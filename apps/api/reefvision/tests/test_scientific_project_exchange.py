@@ -168,6 +168,115 @@ def test_scientific_roundtrip_preserves_evidence_and_offline_cache_with_isolated
     )
 
 
+def test_calculation_roundtrip_remaps_input_ids_and_checksum_lineage(client, test_settings):
+    project = create_project(client, "Calculation exchange")
+    records = client.post(
+        f"/api/v1/projects/{project['id']}/scientific-records",
+        json={
+            "records": [
+                observation(variable="width", value=2, unit="m"),
+                observation(variable="length", value=3, unit="m"),
+            ]
+        },
+    ).json()["items"]
+    calculated = client.post(
+        f"/api/v1/projects/{project['id']}/scientific-calculations",
+        json={
+            "formula_id": "rectangular_area",
+            "formula_version": "1.0.0",
+            "input_record_ids": [row["id"] for row in records],
+        },
+    )
+    assert calculated.status_code == 201, calculated.text
+
+    imported = import_archive(client, export_archive(client, test_settings, project["id"]))
+    assert imported.status_code == 201, imported.text
+    imported_project_id = imported.json()["project_id"]
+    rows = client.get(f"/api/v1/projects/{imported_project_id}/scientific-records").json()["items"]
+    derived = next(row for row in rows if row["variable"] == "calculated_area")
+    input_ids = derived["provenance"]["processing_parameters"]["input_record_ids"]
+    by_id = {row["id"]: row for row in rows}
+    assert set(input_ids) <= set(by_id)
+    assert set(input_ids).isdisjoint({row["id"] for row in records})
+    assert derived["provenance"]["source_metadata"]["input_content_sha256"] == [
+        by_id[identifier]["content_sha256"] for identifier in input_ids
+    ]
+    assert derived["provenance"]["source_metadata"]["source_package_input_content_sha256"] == [
+        row["content_sha256"] for row in records
+    ]
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "missing_input",
+        "input_checksum",
+        "input_calibration_checksum",
+        "missing_formula",
+        "method",
+        "result_value",
+        "qc",
+        "uncertainty",
+    ],
+)
+def test_exchange_rejects_invalid_calculation_lineage(client, test_settings, corruption):
+    project = create_project(client, "Invalid calculation exchange")
+    records = client.post(
+        f"/api/v1/projects/{project['id']}/scientific-records",
+        json={
+            "records": [
+                observation(variable="width", value=2, unit="m"),
+                observation(variable="length", value=3, unit="m"),
+            ]
+        },
+    ).json()["items"]
+    calculated = client.post(
+        f"/api/v1/projects/{project['id']}/scientific-calculations",
+        json={
+            "formula_id": "rectangular_area",
+            "formula_version": "1.0.0",
+            "input_record_ids": [row["id"] for row in records],
+        },
+    )
+    assert calculated.status_code == 201, calculated.text
+
+    def damage(_manifest, sections):
+        derived = next(
+            row for row in sections["scientific_records"] if row["variable"] == "calculated_area"
+        )
+        provenance = derived["payload_json"]["provenance"]
+        if corruption == "missing_input":
+            provenance["processing_parameters"]["input_record_ids"][0] = (
+                "00000000-0000-0000-0000-000000000000"
+            )
+        elif corruption == "input_checksum":
+            provenance["source_metadata"]["input_content_sha256"][0] = "0" * 64
+        elif corruption == "input_calibration_checksum":
+            provenance["source_metadata"]["input_calibration_sha256"][0] = "0" * 64
+        elif corruption == "missing_formula":
+            provenance["processing_parameters"].pop("formula_id")
+        elif corruption == "method":
+            provenance["method"] = "rectangular_area@9.9.9"
+        elif corruption == "qc":
+            derived["payload_json"]["qc"] = "accepted"
+        elif corruption == "uncertainty":
+            derived["payload_json"]["uncertainty"] = {
+                "value": 0.1,
+                "kind": "bound",
+            }
+            derived["payload_json"]["normalized_uncertainty"] = 0.1
+        else:
+            derived["payload_json"]["value"] = 7
+            derived["payload_json"]["normalized_value"] = 7
+        derived["content_sha256"] = content_hash(derived["payload_json"])
+
+    response = import_archive(
+        client,
+        rewrite(export_archive(client, test_settings, project["id"]), damage),
+    )
+    assert response.status_code == 400, response.text
+
+
 @pytest.mark.parametrize(
     "corruption",
     [

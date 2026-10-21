@@ -7,11 +7,14 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.schemas.scientific_calculations import ScientificCalculationRequest
 from reefvision.schemas.scientific_data import (
     ScientificRecordBatch,
     ScientificRecordPage,
+    ScientificRecordResponse,
     SourceKind,
 )
+from reefvision.services.scientific_calculations import ScientificCalculationService
 from reefvision.services.scientific_data import ScientificDataService
 
 router = APIRouter(tags=["scientific-data"])
@@ -45,3 +48,14 @@ def list_records(
     return ScientificDataService(session).list_records(
         str(project_id), limit=limit, offset=offset, variable=variable, source_kind=source_kind
     )
+
+
+@router.post(
+    "/projects/{project_id}/scientific-calculations",
+    response_model=ScientificRecordResponse,
+    status_code=201,
+)
+def create_calculation(
+    project_id: UUID, payload: ScientificCalculationRequest, session: DbSession
+) -> ScientificRecordResponse:
+    return ScientificCalculationService(session).calculate(str(project_id), payload)

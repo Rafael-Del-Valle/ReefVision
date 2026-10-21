@@ -9,16 +9,20 @@ from sqlalchemy.orm import Session
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.copernicus import CopernicusRequest
 from reefvision.schemas.environmental_context import (
+    CurrentVectorPage,
     EnvironmentalDatasetPage,
     EnvironmentalImportResponse,
     EnvironmentalLookup,
     EnvironmentalLookupResponse,
     EnvironmentalSubjectContext,
     EnvironmentalSubjectLookup,
+    LocalCurrentGridImport,
     NOAAImportRequest,
 )
 from reefvision.services.copernicus_environment import CopernicusEnvironmentService
+from reefvision.services.current_vectors import build_current_vectors
 from reefvision.services.environmental_context import EnvironmentalContextService
+from reefvision.services.local_current_grid import LocalCurrentGridService
 
 router = APIRouter(tags=["environmental-context"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -60,6 +64,17 @@ def import_copernicus(
     )
 
 
+@router.post(
+    "/projects/{project_id}/environment/local-current-grid",
+    response_model=EnvironmentalImportResponse,
+    status_code=201,
+)
+def import_local_current_grid(
+    project_id: UUID, payload: LocalCurrentGridImport, session: DbSession
+) -> EnvironmentalImportResponse:
+    return LocalCurrentGridService(session).import_grid(str(project_id), payload)
+
+
 @router.get("/projects/{project_id}/environment/datasets", response_model=EnvironmentalDatasetPage)
 def list_environmental_datasets(
     project_id: UUID,
@@ -78,3 +93,12 @@ def open_environmental_dataset(
     project_id: UUID, cache_key: str, session: DbSession
 ) -> EnvironmentalImportResponse:
     return EnvironmentalContextService(session).cached_dataset(str(project_id), cache_key)
+
+
+@router.get(
+    "/projects/{project_id}/environment/datasets/{cache_key}/current-vectors",
+    response_model=CurrentVectorPage,
+)
+def current_vectors(project_id: UUID, cache_key: str, session: DbSession) -> CurrentVectorPage:
+    dataset = EnvironmentalContextService(session).cached_dataset(str(project_id), cache_key)
+    return build_current_vectors(dataset.items)

@@ -3,12 +3,15 @@ import { useMemo, useState } from "react";
 import { OpenStreetMapView } from "../video/OpenStreetMapView";
 import { getVideos } from "../video/videoApi";
 import { getVideoGeoreferencedObservations } from "../video/videoGeoreferencedObservationsApi";
-import { currentVectors, vectorColor } from "./currentVectors";
+import { vectorColor, type CurrentVector } from "./currentVectors";
 import {
   getCachedDataset,
+  getCurrentVectors,
   getEnvironmentalDatasets,
   importCopernicus,
+  importLocalCurrentGrid,
   type CopernicusRequest,
+  type LocalCurrentGridRequest,
 } from "./environmentalContextApi";
 import { utcTime } from "./ScientificRecordCard";
 
@@ -41,6 +44,11 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
     enabled: open && Boolean(cacheKey),
     queryFn: ({ signal }) => getCachedDataset(projectId, cacheKey, signal),
   });
+  const vectorPage = useQuery({
+    queryKey: ["environment-current-vectors", projectId, cacheKey],
+    enabled: open && Boolean(cacheKey),
+    queryFn: ({ signal }) => getCurrentVectors(projectId, cacheKey, signal),
+  });
   const videos = useQuery({
     queryKey: ["ocean-overlay-videos", projectId],
     enabled: open && showObjects,
@@ -55,32 +63,55 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
   const times = useMemo(
     () =>
       [
-        ...new Set(dataset.data?.items.map((row) => row.observed_at) ?? []),
+        ...new Set(vectorPage.data?.items.map((row) => row.observed_at) ?? []),
       ].sort(),
-    [dataset.data],
+    [vectorPage.data],
   );
   const depths = useMemo(
     () =>
       [
         ...new Set(
-          dataset.data?.items.flatMap((row) =>
+          vectorPage.data?.items.flatMap((row) =>
             row.depth_m == null ? [] : [row.depth_m],
           ) ?? [],
         ),
       ].sort((a, b) => a - b),
-    [dataset.data],
+    [vectorPage.data],
   );
   const selectedTime = time || times[0];
   const selectedDepth = depth === "" ? depths[0] : Number(depth);
   const vectors = useMemo(
     () =>
-      currentVectors(
-        dataset.data?.items.filter(
+      (vectorPage.data?.items ?? [])
+        .filter(
           (row) =>
             row.observed_at === selectedTime && row.depth_m === selectedDepth,
-        ) ?? [],
-      ),
-    [dataset.data, selectedTime, selectedDepth],
+        )
+        .map((row): CurrentVector => ({
+          id: row.component_record_ids.join(":"),
+          latitude: row.location.latitude,
+          longitude: row.location.longitude,
+          speed: row.speed_m_s,
+          bearing: row.direction_deg_true,
+          east: row.eastward_velocity_m_s,
+          north: row.northward_velocity_m_s,
+          source: row.source,
+          sourceKind: row.source_kind,
+          dataset: row.dataset_id,
+          modelVersion: row.dataset_version,
+          observedAt: row.observed_at,
+          depthM: row.depth_m,
+          recordIds: row.component_record_ids,
+        })),
+    [vectorPage.data, selectedTime, selectedDepth],
+  );
+  const exclusionSummary = useMemo(
+    () =>
+      Object.entries(vectorPage.data?.exclusions ?? {})
+        .filter(([, count]) => count > 0)
+        .map(([reason, count]) => `${reason.replaceAll("_", " ")}: ${count}`)
+        .join("; "),
+    [vectorPage.data],
   );
   const overlay = useMemo(
     () =>
@@ -146,12 +177,14 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
               </button>
             </div>
           )}
-          {(datasets.error || dataset.error) && (
-            <p role="alert">{(datasets.error || dataset.error)?.message}</p>
+          {(datasets.error || dataset.error || vectorPage.error) && (
+            <p role="alert">
+              {(datasets.error || dataset.error || vectorPage.error)?.message}
+            </p>
           )}
-          {(datasets.isFetching || dataset.isFetching) && (
-            <p role="status">Opening local cache…</p>
-          )}
+          {(datasets.isFetching ||
+            dataset.isFetching ||
+            vectorPage.isFetching) && <p role="status">Opening local cache…</p>}
           {dataset.data && (
             <>
               <p>
@@ -224,6 +257,11 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                   </span>
                 ))}
               </div>
+              {exclusionSummary && (
+                <p role="status">
+                  Excluded current inputs or groups: {exclusionSummary}.
+                </p>
+              )}
               {vectors.length === 0 && (
                 <p role="status">
                   Current vectors unavailable: this time/depth has no unique
@@ -342,9 +380,73 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
             </>
           )}
           <CopernicusImportForm projectId={projectId} />
+          <LocalCurrentGridImportForm projectId={projectId} />
         </>
       )}
     </section>
+  );
+}
+
+function LocalCurrentGridImportForm({ projectId }: { projectId: string }) {
+  const client = useQueryClient();
+  const [json, setJson] = useState("");
+  const [parseError, setParseError] = useState("");
+  const mutation = useMutation({
+    mutationFn: (payload: LocalCurrentGridRequest) =>
+      importLocalCurrentGrid(projectId, payload),
+    onSuccess: async () => {
+      await client.invalidateQueries({
+        queryKey: ["environment-datasets", projectId],
+      });
+      await client.invalidateQueries({
+        queryKey: ["scientific-records", projectId],
+      });
+    },
+  });
+  return (
+    <details>
+      <summary>Import local current grid</summary>
+      <p>
+        Import a bounded JSON dataset with explicit observed, remotely sensed,
+        or modeled provenance. Velocities are geographic eastward/northward
+        components in m/s; missing components must be null and are skipped.
+      </p>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          try {
+            const payload = JSON.parse(json) as LocalCurrentGridRequest;
+            setParseError("");
+            mutation.mutate(payload);
+          } catch {
+            setParseError("Current grid JSON is not valid JSON.");
+          }
+        }}
+      >
+        <label>
+          Current grid JSON
+          <textarea
+            required
+            rows={10}
+            value={json}
+            onChange={(event) => setJson(event.target.value)}
+          />
+        </label>
+        <button type="submit" disabled={mutation.isPending}>
+          Import current grid
+        </button>
+        {parseError && <p role="alert">{parseError}</p>}
+        {mutation.error && <p role="alert">{mutation.error.message}</p>}
+        {mutation.data && (
+          <p role="status">
+            {mutation.data.items.length}{" "}
+            {mutation.data.items[0]?.source_kind ?? "scientific"} values
+            imported · {mutation.data.skipped_missing} missing components
+            skipped.
+          </p>
+        )}
+      </form>
+    </details>
   );
 }
 function CopernicusImportForm({ projectId }: { projectId: string }) {

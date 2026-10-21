@@ -21,6 +21,7 @@ from reefvision.db.models import (
     PredictionProposal,
     Project,
     ProjectExchangePackage,
+    ScientificRecord,
     VideoAsset,
     WorkflowArtifact,
     WorkflowGraphRecord,
@@ -29,6 +30,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
+from reefvision.schemas.scientific_calculations import ScientificCalculationRequest
 from reefvision.schemas.workflow_execution import (
     WorkflowArtifactResponse,
     WorkflowGraphRecordResponse,
@@ -39,7 +41,11 @@ from reefvision.schemas.workflow_execution import (
     WorkflowRunResponse,
 )
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
+from reefvision.services.current_vectors import build_current_vectors
+from reefvision.services.environmental_context import EnvironmentalContextService
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
+from reefvision.services.scientific_calculations import ScientificCalculationService
+from reefvision.services.scientific_data import ScientificDataService
 from reefvision.services.workflow_classification import (
     materialize_workflow_classification_dataset,
     train_workflow_classifier,
@@ -72,6 +78,10 @@ EXECUTABLE_NODE_TYPES = {
     "model_training",
     "register_trained_model",
     "project_exchange_export",
+    "scientific_records_source",
+    "scientific_calculation",
+    "environmental_dataset_source",
+    "current_vectors",
     *RUNTIME_ADAPTER_NODE_TYPES,
 }
 
@@ -386,6 +396,130 @@ class WorkflowExecutionService:
                     "image_ids": [image.id for image in images],
                     "image_sha256": {image.id: image.sha256 for image in images},
                     "count": len(images),
+                },
+            )
+        ]
+
+    def _execute_scientific_records_source(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        raw_ids = parameters.get("record_ids")
+        if (
+            not isinstance(raw_ids, list)
+            or not raw_ids
+            or len(set(map(str, raw_ids))) != len(raw_ids)
+        ):
+            raise ValidationError("Scientific Records requires unique record_ids")
+        science = ScientificDataService(self.session)
+        records = []
+        for record_id in raw_ids:
+            row = self.session.get(ScientificRecord, str(record_id))
+            if row is None or row.project_id != project_id:
+                raise ValidationError("Scientific record does not belong to this project")
+            records.append(science.response(row))
+        return [
+            WorkflowArtifactSpec(
+                port_id="records",
+                data_type="scientific_records",
+                payload={
+                    "schema_version": "scientific-records-1.1.0",
+                    "project_id": project_id,
+                    "record_ids": [str(record.id) for record in records],
+                    "content_sha256": [record.content_sha256 for record in records],
+                    "count": len(records),
+                },
+            )
+        ]
+
+    def _execute_scientific_calculation(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        payload = self._single_payload(inputs, "records")
+        if payload.get("project_id") != project_id:
+            raise ValidationError("Scientific Calculation received foreign records")
+        request = ScientificCalculationRequest.model_validate(
+            {
+                "formula_id": parameters.get("formula_id"),
+                "formula_version": parameters.get("formula_version"),
+                "input_record_ids": payload.get("record_ids", []),
+            }
+        )
+        result = ScientificCalculationService(self.session).calculate(project_id, request)
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="scientific_calculation",
+                payload={
+                    "schema_version": "scientific-calculation-1.0.0",
+                    "project_id": project_id,
+                    "record": result.model_dump(mode="json"),
+                },
+            )
+        ]
+
+    def _execute_environmental_dataset_source(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        cache_key = str(parameters.get("cache_key") or "")
+        dataset = EnvironmentalContextService(self.session).cached_dataset(project_id, cache_key)
+        return [
+            WorkflowArtifactSpec(
+                port_id="dataset",
+                data_type="environmental_dataset",
+                payload={
+                    "schema_version": "environmental-dataset-1.1.0",
+                    "project_id": project_id,
+                    "cache_key": cache_key,
+                    "record_ids": [str(record.id) for record in dataset.items],
+                    "cache_status": dataset.cache_status,
+                    "source_url": dataset.source_url,
+                },
+            )
+        ]
+
+    def _execute_current_vectors(
+        self,
+        *,
+        project_id: str,
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        payload = self._single_payload(inputs, "dataset")
+        if payload.get("project_id") != project_id:
+            raise ValidationError("Current Vectors received a foreign dataset")
+        science = ScientificDataService(self.session)
+        records = []
+        for record_id in payload.get("record_ids", []):
+            row = self.session.get(ScientificRecord, str(record_id))
+            if row is None or row.project_id != project_id:
+                raise ValidationError("Environmental dataset contains a missing or foreign record")
+            records.append(science.response(row))
+        vectors = build_current_vectors(records)
+        return [
+            WorkflowArtifactSpec(
+                port_id="vectors",
+                data_type="current_vectors",
+                payload={
+                    "schema_version": "current-vectors-1.1.0",
+                    "project_id": project_id,
+                    "cache_key": payload.get("cache_key"),
+                    "items": vectors.model_dump(mode="json")["items"],
+                    "count": len(vectors.items),
+                    "input_record_count": vectors.input_record_count,
+                    "exclusions": vectors.exclusions.model_dump(mode="json"),
                 },
             )
         ]
