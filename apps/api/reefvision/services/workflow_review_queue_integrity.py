@@ -63,6 +63,14 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     if ranks != set(range(1, saved_count + 1)):
         raise invalid
 
+    # The queue creator ranks by descending priority and then image ID for
+    # deterministic ties. The original scope digest does not encode ranks,
+    # so two otherwise unchanged items could silently exchange priorities.
+    saved_order = [item.image_id for item in sorted(items, key=lambda item: item.rank_position)]
+    expected_order = [item.image_id for item in sorted(items, key=lambda item: (-item.score, item.image_id))]
+    if saved_order != expected_order:
+        raise invalid
+
     actual = canonical_json_sha256(
         {
             "image_ids": sorted(scores),

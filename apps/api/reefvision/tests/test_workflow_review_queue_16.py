@@ -202,3 +202,90 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     listing = client.get(f"/api/v1/projects/{project['id']}/review-queues")
     assert listing.status_code == 200, listing.text
     assert len(listing.json()) == 2
+
+
+def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) -> None:
+    """A saved workflow must reject swapped ranks without altering review decisions."""
+    project = create_project(client, "QC saved ordering integrity")
+    for name in ("priority-a.png", "priority-b.png"):
+        imported = import_one(
+            client,
+            project["id"],
+            filename=name,
+            relative_path=f"qc-priority/{name}",
+        )
+        assert len(imported["successful"]) == 1
+
+    saved = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-graphs",
+        json={"graph": _graph()},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    run = queued.json()
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert detail.status_code == 200, detail.text
+    record = detail.json()
+    qc_node = next(n for n in record["nodes"] if n["node_id"] == "qc")
+    artifact = next(
+        a for a in record["artifacts"] if a["data_type"] == "review_queue_reference"
+    )
+    queue_id = artifact["payload_json"]["queue_id"]
+    assert artifact["payload_json"]["review_status"] == "requires_researcher_review"
+
+    with app.state.session_factory() as session:
+        source = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == run["id"],
+                WorkflowArtifact.data_type == "project_reference",
+            )
+        )
+        node = session.get(WorkflowNodeRun, qc_node["id"])
+        assert source is not None and node is not None
+        params = {
+            **dict(node.parameters_json or {}),
+            "__workflow_run_id": run["id"],
+            "__workflow_node_run_id": qc_node["id"],
+        }
+        rows = list(
+            session.scalars(
+                select(ReviewQueueItem)
+                .where(ReviewQueueItem.review_queue_id == queue_id)
+                .order_by(ReviewQueueItem.rank_position)
+            )
+        )
+        assert len(rows) == 2
+        rows[0].review_state = "in_progress"
+        original_ranks = [item.rank_position for item in rows]
+        rows[0].rank_position, rows[1].rank_position = 2, 1
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        assert rows[0].review_state == "in_progress"
+        # Restore and prove ordinary retries still reuse the same queue.
+        rows[0].rank_position, rows[1].rank_position = original_ranks
+        session.flush()
+        retried = execute_runtime_adapter(
+            "qc_review_queue",
+            session=session,
+            settings=app.state.settings,
+            project_id=project["id"],
+            parameters=params,
+            inputs={"project": [source]},
+        )
+        assert retried[0]["payload"]["queue_id"] == queue_id

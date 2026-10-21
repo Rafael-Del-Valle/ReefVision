@@ -67,6 +67,8 @@ def test_valid_saved_snapshot_and_mutable_reviewer_state():
         "score",
         "duplicate_image",
         "rank",
+        "swapped_ranks",
+        "tie_order",
         "wrong_project",
         "wrong_queue",
         "count",
@@ -91,6 +93,20 @@ def test_rejects_corrupted_saved_snapshot(corruption):
         items[1].image_id = "img-a"
     elif corruption == "rank":
         items[1].rank_position = 1
+    elif corruption == "swapped_ranks":
+        items[0].rank_position, items[1].rank_position = 2, 1
+    elif corruption == "tie_order":
+        # Even after a legitimate checksum update, tie ordering is defined
+        # by image ID; a changed rank must not be silently accepted.
+        items[1].score = 80.0
+        items[0].rank_position, items[1].rank_position = 2, 1
+        queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+            {
+                "image_ids": ["img-a", "img-b"],
+                "scores": {"img-a": 80.0, "img-b": 80.0},
+                "source_quality_control_run_id": None,
+            }
+        )
     elif corruption == "wrong_project":
         items[0].project_id = "foreign"
     elif corruption == "wrong_queue":

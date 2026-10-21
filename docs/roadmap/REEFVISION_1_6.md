@@ -39,6 +39,19 @@
 - API regressions cover state transitions, duplicate retries, cross-queue isolation,
   atomic failure, and preservation of unverified image annotations.
 
+## 1.6 saved queue priority-order integrity
+
+- Workflow retries must preserve the deterministic priority order used by
+  `ReviewQueueService`: descending score, followed by image ID for ties.
+- The earlier checksum covers image IDs and scores but excludes rank positions.
+  The additional validation rejects swaps without recalculating live QC
+  measurements or changing reviewer state, comments, or assignments.
+- Standalone unit regression covers swapped ranks and ties; a saved executable
+  Workflow Builder graph creates a queue with two media items, detects ranking
+  tampering, and confirms that a restored queue can be retried.
+- Approval remains researcher-controlled; saved workflow artifacts retain typed
+  `review_queue_reference` output and provenance.
+
 ## Outstanding acceptance
 
 Run Ruff, mypy, backend/frontend/E2E and migration/backwards-compatibility checks
