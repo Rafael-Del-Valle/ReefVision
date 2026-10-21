@@ -107,8 +107,9 @@ def test_saved_mesh_edge_paths_match_standalone(client: TestClient) -> None:
     standalone = client.post(f"{base}/spatial/mesh-preview", json=PARAMS)
     assert standalone.status_code == 200, standalone.text
     assert artifact["surface_edge_paths"] == standalone.json()["surface_edge_paths"]
-    assert artifact["provenance"]["geometry_sha256"] == (
-        standalone.json()["provenance"]["geometry_sha256"]
+    assert (
+        artifact["provenance"]["geometry_sha256"]
+        == (standalone.json()["provenance"]["geometry_sha256"])
     )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
