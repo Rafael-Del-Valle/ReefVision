@@ -40,12 +40,102 @@ Reusable implementations inspected:
 | 4 Current visualizer | 2, 3 | Not started | No | No | Streamlines, time/depth, layers, trajectories, cache/provenance, desktop acceptance |
 | 5 Scientific heatmaps | 1; existing pose/annotation records | Existing partial infrastructure | Not assessed for 1.1 | No | Independent reviewer/model layers and disagreement validation |
 | 6 Computed metrics | 1; calibration and verified annotations | Existing measurements only | Not assessed for 1.1 | No | Safe arithmetic/unit engine, matching run/frame identity, saved calculations/provenance |
-| 7 Event/environment analysis | 2, 3, 6 | Not started | No | No | Event windows, tides/lunar provenance and reproducible exports |
+| 7 Event/environment analysis | 2, 3, 6 | Not started | No | No | Event windows; automated tidal/lunar context for dated, georeferenced observations; reproducible analysis and exports |
 
 Optional advection is deferred until core acceptance. Existing 1.0.x GUI,
 GPU and scientific acceptance issues do not block additive foundation work,
 but must be reconciled before a combined 1.1 release. Do not merge, tag,
 publish installers, bundle model weights or mark the release complete.
+
+## Planned tidal and lunar context (v1.1)
+
+**Status (2026-10-21): planned only; not implemented or release-validated.**
+This expands Phase 7 (event/environment analysis), reuses the Phase 3 provider/cache contracts
+and Phase 6 computed metrics, and must work both from Environmental Context and as executable
+Workflow Builder nodes. Preserve all earlier milestone scope; do not substitute this plan
+for a functioning implementation.
+
+### Automatic observation context and scientist-facing UI
+
+- When an image, video frame, track, or biological event has a valid observation timestamp
+  and georeferenced site, show a **Tidal & Lunar Context** section in its Environmental
+  Context inspector, and offer a bulk action to calculate the same context for an
+  entire dataset. Permit explicit researcher-supplied observation time and location
+  when source metadata is missing, recording how they were supplied; never silently
+  substitute ingestion time, the user's current location, or a guessed site.
+- Display the astronomical lunar phase (new, waxing crescent, first quarter, waxing
+  gibbous, full, waning gibbous, last quarter, waning crescent), illumination fraction,
+  lunar age, and a timestamp. Prefer reproducible **offline astronomical calculation**,
+  recording algorithm/ephemeris version and time convention. Moonrise/set, if later
+  added, requires observation location and an appropriate astronomy library.
+- For available tidal data, display a small time-series curve with the matched
+  observation time, rising/falling/near-high/near-low water-level state, nearest
+  high/low-water timestamps and elapsed time, station/model identity, reference
+  datum, distance from site, quality and whether values are **predicted** or
+  **observed**. Expose missing/uncertain/stale data rather than drawing a plausible
+  curve from no measurements.
+- Label water-level rise/fall separately from **flood/ebb current**. Do not infer
+  local current direction from water-level trend; use an independently validated
+  current model or current observation where that feature is available.
+- Offer spring/neap characterization only from an appropriate local tidal-range
+  prediction/series, with method and uncertainty; do not equate lunar phase alone
+  with a definitive spring/neap tidal state.
+
+### Tidal data and scientific constraints
+
+- Add a NOAA CO-OPS adapter for tide predictions and, separately, observed water
+  levels where supported. Match station, time window, units, tidal datum, timezone,
+  provider QC and refresh/cache identity, preserving raw responses and immutable
+  acquisition provenance. Keep observed and modeled/predicted values distinct.
+- Allow a user-confirmed station selection and explicit maximum acceptable
+  distance/offset; a nearby coastal station may not represent a mesophotic/offshore
+  reef. Support researcher-provided tide-gauge or validated regional model inputs
+  as future-compatible alternatives without silently transferring coastal
+  predictions offshore.
+- Handle UTC normalization, local display, daylight-saving transitions,
+  timezone-naive/rejected timestamps, gaps, partial series, conflicting datums,
+  datum-unsupported stations, cache expiry and offline use. Missing inputs mean
+  **unavailable**, not zero. Do not claim tidal phase accuracy without adequate
+  time coverage and a supported reference.
+
+### Analysis, Workflow Builder and export
+
+- Match environmental context to organism observations, verified annotations,
+  behavior/tracking events and spawning/feeding events using explicit time,
+  location, depth and quality bounds; record offsets and coverage, and leave
+  unmatched records unmatched.
+- Support event-window comparisons before/at/after events (including configured
+  hour/day lags) and exploratory relationships between polyp activity, abundance,
+  movement, tides, lunar illumination and other environmental variables.
+  Present sampling effort, repeated-measure/temporal autocorrelation caveats,
+  and **association rather than causation**. Avoid claiming significance from
+  naive pooled daily images or mismatched experimental units.
+- Make the operations available as **real, executable typed Workflow Builder
+  nodes**, e.g. lunar-context, tide-context, environment/event join, and lagged
+  comparisons. Require persisted output, immutable source linkage, provenance,
+  deterministic formula/algorithm version, robust failures and a saved-workflow
+  roundtrip regression. A node registry entry or standalone UI alone does not
+  count as completion.
+- Provide exportable observation-environment tables (CSV and geographic export
+  where coordinates are valid) with units, UTC timestamps, station/model IDs,
+  source kind, datum, quality flags, match offsets, calculation versions and
+  explicit missing values; retain provenance so analyses are reproducible offline.
+
+### Minimum acceptance evidence (unchecked until implemented)
+
+- [ ] Timestamp/GPS/manual-metadata linking works for cold-open images,
+      video frames, tracks and event observations, with no inferred provenance.
+- [ ] Deterministic lunar phase/illumination is tested on reference new/full/
+      quarter dates across timezone and year boundaries; calculations work offline.
+- [ ] Tide provider fixtures cover observed vs predicted, high/low detection,
+      rising/falling transitions, datum mismatch, missing/gapped series,
+      distant/offshore stations, and offline cache integrity/revision handling.
+- [ ] The inspector and bulk dataset action display the same validated
+      results with visible provenance, limits and stale/unavailable states.
+- [ ] Executable saved Workflow Builder runs, reproducible exports and
+      event-window/lag comparisons have representative scientific regressions.
+- [ ] Windows/Tauri installed-GUI behavior and representative scientific
+      data are accepted independently from backend/unit/CI tests.
 
 ## First implementation design
 
