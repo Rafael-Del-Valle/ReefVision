@@ -35,9 +35,7 @@ def audit_unit_coverage(
         unit_id = next(iter(ids))
         prior_unit = organism_memberships.setdefault(organism_id, unit_id)
         if prior_unit != unit_id:
-            raise ValueError(
-                "An organism cannot change experimental units between metrics"
-            )
+            raise ValueError("An organism cannot change experimental units between metrics")
         if (organism_id, metric_name) in completed and len(observations) < 2:
             raise ValueError("Completed series requires repeated observations")
         by_unit_metric[(unit_id, metric_name)].append(
@@ -45,12 +43,9 @@ def audit_unit_coverage(
         )
 
     summaries = list(unit_summaries)
-    eligible_rows = [
-        (row.experimental_unit_id, row.metric_name) for row in summaries
-    ]
+    eligible_rows = [(row.experimental_unit_id, row.metric_name) for row in summaries]
     excluded_rows = [
-        (row.experimental_unit_id, row.metric_name, row.reason)
-        for row in excluded_units
+        (row.experimental_unit_id, row.metric_name, row.reason) for row in excluded_units
     ]
     if len(eligible_rows) != len(set(eligible_rows)):
         raise ValueError("Duplicate eligible experimental-unit decision")
@@ -62,12 +57,8 @@ def audit_unit_coverage(
         key = (row.experimental_unit_id, row.metric_name)
         count = getattr(row, "organism_count", None)
         if count is not None and count != len(by_unit_metric.get(key, ())):
-            raise ValueError(
-                "Eligible experimental-unit organism count disagrees with coverage"
-            )
-    exclusions = {
-        (unit_id, metric): reason for unit_id, metric, reason in excluded_rows
-    }
+            raise ValueError("Eligible experimental-unit organism count disagrees with coverage")
+    exclusions = {(unit_id, metric): reason for unit_id, metric, reason in excluded_rows}
     if eligible.intersection(exclusions):
         raise ValueError("A unit/metric cannot be eligible and excluded simultaneously")
     if eligible.union(exclusions) != set(by_unit_metric):
