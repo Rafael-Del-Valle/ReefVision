@@ -22,9 +22,7 @@ def test_calibrated_envelope_and_scale_interval() -> None:
         relative_scale_uncertainty=0.1,
     )
     volume = 0.02 * 0.03 * 0.04
-    assert result["axis_aligned_bounding_box_envelope_volume_m3"] == pytest.approx(
-        volume
-    )
+    assert result["axis_aligned_bounding_box_envelope_volume_m3"] == pytest.approx(volume)
     interval = result["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
     assert interval == pytest.approx([volume * 0.9**3, volume * 1.1**3])
     assert result["surface_area_m2"] is None
@@ -86,9 +84,7 @@ def test_envelope_saved_workflow_matches_standalone(client: TestClient) -> None:
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -98,15 +94,16 @@ def test_envelope_saved_workflow_matches_standalone(client: TestClient) -> None:
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        a for a in detail.json()["artifacts"]
-        if a["data_type"] == "point_cloud_measurement_preview"
+        a for a in detail.json()["artifacts"] if a["data_type"] == "point_cloud_measurement_preview"
     )
     payload = artifact["payload_json"]
-    assert payload["axis_aligned_bounding_box_envelope_volume_m3"] == (
-        expected["axis_aligned_bounding_box_envelope_volume_m3"]
+    assert (
+        payload["axis_aligned_bounding_box_envelope_volume_m3"]
+        == (expected["axis_aligned_bounding_box_envelope_volume_m3"])
     )
-    assert payload["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] == (
-        expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
+    assert (
+        payload["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
+        == (expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"])
     )
     assert payload["provenance"] == expected["provenance"]
     assert payload["project_id"] == project_id

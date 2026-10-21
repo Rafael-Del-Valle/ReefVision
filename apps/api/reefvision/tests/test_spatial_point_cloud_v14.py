@@ -40,9 +40,7 @@ def test_ply_parser_and_geometry_uncertainty() -> None:
         relative_scale_uncertainty=0.1,
     )
     assert result["axis_aligned_dimensions_m"] == pytest.approx([0.02, 0.03, 0])
-    assert result["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
-        [0.002, 0.003, 0]
-    )
+    assert result["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx([0.002, 0.003, 0])
     assert result["surface_area_m2"] is None
     assert result["branch_length_m"] is None
     assert result["provenance"]["calibration_verified"] is False
@@ -76,14 +74,15 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["provenance"]["source_format"] == "ply_ascii_point_cloud"
-    assert client.post(
-        f"{base}/spatial/point-cloud-preview",
-        json={**PARAMS, "points": [[0, 0, 0]]},
-    ).status_code == 422
-    registry = client.get("/api/v1/workflow-graphs/node-registry")
-    node = next(
-        n for n in registry.json() if n["node_type"] == "point_cloud_preview"
+    assert (
+        client.post(
+            f"{base}/spatial/point-cloud-preview",
+            json={**PARAMS, "points": [[0, 0, 0]]},
+        ).status_code
+        == 422
     )
+    registry = client.get("/api/v1/workflow-graphs/node-registry")
+    node = next(n for n in registry.json() if n["node_type"] == "point_cloud_preview")
     assert node["executable"] is True
     assert node["output_ports"][0]["accepted_types"] == ["point_cloud_measurement_preview"]
     graph = {
@@ -109,9 +108,7 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     assert saved.json()["graph_json"]["nodes"][1]["parameters"]["ply_text"] == PLY
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -121,13 +118,32 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        a for a in detail.json()["artifacts"]
-        if a["data_type"] == "point_cloud_measurement_preview"
+        a for a in detail.json()["artifacts"] if a["data_type"] == "point_cloud_measurement_preview"
     )
-    assert artifact["payload_json"]["axis_aligned_dimensions_m"] == expected[
-        "axis_aligned_dimensions_m"
-    ]
+    assert (
+        artifact["payload_json"]["axis_aligned_dimensions_m"]
+        == expected["axis_aligned_dimensions_m"]
+    )
+    for key in ("axis_aligned_min_in_source_frame_m", "axis_aligned_max_in_source_frame_m"):
+        assert artifact["payload_json"][key] == expected[key]
     assert artifact["payload_json"]["provenance"] == expected["provenance"]
     assert artifact["payload_json"]["surface_area_m2"] is None
     assert artifact["payload_json"]["project_id"] == project_id
     assert len(artifact["payload_sha256"]) == 64
+
+
+def test_bounds_preserve_negative_source_coordinates() -> None:
+    result = measure_point_cloud_preview(
+        points=[[-2, -3, -4], [1, 2, 3]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unverified ruler",
+    )
+    assert result["axis_aligned_min_in_source_frame_m"] == pytest.approx(
+        [-0.02, -0.03, -0.04]
+    )
+    assert result["axis_aligned_max_in_source_frame_m"] == pytest.approx(
+        [0.01, 0.02, 0.03]
+    )
+    assert result["axis_aligned_dimensions_m"] == pytest.approx([0.03, 0.05, 0.07])
+    assert result["measurement_status"] == "caller_supplied_unverified"

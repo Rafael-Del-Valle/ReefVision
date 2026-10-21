@@ -107,15 +107,13 @@ def measure_point_cloud_preview(
     if not isinstance(calibration_evidence, str) or not calibration_evidence.strip():
         raise ValueError("Calibration evidence is required")
     if relative_scale_uncertainty is not None and (
-        not isfinite(relative_scale_uncertainty)
-        or not 0 <= relative_scale_uncertainty <= 1
+        not isfinite(relative_scale_uncertainty) or not 0 <= relative_scale_uncertainty <= 1
     ):
         raise ValueError("relative_scale_uncertainty must be between 0 and 1")
     vertices: list[tuple[float, float, float]] = []
     for point in points:
-        if (
-            len(point) != 3
-            or any(not isfinite(float(v)) or abs(float(v)) > 1_000_000_000 for v in point)
+        if len(point) != 3 or any(
+            not isfinite(float(v)) or abs(float(v)) > 1_000_000_000 for v in point
         ):
             raise ValueError("Every point requires three bounded finite coordinates")
         vertices.append((float(point[0]), float(point[1]), float(point[2])))
@@ -149,6 +147,8 @@ def measure_point_cloud_preview(
         (max(p[axis] for p in vertices) - min(p[axis] for p in vertices)) * scale
         for axis in range(3)
     ]
+    bounds_min = [min(p[axis] for p in vertices) * scale for axis in range(3)]
+    bounds_max = [max(p[axis] for p in vertices) * scale for axis in range(3)]
     centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
     envelope_volume = dimensions[0] * dimensions[1] * dimensions[2]
@@ -170,11 +170,11 @@ def measure_point_cloud_preview(
         "unique_point_count": unique_count,
         "selected_point_chords": selected_chords,
         "axis_aligned_dimensions_m": dimensions,
+        "axis_aligned_min_in_source_frame_m": bounds_min,
+        "axis_aligned_max_in_source_frame_m": bounds_max,
         "axis_aligned_bounding_box_diagonal_m": diagonal,
         "axis_aligned_bounding_box_envelope_volume_m3": envelope_volume,
-        "axis_aligned_bounding_box_envelope_volume_scale_interval_m3": (
-            envelope_scale_interval
-        ),
+        "axis_aligned_bounding_box_envelope_volume_scale_interval_m3": (envelope_scale_interval),
         "axis_aligned_dimension_scale_uncertainty_m": (
             [value * relative_scale_uncertainty for value in dimensions]
             if relative_scale_uncertainty is not None

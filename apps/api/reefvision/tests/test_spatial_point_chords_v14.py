@@ -28,12 +28,8 @@ def test_chord_measurements_and_saved_graph(client: TestClient) -> None:
     assert response.status_code == 200, response.text
     expected = response.json()
     chords = expected["selected_point_chords"]
-    assert [entry["chord_distance_m"] for entry in chords] == pytest.approx(
-        [0.05, 0.12]
-    )
-    assert [entry["scale_uncertainty_m"] for entry in chords] == pytest.approx(
-        [0.005, 0.012]
-    )
+    assert [entry["chord_distance_m"] for entry in chords] == pytest.approx([0.05, 0.12])
+    assert [entry["scale_uncertainty_m"] for entry in chords] == pytest.approx([0.005, 0.012])
     assert expected["branch_length_m"] is None
     assert expected["provenance"]["calibration_verified"] is False
     assert len(expected["provenance"]["ordered_geometry_sha256"]) == 64
@@ -68,9 +64,7 @@ def test_chord_measurements_and_saved_graph(client: TestClient) -> None:
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -80,11 +74,10 @@ def test_chord_measurements_and_saved_graph(client: TestClient) -> None:
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "point_cloud_measurement_preview"
     )
     assert artifact["payload_json"]["selected_point_chords"] == chords
     assert artifact["payload_json"]["provenance"] == expected["provenance"]
-    assert artifact["payload_json"]["measurement_status"] == (
-        "caller_supplied_unverified"
-    )
+    assert artifact["payload_json"]["measurement_status"] == ("caller_supplied_unverified")
