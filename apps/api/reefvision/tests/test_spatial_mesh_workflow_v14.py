@@ -118,6 +118,9 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> Non
     assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     assert len(artifact["payload_sha256"]) == 64
     assert artifact["payload_json"]["area_scale_uncertainty_m2"] == pytest.approx(0.00003)
+    assert artifact["payload_json"]["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
+        0.01 * 13**0.5
+    )
     measured = artifact["payload_json"]
     assert measured["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
         [0.001, 0.0015, 0.0]
@@ -244,6 +247,10 @@ def test_saved_mesh_workflow_preserves_topology_qc(client: TestClient) -> None:
         "unreferenced_vertex_count",
         "axis_aligned_dimensions_m",
         "axis_aligned_dimension_scale_uncertainty_m",
+        "axis_aligned_bounding_box_diagonal_m",
+        "axis_aligned_bounding_box_diagonal_scale_uncertainty_m",
+        "edge_connected_patch_bounding_box_diagonals_m",
+        "edge_connected_patch_bounding_box_diagonal_scale_uncertainties_m",
     ):
         assert artifact[field] == standalone.json()[field]
     assert (

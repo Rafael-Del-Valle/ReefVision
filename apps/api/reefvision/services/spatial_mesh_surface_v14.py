@@ -233,6 +233,13 @@ def measure_mesh_preview(
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
         "axis_aligned_dimensions_m": dimensions,
+        # This global-axis diagonal is not an anatomical measurement.
+        "axis_aligned_bounding_box_diagonal_m": dist((0.0, 0.0, 0.0), dimensions),
+        "axis_aligned_bounding_box_diagonal_scale_uncertainty_m": (
+            dist((0.0, 0.0, 0.0), dimensions) * relative_scale_uncertainty
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "area_weighted_surface_centroid_m": centroid_m,
         "area_weighted_centroid_scale_uncertainty_m": centroid_uncertainty_m,
         "face_count": len(faces),
@@ -267,6 +274,17 @@ def measure_mesh_preview(
         "edge_connected_patch_inconsistent_winding_edge_counts": patch_winding_edge_counts,
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,
         "edge_connected_patch_axis_aligned_dimensions_m": patch_dimensions_m,
+        "edge_connected_patch_bounding_box_diagonals_m": [
+            dist((0.0, 0.0, 0.0), dims) for dims in patch_dimensions_m
+        ],
+        "edge_connected_patch_bounding_box_diagonal_scale_uncertainties_m": (
+            [
+                dist((0.0, 0.0, 0.0), dims) * relative_scale_uncertainty
+                for dims in patch_dimensions_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "edge_connected_patch_area_weighted_surface_centroids_m": patch_centroids_m,
         "edge_connected_patch_centroid_scale_uncertainties_m": (patch_centroid_uncertainties_m),
         "edge_connected_patch_dimension_scale_uncertainties_m": (

@@ -44,3 +44,10 @@ registration, reconstruction, coordinate-origin, navigation, or biological
 localization error. Do not interpret a centroid displacement between surveys
 as growth, movement, or reidentification without reviewed registration and
 organism identity.
+
+Global-axis bounding-box diagonals are calibrated lengths spanning each mesh
+or edge-connected patch's axis-aligned bounding box. They are upper bounds on
+pairwise distances between referenced vertices, not observed biological branch
+lengths or Feret diameters. They depend on orientation, and comparisons across
+time require reviewed registration, calibration, and organism identity.
+Uncertainty is scale-only; missing uncertainty remains null, not zero.
