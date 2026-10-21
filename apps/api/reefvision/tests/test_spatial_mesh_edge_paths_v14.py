@@ -174,9 +174,7 @@ def test_saved_mesh_edge_paths_match_standalone(client: TestClient) -> None:
     assert standalone.status_code == 200, standalone.text
     assert artifact["surface_edge_paths"] == standalone.json()["surface_edge_paths"]
     assert artifact["surface_edge_paths"][0]["geometric_detour_ratio"] == pytest.approx(1.0)
-    assert artifact["surface_edge_paths"][0]["path_qc_warnings"] == [
-        "open_boundary_edge_on_path"
-    ]
+    assert artifact["surface_edge_paths"][0]["path_qc_warnings"] == ["open_boundary_edge_on_path"]
     assert (
         artifact["provenance"]["geometry_sha256"]
         == (standalone.json()["provenance"]["geometry_sha256"])
