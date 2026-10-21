@@ -139,11 +139,7 @@ def test_bounds_preserve_negative_source_coordinates() -> None:
         calibration_method="ruler",
         calibration_evidence="Unverified ruler",
     )
-    assert result["axis_aligned_min_in_source_frame_m"] == pytest.approx(
-        [-0.02, -0.03, -0.04]
-    )
-    assert result["axis_aligned_max_in_source_frame_m"] == pytest.approx(
-        [0.01, 0.02, 0.03]
-    )
+    assert result["axis_aligned_min_in_source_frame_m"] == pytest.approx([-0.02, -0.03, -0.04])
+    assert result["axis_aligned_max_in_source_frame_m"] == pytest.approx([0.01, 0.02, 0.03])
     assert result["axis_aligned_dimensions_m"] == pytest.approx([0.03, 0.05, 0.07])
     assert result["measurement_status"] == "caller_supplied_unverified"
