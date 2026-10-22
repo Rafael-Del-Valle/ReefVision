@@ -21,6 +21,13 @@ def valid_workflow(version: str = "1.0.3") -> str:
     slug = version.replace(".", "-")
     return f"""name: Build Windows Desktop
   historical_document: docs/RELEASE_1.0.2.md
+  build-windows-installer:
+    steps:
+      - uses: actions/setup-python@v5
+      - name: Check Windows installer version before packaging
+        run: python scripts/check-windows-installer-acceptance-version.py
+      - name: Build MSI desktop installer with bundled checkpoints
+        run: npm run build:desktop
   windows-clean-install-acceptance:
     name: Install, launch, persist and uninstall {version} on fresh Windows
     steps:
@@ -28,6 +35,7 @@ def valid_workflow(version: str = "1.0.3") -> str:
           $folder = 'reefvision-{slug}-installer'
           $msi = 'ReefVision_{version}_x64_en-US.msi'
           if ($msi.Name -ne 'ReefVision_{version}_x64_en-US.msi') {{ throw 'bad' }}
+          if ($versionRecord.StringData(1) -ne '{version}') {{ throw 'bad' }}
           throw 'MSI ProductVersion must be {version}.'
           -AcceptanceRoot 'C:\\reefvision-{slug}-disposable-acceptance'
       - name: ReefVision-{version}-Windows-Clean-Install-Evidence
