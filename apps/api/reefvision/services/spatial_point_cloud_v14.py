@@ -201,6 +201,9 @@ def measure_point_cloud_preview(
             else None
         ),
         "arithmetic_centroid_in_source_frame_m": centroid,
+        "arithmetic_centroid_in_source_frame_scale_interval_m": coordinate_scale_intervals(
+            centroid
+        ),
         "surface_area_m2": None,
         "branch_length_m": None,
         "qc_warnings": (["duplicate_points_present"] if unique_count < len(vertices) else []),

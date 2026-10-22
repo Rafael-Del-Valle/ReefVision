@@ -129,6 +129,7 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     for key in (
         "axis_aligned_min_in_source_frame_scale_interval_m",
         "axis_aligned_max_in_source_frame_scale_interval_m",
+        "arithmetic_centroid_in_source_frame_scale_interval_m",
     ):
         assert artifact["payload_json"][key] == expected[key]
     assert artifact["payload_json"]["provenance"] == expected["provenance"]
@@ -147,4 +148,24 @@ def test_bounds_preserve_negative_source_coordinates() -> None:
     assert result["axis_aligned_min_in_source_frame_m"] == pytest.approx([-0.02, -0.03, -0.04])
     assert result["axis_aligned_max_in_source_frame_m"] == pytest.approx([0.01, 0.02, 0.03])
     assert result["axis_aligned_dimensions_m"] == pytest.approx([0.03, 0.05, 0.07])
+    assert result["arithmetic_centroid_in_source_frame_scale_interval_m"] is None
     assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_centroid_scale_intervals_preserve_signed_source_frame() -> None:
+    result = measure_point_cloud_preview(
+        points=[[-2, 2, 0], [0, 4, 0]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unverified ruler",
+        relative_scale_uncertainty=0.1,
+    )
+    assert result["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
+        [-0.01, 0.03, 0.0]
+    )
+    intervals = result["arithmetic_centroid_in_source_frame_scale_interval_m"]
+    assert intervals is not None
+    expected_intervals = [[-0.011, -0.009], [0.027, 0.033], [0, 0]]
+    for actual, expected in zip(intervals, expected_intervals, strict=True):
+        assert actual == pytest.approx(expected)
+    assert result["provenance"]["coordinate_registration_verified"] is False
