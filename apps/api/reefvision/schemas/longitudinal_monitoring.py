@@ -18,6 +18,7 @@ class MonitoringObservation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     organism_id: str = Field(min_length=1, max_length=150)
+    parent_colony_id: str | None = Field(default=None, max_length=150)
     metric_name: str = Field(min_length=1, max_length=100)
     source_record_id: str = Field(min_length=1, max_length=150)
     observed_at: datetime
@@ -28,6 +29,7 @@ class MonitoringObservation(BaseModel):
 
     @field_validator(
         "organism_id",
+        "parent_colony_id",
         "metric_name",
         "source_record_id",
         "unit",

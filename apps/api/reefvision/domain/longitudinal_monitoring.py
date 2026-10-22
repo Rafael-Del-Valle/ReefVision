@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
+from reefvision.domain.ecology_lineage_policy import validate_declared_lineage
 from reefvision.domain.ecology_unit_coverage import audit_unit_coverage
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.population_unit_summaries import summarize_population_units
@@ -126,6 +127,7 @@ def analyze_longitudinal(
     This is an exploratory calculator for caller-supplied measurements, NOT a read of
     verified ReefVision annotations. It does not estimate survival or significance.
     """
+    validate_declared_lineage(request.observations, experimental_unit_type=request.experimental_unit_type)
     grouped: dict[tuple[str, str], list[MonitoringObservation]] = defaultdict(list)
     used_sources: set[str] = set()
     for obs in request.observations:
@@ -206,7 +208,7 @@ def analyze_longitudinal(
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-longitudinal-0005",
+            algorithm_version="ecology-longitudinal-0006",
             records=request.observations,
             parameters={"experimental_unit_type": request.experimental_unit_type},
             source_record_ids=(obs.source_record_id for obs in request.observations),
@@ -222,6 +224,7 @@ def analyze_longitudinal(
         unit_coverage=unit_coverage,
         limitations=[
             "Caller-supplied observations are not verified against project data or calibration.",
+            "Parent-colony identity and experimental units are declared, not authenticated.",
             "Changes compare the first and last sampling dates; "
             "no statistical significance is inferred.",
             "Organisms are the reporting unit; observations are not pooled "

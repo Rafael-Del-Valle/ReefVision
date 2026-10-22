@@ -265,3 +265,21 @@ Standalone and saved workflows share the same validation and fail closed on
 conflicting identity declarations. These are caller-supplied labels, **not**
 verified specimen identity, true independence, or reviewed human consensus.
 No migration, external model acquisition, or verified-dataset promotion occurs.
+
+## Longitudinal parent-colony lineage safeguards (2026-10-22)
+
+Exploratory longitudinal observations may declare `parent_colony_id` in addition
+to the existing organism and experimental-unit identifiers. The shared kernel
+rejects partial lineage declarations, changes of an organism's declared parent,
+different parent colonies inside one colony-level unit, and one parent colony
+split across multiple purported independent colony units. Common plural and
+`-level` biological unit labels are recognized; different fragments from one
+parent in different tanks remain valid when tanks are the declared units.
+
+The standalone API and persisted executable `ecology_longitudinal_analysis`
+Workflow Builder node use the same fail-closed validation. The input fingerprint
+includes declared parent identity and algorithm version
+`ecology-longitudinal-0006`. These safeguards do **not** authenticate colony
+identities, project-owned observations, calibration, independence or review;
+`caller_supplied_unverified` remains mandatory. Scientific and Windows
+acceptance are still outstanding.
