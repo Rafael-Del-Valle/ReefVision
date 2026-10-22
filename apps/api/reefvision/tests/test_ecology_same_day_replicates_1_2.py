@@ -36,9 +36,7 @@ def _observation(
         ("2026-04-01T23:00:00-04:00", "2026-04-02T04:00:00Z"),
     ],
 )
-def test_same_utc_day_photographs_require_reviewed_aggregation(
-    first: str, second: str
-) -> None:
+def test_same_utc_day_photographs_require_reviewed_aggregation(first: str, second: str) -> None:
     request = LongitudinalAnalysisRequest(
         observations=[
             _observation("frag-A", first, "first"),
@@ -63,9 +61,7 @@ def test_distinct_organisms_and_metrics_can_share_sampling_dates() -> None:
             (2, "2026-04-02T11:00:00Z"),
         )
     ]
-    result = analyze_longitudinal(
-        LongitudinalAnalysisRequest(observations=observations)
-    )
+    result = analyze_longitudinal(LongitudinalAnalysisRequest(observations=observations))
     assert result.evaluated_series_count == 3
     assert result.analysis_provenance.algorithm_version == "ecology-longitudinal-0004"
     assert result.evidence_level == "caller_supplied_unverified"
@@ -127,6 +123,4 @@ def test_saved_workflow_fails_closed_without_longitudinal_artifact(
     body = detail.json()
     assert body["run"]["status"] == "failed"
     assert "same UTC sampling date" in body["run"]["error_message"]
-    assert not any(
-        item["data_type"] == "longitudinal_analysis" for item in body["artifacts"]
-    )
+    assert not any(item["data_type"] == "longitudinal_analysis" for item in body["artifacts"])
