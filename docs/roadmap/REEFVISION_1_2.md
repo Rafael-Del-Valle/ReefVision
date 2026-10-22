@@ -232,3 +232,19 @@ validation error. The provenance algorithm advances to
 no database schema migration; prior persisted unverified artifacts are not
 rewritten. A future authenticated observation service must support explicit
 scientist-reviewed technical-replicate aggregation and identity verification.
+
+## UTC-date-aligned unit windows (2026-10-22)
+
+An exploratory tank/colony/site summary requires matching first and last
+**UTC sampling dates** for all constituent organisms, not identical acquisition
+hours. Same-day photographs of *different* organisms can occur at different
+times without incorrectly excluding their shared experimental unit. The unit
+summary retains the earliest baseline and latest final capture timestamps as
+an acquisition envelope, while each organism's change-per-day still uses its
+own exact elapsed time. Different UTC sampling dates remain an exclusion, and
+multiple photographs of the **same** organism/metric on one UTC date remain
+prohibited pending reviewed technical-replicate resolution. Provenance advances
+to `ecology-longitudinal-0005`. The standalone API and existing executable,
+persisted Workflow Builder node use the same domain kernel. This is a
+caller-supplied, unverified descriptive analysis; it does not authenticate
+organism identity or true experimental independence.

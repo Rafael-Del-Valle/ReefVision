@@ -81,7 +81,14 @@ def _summarize_experimental_units(
             )
             continue
         series = [completed[key] for key in sorted(keys)]
-        windows = {(item.first_observed_at, item.last_observed_at) for item in series}
+        # Fragments imaged at different hours of the same UTC sampling dates
+        # share a biological sampling window; their photographs are not
+        # independent time points. Each organism still retains its exact
+        # timestamps for change-per-day calculations.
+        windows = {
+            (item.first_observed_at.date(), item.last_observed_at.date())
+            for item in series
+        }
         if len(windows) != 1:
             excluded.append(
                 ExcludedExperimentalUnit(
@@ -91,7 +98,10 @@ def _summarize_experimental_units(
                 )
             )
             continue
-        baseline_at, final_at = next(iter(windows))
+        # Preserve the full within-date acquisition envelope rather than
+        # arbitrarily selecting the timestamps of one organism.
+        baseline_at = min(item.first_observed_at for item in series)
+        final_at = max(item.last_observed_at for item in series)
         mean_change = finite_descriptive_mean(item.absolute_change for item in series)
         mean_rate = finite_descriptive_mean(item.change_per_day for item in series)
         if not all(math.isfinite(v) for v in (mean_change, mean_rate)):
@@ -199,7 +209,7 @@ def analyze_longitudinal(
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-longitudinal-0004",
+            algorithm_version="ecology-longitudinal-0005",
             records=request.observations,
             parameters={"experimental_unit_type": request.experimental_unit_type},
             source_record_ids=(obs.source_record_id for obs in request.observations),
@@ -220,7 +230,7 @@ def analyze_longitudinal(
             "Organisms are the reporting unit; observations are not pooled "
             "as independent replicates.",
             "Experimental-unit means are descriptive only, require an explicitly declared "
-            "sampling unit and matching organism-level sampling windows, and exclude "
+            "sampling unit and matching organism-level UTC sampling-date windows, and exclude "
             "units with missing follow-up; they are not independent hypothesis tests.",
             "Cross-unit summaries weight eligible units equally and stratify by UTC dates; "
             "no population inference or significance is claimed.",
