@@ -32,6 +32,10 @@ jobs:
         shell: pwsh
         run: ./scripts/test-windows-clean-install-harness.ps1
 
+      - name: Reject unsafe ReefVision command installs before packaging
+        shell: pwsh
+        run: ./scripts/test-reefvision-command-preflight.ps1
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

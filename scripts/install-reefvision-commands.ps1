@@ -27,21 +27,16 @@ function Write-ManagedWrapper {
     Set-Content -LiteralPath $WrapperPath -Value $wrapperContent -Encoding ASCII
 }
 
+# Check all predictable conflicts before touching configuration, support files,
+# command wrappers, or the user's PATH. -Force only authorizes replacement of
+# existing unmanaged wrapper *files*, not directory collisions.
 $ResolvedRepoPath = Resolve-ReefVisionRepoPath -PreferredPath $RepoPath
 if ($null -eq $ResolvedRepoPath) {
-    $ResolvedRepoPath = Set-ReefVisionRepoPath -RepoPath $Root
-}
-else {
-    $ResolvedRepoPath = Set-ReefVisionRepoPath -RepoPath $ResolvedRepoPath
+    $ResolvedRepoPath = $Root
 }
 
-Write-ReefVisionCommandStep "Installing ReefVision command shortcuts"
-Write-ReefVisionCommandNote "Repository: $ResolvedRepoPath"
-
-New-ReefVisionCommandDirectoryLayout
 $binDir = Get-ReefVisionCommandBinDir
 $supportDir = Get-ReefVisionCommandSupportDir
-
 $sourceAssets = @(
     @{
         Source = Join-Path $ResolvedRepoPath "scripts\start-reefvision.ps1"
@@ -56,14 +51,6 @@ $sourceAssets = @(
         Destination = Join-Path $supportDir "reefvision-commands.ps1"
     }
 )
-
-foreach ($asset in $sourceAssets) {
-    if (-not (Test-Path $asset.Source -PathType Leaf)) {
-        throw "Required command asset is missing from the repository: $($asset.Source)"
-    }
-    Copy-Item -LiteralPath $asset.Source -Destination $asset.Destination -Force
-}
-
 $wrappers = @(
     @{
         Path = Join-Path $binDir "start-reefvision.cmd"
@@ -75,17 +62,48 @@ $wrappers = @(
     }
 )
 
+$managedDirectories = @(
+    (Get-ReefVisionCommandsRoot),
+    $binDir,
+    $supportDir,
+    (Split-Path -Parent (Get-ReefVisionCommandConfigPath)),
+    (Get-ReefVisionCommandRuntimeDir)
+)
+foreach ($directory in $managedDirectories) {
+    if (Test-Path -LiteralPath $directory -PathType Leaf) {
+        throw "Refusing to replace a file with a ReefVision command directory: $directory"
+    }
+}
+foreach ($asset in $sourceAssets) {
+    if (-not (Test-Path -LiteralPath $asset.Source -PathType Leaf)) {
+        throw "Required command asset is missing from the repository: $($asset.Source)"
+    }
+    if (Test-Path -LiteralPath $asset.Destination -PathType Container) {
+        throw "Refusing to replace a directory with a ReefVision support script: $($asset.Destination)"
+    }
+}
 $conflicts = @()
 foreach ($wrapper in $wrappers) {
-    if ((Test-Path $wrapper.Path -PathType Leaf) -and -not $Force -and -not (Test-ReefVisionManagedWrapper -Path $wrapper.Path)) {
-        $conflicts += $wrapper.Path
-        continue
+    if (Test-Path -LiteralPath $wrapper.Path -PathType Container) {
+        throw "Refusing to replace a directory with a ReefVision command wrapper: $($wrapper.Path)"
     }
-    Write-ManagedWrapper -WrapperPath $wrapper.Path -ScriptName $wrapper.ScriptName
+    if ((Test-Path -LiteralPath $wrapper.Path -PathType Leaf) -and -not $Force -and -not (Test-ReefVisionManagedWrapper -Path $wrapper.Path)) {
+        $conflicts += $wrapper.Path
+    }
 }
-
 if ($conflicts.Count -gt 0) {
     throw "Existing command wrappers are not ReefVision-managed. Resolve these conflicts or rerun with -Force: $($conflicts -join ', ')"
+}
+
+$ResolvedRepoPath = Set-ReefVisionRepoPath -RepoPath $ResolvedRepoPath
+Write-ReefVisionCommandStep "Installing ReefVision command shortcuts"
+Write-ReefVisionCommandNote "Repository: $ResolvedRepoPath"
+New-ReefVisionCommandDirectoryLayout
+foreach ($asset in $sourceAssets) {
+    Copy-Item -LiteralPath $asset.Source -Destination $asset.Destination -Force
+}
+foreach ($wrapper in $wrappers) {
+    Write-ManagedWrapper -WrapperPath $wrapper.Path -ScriptName $wrapper.ScriptName
 }
 
 $pathResult = Ensure-ReefVisionBinOnUserPath
