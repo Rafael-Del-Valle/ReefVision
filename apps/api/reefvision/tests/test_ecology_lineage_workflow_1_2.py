@@ -62,9 +62,7 @@ def test_saved_workflow_fails_closed_on_mixed_colony_lineage(client: TestClient)
     body = detail.json()
     assert body["run"]["status"] == "failed"
     assert "different parent colonies" in body["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "paired_count_comparison" for row in body["artifacts"]
-    )
+    assert not any(row["data_type"] == "paired_count_comparison" for row in body["artifacts"])
 
 
 def test_standalone_accepts_parent_fragments_in_separate_tanks(client: TestClient) -> None:
