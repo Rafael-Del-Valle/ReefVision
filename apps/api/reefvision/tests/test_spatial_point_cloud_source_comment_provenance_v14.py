@@ -51,8 +51,7 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
         == hashlib.sha256(COMMENTED_PLY.encode()).hexdigest()
     )
     assert (
-        plain["provenance"]["source_text_sha256"]
-        != commented["provenance"]["source_text_sha256"]
+        plain["provenance"]["source_text_sha256"] != commented["provenance"]["source_text_sha256"]
     )
     assert (
         plain["selected_point_chords"][0]["endpoint_ordered_geometry_sha256"]
