@@ -137,6 +137,7 @@ def test_rejects_corrupted_saved_snapshot(corruption):
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
 
+
 @pytest.mark.parametrize("corruption", ["foreign", "missing", "not_mapping"])
 def test_rejects_modified_saved_source_configuration(corruption):
     """A saved queue's resolved QC source must match its stored config."""

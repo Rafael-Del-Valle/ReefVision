@@ -19,9 +19,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
 
     Validate persisted records only; never recalculate from live annotations.
     """
-    invalid = ValidationError(
-        "Saved QC review queue snapshot failed integrity validation"
-    )
+    invalid = ValidationError("Saved QC review queue snapshot failed integrity validation")
     # The generator stores the resolved QC source in both locations. A
     # workflow without an explicit source may select the latest historical
     # run, so compare persisted records rather than current QC state.
@@ -29,8 +27,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     if (
         not isinstance(configuration, dict)
         or "source_quality_control_run_id" not in configuration
-        or configuration["source_quality_control_run_id"]
-        != queue.source_quality_control_run_id
+        or configuration["source_quality_control_run_id"] != queue.source_quality_control_run_id
     ):
         raise invalid
 
@@ -78,12 +75,9 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # The queue creator ranks by descending priority and then image ID for
     # deterministic ties. The original scope digest does not encode ranks,
     # so two otherwise unchanged items could silently exchange priorities.
-    saved_order = [
-        item.image_id for item in sorted(items, key=lambda item: item.rank_position)
-    ]
+    saved_order = [item.image_id for item in sorted(items, key=lambda item: item.rank_position)]
     expected_order = [
-        item.image_id
-        for item in sorted(items, key=lambda item: (-item.score, item.image_id))
+        item.image_id for item in sorted(items, key=lambda item: (-item.score, item.image_id))
     ]
     if saved_order != expected_order:
         raise invalid

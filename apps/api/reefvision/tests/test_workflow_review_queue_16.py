@@ -10,7 +10,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import ReviewQueue, ReviewQueueItem, WorkflowArtifact, WorkflowNodeRun
+from reefvision.db.models import (
+    ReviewQueue,
+    ReviewQueueItem,
+    WorkflowArtifact,
+    WorkflowNodeRun,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_runtime_adapters import execute_runtime_adapter
@@ -148,9 +153,7 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
         # Persisted snapshots must fail closed on retry, not silently reuse
         # tampered scores even when workflow parameters are unchanged.
         saved_item = session.scalar(
-            select(ReviewQueueItem).where(
-                ReviewQueueItem.review_queue_id == result["queue_id"]
-            )
+            select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == result["queue_id"])
         )
         assert saved_item is not None
         original_score = saved_item.score
@@ -265,9 +268,7 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
     assert detail.status_code == 200, detail.text
     record = detail.json()
     qc_node = next(n for n in record["nodes"] if n["node_id"] == "qc")
-    artifact = next(
-        a for a in record["artifacts"] if a["data_type"] == "review_queue_reference"
-    )
+    artifact = next(a for a in record["artifacts"] if a["data_type"] == "review_queue_reference")
     queue_id = artifact["payload_json"]["queue_id"]
     assert artifact["payload_json"]["review_status"] == "requires_researcher_review"
 
