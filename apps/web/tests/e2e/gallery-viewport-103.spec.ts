@@ -4,7 +4,7 @@ import path from "node:path";
 
 // Browser-generated, decodable PNGs exercise the viewer without requiring
 // network image fixtures or changing scientific source-image metadata.
-test("initial image renders and gallery scrolling preserves viewport", async ({ page }) => {
+test("initial image and gallery scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 820 });
 
   const makePng = async (width: number, height: number): Promise<Buffer> => {
@@ -106,7 +106,8 @@ test("initial image renders and gallery scrolling preserves viewport", async ({ 
     (name) => name.startsWith("index-") && name.endsWith(".js"),
   );
   const styleName = assets.find((name) => name.endsWith(".css"));
-  if (!scriptName || !styleName) throw new Error("Built Vite assets are missing");
+  if (!scriptName || !styleName)
+    throw new Error("Built Vite assets are missing");
 
   const [script, style] = await Promise.all([
     readFile(path.join(assetDirectory, scriptName), "utf8"),
