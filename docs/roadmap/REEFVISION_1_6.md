@@ -65,6 +65,21 @@
 - The deterministic rank check was separately reformatted for Python CI.
   These changes require exact-head CI and Windows acceptance.
 
+## 1.6 saved scientific summary integrity
+
+- The queue scope checksum protects saved image IDs and scores, but does not
+  cover the separately persisted QC summary. Saved Workflow Builder retries now
+  reconstruct mean priority, severity counts, split counts and top-ten image
+  order from saved items; inconsistent summaries fail closed.
+- No live annotations are re-read or rescored, and reviewer states, assignments
+  and comments remain editable. Both empty queues and zero-valued summaries
+  are supported.
+- Unit regressions cover missing/nonfinite/boolean mean, corrupted counts,
+  invalid top-ten order and empty queues. The executable saved-workflow test
+  tampers with the summary, checks rejection, restores it, and verifies reuse.
+- Exact-head CI, migration compatibility, Windows installed GUI and real
+  scientific-data acceptance are still required.
+
 ## Outstanding acceptance
 
 Run Ruff, mypy, backend/frontend/E2E and migration/backwards-compatibility checks

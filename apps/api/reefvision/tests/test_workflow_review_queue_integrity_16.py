@@ -23,6 +23,8 @@ def snapshot():
             dataset_version_id=None,
             rank_position=1,
             score=80.0,
+            highest_qc_severity="warning",
+            split="train",
             review_state="pending",
         ),
         SimpleNamespace(
@@ -32,6 +34,8 @@ def snapshot():
             dataset_version_id=None,
             rank_position=2,
             score=20.0,
+            highest_qc_severity=None,
+            split=None,
             review_state="pending",
         ),
     ]
@@ -51,6 +55,12 @@ def snapshot():
         item_count=2,
         input_checksums_json={"item_count": 2, "queue_scope_sha256": digest},
         configuration_json={"source_quality_control_run_id": None},
+        summary_json={
+            "average_score": 50.0,
+            "counts_by_severity": {"warning": 1},
+            "counts_by_split": {"train": 1, "unspecified": 1},
+            "top_image_ids": ["img-a", "img-b"],
+        },
     )
     return queue, items
 
@@ -165,3 +175,63 @@ def test_automatic_source_run_id_is_not_required_to_be_none():
         }
     )
     validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "missing",
+        "average",
+        "nonfinite_average",
+        "boolean_average",
+        "severity",
+        "split",
+        "top_image_ids",
+        "negative_count",
+        "boolean_count",
+    ],
+)
+def test_rejects_corrupted_saved_scientific_summary(corruption):
+    queue, items = snapshot()
+    if corruption == "missing":
+        queue.summary_json = None
+    elif corruption == "average":
+        queue.summary_json["average_score"] = 51.0
+    elif corruption == "nonfinite_average":
+        queue.summary_json["average_score"] = float("nan")
+    elif corruption == "boolean_average":
+        queue.summary_json["average_score"] = True
+    elif corruption == "severity":
+        queue.summary_json["counts_by_severity"] = {"error": 1}
+    elif corruption == "split":
+        queue.summary_json["counts_by_split"] = {"train": 2}
+    elif corruption == "top_image_ids":
+        queue.summary_json["top_image_ids"] = ["img-b", "img-a"]
+    elif corruption == "negative_count":
+        queue.summary_json["counts_by_severity"] = {"warning": -1}
+    elif corruption == "boolean_count":
+        queue.summary_json["counts_by_severity"] = {"warning": True}
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_empty_saved_queue_summary_is_valid():
+    queue, _items = snapshot()
+    queue.item_count = 0
+    queue.input_checksums_json = {
+        "item_count": 0,
+        "queue_scope_sha256": canonical_json_sha256(
+            {
+                "image_ids": [],
+                "scores": {},
+                "source_quality_control_run_id": None,
+            }
+        ),
+    }
+    queue.summary_json = {
+        "average_score": 0.0,
+        "counts_by_severity": {},
+        "counts_by_split": {},
+        "top_image_ids": [],
+    }
+    validate_saved_queue_snapshot(queue, [])

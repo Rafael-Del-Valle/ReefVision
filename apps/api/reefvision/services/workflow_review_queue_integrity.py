@@ -6,8 +6,10 @@ validator deliberately leaves review states, comments and assignments alone.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Sequence
 from math import isfinite
+from statistics import mean
 from typing import Any
 
 from reefvision.domain.errors import ValidationError
@@ -80,6 +82,44 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         item.image_id for item in sorted(items, key=lambda item: (-item.score, item.image_id))
     ]
     if saved_order != expected_order:
+        raise invalid
+
+    # Queue creation saves a scientific summary separately from the scope
+    # checksum. Reconstruct it only from the persisted queue items, never
+    # from current annotations or mutable reviewer decisions.
+    summary = queue.summary_json
+    if not isinstance(summary, dict):
+        raise invalid
+    expected_average = round(mean(scores.values()), 2) if scores else 0.0
+    stored_average = summary.get("average_score")
+    if (
+        type(stored_average) not in (int, float)
+        or not isfinite(stored_average)
+        or stored_average != expected_average
+    ):
+        raise invalid
+
+    def matches_counts(field: str, expected: Counter[str]) -> bool:
+        saved = summary.get(field)
+        return (
+            isinstance(saved, dict)
+            and all(
+                isinstance(key, str) and type(count) is int and count >= 0
+                for key, count in saved.items()
+            )
+            and saved == dict(expected)
+        )
+
+    if (
+        not matches_counts(
+            "counts_by_severity",
+            Counter(item.highest_qc_severity for item in items if item.highest_qc_severity),
+        )
+        or not matches_counts(
+            "counts_by_split", Counter(item.split or "unspecified" for item in items)
+        )
+        or summary.get("top_image_ids") != saved_order[:10]
+    ):
         raise invalid
 
     actual = canonical_json_sha256(

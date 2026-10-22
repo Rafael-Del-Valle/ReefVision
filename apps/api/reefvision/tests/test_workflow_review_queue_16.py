@@ -200,6 +200,34 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             inputs={"project": [source]},
         )
         assert restored[0]["payload"]["queue_id"] == result["queue_id"]
+        # The saved scientific summary is independent of the scope checksum.
+        # Reject tampering without changing reviewer decisions or live QC.
+        original_summary = dict(saved_queue.summary_json)
+        saved_queue.summary_json = {
+            **original_summary,
+            "average_score": original_summary["average_score"] + 1.0,
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        saved_queue.summary_json = original_summary
+        session.flush()
+        restored = execute_runtime_adapter(
+            "qc_review_queue",
+            session=session,
+            settings=app.state.settings,
+            project_id=project["id"],
+            parameters=params,
+            inputs={"project": [source]},
+        )
+        assert restored[0]["payload"]["queue_id"] == result["queue_id"]
         # Omitting a persisted optional parameter is a provenance change,
         # even when its saved value was null.
         missing_source = dict(params)
