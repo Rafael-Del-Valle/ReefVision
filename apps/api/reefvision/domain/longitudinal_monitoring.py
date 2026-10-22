@@ -85,10 +85,7 @@ def _summarize_experimental_units(
         # share a biological sampling window; their photographs are not
         # independent time points. Each organism still retains its exact
         # timestamps for change-per-day calculations.
-        windows = {
-            (item.first_observed_at.date(), item.last_observed_at.date())
-            for item in series
-        }
+        windows = {(item.first_observed_at.date(), item.last_observed_at.date()) for item in series}
         if len(windows) != 1:
             excluded.append(
                 ExcludedExperimentalUnit(
