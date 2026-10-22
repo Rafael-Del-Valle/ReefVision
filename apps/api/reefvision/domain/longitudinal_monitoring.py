@@ -127,7 +127,9 @@ def analyze_longitudinal(
     This is an exploratory calculator for caller-supplied measurements, NOT a read of
     verified ReefVision annotations. It does not estimate survival or significance.
     """
-    validate_declared_lineage(request.observations, experimental_unit_type=request.experimental_unit_type)
+    validate_declared_lineage(
+        request.observations, experimental_unit_type=request.experimental_unit_type
+    )
     grouped: dict[tuple[str, str], list[MonitoringObservation]] = defaultdict(list)
     used_sources: set[str] = set()
     for obs in request.observations:
