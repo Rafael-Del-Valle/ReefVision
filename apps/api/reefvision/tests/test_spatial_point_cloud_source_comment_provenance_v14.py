@@ -86,9 +86,7 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
     assert planned.status_code == 200, planned.text
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = client.app
     assert process_workflow_run_job(
