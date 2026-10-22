@@ -27,6 +27,12 @@ from verified research data. Report the independent sampling unit explicitly.
 3. **Derived biological metrics (pending).** Reuse existing calibrated mask
    and centerline infrastructure to calculate colony extent, area, polyp
    density and change, with explicit geometric assumptions and unit QC.
+   **Added 2026-10-22:** connected yet independently identified branch segments,
+   per-branch calibrated lengths, reviewed junctions, graph connectivity/QC,
+   model-predicted branch proposals, Workflow Builder integration and exports.
+   See [the dedicated connected branch specification](REEFVISION_1_2_CONNECTED_BRANCH_MEASUREMENTS.md).
+   This requirement replaces the earlier suggestion to scope multi-branch
+   centerline editing to 1.1; no functionality is claimed complete.
 4. **Population monitoring (pending).** Group by design-specified independent
    sampling units (organism, tank, colony, site), report denominators and
    missing follow-ups; avoid false survival and pseudoreplication.
