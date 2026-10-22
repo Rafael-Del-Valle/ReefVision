@@ -30,6 +30,8 @@ def test_chord_measurements_and_saved_graph(client: TestClient) -> None:
     chords = expected["selected_point_chords"]
     assert [entry["chord_distance_m"] for entry in chords] == pytest.approx([0.05, 0.12])
     assert [entry["scale_uncertainty_m"] for entry in chords] == pytest.approx([0.005, 0.012])
+    for chord, interval in zip(chords, ([0.045, 0.055], [0.108, 0.132]), strict=True):
+        assert chord["chord_distance_scale_interval_m"] == pytest.approx(interval)
     assert expected["branch_length_m"] is None
     assert expected["provenance"]["calibration_verified"] is False
     assert len(expected["provenance"]["ordered_geometry_sha256"]) == 64

@@ -136,6 +136,14 @@ def measure_point_cloud_preview(
                 {
                     "point_indices": list(pair),
                     "chord_distance_m": chord_m,
+                    "chord_distance_scale_interval_m": (
+                        [
+                            chord_m * (1 - relative_scale_uncertainty),
+                            chord_m * (1 + relative_scale_uncertainty),
+                        ]
+                        if relative_scale_uncertainty is not None
+                        else None
+                    ),
                     "scale_uncertainty_m": (
                         chord_m * relative_scale_uncertainty
                         if relative_scale_uncertainty is not None
