@@ -44,6 +44,8 @@ def test_ply_parser_and_geometry_uncertainty() -> None:
     assert result["surface_area_m2"] is None
     assert result["branch_length_m"] is None
     assert result["provenance"]["calibration_verified"] is False
+    assert result["preview_point_indices"] == [0, 1, 2]
+    assert result["preview_points_in_source_frame_m"][1] == pytest.approx([0.02, 0.0, 0.0])
 
 
 @pytest.mark.parametrize(
@@ -170,6 +172,7 @@ def test_centroid_scale_intervals_preserve_signed_source_frame() -> None:
         assert actual == pytest.approx(expected)
     assert result["provenance"]["coordinate_registration_verified"] is False
 
+
 def test_preview_sampling_keeps_original_indices_and_provisional_status() -> None:
     points = [[float(index), -float(index), 0.0] for index in range(2000)]
     kwargs = {
@@ -188,6 +191,11 @@ def test_preview_sampling_keeps_original_indices_and_provisional_status() -> Non
     assert indices[0] == 0
     assert indices[-1] == 1999
     assert indices == sorted(set(indices))
+    assert 1000 not in indices  # Selected measurement endpoints need not be displayed.
+    assert first["axis_aligned_dimensions_m"] == pytest.approx([19.99, 19.99, 0])
+    assert first["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
+        [9.995, -9.995, 0]
+    )
     assert sample == [[value * 0.01 for value in points[i]] for i in indices]
     assert sample == second["preview_points_in_source_frame_m"]
     chord = first["selected_point_chords"][0]
@@ -197,3 +205,18 @@ def test_preview_sampling_keeps_original_indices_and_provisional_status() -> Non
     assert first["branch_length_m"] is None
     assert first["provenance"]["calibration_verified"] is False
     assert first["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_single_point_preview_preserves_zero_extents_without_biological_inference() -> None:
+    result = measure_point_cloud_preview(
+        points=[[2.0, -1.0, 3.0]],
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Unverified ruler",
+    )
+    assert result["preview_point_indices"] == [0]
+    assert result["preview_points_in_source_frame_m"][0] == pytest.approx([0.2, -0.1, 0.3])
+    assert result["axis_aligned_dimensions_m"] == [0.0, 0.0, 0.0]
+    assert result["surface_area_m2"] is None
+    assert result["branch_length_m"] is None
+    assert result["provenance"]["calibration_verified"] is False
