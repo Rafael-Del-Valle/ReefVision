@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from typing import cast
-
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
@@ -31,6 +28,7 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
         "calibration_method": "ruler",
         "calibration_evidence": "Unverified reference",
         "relative_scale_uncertainty": 0.1,
+        "point_index_pairs": [[0, 1]],
     }
     plain_response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     commented_response = client.post(
@@ -59,6 +57,10 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
     assert (
         plain["provenance"]["source_text_sha256"]
         != commented["provenance"]["source_text_sha256"]
+    )
+    assert (
+        plain["selected_point_chords"][0]["endpoint_ordered_geometry_sha256"]
+        == commented["selected_point_chords"][0]["endpoint_ordered_geometry_sha256"]
     )
     assert commented["provenance"]["calibration_verified"] is False
     assert commented["surface_area_m2"] is None
@@ -93,7 +95,7 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
         f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
     )
     assert run.status_code == 202, run.text
-    app = cast(FastAPI, client.app)
+    app = client.app
     assert process_workflow_run_job(
         app.state.settings, app.state.session_factory, str(run.json()["job_id"])
     )
