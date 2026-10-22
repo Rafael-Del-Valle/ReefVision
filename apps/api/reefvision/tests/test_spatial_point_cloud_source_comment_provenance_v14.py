@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
-
 
 PLY = (
     "ply\nformat ascii 1.0\nelement vertex 2\n"
@@ -108,6 +108,10 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
         if a["data_type"] == "point_cloud_measurement_preview"
     )
     assert artifact["payload_json"]["provenance"] == commented["provenance"]
+    assert artifact["payload_json"]["selected_point_chords"] == commented["selected_point_chords"]
+    assert artifact["payload_json"]["axis_aligned_dimensions_m"] == commented["axis_aligned_dimensions_m"]
+    assert artifact["payload_json"]["surface_area_m2"] is None
+    assert artifact["payload_json"]["branch_length_m"] is None
     assert (
         artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     )
