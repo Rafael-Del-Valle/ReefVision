@@ -160,9 +160,7 @@ def test_centroid_scale_intervals_preserve_signed_source_frame() -> None:
         calibration_evidence="Unverified ruler",
         relative_scale_uncertainty=0.1,
     )
-    assert result["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
-        [-0.01, 0.03, 0.0]
-    )
+    assert result["arithmetic_centroid_in_source_frame_m"] == pytest.approx([-0.01, 0.03, 0.0])
     intervals = result["arithmetic_centroid_in_source_frame_scale_interval_m"]
     assert intervals is not None
     expected_intervals = [[-0.011, -0.009], [0.027, 0.033], [0, 0]]
