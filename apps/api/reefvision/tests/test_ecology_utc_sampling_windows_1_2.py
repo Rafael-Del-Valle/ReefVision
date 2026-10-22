@@ -14,9 +14,7 @@ from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_ecology_1_2 import _graph
 
 
-def _obs(
-    organism: str, source: str, observed_at: str, value: float
-) -> dict[str, object]:
+def _obs(organism: str, source: str, observed_at: str, value: float) -> dict[str, object]:
     return {
         "organism_id": organism,
         "metric_name": "polyp_count",
@@ -48,12 +46,8 @@ def test_same_utc_dates_different_hours_are_eligible() -> None:
     assert result.unit_coverage[0].eligible_for_summary is True
     assert result.unit_summaries[0].organism_count == 2
     assert result.unit_summaries[0].mean_absolute_change == 3
-    assert result.unit_summaries[0].baseline_at.isoformat() == (
-        "2026-04-01T08:00:00+00:00"
-    )
-    assert result.unit_summaries[0].final_at.isoformat() == (
-        "2026-04-03T18:00:00+00:00"
-    )
+    assert result.unit_summaries[0].baseline_at.isoformat() == ("2026-04-01T08:00:00+00:00")
+    assert result.unit_summaries[0].final_at.isoformat() == ("2026-04-03T18:00:00+00:00")
     assert result.population_summaries[0].independent_unit_count == 1
     assert result.analysis_provenance.algorithm_version == "ecology-longitudinal-0005"
     assert result.evidence_level == "caller_supplied_unverified"
@@ -65,12 +59,8 @@ def test_timezone_offsets_are_normalized_before_window_comparison() -> None:
     observations[3]["observed_at"] = "2026-04-03T14:00:00-04:00"
     result = analyze_longitudinal(LongitudinalAnalysisRequest(observations=observations))
     assert len(result.unit_summaries) == 1
-    assert result.unit_summaries[0].baseline_at.isoformat() == (
-        "2026-04-01T03:30:00+00:00"
-    )
-    assert result.unit_summaries[0].final_at.isoformat() == (
-        "2026-04-03T18:00:00+00:00"
-    )
+    assert result.unit_summaries[0].baseline_at.isoformat() == ("2026-04-01T03:30:00+00:00")
+    assert result.unit_summaries[0].final_at.isoformat() == ("2026-04-03T18:00:00+00:00")
 
 
 def test_different_utc_sampling_dates_still_exclude_unit() -> None:
@@ -97,9 +87,7 @@ def test_standalone_and_saved_workflow_agree_on_date_window(
     project = create_project(client, "UTC-date ecological sampling")
     project_id = str(project["id"])
     graph = _graph(observations)
-    plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     saved = client.post(
@@ -125,9 +113,7 @@ def test_standalone_and_saved_workflow_agree_on_date_window(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        item
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "longitudinal_analysis"
+        item for item in detail.json()["artifacts"] if item["data_type"] == "longitudinal_analysis"
     ]
     assert len(artifacts) == 1
     payload = artifacts[0]["payload_json"]
