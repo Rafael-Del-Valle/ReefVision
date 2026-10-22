@@ -177,7 +177,8 @@ describe("Gallery", () => {
     expect(onOpenAnnotation).toHaveBeenCalledWith("image-1");
   });
 
-  it("uploads selected files and shows the structured import report", async () => {
+  it("uploads selected files and allows retrying the same camera JPEG", async () => {
+    const importCalls = vi.fn();
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.includes(`/projects/${project.id}/images`)) {
@@ -190,14 +191,15 @@ describe("Gallery", () => {
         });
       }
       if (url.endsWith(`/projects/${project.id}/imports/images`)) {
+        importCalls();
         expect(init?.method).toBe("POST");
         expect(init?.body).toBeInstanceOf(FormData);
         return jsonResponse({
           project_id: project.id,
           successful: [
             {
-              filename: "coral.png",
-              relative_path: "coral.png",
+              filename: "coral.JPEG",
+              relative_path: "coral.JPEG",
               status: "successful",
               detail: null,
               image_id: "image-2",
@@ -215,11 +217,17 @@ describe("Gallery", () => {
 
     renderGallery();
     await screen.findByText("No images yet");
-    const file = new File(["image bytes"], "coral.png", { type: "image/png" });
-    await userEvent.upload(screen.getByLabelText("Import files"), file);
+    const file = new File(["image bytes"], "coral.JPEG", {
+      type: "image/jpeg",
+    });
+    const fileInput = screen.getByLabelText("Import files") as HTMLInputElement;
+    await userEvent.upload(fileInput, file);
 
     expect(await screen.findByText("1 files processed")).toBeInTheDocument();
     expect(screen.getByText("1 imported")).toBeInTheDocument();
+    expect(fileInput.value).toBe("");
+    await userEvent.upload(fileInput, file);
+    await waitFor(() => expect(importCalls).toHaveBeenCalledTimes(2));
   });
 
   it("jumps directly to a requested page with global newest-first ordering", async () => {
