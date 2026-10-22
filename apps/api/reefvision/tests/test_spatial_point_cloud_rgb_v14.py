@@ -65,6 +65,14 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
     original_provenance = expected["provenance"]
     source_digest = hashlib.sha256(RGB_PLY.encode("utf-8")).hexdigest()
     assert original_provenance["source_text_sha256"] == source_digest
+    chord = expected["selected_point_chords"][0]
+    assert chord["endpoint_coordinates_in_source_frame_m"] == [
+        [0.0, 0.0, 0.0],
+        [0.02, 0.0, 0.0],
+    ]
+    assert chord["endpoint_ordered_geometry_sha256"] == hashlib.sha256(
+        b"[[0.0,0.0,0.0],[2.0,0.0,0.0]]"
+    ).hexdigest()
     recolored_ply = RGB_PLY.replace("255 0 0 0 128 0", "254 0 0 0 128 0")
     recolored_response = client.post(
         f"{base}/spatial/point-cloud-preview",
@@ -72,11 +80,14 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
     )
     assert recolored_response.status_code == 200, recolored_response.text
     recolored_provenance = recolored_response.json()["provenance"]
-    assert (
-        recolored_provenance["geometry_sha256"]
-        == original_provenance["geometry_sha256"]
-    )
+    assert recolored_provenance["geometry_sha256"] == original_provenance["geometry_sha256"]
     assert recolored_provenance["source_text_sha256"] != source_digest
+    assert (
+        recolored_response.json()["selected_point_chords"][0][
+            "endpoint_ordered_geometry_sha256"
+        ]
+        == chord["endpoint_ordered_geometry_sha256"]
+    )
     graph = {
         "graph_id": "point-cloud-rgb-v14",
         "name": "RGB point cloud geometry preview",
