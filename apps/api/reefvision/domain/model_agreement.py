@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
+from reefvision.domain.ecology_lineage_policy import validate_declared_lineage
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.scientific_input_provenance import scientific_input_provenance
 from reefvision.domain.scientific_mean import finite_descriptive_mean
@@ -55,6 +56,8 @@ def compare_paired_counts(
             existing = memberships.setdefault(item.organism_id, item.experimental_unit_id)
             if existing != item.experimental_unit_id:
                 raise ValidationError("An organism cannot change experimental units")
+
+    validate_declared_lineage(pairs, experimental_unit_type=unit_type)
 
     differences: list[PairedCountDifference] = []
     by_unit: dict[str, list[PairedCountDifference]] = defaultdict(list)
@@ -188,7 +191,7 @@ def compare_paired_counts(
     return PairedCountComparisonResponse(
         reference_kind=request.reference_kind,
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-paired-count-0002",
+            algorithm_version="ecology-paired-count-0003",
             records=request.pairs,
             parameters={
                 "reference_kind": request.reference_kind,
@@ -233,5 +236,6 @@ def compare_paired_counts(
             "Nested means average images per organism, organisms per unit, then units.",
             "Sampling dates and technical-replicate identity are not verified.",
             "Experimental-unit identities are not validated against a registered study design.",
+            "Parent-colony labels are caller-declared and require independent verification.",
         ],
     )

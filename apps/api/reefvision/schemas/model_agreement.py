@@ -16,6 +16,7 @@ class PairedCountObservation(BaseModel):
 
     observation_id: str = Field(min_length=1, max_length=150)
     organism_id: str = Field(min_length=1, max_length=150)
+    parent_colony_id: str | None = Field(default=None, max_length=150)
     metric_name: str = Field(min_length=1, max_length=100)
     reference_source_record_id: str = Field(min_length=1, max_length=150)
     model_source_record_id: str = Field(min_length=1, max_length=150)
@@ -27,6 +28,7 @@ class PairedCountObservation(BaseModel):
     @field_validator(
         "observation_id",
         "organism_id",
+        "parent_colony_id",
         "metric_name",
         "reference_source_record_id",
         "model_source_record_id",

@@ -248,3 +248,20 @@ to `ecology-longitudinal-0005`. The standalone API and existing executable,
 persisted Workflow Builder node use the same domain kernel. This is a
 caller-supplied, unverified descriptive analysis; it does not authenticate
 organism identity or true experimental independence.
+
+## Caller-declared parent-colony identity safeguards (2026-10-22)
+
+The exploratory paired-count API and executable, persisted Workflow Builder
+node accept an optional `parent_colony_id` for each paired image. Once one
+pair supplies lineage, every pair must. An organism cannot change parent;
+one colony-level experimental unit cannot contain different parents; one
+parent cannot be split into multiple independent colony-level units. An
+organism/individual/fragment-level unit cannot contain distinct organisms.
+Multiple fragments from the same parent may be distributed across different
+tanks when tank is the declared unit. Existing unlabeled comparisons remain
+compatible but unverified. The algorithm provenance advances to
+`ecology-paired-count-0003` and includes lineage in canonical fingerprints.
+Standalone and saved workflows share the same validation and fail closed on
+conflicting identity declarations. These are caller-supplied labels, **not**
+verified specimen identity, true independence, or reviewed human consensus.
+No migration, external model acquisition, or verified-dataset promotion occurs.
