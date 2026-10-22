@@ -28,9 +28,7 @@ from reefvision.tests.test_workflow_model_agreement_1_2 import (
 
 
 @pytest.mark.parametrize("value", [True, False])
-def test_longitudinal_rejects_boolean_measurement(
-    client: TestClient, value: bool
-) -> None:
+def test_longitudinal_rejects_boolean_measurement(client: TestClient, value: bool) -> None:
     observations = longitudinal_observations()
     observations[0]["value"] = value
     payload = {"observations": observations}
@@ -42,9 +40,7 @@ def test_longitudinal_rejects_boolean_measurement(
 
 @pytest.mark.parametrize("field", ["reference_count", "model_count"])
 @pytest.mark.parametrize("value", [True, False])
-def test_paired_counts_reject_booleans(
-    client: TestClient, field: str, value: bool
-) -> None:
+def test_paired_counts_reject_booleans(client: TestClient, field: str, value: bool) -> None:
     pairs = paired_observations()
     pairs[0][field] = value
     payload = {"pairs": pairs, "reference_kind": "human_consensus"}
@@ -95,9 +91,7 @@ def test_valid_zero_remains_unverified(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize("kind", ["longitudinal", "paired", "source_claim"])
-def test_saved_workflow_rejects_invalid_scientific_input(
-    client: TestClient, kind: str
-) -> None:
+def test_saved_workflow_rejects_invalid_scientific_input(client: TestClient, kind: str) -> None:
     project = create_project(client, f"Strict ecological input {kind}")
     project_id = str(project["id"])
     if kind in {"longitudinal", "source_claim"}:
@@ -140,6 +134,5 @@ def test_saved_workflow_rejects_invalid_scientific_input(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert not any(
-        artifact["data_type"] == forbidden_artifact
-        for artifact in detail.json()["artifacts"]
+        artifact["data_type"] == forbidden_artifact for artifact in detail.json()["artifacts"]
     )
