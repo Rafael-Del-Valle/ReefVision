@@ -133,6 +133,8 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     ):
         assert artifact["payload_json"][key] == expected[key]
     assert artifact["payload_json"]["provenance"] == expected["provenance"]
+    for key in ("preview_point_indices", "preview_points_in_source_frame_m"):
+        assert artifact["payload_json"][key] == expected[key]
     assert artifact["payload_json"]["surface_area_m2"] is None
     assert artifact["payload_json"]["project_id"] == project_id
     assert len(artifact["payload_sha256"]) == 64
@@ -167,3 +169,31 @@ def test_centroid_scale_intervals_preserve_signed_source_frame() -> None:
     for actual, expected in zip(intervals, expected_intervals, strict=True):
         assert actual == pytest.approx(expected)
     assert result["provenance"]["coordinate_registration_verified"] is False
+
+def test_preview_sampling_keeps_original_indices_and_provisional_status() -> None:
+    points = [[float(index), -float(index), 0.0] for index in range(2000)]
+    kwargs = {
+        "points": points,
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified field ruler",
+        "relative_scale_uncertainty": 0.1,
+        "point_index_pairs": [[1000, 1999]],
+    }
+    first = measure_point_cloud_preview(**kwargs)
+    second = measure_point_cloud_preview(**kwargs)
+    indices = first["preview_point_indices"]
+    sample = first["preview_points_in_source_frame_m"]
+    assert len(indices) == len(sample) == 512
+    assert indices[0] == 0
+    assert indices[-1] == 1999
+    assert indices == sorted(set(indices))
+    assert sample == [[value * 0.01 for value in points[i]] for i in indices]
+    assert sample == second["preview_points_in_source_frame_m"]
+    chord = first["selected_point_chords"][0]
+    assert chord["point_indices"] == [1000, 1999]
+    assert chord["chord_distance_m"] == pytest.approx(14.127993)
+    assert first["surface_area_m2"] is None
+    assert first["branch_length_m"] is None
+    assert first["provenance"]["calibration_verified"] is False
+    assert first["measurement_status"] == "caller_supplied_unverified"
