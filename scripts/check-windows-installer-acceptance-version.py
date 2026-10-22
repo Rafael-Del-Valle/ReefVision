@@ -32,6 +32,14 @@ def check_workflow(workflow: str, version: str) -> list[str]:
             set(re.findall(r"MSI ProductVersion must be (\d+\.\d+\.\d+)\.", job)),
             {version},
         ),
+        # Check the PowerShell condition, not only the diagnostic string.
+        "ProductVersion comparison": (
+            set(re.findall(
+                r"\\$versionRecord\\.StringData\\(1\\)\\s+-ne\\s+['\\\"](\\d+\\.\\d+\\.\\d+)['\\\"]",
+                job,
+            )),
+            {version},
+        ),
         "artifact staging directory": (
             set(re.findall(r"reefvision-(\d+-\d+-\d+)-installer", job)),
             {slug},
@@ -52,6 +60,19 @@ def check_workflow(workflow: str, version: str) -> list[str]:
         errors.append("Clean-install job label does not match Tauri version")
     if "-LiveSam2Acceptance" in job:
         errors.append("Default clean-install job must not opt into network model downloads")
+    build_marker = "  build-windows-installer:"
+    if workflow.count(build_marker) != 1:
+        errors.append("Expected exactly one Windows installer build job")
+    else:
+        build_job = workflow.split(build_marker, 1)[1].split(marker, 1)[0]
+        invocation = "run: python scripts/check-windows-installer-acceptance-version.py"
+        packaging = "- name: Build MSI desktop installer with bundled checkpoints"
+        if build_job.count(invocation) != 1:
+            errors.append("Version preflight must run exactly once in Windows build job")
+        elif packaging not in build_job or build_job.index(invocation) > build_job.index(packaging):
+            errors.append("Version preflight must run before MSI packaging")
+        elif "actions/setup-python@v5" not in build_job[:build_job.index(invocation)]:
+            errors.append("Version preflight must run after Python setup")
     return errors
 
 
