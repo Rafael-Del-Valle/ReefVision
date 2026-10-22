@@ -240,14 +240,19 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
 def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) -> None:
     """A saved workflow must reject swapped ranks without altering review decisions."""
     project = create_project(client, "QC saved ordering integrity")
-    for name in ("priority-a.png", "priority-b.png"):
+    imported_ids: list[str] = []
+    for name, size in (("priority-a.png", (80, 60)), ("priority-b.png", (81, 60))):
         imported = import_one(
             client,
             project["id"],
             filename=name,
             relative_path=f"qc-priority/{name}",
+            size=size,
         )
         assert len(imported["successful"]) == 1
+        imported_ids.append(imported["successful"][0]["image_id"])
+    # Identical image bytes are deduplicated even with different filenames.
+    assert len(set(imported_ids)) == 2
 
     saved = client.post(
         f"/api/v1/projects/{project['id']}/workflow-graphs",
