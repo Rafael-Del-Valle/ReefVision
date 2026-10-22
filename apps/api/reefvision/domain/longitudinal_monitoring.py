@@ -141,6 +141,17 @@ def analyze_longitudinal(
             raise ValidationError(
                 f"Ambiguous simultaneous measurements for {organism_id!r}/{metric_name!r}"
             )
+        # Multiple photographs on one UTC sampling date are technical
+        # replicates, not separate longitudinal biological time points.
+        # Require an explicit reviewed aggregation upstream rather than
+        # arbitrarily choosing the first or last photograph.
+        utc_sampling_dates = [item.observed_at.date() for item in ordered]
+        if len(set(utc_sampling_dates)) != len(utc_sampling_dates):
+            raise ValidationError(
+                f"Multiple observations on the same UTC sampling date for "
+                f"{organism_id!r}/{metric_name!r}; resolve technical replicates "
+                "before longitudinal analysis"
+            )
         if len(ordered) < 2:
             incomplete += 1
             continue
@@ -188,7 +199,7 @@ def analyze_longitudinal(
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-longitudinal-0003",
+            algorithm_version="ecology-longitudinal-0004",
             records=request.observations,
             parameters={"experimental_unit_type": request.experimental_unit_type},
             source_record_ids=(obs.source_record_id for obs in request.observations),

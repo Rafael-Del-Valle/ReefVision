@@ -210,3 +210,19 @@ Workflow Builder nodes share these schemas, so invalid inputs must fail
 without producing a successful analysis artifact. Inputs remain
 `caller_supplied_unverified` and require source and study-design review.
 This is a schema hardening increment, not verification of source records.
+
+## Same-day technical-replicate guard (2026-10-22)
+
+The exploratory longitudinal calculator and its existing executable saved
+Workflow Builder node now fail closed when one organism/metric has multiple
+observations on the same **UTC sampling date**, even if timestamps differ.
+Photographs are technical replicates, not independent biological time points;
+there is no implicit first/last selection or unreviewed aggregation. Different
+organisms and metrics may legitimately share a sampling date. Timezone offsets
+are normalized before checking. A saved workflow fails without a successful
+longitudinal-analysis artifact, and the standalone endpoint returns a domain
+validation error. The provenance algorithm advances to
+`ecology-longitudinal-0004`. This is an additive scientific safeguard with
+no database schema migration; prior persisted unverified artifacts are not
+rewritten. A future authenticated observation service must support explicit
+scientist-reviewed technical-replicate aggregation and identity verification.
