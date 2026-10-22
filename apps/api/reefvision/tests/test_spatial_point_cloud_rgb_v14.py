@@ -10,7 +10,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.spatial_point_cloud_v14 import parse_ascii_ply_points
+from reefvision.services.spatial_point_cloud_v14 import (
+    measure_point_cloud_preview,
+    parse_ascii_ply_points,
+)
 from reefvision.tests.test_annotations import create_project
 
 RGB_PLY = (
@@ -70,9 +73,11 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
         [0.0, 0.0, 0.0],
         [0.02, 0.0, 0.0],
     ]
-    assert chord["endpoint_ordered_geometry_sha256"] == hashlib.sha256(
-        b"[[0.0,0.0,0.0],[2.0,0.0,0.0]]"
-    ).hexdigest()
+    assert (
+        chord["endpoint_ordered_geometry_sha256"]
+        == hashlib.sha256(b"[[0.0,0.0,0.0],[2.0,0.0,0.0]]").hexdigest()
+    )
+    assert chord["qc_warnings"] == []
     recolored_ply = RGB_PLY.replace("255 0 0 0 128 0", "254 0 0 0 128 0")
     recolored_response = client.post(
         f"{base}/spatial/point-cloud-preview",
@@ -83,9 +88,7 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
     assert recolored_provenance["geometry_sha256"] == original_provenance["geometry_sha256"]
     assert recolored_provenance["source_text_sha256"] != source_digest
     assert (
-        recolored_response.json()["selected_point_chords"][0][
-            "endpoint_ordered_geometry_sha256"
-        ]
+        recolored_response.json()["selected_point_chords"][0]["endpoint_ordered_geometry_sha256"]
         == chord["endpoint_ordered_geometry_sha256"]
     )
     graph = {
@@ -131,3 +134,24 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
         assert payload[key] == expected[key]
     assert payload["project_id"] == project_id
     assert len(artifact["payload_sha256"]) == 64
+
+
+def test_coincident_point_indices_have_explicit_chord_qc() -> None:
+    result = measure_point_cloud_preview(
+        points=[[0, 0, 0], [0, 0, 0], [0, 3, 0]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unverified reference",
+        relative_scale_uncertainty=0.1,
+        point_index_pairs=[[0, 1], [0, 2]],
+    )
+    assert result["qc_warnings"] == ["duplicate_points_present"]
+    coincident, distinct = result["selected_point_chords"]
+    assert coincident["point_indices"] == [0, 1]
+    assert coincident["chord_distance_m"] == 0
+    assert coincident["chord_distance_scale_interval_m"] == [0, 0]
+    assert coincident["qc_warnings"] == ["coincident_endpoint_coordinates"]
+    assert distinct["chord_distance_m"] == pytest.approx(0.03)
+    assert distinct["qc_warnings"] == []
+    assert result["branch_length_m"] is None
+    assert result["measurement_status"] == "caller_supplied_unverified"

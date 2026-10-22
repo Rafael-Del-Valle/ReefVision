@@ -146,17 +146,22 @@ def measure_point_cloud_preview(
                 raise ValueError("Point pair requires two distinct in-range integer indices")
             endpoints = [vertices[pair[0]], vertices[pair[1]]]
             chord_m = dist(*endpoints) * scale
+            # Different indices can still identify identical XYZ coordinates.
+            # Flag a zero-length chord instead of implying biological structure.
+            chord_qc_warnings: list[str] = []
+            if endpoints[0] == endpoints[1]:
+                chord_qc_warnings.append("coincident_endpoint_coordinates")
             selected_chords.append(
                 {
                     "point_indices": list(pair),
+                    "qc_warnings": chord_qc_warnings,
                     # Fingerprint endpoint geometry, not just mutable point indices.
                     # Ordered and scale-independent; not an organism identifier.
                     "endpoint_ordered_geometry_sha256": hashlib.sha256(
                         json.dumps(endpoints, separators=(",", ":")).encode("utf-8")
                     ).hexdigest(),
                     "endpoint_coordinates_in_source_frame_m": [
-                        [coordinate * scale for coordinate in vertex]
-                        for vertex in endpoints
+                        [coordinate * scale for coordinate in vertex] for vertex in endpoints
                     ],
                     "chord_distance_m": chord_m,
                     "chord_distance_scale_interval_m": (
