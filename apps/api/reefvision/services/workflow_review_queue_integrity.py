@@ -93,7 +93,8 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     expected_average = round(mean(scores.values()), 2) if scores else 0.0
     stored_average = summary.get("average_score")
     if (
-        type(stored_average) not in (int, float)
+        not isinstance(stored_average, (int, float))
+        or isinstance(stored_average, bool)
         or not isfinite(stored_average)
         or stored_average != expected_average
     ):

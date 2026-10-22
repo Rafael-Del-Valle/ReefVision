@@ -80,6 +80,17 @@
 - Exact-head CI, migration compatibility, Windows installed GUI and real
   scientific-data acceptance are still required.
 
+## 1.6 QC mean type narrowing and invalid-value regressions
+
+- The existing summary validator uses an explicit numeric `isinstance` check
+  before `math.isfinite` so strict mypy can narrow `Any | None` safely.
+- Boolean, string, null, NaN and infinite averages are still rejected; valid
+  finite integer and floating-point averages remain accepted. No coercion or
+  silent change to scientific scoring is introduced.
+- A new standalone regression test exercises nine numeric and invalid cases;
+  the existing executable saved-workflow test exercises this validator during
+  retry. Exact-head CI and installed Windows validation remain outstanding.
+
 ## Outstanding acceptance
 
 Run Ruff, mypy, backend/frontend/E2E and migration/backwards-compatibility checks
