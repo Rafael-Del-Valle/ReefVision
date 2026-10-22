@@ -619,7 +619,11 @@ export function Gallery({
               type="file"
               accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
-              onChange={(event) => acceptFiles(event.target.files)}
+              onChange={(event) => {
+              acceptFiles(event.currentTarget.files);
+              // Permit retrying the same camera file after a failed import.
+              event.currentTarget.value = "";
+            }}
             />
           </label>
           <label className="button-label secondary-label">
@@ -630,7 +634,11 @@ export function Gallery({
               type="file"
               accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
-              onChange={(event) => acceptFiles(event.target.files)}
+              onChange={(event) => {
+              acceptFiles(event.currentTarget.files);
+              // Permit retrying the same camera file after a failed import.
+              event.currentTarget.value = "";
+            }}
             />
           </label>
         </div>
