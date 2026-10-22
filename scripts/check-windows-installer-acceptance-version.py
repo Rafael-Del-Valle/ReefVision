@@ -35,7 +35,7 @@ def check_workflow(workflow: str, version: str) -> list[str]:
         # Check the PowerShell condition, not only the diagnostic string.
         "ProductVersion comparison": (
             set(re.findall(
-                r"\$versionRecord\.StringData\(1\)\s+-ne\s+['\\"](\d+\.\d+\.\d+)['\\"]",
+                r"\$versionRecord\.StringData\(1\)\s+-ne\s+'(\d+\.\d+\.\d+)'",
                 job,
             )),
             {version},
