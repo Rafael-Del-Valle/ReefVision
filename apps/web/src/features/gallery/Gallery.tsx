@@ -225,8 +225,22 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     phase === "thumbnail-loading" || phase === "thumbnail-loaded";
   const waiting = phase === "loading" || phase === "thumbnail-loading";
 
-  function handleLoad() {
-    setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+  async function handleLoad(event: { currentTarget: HTMLImageElement }) {
+    const element = event.currentTarget;
+    if (typeof element.decode === "function") {
+      try {
+        await element.decode();
+      } catch {
+        if (!element.complete || element.naturalWidth === 0) {
+          if (element.isConnected) handleError();
+          return;
+        }
+      }
+    }
+    // A stale decode must not clear the loading state of a different image.
+    if (element.isConnected) {
+      setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+    }
   }
 
   function handleError() {
