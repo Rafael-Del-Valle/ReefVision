@@ -64,14 +64,15 @@ def parse_ascii_ply_points(text: str) -> list[list[float]]:
             properties.append(property_name)
         else:
             raise ValueError("Unsupported point-cloud PLY header directive")
+    allowed_properties = (
+        {"x", "y", "z"},
+        {"x", "y", "z", "red", "green", "blue"},
+    )
     if (
         not format_seen
         or vertex_count is None
         or header_end is None
-        or set(properties) not in (
-            {"x", "y", "z"},
-            {"x", "y", "z", "red", "green", "blue"},
-        )
+        or set(properties) not in allowed_properties
     ):
         raise ValueError("Incomplete point-cloud PLY header")
     rows = lines[header_end + 1 :]
@@ -261,4 +262,11 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         point_index_pairs=payload.point_index_pairs,
     )
     result["provenance"]["source_format"] = source_format
+    # Hash the received PLY text (including RGB) separately from XYZ geometry.
+    # This is not a digest of the original on-disk file or a verification mark.
+    result["provenance"]["source_text_sha256"] = (
+        hashlib.sha256(payload.ply_text.encode("utf-8")).hexdigest()
+        if payload.ply_text is not None
+        else None
+    )
     return result
