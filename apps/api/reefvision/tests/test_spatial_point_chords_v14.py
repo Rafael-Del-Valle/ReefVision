@@ -34,12 +34,22 @@ def test_chord_measurements_and_saved_graph(client: TestClient) -> None:
     assert expected["provenance"]["calibration_verified"] is False
     assert len(expected["provenance"]["ordered_geometry_sha256"]) == 64
 
-    for pair in ([0, 0], [0, 3], [True, 1], [0.0, 1], [0, 1, 2]):
+    # The request schema rejects non-integer indices (422), while the
+    # measurement service rejects semantically invalid pairs (400).
+    for pair in ([True, 1], [0.0, 1]):
         invalid = client.post(
             f"{base}/spatial/point-cloud-preview",
             json={**PARAMS, "point_index_pairs": [pair]},
         )
         assert invalid.status_code == 422, invalid.text
+
+    for pair in ([0, 0], [0, 3], [0, 1, 2]):
+        invalid = client.post(
+            f"{base}/spatial/point-cloud-preview",
+            json={**PARAMS, "point_index_pairs": [pair]},
+        )
+        assert invalid.status_code == 400, invalid.text
+        assert "two distinct in-range integer indices" in invalid.json()["detail"]
 
     graph = {
         "graph_id": "point-chords-v14",
