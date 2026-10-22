@@ -119,3 +119,24 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
         artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     )
     assert artifact["payload_json"]["project_id"] == project_id
+
+    # Re-running the same saved graph must reproduce the scientific payload
+    # and its content digest, not silently promote calibration verification.
+    repeated = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
+    assert repeated.status_code == 202, repeated.text
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(repeated.json()["job_id"])
+    )
+    replay = client.get(f"/api/v1/workflow-runs/{repeated.json()['id']}")
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["run"]["status"] == "succeeded"
+    replay_artifact = next(
+        a
+        for a in replay.json()["artifacts"]
+        if a["data_type"] == "point_cloud_measurement_preview"
+    )
+    assert replay_artifact["payload_sha256"] == artifact["payload_sha256"]
+    assert replay_artifact["payload_json"] == artifact["payload_json"]
+    assert replay_artifact["payload_json"]["provenance"]["calibration_verified"] is False
