@@ -96,9 +96,7 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        a
-        for a in detail.json()["artifacts"]
-        if a["data_type"] == "point_cloud_measurement_preview"
+        a for a in detail.json()["artifacts"] if a["data_type"] == "point_cloud_measurement_preview"
     )
     assert artifact["payload_json"]["provenance"] == commented["provenance"]
     assert artifact["payload_json"]["selected_point_chords"] == commented["selected_point_chords"]
