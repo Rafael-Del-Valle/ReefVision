@@ -82,4 +82,4 @@ def test_saved_workflow_preserves_missing_organism_ids(
     assert payload["unit_summaries"] == []
     assert payload["population_summaries"] == []
     assert payload["independent_unit_count"] == 1
-    assert payload["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0004"
+    assert payload["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0005"
