@@ -41,10 +41,8 @@ test("initial image and gallery scrolling", async ({ page }) => {
   const images = Array.from({ length: 12 }, (_, index) => ({
     id: "image-" + (index + 1),
     project_id: project.id,
-    original_filename:
-      "camera-" + String(index + 1).padStart(2, "0") + ".JPEG",
-    managed_path:
-      "projects/project-1/images/originals/camera-" + (index + 1) + ".jpg",
+    original_filename: `camera-${String(index + 1).padStart(2, "0")}.JPEG`,
+    managed_path: `projects/project-1/images/originals/camera-${index + 1}.jpg`,
     thumbnail_path: null,
     sha256: "a".repeat(64),
     width_px: index === 11 ? 6000 : 1600,
@@ -79,9 +77,7 @@ test("initial image and gallery scrolling", async ({ page }) => {
       });
     } else if (url.pathname.endsWith("/projects/" + project.id)) {
       await route.fulfill({ json: project });
-    } else if (
-      url.pathname.endsWith("/projects/" + project.id + "/images")
-    ) {
+    } else if (url.pathname.endsWith("/projects/" + project.id + "/images")) {
       await route.fulfill({
         json: { items: images, total: 12, page: 1, page_size: 24, pages: 1 },
       });
@@ -106,8 +102,9 @@ test("initial image and gallery scrolling", async ({ page }) => {
     (name) => name.startsWith("index-") && name.endsWith(".js"),
   );
   const styleName = assets.find((name) => name.endsWith(".css"));
-  if (!scriptName || !styleName)
+  if (!scriptName || !styleName) {
     throw new Error("Built Vite assets are missing");
+  }
 
   const [script, style] = await Promise.all([
     readFile(path.join(assetDirectory, scriptName), "utf8"),
@@ -121,14 +118,11 @@ test("initial image and gallery scrolling", async ({ page }) => {
   );
   await page.goto("http://127.0.0.1:8000/");
 
-  const pkg = JSON.parse(
-    await readFile(path.resolve("package.json"), "utf8"),
-  ) as { version: string };
+  const packageJson = await readFile(path.resolve("package.json"), "utf8");
+  const pkg: { version: string } = JSON.parse(packageJson);
   await page.evaluate((version) => {
-    window.localStorage.setItem(
-      "reefvision.onboarding.dismissed." + version,
-      "true",
-    );
+    const onboardingKey = "reefvision.onboarding.dismissed." + version;
+    window.localStorage.setItem(onboardingKey, "true");
   }, pkg.version);
   await page.addStyleTag({ content: style });
   await page.addScriptTag({ content: script, type: "module" });
@@ -138,15 +132,13 @@ test("initial image and gallery scrolling", async ({ page }) => {
   const focused = workbench.locator(".rv-media-canvas img");
   const assertDecodedAndContained = async (width: number, height: number) => {
     await expect(focused).toBeVisible();
-    await expect
-      .poll(() =>
-        focused.evaluate((img: HTMLImageElement) => ({
-          complete: img.complete,
-          width: img.naturalWidth,
-          height: img.naturalHeight,
-        })),
-      )
-      .toEqual({ complete: true, width, height });
+    const decodedImage = () =>
+      focused.evaluate((img: HTMLImageElement) => ({
+        complete: img.complete,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      }));
+    await expect.poll(decodedImage).toEqual({ complete: true, width, height });
     await expect(
       workbench.getByText("Loading full-resolution image..."),
     ).toHaveCount(0);
@@ -180,17 +172,14 @@ test("initial image and gallery scrolling", async ({ page }) => {
   };
 
   await assertDecodedAndContained(1600, 1200);
-  await workbench
-    .getByRole("listitem", { name: "Focus camera-12.JPEG" })
-    .click();
+  const lastImage = workbench.getByRole("listitem", {
+    name: "Focus camera-12.JPEG",
+  });
+  await lastImage.click();
   await assertDecodedAndContained(6000, 400);
-  await expect
-    .poll(() =>
-      workbench
-        .locator(".rv-media-filmstrip")
-        .evaluate((element) => element.scrollLeft),
-    )
-    .toBeGreaterThan(0);
+  const filmstrip = workbench.locator(".rv-media-filmstrip");
+  const scrollOffset = () => filmstrip.evaluate((element) => element.scrollLeft);
+  await expect.poll(scrollOffset).toBeGreaterThan(0);
 
   await workbench.focus();
   await page.keyboard.press("Home");
