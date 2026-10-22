@@ -63,7 +63,7 @@ def test_distinct_organisms_and_metrics_can_share_sampling_dates() -> None:
     ]
     result = analyze_longitudinal(LongitudinalAnalysisRequest(observations=observations))
     assert result.evaluated_series_count == 3
-    assert result.analysis_provenance.algorithm_version == "ecology-longitudinal-0004"
+    assert result.analysis_provenance.algorithm_version == "ecology-longitudinal-0005"
     assert result.evidence_level == "caller_supplied_unverified"
 
 
