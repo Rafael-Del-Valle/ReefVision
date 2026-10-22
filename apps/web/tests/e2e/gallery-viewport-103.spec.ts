@@ -4,9 +4,7 @@ import path from "node:path";
 
 // Browser-generated, decodable PNGs exercise the viewer without requiring
 // network image fixtures or changing scientific source-image metadata.
-test("initial image renders and gallery scrolling preserves viewport", async ({
-  page,
-}) => {
+test("initial image renders and gallery scrolling preserves viewport", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 820 });
 
   const makePng = async (width: number, height: number): Promise<Buffer> => {
