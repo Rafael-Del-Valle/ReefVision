@@ -10,6 +10,7 @@ from typing import Any
 from reefvision.services.spatial_mesh_obj_v14 import MAX_VERTICES
 
 MAX_PLY_BYTES = 256_000
+MAX_PREVIEW_POINTS = 512
 
 
 def parse_ascii_ply_points(text: str) -> list[list[float]]:
@@ -213,10 +214,26 @@ def measure_point_cloud_preview(
     geometry_hash = hashlib.sha256(
         json.dumps(sorted(vertices), separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+    # Deterministic, bounded display sample. Original indices are preserved
+    # so display decimation never changes the identity of measured point pairs.
+    preview_count = min(len(vertices), MAX_PREVIEW_POINTS)
+    preview_indices = (
+        [0]
+        if preview_count == 1
+        else [
+            index * (len(vertices) - 1) // (preview_count - 1)
+            for index in range(preview_count)
+        ]
+    )
     return {
         "schema_version": "point-cloud-preview-0001",
         "point_count": len(vertices),
         "unique_point_count": unique_count,
+        "preview_point_indices": preview_indices,
+        "preview_points_in_source_frame_m": [
+            [coordinate * scale for coordinate in vertices[index]]
+            for index in preview_indices
+        ],
         "selected_point_chords": selected_chords,
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_min_in_source_frame_m": bounds_min,
