@@ -42,16 +42,24 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
     plain = plain_response.json()
     commented = commented_response.json()
     assert plain["axis_aligned_dimensions_m"] == commented["axis_aligned_dimensions_m"]
-    assert plain["provenance"]["geometry_sha256"] == commented["provenance"]["geometry_sha256"]
+    assert (
+        plain["provenance"]["geometry_sha256"]
+        == commented["provenance"]["geometry_sha256"]
+    )
     assert (
         plain["provenance"]["ordered_geometry_sha256"]
         == commented["provenance"]["ordered_geometry_sha256"]
     )
-    assert plain["provenance"]["source_text_sha256"] == hashlib.sha256(PLY.encode()).hexdigest()
+    assert plain["provenance"]["source_text_sha256"] == hashlib.sha256(
+        PLY.encode()
+    ).hexdigest()
     assert commented["provenance"]["source_text_sha256"] == hashlib.sha256(
         COMMENTED_PLY.encode()
     ).hexdigest()
-    assert plain["provenance"]["source_text_sha256"] != commented["provenance"]["source_text_sha256"]
+    assert (
+        plain["provenance"]["source_text_sha256"]
+        != commented["provenance"]["source_text_sha256"]
+    )
     assert commented["provenance"]["calibration_verified"] is False
     assert commented["surface_area_m2"] is None
     assert commented["branch_length_m"] is None
@@ -81,7 +89,9 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
     assert planned.status_code == 200, planned.text
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -91,8 +101,12 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        a for a in detail.json()["artifacts"] if a["data_type"] == "point_cloud_measurement_preview"
+        a
+        for a in detail.json()["artifacts"]
+        if a["data_type"] == "point_cloud_measurement_preview"
     )
     assert artifact["payload_json"]["provenance"] == commented["provenance"]
-    assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
+    assert (
+        artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
+    )
     assert artifact["payload_json"]["project_id"] == project_id
