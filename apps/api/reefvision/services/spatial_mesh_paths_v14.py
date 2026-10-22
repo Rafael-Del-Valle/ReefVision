@@ -96,7 +96,17 @@ def mesh_edge_paths(
                 "path_qc_warnings": path_qc_warnings,
                 "edge_count": len(route) - 1 if route is not None else None,
                 "length_m": meters,
+                "length_scale_interval_m": (
+                    [meters * (1 - scale_uncertainty), meters * (1 + scale_uncertainty)]
+                    if meters is not None and scale_uncertainty is not None
+                    else None
+                ),
                 "endpoint_chord_length_m": chord_m,
+                "endpoint_chord_scale_interval_m": (
+                    [chord_m * (1 - scale_uncertainty), chord_m * (1 + scale_uncertainty)]
+                    if chord_m is not None and scale_uncertainty is not None
+                    else None
+                ),
                 "endpoint_chord_scale_uncertainty_m": (
                     chord_m * scale_uncertainty
                     if chord_m is not None and scale_uncertainty is not None

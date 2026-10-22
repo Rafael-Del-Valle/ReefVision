@@ -5,7 +5,12 @@ accept up to 16 `surface_path_vertex_pairs`, each containing two distinct
 zero-based source vertex indices. The engine finds a shortest route **along
 existing triangle edges**, not across triangle interiors. Results include
 the source indices, traversed vertices, edge count, calibrated length in
-meters, and optional common-scale uncertainty.
+meters, optional common-scale uncertainty, and exact lower/upper scale-only
+intervals for both the traversed route and endpoint chord. When relative
+scale uncertainty is unknown, interval fields are null. Disconnected and
+unreferenced routes never receive numeric intervals. The intervals apply
+the same multiplicative scale uncertainty to both lengths; they are not
+statistical confidence intervals.
 
 A disconnected pair returns `status: disconnected` with unknown length.
 A vertex not referenced by any face returns `status: unreferenced_endpoint`.
