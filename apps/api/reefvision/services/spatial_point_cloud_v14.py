@@ -13,7 +13,7 @@ MAX_PLY_BYTES = 256_000
 
 
 def parse_ascii_ply_points(text: str) -> list[list[float]]:
-    """Read vertex-only ASCII PLY 1.0 XYZ coordinates; reject mesh/unknown records."""
+    """Read vertex-only ASCII PLY 1.0 XYZ or XYZ+RGB; discard validated color."""
     if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_PLY_BYTES:
         raise ValueError("Point-cloud PLY exceeds the 256000-byte preview limit")
     lines = text.splitlines()
@@ -50,23 +50,28 @@ def parse_ascii_ply_points(text: str) -> list[list[float]]:
             if not 1 <= vertex_count <= MAX_VERTICES:
                 raise ValueError("Point-cloud vertex count outside preview bounds")
         elif parts[0] == "property":
-            if (
-                vertex_count is None
-                or len(parts) != 3
-                or parts[1] not in {"float", "double", "float32", "float64"}
-                or parts[2] not in {"x", "y", "z"}
-                or parts[2] in properties
-            ):
-                raise ValueError("Point-cloud PLY requires unique floating XYZ properties")
-            properties.append(parts[2])
+            if vertex_count is None or len(parts) != 3 or parts[2] in properties:
+                raise ValueError("Point-cloud PLY requires unique vertex properties")
+            property_type, property_name = parts[1:]
+            if property_name in {"x", "y", "z"}:
+                if property_type not in {"float", "double", "float32", "float64"}:
+                    raise ValueError("Point-cloud XYZ properties must be floating point")
+            elif property_name in {"red", "green", "blue"}:
+                if property_type not in {"uchar", "uint8"}:
+                    raise ValueError("Point-cloud RGB properties must be unsigned bytes")
+            else:
+                raise ValueError("Unsupported point-cloud PLY property")
+            properties.append(property_name)
         else:
             raise ValueError("Unsupported point-cloud PLY header directive")
     if (
         not format_seen
         or vertex_count is None
         or header_end is None
-        or set(properties) != {"x", "y", "z"}
-        or len(properties) != 3
+        or set(properties) not in (
+            {"x", "y", "z"},
+            {"x", "y", "z", "red", "green", "blue"},
+        )
     ):
         raise ValueError("Incomplete point-cloud PLY header")
     rows = lines[header_end + 1 :]
@@ -76,13 +81,20 @@ def parse_ascii_ply_points(text: str) -> list[list[float]]:
     points: list[list[float]] = []
     for row in rows:
         values = row.split()
-        if len(values) != 3:
-            raise ValueError("Point-cloud PLY vertex must have three values")
+        if len(values) != len(properties):
+            raise ValueError("Point-cloud PLY vertex does not match header properties")
         try:
-            parsed = [float(value) for value in values]
+            parsed = [float(values[index]) for index in xyz]
         except ValueError as exc:
             raise ValueError("Invalid point-cloud coordinate") from exc
-        points.append([parsed[index] for index in xyz])
+        if any(not isfinite(value) or abs(value) > 1_000_000_000 for value in parsed):
+            raise ValueError("Point-cloud coordinates must be finite and bounded")
+        for channel in ("red", "green", "blue"):
+            if channel in properties:
+                token = values[properties.index(channel)]
+                if not token.isascii() or not token.isdecimal() or int(token) > 255:
+                    raise ValueError("Point-cloud RGB channels must be 0-255 integers")
+        points.append(parsed)
     return points
 
 
