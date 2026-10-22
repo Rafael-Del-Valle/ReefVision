@@ -40,10 +40,7 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
     plain = plain_response.json()
     commented = commented_response.json()
     assert plain["axis_aligned_dimensions_m"] == commented["axis_aligned_dimensions_m"]
-    assert (
-        plain["provenance"]["geometry_sha256"]
-        == commented["provenance"]["geometry_sha256"]
-    )
+    assert plain["provenance"]["geometry_sha256"] == commented["provenance"]["geometry_sha256"]
     assert (
         plain["provenance"]["ordered_geometry_sha256"]
         == commented["provenance"]["ordered_geometry_sha256"]
