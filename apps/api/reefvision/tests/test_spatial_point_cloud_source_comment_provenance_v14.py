@@ -109,7 +109,10 @@ def test_comments_change_source_evidence_not_geometry_or_verification(
     )
     assert artifact["payload_json"]["provenance"] == commented["provenance"]
     assert artifact["payload_json"]["selected_point_chords"] == commented["selected_point_chords"]
-    assert artifact["payload_json"]["axis_aligned_dimensions_m"] == commented["axis_aligned_dimensions_m"]
+    assert (
+        artifact["payload_json"]["axis_aligned_dimensions_m"]
+        == commented["axis_aligned_dimensions_m"]
+    )
     assert artifact["payload_json"]["surface_area_m2"] is None
     assert artifact["payload_json"]["branch_length_m"] is None
     assert (
