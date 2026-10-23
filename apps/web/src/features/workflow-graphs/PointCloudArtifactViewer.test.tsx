@@ -242,10 +242,22 @@ describe("PointCloudArtifactViewer", () => {
 
   it("rejects contradictory or malformed extrema-coverage metadata", () => {
     for (const fields of [
-      { preview_omitted_axis_extrema: ["x_max"], preview_axis_extrema_covered: true },
-      { preview_omitted_axis_extrema: [], preview_axis_extrema_covered: false },
-      { preview_omitted_axis_extrema: ["x_bad"], preview_axis_extrema_covered: false },
-      { preview_omitted_axis_extrema: ["x_max", "x_max"], preview_axis_extrema_covered: false },
+      {
+        preview_omitted_axis_extrema: ["x_max"],
+        preview_axis_extrema_covered: true,
+      },
+      {
+        preview_omitted_axis_extrema: [],
+        preview_axis_extrema_covered: false,
+      },
+      {
+        preview_omitted_axis_extrema: ["x_bad"],
+        preview_axis_extrema_covered: false,
+      },
+      {
+        preview_omitted_axis_extrema: ["x_max", "x_max"],
+        preview_axis_extrema_covered: false,
+      },
     ]) {
       expect(
         parsePointCloudRenderArtifact({ ...validArtifact, ...fields }),
