@@ -51,10 +51,26 @@ def validate_declared_lineage(
         "fragments",
     }
     colony_units = {"colony", "colonies"}
-    organism_level = len(words) == 1 and words[0] in organism_units
-    colony_level = (len(words) == 1 and words[0] in colony_units) or (
-        len(words) == 2 and words[0] == "parent" and words[1] in colony_units
-    )
+    # Extra descriptors such as "colony replicate" must not bypass the
+    # parent-lineage guard. Conversely, compound labels such as "colony/tank"
+    # cannot silently select whichever level is convenient for a comparison.
+    declared_levels = {
+        level
+        for level, vocabulary in (
+            ("organism", organism_units),
+            ("colony", colony_units),
+            ("tank", {"tank", "tanks", "aquarium", "aquaria"}),
+            ("site", {"site", "sites", "plot", "plots", "transect", "transects"}),
+        )
+        if set(words) & vocabulary
+    }
+    if len(declared_levels) > 1:
+        raise ValidationError(
+            "Ambiguous experimental_unit_type mixes biological sampling levels; "
+            "declare one independent experimental unit"
+        )
+    organism_level = "organism" in declared_levels
+    colony_level = "colony" in declared_levels
     unit_to_organism: dict[str, str] = {}
     organism_to_parent: dict[str, str] = {}
     unit_to_parent: dict[str, str] = {}
