@@ -66,6 +66,24 @@ def test_equal_sampling_dates_have_no_false_discordance(client: TestClient) -> N
     assert response.json()["unit_coverage"][0]["discordant_sampling_dates"] is False
 
 
+
+def test_sampling_date_qc_uses_utc_not_camera_local_date(client: TestClient) -> None:
+    payload = _request(False)
+    for observation in payload["observations"]:
+        if observation["organism_id"] == "frag-B":
+            day = int(observation["observed_at"][9:10])
+            observation["observed_at"] = f"2026-04-0{day + 1}T00:30:00+02:00"
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=payload)
+    assert response.status_code == 200, response.text
+    coverage = response.json()["unit_coverage"][0]
+    assert coverage["discordant_sampling_dates"] is False
+    assert coverage["observed_sampling_dates_by_organism"]["frag-B"] == [
+        "2026-04-01",
+        "2026-04-02",
+        "2026-04-03",
+    ]
+
+
 def test_sampling_date_qc_is_deterministic_and_persisted_in_saved_workflow(
     client: TestClient,
 ) -> None:
