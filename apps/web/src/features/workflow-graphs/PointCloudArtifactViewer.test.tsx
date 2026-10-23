@@ -185,6 +185,23 @@ describe("PointCloudArtifactViewer", () => {
     ).not.toBeNull();
   });
 
+  it("does not falsely reject chords lost to large-offset display rounding", () => {
+    const rounded = {
+      ...validArtifact,
+      preview_points_in_source_frame_m: [
+        [1e15, 0, 0],
+        [1e15, 1, 0],
+        [1e15, 0, 0],
+      ],
+      axis_aligned_min_in_source_frame_m: [1e15, 0, 0],
+      axis_aligned_max_in_source_frame_m: [1e15, 1, 0],
+      selected_point_chords: [{ point_indices: [0, 2], chord_distance_m: 0.01 }],
+    };
+    // The full-resolution input may resolve a chord lost after scaling and
+    // rounding very large source-frame coordinates for visualization.
+    expect(parsePointCloudRenderArtifact(rounded)).not.toBeNull();
+  });
+
   it("renders decimated colorless samples with preserved original indices", () => {
     const { container } = render(
       <PointCloudArtifactViewer
