@@ -165,6 +165,22 @@ def _pose_dataset(
     if advertised_manifest and advertised_manifest != dataset.manifest_sha256:
         raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
 
+    # Downstream training must not silently accept a stale or substituted
+    # landmark schema identity from a persisted Workflow Builder artifact.
+    schema_fields = (
+        "pose_schema_id",
+        "pose_schema_revision",
+        "pose_schema_content_hash",
+    )
+    if any(
+        str(payload[field]) != str(getattr(dataset, field))
+        for field in schema_fields
+        if field in payload
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset artifact landmark schema metadata no longer matches frozen truth"
+        )
+
     return dataset
 
 
