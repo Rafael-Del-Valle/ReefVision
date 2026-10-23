@@ -49,7 +49,7 @@ def test_six_cab_upload_partitions_are_complete_and_bounded() -> None:
         ["rv3.cab", "rv4.cab"],
         ["rv5.cab", "rv6.cab"],
     ]
-    assert sum(partitions, []) == expected
+    assert [cab for partition in partitions for cab in partition] == expected
     assert "merge-multiple: true" in workflow
     assert "MSI/CAB mismatch." in workflow
 
