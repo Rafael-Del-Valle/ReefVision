@@ -3,6 +3,12 @@ import { useMemo, useState } from "react";
 type Vec3 = [number, number, number];
 type RGB = [number, number, number];
 
+interface PointChord {
+  point_indices: [number, number];
+  chord_distance_m: number;
+  scale_uncertainty_m?: number | null;
+}
+
 interface PointCloudRenderArtifact {
   points: Vec3[];
   indices: number[];
@@ -10,6 +16,7 @@ interface PointCloudRenderArtifact {
   target: Vec3;
   radius: number;
   totalCount: number;
+  chords: PointChord[];
 }
 
 function isVec3(value: unknown): value is Vec3 {
@@ -37,6 +44,35 @@ function isRGB(value: unknown): value is RGB {
   );
 }
 
+function isPointChord(value: unknown, totalCount: number): value is PointChord {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const chord = value as Record<string, unknown>;
+  const pair = chord.point_indices;
+  const distance = chord.chord_distance_m;
+  const uncertainty = chord.scale_uncertainty_m;
+  return (
+    Array.isArray(pair) &&
+    pair.length === 2 &&
+    pair.every(
+      (index) =>
+        typeof index === "number" &&
+        Number.isInteger(index) &&
+        index >= 0 &&
+        index < totalCount,
+    ) &&
+    pair[0] !== pair[1] &&
+    typeof distance === "number" &&
+    Number.isFinite(distance) &&
+    distance >= 0 &&
+    (uncertainty == null ||
+      (typeof uncertainty === "number" &&
+        Number.isFinite(uncertainty) &&
+        uncertainty >= 0))
+  );
+}
+
 /** Fail closed on malformed persisted display data; never infer coral surface or condition. */
 export function parsePointCloudRenderArtifact(
   value: unknown,
@@ -51,6 +87,7 @@ export function parsePointCloudRenderArtifact(
   const min = data.axis_aligned_min_in_source_frame_m;
   const max = data.axis_aligned_max_in_source_frame_m;
   const totalCount = data.point_count;
+  const rawChords = data.selected_point_chords;
   const provenance = data.provenance;
   // A point-cloud preview is provisional geometry, never verified biology.
   // Reject contradictory saved metadata instead of displaying a misleading artifact.
@@ -101,6 +138,15 @@ export function parsePointCloudRenderArtifact(
   ) {
     return null;
   }
+  if (
+    rawChords != null &&
+    (!Array.isArray(rawChords) ||
+      rawChords.length > 32 ||
+      !rawChords.every((chord) => isPointChord(chord, totalCount as number)))
+  ) {
+    return null;
+  }
+  const chords: PointChord[] = Array.isArray(rawChords) ? rawChords : [];
   const target: Vec3 = [
     (min[0] + max[0]) / 2,
     (min[1] + max[1]) / 2,
@@ -116,6 +162,7 @@ export function parsePointCloudRenderArtifact(
     target,
     radius,
     totalCount: totalCount as number,
+    chords,
   };
 }
 
@@ -255,6 +302,16 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
       >
         Reset point view
       </button>
+      {cloud.chords.map((chord, index) => (
+        <p className="annotation-helper" key={index}>
+          Source-point chord {chord.point_indices[0]}–{chord.point_indices[1]}:
+          {" "}{chord.chord_distance_m.toFixed(4)} m
+          {chord.scale_uncertainty_m != null
+            ? ` (scale-only ±${chord.scale_uncertainty_m.toFixed(4)} m)`
+            : " (scale uncertainty unknown)"}
+          {" — provisional straight line, not anatomical branch length."}
+        </p>
+      ))}
       <p className="annotation-helper">
         Display points: {cloud.points.length} / {cloud.totalCount} · Point
         coverage: {((cloud.points.length / cloud.totalCount) * 100).toFixed(1)}%
