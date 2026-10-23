@@ -97,15 +97,15 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-      # The previous 2.8 GB upload reported success but rv5.cab was absent
-      # after extraction on the acceptance runner. Keep each artifact under 2 GiB.
+      # A previous 2.8 GB upload lost an external CAB after extraction.
+      # Split all six CABs into bounded artifacts; never omit a generated cabinet.
       - name: Verify CAB partition matches the packaged 1.0.3 installer
         shell: pwsh
         run: |
           $folder = 'apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi'
           $actual = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File |
             Select-Object -ExpandProperty Name | Sort-Object)
-          $expected = @('rv1.cab', 'rv2.cab', 'rv3.cab', 'rv4.cab', 'rv5.cab')
+          $expected = @('rv1.cab', 'rv2.cab', 'rv3.cab', 'rv4.cab', 'rv5.cab', 'rv6.cab')
           if (($actual -join ',') -ne ($expected -join ',')) {
             throw "Installer CAB partition needs review: found $($actual -join ', ')."
           }
@@ -125,14 +125,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload Windows installer CABs 3-5
+      - name: Upload Windows installer CABs 3-4
         uses: actions/upload-artifact@v4
         with:
           name: ReefVision-Windows-Installer-Part-2
           path: |
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv3.cab
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv4.cab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer CABs 5-6
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-Windows-Installer-Part-3
+          path: |
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv5.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv6.cab
           if-no-files-found: error
           retention-days: 14
 
@@ -145,7 +154,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Retrieve exact MSI and all five external CABs
+      - name: Retrieve exact MSI and all six external CABs
         uses: actions/download-artifact@v4
         with:
           pattern: ReefVision-Windows-Installer-Part-*
