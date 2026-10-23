@@ -29,7 +29,10 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             {
                 "node_id": "frozen-pose",
                 "node_type": "pose_training_dataset",
-                "parameters": {"dataset_id": dataset_id},
+                "parameters": {
+                    "dataset_id": dataset_id,
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
             }
         ],
         "edges": [],
@@ -48,6 +51,27 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is True
     assert plan.json()["executable"] is True
+
+    stale_graph = {
+        **graph,
+        "nodes": [
+            {
+                **graph["nodes"][0],
+                "parameters": {
+                    "dataset_id": dataset_id,
+                    "manifest_sha256": "0" * 64,
+                },
+            }
+        ],
+    }
+    stale_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=stale_graph
+    )
+    assert stale_plan.status_code == 200, stale_plan.text
+    assert stale_plan.json()["valid"] is False
+    assert stale_plan.json()["executable"] is False
+    stale_codes = {issue["code"] for issue in stale_plan.json()["issues"]}
+    assert "pose_dataset_manifest_mismatch" in stale_codes
 
     saved = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
