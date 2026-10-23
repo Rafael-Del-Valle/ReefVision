@@ -215,6 +215,7 @@ class WorkflowGraphService:
         dataset_id = str(parameters.get("dataset_id") or "").strip()
         if not dataset_id:
             return  # Required-parameter validation reports the missing ID.
+        expected_manifest = str(parameters.get("manifest_sha256") or "").strip()
         dataset = self.session.get(PoseTrainingDataset, dataset_id)
         if dataset is None or dataset.project_id != project_id:
             issues.append(
@@ -235,6 +236,15 @@ class WorkflowGraphService:
                     "error",
                     "pose_dataset_incomplete",
                     "Frozen pose dataset must be complete and contain verified items",
+                    node_id=node_id,
+                )
+            )
+        elif expected_manifest and expected_manifest != dataset.manifest_sha256:
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_manifest_mismatch",
+                    "Frozen pose dataset manifest differs from the saved workflow",
                     node_id=node_id,
                 )
             )
