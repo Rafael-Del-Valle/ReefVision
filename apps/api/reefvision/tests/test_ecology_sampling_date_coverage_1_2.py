@@ -66,7 +66,6 @@ def test_equal_sampling_dates_have_no_false_discordance(client: TestClient) -> N
     assert response.json()["unit_coverage"][0]["discordant_sampling_dates"] is False
 
 
-
 def test_sampling_date_qc_uses_utc_not_camera_local_date(client: TestClient) -> None:
     payload = _request(False)
     for observation in payload["observations"]:
