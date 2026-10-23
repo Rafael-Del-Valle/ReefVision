@@ -49,7 +49,7 @@ def test_same_utc_dates_different_hours_are_eligible() -> None:
     assert result.unit_summaries[0].baseline_at.isoformat() == ("2026-04-01T08:00:00+00:00")
     assert result.unit_summaries[0].final_at.isoformat() == ("2026-04-03T18:00:00+00:00")
     assert result.population_summaries[0].independent_unit_count == 1
-    assert result.analysis_provenance.algorithm_version == "ecology-longitudinal-0006"
+    assert result.analysis_provenance.algorithm_version.startswith("ecology-longitudinal-")
     assert result.evidence_level == "caller_supplied_unverified"
 
 

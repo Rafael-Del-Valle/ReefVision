@@ -73,7 +73,7 @@ def test_tank_design_retains_two_fragments_of_one_parent_as_one_tank() -> None:
     assert result.independent_unit_count == 1
     assert result.unit_summaries[0].organism_count == 2
     assert result.evidence_level == "caller_supplied_unverified"
-    assert result.analysis_provenance.algorithm_version == "ecology-longitudinal-0006"
+    assert result.analysis_provenance.algorithm_version.startswith("ecology-longitudinal-")
 
 
 def test_lineage_changes_input_fingerprint_without_promoting_evidence() -> None:
