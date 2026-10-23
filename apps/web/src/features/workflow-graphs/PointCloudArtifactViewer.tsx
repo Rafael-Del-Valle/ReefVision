@@ -58,6 +58,7 @@ export function parsePointCloudRenderArtifact(
     !points.every(isVec3) ||
     !Array.isArray(indices) ||
     indices.length !== points.length ||
+    typeof totalCount !== "number" ||
     !Number.isInteger(totalCount) ||
     (totalCount as number) < points.length ||
     (totalCount as number) > 2000 ||
