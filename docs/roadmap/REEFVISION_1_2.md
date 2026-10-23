@@ -312,3 +312,21 @@ parentage nor justifies a statistical test. The existing algorithm fingerprints
 already bind declared lineage and unit identifiers. Full CI, registered design,
 verified identity/calibration, migration and installed Windows acceptance remain
 required before release.
+
+## Fail-closed compound sampling-level declarations (2026-10-23)
+
+The exploratory longitudinal and paired human-model analyses now recognize
+descriptive labels such as `colony replicate` and `fragment sample` as
+colony-level and organism-level declarations for lineage checks. Previously,
+extra descriptive words could bypass those checks. Compound declarations
+mixing recognized biological levels (for example `colony/tank`,
+`organism-colony`, or `tank and site`) are rejected rather than being
+silently treated as a new, unguarded independent-unit type.
+
+The shared domain validator is called by both standalone endpoints and the
+executable Workflow Builder nodes. Regression tests cover standalone errors,
+saved-workflow failure without a successful scientific artifact, and
+legitimate fragments from one parent across different tank units. This is a
+**caller-label QC safeguard only**: it does not authenticate colony identity,
+sampling-unit independence, reviewed annotations, or calibration. Persisted
+analysis artifacts retain their unverified evidence and review gates.
