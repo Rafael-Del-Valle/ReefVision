@@ -62,6 +62,9 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
+    assert expected["preview_point_colors_rgb_uint8"] == [
+        [0, 128, 255], [255, 64, 0], [11, 22, 7]
+    ]
     assert expected["measurement_status"] == "caller_supplied_unverified"
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["surface_area_m2"] is None
@@ -84,6 +87,7 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
         json={**params, "ply_text": recolored_ply},
     )
     assert recolored_response.status_code == 200, recolored_response.text
+    assert recolored_response.json()["preview_point_colors_rgb_uint8"][0] == [0, 128, 254]
     recolored_provenance = recolored_response.json()["provenance"]
     assert recolored_provenance["geometry_sha256"] == original_provenance["geometry_sha256"]
     assert recolored_provenance["source_text_sha256"] != source_digest
@@ -129,6 +133,7 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
         "axis_aligned_dimensions_m",
         "selected_point_chords",
         "arithmetic_centroid_in_source_frame_m",
+        "preview_point_colors_rgb_uint8",
         "provenance",
     ):
         assert payload[key] == expected[key]
@@ -155,3 +160,35 @@ def test_coincident_point_indices_have_explicit_chord_qc() -> None:
     assert distinct["qc_warnings"] == []
     assert result["branch_length_m"] is None
     assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_rgb_decimation_retains_source_index_alignment(client: TestClient) -> None:
+    project_id = str(create_project(client, "RGB sample threshold")["id"])
+    header = (
+        "ply\\nformat ascii 1.0\\nelement vertex 513\\n"
+        "property float x\\nproperty float y\\nproperty float z\\n"
+        "property uchar red\\nproperty uchar green\\nproperty uchar blue\\nend_header\\n"
+    )
+    rows = [f"{i} 0 0 {i % 256} 10 20" for i in range(513)]
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/point-cloud-preview",
+        json={
+            "ply_text": header + "\\n".join(rows) + "\\n",
+            "meters_per_unit": 0.01,
+            "calibration_method": "ruler",
+            "calibration_evidence": "Unreviewed field ruler",
+            "relative_scale_uncertainty": 0.1,
+        },
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    indices = result["preview_point_indices"]
+    assert len(indices) == 512
+    assert indices[0] == 0 and indices[-1] == 512
+    assert result["preview_point_colors_rgb_uint8"] == [
+        [i % 256, 10, 20] for i in indices
+    ]
+    assert result["axis_aligned_dimensions_m"] == pytest.approx([5.12, 0, 0])
+    assert result["provenance"]["calibration_verified"] is False
+    assert result["surface_area_m2"] is None
+    assert result["branch_length_m"] is None
