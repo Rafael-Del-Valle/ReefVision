@@ -135,7 +135,13 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     ):
         assert artifact["payload_json"][key] == expected[key]
     assert artifact["payload_json"]["provenance"] == expected["provenance"]
-    for key in ("preview_point_indices", "preview_points_in_source_frame_m"):
+    for key in (
+        "preview_point_indices",
+        "preview_points_in_source_frame_m",
+        "preview_omitted_axis_extrema",
+        "preview_axis_extrema_covered",
+        "qc_warnings",
+    ):
         assert artifact["payload_json"][key] == expected[key]
     assert artifact["payload_json"]["surface_area_m2"] is None
     assert artifact["payload_json"]["project_id"] == project_id
@@ -243,3 +249,90 @@ def test_sampling_threshold_preserves_full_geometry_and_provisional_status() -> 
         assert result["surface_area_m2"] is None
         assert result["branch_length_m"] is None
         assert result["provenance"]["calibration_verified"] is False
+
+
+def test_hidden_extreme_is_reported_without_changing_full_cloud_measurements() -> None:
+    points = [[float(index), 0.0, 0.0] for index in range(513)]
+    points[511] = [1_000_000.0, 0.0, 0.0]
+    result = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unverified field scale",
+        relative_scale_uncertainty=0.1,
+    )
+    assert 511 not in result["preview_point_indices"]
+    assert result["preview_axis_extrema_covered"] is False
+    assert result["preview_omitted_axis_extrema"] == ["x_max"]
+    assert "preview_omits_axis_extrema" in result["qc_warnings"]
+    assert result["axis_aligned_dimensions_m"] == pytest.approx([10000.0, 0, 0])
+    assert result["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
+        [1000.0, 0, 0]
+    )
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["surface_area_m2"] is None
+    assert result["branch_length_m"] is None
+
+
+def test_hidden_extreme_standalone_and_saved_workflow_parity(client: TestClient) -> None:
+    project_id = str(create_project(client, "Point cloud hidden outlier")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    points = [[float(index), 0.0, 0.0] for index in range(513)]
+    points[511] = [1_000_000.0, 0.0, 0.0]
+    parameters = {
+        "points": points,
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified scale",
+    }
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=parameters)
+    assert standalone.status_code == 200, standalone.text
+    graph = {
+        "graph_id": "point-cloud-hidden-extreme-v14",
+        "name": "Hidden source extent",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": parameters},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        a for a in detail.json()["artifacts"] if a["data_type"] == "point_cloud_measurement_preview"
+    )
+    expected = standalone.json()
+    for key in (
+        "preview_point_indices",
+        "preview_omitted_axis_extrema",
+        "preview_axis_extrema_covered",
+        "qc_warnings",
+        "axis_aligned_dimensions_m",
+        "axis_aligned_dimension_scale_uncertainty_m",
+        "measurement_status",
+        "provenance",
+    ):
+        assert artifact["payload_json"][key] == expected[key]
+    assert expected["preview_omitted_axis_extrema"] == ["x_max"]
+    assert artifact["payload_json"]["surface_area_m2"] is None
+    assert len(artifact["payload_sha256"]) == 64
