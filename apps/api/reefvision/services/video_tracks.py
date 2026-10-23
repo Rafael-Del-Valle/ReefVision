@@ -51,6 +51,10 @@ def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
     }
     if item.keypoints is not None:
         payload["keypoints"] = [list(point) for point in item.keypoints]
+    if item.mask_polygons is not None:
+        payload["mask_polygons"] = [
+            [list(point) for point in polygon] for polygon in item.mask_polygons
+        ]
     if item.pose_observations is not None:
         payload["pose_observations"] = [
             observation.model_dump(mode="json") for observation in item.pose_observations
