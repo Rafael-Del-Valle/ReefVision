@@ -378,3 +378,18 @@ artifacts distinguish this reporting contract. Regression coverage includes
 standalone API, input-order determinism, no-false-positive control and saved
 Workflow Builder artifact parity. Full CI, verified identity/calibration and
 installed Windows scientific acceptance remain outstanding.
+
+## Derived technical-replicate label guard (2026-10-23)
+
+The shared experimental-unit policy now also rejects ROI, bounding-box,
+segmentation, model-prediction, keyframe, augmentation, thumbnail and
+subimage/view labels as *independent biological experimental units*. Compound
+labels such as `bounding_box` and `model_prediction` cannot bypass the guard.
+The exploratory longitudinal and paired-count schemas use the same policy;
+standalone schema regressions and persisted saved-workflow failure tests cover
+these labels. Rejected saved runs must not emit a successful scientific
+analysis artifact. This is a conservative pseudoreplication safeguard, **not**
+validation of caller-declared tank, colony or site independence. No evidence
+is promoted from `caller_supplied_unverified`, and the verified identity,
+calibration, experimental-design registry, migration and installed Windows
+acceptance requirements remain outstanding.
