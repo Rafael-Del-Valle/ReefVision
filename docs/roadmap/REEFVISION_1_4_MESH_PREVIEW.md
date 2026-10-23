@@ -63,3 +63,29 @@ above one may indicate disconnected fragments, and inconsistent winding may
 invalidate assumptions of a consistently oriented closed surface. This is
 diagnostic topology QC, not a validated tissue segmentation, watertightness
 certificate, volume estimate, or biological identity determination.
+
+
+## Bounded mesh render payload (1.4 development)
+
+The mesh preview response now includes `preview_face_indices` (original
+zero-based face indices), `preview_vertex_indices` (original vertex indices),
+`preview_faces_local_indices` (triangles remapped to the preview vertex array),
+`preview_vertices_in_source_frame_m`, and `preview_is_decimated`.
+At most 512 triangles and 1,536 referenced vertices are returned for display.
+Faces are sampled deterministically across the original face order, with the
+first and last included; this is a **render-only sample**, not a representative
+statistical sample of tissue or a validated mesh simplification.
+
+All surface areas, extents, QC, uncertainty estimates and geometry hashes are
+computed from the complete validated input **before** the display sample is
+formed. Preview indices retain the original source indexing and face winding;
+the local face indices address only the preview vertex array. Calibrated
+coordinates still depend on caller-supplied, unverified scale evidence.
+Sampling can omit small branches, holes, or defects and must never be used
+for scientific measurement or organism reidentification. No interactive 3D
+viewer, persistence, camera controls, or hardware acceptance is claimed.
+
+Regression coverage:
+`test_spatial_mesh_render_sample_v14.py` checks the 512/513-face threshold,
+original-to-local index mapping, unchanged full-mesh area/uncertainty, and
+standalone versus executed saved Workflow Builder payload parity.
