@@ -215,7 +215,6 @@ def get_training_run(
     return service(request, session).get_run(run_id)
 
 
-
 def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool | str]:
     """Read only a bounded tail of a run's persisted log, never an arbitrary path."""
     empty: dict[str, bool | str] = {"available": False, "text": ""}
