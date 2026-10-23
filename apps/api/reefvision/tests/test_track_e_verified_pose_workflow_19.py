@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.db.models import PoseTrainingDataset
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_pose_training_phase10 import _frozen_dataset
 
 
@@ -32,6 +33,17 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         ],
         "edges": [],
     }
+
+    other_project = create_project(client, "Pose dataset project isolation")
+    forbidden = client.post(
+        f"/api/v1/projects/{other_project['id']}/workflow-graphs/plan", json=graph
+    )
+    assert forbidden.status_code == 200, forbidden.text
+    assert forbidden.json()["valid"] is False
+    assert any(
+        issue["code"] == "pose_dataset_scope_mismatch"
+        for issue in forbidden.json()["issues"]
+    )
 
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
