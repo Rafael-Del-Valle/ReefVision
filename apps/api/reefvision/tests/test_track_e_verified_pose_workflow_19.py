@@ -11,7 +11,10 @@ from fastapi.testclient import TestClient
 from reefvision.db.models import PoseTrainingDataset
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.workflow_pose_training import execute_pose_training_dataset_adapter
+from reefvision.services.workflow_pose_training import (
+    create_pose_workflow_training_result,
+    execute_pose_training_dataset_adapter,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_pose_training_phase10 import _frozen_dataset
@@ -128,6 +131,23 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["pose_schema_id"] == dataset["pose_schema_id"]
     assert payload["pose_schema_revision"] == dataset["pose_schema_revision"]
     assert payload["pose_schema_content_hash"] == dataset["pose_schema_content_hash"]
+
+    # The saved workflow's real output artifact must not be reusable for
+    # training after any of its frozen landmark identity fields are changed.
+    with app.state.session_factory() as session:
+        for field, stale_value in (
+            ("pose_schema_id", "not-the-frozen-schema"),
+            ("pose_schema_revision", -1),
+            ("pose_schema_content_hash", "0" * 64),
+        ):
+            with pytest.raises(ValidationError, match="artifact landmark schema metadata"):
+                create_pose_workflow_training_result(
+                    session,
+                    app.state.settings,
+                    project_id=project_id,
+                    dataset_payload={**payload, field: stale_value},
+                    parameters={},
+                )
 
     with app.state.session_factory() as session:
         frozen = session.get(PoseTrainingDataset, dataset_id)
