@@ -246,6 +246,9 @@ def run_pending_migrations(settings: Settings) -> None:
     alembic_ini, migrations_dir = resolve_alembic_paths()
     config = Config(str(alembic_ini))
     config.attributes["configure_logger"] = False
+    # Pin Alembic to the exact database that the desktop preflight and
+    # post-upgrade checks inspect; env.py must not re-resolve this URL.
+    config.attributes["desktop_database_url"] = settings.resolved_database_url
     config.set_main_option("script_location", str(migrations_dir))
     config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
 
