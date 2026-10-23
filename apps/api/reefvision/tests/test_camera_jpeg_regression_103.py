@@ -162,3 +162,48 @@ def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
                 expected = colors[color_index]
                 assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
     assert source.read_bytes() == original
+
+@pytest.mark.parametrize(
+    ("mode", "color", "expected_display_mode"),
+    [
+        ("CMYK", (10, 40, 80, 5), "RGB"),
+        ("L", 127, "L"),
+    ],
+)
+def test_non_rgb_camera_jpeg_import_and_oriented_renditions(
+    client: TestClient,
+    tmp_path: Path,
+    mode: str,
+    color: tuple[int, ...] | int,
+    expected_display_mode: str,
+) -> None:
+    """CMYK and grayscale camera JPEGs must render without altering source bytes."""
+
+    source = tmp_path / "DSC_0003.JPEG"
+    display = tmp_path / "display.png"
+    thumbnail = tmp_path / "thumbnail.jpg"
+    exif = Image.Exif()
+    exif[274] = 6
+    Image.new(mode, (80, 60), color).save(source, format="JPEG", exif=exif)
+    original = source.read_bytes()
+
+    project = create_project(client, f"{mode} camera JPEG")
+    report = import_one(client, project["id"], filename=source.name, content=original)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["media_type"] == "image/jpeg"
+    assert metadata["metadata_json"]["mode"] == mode
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+    create_browser_display(source, display)
+    create_thumbnail(source, thumbnail, max_width=160, max_height=160)
+    with Image.open(display) as rendered:
+        assert rendered.mode == expected_display_mode
+        assert rendered.size == (60, 80)
+        assert rendered.getexif().get(274) is None
+    with Image.open(thumbnail) as rendered:
+        assert rendered.mode == "RGB"
+        assert rendered.size == (60, 80)
+        assert rendered.getexif().get(274) is None
+    assert source.read_bytes() == original
