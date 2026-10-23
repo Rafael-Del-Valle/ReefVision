@@ -13,7 +13,9 @@ export function LocalMeshPreview({ projectId }: LocalMeshPreviewProps) {
   const [scale, setScale] = useState("0.01");
   const [evidence, setEvidence] = useState("");
   const [uncertainty, setUncertainty] = useState("");
-  const [artifact, setArtifact] = useState<Record<string, unknown> | null>(null);
+  const [artifact, setArtifact] = useState<Record<string, unknown> | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const requestVersion = useRef(0);
@@ -42,7 +44,9 @@ export function LocalMeshPreview({ projectId }: LocalMeshPreviewProps) {
       if (version === requestVersion.current) setArtifact(result);
     } catch (reason) {
       if (version === requestVersion.current) {
-        setError(reason instanceof Error ? reason.message : "Mesh preview failed.");
+        setError(
+          reason instanceof Error ? reason.message : "Mesh preview failed.",
+        );
       }
     } finally {
       if (version === requestVersion.current) setLoading(false);
