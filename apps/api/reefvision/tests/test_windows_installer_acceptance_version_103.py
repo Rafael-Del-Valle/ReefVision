@@ -101,3 +101,39 @@ def test_invalid_release_version_is_rejected() -> None:
 def test_mixed_msi_versions_are_rejected() -> None:
     workflow = valid_workflow() + "      # ReefVision_1.0.2_x64_en-US.msi\n"
     assert any("MSI filename" in error for error in MODULE.check_workflow(workflow, "1.0.3"))
+
+CAB_WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(
+    encoding="utf-8"
+)
+
+
+def test_windows_cab_artifact_manifest_preflight_matches_real_workflow() -> None:
+    assert MODULE.check_cab_artifact_partition(CAB_WORKFLOW) == []
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        ("msi/rv4.cab", "msi/rv3.cab"),
+        ("msi/rv6.cab", "msi/rv7.cab"),
+        ("name: ReefVision-Windows-Installer-Part-3", "name: ReefVision-Windows-Installer-Part-2"),
+        ("pattern: ReefVision-Windows-Installer-Part-*", "pattern: unrelated-*"),
+        ("merge-multiple: true", "merge-multiple: false"),
+        ("msi/*.msi", "msi/incorrect.msi"),
+    ],
+)
+def test_windows_cab_preflight_rejects_missing_or_duplicated_artifacts(
+    original: str, replacement: str
+) -> None:
+    assert original in CAB_WORKFLOW
+    modified = CAB_WORKFLOW.replace(original, replacement, 1)
+    assert MODULE.check_cab_artifact_partition(modified)
+
+
+def test_windows_cab_preflight_requires_missing_file_upload_failure() -> None:
+    assert "if-no-files-found: error" in CAB_WORKFLOW
+    modified = CAB_WORKFLOW.replace("if-no-files-found: error", "if-no-files-found: warn", 1)
+    assert any(
+        "must reject missing upload files" in error
+        for error in MODULE.check_cab_artifact_partition(modified)
+    )
