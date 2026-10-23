@@ -76,7 +76,9 @@ def test_shared_parent_disclosed_in_standalone_and_saved_workflow(
     assert result["cross_unit_shared_parent_colony_ids"] == ["shared-parent"]
     assert result["evidence_level"] == "caller_supplied_unverified"
     count_key = (
-        "declared_independent_unit_count" if kind == "paired" else "independent_unit_count"
+        "declared_independent_unit_count"
+        if kind == "paired"
+        else "independent_unit_count"
     )
     assert result[count_key] == 2
 
