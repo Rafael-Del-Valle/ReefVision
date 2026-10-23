@@ -1,8 +1,9 @@
 """Training workspace API routes."""
 
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -212,6 +213,49 @@ def get_training_run(
     session: DbSession,
 ) -> TrainingRunResponse:
     return service(request, session).get_run(run_id)
+
+
+
+def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool | str]:
+    """Read only a bounded tail of a run's persisted log, never an arbitrary path."""
+    empty: dict[str, bool | str] = {"available": False, "text": ""}
+    if not log_path:
+        return empty
+    root = data_dir.resolve()
+    candidate = Path(log_path)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    try:
+        path = candidate.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return empty
+    if not path.is_relative_to(root) or path.suffix.lower() not in {".log", ".txt"}:
+        raise HTTPException(status_code=403, detail="Training log path is not permitted")
+    if not path.is_file():
+        return empty
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            handle.seek(max(0, size - 16384))
+            payload = handle.read(16384)
+    except OSError:
+        return empty
+    return {"available": True, "text": payload.decode("utf-8", errors="replace")}
+
+
+@router.get("/training-runs/{run_id}/logs/tail")
+def get_training_log_tail(
+    run_id: str,
+    request: Request,
+    response: Response,
+    session: DbSession,
+) -> dict[str, bool | str]:
+    """Expose a bounded, read-only log tail for the desktop PowerShell monitor."""
+    response.headers["Cache-Control"] = "no-store"
+    run = service(request, session).get_run(run_id)
+    settings: Settings = request.app.state.settings
+    return _training_log_tail(run.logs_path, settings.resolved_data_dir)
 
 
 @router.get("/training-runs/{run_id}/artifacts/{artifact_index}", response_class=FileResponse)
