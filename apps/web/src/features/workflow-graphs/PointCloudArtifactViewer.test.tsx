@@ -243,11 +243,6 @@ describe("PointCloudArtifactViewer", () => {
   it("rejects contradictory or malformed extrema-coverage metadata", () => {
     for (const fields of [
       {
-        // Claims a hidden extreme when every source bound is sampled.
-        preview_omitted_axis_extrema: ["x_max"],
-        preview_axis_extrema_covered: false,
-      },
-      {
         // Claims complete coverage although an unsampled extreme is known.
         axis_aligned_max_in_source_frame_m: [2, 1, 0],
         preview_omitted_axis_extrema: [],
@@ -280,6 +275,15 @@ describe("PointCloudArtifactViewer", () => {
         parsePointCloudRenderArtifact({ ...validArtifact, ...fields }),
       ).toBeNull();
     }
+    // A conservative omission warning can be genuine even when large-offset
+    // scaling rounds a source extreme onto the same displayed coordinate.
+    expect(
+      parsePointCloudRenderArtifact({
+        ...validArtifact,
+        preview_omitted_axis_extrema: ["x_max"],
+        preview_axis_extrema_covered: false,
+      }),
+    ).not.toBeNull();
     // Older persisted artifacts remain displayable but coverage is unassessed.
     render(<PointCloudArtifactViewer artifact={validArtifact} />);
     expect(screen.getByText(/Point coverage:/)).toHaveTextContent(
