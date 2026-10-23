@@ -9,6 +9,10 @@ interface LocalMeshPreviewProps {
 
 /** Standalone local-file preview; saved scientific graphs remain the persistent path. */
 export function LocalMeshPreview({ projectId }: LocalMeshPreviewProps) {
+  return <LocalMeshPreviewSession key={projectId} projectId={projectId} />;
+}
+
+function LocalMeshPreviewSession({ projectId }: LocalMeshPreviewProps) {
   const [file, setFile] = useState<File | null>(null);
   const [scale, setScale] = useState("0.01");
   const [evidence, setEvidence] = useState("");
