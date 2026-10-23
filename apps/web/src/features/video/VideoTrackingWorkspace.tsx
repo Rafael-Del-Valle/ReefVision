@@ -162,6 +162,11 @@ export function VideoTrackingWorkspace({
     useState(false);
 
   const [trackingModelId, setTrackingModelId] = useState("");
+  const [trackingMode, setTrackingMode] = useState<
+    "auto" | "detect" | "segment" | "hybrid"
+  >("auto");
+  const [segmentationTrackingModelId, setSegmentationTrackingModelId] = useState("");
+  const [hybridMatchIou, setHybridMatchIou] = useState(0.5);
   const [trackerName, setTrackerName] = useState("bytetrack.yaml");
   const [trackingConfidence, setTrackingConfidence] = useState(0.25);
   const [trackingIou, setTrackingIou] = useState(0.5);
@@ -228,6 +233,16 @@ export function VideoTrackingWorkspace({
     queryKey: ["video-tracking-models", project.id],
     queryFn: ({ signal }) => getTrackingModels(project.id, signal),
   });
+  const eligibleTrackingModels = (modelsQuery.data ?? []).filter((model) => {
+    if (trackingMode === "hybrid" || trackingMode === "detect") {
+      return model.task === "detect";
+    }
+    if (trackingMode === "segment") return model.task === "segment";
+    return true;
+  });
+  const eligibleSegmentationModels = (modelsQuery.data ?? []).filter(
+    (model) => model.task === "segment" && model.provider_name === "ultralytics",
+  );
   const selectedTrackingModel = modelsQuery.data?.find(
     (model) => model.id === trackingModelId,
   );
@@ -469,10 +484,25 @@ export function VideoTrackingWorkspace({
     }
   }, [selectedVideo]);
   useEffect(() => {
-    if (!trackingModelId && modelsQuery.data?.[0]) {
-      setTrackingModelId(modelsQuery.data[0].id);
+    if (
+      eligibleTrackingModels.length > 0 &&
+      !eligibleTrackingModels.some((model) => model.id === trackingModelId)
+    ) {
+      setTrackingModelId(eligibleTrackingModels[0].id);
+    } else if (modelsQuery.data && eligibleTrackingModels.length === 0 && trackingModelId) {
+      setTrackingModelId("");
     }
-  }, [modelsQuery.data, trackingModelId]);
+  }, [eligibleTrackingModels, modelsQuery.data, trackingModelId]);
+  useEffect(() => {
+    if (
+      eligibleSegmentationModels.length > 0 &&
+      !eligibleSegmentationModels.some(
+        (model) => model.id === segmentationTrackingModelId,
+      )
+    ) {
+      setSegmentationTrackingModelId(eligibleSegmentationModels[0].id);
+    }
+  }, [eligibleSegmentationModels, segmentationTrackingModelId]);
   useEffect(() => {
     if (!poseTrackingSelected) {
       setPoseLandmarkGroups([]);
@@ -746,8 +776,21 @@ export function VideoTrackingWorkspace({
           "Save a ReefVision landmark schema before running pose inference",
         );
       }
+      if (trackingMode === "hybrid" && (
+        !segmentationTrackingModelId ||
+        selectedTrackingModel?.provider_name !== "ultralytics"
+      )) {
+        throw new Error("Hybrid tracking needs an Ultralytics detector and segmenter");
+      }
+      if (trackingMode === "hybrid" && (hybridMatchIou <= 0 || hybridMatchIou > 1)) {
+        throw new Error("Hybrid overlap IoU must be greater than zero and at most one");
+      }
       return createVideoTrackingJob(selectedVideoId, {
         model_id: trackingModelId,
+        tracking_mode: trackingMode,
+        segmentation_model_id:
+          trackingMode === "hybrid" ? segmentationTrackingModelId : null,
+        hybrid_match_iou: hybridMatchIou,
         tracker: trackerName,
         confidence: trackingConfidence,
         iou: trackingIou,
@@ -2008,20 +2051,79 @@ export function VideoTrackingWorkspace({
 
       <section className="management-card">
         <p className="eyebrow">Automated tracking</p>
-        <h3>Detection / pose + tracker</h3>
+        <h3>Detection / segmentation / hybrid video tracking</h3>
         <label>
-          Detection or pose model
+          Tracking mode
+          <select
+            value={trackingMode}
+            onChange={(event) =>
+              setTrackingMode(
+                event.target.value as "auto" | "detect" | "segment" | "hybrid",
+              )
+            }
+          >
+            <option value="auto">Single model (auto: detection, segmentation, or pose)</option>
+            <option value="detect">Detection tracking</option>
+            <option value="segment">Segmentation tracking</option>
+            <option value="hybrid">Hybrid detection + segmentation</option>
+          </select>
+        </label>
+        <label>
+          {trackingMode === "hybrid" ? "Detection model" : "Tracking model"}
           <select
             value={trackingModelId}
             onChange={(event) => setTrackingModelId(event.target.value)}
           >
-            {(modelsQuery.data ?? []).map((model) => (
+            {eligibleTrackingModels.length === 0 && (
+              <option value="">No compatible models registered</option>
+            )}
+            {eligibleTrackingModels.map((model) => (
               <option key={model.id} value={model.id}>
                 {model.display_name} ({model.task})
               </option>
             ))}
           </select>
         </label>
+        {trackingMode === "hybrid" && (
+          <>
+            <label>
+              Segmentation model
+              <select
+                value={segmentationTrackingModelId}
+                onChange={(event) =>
+                  setSegmentationTrackingModelId(event.target.value)
+                }
+              >
+                {eligibleSegmentationModels.length === 0 && (
+                  <option value="">Register an Ultralytics instance-segmentation model</option>
+                )}
+                {eligibleSegmentationModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.display_name} ({model.task})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Hybrid matching IoU
+              <input
+                type="number"
+                min={0.05}
+                max={1}
+                step={0.05}
+                value={hybridMatchIou}
+                onChange={(event) =>
+                  setHybridMatchIou(Number(event.target.value))
+                }
+              />
+            </label>
+            <p className="annotation-helper">
+              Runs detector and segmenter on the same video and reconciles
+              class-mapped tracks. Segment polygons are retained for matched
+              observations; unmatched objects remain reviewable.
+            </p>
+          </>
+        )}
         {poseTrackingSelected && (
           <div className="workspace-guide compact">
             <div>
@@ -2255,6 +2357,10 @@ export function VideoTrackingWorkspace({
             !selectedVideoId ||
             !trackingModelId ||
             trackingMutation.isPending ||
+            (trackingMode === "hybrid" &&
+              (!segmentationTrackingModelId ||
+                selectedTrackingModel?.provider_name !== "ultralytics" ||
+                !linkDetections)) ||
             (poseTrackingSelected && selectedModelPoseSchema === null)
           }
           onClick={() => trackingMutation.mutate()}
@@ -2264,9 +2370,11 @@ export function VideoTrackingWorkspace({
             : linkDetections
               ? sleapTrackingSelected
                 ? "Run SLEAP-NN pose + instance tracking"
-                : poseTrackingSelected
-                  ? `Run pose + ${trackerLabel(trackerName)}`
-                  : `Run ${trackerLabel(trackerName)}`
+                : trackingMode === "hybrid"
+                  ? `Run hybrid + ${trackerLabel(trackerName)}`
+                  : poseTrackingSelected
+                    ? `Run pose + ${trackerLabel(trackerName)}`
+                    : `Run ${trackerLabel(trackerName)}`
               : poseTrackingSelected
                 ? "Run pose inference"
                 : "Run instance detection"}
@@ -2293,6 +2401,7 @@ export function VideoTrackingWorkspace({
                 <tr>
                   <th>Run</th>
                   <th>Tracker</th>
+                  <th>Mode</th>
                   <th>Status</th>
                   <th>Progress</th>
                   <th>Detections</th>
@@ -2318,6 +2427,7 @@ export function VideoTrackingWorkspace({
                           ? trackerLabel(run.tracker)
                           : "Instances only"}
                       </td>
+                      <td>{run.tracking_mode ?? "auto"}</td>
                       <td>
                         {run.stale ? <strong>Stalled</strong> : run.stage}
                         {run.stale && (
