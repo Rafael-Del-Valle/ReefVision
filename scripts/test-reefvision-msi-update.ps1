@@ -56,6 +56,29 @@ try {
         throw 'MSI preflight changed an unrelated file.'
     }
     $passed++
+    # Regression contract for the actual installed command: never silently
+    # reintroduce NSIS execution or direct portable-backend overwrites.
+    $updateScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'update-reefvision.ps1') -Raw
+    $installerScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'install-reefvision-commands.ps1') -Raw
+    if ($updateScript.Contains('$installer = Get-ReefVisionFreshInstaller')) {
+        throw 'Updater still selects the legacy NSIS installer.'
+    }
+    if ($updateScript.Contains('$portableSync = Sync-ReefVisionPortableInstall')) {
+        throw 'Updater still overwrites portable backend files.'
+    }
+    $verificationPosition = $updateScript.LastIndexOf('Assert-ReefVisionMsiPayload')
+    $stopPosition = $updateScript.IndexOf('Stop-ReefVisionRunningProcesses', $verificationPosition)
+    if ($verificationPosition -lt 0 -or $stopPosition -le $verificationPosition) {
+        throw 'MSI verification must precede stopping the desktop.'
+    }
+    if (-not $updateScript.Contains('msiexec.exe') -or
+        -not $updateScript.Contains('--clean-build is disabled')) {
+        throw 'Updater MSI installation or safe-cleanup contract is missing.'
+    }
+    if (-not $installerScript.Contains('Destination = Join-Path $supportDir "reefvision-msi-update.ps1"')) {
+        throw 'Managed command installation does not deploy the MSI helper.'
+    }
+    $passed += 5
     Write-Host "MSI update preflight: $passed passed" -ForegroundColor Green
 }
 finally {
