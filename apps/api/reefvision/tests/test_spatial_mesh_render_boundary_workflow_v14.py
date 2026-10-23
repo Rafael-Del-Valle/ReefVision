@@ -52,6 +52,9 @@ def test_decimated_mesh_saved_workflow_matches_standalone(client: TestClient) ->
     assert expected["preview_is_decimated"] is True
     assert expected["preview_face_count"] == 512
     assert expected["preview_face_fraction"] == pytest.approx(512 / 513)
+    assert expected["preview_camera_fit_basis"] == "all_referenced_vertices"
+    assert expected["preview_coordinate_registration_verified"] is False
+    assert expected["preview_camera_radius_m"] > 0
 
     graph = {
         "graph_id": "mesh-render-boundary-513-v14",
@@ -95,3 +98,30 @@ def test_decimated_mesh_saved_workflow_matches_standalone(client: TestClient) ->
     )
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
+
+
+def test_camera_fit_uses_unsampled_faces_but_ignores_orphan_vertices() -> None:
+    """A missed display triangle must still influence the full-mesh camera fit."""
+    parameters = _mesh_parameters(513)
+    # Uniform 512-of-513 face sampling skips face 511.
+    parameters["vertices"][3 * 511][0] = 20_000.0
+    parameters["vertices"].append([100_000_000.0] * 3)
+    result = measure_mesh_preview(**parameters)
+
+    assert 511 not in result["preview_face_indices"]
+    assert 3 * 511 not in result["preview_vertex_indices"]
+    assert result["unreferenced_vertex_count"] == 1
+    assert result["preview_referenced_bounds_in_source_frame_m"] == {
+        "minimum": [0.0, 0.0, 0.0],
+        "maximum": [200.0, 0.01, 0.0],
+    }
+    assert result["preview_camera_target_in_source_frame_m"] == pytest.approx(
+        [100.0, 0.005, 0.0]
+    )
+    assert result["preview_camera_radius_m"] == pytest.approx(
+        (200.0**2 + 0.01**2) ** 0.5 / 2
+    )
+    assert result["preview_camera_fit_basis"] == "all_referenced_vertices"
+    assert result["preview_coordinate_registration_verified"] is False
+    assert result["provenance"]["calibration_verified"] is False
+    assert result["measurement_status"] == "caller_supplied_unverified"
