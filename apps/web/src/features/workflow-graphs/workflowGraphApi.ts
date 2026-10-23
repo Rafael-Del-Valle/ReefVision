@@ -263,7 +263,11 @@ export function cancelWorkflowRunJob(
 /** Bounded local file preview. No asset persistence or calibration verification. */
 export interface MeshPreviewCalibration {
   meters_per_unit: number;
-  calibration_method: "ruler" | "photogrammetry_control" | "instrument" | "other";
+  calibration_method:
+    | "ruler"
+    | "photogrammetry_control"
+    | "instrument"
+    | "other";
   calibration_evidence: string;
   relative_scale_uncertainty?: number | null;
 }
@@ -279,21 +283,34 @@ export async function previewLocalMeshFile(
   }
   const maxBytes = extension === "glb" ? 262_500 : 256_000;
   if (!file.size || file.size > maxBytes || file.name.length > 200) {
-    throw new Error("Mesh file is empty, oversized, or has an invalid filename.");
+    throw new Error(
+      "Mesh file is empty, oversized, or has an invalid filename.",
+    );
   }
   if (
     !Number.isFinite(calibration.meters_per_unit) ||
     calibration.meters_per_unit <= 0 ||
+    calibration.meters_per_unit > 1_000_000 ||
     !calibration.calibration_evidence.trim()
   ) {
     throw new Error("Provide a positive scale and calibration evidence.");
+  }
+  if (
+    calibration.relative_scale_uncertainty != null &&
+    (!Number.isFinite(calibration.relative_scale_uncertainty) ||
+      calibration.relative_scale_uncertainty < 0 ||
+      calibration.relative_scale_uncertainty > 1)
+  ) {
+    throw new Error("Relative scale uncertainty must be between 0 and 1.");
   }
   let geometry: Record<string, string>;
   if (extension === "glb") {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = "";
     for (let offset = 0; offset < bytes.length; offset += 8192) {
-      binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+      binary += String.fromCharCode(
+        ...bytes.subarray(offset, offset + 8192),
+      );
     }
     geometry = { glb_base64: btoa(binary) };
   } else {
