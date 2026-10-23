@@ -1,7 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { MeshArtifactViewer, parseMeshRenderArtifact } from "./MeshArtifactViewer";
+import {
+  MeshArtifactViewer,
+  parseMeshRenderArtifact,
+} from "./MeshArtifactViewer";
 
 const validArtifact = {
   preview_vertices_in_source_frame_m: [
@@ -23,7 +26,9 @@ const validArtifact = {
 describe("MeshArtifactViewer", () => {
   it("rotates and resets the persisted preview without changing the scientific artifact", () => {
     const before = JSON.stringify(validArtifact);
-    const { container } = render(<MeshArtifactViewer artifact={validArtifact} />);
+    const { container } = render(
+      <MeshArtifactViewer artifact={validArtifact} />,
+    );
     const polygon = container.querySelector("polygon");
     expect(polygon).not.toBeNull();
     expect(polygon?.getAttribute("data-source-face-index")).toBe("7");
@@ -34,7 +39,9 @@ describe("MeshArtifactViewer", () => {
     expect(polygon?.getAttribute("points")).not.toBe(originalPoints);
     fireEvent.click(screen.getByRole("button", { name: "Reset 3D view" }));
     expect(polygon?.getAttribute("points")).toBe(originalPoints);
-    expect(screen.getByText(/Surface-area coverage:/)).toHaveTextContent("25.0%");
+    expect(screen.getByText(/Surface-area coverage:/)).toHaveTextContent(
+      "25.0%",
+    );
     expect(screen.getByText(/Surface-area coverage:/)).toHaveTextContent(
       "Decimated preview",
     );
@@ -61,7 +68,9 @@ describe("MeshArtifactViewer", () => {
     expect(
       parseMeshRenderArtifact({
         ...validArtifact,
-        preview_faces_local_indices: Array.from({ length: 513 }, () => [0, 1, 2]),
+        preview_faces_local_indices: Array.from({ length: 513 }, () => [
+          0, 1, 2,
+        ]),
         preview_face_indices: Array.from({ length: 513 }, (_, index) => index),
       }),
     ).toBeNull();
@@ -84,8 +93,8 @@ describe("MeshArtifactViewer", () => {
     expect(screen.getByText(/Surface-area coverage:/)).toHaveTextContent(
       "undefined (zero-area geometry)",
     );
-    expect(screen.getByText(/Calibration and coordinate registration/)).toHaveTextContent(
-      "unverified",
-    );
+    expect(
+      screen.getByText(/Calibration and coordinate registration/),
+    ).toHaveTextContent("unverified");
   });
 });
