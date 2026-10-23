@@ -47,3 +47,25 @@ These are provisional **straight-line endpoint chords**, not coral branch length
 ## Chord display integrity check (October 23, 2026)
 
 When both original source-point indices for a selected chord are present in the bounded interactive display sample, the frontend independently recomputes their straight-line distance from the sampled, calibrated XYZ coordinates. A nonfinite or contradictory reported chord distance causes the viewer to reject the artifact rather than display inconsistent scientific metadata. The comparison uses a small relative tolerance plus an absolute-coordinate-magnitude guard for cancellation at very large source-frame offsets; this avoids falsely rejecting full-resolution chords lost to rounding in the display sample. When one or both endpoints were omitted by deterministic decimation, the viewer **does not** reconstruct them or pretend to validate their distance: the full-input backend remains authoritative, and the saved workflow preserves the original indices and ordered-geometry fingerprint. This is a consistency check on provisional display metadata, **not** human verification, calibration acceptance, an anatomical branch-length estimate, or an independent validation of the full point cloud.
+
+## Source-axis extrema coverage QC (October 23, 2026)
+
+The deterministic 512-point interactive sample can omit an isolated outlier even
+when the full 513–2,000-point input is valid. The shared standalone/API and saved
+`point_cloud_preview` Workflow Builder execution now compare raw XYZ extrema
+against the sampled XYZ extrema before scale multiplication. They persist
+`preview_omitted_axis_extrema` (any of `x_min`, `x_max`, `y_min`,
+`y_max`, `z_min`, `z_max`), `preview_axis_extrema_covered`, and the
+`preview_omits_axis_extrema` QC warning when applicable. The interactive
+saved-artifact viewer displays the omission explicitly; malformed or
+contradictory new coverage metadata fails closed. Older saved artifacts without
+this field remain readable but show coverage as **unassessed**.
+
+This checks whether the displayed sample reaches each *axis-aligned* source
+extremum. It does **not** establish full convex-hull coverage, adequate point
+density, a valid organism outline, anatomical branch length, tissue surface
+area, verified calibration, or source-frame registration. Full-cloud bounds,
+selected source-index chords, geometry fingerprints, uncertainty intervals,
+and scientific provenance are unchanged by display decimation. Tests include a
+513-point scan with a hidden extreme at original index 511, standalone versus
+saved executable workflow parity, and malformed frontend metadata.
