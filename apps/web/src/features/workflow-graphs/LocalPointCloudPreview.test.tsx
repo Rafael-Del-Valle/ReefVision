@@ -63,7 +63,9 @@ describe("LocalPointCloudPreview", () => {
     fireEvent.change(screen.getByLabelText("Chord end source point index"), {
       target: { value: "1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview point cloud" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview point cloud" }),
+    );
     expect(
       await screen.findByText("Provisional point-cloud viewer"),
     ).toBeInTheDocument();
@@ -73,7 +75,9 @@ describe("LocalPointCloudPreview", () => {
       expect.objectContaining({ meters_per_unit: 0.01 }),
       [[0, 1]],
     );
-    expect(screen.getByText(/not anatomical branch length/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/not anatomical branch length/),
+    ).toBeInTheDocument();
   });
 
   it("requires both source indices before sending a chord request", async () => {
@@ -84,7 +88,9 @@ describe("LocalPointCloudPreview", () => {
     fireEvent.change(screen.getByLabelText("Chord start source point index"), {
       target: { value: "0" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview point cloud" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview point cloud" }),
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "both source point indices",
     );
