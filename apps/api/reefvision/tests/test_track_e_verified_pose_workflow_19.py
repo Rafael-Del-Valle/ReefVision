@@ -134,6 +134,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         assert frozen.manifest_sha256 == payload["manifest_sha256"]
         assert frozen.pose_schema_content_hash == payload["pose_schema_content_hash"]
 
+
 def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
