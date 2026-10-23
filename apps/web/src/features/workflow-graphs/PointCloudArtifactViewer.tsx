@@ -147,12 +147,36 @@ export function parsePointCloudRenderArtifact(
       !omittedExtrema.every(
         (value) =>
           typeof value === "string" &&
-          ["x_min", "x_max", "y_min", "y_max", "z_min", "z_max"].includes(value),
+          ["x_min", "x_max", "y_min", "y_max", "z_min", "z_max"].includes(
+            value,
+          ),
       ) ||
       new Set(omittedExtrema).size !== omittedExtrema.length ||
       data.preview_axis_extrema_covered !== (omittedExtrema.length === 0))
   ) {
     return null;
+  }
+  // Do not trust saved display-coverage flags without checking the sampled
+  // geometry against the full-cloud bounding box. A mislabeled preview could
+  // otherwise conceal a missing extreme point and mislead field measurements.
+  if (Array.isArray(omittedExtrema)) {
+    const actualOmissions: string[] = [];
+    for (let axis = 0; axis < 3; axis += 1) {
+      const sampledValues = (points as Vec3[]).map((point) => point[axis]);
+      const axisName = ["x", "y", "z"][axis];
+      if (Math.min(...sampledValues) !== min[axis]) {
+        actualOmissions.push(`${axisName}_min`);
+      }
+      if (Math.max(...sampledValues) !== max[axis]) {
+        actualOmissions.push(`${axisName}_max`);
+      }
+    }
+    if (
+      actualOmissions.length !== omittedExtrema.length ||
+      actualOmissions.some((label) => !omittedExtrema.includes(label))
+    ) {
+      return null;
+    }
   }
   if (
     rawChords != null &&
