@@ -115,4 +115,55 @@ describe("LocalMeshPreview", () => {
       }),
     );
   });
+
+  it("isolates provisional geometry and pending results across project changes", async () => {
+    const deferred: {
+      resolve?: (value: Record<string, unknown>) => void;
+    } = {};
+    vi.mocked(previewLocalMeshFile).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          deferred.resolve = resolve;
+        }),
+    );
+    const { rerender } = render(
+      <LocalMeshPreview projectId="original-project" />,
+    );
+    const original = new File(["old"], "old.obj");
+    fireEvent.change(screen.getByLabelText("Mesh file"), {
+      target: { files: [original] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview mesh" }));
+    expect(previewLocalMeshFile).toHaveBeenCalledWith(
+      "original-project",
+      original,
+      expect.any(Object),
+    );
+
+    rerender(<LocalMeshPreview projectId="new-project" />);
+    expect(screen.getByRole("button", { name: "Preview mesh" })).toBeDisabled();
+    await act(async () => {
+      deferred.resolve?.({ measurement_status: "caller_supplied_unverified" });
+    });
+    expect(
+      screen.queryByText("Saved preview rendered"),
+    ).not.toBeInTheDocument();
+
+    const replacement = new File(["new"], "new.ply");
+    vi.mocked(previewLocalMeshFile).mockResolvedValueOnce({
+      measurement_status: "caller_supplied_unverified",
+    });
+    fireEvent.change(screen.getByLabelText("Mesh file"), {
+      target: { files: [replacement] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview mesh" }));
+    expect(
+      await screen.findByText("Saved preview rendered"),
+    ).toBeInTheDocument();
+    expect(previewLocalMeshFile).toHaveBeenLastCalledWith(
+      "new-project",
+      replacement,
+      expect.objectContaining({ calibration_evidence: "" }),
+    );
+  });
 });
