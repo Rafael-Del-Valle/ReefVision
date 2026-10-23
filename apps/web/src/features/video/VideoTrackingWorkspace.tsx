@@ -233,15 +233,24 @@ export function VideoTrackingWorkspace({
     queryKey: ["video-tracking-models", project.id],
     queryFn: ({ signal }) => getTrackingModels(project.id, signal),
   });
-  const eligibleTrackingModels = (modelsQuery.data ?? []).filter((model) => {
-    if (trackingMode === "hybrid" || trackingMode === "detect") {
-      return model.task === "detect";
-    }
-    if (trackingMode === "segment") return model.task === "segment";
-    return true;
-  });
-  const eligibleSegmentationModels = (modelsQuery.data ?? []).filter(
-    (model) => model.task === "segment" && model.provider_name === "ultralytics",
+  const eligibleTrackingModels = useMemo(
+    () =>
+      (modelsQuery.data ?? []).filter((model) => {
+        if (trackingMode === "hybrid" || trackingMode === "detect") {
+          return model.task === "detect";
+        }
+        if (trackingMode === "segment") return model.task === "segment";
+        return true;
+      }),
+    [modelsQuery.data, trackingMode],
+  );
+  const eligibleSegmentationModels = useMemo(
+    () =>
+      (modelsQuery.data ?? []).filter(
+        (model) =>
+          model.task === "segment" && model.provider_name === "ultralytics",
+      ),
+    [modelsQuery.data],
   );
   const selectedTrackingModel = modelsQuery.data?.find(
     (model) => model.id === trackingModelId,
