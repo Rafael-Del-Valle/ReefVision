@@ -12,6 +12,7 @@ from reefvision.db.models import (
     DatasetVersion,
     LabelClass,
     ModelRegistration,
+    PoseTrainingDataset,
     Project,
     VideoAsset,
 )
@@ -204,6 +205,40 @@ class WorkflowGraphService:
                 )
             )
 
+    def _validate_pose_dataset_source(
+        self,
+        project_id: str,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+    ) -> None:
+        dataset_id = str(parameters.get("dataset_id") or "").strip()
+        if not dataset_id:
+            return  # Required-parameter validation reports the missing ID.
+        dataset = self.session.get(PoseTrainingDataset, dataset_id)
+        if dataset is None or dataset.project_id != project_id:
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_scope_mismatch",
+                    "Frozen pose dataset does not belong to this project",
+                    node_id=node_id,
+                )
+            )
+        elif (
+            dataset.status != "complete"
+            or (dataset.item_count or 0) < 1
+            or not dataset.manifest_sha256
+        ):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_incomplete",
+                    "Frozen pose dataset must be complete and contain verified items",
+                    node_id=node_id,
+                )
+            )
+
     def _validate_model_source(
         self,
         project_id: str,
@@ -385,6 +420,13 @@ class WorkflowGraphService:
                     node.parameters,
                     issues,
                     referenced_dataset_ids,
+                )
+            elif node.node_type == "pose_training_dataset":
+                self._validate_pose_dataset_source(
+                    project_id,
+                    node.node_id,
+                    node.parameters,
+                    issues,
                 )
             elif node.node_type == "registered_model_source":
                 self._validate_model_source(
