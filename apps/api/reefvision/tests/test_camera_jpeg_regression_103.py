@@ -45,6 +45,13 @@ def test_progressive_camera_jpeg_keeps_original_bytes_and_exif(
     assert original.status_code == 200
     assert original.content == payload
 
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as decoded:
+        assert decoded.size == (64, 48)
+        assert decoded.getexif().get(274) is None
+
 
 @pytest.mark.parametrize("extension", [".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"])
 def test_jpeg_camera_filename_aliases_preserve_original_content(

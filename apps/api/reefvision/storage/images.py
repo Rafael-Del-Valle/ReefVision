@@ -189,7 +189,11 @@ def create_browser_display(source: Path, destination: Path) -> None:
     temporary.unlink(missing_ok=True)
     try:
         with Image.open(source) as image:
-            display: Image.Image = image
+            display: Image.Image = image.copy()
+            # Display renditions deliberately keep the stored raw pixel raster.
+            # Browsers apply EXIF orientation automatically, which would rotate
+            # the image away from ReefVision's immutable source-pixel geometry.
+            display.info.pop("exif", None)
             if display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16"}:
                 display = display.convert("RGB")
             display.save(temporary, format="PNG", optimize=True)
