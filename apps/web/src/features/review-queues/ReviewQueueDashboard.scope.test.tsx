@@ -107,8 +107,8 @@ describe("ReviewQueueDashboard scope isolation", () => {
         expect.anything(),
       );
     });
-    const fetchedQueueCalls = vi.mocked(getReviewQueueItems).mock.calls;
-    expect(fetchedQueueCalls.every(([id]) => id === "queue-b")).toBe(true);
+    const queueIds = vi.mocked(getReviewQueueItems).mock.calls.map(([id]) => id);
+    expect(queueIds.every((id) => id === "queue-b")).toBe(true);
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
   });
 
@@ -139,8 +139,8 @@ describe("ReviewQueueDashboard scope isolation", () => {
       ),
     );
     expect(getDatasetVersionReviewQueues).not.toHaveBeenCalled();
-    const fetchedQueueCalls = vi.mocked(getReviewQueueItems).mock.calls;
-    expect(fetchedQueueCalls.every(([id]) => id === "queue-b")).toBe(true);
+    const queueIds = vi.mocked(getReviewQueueItems).mock.calls.map(([id]) => id);
+    expect(queueIds.every((id) => id === "queue-b")).toBe(true);
   });
 
   it("never falls back to project queues while dataset version is unset", async () => {
@@ -172,9 +172,7 @@ describe("ReviewQueueDashboard scope isolation", () => {
         expect.anything(),
       );
     });
-    const fetchedQueueCalls = vi.mocked(getReviewQueueItems).mock.calls;
-    expect(fetchedQueueCalls.every(([id]) => id === "dataset-queue")).toBe(
-      true,
-    );
+    const queueIds = vi.mocked(getReviewQueueItems).mock.calls.map(([id]) => id);
+    expect(queueIds.every((id) => id === "dataset-queue")).toBe(true);
   });
 });
