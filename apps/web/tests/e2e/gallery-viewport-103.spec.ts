@@ -178,7 +178,8 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await lastImage.click();
   await assertDecodedAndContained(6000, 400);
   const filmstrip = workbench.locator(".rv-media-filmstrip");
-  const scrollOffset = () => filmstrip.evaluate((element) => element.scrollLeft);
+  const scrollOffset = () =>
+    filmstrip.evaluate((element) => element.scrollLeft);
   await expect.poll(scrollOffset).toBeGreaterThan(0);
 
   await workbench.focus();
