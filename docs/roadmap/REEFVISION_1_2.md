@@ -517,3 +517,20 @@ remains mandatory. This feature reuses the existing typed Workflow Builder
 analysis node rather than adding a duplicate node. The persistent identity,
 calibration and study-design registry remain unfinished, as do installed
 Windows and complete scientific acceptance tests.
+
+## Versioned project-owned organism identity foundation (2026-10-23)
+
+An additive Track B migration `b12_identity_0001` (branch-local descendant of
+`0037`) introduces append-only project-scoped organism/colony identity revisions.
+Registration and revision APIs validate project ownership, same-project parent
+colony registration, complete experimental-unit labels and technical-replicate
+rejection. Revision updates require an expected version and preserve history.
+A read-only executable Workflow Builder source persists a typed
+`ecology_identity_registry` artifact with a deterministic snapshot fingerprint,
+`registered_unverified` evidence level and explicit scientist-review gate.
+Saved-workflow and standalone acceptance tests exercise project isolation,
+revision history and provenance. **This is not verified biological identity**:
+annotation/calibration linkage, immutable evidence review, experiment-design
+attestation, UI, migration reconciliation with unmerged 1.1 `0038`, real study
+acceptance and installed Windows checks remain pending. The exploratory
+longitudinal and human/model analyses still reject promotion to verified truth.

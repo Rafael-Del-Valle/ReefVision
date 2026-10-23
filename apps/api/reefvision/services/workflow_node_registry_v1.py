@@ -631,6 +631,41 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
     )
 
+    registry["ecology_identity_registry_source"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_identity_registry_source",
+        display_name="Project Ecological Identity Registry",
+        category="Scientific analysis",
+        description=(
+            "Read project-owned versioned organism/colony registrations; "
+            "scientist verification of biological identity remains required."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="registry",
+                display_name="Unverified identity registry snapshot",
+                accepted_types=["ecology_identity_registry"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Persists a deterministic project-scoped registry snapshot and revision IDs.",
+            "Registry metadata is not evidence of verified annotation or organism identity.",
+            "Review gate prevents direct promotion into verified-dataset ports.",
+        ],
+    )
+
     registry["ecology_longitudinal_analysis"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_longitudinal_analysis",
         display_name="Exploratory Longitudinal Ecology",

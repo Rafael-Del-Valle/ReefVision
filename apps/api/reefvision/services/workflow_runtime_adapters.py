@@ -45,6 +45,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "mask_measurements",
     "video_tracking",
     "ecology_longitudinal_analysis",
+    "ecology_identity_registry_source",
     "ecology_paired_count_comparison",
 }
 
@@ -793,6 +794,33 @@ def _video_tracking(
     ]
 
 
+def _ecology_identity_registry_source(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.services.ecology_identity import EcologyIdentityService
+
+    del settings
+    if parameters:
+        raise ValidationError("Ecological identity registry source accepts no parameters")
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Identity registry requires the current project source")
+    snapshot = EcologyIdentityService(session).registry(project_id)
+    if not snapshot.identities:
+        raise ValidationError("Register an organism before sourcing an identity registry")
+    return [
+        {
+            "port_id": "registry",
+            "data_type": "ecology_identity_registry",
+            "payload": snapshot.model_dump(mode="json"),
+        }
+    ]
+
+
 def _ecology_longitudinal_analysis(
     session: Session,
     settings: Settings,
@@ -879,6 +907,7 @@ _ADAPTERS = {
     "mask_measurements": _mask_measurements,
     "video_tracking": _video_tracking,
     "ecology_longitudinal_analysis": _ecology_longitudinal_analysis,
+    "ecology_identity_registry_source": _ecology_identity_registry_source,
     "ecology_paired_count_comparison": _ecology_paired_count_comparison,
 }
 
