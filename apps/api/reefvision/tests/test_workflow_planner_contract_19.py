@@ -42,7 +42,5 @@ def test_frozen_pose_dataset_planner_rejects_nonexistent_dataset(
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is False
     assert plan.json()["executable"] is False
-    assert any(
-        issue["code"] == "pose_dataset_scope_mismatch"
-        for issue in plan.json()["issues"]
-    )
+    issue_codes = {issue["code"] for issue in plan.json()["issues"]}
+    assert "pose_dataset_scope_mismatch" in issue_codes
