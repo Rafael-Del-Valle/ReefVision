@@ -29,8 +29,11 @@ def test_missing_planned_endpoint_reports_calendar_qc_not_window_qc(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["evidence_level"] == "caller_supplied_unverified"
-    assert body["analysis_provenance"]["algorithm_version"] == ("ecology-longitudinal-0009")
+    assert body["analysis_provenance"]["algorithm_version"] == ("ecology-longitudinal-0010")
     assert body["unit_summaries"] == []
+    assert body["planned_sampling_effort"][0]["expected_organism_visits"] == 6
+    assert body["planned_sampling_effort"][0]["observed_organism_visits"] == 5
+    assert body["planned_sampling_effort"][0]["missing_organism_visits"] == 1
     assert body["population_summaries"] == []
     assert body["excluded_units"][0]["reason"] == "missing_scheduled_observations"
     coverage = body["unit_coverage"][0]
@@ -90,5 +93,6 @@ def test_missing_planned_endpoint_persists_same_qc_in_saved_workflow(
     payload = artifacts[0]["payload_json"]
     result = standalone.json()
     assert payload["unit_coverage"] == result["unit_coverage"]
+    assert payload["planned_sampling_effort"] == result["planned_sampling_effort"]
     assert payload["excluded_units"] == result["excluded_units"]
     assert payload["analysis_provenance"] == result["analysis_provenance"]
