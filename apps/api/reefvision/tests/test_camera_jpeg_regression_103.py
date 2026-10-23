@@ -114,3 +114,55 @@ def test_camera_display_exif_orientation_preserves_original(
     with Image.open(source) as camera:
         assert camera.size == (64, 48)
         assert camera.getexif().get(274) == orientation
+
+
+@pytest.mark.parametrize(
+    ("orientation", "quadrant_order"),
+    [
+        (1, (0, 1, 2, 3)),
+        (2, (1, 0, 3, 2)),
+        (3, (3, 2, 1, 0)),
+        (4, (2, 3, 0, 1)),
+        (5, (0, 2, 1, 3)),
+        (6, (2, 0, 3, 1)),
+        (7, (3, 1, 2, 0)),
+        (8, (1, 3, 0, 2)),
+    ],
+)
+def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
+    tmp_path: Path, orientation: int, quadrant_order: tuple[int, int, int, int]
+) -> None:
+    """Detect incorrect mirrored/rotated camera pixels, not just swapped dimensions."""
+
+    from reefvision.storage.images import create_thumbnail
+
+    source = tmp_path / "DSC_0043.JPEG"
+    display = tmp_path / "display.png"
+    thumbnail = tmp_path / "thumbnail.jpg"
+    colors = [(240, 20, 20), (20, 240, 20), (20, 20, 240), (240, 240, 20)]
+    camera = Image.new("RGB", (80, 60))
+    for (x, y), color in zip(
+        [(0, 0), (40, 0), (0, 30), (40, 30)], colors, strict=True
+    ):
+        camera.paste(color, (x, y, x + 40, y + 30))
+    exif = Image.Exif()
+    exif[274] = orientation
+    camera.save(source, format="JPEG", quality=100, subsampling=0, exif=exif)
+    original = source.read_bytes()
+
+    create_browser_display(source, display)
+    create_thumbnail(source, thumbnail, max_width=160, max_height=160)
+
+    expected_size = (80, 60) if orientation <= 4 else (60, 80)
+    sample_points = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)]
+    for rendition in (display, thumbnail):
+        with Image.open(rendition) as rendered:
+            assert rendered.size == expected_size
+            assert rendered.getexif().get(274) is None
+            for (fx, fy), color_index in zip(sample_points, quadrant_order, strict=True):
+                actual = rendered.convert("RGB").getpixel(
+                    (int(rendered.width * fx), int(rendered.height * fy))
+                )
+                expected = colors[color_index]
+                assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
+    assert source.read_bytes() == original
