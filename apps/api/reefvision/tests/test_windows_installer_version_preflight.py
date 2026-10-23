@@ -1,15 +1,13 @@
 """Regression coverage for Windows installer version preflight (no network or MSI execution)."""
 
-from __future__ import annotations
-
-from pathlib import Path
-from runpy import run_path
+import pathlib
+import runpy
 
 import pytest
 
 
-ROOT = Path(__file__).resolve().parents[4]
-check_workflow = run_path(
+ROOT = pathlib.Path(__file__).resolve().parents[4]
+check_workflow = runpy.run_path(
     str(ROOT / "scripts/check-windows-installer-acceptance-version.py")
 )["check_workflow"]
 
