@@ -17,9 +17,19 @@ config = context.config
 if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
-settings = get_settings()
-settings.ensure_directories()
-config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+# The desktop verifies its database before and after upgrading. Alembic must
+# migrate that *same* database rather than resolving a second Settings instance
+# (which can differ in a frozen sidecar or test environment).
+desktop_database_url = config.attributes.get("desktop_database_url")
+if desktop_database_url is not None:
+    if not isinstance(desktop_database_url, str) or not desktop_database_url.strip():
+        raise RuntimeError("Invalid pinned desktop Alembic database URL")
+    database_url = desktop_database_url
+else:
+    settings = get_settings()
+    settings.ensure_directories()
+    database_url = settings.resolved_database_url
+config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = Base.metadata
 
 
