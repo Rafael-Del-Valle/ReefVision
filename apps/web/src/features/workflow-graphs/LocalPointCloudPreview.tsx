@@ -69,9 +69,9 @@ function LocalPointCloudPreviewSession({
     <section className="panel-card" aria-label="Local 3D point-cloud preview">
       <h4>Local ASCII PLY point-cloud preview</h4>
       <p className="muted-copy">
-        Inspect vertex-only ASCII PLY 1.0 XYZ points (optional raw RGB).
-        This is a temporary, unverified preview, not a saved asset or
-        biological surface, branch-length, or condition measurement.
+        Inspect vertex-only ASCII PLY 1.0 XYZ points (optional raw RGB). This is
+        a temporary, unverified preview, not a saved asset or biological
+        surface, branch-length, or condition measurement.
       </p>
       <div className="feature-grid">
         <label>
