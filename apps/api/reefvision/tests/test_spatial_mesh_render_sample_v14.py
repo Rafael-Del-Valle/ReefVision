@@ -19,8 +19,7 @@ def _mesh_parameters(face_count: int) -> dict:
     for index in range(face_count):
         offset = 3 * index
         vertices.extend(
-            [[float(offset), 0.0, 0.0], [float(offset + 1), 0.0, 0.0],
-             [float(offset), 1.0, 0.0]]
+            [[float(offset), 0.0, 0.0], [float(offset + 1), 0.0, 0.0], [float(offset), 1.0, 0.0]]
         )
         faces.append([offset, offset + 1, offset + 2])
     return {
@@ -39,10 +38,9 @@ def test_mesh_render_sample_does_not_change_full_mesh_science() -> None:
     assert result["face_count"] == 513
     assert result["vertex_count"] == 1539
     assert result["surface_area_m2"] == pytest.approx(513 * 0.5 * 0.01**2)
-    assert result["area_scale_uncertainty_m2"] == pytest.approx(
-        2 * 0.1 * result["surface_area_m2"]
-    )
+    assert result["area_scale_uncertainty_m2"] == pytest.approx(2 * 0.1 * result["surface_area_m2"])
     assert result["preview_is_decimated"] is True
+    assert result["preview_surface_area_fraction"] == pytest.approx(512 / 513)
     face_indices = result["preview_face_indices"]
     vertex_indices = result["preview_vertex_indices"]
     render_faces = result["preview_faces_local_indices"]
@@ -104,7 +102,8 @@ def test_mesh_render_sample_saved_workflow_matches_standalone(client: TestClient
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"] == expected
