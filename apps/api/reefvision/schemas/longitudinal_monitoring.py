@@ -109,7 +109,7 @@ class LongitudinalAnalysisRequest(BaseModel):
         for dates in value.values():
             if not isinstance(dates, list) or any(
                 not isinstance(day, str)
-                or re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", day) is None
+                or re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) is None
                 for day in dates
             ):
                 raise ValueError("Expected sampling dates must be explicit ISO YYYY-MM-DD strings")
