@@ -49,6 +49,10 @@ $sourceAssets = @(
     @{
         Source = Join-Path $ResolvedRepoPath "scripts\lib\reefvision-commands.ps1"
         Destination = Join-Path $supportDir "reefvision-commands.ps1"
+    },
+    @{
+        Source = Join-Path $ResolvedRepoPath "scripts\lib\reefvision-msi-update.ps1"
+        Destination = Join-Path $supportDir "reefvision-msi-update.ps1"
     }
 )
 $wrappers = @(
