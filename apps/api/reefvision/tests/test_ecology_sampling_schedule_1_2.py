@@ -167,3 +167,17 @@ def test_invalid_saved_calendar_does_not_produce_successful_analysis(
         item["data_type"] == "longitudinal_analysis"
         for item in detail.json()["artifacts"]
     )
+
+
+@pytest.mark.parametrize(
+    "invalid_date",
+    [1743465600, "2026-04-01T00:00:00Z", True, "2026-4-1"],
+)
+def test_calendar_requires_explicit_iso_calendar_dates(
+    client: TestClient, invalid_date: object
+) -> None:
+    request = _payload()
+    request["expected_sampling_dates_by_unit"]["tank-1"][0] = invalid_date
+    result = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert result.status_code == 422, result.text
+    assert "explicit ISO YYYY-MM-DD" in result.text
