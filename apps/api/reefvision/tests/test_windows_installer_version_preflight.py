@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import runpy
 from pathlib import Path
+from runpy import run_path
 
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[4]
-check_workflow = runpy.run_path(
+check_workflow = run_path(
     str(ROOT / "scripts/check-windows-installer-acceptance-version.py")
 )["check_workflow"]
 
@@ -36,7 +36,10 @@ jobs:
             throw 'MSI ProductVersion must be {version}.'
           }}
       - name: Isolated installation
-        run: ./scripts/acceptance-windows-clean-install.ps1 -AcceptanceRoot 'C:\\reefvision-{slug}-disposable-acceptance' -DisposableTest
+        run: |
+          ./scripts/acceptance-windows-clean-install.ps1 `
+            -AcceptanceRoot 'C:\\reefvision-{slug}-disposable-acceptance' `
+            -DisposableTest
       - uses: actions/upload-artifact@v4
         with:
           name: ReefVision-{version}-Windows-Clean-Install-Evidence
@@ -52,12 +55,28 @@ def test_matching_offline_installer_contract() -> None:
     [
         ("ReefVision_1.0.3_x64_en-US.msi", "ReefVision_1.0.2_x64_en-US.msi", "MSI filename"),
         ("StringData(1) -ne '1.0.3'", "StringData(1) -ne '1.0.2'", "ProductVersion comparison"),
-        ("MSI ProductVersion must be 1.0.3.", "MSI ProductVersion must be 1.0.2.", "ProductVersion"),
+        (
+            "MSI ProductVersion must be 1.0.3.",
+            "MSI ProductVersion must be 1.0.2.",
+            "ProductVersion",
+        ),
         ("reefvision-1-0-3-installer", "reefvision-1-0-2-installer", "artifact staging directory"),
-        ("reefvision-1-0-3-disposable-acceptance", "reefvision-1-0-2-disposable-acceptance", "disposable acceptance root"),
-        ("ReefVision-1.0.3-Windows-Clean-Install-Evidence", "ReefVision-1.0.2-Windows-Clean-Install-Evidence", "evidence artifact"),
+        (
+            "reefvision-1-0-3-disposable-acceptance",
+            "reefvision-1-0-2-disposable-acceptance",
+            "disposable acceptance root",
+        ),
+        (
+            "ReefVision-1.0.3-Windows-Clean-Install-Evidence",
+            "ReefVision-1.0.2-Windows-Clean-Install-Evidence",
+            "evidence artifact",
+        ),
         ("-DisposableTest", "-DisposableTest -LiveSam2Acceptance", "network model downloads"),
-        ("run: python scripts/check-windows-installer-acceptance-version.py", "run: echo bypass", "preflight must run"),
+        (
+            "run: python scripts/check-windows-installer-acceptance-version.py",
+            "run: echo bypass",
+            "preflight must run",
+        ),
         ("uninstall 1.0.3", "uninstall 1.0.2", "job label"),
     ],
 )
