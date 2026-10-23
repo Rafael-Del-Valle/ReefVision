@@ -5,7 +5,10 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
-from reefvision.domain.ecology_lineage_policy import validate_declared_lineage
+from reefvision.domain.ecology_lineage_policy import (
+    cross_unit_shared_parent_colony_ids,
+    validate_declared_lineage,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.scientific_input_provenance import scientific_input_provenance
 from reefvision.domain.scientific_mean import finite_descriptive_mean
@@ -211,6 +214,7 @@ def compare_paired_counts(
         paired_differences=differences,
         experimental_unit_type=unit_type,
         declared_independent_unit_count=len(by_unit) if unit_type is not None else None,
+        cross_unit_shared_parent_colony_ids=cross_unit_shared_parent_colony_ids(pairs),
         unit_summaries=unit_summaries,
         unit_balanced_mean_signed_bias=unit_balanced_bias,
         unit_balanced_mean_absolute_error=unit_balanced_error,

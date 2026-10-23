@@ -5,7 +5,10 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
-from reefvision.domain.ecology_lineage_policy import validate_declared_lineage
+from reefvision.domain.ecology_lineage_policy import (
+    cross_unit_shared_parent_colony_ids,
+    validate_declared_lineage,
+)
 from reefvision.domain.ecology_unit_coverage import audit_unit_coverage
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.population_unit_summaries import summarize_population_units
@@ -220,6 +223,9 @@ def analyze_longitudinal(
         changes=changes,
         experimental_unit_type=request.experimental_unit_type,
         independent_unit_count=independent_unit_count,
+        cross_unit_shared_parent_colony_ids=cross_unit_shared_parent_colony_ids(
+            request.observations
+        ),
         unit_summaries=unit_summaries,
         population_summaries=population_summaries,
         excluded_units=excluded_units,

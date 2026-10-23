@@ -193,6 +193,7 @@ class LongitudinalAnalysisResponse(BaseModel):
     changes: list[LongitudinalChange]
     experimental_unit_type: str | None = None
     independent_unit_count: int | None = None
+    cross_unit_shared_parent_colony_ids: list[str] = Field(default_factory=list)
     unit_summaries: list[ExperimentalUnitSummary] = Field(default_factory=list)
     population_summaries: list[PopulationUnitSummary] = Field(default_factory=list)
     excluded_units: list[ExcludedExperimentalUnit] = Field(default_factory=list)

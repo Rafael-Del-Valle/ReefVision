@@ -296,3 +296,19 @@ inputs to fail without producing successful analysis artifacts. This does not
 authenticate source records, calibrations or organism identity, and does not
 change the unverified-evidence/review gate. Full exact-head CI, Windows GUI and
 scientific acceptance remain required.
+
+## Cross-unit shared-parent disclosure (2026-10-23)
+
+The exploratory longitudinal and paired human–model comparison responses now
+report sorted `cross_unit_shared_parent_colony_ids` when a caller-declared
+parent colony occurs in multiple declared experimental units. The same field
+is persisted in their existing typed executable Workflow Builder artifacts.
+Repeated photographs or fragments within one unit do not create a false
+cross-unit flag. Shared parentage across **tanks** is disclosed for study-design
+review, not automatically treated as a violation of tank-level independence.
+Colony-level unit-splitting still fails closed under the existing lineage policy.
+Inputs remain `caller_supplied_unverified`; the field neither authenticates
+parentage nor justifies a statistical test. The existing algorithm fingerprints
+already bind declared lineage and unit identifiers. Full CI, registered design,
+verified identity/calibration, migration and installed Windows acceptance remain
+required before release.

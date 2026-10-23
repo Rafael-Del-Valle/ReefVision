@@ -125,6 +125,7 @@ class PairedCountComparisonResponse(BaseModel):
     paired_differences: list[PairedCountDifference]
     experimental_unit_type: str | None = None
     declared_independent_unit_count: int | None = None
+    cross_unit_shared_parent_colony_ids: list[str] = Field(default_factory=list)
     unit_summaries: list[PairedCountUnitSummary] = Field(default_factory=list)
     unit_balanced_mean_signed_bias: float | None = None
     unit_balanced_mean_absolute_error: float | None = None
