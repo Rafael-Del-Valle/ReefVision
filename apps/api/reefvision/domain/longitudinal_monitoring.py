@@ -11,7 +11,10 @@ from reefvision.domain.ecology_lineage_policy import (
     cross_unit_shared_parent_colony_ids,
     validate_declared_lineage,
 )
-from reefvision.domain.ecology_unit_coverage import audit_unit_coverage
+from reefvision.domain.ecology_unit_coverage import (
+    audit_unit_coverage,
+    summarize_planned_sampling_effort,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.population_unit_summaries import summarize_population_units
 from reefvision.domain.scientific_input_provenance import scientific_input_provenance
@@ -24,6 +27,7 @@ from reefvision.schemas.longitudinal_monitoring import (
     LongitudinalAnalysisResponse,
     LongitudinalChange,
     MonitoringObservation,
+    PlannedSamplingEffort,
 )
 
 
@@ -252,11 +256,15 @@ def analyze_longitudinal(
         else []
     )
     population_summaries = summarize_population_units(unit_summaries)
+    planned_sampling_effort = [
+        PlannedSamplingEffort.model_validate(row)
+        for row in summarize_planned_sampling_effort(unit_coverage)
+    ]
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
             algorithm_version=(
-                "ecology-longitudinal-0009"
+                "ecology-longitudinal-0010"
                 if request.expected_sampling_dates_by_unit is not None
                 else "ecology-longitudinal-0008"
             ),
@@ -293,6 +301,7 @@ def analyze_longitudinal(
         population_summaries=population_summaries,
         excluded_units=excluded_units,
         unit_coverage=unit_coverage,
+        planned_sampling_effort=planned_sampling_effort,
         limitations=[
             "Caller-supplied observations are not verified against project data or calibration.",
             "Parent-colony identity and experimental units are declared, not authenticated.",
@@ -309,6 +318,8 @@ def analyze_longitudinal(
             "no population inference or significance is claimed.",
             "Declared planned sampling dates exclude units with missing visits; "
             "missing visits do not establish mortality, absence or zero abundance.",
+            "Planned organism-visit coverage counts missing measurements, not mortality; "
+            "without a roster, completely unobserved organisms cannot enter its denominator.",
             "Different intermediate observation dates within a unit are disclosed as QC; "
             "they do not establish missing scheduled visits or invalidate endpoint-only means.",
         ],
