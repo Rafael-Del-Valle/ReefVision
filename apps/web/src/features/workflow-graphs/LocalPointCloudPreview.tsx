@@ -23,6 +23,8 @@ function LocalPointCloudPreviewSession({
   const [scale, setScale] = useState("0.01");
   const [evidence, setEvidence] = useState("");
   const [uncertainty, setUncertainty] = useState("");
+  const [firstPointIndex, setFirstPointIndex] = useState("");
+  const [secondPointIndex, setSecondPointIndex] = useState("");
   const [artifact, setArtifact] = useState<Record<string, unknown> | null>(
     null,
   );
@@ -44,13 +46,26 @@ function LocalPointCloudPreviewSession({
     setError(null);
     setArtifact(null);
     try {
-      const result = await previewLocalPointCloudFile(projectId, file, {
-        meters_per_unit: Number(scale),
-        calibration_method: "ruler",
-        calibration_evidence: evidence,
-        relative_scale_uncertainty:
-          uncertainty.trim() === "" ? null : Number(uncertainty),
-      });
+      const hasFirst = firstPointIndex.trim() !== "";
+      const hasSecond = secondPointIndex.trim() !== "";
+      if (hasFirst !== hasSecond) {
+        throw new Error("Provide both source point indices for a chord.");
+      }
+      const pointIndexPairs: Array<[number, number]> | undefined = hasFirst
+        ? [[Number(firstPointIndex), Number(secondPointIndex)]]
+        : undefined;
+      const result = await previewLocalPointCloudFile(
+        projectId,
+        file,
+        {
+          meters_per_unit: Number(scale),
+          calibration_method: "ruler",
+          calibration_evidence: evidence,
+          relative_scale_uncertainty:
+            uncertainty.trim() === "" ? null : Number(uncertainty),
+        },
+        pointIndexPairs,
+      );
       if (version === requestVersion.current) setArtifact(result);
     } catch (reason) {
       if (version === requestVersion.current) {
@@ -125,7 +140,42 @@ function LocalPointCloudPreviewSession({
             }}
           />
         </label>
+        <label>
+          Chord start source point index (optional)
+          <input
+            aria-label="Chord start source point index"
+            type="number"
+            min="0"
+            max="1999"
+            step="1"
+            value={firstPointIndex}
+            onChange={(event) => {
+              setFirstPointIndex(event.target.value);
+              invalidatePreview();
+            }}
+          />
+        </label>
+        <label>
+          Chord end source point index (optional)
+          <input
+            aria-label="Chord end source point index"
+            type="number"
+            min="0"
+            max="1999"
+            step="1"
+            value={secondPointIndex}
+            onChange={(event) => {
+              setSecondPointIndex(event.target.value);
+              invalidatePreview();
+            }}
+          />
+        </label>
       </div>
+      <p className="muted-copy">
+        Optional point-pair chord is straight-line distance between original
+        zero-based source indices, not anatomical branch length. The backend
+        checks indices against the full imported cloud.
+      </p>
       <button
         type="button"
         disabled={!file || loading}
