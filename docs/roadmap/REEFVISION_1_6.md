@@ -114,3 +114,29 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   metadata, 10,000 dense boxes, and the actual editor pan/reset flow.
 - Still requires installed-Windows GUI profiling with real dense coral images,
   large raster masks and GPU/CPU hardware. This is not a release acceptance claim.
+
+## 2026-10-23 — Windows MSI updater integration (Track D)
+
+- The installed `update-reefvision` command now locates the MSI/CAB bundle rather
+  than selecting an NSIS `*-setup.exe`. Its MSI helper is installed alongside
+  managed command support scripts, with missing-asset preflight.
+- A local MSI must come from the exact repository build-output directory with
+  no linked path ancestors. Before caching the path (`--build-only`) or stopping
+  the application, the command verifies SHA-256 build provenance against the
+  checked-out Git SHA, the MSI ProductVersion, and external CAB Media-table set.
+- Installation uses Windows Installer with an MSI log. It no longer overwrites
+  or deletes portable backend trees. `--clean-build` fails closed pending a
+  validated artifact-only cleanup. No pretrained weights are downloaded.
+- New Windows disposable-fixture regression checks MSI path confinement,
+  junction rejection, sentinel preservation, helper deployment, and the
+  verification-before-stop/NSIS-removal command contract. Windows packaging CI
+  now invokes this regression before the build.
+- **Evidence:** commits `42e4a5cb`, `ae098277`, `27dd1762`,
+  `14800253`, `95e1e8bd`, `fdb3e5f0`, `87abe6a1`.
+  Previous head `c22981bb` passed Windows packaging/provenance and
+  19 of 20 workflow runs; its remaining acceptance run was in progress at
+  inspection. **New exact-head CI is pending**; native Windows MSI upgrade
+  and installed GUI acceptance have not been performed. No release claim.
+- The older NSIS/portable helper functions remain defined for compatibility
+  but are no longer invoked by the updater. Audit remaining external callers
+  before removing them.
