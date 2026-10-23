@@ -22,6 +22,8 @@ def test_render_threshold_preserves_original_face_indices(face_count: int) -> No
     source_vertices = result["preview_vertex_indices"]
     assert result["face_count"] == face_count
     assert len(indices) == 512
+    assert result["preview_face_count"] == 512
+    assert result["preview_face_fraction"] == pytest.approx(512 / face_count)
     assert indices[0] == 0
     assert indices[-1] == face_count - 1
     assert result["preview_is_decimated"] is (face_count == 513)
@@ -48,6 +50,8 @@ def test_decimated_mesh_saved_workflow_matches_standalone(client: TestClient) ->
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["preview_is_decimated"] is True
+    assert expected["preview_face_count"] == 512
+    assert expected["preview_face_fraction"] == pytest.approx(512 / 513)
 
     graph = {
         "graph_id": "mesh-render-boundary-513-v14",
