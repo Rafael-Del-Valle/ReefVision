@@ -133,6 +133,17 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         assert frozen.status == "complete"
         assert frozen.manifest_sha256 == payload["manifest_sha256"]
         assert frozen.pose_schema_content_hash == payload["pose_schema_content_hash"]
+        frozen.pose_schema_content_hash = "0" * 64
+        session.commit()
+
+    stale_schema_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
+    )
+    assert stale_schema_plan.status_code == 200, stale_schema_plan.text
+    assert stale_schema_plan.json()["valid"] is False
+    assert stale_schema_plan.json()["executable"] is False
+    stale_schema_codes = {issue["code"] for issue in stale_schema_plan.json()["issues"]}
+    assert "pose_dataset_schema_mismatch" in stale_schema_codes
 
 
 def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
