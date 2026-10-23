@@ -158,9 +158,7 @@ def _pose_dataset(
         or revision is None
         or revision.content_hash != dataset.pose_schema_content_hash
     ):
-        raise ValidationError(
-            f"Pose {role} dataset landmark schema no longer matches frozen truth"
-        )
+        raise ValidationError(f"Pose {role} dataset landmark schema no longer matches frozen truth")
 
     advertised_manifest = str(payload.get("manifest_sha256") or "")
 
