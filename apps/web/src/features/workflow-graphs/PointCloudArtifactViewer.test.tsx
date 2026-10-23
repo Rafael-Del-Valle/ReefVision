@@ -162,6 +162,27 @@ describe("PointCloudArtifactViewer", () => {
     }
   });
 
+  it("cross-checks sampled chord endpoints without guessing missing source points", () => {
+    const contradictory = {
+      ...validArtifact,
+      selected_point_chords: [{ point_indices: [0, 2], chord_distance_m: 2 }],
+    };
+    // Both displayed endpoints are exactly 1 m apart in the calibrated frame.
+    expect(parsePointCloudRenderArtifact(contradictory)).toBeNull();
+    const decimated = {
+      ...contradictory,
+      point_count: 513,
+      preview_point_indices: [0, 256, 512],
+    };
+    // Original point 2 is absent from the visualization sample. Do not infer
+    // its coordinates or reject a full-cloud measurement without evidence.
+    expect(parsePointCloudRenderArtifact(decimated)).not.toBeNull();
+    expect(parsePointCloudRenderArtifact({
+      ...validArtifact,
+      selected_point_chords: [{ point_indices: [0, 2], chord_distance_m: 1 }],
+    })).not.toBeNull();
+  });
+
   it("renders decimated colorless samples with preserved original indices", () => {
     const { container } = render(
       <PointCloudArtifactViewer
