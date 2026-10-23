@@ -11,7 +11,9 @@ from reefvision.domain.ecology_unit_coverage import audit_unit_coverage
 
 
 def _observation(unit_id: str) -> SimpleNamespace:
-    return SimpleNamespace(experimental_unit_id=unit_id, observed_at=datetime(2026, 4, 1, tzinfo=UTC))
+    return SimpleNamespace(
+        experimental_unit_id=unit_id, observed_at=datetime(2026, 4, 1, tzinfo=UTC)
+    )
 
 
 def _change(organism_id: str, metric: str = "polyp_count") -> SimpleNamespace:
