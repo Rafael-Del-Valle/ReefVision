@@ -355,3 +355,26 @@ algorithm contract advances to `ecology-longitudinal-0007`. Both standalone
 and saved-workflow artifacts retain `caller_supplied_unverified` evidence.
 Full source ownership, verified study design, migrations, GUI and scientific
 acceptance remain pending.
+
+
+## Intermediate UTC sampling-date coverage QC (2026-10-23)
+
+The exploratory longitudinal API and the existing executable, persisted
+`ecology_longitudinal_analysis` Workflow Builder node now report two additive,
+typed fields on each per-unit/per-metric `unit_coverage` record:
+`observed_sampling_dates_by_organism` (sorted UTC calendar dates) and
+`discordant_sampling_dates` (true when organisms in the same declared unit
+have different observed date sets). This exposes gaps hidden by matching
+first/last dates without treating images as independent replicates.
+
+**Scientific boundary:** this flag describes *observed* date discordance only.
+Without a registered planned sampling schedule, it does not prove a missed
+visit, mortality, absence, or biased treatment assignment. Endpoint-only
+descriptive summaries remain eligible when their first/last UTC dates agree,
+while actual missing endpoints and unobserved expected organisms retain their
+existing exclusion gates. The result stays `caller_supplied_unverified`.
+The algorithm version advances to `ecology-longitudinal-0008`, so persisted
+artifacts distinguish this reporting contract. Regression coverage includes
+standalone API, input-order determinism, no-false-positive control and saved
+Workflow Builder artifact parity. Full CI, verified identity/calibration and
+installed Windows scientific acceptance remain outstanding.
