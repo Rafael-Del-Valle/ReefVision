@@ -159,3 +159,25 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   `39a279dc` had 20/20 successful Actions workflows including the Windows
   installer build and isolated installation harness. The new exact-head
   Windows checks and full installed-GUI/upgrade acceptance are still required.
+
+## 2026-10-23 — Pin install-only MSI to verified build digest (Track D)
+
+- **Gap found in the existing implementation:** `--build-only` stored the MSI
+  SHA-256, but `--install-only` did not check it. If its cached path disappeared,
+  the command silently selected the newest MSI by timestamp. The provenance
+  manifest is not a signed authorization mechanism, so this fallback could
+  install a different local artifact than the one previously approved.
+- `Assert-ReefVisionCachedMsi` now validates the recorded 64-digit SHA-256,
+  enforces the existing exact build-directory and junction restrictions, and
+  compares the actual file digest case-insensitively before any process stop.
+  `--install-only` requires a pinned path and digest; an absent or changed
+  build fails closed with instructions to run `--build-only` again.
+- The existing full MSI/CAB provenance and Media-table checks still run after
+  the pinned-digest check. No user assets are deleted, and no network access or
+  pretrained models are required.
+- Native Windows regression fixtures exercise the valid pinned case, modified
+  digest, missing digest, wrong directory, and updater wiring without installing
+  an MSI. The Windows packaging workflow already runs this test file.
+- **Acceptance:** source committed to the isolated draft PR; exact-head Windows
+  CI and a real interactive Windows upgrade/rollback remain mandatory. A
+  passing packaging job does not establish installed-GUI acceptance.
