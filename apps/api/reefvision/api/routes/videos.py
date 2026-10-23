@@ -819,6 +819,38 @@ def create_tracking_job(
         "pose",
     }:
         raise ValidationError("Video tracking requires a detection, instance, or pose model")
+    if payload.tracking_mode in {"detect", "hybrid"} and model.task != "detect":
+        raise ValidationError("Detection and hybrid tracking require a detection model")
+    if payload.tracking_mode == "segment" and model.task != "segment":
+        raise ValidationError("Segmentation tracking requires an instance-segmentation model")
+    if payload.tracking_mode == "hybrid":
+        secondary = session.get(ModelRegistration, payload.segmentation_model_id)
+        if (
+            secondary is None
+            or secondary.project_id != video.project_id
+            or secondary.task != "segment"
+            or secondary.purpose != "segmenter"
+            or secondary.provider_name != "ultralytics"
+            or model.provider_name != "ultralytics"
+        ):
+            raise ValidationError(
+                "Hybrid tracking requires an Ultralytics detector and segmentation model "
+                "registered in the same project"
+            )
+        detector_classes = {
+            str(value) for value in (
+                dict(model.class_map_json or {}).get("mapping") or {}
+            ).values()
+        }
+        segmenter_classes = {
+            str(value) for value in (
+                dict(secondary.class_map_json or {}).get("mapping") or {}
+            ).values()
+        }
+        if not detector_classes.intersection(segmenter_classes):
+            raise ValidationError(
+                "Hybrid tracking models must map at least one class to the same project label"
+            )
     job = Job(
         project_id=video.project_id,
         job_type="video_tracking",
