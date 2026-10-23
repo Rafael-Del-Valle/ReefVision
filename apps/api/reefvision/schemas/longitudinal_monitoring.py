@@ -181,17 +181,16 @@ class ExperimentalUnitCoverage(BaseModel):
     observed_sampling_dates_by_organism: dict[str, list[date]] = Field(default_factory=dict)
     discordant_sampling_dates: bool = False
     eligible_for_summary: bool
-    exclusion_reason: Literal[
-        "missing_followup", "nonmatching_sampling_window", "missing_expected_organisms"
-    ] | None = None
+    exclusion_reason: (
+        Literal["missing_followup", "nonmatching_sampling_window", "missing_expected_organisms"]
+        | None
+    ) = None
 
 
 class ExcludedExperimentalUnit(BaseModel):
     experimental_unit_id: str
     metric_name: str
-    reason: Literal[
-        "missing_followup", "nonmatching_sampling_window", "missing_expected_organisms"
-    ]
+    reason: Literal["missing_followup", "nonmatching_sampling_window", "missing_expected_organisms"]
 
 
 class LongitudinalAnalysisResponse(BaseModel):

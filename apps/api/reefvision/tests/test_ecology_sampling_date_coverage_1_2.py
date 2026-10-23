@@ -112,9 +112,12 @@ def test_sampling_date_qc_is_deterministic_and_persisted_in_saved_workflow(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
@@ -124,7 +127,6 @@ def test_sampling_date_qc_is_deterministic_and_persisted_in_saved_workflow(
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"]["unit_coverage"] == first.json()["unit_coverage"]
     assert (
-        artifacts[0]["payload_json"]["analysis_provenance"]
-        == first.json()["analysis_provenance"]
+        artifacts[0]["payload_json"]["analysis_provenance"] == first.json()["analysis_provenance"]
     )
     assert artifacts[0]["payload_json"]["evidence_level"] == "caller_supplied_unverified"

@@ -12,9 +12,7 @@ from reefvision.schemas.longitudinal_monitoring import ExperimentalUnitCoverage
 
 
 def observation(unit: str) -> Row:
-    return Row(
-        experimental_unit_id=unit, observed_at=datetime(2026, 4, 1, tzinfo=UTC)
-    )
+    return Row(experimental_unit_id=unit, observed_at=datetime(2026, 4, 1, tzinfo=UTC))
 
 
 def change(organism: str) -> Row:

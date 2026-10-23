@@ -43,9 +43,7 @@ def audit_unit_coverage(
         if (organism_id, metric_name) in completed and len(observations) < 2:
             raise ValueError("Completed series requires repeated observations")
         key = (unit_id, metric_name)
-        sampling_dates[key][organism_id] = sorted(
-            {row.observed_at.date() for row in observations}
-        )
+        sampling_dates[key][organism_id] = sorted({row.observed_at.date() for row in observations})
         by_unit_metric[key].append((organism_id, (organism_id, metric_name) in completed))
 
     summaries = list(unit_summaries)
