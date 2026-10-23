@@ -54,7 +54,7 @@ def test_standalone_roster_excludes_unobserved_organism_without_claiming_death(
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["expected_roster_supplied"] is True
     assert payload["independent_unit_count"] == 2
-    assert payload["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0007"
+    assert payload["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0008"
     assert payload["unit_coverage"][0]["unobserved_organism_ids"] == ["frag-C"]
     assert payload["unit_coverage"][0]["expected_organism_count"] == 2
     assert payload["unit_coverage"][0]["missing_organism_ids"] == []
