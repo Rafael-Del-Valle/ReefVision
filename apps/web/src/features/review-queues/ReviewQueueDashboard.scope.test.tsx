@@ -108,7 +108,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
       );
     });
     expect(
-      vi.mocked(getReviewQueueItems).mock.calls.every(([id]) => id === "queue-b"),
+      vi.mocked(getReviewQueueItems).mock.calls.every(
+        ([id]) => id === "queue-b",
+      ),
     ).toBe(true);
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
   });
@@ -141,7 +143,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
     );
     expect(getDatasetVersionReviewQueues).not.toHaveBeenCalled();
     expect(
-      vi.mocked(getReviewQueueItems).mock.calls.every(([id]) => id === "queue-b"),
+      vi.mocked(getReviewQueueItems).mock.calls.every(
+        ([id]) => id === "queue-b",
+      ),
     ).toBe(true);
   });
 
@@ -154,6 +158,13 @@ describe("ReviewQueueDashboard scope isolation", () => {
       target: { value: "dataset_version" },
     });
     await screen.findByLabelText("Dataset version");
+    const sourceRunSelect = screen.getByLabelText("Source QC run");
+    const generateButton = screen.getByRole("button", {
+      name: "Generate queue",
+    });
+    expect(sourceRunSelect.hasAttribute("disabled")).toBe(true);
+    expect(generateButton.hasAttribute("disabled")).toBe(true);
+    expect(getDatasetVersionQualityControlRuns).not.toHaveBeenCalled();
     expect(getReviewQueues).not.toHaveBeenCalled();
     expect(getDatasetVersionReviewQueues).not.toHaveBeenCalled();
     expect(getReviewQueueItems).not.toHaveBeenCalled();
