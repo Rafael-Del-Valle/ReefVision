@@ -537,35 +537,38 @@ try {
     $verifiedMsi = Assert-ReefVisionMsiPayload -InstallerPath $installer.FullName -RepoPath $repoPath -ExpectedVersion $expectedVersion -ExpectedCommit $expectedSourceCommit
     Write-ReefVisionCommandNote "Verified MSI source commit: $($verifiedMsi.source_commit)"
 
+    # Preflight the MSI engine and a safe log destination before stopping the
+    # user's running desktop. Invalid paths must leave the application running.
+    $msiexec = Join-Path $env:SystemRoot 'System32\msiexec.exe'
+    if (-not (Test-Path -LiteralPath $msiexec -PathType Leaf)) {
+        throw "Windows Installer executable is unavailable: $msiexec"
+    }
+    $logDir = Assert-ReefVisionMsiLogDirectory -LogDirectory (Get-ReefVisionCommandRuntimeDir)
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    $logPath = Join-Path $logDir ("msi-update-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N') + '.log')
+
     Write-ReefVisionCommandStep "Stopping running ReefVision processes"
     Stop-ReefVisionRunningProcesses
     Start-Sleep -Milliseconds 500
 
     # MSI owns installation and rollback. Never overwrite portable backend
     # files or remove any existing user assets during the update.
-    $msiexec = Join-Path $env:SystemRoot 'System32\msiexec.exe'
-    if (-not (Test-Path -LiteralPath $msiexec -PathType Leaf)) {
-        throw "Windows Installer executable is unavailable: $msiexec"
-    }
-    $logDir = Get-ReefVisionCommandRuntimeDir
-    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-    $logPath = Join-Path $logDir ("msi-update-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
     $arguments = "/i `"$($installer.FullName)`" /passive /norestart /L*v `"$logPath`""
     Write-ReefVisionCommandStep "Installing verified ReefVision MSI"
     $process = Start-Process -FilePath $msiexec -ArgumentList $arguments -PassThru -Wait
     if ($process.ExitCode -notin @(0, 3010)) {
         throw "MSI installation failed with exit code $($process.ExitCode). See $logPath"
     }
+    Write-ReefVisionCommandNote "MSI log: $logPath"
     if ($process.ExitCode -eq 3010) {
-        Write-Warning "MSI installation requested a restart. Validate the desktop after restarting Windows."
+        Write-Warning "MSI installation requires a Windows restart. Desktop version verification and relaunch are deferred until after reboot. See $logPath"
+        return
     }
     $installedDesktopPath = Resolve-ReefVisionInstalledDesktopPath
     $installedVersion = Get-ReefVisionExecutableVersion -ExecutablePath $installedDesktopPath
     if ($installedVersion -notin @($expectedVersion, "$expectedVersion.0")) {
         throw "MSI completed but installed desktop version is '$installedVersion' (expected '$expectedVersion'). See $logPath"
     }
-    Write-ReefVisionCommandNote "MSI log: $logPath"
-
     if (-not $noLaunch) {
         Write-ReefVisionCommandStep "Launching the updated ReefVision desktop app"
         & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoPath "scripts\start-reefvision.ps1") --no-wait

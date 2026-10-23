@@ -116,3 +116,24 @@ function Assert-ReefVisionMsiPayload {
         verified = $true
     }
 }
+
+function Assert-ReefVisionMsiLogDirectory {
+    param([Parameter(Mandatory = $true)][string]$LogDirectory)
+    $fullPath = [System.IO.Path]::GetFullPath($LogDirectory)
+    $current = $fullPath
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        $entry = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -ne $entry) {
+            if (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Refusing MSI log through a symlink/junction: $current"
+            }
+            if ($current -eq $fullPath -and -not $entry.PSIsContainer) {
+                throw "Refusing MSI log directory occupied by a file: $fullPath"
+            }
+        }
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $current) { break }
+        $current = $parent
+    }
+    return $fullPath
+}

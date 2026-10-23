@@ -56,6 +56,29 @@ try {
         throw 'MSI preflight changed an unrelated file.'
     }
     $passed++
+
+    # MSI logs must never be redirected into unrelated user directories.
+    $validLog = Join-Path $root 'managed-logs'
+    if ((Assert-ReefVisionMsiLogDirectory -LogDirectory $validLog) -ne
+        [System.IO.Path]::GetFullPath($validLog)) {
+        throw 'Valid MSI log directory was not accepted.'
+    }
+    $passed++
+    $logFile = Join-Path $root 'log-file'
+    Set-Content -LiteralPath $logFile -Value 'preserve' -Encoding ASCII
+    Assert-Throws {
+        Assert-ReefVisionMsiLogDirectory -LogDirectory $logFile
+    } 'occupied by a file'
+    $redirectedLog = Join-Path $root 'redirected-logs'
+    New-Item -ItemType Junction -Path $redirectedLog -Target $repo | Out-Null
+    try {
+        Assert-Throws {
+            Assert-ReefVisionMsiLogDirectory -LogDirectory (Join-Path $redirectedLog 'logs')
+        } 'symlink/junction'
+    }
+    finally {
+        Remove-Item -LiteralPath $redirectedLog -Force
+    }
     # Regression contract for the actual installed command: never silently
     # reintroduce NSIS execution or direct portable-backend overwrites.
     $updateScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'update-reefvision.ps1') -Raw
@@ -71,6 +94,17 @@ try {
     if ($verificationPosition -lt 0 -or $stopPosition -le $verificationPosition) {
         throw 'MSI verification must precede stopping the desktop.'
     }
+    $enginePreflight = $updateScript.IndexOf('if (-not (Test-Path -LiteralPath $msiexec -PathType Leaf))')
+    $logPreflight = $updateScript.IndexOf('Assert-ReefVisionMsiLogDirectory')
+    if ($enginePreflight -le $verificationPosition -or $enginePreflight -ge $stopPosition -or
+        $logPreflight -le $verificationPosition -or $logPreflight -ge $stopPosition) {
+        throw 'MSI executable and safe log preflight must precede stopping the desktop.'
+    }
+    $passed++
+    if ($updateScript -notmatch '(?s)if \\(\\$process\\.ExitCode -eq 3010\\) \\{\\s*Write-Warning[^\\r\\n]*\\s*return\\s*\\}') {
+        throw 'Reboot-required MSI result must defer version verification and relaunch.'
+    }
+    $passed++
     if (-not $updateScript.Contains('msiexec.exe') -or
         -not $updateScript.Contains('--clean-build is disabled')) {
         throw 'Updater MSI installation or safe-cleanup contract is missing.'
