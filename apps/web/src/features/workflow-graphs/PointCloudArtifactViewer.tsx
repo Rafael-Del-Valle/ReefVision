@@ -51,6 +51,22 @@ export function parsePointCloudRenderArtifact(
   const min = data.axis_aligned_min_in_source_frame_m;
   const max = data.axis_aligned_max_in_source_frame_m;
   const totalCount = data.point_count;
+  const provenance = data.provenance;
+  // A point-cloud preview is provisional geometry, never verified biology.
+  // Reject contradictory saved metadata instead of displaying a misleading artifact.
+  if (
+    provenance === null ||
+    typeof provenance !== "object" ||
+    Array.isArray(provenance) ||
+    (provenance as Record<string, unknown>).calibration_verified !== false ||
+    (provenance as Record<string, unknown>).coordinate_registration_verified ===
+      true ||
+    data.measurement_status !== "caller_supplied_unverified" ||
+    data.surface_area_m2 != null ||
+    data.branch_length_m != null
+  ) {
+    return null;
+  }
   if (
     !Array.isArray(points) ||
     points.length < 1 ||
