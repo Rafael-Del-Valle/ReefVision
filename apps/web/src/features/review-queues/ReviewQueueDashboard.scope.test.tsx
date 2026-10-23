@@ -113,6 +113,38 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
   });
 
+  it("drops a prior project's dataset-version selection before fetching", async () => {
+    const { rerender, view } = mount();
+    await waitFor(() => expect(getReviewQueueItems).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Scope"), {
+      target: { value: "dataset_version" },
+    });
+    fireEvent.change(await screen.findByLabelText("Dataset version"), {
+      target: { value: "dataset-1" },
+    });
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "dataset-queue",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    vi.mocked(getDatasetVersionReviewQueues).mockClear();
+    vi.mocked(getReviewQueueItems).mockClear();
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-b",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    expect(getDatasetVersionReviewQueues).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(getReviewQueueItems).mock.calls.every(([id]) => id === "queue-b"),
+    ).toBe(true);
+  });
+
   it("never falls back to project queues while dataset version is unset", async () => {
     mount();
     await waitFor(() => expect(getReviewQueueItems).toHaveBeenCalled());
