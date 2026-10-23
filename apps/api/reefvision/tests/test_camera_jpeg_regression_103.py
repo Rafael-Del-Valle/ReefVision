@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from reefvision.storage.images import create_browser_display
+from reefvision.storage.images import create_browser_display, create_thumbnail
 from reefvision.tests.test_images import create_project, import_one
 
 
@@ -133,8 +133,6 @@ def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
     tmp_path: Path, orientation: int, quadrant_order: tuple[int, int, int, int]
 ) -> None:
     """Detect incorrect mirrored/rotated camera pixels, not just swapped dimensions."""
-
-    from reefvision.storage.images import create_thumbnail
 
     source = tmp_path / "DSC_0043.JPEG"
     display = tmp_path / "display.png"
