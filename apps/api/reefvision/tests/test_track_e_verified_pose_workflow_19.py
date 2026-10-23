@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 
 from reefvision.db.models import PoseTrainingDataset
 from reefvision.domain.errors import ValidationError
-from reefvision.services.workflow_pose_training import execute_pose_training_dataset_adapter
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.workflow_pose_training import execute_pose_training_dataset_adapter
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_pose_training_phase10 import _frozen_dataset
@@ -149,11 +149,13 @@ def test_verified_pose_dataset_persists_workflow_lineage(
 
     # Execution must independently reject schema drift even if a node adapter
     # is called after the graph was planned successfully.
-    with app.state.session_factory() as session:
-        with pytest.raises(ValidationError, match="landmark schema no longer matches"):
-            execute_pose_training_dataset_adapter(
-                session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
-            )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="landmark schema no longer matches"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
 
 
 def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
