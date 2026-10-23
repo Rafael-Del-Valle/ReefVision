@@ -38,6 +38,10 @@ jobs:
     env:
       REEFVISION_RELEASE_VERSION: ${{ needs.build-windows-installer.outputs.release-version }}
       REEFVISION_RELEASE_SLUG: ${{ needs.build-windows-installer.outputs.release-slug }}
+      REEFVISION_PREVIOUS_RELEASE_VERSION: "1.0.2"
+      REEFVISION_PREVIOUS_RELEASE_SOURCE_COMMIT: "8d5d10e06b831859cd6e208a7a564780c5f2bd5a"
+      REEFVISION_PREVIOUS_PROVENANCE_SHA256: >-
+        d20a3df535a0be4f2eadcf6d3e512d1487bc161645e698790505a9c860c2bb60
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -47,8 +51,12 @@ jobs:
       - run: |
           $releaseVersion = $env:REEFVISION_RELEASE_VERSION
           $releaseSlug = $env:REEFVISION_RELEASE_SLUG
+          $previousVersion = $env:REEFVISION_PREVIOUS_RELEASE_VERSION
+          $previousSourceCommit = $env:REEFVISION_PREVIOUS_RELEASE_SOURCE_COMMIT
+          $previousProvenanceHash = $env:REEFVISION_PREVIOUS_PROVENANCE_SHA256
           $folder = Join-Path $env:RUNNER_TEMP "reefvision-$releaseSlug-installer"
           $expectedMsiName = "ReefVision_${releaseVersion}_x64_en-US.msi"
+          gh release download "v$previousVersion"
           if ($versionRecord.StringData(1) -ne $releaseVersion) { throw 'bad version' }
           $provenancePath = Join-Path $folder 'build-provenance.json'
           $provenance = Get-Content $provenancePath -Raw | ConvertFrom-Json
@@ -58,7 +66,15 @@ jobs:
           if ($provenance.msi_verified -ne $true) { throw 'unverified MSI' }
           $manifestByName = @{}
           $actualHash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+          if ($previousProvenance.version -ne $previousVersion) { throw 'bad previous version' }
+          if ($previousActualProvenanceHash -ne $previousProvenanceHash) { throw 'bad manifest' }
+          if ($previousProvenance.source_commit -ne $previousSourceCommit) {
+            throw 'bad previous commit'
+          }
+          if ($previousActualHash -ne $previousExpectedHash) { throw 'bad previous hash' }
           ./scripts/acceptance-windows-clean-install.ps1 `
+            -PreviousInstallerPath $previousMsi `
+            -PreviousInstallerSupportsIsolatedAcceptance `
             -AcceptanceRoot "C:\reefvision-$releaseSlug-disposable-acceptance" `
             -DisposableTest
       - uses: actions/upload-artifact@v4

@@ -27,6 +27,20 @@ def test_repository_workflow_matches_tauri_version() -> None:
     assert MODULE.check_workflow(workflow, str(config["version"])) == []
 
 
+def test_repository_workflow_runs_provenance_verified_102_upgrade() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
+    clean_job = workflow.split("  windows-clean-install-acceptance:", 1)[1]
+
+    assert 'REEFVISION_PREVIOUS_RELEASE_VERSION: "1.0.2"' in clean_job
+    assert "REEFVISION_PREVIOUS_PROVENANCE_SHA256" in clean_job
+    assert 'gh release download "v$previousVersion"' in clean_job
+    assert "$previousProvenance.version -ne $previousVersion" in clean_job
+    assert "$previousActualHash -ne $previousExpectedHash" in clean_job
+    assert "-PreviousInstallerPath $previousMsi" in clean_job
+    assert "-PreviousInstallerSupportsIsolatedAcceptance" in clean_job
+    assert "-SkipUpgrade" not in clean_job
+
+
 def valid_workflow() -> str:
     workflow = r"""name: Build Windows Desktop
   historical_document: docs/RELEASE_1.0.2.md
@@ -54,12 +68,20 @@ def valid_workflow() -> str:
     env:
       REEFVISION_RELEASE_VERSION: ${{ needs.build-windows-installer.outputs.release-version }}
       REEFVISION_RELEASE_SLUG: ${{ needs.build-windows-installer.outputs.release-slug }}
+      REEFVISION_PREVIOUS_RELEASE_VERSION: "1.0.2"
+      REEFVISION_PREVIOUS_RELEASE_SOURCE_COMMIT: "8d5d10e06b831859cd6e208a7a564780c5f2bd5a"
+      REEFVISION_PREVIOUS_PROVENANCE_SHA256: >-
+        d20a3df535a0be4f2eadcf6d3e512d1487bc161645e698790505a9c860c2bb60
     steps:
       - run: |
           $releaseVersion = $env:REEFVISION_RELEASE_VERSION
           $releaseSlug = $env:REEFVISION_RELEASE_SLUG
+          $previousVersion = $env:REEFVISION_PREVIOUS_RELEASE_VERSION
+          $previousSourceCommit = $env:REEFVISION_PREVIOUS_RELEASE_SOURCE_COMMIT
+          $previousProvenanceHash = $env:REEFVISION_PREVIOUS_PROVENANCE_SHA256
           $folder = Join-Path $env:RUNNER_TEMP "reefvision-$releaseSlug-installer"
           $expectedMsiName = "ReefVision_${releaseVersion}_x64_en-US.msi"
+          gh release download "v$previousVersion"
           if ($msi[0].Name -ne $expectedMsiName) { throw 'bad' }
           if ($versionRecord.StringData(1) -ne $releaseVersion) { throw 'bad' }
           $provenancePath = Join-Path $folder 'build-provenance.json'
@@ -72,6 +94,14 @@ def valid_workflow() -> str:
           $actualHash = (
             Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256
           ).Hash.ToLowerInvariant()
+          if ($previousProvenance.version -ne $previousVersion) { throw 'bad previous version' }
+          if ($previousActualProvenanceHash -ne $previousProvenanceHash) { throw 'bad manifest' }
+          if ($previousProvenance.source_commit -ne $previousSourceCommit) {
+            throw 'bad previous commit'
+          }
+          if ($previousActualHash -ne $previousExpectedHash) { throw 'bad previous hash' }
+          -PreviousInstallerPath $previousMsi
+          -PreviousInstallerSupportsIsolatedAcceptance
           -AcceptanceRoot "C:\reefvision-$releaseSlug-disposable-acceptance"
       - name: Upload evidence
         uses: actions/upload-artifact@v4
@@ -135,6 +165,34 @@ def test_missing_clean_install_job_is_rejected() -> None:
         "exactly one" in error
         for error in MODULE.check_workflow("name: Build Windows Desktop", "1.0.3")
     )
+
+
+@pytest.mark.parametrize(
+    "required_fragment",
+    [
+        "REEFVISION_PREVIOUS_RELEASE_VERSION",
+        "REEFVISION_PREVIOUS_RELEASE_SOURCE_COMMIT",
+        "REEFVISION_PREVIOUS_PROVENANCE_SHA256",
+        'gh release download "v$previousVersion"',
+        "$previousActualProvenanceHash -ne $previousProvenanceHash",
+        "$previousProvenance.version -ne $previousVersion",
+        "$previousProvenance.source_commit -ne $previousSourceCommit",
+        "$previousActualHash -ne $previousExpectedHash",
+        "-PreviousInstallerPath $previousMsi",
+        "-PreviousInstallerSupportsIsolatedAcceptance",
+    ],
+)
+def test_missing_upgrade_guard_is_rejected(required_fragment: str) -> None:
+    workflow = valid_workflow().replace(required_fragment, "REMOVED")
+    assert any("upgrade" in error.lower() for error in MODULE.check_workflow(workflow, "1.0.3"))
+
+
+def test_skipped_upgrade_is_rejected() -> None:
+    workflow = valid_workflow().replace(
+        "-PreviousInstallerSupportsIsolatedAcceptance",
+        "-PreviousInstallerSupportsIsolatedAcceptance -SkipUpgrade",
+    )
+    assert any("must not be skipped" in error for error in MODULE.check_workflow(workflow, "1.0.3"))
 
 
 def test_invalid_release_version_is_rejected() -> None:

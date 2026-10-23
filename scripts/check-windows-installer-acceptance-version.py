@@ -29,16 +29,11 @@ def check_workflow(workflow: str, version: str) -> list[str]:
         r"ReefVision-\d+\.\d+\.\d+-Windows-Clean-Install-Evidence",
     )
     hardcoded = sorted(
-        {
-            match.group(0)
-            for pattern in hardcoded_patterns
-            for match in re.finditer(pattern, job)
-        }
+        {match.group(0) for pattern in hardcoded_patterns for match in re.finditer(pattern, job)}
     )
     if hardcoded:
         errors.append(
-            "Clean-install job contains hardcoded release version references: "
-            f"{hardcoded!r}"
+            f"Clean-install job contains hardcoded release version references: {hardcoded!r}"
         )
 
     build_marker = "  build-windows-installer:"
@@ -91,6 +86,24 @@ def check_workflow(workflow: str, version: str) -> list[str]:
         if fragment not in job:
             errors.append(f"Installer provenance guard is missing: {fragment}")
 
+    required_upgrade_fragments = (
+        "REEFVISION_PREVIOUS_RELEASE_VERSION",
+        "REEFVISION_PREVIOUS_RELEASE_SOURCE_COMMIT",
+        "REEFVISION_PREVIOUS_PROVENANCE_SHA256",
+        'gh release download "v$previousVersion"',
+        "$previousActualProvenanceHash -ne $previousProvenanceHash",
+        "$previousProvenance.version -ne $previousVersion",
+        "$previousProvenance.source_commit -ne $previousSourceCommit",
+        "$previousActualHash -ne $previousExpectedHash",
+        "-PreviousInstallerPath $previousMsi",
+        "-PreviousInstallerSupportsIsolatedAcceptance",
+    )
+    for fragment in required_upgrade_fragments:
+        if fragment not in job:
+            errors.append(f"Previous-release upgrade guard is missing: {fragment}")
+    if "-SkipUpgrade" in job:
+        errors.append("Previous-release upgrade must not be skipped")
+
     if "-LiveSam2Acceptance" in job:
         errors.append("Default clean-install job must not opt into network model downloads")
     if build_job:
@@ -100,19 +113,15 @@ def check_workflow(workflow: str, version: str) -> list[str]:
             errors.append("Version preflight must run exactly once in Windows build job")
         elif packaging not in build_job or build_job.index(invocation) > build_job.index(packaging):
             errors.append("Version preflight must run before MSI packaging")
-        elif "actions/setup-python@v5" not in build_job[:build_job.index(invocation)]:
+        elif "actions/setup-python@v5" not in build_job[: build_job.index(invocation)]:
             errors.append("Version preflight must run after Python setup")
     return errors
 
 
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    config = json.loads(
-        (root / "apps/web/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
-    )
-    workflow = (root / ".github/workflows/build-desktop.yml").read_text(
-        encoding="utf-8"
-    )
+    config = json.loads((root / "apps/web/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+    workflow = (root / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
     errors = check_workflow(workflow, str(config["version"]))
     if errors:
         for error in errors:
