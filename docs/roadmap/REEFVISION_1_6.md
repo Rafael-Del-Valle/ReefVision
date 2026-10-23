@@ -95,8 +95,9 @@
 
 Run Ruff, mypy, backend/frontend/E2E and migration/backwards-compatibility checks
 at the actual commit SHA; independently verify scientific semantics and review gating;
-add reviewer assignment/comment/bulk actions, dense-object rendering, onboarding and
-Windows installer/start/update validation, and installed GUI/hardware acceptance.
+validate the existing reviewer assignment/comment/bulk actions and dense-object
+rendering on installed Windows; complete onboarding, command start/update and
+installed GUI/hardware acceptance.
 
 Version 1.7 monitoring and **revised** 1.8 scientific modalities remain untouched.
 Do not merge, tag, release, download pretrained weights or deploy paid hosting.
@@ -140,3 +141,21 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - The older NSIS/portable helper functions remain defined for compatibility
   but are no longer invoked by the updater. Audit remaining external callers
   before removing them.
+
+## 2026-10-23 — MSI engine/log preflight and restart-safe updater (Track D)
+
+- Before terminating a running ReefVision desktop, `update-reefvision` now
+  checks that the Windows Installer executable exists and prepares a managed
+  log directory with no symlink/junction ancestor or file collision. An unsafe
+  log path fails closed while leaving the running application untouched.
+- Per-update log filenames include a random identifier to avoid collisions.
+  Windows Installer exit code `3010` (restart required) records the log and
+  exits without premature desktop-version verification or relaunch; post-reboot
+  acceptance remains the researcher's responsibility.
+- Native Windows disposable-fixture regressions cover safe/unsafe log paths,
+  junction rejection, and the updater's verification/engine/log-preflight-before-
+  stop and reboot-deferral contracts. No user research assets are modified.
+- **Evidence:** commits `895eb47f` and `521c2f6d`. The preceding head
+  `39a279dc` had 20/20 successful Actions workflows including the Windows
+  installer build and isolated installation harness. The new exact-head
+  Windows checks and full installed-GUI/upgrade acceptance are still required.
