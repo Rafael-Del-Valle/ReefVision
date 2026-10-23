@@ -10,11 +10,7 @@ from typing import Any
 
 from reefvision.services.spatial_mesh_glb_v14 import parse_glb_triangles
 from reefvision.services.spatial_mesh_measurements import triangle_area
-from reefvision.services.spatial_mesh_obj_v14 import (
-    MAX_FACES,
-    MAX_VERTICES,
-    parse_obj_triangles,
-)
+from reefvision.services.spatial_mesh_obj_v14 import MAX_FACES, MAX_VERTICES, parse_obj_triangles
 from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
 from reefvision.services.spatial_mesh_ply_v14 import parse_ply_triangles
 
