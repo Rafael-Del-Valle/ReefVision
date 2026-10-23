@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from contextlib import suppress
 from datetime import UTC, datetime
 from hashlib import sha256
 from math import isfinite
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
@@ -19,8 +20,9 @@ from reefvision.config import Settings
 from reefvision.db.models import ImageAsset, Job, ModelRegistration, PredictionProposal, Project
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.provider_hub import detection_provider_for_name
-from reefvision.ml.providers import DetectionProvider, DetectionSettings
+from reefvision.ml.providers import DetectionPrediction, DetectionProvider, DetectionSettings
 from reefvision.ml.segmentation import (
+    SegmentationPrediction,
     SegmentationProvider,
     segmentation_provider_for_name,
 )
@@ -375,9 +377,23 @@ def process_inference_job(
                 else:
                     if provider is None:
                         raise RuntimeError("Inference provider is unavailable")
-                    predictions = provider.predict(image_path, inference_settings)
+                    predictions: Sequence[DetectionPrediction | SegmentationPrediction]
+                    if model_task == "segment":
+                        predictions = cast(SegmentationProvider, provider).predict(
+                            image_path,
+                            inference_settings,
+                        )
+                    else:
+                        predictions = cast(DetectionProvider, provider).predict(
+                            image_path,
+                            inference_settings,
+                        )
                     proposals = []
-                    for prediction_index, prediction in enumerate(predictions):
+                    for prediction_index, raw_prediction in enumerate(predictions):
+                        prediction = cast(
+                            DetectionPrediction | SegmentationPrediction,
+                            raw_prediction,
+                        )
                         polygon = getattr(prediction, "polygon", None)
                         try:
                             _validate_model_prediction(
