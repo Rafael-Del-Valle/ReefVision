@@ -20,7 +20,23 @@ export function OnboardingModal({
         ? document.activeElement
         : null;
     closeButtonRef.current?.focus();
+
+    // A dialog-level Tab handler cannot catch focus moved outside the dialog
+    // by browser chrome, extensions, scripts, or a dynamically mounted control.
+    // Keep the first-run help modal truly modal without changing background data.
+    function keepFocusInDialog(event: FocusEvent) {
+      const dialog = dialogRef.current;
+      if (
+        dialog &&
+        event.target instanceof Node &&
+        !dialog.contains(event.target)
+      ) {
+        closeButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener("focusin", keepFocusInDialog);
     return () => {
+      document.removeEventListener("focusin", keepFocusInDialog);
       if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, []);
