@@ -89,6 +89,5 @@ def test_saved_workflow_cannot_persist_analysis_from_implicit_epoch(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert not any(
-        artifact["data_type"] == "longitudinal_analysis"
-        for artifact in detail.json()["artifacts"]
+        artifact["data_type"] == "longitudinal_analysis" for artifact in detail.json()["artifacts"]
     )
