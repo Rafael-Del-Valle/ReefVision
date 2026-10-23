@@ -69,9 +69,9 @@ def validate_expected_roster(
         canonical[unit_id] = sorted(organism_ids)
 
     for row in rows:
-        unit_id = row.experimental_unit_id
-        if unit_id is None:
+        observed_unit_id = row.experimental_unit_id
+        if observed_unit_id is None:
             raise ValidationError("Expected organism roster requires unit IDs on all observations")
-        if row.organism_id not in canonical[unit_id]:
+        if row.organism_id not in canonical[observed_unit_id]:
             raise ValidationError("Observed organism is absent from its expected unit roster")
     return canonical
