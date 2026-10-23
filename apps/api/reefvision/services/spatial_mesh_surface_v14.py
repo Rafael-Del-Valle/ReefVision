@@ -16,7 +16,6 @@ from reefvision.services import (
     spatial_mesh_ply_v14,
 )
 
-
 MAX_PREVIEW_TRIANGLES = 512
 
 
@@ -70,7 +69,10 @@ def measure_mesh_preview(
     source_label: str | None = None,
     surface_path_vertex_pairs: list[list[int]] | None = None,
 ) -> dict[str, Any]:
-    if not 3 <= len(vertices) <= spatial_mesh_obj_v14.MAX_VERTICES or not 1 <= len(faces) <= spatial_mesh_obj_v14.MAX_FACES:
+    if (
+        not 3 <= len(vertices) <= spatial_mesh_obj_v14.MAX_VERTICES
+        or not 1 <= len(faces) <= spatial_mesh_obj_v14.MAX_FACES
+    ):
         raise ValueError("Mesh preview vertex/face count is outside supported bounds")
     scale = float(meters_per_unit)
     if not isfinite(scale) or not 0 < scale <= 1_000_000:
@@ -123,7 +125,9 @@ def measure_mesh_preview(
         if key in seen_faces:
             raise ValueError("Duplicate triangles would double-count surface area")
         seen_faces.add(key)
-        area = spatial_mesh_measurements.triangle_area(points[face[0]], points[face[1]], points[face[2]])
+        area = spatial_mesh_measurements.triangle_area(
+            points[face[0]], points[face[1]], points[face[2]]
+        )
         if not isfinite(area):
             raise ValueError("Mesh triangle area overflowed")
         degenerate += area == 0
@@ -142,6 +146,19 @@ def measure_mesh_preview(
     referenced_indices = {index for face in faces for index in face}
     referenced_points = [points[index] for index in sorted(referenced_indices)]
     unreferenced_vertex_count = len(points) - len(referenced_points)
+    # Fit the future renderer to ALL referenced vertices, not the decimated
+    # triangle sample. Coordinates remain in unregistered imported source axes.
+    preview_min_m = [
+        min(point[axis] for point in referenced_points) * scale for axis in range(3)
+    ]
+    preview_max_m = [
+        max(point[axis] for point in referenced_points) * scale for axis in range(3)
+    ]
+    preview_camera_target_m = [
+        (minimum + maximum) / 2
+        for minimum, maximum in zip(preview_min_m, preview_max_m, strict=True)
+    ]
+    preview_camera_radius_m = dist(preview_min_m, preview_max_m) / 2
     dimensions = [
         (max(p[axis] for p in referenced_points) - min(p[axis] for p in referenced_points)) * scale
         for axis in range(3)
@@ -285,6 +302,14 @@ def measure_mesh_preview(
         "face_count": len(faces),
         **_sample_mesh_display_geometry(points, faces, scale),
         "vertex_count": len(points),
+        "preview_referenced_bounds_in_source_frame_m": {
+            "minimum": preview_min_m,
+            "maximum": preview_max_m,
+        },
+        "preview_camera_target_in_source_frame_m": preview_camera_target_m,
+        "preview_camera_radius_m": preview_camera_radius_m,
+        "preview_camera_fit_basis": "all_referenced_vertices",
+        "preview_coordinate_registration_verified": False,
         "unreferenced_vertex_count": unreferenced_vertex_count,
         "degenerate_face_count": degenerate,
         "boundary_edge_count": boundary,
