@@ -98,11 +98,10 @@ def cross_unit_shared_parent_colony_ids(
     This is a study-design review signal, not proof that tanks are dependent.
     Biological parentage and experimental-unit labels remain unauthenticated.
     """
+
     units_by_parent: dict[str, set[str]] = {}
     for record in records:
         if record.parent_colony_id is None or record.experimental_unit_id is None:
             continue
-        units_by_parent.setdefault(record.parent_colony_id, set()).add(
-            record.experimental_unit_id
-        )
+        units_by_parent.setdefault(record.parent_colony_id, set()).add(record.experimental_unit_id)
     return sorted(parent for parent, units in units_by_parent.items() if len(units) > 1)
