@@ -28,15 +28,13 @@ def test_render_threshold_preserves_original_face_indices(face_count: int) -> No
     assert indices[-1] == face_count - 1
     assert result["preview_is_decimated"] is (face_count == 513)
     assert len(set(indices)) == 512
-    for source_face, local_face in zip(
-        indices, result["preview_faces_local_indices"], strict=True
-    ):
-        assert [source_vertices[index] for index in local_face] == parameters["faces"][
-            source_face
-        ]
+    for source_face, local_face in zip(indices, result["preview_faces_local_indices"], strict=True):
+        assert [source_vertices[index] for index in local_face] == parameters["faces"][source_face]
     assert result["surface_area_m2"] == pytest.approx(face_count * 0.5 * 0.01**2)
-    assert result["area_scale_uncertainty_m2"] == pytest.approx(
-        0.2 * result["surface_area_m2"]
+    assert result["area_scale_uncertainty_m2"] == pytest.approx(0.2 * result["surface_area_m2"])
+    assert result["preview_surface_area_fraction"] == pytest.approx(512 / face_count)
+    assert result["preview_sampled_surface_area_m2"] == pytest.approx(
+        result["surface_area_m2"] * 512 / face_count
     )
     assert result["provenance"]["calibration_verified"] is False
     assert result["measurement_status"] == "caller_supplied_unverified"
@@ -52,6 +50,10 @@ def test_decimated_mesh_saved_workflow_matches_standalone(client: TestClient) ->
     assert expected["preview_is_decimated"] is True
     assert expected["preview_face_count"] == 512
     assert expected["preview_face_fraction"] == pytest.approx(512 / 513)
+    assert expected["preview_surface_area_fraction"] == pytest.approx(512 / 513)
+    assert expected["preview_sampled_surface_area_m2"] == pytest.approx(
+        expected["surface_area_m2"] * 512 / 513
+    )
     assert expected["preview_camera_fit_basis"] == "all_referenced_vertices"
     assert expected["preview_coordinate_registration_verified"] is False
     assert expected["preview_camera_radius_m"] > 0
@@ -115,13 +117,32 @@ def test_camera_fit_uses_unsampled_faces_but_ignores_orphan_vertices() -> None:
         "minimum": [0.0, 0.0, 0.0],
         "maximum": [200.0, 0.01, 0.0],
     }
-    assert result["preview_camera_target_in_source_frame_m"] == pytest.approx(
-        [100.0, 0.005, 0.0]
-    )
-    assert result["preview_camera_radius_m"] == pytest.approx(
-        (200.0**2 + 0.01**2) ** 0.5 / 2
-    )
+    assert result["preview_camera_target_in_source_frame_m"] == pytest.approx([100.0, 0.005, 0.0])
+    assert result["preview_camera_radius_m"] == pytest.approx((200.0**2 + 0.01**2) ** 0.5 / 2)
     assert result["preview_camera_fit_basis"] == "all_referenced_vertices"
     assert result["preview_coordinate_registration_verified"] is False
     assert result["provenance"]["calibration_verified"] is False
     assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_render_area_coverage_detects_omitted_large_triangle() -> None:
+    """Face-count coverage must not masquerade as geometric area coverage."""
+    parameters = _mesh_parameters(513)
+    parameters["vertices"][3 * 511 + 2][1] = 100_000.0
+    result = measure_mesh_preview(**parameters)
+    assert 511 not in result["preview_face_indices"]
+    assert result["preview_face_fraction"] == pytest.approx(512 / 513)
+    assert result["preview_surface_area_fraction"] == pytest.approx(512 / 100_512)
+    assert result["preview_sampled_surface_area_m2"] == pytest.approx(512 * 0.5 * 0.01**2)
+    assert result["surface_area_m2"] == pytest.approx(100_512 * 0.5 * 0.01**2)
+    assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_zero_area_mesh_has_undefined_render_area_fraction() -> None:
+    parameters = _mesh_parameters(1)
+    parameters["vertices"][2] = [2.0, 0.0, 0.0]
+    result = measure_mesh_preview(**parameters)
+    assert result["surface_area_m2"] == 0.0
+    assert result["preview_sampled_surface_area_m2"] == 0.0
+    assert result["preview_surface_area_fraction"] is None
+    assert "degenerate_triangles_present" in result["qc_warnings"]
