@@ -31,7 +31,7 @@ try {
     $passed++
     # The cached digest is a second independent guard for --install-only.
     $pinnedSha = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
-    $pinned = Assert-ReefVisionCachedMsi -InstallerPath $msi -RepoPath $repo -ExpectedSha256 $pinnedSha.ToLowerInvariant()
+    $pinned = Assert-ReefVisionCachedMsi -InstallerPath $msi -RepoPath $repo -ExpectedSha256 ($pinnedSha.ToLowerInvariant())
     if ($pinned.FullName -ne [System.IO.Path]::GetFullPath($msi)) {
         throw 'Pinned MSI validation changed the selected installer.'
     }
