@@ -236,7 +236,7 @@ def analyze_longitudinal(
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-longitudinal-0007",
+            algorithm_version="ecology-longitudinal-0008",
             records=request.observations,
             parameters={
                 "experimental_unit_type": request.experimental_unit_type,
@@ -273,5 +273,7 @@ def analyze_longitudinal(
             "units with missing follow-up; they are not independent hypothesis tests.",
             "Cross-unit summaries weight eligible units equally and stratify by UTC dates; "
             "no population inference or significance is claimed.",
+            "Different intermediate observation dates within a unit are disclosed as QC; "
+            "they do not establish missing scheduled visits or invalidate endpoint-only means.",
         ],
     )
