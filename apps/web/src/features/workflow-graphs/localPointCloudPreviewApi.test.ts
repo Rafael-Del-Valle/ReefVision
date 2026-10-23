@@ -102,7 +102,7 @@ describe("previewLocalPointCloudFile", () => {
       [[0, 2000]],
       [[0.5, 1]],
       [[Number.NaN, 1]],
-      Array.from({ length: 33 }, () => [0, 1]),
+      Array.from({ length: 33 }, (): [number, number] => [0, 1]),
     ];
     for (const pairs of invalid) {
       await expect(
