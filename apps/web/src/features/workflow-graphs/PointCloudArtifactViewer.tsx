@@ -147,6 +147,30 @@ export function parsePointCloudRenderArtifact(
     return null;
   }
   const chords: PointChord[] = Array.isArray(rawChords) ? rawChords : [];
+  // When both original endpoints survive display sampling, cross-check the
+  // reported chord against their calibrated coordinates. Never infer an
+  // unsampled endpoint from a visualization-only point subset.
+  if (
+    chords.some((chord) => {
+      const firstIndex = (indices as number[]).indexOf(chord.point_indices[0]);
+      const secondIndex = (indices as number[]).indexOf(chord.point_indices[1]);
+      if (firstIndex < 0 || secondIndex < 0) return false;
+      const first = (points as Vec3[])[firstIndex];
+      const second = (points as Vec3[])[secondIndex];
+      const expected = Math.hypot(
+        first[0] - second[0],
+        first[1] - second[1],
+        first[2] - second[2],
+      );
+      return (
+        !Number.isFinite(expected) ||
+        Math.abs(expected - chord.chord_distance_m) >
+          1e-9 * Math.max(1, expected, chord.chord_distance_m)
+      );
+    })
+  ) {
+    return null;
+  }
   const target: Vec3 = [
     (min[0] + max[0]) / 2,
     (min[1] + max[1]) / 2,
@@ -304,8 +328,8 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
       </button>
       {cloud.chords.map((chord, index) => (
         <p className="annotation-helper" key={index}>
-          Source-point chord {chord.point_indices[0]}–{chord.point_indices[1]}:
-          {" "}{chord.chord_distance_m.toFixed(4)} m
+          Source-point chord {chord.point_indices[0]}–{chord.point_indices[1]}:{" "}
+          {chord.chord_distance_m.toFixed(4)} m
           {chord.scale_uncertainty_m != null
             ? ` (scale-only ±${chord.scale_uncertainty_m.toFixed(4)} m)`
             : " (scale uncertainty unknown)"}
