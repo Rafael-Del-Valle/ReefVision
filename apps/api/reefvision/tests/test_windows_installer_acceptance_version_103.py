@@ -38,7 +38,10 @@ def test_repository_workflow_runs_provenance_verified_102_upgrade() -> None:
     assert "$previousActualHash -ne $previousExpectedHash" in clean_job
     assert "-PreviousInstallerPath $previousMsi" in clean_job
     assert "-PreviousInstallerSupportsIsolatedAcceptance" in clean_job
-    assert "-SkipUpgrade" not in clean_job
+    assert clean_job.count("-SkipUpgrade") == 1
+    assert clean_job.count("-InstallerPath $msi") == 2
+    assert '"C:\\reefvision-$releaseSlug-fresh-install-acceptance"' in clean_job
+    assert '"C:\\reefvision-$releaseSlug-upgrade-acceptance"' in clean_job
 
 
 def valid_workflow() -> str:
@@ -100,21 +103,27 @@ def valid_workflow() -> str:
             throw 'bad previous commit'
           }
           if ($previousActualHash -ne $previousExpectedHash) { throw 'bad previous hash' }
+          -InstallerPath $msi
+          -AcceptanceRoot "C:\reefvision-$releaseSlug-fresh-install-acceptance"
+          -SkipUpgrade
+          -DisposableTest
+          -InstallerPath $msi
           -PreviousInstallerPath $previousMsi
           -PreviousInstallerSupportsIsolatedAcceptance
-          -AcceptanceRoot "C:\reefvision-$releaseSlug-disposable-acceptance"
+          -AcceptanceRoot "C:\reefvision-$releaseSlug-upgrade-acceptance"
+          -DisposableTest
       - name: Upload evidence
         uses: actions/upload-artifact@v4
         with:
           name: EVIDENCE_NAME
 """
     job_label = (
-        "Install, launch, persist and uninstall "
-        "${{ needs.build-windows-installer.outputs.release-version }} on fresh Windows"
+        "Fresh install, upgrade, launch, persist and uninstall "
+        "${{ needs.build-windows-installer.outputs.release-version }} on disposable Windows"
     )
     evidence_name = (
         "ReefVision-${{ needs.build-windows-installer.outputs.release-version }}-"
-        "Windows-Clean-Install-Evidence"
+        "Windows-Fresh-Install-And-Upgrade-Evidence"
     )
     return workflow.replace("JOB_LABEL", job_label).replace("EVIDENCE_NAME", evidence_name)
 
@@ -138,9 +147,10 @@ def test_historical_release_notes_outside_acceptance_job_are_allowed() -> None:
         "ReefVision_1.0.2_x64_en-US.msi",
         "MSI ProductVersion must be 1.0.2.",
         "reefvision-1-0-2-installer",
-        "Install, launch, persist and uninstall 1.0.2 on fresh Windows",
-        "ReefVision-1.0.2-Windows-Clean-Install-Evidence",
-        "reefvision-1-0-2-disposable-acceptance",
+        "Fresh install, upgrade, launch, persist and uninstall 1.0.2 on disposable Windows",
+        "ReefVision-1.0.2-Windows-Fresh-Install-And-Upgrade-Evidence",
+        "reefvision-1-0-2-fresh-install-acceptance",
+        "reefvision-1-0-2-upgrade-acceptance",
     ],
 )
 def test_stale_version_reference_is_rejected(stale_reference: str) -> None:
@@ -187,12 +197,11 @@ def test_missing_upgrade_guard_is_rejected(required_fragment: str) -> None:
     assert any("upgrade" in error.lower() for error in MODULE.check_workflow(workflow, "1.0.3"))
 
 
-def test_skipped_upgrade_is_rejected() -> None:
-    workflow = valid_workflow().replace(
-        "-PreviousInstallerSupportsIsolatedAcceptance",
-        "-PreviousInstallerSupportsIsolatedAcceptance -SkipUpgrade",
+def test_missing_candidate_only_fresh_install_is_rejected() -> None:
+    workflow = valid_workflow().replace("-SkipUpgrade", "REMOVED")
+    assert any(
+        "fresh install" in error.lower() for error in MODULE.check_workflow(workflow, "1.0.3")
     )
-    assert any("must not be skipped" in error for error in MODULE.check_workflow(workflow, "1.0.3"))
 
 
 def test_invalid_release_version_is_rejected() -> None:

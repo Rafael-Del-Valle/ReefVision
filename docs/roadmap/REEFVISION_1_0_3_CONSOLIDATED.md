@@ -187,12 +187,14 @@ the RTX 3090 matrix, or installed interactive P0–P7 acceptance.
   skipped while nine valid proposals persisted. Evidence is retained at
   `C:\Windows\Temp\rv103-seg-final-out\report.json`. Dataset representativeness and
   scientific segmentation acceptance remain **UNVERIFIED**.
-- The Windows clean-install job now downloads the published 1.0.2 MSI and five CABs,
-  pins its audited source commit and provenance SHA-256, verifies every payload hash and
-  MSI ProductVersion, installs into the marker-gated isolated data root, upgrades to the
-  candidate, verifies the packaged API version changed from 1.0.2 to 1.0.3, checks data
-  persistence/relaunch, and uninstalls. Local preflight tests and 44 PowerShell safeguard
-  assertions pass. The user's installed ReefVision application was not modified.
+- The disposable Windows job now runs two isolated harness passes: a candidate-only
+  fresh install, launch, persistence/relaunch, and uninstall; then an audited 1.0.2 to
+  candidate upgrade. It downloads the published 1.0.2 MSI and five CABs, pins its
+  audited source commit and provenance SHA-256, verifies every payload hash and MSI
+  ProductVersion, and verifies the packaged API version changes from 1.0.2 to 1.0.3
+  during upgrade. The two paths use distinct marker-gated data roots and evidence.
+  Local preflight tests and 44 PowerShell safeguard assertions pass. The user's
+  installed ReefVision application was not modified.
 - The hosted Windows build/install/upgrade result is authoritative only when the final
   PR SHA's checks complete successfully. Interactive mouse/keyboard, DPI, dual-monitor,
   training-console-window, and complete P0–P7 observations remain **UNVERIFIED** even

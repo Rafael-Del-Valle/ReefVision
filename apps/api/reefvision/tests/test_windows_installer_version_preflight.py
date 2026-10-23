@@ -73,21 +73,27 @@ jobs:
           }
           if ($previousActualHash -ne $previousExpectedHash) { throw 'bad previous hash' }
           ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath $msi `
+            -AcceptanceRoot "C:\reefvision-$releaseSlug-fresh-install-acceptance" `
+            -SkipUpgrade `
+            -DisposableTest
+          ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi `
             -PreviousInstallerSupportsIsolatedAcceptance `
-            -AcceptanceRoot "C:\reefvision-$releaseSlug-disposable-acceptance" `
+            -AcceptanceRoot "C:\reefvision-$releaseSlug-upgrade-acceptance" `
             -DisposableTest
       - uses: actions/upload-artifact@v4
         with:
           name: EVIDENCE_NAME
 """
     job_label = (
-        "Install, launch, persist and uninstall "
-        "${{ needs.build-windows-installer.outputs.release-version }} on fresh Windows"
+        "Fresh install, upgrade, launch, persist and uninstall "
+        "${{ needs.build-windows-installer.outputs.release-version }} on disposable Windows"
     )
     evidence_name = (
         "ReefVision-${{ needs.build-windows-installer.outputs.release-version }}-"
-        "Windows-Clean-Install-Evidence"
+        "Windows-Fresh-Install-And-Upgrade-Evidence"
     )
     download_path = (
         "${{ runner.temp }}/reefvision-"
@@ -124,19 +130,19 @@ def test_split_installer_artifacts_are_reassembled_before_acceptance() -> None:
             "hardcoded release version",
         ),
         (
-            '"C:\\reefvision-$releaseSlug-disposable-acceptance"',
-            '"C:\\reefvision-1-0-2-disposable-acceptance"',
+            '"C:\\reefvision-$releaseSlug-fresh-install-acceptance"',
+            '"C:\\reefvision-1-0-2-fresh-install-acceptance"',
             "hardcoded release version",
         ),
         (
-            "${{ needs.build-windows-installer.outputs.release-version }} on fresh Windows",
-            "1.0.2 on fresh Windows",
+            "${{ needs.build-windows-installer.outputs.release-version }} on disposable Windows",
+            "1.0.2 on disposable Windows",
             "hardcoded release version",
         ),
         (
             "ReefVision-${{ needs.build-windows-installer.outputs.release-version }}-"
-            "Windows-Clean-Install-Evidence",
-            "ReefVision-1.0.2-Windows-Clean-Install-Evidence",
+            "Windows-Fresh-Install-And-Upgrade-Evidence",
+            "ReefVision-1.0.2-Windows-Fresh-Install-And-Upgrade-Evidence",
             "hardcoded release version",
         ),
         ("-DisposableTest", "-DisposableTest -LiveSam2Acceptance", "network model downloads"),

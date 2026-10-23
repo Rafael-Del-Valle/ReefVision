@@ -24,9 +24,10 @@ def check_workflow(workflow: str, version: str) -> list[str]:
     hardcoded_patterns = (
         r"ReefVision_\d+\.\d+\.\d+_x64_en-US\.msi",
         r"MSI ProductVersion must be \d+\.\d+\.\d+\.",
-        r"reefvision-\d+-\d+-\d+-(?:installer|disposable-acceptance)",
-        r"Install, launch, persist and uninstall \d+\.\d+\.\d+ on fresh Windows",
-        r"ReefVision-\d+\.\d+\.\d+-Windows-Clean-Install-Evidence",
+        r"reefvision-\d+-\d+-\d+-(?:installer|fresh-install-acceptance|upgrade-acceptance)",
+        r"Fresh install, upgrade, launch, persist and uninstall "
+        r"\d+\.\d+\.\d+ on disposable Windows",
+        r"ReefVision-\d+\.\d+\.\d+-Windows-Fresh-Install-And-Upgrade-Evidence",
     )
     hardcoded = sorted(
         {match.group(0) for pattern in hardcoded_patterns for match in re.finditer(pattern, job)}
@@ -58,16 +59,16 @@ def check_workflow(workflow: str, version: str) -> list[str]:
             errors.append(f"Dynamic package version output is missing: {fragment}")
 
     required_clean_fragments = (
-        "Install, launch, persist and uninstall "
-        "${{ needs.build-windows-installer.outputs.release-version }} on fresh Windows",
+        "Fresh install, upgrade, launch, persist and uninstall "
+        "${{ needs.build-windows-installer.outputs.release-version }} on disposable Windows",
         "REEFVISION_RELEASE_VERSION: ${{ needs.build-windows-installer.outputs.release-version }}",
         "REEFVISION_RELEASE_SLUG: ${{ needs.build-windows-installer.outputs.release-slug }}",
         '"reefvision-$releaseSlug-installer"',
         '"ReefVision_${releaseVersion}_x64_en-US.msi"',
         "$versionRecord.StringData(1) -ne $releaseVersion",
-        '"C:\\reefvision-$releaseSlug-disposable-acceptance"',
+        '"C:\\reefvision-$releaseSlug-fresh-install-acceptance"',
         "ReefVision-${{ needs.build-windows-installer.outputs.release-version }}-"
-        "Windows-Clean-Install-Evidence",
+        "Windows-Fresh-Install-And-Upgrade-Evidence",
     )
     for fragment in required_clean_fragments:
         if fragment not in job:
@@ -97,12 +98,17 @@ def check_workflow(workflow: str, version: str) -> list[str]:
         "$previousActualHash -ne $previousExpectedHash",
         "-PreviousInstallerPath $previousMsi",
         "-PreviousInstallerSupportsIsolatedAcceptance",
+        '"C:\\reefvision-$releaseSlug-upgrade-acceptance"',
     )
     for fragment in required_upgrade_fragments:
         if fragment not in job:
             errors.append(f"Previous-release upgrade guard is missing: {fragment}")
-    if "-SkipUpgrade" in job:
-        errors.append("Previous-release upgrade must not be skipped")
+    if job.count("-InstallerPath $msi") != 2:
+        errors.append("Fresh install and upgrade must each invoke the candidate installer")
+    if job.count("-SkipUpgrade") != 1:
+        errors.append("Candidate-only fresh install must skip the upgrade phase exactly once")
+    if job.count("-DisposableTest") != 2:
+        errors.append("Fresh install and upgrade must each run in disposable mode")
 
     if "-LiveSam2Acceptance" in job:
         errors.append("Default clean-install job must not opt into network model downloads")

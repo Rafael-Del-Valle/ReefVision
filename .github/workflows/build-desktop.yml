@@ -153,10 +153,10 @@ jobs:
 
   # Separate, disposable Windows runner: do not validate an MSI only on its build machine.
   windows-clean-install-acceptance:
-    name: Install, launch, persist and uninstall ${{ needs.build-windows-installer.outputs.release-version }} on fresh Windows
+    name: Fresh install, upgrade, launch, persist and uninstall ${{ needs.build-windows-installer.outputs.release-version }} on disposable Windows
     runs-on: windows-latest
     needs: build-windows-installer
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       REEFVISION_RELEASE_VERSION: ${{ needs.build-windows-installer.outputs.release-version }}
       REEFVISION_RELEASE_SLUG: ${{ needs.build-windows-installer.outputs.release-slug }}
@@ -366,7 +366,7 @@ jobs:
           }
           Write-Host "MSI references $($requiredCabs.Count) external CAB files, all present."
 
-      - name: Test isolated MSI installation without developer runtimes on PATH
+      - name: Test candidate-only fresh install and audited previous-release upgrade
         shell: pwsh
         run: |
           $releaseVersion = $env:REEFVISION_RELEASE_VERSION
@@ -392,16 +392,21 @@ jobs:
           }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
+            -AcceptanceRoot "C:\reefvision-$releaseSlug-fresh-install-acceptance" `
+            -SkipUpgrade `
+            -DisposableTest -KeepArtifacts
+          & ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi `
             -PreviousInstallerSupportsIsolatedAcceptance `
-            -AcceptanceRoot "C:\reefvision-$releaseSlug-disposable-acceptance" `
+            -AcceptanceRoot "C:\reefvision-$releaseSlug-upgrade-acceptance" `
             -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-${{ needs.build-windows-installer.outputs.release-version }}-Windows-Clean-Install-Evidence
+          name: ReefVision-${{ needs.build-windows-installer.outputs.release-version }}-Windows-Fresh-Install-And-Upgrade-Evidence
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
