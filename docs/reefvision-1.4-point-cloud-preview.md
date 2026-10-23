@@ -69,3 +69,5 @@ selected source-index chords, geometry fingerprints, uncertainty intervals,
 and scientific provenance are unchanged by display decimation. Tests include a
 513-point scan with a hidden extreme at original index 511, standalone versus
 saved executable workflow parity, and malformed frontend metadata.
+
+The saved viewer now independently compares displayed point extrema with the persisted full-cloud bounding box. If a missing axis extreme remains numerically visible after calibration scaling, its omission must appear in `preview_omitted_axis_extrema`; otherwise the artifact fails closed. Conversely, a reported omission is treated conservatively even if large source-frame offsets make the scaled sample and bound numerically equal: rounding can erase evidence of a genuinely missing raw extreme. This validation does not upgrade the preview to a verified measurement. Regression tests cover falsely claimed complete coverage, wrong-axis omission flags, and conservative warnings.
