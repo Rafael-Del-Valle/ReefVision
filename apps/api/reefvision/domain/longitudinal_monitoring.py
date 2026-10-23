@@ -93,6 +93,21 @@ def _summarize_experimental_units(
                 )
             )
             continue
+        # A singleton can also have missing scheduled visits. Classify those
+        # visits before the generic missing-followup check, so QC reports the
+        # actionable calendar gaps without inventing death or zero abundance.
+        scheduled = set(schedule_by_unit.get(unit_id, ()))
+        if scheduled and any(
+            scheduled - {row.observed_at.date() for row in grouped[key]} for key in keys
+        ):
+            excluded.append(
+                ExcludedExperimentalUnit(
+                    experimental_unit_id=unit_id,
+                    metric_name=metric,
+                    reason="missing_scheduled_observations",
+                )
+            )
+            continue
         if any(key not in completed for key in keys):
             excluded.append(
                 ExcludedExperimentalUnit(
@@ -107,21 +122,6 @@ def _summarize_experimental_units(
         # share a biological sampling window; their photographs are not
         # independent time points. Each organism still retains its exact
         # timestamps for change-per-day calculations.
-        # When a planned calendar is declared, a missing endpoint is first a
-        # missing scheduled visit, not merely a discordant endpoint window.
-        # Prioritize the actionable calendar QC reason without inferring death.
-        scheduled = set(schedule_by_unit.get(unit_id, ()))
-        if scheduled and any(
-            scheduled - {row.observed_at.date() for row in grouped[key]} for key in keys
-        ):
-            excluded.append(
-                ExcludedExperimentalUnit(
-                    experimental_unit_id=unit_id,
-                    metric_name=metric,
-                    reason="missing_scheduled_observations",
-                )
-            )
-            continue
         windows = {(item.first_observed_at.date(), item.last_observed_at.date()) for item in series}
         if len(windows) != 1:
             excluded.append(
@@ -264,7 +264,7 @@ def analyze_longitudinal(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
             algorithm_version=(
-                "ecology-longitudinal-0010"
+                "ecology-longitudinal-0011"
                 if request.expected_sampling_dates_by_unit is not None
                 else "ecology-longitudinal-0008"
             ),
