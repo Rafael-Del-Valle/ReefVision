@@ -225,6 +225,21 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     phase === "thumbnail-loading" || phase === "thumbnail-loaded";
   const waiting = phase === "loading" || phase === "thumbnail-loading";
 
+  useEffect(() => {
+    if (!waiting) return;
+    // Some Windows WebView2 media requests stall without either a load or an
+    // error event. Never leave the first image obscured indefinitely.
+    const timer = window.setTimeout(() => {
+      setPhase((current) => {
+        if (current === "loading") {
+          return image.thumbnail_path ? "thumbnail-loading" : "error";
+        }
+        return current === "thumbnail-loading" ? "error" : current;
+      });
+    }, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [image.thumbnail_path, phase, waiting]);
+
   function handleLoad(event: { currentTarget: HTMLImageElement }) {
     // The load event is sufficient to reveal the image. In some WebView2
     // versions decode() can remain pending even after a successful load,
