@@ -90,11 +90,8 @@ export function parsePointCloudRenderArtifact(
     (min[1] + max[1]) / 2,
     (min[2] + max[2]) / 2,
   ];
-  const radius = Math.hypot(
-    max[0] - min[0],
-    max[1] - min[1],
-    max[2] - min[2],
-  ) / 2;
+  const radius =
+    Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2;
   if (!isVec3(target) || !Number.isFinite(radius)) return null;
   return {
     points: points as Vec3[],
@@ -129,7 +126,10 @@ function projectPoint(
 
 /** Read-only orthographic preview of sampled points in unregistered source coordinates. */
 export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
-  const cloud = useMemo(() => parsePointCloudRenderArtifact(artifact), [artifact]);
+  const cloud = useMemo(
+    () => parsePointCloudRenderArtifact(artifact),
+    [artifact],
+  );
   const [yaw, setYaw] = useState(30);
   const [pitch, setPitch] = useState(20);
   const [zoom, setZoom] = useState(1);
@@ -145,11 +145,18 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
   }, [cloud, yaw, pitch, zoom]);
 
   if (!cloud) {
-    return <p role="status">This point-cloud artifact has no valid bounded 3D display data.</p>;
+    return (
+      <p role="status">
+        This point-cloud artifact has no valid bounded 3D display data.
+      </p>
+    );
   }
 
   return (
-    <section aria-label="Interactive point-cloud preview" data-testid="point-cloud-artifact-viewer">
+    <section
+      aria-label="Interactive point-cloud preview"
+      data-testid="point-cloud-artifact-viewer"
+    >
       <p className="annotation-helper">
         Read-only point visualization in unregistered source axes. Calibration
         remains unverified. RGB is display metadata, not biological condition;
