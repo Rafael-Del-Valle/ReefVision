@@ -52,7 +52,7 @@ describe("onboarding local usability", () => {
     expect(document.activeElement).toBe(close);
   });
 
-  it("explains QC review and saved workflows without implying auto approval", () => {
+  it("describes reviewed QC and saved workflows", () => {
     render(
       <OnboardingModal
         version="1.6"
@@ -61,7 +61,9 @@ describe("onboarding local usability", () => {
       />,
     );
     expect(screen.getByText("Research review and workflows")).toBeTruthy();
-    expect(screen.getByText(/Workflow Builder can save and rerun a QC queue/)).toBeTruthy();
+    expect(
+      screen.getByText(/Workflow Builder can save and rerun a QC queue/),
+    ).toBeTruthy();
     expect(screen.getByText(/never approve model predictions/)).toBeTruthy();
   });
 });
