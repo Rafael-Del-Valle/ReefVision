@@ -371,13 +371,14 @@ export async function previewLocalPointCloudFile(
           !Array.isArray(pair) ||
           pair.length !== 2 ||
           pair.some(
-            (index) =>
-              !Number.isInteger(index) || index < 0 || index >= 2_000,
+            (index) => !Number.isInteger(index) || index < 0 || index >= 2_000,
           ) ||
           pair[0] === pair[1],
       ))
   ) {
-    throw new Error("Point chord indices must be distinct integers from 0 to 1999.");
+    throw new Error(
+      "Point chord indices must be distinct integers from 0 to 1999.",
+    );
   }
   const bytes = await file.arrayBuffer();
   if (!bytes.byteLength || bytes.byteLength > 256_000) {
@@ -395,7 +396,9 @@ export async function previewLocalPointCloudFile(
         ...calibration,
         ply_text: plyText,
         source_label: file.name,
-        ...(pointIndexPairs?.length ? { point_index_pairs: pointIndexPairs } : {}),
+        ...(pointIndexPairs?.length
+          ? { point_index_pairs: pointIndexPairs }
+          : {}),
       }),
     },
   );
