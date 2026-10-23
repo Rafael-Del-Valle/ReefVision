@@ -27,11 +27,7 @@ def _sample_mesh_display_geometry(
     """Bounded render-only triangle sample; scientific metrics use all faces."""
     count = min(len(faces), MAX_PREVIEW_TRIANGLES)
     last = len(faces) - 1
-    face_indices = (
-        [0]
-        if count == 1
-        else [index * last // (count - 1) for index in range(count)]
-    )
+    face_indices = [0] if count == 1 else [index * last // (count - 1) for index in range(count)]
     vertex_indices: list[int] = []
     local_indices: dict[int, int] = {}
     display_faces: list[list[int]] = []
@@ -48,8 +44,7 @@ def _sample_mesh_display_geometry(
         "preview_vertex_indices": vertex_indices,
         "preview_faces_local_indices": display_faces,
         "preview_vertices_in_source_frame_m": [
-            [coordinate * scale for coordinate in points[index]]
-            for index in vertex_indices
+            [coordinate * scale for coordinate in points[index]] for index in vertex_indices
         ],
         "preview_is_decimated": count < len(faces),
         "preview_face_count": count,
@@ -148,12 +143,8 @@ def measure_mesh_preview(
     unreferenced_vertex_count = len(points) - len(referenced_points)
     # Fit the future renderer to ALL referenced vertices, not the decimated
     # triangle sample. Coordinates remain in unregistered imported source axes.
-    preview_min_m = [
-        min(point[axis] for point in referenced_points) * scale for axis in range(3)
-    ]
-    preview_max_m = [
-        max(point[axis] for point in referenced_points) * scale for axis in range(3)
-    ]
+    preview_min_m = [min(point[axis] for point in referenced_points) * scale for axis in range(3)]
+    preview_max_m = [max(point[axis] for point in referenced_points) * scale for axis in range(3)]
     preview_camera_target_m = [
         (minimum + maximum) / 2
         for minimum, maximum in zip(preview_min_m, preview_max_m, strict=True)
@@ -286,6 +277,10 @@ def measure_mesh_preview(
             {"vertices": points, "faces": faces}, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
     ).hexdigest()
+    # Display sampling can underrepresent large triangles; expose its area
+    # coverage without treating sampled faces as scientific measurements.
+    display_geometry = _sample_mesh_display_geometry(points, faces, scale)
+    sampled_raw_area = sum(face_areas[index] for index in display_geometry["preview_face_indices"])
     return {
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
@@ -300,7 +295,9 @@ def measure_mesh_preview(
         "area_weighted_surface_centroid_m": centroid_m,
         "area_weighted_centroid_scale_uncertainty_m": centroid_uncertainty_m,
         "face_count": len(faces),
-        **_sample_mesh_display_geometry(points, faces, scale),
+        **display_geometry,
+        "preview_sampled_surface_area_m2": sampled_raw_area * scale * scale,
+        "preview_surface_area_fraction": sampled_raw_area / raw_area if raw_area > 0 else None,
         "vertex_count": len(points),
         "preview_referenced_bounds_in_source_frame_m": {
             "minimum": preview_min_m,
