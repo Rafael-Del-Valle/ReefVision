@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from datetime import UTC, date, datetime
 from typing import Literal
 
@@ -49,6 +50,20 @@ class MonitoringObservation(BaseModel):
     @classmethod
     def reject_technical_units(cls, value: str | None) -> str | None:
         return require_ecological_unit_type(value)
+
+    @field_validator("observed_at", mode="before")
+    @classmethod
+    def explicit_calendar_timestamp(cls, value: object) -> object:
+        # Pydantic otherwise converts Unix seconds (including numeric strings)
+        # into UTC datetimes. That would silently invent acquisition-time
+        # semantics for an unverified scientific observation.
+        if isinstance(value, datetime):
+            return value
+        if not isinstance(value, str) or not re.match(
+            r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()
+        ):
+            raise ValueError("Observation time must be an explicit ISO 8601 calendar timestamp")
+        return value
 
     @field_validator("observed_at")
     @classmethod
