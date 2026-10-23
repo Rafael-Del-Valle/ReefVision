@@ -182,6 +182,9 @@ export function ReviewQueueDashboard({
 
   const createQueue = useMutation({
     mutationFn: async () => {
+      if (!scopeReady) {
+        throw new Error("Review scope is not ready");
+      }
       const payload = {
         source_quality_control_run_id: selectedRunId || undefined,
         signal_weights: weights,
@@ -342,6 +345,7 @@ export function ReviewQueueDashboard({
             <label>
               Source QC run
               <select
+                disabled={!scopeReady || runs.isPending}
                 value={selectedRunId}
                 onChange={(event) => setSelectedRunId(event.target.value)}
               >
@@ -395,6 +399,7 @@ export function ReviewQueueDashboard({
               <button
                 type="button"
                 disabled={
+                  !scopeReady ||
                   createQueue.isPending ||
                   (scopeType === "dataset_version" && !datasetVersionId)
                 }
@@ -435,12 +440,12 @@ export function ReviewQueueDashboard({
                     selectedQueueId === queue.id ? "selected" : ""
                   }`}
                   onClick={() => {
-                      setSelectedQueueId(queue.id);
-                      setQuickReviewItemId(null);
-                      setCoordinationItemId(null);
-                      setOpenQuickReviewWhenReady(false);
-                      setPage(1);
-                    }}
+                    setSelectedQueueId(queue.id);
+                    setQuickReviewItemId(null);
+                    setCoordinationItemId(null);
+                    setOpenQuickReviewWhenReady(false);
+                    setPage(1);
+                  }}
                 >
                   <strong>{new Date(queue.created_at).toLocaleString()}</strong>
                   <span>{queueLabel(queue)}</span>
