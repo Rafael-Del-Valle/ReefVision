@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from reefvision.ml.video_tracking import TrackObservation
 from reefvision.ml.video_tracking_fusion import box_iou, fuse_tracked_models
-from reefvision.schemas.videos import VideoTrackKeyframe, VideoTrackingCreateRequest
+from reefvision.schemas.videos import VideoTrackingCreateRequest, VideoTrackKeyframe
 
 
 def observation(
@@ -24,11 +24,7 @@ def observation(
         class_name=kind,
         confidence=0.9,
         bbox=(x, 10.0, 20.0, 10.0),
-        mask_polygons=(
-            (((x, 10.0), (x + 20.0, 10.0), (x + 10.0, 20.0)),)
-            if mask
-            else None
-        ),
+        mask_polygons=((((x, 10.0), (x + 20.0, 10.0), (x + 10.0, 20.0)),) if mask else None),
     )
 
 
@@ -74,7 +70,9 @@ def test_fusion_uses_track_identity_to_fill_detector_gaps() -> None:
         segmenter_class_map={"fish": "same-class"},
     )
     assert [(item.frame, item.provider_track_id) for item in tracks] == [
-        (0, 4), (1, 4), (2, 4),
+        (0, 4),
+        (1, 4),
+        (2, 4),
     ]
     assert tracks[1].class_name == "project:same-class"
     assert report.matched_track_pairs == 1
@@ -95,12 +93,28 @@ def test_fusion_does_not_overwrite_disagreeing_same_frame_geometry() -> None:
 
 def test_fusion_does_not_match_different_project_classes() -> None:
     tracks, report = fuse_tracked_models(
-        [observation(0, 5)], [observation(0, 6, mask=True)],
+        [observation(0, 5)],
+        [observation(0, 6, mask=True)],
         detector_class_map={"fish": "class-a"},
         segmenter_class_map={"fish": "class-b"},
     )
     assert len(tracks) == 2
     assert report.matched_track_pairs == 0
+
+
+def test_fusion_leaves_exact_crossing_ambiguity_unmatched() -> None:
+    tracks, report = fuse_tracked_models(
+        [observation(5, 10), observation(5, 20)],
+        [observation(5, 101, mask=True), observation(5, 202, mask=True)],
+        detector_class_map={"fish": "same-class"},
+        segmenter_class_map={"fish": "same-class"},
+    )
+
+    assert report.matched_track_pairs == 0
+    assert len(tracks) == 4
+    detector_tracks = [item for item in tracks if item.provider_track_id in {10, 20}]
+    assert all(item.mask_polygons is None for item in detector_tracks)
+    assert len({item.provider_track_id for item in tracks}) == 4
 
 
 def test_reject_invalid_tracking_modes_and_secondary_pairings() -> None:
@@ -112,32 +126,39 @@ def test_reject_invalid_tracking_modes_and_secondary_pairings() -> None:
         )
     with pytest.raises(ValidationError, match="linking"):
         VideoTrackingCreateRequest(
-            model_id="det", segmentation_model_id="seg",
-            tracking_mode="hybrid", link_detections=False,
+            model_id="det",
+            segmentation_model_id="seg",
+            tracking_mode="hybrid",
+            link_detections=False,
         )
     with pytest.raises(ValidationError, match="only valid in hybrid"):
         VideoTrackingCreateRequest(model_id="det", segmentation_model_id="seg")
     request = VideoTrackingCreateRequest(
-        model_id="det", segmentation_model_id="seg",
-        tracking_mode="hybrid", hybrid_match_iou=0.75,
+        model_id="det",
+        segmentation_model_id="seg",
+        tracking_mode="hybrid",
+        hybrid_match_iou=0.75,
     )
     assert request.hybrid_match_iou == pytest.approx(0.75)
 
 
 def test_validate_retained_polygons_and_finite_coordinates() -> None:
     frame = VideoTrackKeyframe(
-        frame=4, bbox=(10, 10, 20, 20),
+        frame=4,
+        bbox=(10, 10, 20, 20),
         mask_polygons=[[(10, 10), (25, 10), (20, 20)]],
     )
     assert frame.mask_polygons is not None
     with pytest.raises(ValidationError):
         VideoTrackKeyframe(
-            frame=4, bbox=(10, 10, 20, 20),
+            frame=4,
+            bbox=(10, 10, 20, 20),
             mask_polygons=[[(10, 10), (20, 20)]],
         )
     with pytest.raises(ValidationError):
         VideoTrackKeyframe(
-            frame=4, bbox=(10, 10, 20, 20),
+            frame=4,
+            bbox=(10, 10, 20, 20),
             mask_polygons=[[(10, 10), (float("nan"), 20), (20, 20)]],
         )
 

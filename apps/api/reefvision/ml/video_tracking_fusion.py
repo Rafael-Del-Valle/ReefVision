@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, replace
+from math import isclose
 
 from reefvision.ml.video_tracking import TrackObservation
 
@@ -68,16 +69,53 @@ def fuse_tracked_models(
             if detector_label is None:
                 continue
             for segmenter in segment_items:
-                if detector_label != segmenter_class_map.get(segmenter.class_name.strip().casefold()):
+                if detector_label != segmenter_class_map.get(
+                    segmenter.class_name.strip().casefold()
+                ):
                     continue
                 overlap = box_iou(detector.bbox, segmenter.bbox)
                 if overlap >= minimum_iou:
-                    proposals.append((overlap, detector.provider_track_id, segmenter.provider_track_id))
+                    proposals.append(
+                        (overlap, detector.provider_track_id, segmenter.provider_track_id)
+                    )
+        detector_candidates: dict[int, list[tuple[float, int]]] = defaultdict(list)
+        segmenter_candidates: dict[int, list[tuple[float, int]]] = defaultdict(list)
+        for overlap, detection_id, segmentation_id in proposals:
+            detector_candidates[detection_id].append((overlap, segmentation_id))
+            segmenter_candidates[segmentation_id].append((overlap, detection_id))
+
+        def unique_best(candidates: list[tuple[float, int]]) -> int | None:
+            maximum = max((candidate[0] for candidate in candidates), default=None)
+            if maximum is None:
+                return None
+            winners = [
+                identity
+                for overlap, identity in candidates
+                if isclose(overlap, maximum, rel_tol=1e-12, abs_tol=1e-12)
+            ]
+            return winners[0] if len(winners) == 1 else None
+
+        detector_best = {
+            identity: unique_best(candidates)
+            for identity, candidates in detector_candidates.items()
+        }
+        segmenter_best = {
+            identity: unique_best(candidates)
+            for identity, candidates in segmenter_candidates.items()
+        }
         used_detector: set[int] = set()
         used_segmenter: set[int] = set()
         for overlap, detection_id, segmentation_id in sorted(
             proposals, key=lambda candidate: (-candidate[0], candidate[1], candidate[2])
         ):
+            # Crossing objects can yield equally plausible same-frame matches.
+            # Only use mutual, unique best overlaps as identity evidence rather
+            # than resolving scientific ambiguity with an arbitrary ID order.
+            if (
+                detector_best[detection_id] != segmentation_id
+                or segmenter_best[segmentation_id] != detection_id
+            ):
+                continue
             if detection_id in used_detector or segmentation_id in used_segmenter:
                 continue
             used_detector.add(detection_id)
