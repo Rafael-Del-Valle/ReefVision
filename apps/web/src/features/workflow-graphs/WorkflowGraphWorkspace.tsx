@@ -20,6 +20,7 @@ import {
   workflowTemplates,
 } from "./workflowTemplates";
 import { LocalMeshPreview } from "./LocalMeshPreview";
+import { LocalPointCloudPreview } from "./LocalPointCloudPreview";
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
@@ -267,6 +268,7 @@ export function WorkflowGraphWorkspace({
       </div>
 
       <LocalMeshPreview projectId={project.id} />
+      <LocalPointCloudPreview projectId={project.id} />
 
       {poseDatasetSources.length > 0 && (
         <section className="panel-card">
