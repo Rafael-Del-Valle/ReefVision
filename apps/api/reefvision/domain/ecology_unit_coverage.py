@@ -96,12 +96,18 @@ def audit_unit_coverage(
             raise ValueError("Expected-roster exclusion requires unobserved organisms")
         if reason == "missing_followup" and complete == len(flags):
             raise ValueError("Missing-followup exclusion requires an incomplete organism")
+        if reason == "missing_followup" and missing_scheduled:
+            raise ValueError("Missing scheduled visits must take precedence over follow-up QC")
         if reason == "nonmatching_sampling_window" and complete != len(flags):
             raise ValueError("Sampling-window exclusion cannot conceal missing follow-up")
         if reason == "nonmatching_sampling_window" and unobserved_ids:
             raise ValueError("Sampling-window exclusion cannot conceal missing roster organisms")
+        if reason == "nonmatching_sampling_window" and missing_scheduled:
+            raise ValueError("Sampling-window exclusion cannot conceal missing scheduled visits")
+        # A scheduled singleton is incomplete but still has actionable missing
+        # calendar dates; retain both counts instead of rejecting its audit.
         if reason == "missing_scheduled_observations" and (
-            not missing_scheduled or unobserved_ids or complete != len(flags)
+            not missing_scheduled or unobserved_ids
         ):
             raise ValueError("Scheduled-visit exclusion must reflect missing scheduled dates")
         results.append(
