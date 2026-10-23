@@ -98,6 +98,28 @@ describe("PointCloudArtifactViewer", () => {
     );
   });
 
+  it("fails closed on contradictory scientific verification or biological measurements", () => {
+    const contradictoryArtifacts = [
+      { ...validArtifact, provenance: null },
+      { ...validArtifact, provenance: { calibration_verified: true } },
+      {
+        ...validArtifact,
+        provenance: {
+          calibration_verified: false,
+          coordinate_registration_verified: true,
+        },
+      },
+      { ...validArtifact, measurement_status: "scientist_verified" },
+      { ...validArtifact, surface_area_m2: 0.25 },
+      { ...validArtifact, branch_length_m: 0.5 },
+    ];
+    for (const artifact of contradictoryArtifacts) {
+      expect(parsePointCloudRenderArtifact(artifact)).toBeNull();
+    }
+    // An explicitly unregistered, unverified saved preview remains displayable.
+    expect(parsePointCloudRenderArtifact(validArtifact)).not.toBeNull();
+  });
+
   it("renders decimated colorless samples with preserved original indices", () => {
     const { container } = render(
       <PointCloudArtifactViewer
