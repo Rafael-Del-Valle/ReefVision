@@ -629,8 +629,11 @@ export function WorkflowGraphWorkspace({
                     {artifact.data_type === "mesh_measurement_preview" && (
                       <MeshArtifactViewer artifact={artifact.payload_json} />
                     )}
-                    {artifact.data_type === "point_cloud_measurement_preview" && (
-                      <PointCloudArtifactViewer artifact={artifact.payload_json} />
+                    {artifact.data_type ===
+                      "point_cloud_measurement_preview" && (
+                      <PointCloudArtifactViewer
+                        artifact={artifact.payload_json}
+                      />
                     )}
                     <details>
                       <summary>Inspect artifact</summary>
