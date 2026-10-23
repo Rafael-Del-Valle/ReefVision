@@ -16,22 +16,22 @@ from reefvision.tests.test_workflow_ecology_1_2 import _graph
 def _payload(missing: bool = False) -> dict[str, Any]:
     rows = []
     for organism in ("A", "B"):
-        for day in ((1, 3) if missing and organism == "B" else (1, 2, 3)):
-            rows.append({
-                "organism_id": organism,
-                "metric_name": "polyp_count",
-                "source_record_id": f"{organism}-{day}",
-                "observed_at": f"2026-04-0{day}T12:00:00Z",
-                "value": 10 + day,
-                "unit": "count",
-                "experimental_unit_id": "tank-1",
-            })
+        for day in (1, 3) if missing and organism == "B" else (1, 2, 3):
+            rows.append(
+                {
+                    "organism_id": organism,
+                    "metric_name": "polyp_count",
+                    "source_record_id": f"{organism}-{day}",
+                    "observed_at": f"2026-04-0{day}T12:00:00Z",
+                    "value": 10 + day,
+                    "unit": "count",
+                    "experimental_unit_id": "tank-1",
+                }
+            )
     return {
         "observations": rows,
         "experimental_unit_type": "tank",
-        "expected_sampling_dates_by_unit": {
-            "tank-1": ["2026-04-03", "2026-04-01", "2026-04-02"]
-        },
+        "expected_sampling_dates_by_unit": {"tank-1": ["2026-04-03", "2026-04-01", "2026-04-02"]},
     }
 
 
@@ -57,9 +57,7 @@ def test_missing_intermediate_visit_excludes_tank_without_claiming_mortality(
     assert body["population_summaries"] == []
     assert body["independent_unit_count"] == 1
     assert body["unit_coverage"][0]["exclusion_reason"] == "missing_scheduled_observations"
-    assert body["unit_coverage"][0]["missing_scheduled_dates_by_organism"] == {
-        "B": ["2026-04-02"]
-    }
+    assert body["unit_coverage"][0]["missing_scheduled_dates_by_organism"] == {"B": ["2026-04-02"]}
 
 
 @pytest.mark.parametrize(
@@ -96,10 +94,12 @@ def test_saved_workflow_persists_schedule_qc(client: TestClient) -> None:
     project_id = str(create_project(client, "Scheduled visits")["id"])
     request = _payload(True)
     graph = _graph(request["observations"])
-    graph["nodes"][1]["parameters"].update({
-        "experimental_unit_type": "tank",
-        "expected_sampling_dates_by_unit": request["expected_sampling_dates_by_unit"],
-    })
+    graph["nodes"][1]["parameters"].update(
+        {
+            "experimental_unit_type": "tank",
+            "expected_sampling_dates_by_unit": request["expected_sampling_dates_by_unit"],
+        }
+    )
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
@@ -114,23 +114,26 @@ def test_saved_workflow_persists_schedule_qc(client: TestClient) -> None:
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        item for item in detail.json()["artifacts"]
-        if item["data_type"] == "longitudinal_analysis"
+        item for item in detail.json()["artifacts"] if item["data_type"] == "longitudinal_analysis"
     ]
     assert len(artifacts) == 1
     standalone = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
     assert standalone.status_code == 200, standalone.text
     assert artifacts[0]["payload_json"]["unit_coverage"] == standalone.json()["unit_coverage"]
-    assert artifacts[0]["payload_json"]["analysis_provenance"] == standalone.json()[
-        "analysis_provenance"
-    ]
+    assert (
+        artifacts[0]["payload_json"]["analysis_provenance"]
+        == standalone.json()["analysis_provenance"]
+    )
     assert artifacts[0]["payload_json"]["evidence_level"] == "caller_supplied_unverified"
 
 
@@ -140,12 +143,12 @@ def test_invalid_saved_calendar_does_not_produce_successful_analysis(
     project_id = str(create_project(client, "Invalid planned visits")["id"])
     request = _payload()
     graph = _graph(request["observations"])
-    graph["nodes"][1]["parameters"].update({
-        "experimental_unit_type": "tank",
-        "expected_sampling_dates_by_unit": {
-            "tank-1": ["2026-04-01", "2026-04-03"]
-        },
-    })
+    graph["nodes"][1]["parameters"].update(
+        {
+            "experimental_unit_type": "tank",
+            "expected_sampling_dates_by_unit": {"tank-1": ["2026-04-01", "2026-04-03"]},
+        }
+    )
     saved = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
         json={"graph": graph, "create_new_revision": True},
@@ -157,15 +160,17 @@ def test_invalid_saved_calendar_does_not_produce_successful_analysis(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is False
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is False
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert not any(
-        item["data_type"] == "longitudinal_analysis"
-        for item in detail.json()["artifacts"]
+        item["data_type"] == "longitudinal_analysis" for item in detail.json()["artifacts"]
     )
 
 
