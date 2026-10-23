@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from reefvision.storage.images import create_browser_display
 from reefvision.tests.test_images import create_project, import_one
 
 
@@ -66,3 +68,51 @@ def test_jpeg_camera_filename_aliases_preserve_original_content(
     response = client.get(f"/api/v1/images/{image_id}/content")
     assert response.status_code == 200
     assert response.content == payload
+
+
+@pytest.mark.parametrize("progressive", [False, True])
+def test_truncated_camera_jpeg_rejected_before_import_commit(
+    client: TestClient, progressive: bool
+) -> None:
+    project = create_project(client, "Truncated camera JPEG")
+    stream = BytesIO()
+    Image.new("RGB", (512, 512), (20, 30, 40)).save(
+        stream, format="JPEG", progressive=progressive
+    )
+    truncated = stream.getvalue()[:-2]  # Remove JPEG end-of-image marker.
+    report = import_one(client, project["id"], filename="DSC_0002.JPEG", content=truncated)
+    assert not report["successful"], report
+    assert len(report["failed"]) == 1, report
+
+
+@pytest.mark.parametrize(
+    ("orientation", "expected"),
+    [
+        (1, (64, 48)),
+        (2, (64, 48)),
+        (3, (64, 48)),
+        (4, (64, 48)),
+        (5, (48, 64)),
+        (6, (48, 64)),
+        (7, (48, 64)),
+        (8, (48, 64)),
+    ],
+)
+def test_camera_display_exif_orientation_preserves_original(
+    tmp_path: Path, orientation: int, expected: tuple[int, int]
+) -> None:
+    source = tmp_path / "DSC_0042.JPEG"
+    display = tmp_path / "display.png"
+    exif = Image.Exif()
+    exif[274] = orientation
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(source, format="JPEG", exif=exif)
+    original = source.read_bytes()
+    create_browser_display(source, display)
+    with Image.open(display) as rendered:
+        assert rendered.format == "PNG"
+        assert rendered.size == expected
+        assert rendered.getexif().get(274) is None
+    assert source.read_bytes() == original
+    with Image.open(source) as camera:
+        assert camera.size == (64, 48)
+        assert camera.getexif().get(274) == orientation
