@@ -264,10 +264,7 @@ export function cancelWorkflowRunJob(
 export interface MeshPreviewCalibration {
   meters_per_unit: number;
   calibration_method:
-    | "ruler"
-    | "photogrammetry_control"
-    | "instrument"
-    | "other";
+    "ruler" | "photogrammetry_control" | "instrument" | "other";
   calibration_evidence: string;
   relative_scale_uncertainty?: number | null;
 }
@@ -308,9 +305,7 @@ export async function previewLocalMeshFile(
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = "";
     for (let offset = 0; offset < bytes.length; offset += 8192) {
-      binary += String.fromCharCode(
-        ...bytes.subarray(offset, offset + 8192),
-      );
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
     }
     geometry = { glb_base64: btoa(binary) };
   } else {
@@ -318,7 +313,8 @@ export async function previewLocalMeshFile(
     if (content.length > 256_000) {
       throw new Error("Mesh text exceeds the supported preview limit.");
     }
-    geometry = extension === "obj" ? { obj_text: content } : { ply_text: content };
+    geometry =
+      extension === "obj" ? { obj_text: content } : { ply_text: content };
   }
   return request<Record<string, unknown>>(
     `/projects/${encodeURIComponent(projectId)}/spatial/mesh-preview`,
