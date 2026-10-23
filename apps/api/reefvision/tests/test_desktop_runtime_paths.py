@@ -43,6 +43,23 @@ def _stamp_database(settings: Settings, revision: str) -> Path:
     return database
 
 
+def _add_native_review_table(database: Path, *, revision: str | None = None) -> None:
+    """Make a synthetic revision stamp satisfy the 1.6 lineage guard.
+
+    The separate real-migration regression exercises actual Alembic DDL.
+    """
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE review_queue_item_events ("
+            "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
+            "project_id TEXT, client_request_id TEXT, event_type TEXT, actor TEXT, "
+            "comment TEXT, assignee TEXT, created_at TEXT)"
+        )
+        if revision is not None:
+            connection.execute("UPDATE alembic_version SET version_num = ?", (revision,))
+        connection.commit()
+
+
 def test_provider_runtime_dir_uses_desktop_data_dir_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -94,6 +111,10 @@ def test_current_database_revision_skips_alembic_upgrade(
         settings,
         current_head,
     )
+    # A bare Alembic stamp is no longer a valid 0038 database: the lineage
+    # guard deliberately requires the matching review-events schema.
+    if current_head == "0038":
+        _add_native_review_table(database)
     before = database.read_bytes()
 
     def unexpected_upgrade(*args, **kwargs) -> None:
@@ -120,8 +141,11 @@ def test_older_database_revision_still_invokes_alembic_upgrade(
     calls: list[str] = []
 
     def record_upgrade(config, target: str) -> None:
-        assert config.get_main_option("sqlalchemy.url") == (settings.resolved_database_url)
+        assert config.get_main_option("sqlalchemy.url") == settings.resolved_database_url
         calls.append(target)
+        # The desktop now checks the post-upgrade revision and lineage.
+        # Model a successful migration rather than a no-op mock.
+        _add_native_review_table(settings.resolved_data_dir / "reefvision.db", revision="0038")
 
     monkeypatch.setattr(
         command,
