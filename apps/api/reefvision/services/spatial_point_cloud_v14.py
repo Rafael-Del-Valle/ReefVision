@@ -83,6 +83,8 @@ def parse_ascii_ply_points(
         raise ValueError("Point-cloud PLY body length does not match vertex count")
     xyz = [properties.index(axis) for axis in ("x", "y", "z")]
     points: list[list[float]] = []
+    # Stage RGB until every vertex passes validation: never leak partial colors.
+    staged_colors: list[list[int]] = []
     for row in rows:
         values = row.split()
         if len(values) != len(properties):
@@ -100,9 +102,10 @@ def parse_ascii_ply_points(
                     raise ValueError("Point-cloud RGB channels must be 0-255 integers")
         points.append(parsed)
         if colors_out is not None and "red" in properties:
-            colors_out.append(
-                [int(values[properties.index(c)]) for c in ("red", "green", "blue")]
-            )
+            rgb = [int(values[properties.index(c)]) for c in ("red", "green", "blue")]
+            staged_colors.append(rgb)
+    if colors_out is not None:
+        colors_out.extend(staged_colors)
     return points
 
 
