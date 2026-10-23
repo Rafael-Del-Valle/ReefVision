@@ -28,8 +28,9 @@ def _prepare_desktop_migration(monkeypatch: pytest.MonkeyPatch, engine: object) 
 
 def test_desktop_rejects_foreign_0038_even_when_at_head(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'lineage.sqlite'}")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
         connection.execute(text("INSERT INTO alembic_version VALUES ('0038')"))
@@ -37,7 +38,7 @@ def test_desktop_rejects_foreign_0038_even_when_at_head(
         connection.execute(text("INSERT INTO scientific_records VALUES ('preserve-me')"))
     _prepare_desktop_migration(monkeypatch, engine)
 
-    settings = SimpleNamespace(resolved_database_url="sqlite+pysqlite:///:memory:")
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
     with pytest.raises(RuntimeError, match="Unsafe ReefVision Alembic revision 0038"):
         desktop.run_pending_migrations(settings)
 
@@ -49,8 +50,9 @@ def test_desktop_rejects_foreign_0038_even_when_at_head(
 
 def test_desktop_accepts_native_0038_at_head_without_upgrade(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'lineage.sqlite'}")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
         connection.execute(text("INSERT INTO alembic_version VALUES ('0038')"))
@@ -64,7 +66,7 @@ def test_desktop_accepts_native_0038_at_head_without_upgrade(
         )
     _prepare_desktop_migration(monkeypatch, engine)
 
-    settings = SimpleNamespace(resolved_database_url="sqlite+pysqlite:///:memory:")
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
     desktop.run_pending_migrations(settings)
 
     with engine.connect() as connection:
