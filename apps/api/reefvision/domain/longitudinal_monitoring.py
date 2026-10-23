@@ -13,6 +13,7 @@ from reefvision.domain.ecology_lineage_policy import (
 )
 from reefvision.domain.ecology_unit_coverage import (
     audit_unit_coverage,
+    summarize_planned_sampling_dates,
     summarize_planned_sampling_effort,
 )
 from reefvision.domain.errors import ValidationError
@@ -27,6 +28,7 @@ from reefvision.schemas.longitudinal_monitoring import (
     LongitudinalAnalysisResponse,
     LongitudinalChange,
     MonitoringObservation,
+    PlannedSamplingDateCoverage,
     PlannedSamplingEffort,
 )
 
@@ -264,7 +266,7 @@ def analyze_longitudinal(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
             algorithm_version=(
-                "ecology-longitudinal-0011"
+                "ecology-longitudinal-0012"
                 if request.expected_sampling_dates_by_unit is not None
                 else "ecology-longitudinal-0008"
             ),
@@ -302,6 +304,10 @@ def analyze_longitudinal(
         excluded_units=excluded_units,
         unit_coverage=unit_coverage,
         planned_sampling_effort=planned_sampling_effort,
+        planned_sampling_date_coverage=[
+            PlannedSamplingDateCoverage.model_validate(row)
+            for row in summarize_planned_sampling_dates(unit_coverage)
+        ],
         limitations=[
             "Caller-supplied observations are not verified against project data or calibration.",
             "Parent-colony identity and experimental units are declared, not authenticated.",
@@ -318,6 +324,8 @@ def analyze_longitudinal(
             "no population inference or significance is claimed.",
             "Declared planned sampling dates exclude units with missing visits; "
             "missing visits do not establish mortality, absence or zero abundance.",
+            "Per-visit UTC sampling coverage identifies missing organism observations, not " 
+            "mortality, absence or zero abundance.",
             "Planned organism-visit coverage counts missing measurements, not mortality; "
             "without a roster, completely unobserved organisms cannot enter its denominator.",
             "Different intermediate observation dates within a unit are disclosed as QC; "

@@ -226,6 +226,21 @@ class PlannedSamplingEffort(BaseModel):
     expected_roster_supplied: bool = False
 
 
+
+class PlannedSamplingDateCoverage(BaseModel):
+    """Per-UTC-visit organism coverage, not a mortality or abundance estimate."""
+
+    experimental_unit_id: str
+    metric_name: str
+    sampling_date: date
+    expected_organism_count: int = Field(ge=1)
+    observed_organism_count: int = Field(ge=0)
+    observed_organism_ids: list[str] = Field(default_factory=list)
+    missing_organism_ids: list[str] = Field(default_factory=list)
+    observation_coverage_fraction: float = Field(ge=0, le=1)
+    expected_roster_supplied: bool = False
+
+
 class ExcludedExperimentalUnit(BaseModel):
     experimental_unit_id: str
     metric_name: str
@@ -255,4 +270,5 @@ class LongitudinalAnalysisResponse(BaseModel):
     excluded_units: list[ExcludedExperimentalUnit] = Field(default_factory=list)
     unit_coverage: list[ExperimentalUnitCoverage] = Field(default_factory=list)
     planned_sampling_effort: list[PlannedSamplingEffort] = Field(default_factory=list)
+    planned_sampling_date_coverage: list[PlannedSamplingDateCoverage] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

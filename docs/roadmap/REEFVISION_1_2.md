@@ -496,3 +496,24 @@ This check does **not** authenticate experimental units, organisms, reviewed
 source annotations, or calibration. Persistent project-owned identity,
 verified longitudinal records, registered study designs, source review gates,
 full exact-head CI and installed Windows acceptance remain outstanding.
+
+## Per-visit organism sampling coverage (2026-10-23)
+
+The exploratory longitudinal API and executable, persisted
+`ecology_longitudinal_analysis` Workflow Builder artifact now include typed
+`planned_sampling_date_coverage` rows for every declared UTC visit, metric
+and experimental unit. Each row reports the expected and observed organism
+denominators, sorted observed/missing organism IDs and the observed fraction.
+When a caller-declared roster exists, organisms never observed for a metric
+are counted as missing measurements on every planned date. Without a roster,
+the denominator is explicitly limited to organisms observed for that metric.
+Results are deterministic, and the scheduled analysis algorithm identifier
+advances to `ecology-longitudinal-0012` for reproducibility.
+
+These are **sampling-effort QC counts**, not observed abundance, organism
+mortality, verified specimen identity, biological independence or evidence of
+zero polyp counts. The existing `caller_supplied_unverified` review gate
+remains mandatory. This feature reuses the existing typed Workflow Builder
+analysis node rather than adding a duplicate node. The persistent identity,
+calibration and study-design registry remain unfinished, as do installed
+Windows and complete scientific acceptance tests.

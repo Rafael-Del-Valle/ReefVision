@@ -171,3 +171,40 @@ def summarize_planned_sampling_effort(
             }
         )
     return summaries
+
+def summarize_planned_sampling_dates(
+    coverage: Iterable[Any],
+) -> list[dict[str, Any]]:
+    """Audit each planned UTC visit by biological organism, never by image.
+
+    A roster adds completely unobserved organisms to every planned date.
+    Missing measurements are not zero counts, absences or deaths.
+    """
+    results: list[dict[str, Any]] = []
+    for row in sorted(coverage, key=lambda item: (item.experimental_unit_id, item.metric_name)):
+        scheduled = row.expected_sampling_dates
+        if not scheduled:
+            continue
+        observed = row.observed_sampling_dates_by_organism
+        expected_ids = set(observed) | set(row.unobserved_organism_ids)
+        count = row.expected_organism_count or row.observed_organism_count
+        if len(expected_ids) != count:
+            raise ValueError("Planned date roster disagrees with expected organism count")
+        for day in scheduled:
+            present = sorted(organism for organism, dates in observed.items() if day in dates)
+            missing = sorted(expected_ids - set(present))
+            results.append(
+                {
+                    "experimental_unit_id": row.experimental_unit_id,
+                    "metric_name": row.metric_name,
+                    "sampling_date": day,
+                    "expected_organism_count": count,
+                    "observed_organism_count": len(present),
+                    "observed_organism_ids": present,
+                    "missing_organism_ids": missing,
+                    "observation_coverage_fraction": len(present) / count,
+                    "expected_roster_supplied": row.expected_organism_count is not None,
+                }
+            )
+    return results
+
