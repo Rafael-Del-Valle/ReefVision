@@ -334,6 +334,7 @@ export async function previewLocalPointCloudFile(
   projectId: string,
   file: File,
   calibration: MeshPreviewCalibration,
+  pointIndexPairs?: Array<[number, number]>,
 ): Promise<Record<string, unknown>> {
   if (file.name.split(".").pop()?.toLowerCase() !== "ply") {
     throw new Error("Choose a vertex-only ASCII PLY point-cloud file.");
@@ -362,6 +363,22 @@ export async function previewLocalPointCloudFile(
   ) {
     throw new Error("Relative scale uncertainty must be between 0 and 1.");
   }
+  if (
+    pointIndexPairs &&
+    (pointIndexPairs.length > 32 ||
+      pointIndexPairs.some(
+        (pair) =>
+          !Array.isArray(pair) ||
+          pair.length !== 2 ||
+          pair.some(
+            (index) =>
+              !Number.isInteger(index) || index < 0 || index >= 2_000,
+          ) ||
+          pair[0] === pair[1],
+      ))
+  ) {
+    throw new Error("Point chord indices must be distinct integers from 0 to 1999.");
+  }
   const bytes = await file.arrayBuffer();
   if (!bytes.byteLength || bytes.byteLength > 256_000) {
     throw new Error("Point-cloud file exceeds the supported preview limit.");
@@ -378,6 +395,7 @@ export async function previewLocalPointCloudFile(
         ...calibration,
         ply_text: plyText,
         source_label: file.name,
+        ...(pointIndexPairs?.length ? { point_index_pairs: pointIndexPairs } : {}),
       }),
     },
   );
