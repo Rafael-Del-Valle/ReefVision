@@ -18,7 +18,10 @@ function isVec3(value: unknown): value is Vec3 {
   return (
     Array.isArray(value) &&
     value.length === 3 &&
-    value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))
+    value.every(
+      (coordinate) =>
+        typeof coordinate === "number" && Number.isFinite(coordinate),
+    )
   );
 }
 
@@ -37,7 +40,9 @@ function isFace(value: unknown, vertexCount: number): value is Face {
 }
 
 /** Validate persisted renderer data before drawing; never infer scientific verification. */
-export function parseMeshRenderArtifact(value: unknown): MeshRenderArtifact | null {
+export function parseMeshRenderArtifact(
+  value: unknown,
+): MeshRenderArtifact | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
@@ -61,7 +66,8 @@ export function parseMeshRenderArtifact(value: unknown): MeshRenderArtifact | nu
     !Array.isArray(sourceFaceIndices) ||
     sourceFaceIndices.length !== faces.length ||
     !sourceFaceIndices.every(
-      (index) => typeof index === "number" && Number.isInteger(index) && index >= 0,
+      (index) =>
+        typeof index === "number" && Number.isInteger(index) && index >= 0,
     ) ||
     !isVec3(target) ||
     typeof radius !== "number" ||
@@ -155,17 +161,25 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
   }
 
   return (
-    <section aria-label="Interactive mesh preview" data-testid="mesh-artifact-viewer">
+    <section
+      aria-label="Interactive mesh preview"
+      data-testid="mesh-artifact-viewer"
+    >
       <p className="annotation-helper">
-        Orthographic 3D visualization only. Calibration and coordinate registration
-        remain unverified; sampled triangles must not replace full-mesh scientific
-        measurements.
+        Orthographic 3D visualization only. Calibration and coordinate
+        registration remain unverified; sampled triangles must not replace
+        full-mesh scientific measurements.
       </p>
       <svg
         viewBox="0 0 560 400"
         role="img"
         aria-label="Rotatable mesh surface preview"
-        style={{ width: "100%", maxHeight: 440, background: "#092333", borderRadius: 8 }}
+        style={{
+          width: "100%",
+          maxHeight: 440,
+          background: "#092333",
+          borderRadius: 8,
+        }}
       >
         {polygons.map((polygon, index) => (
           <polygon
