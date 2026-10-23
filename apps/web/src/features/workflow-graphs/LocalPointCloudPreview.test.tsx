@@ -127,6 +127,7 @@ describe("LocalPointCloudPreview", () => {
       "reef-project",
       expect.any(File),
       expect.objectContaining({ calibration_evidence: "New ruler evidence" }),
+      undefined,
     );
   });
 
@@ -172,6 +173,7 @@ describe("LocalPointCloudPreview", () => {
       "new-project",
       replacement,
       expect.objectContaining({ calibration_evidence: "" }),
+      undefined,
     );
   });
 
