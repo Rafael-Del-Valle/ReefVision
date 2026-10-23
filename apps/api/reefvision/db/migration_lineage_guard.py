@@ -8,7 +8,6 @@ missing migration. Do not stamp, mutate, or delete any user schema here.
 
 from sqlalchemy import Connection, inspect, text
 
-
 _REVIEW_TABLE = "review_queue_item_events"
 _REVIEW_COLUMNS = frozenset(
     {
