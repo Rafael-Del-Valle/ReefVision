@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import date
 from typing import Any
 
 
@@ -28,7 +29,7 @@ def audit_unit_coverage(
         raise ValueError("Completed change has no corresponding observed series")
     by_unit_metric: dict[tuple[str, str], list[tuple[str, bool]]] = defaultdict(list)
     organism_memberships: dict[str, str] = {}
-    sampling_dates: dict[tuple[str, str], dict[str, list[Any]]] = defaultdict(dict)
+    sampling_dates: dict[tuple[str, str], dict[str, list[date]]] = defaultdict(dict)
     for (organism_id, metric_name), observations in grouped.items():
         if not observations:
             raise ValueError("An organism/metric series cannot be empty")
