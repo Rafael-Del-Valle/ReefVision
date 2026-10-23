@@ -37,10 +37,7 @@ def test_review_lineage_0038_is_accepted_without_writes() -> None:
             text("INSERT INTO review_queue_item_events (id) VALUES ('event-preserved')")
         )
         assert_compatible_revision_0038(connection)
-        assert (
-            connection.scalar(text("SELECT id FROM review_queue_item_events"))
-            == "event-preserved"
-        )
+        assert connection.scalar(text("SELECT id FROM review_queue_item_events")) == "event-preserved"
 
 
 @pytest.mark.parametrize(
@@ -69,9 +66,12 @@ def test_colliding_0038_rejected_without_mutating_assets(tables: tuple[str, ...]
         assert connection.scalar(text("SELECT value FROM preserved")) == "do not delete"
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0038"
         for table in tables:
-            assert connection.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
-            ).scalar() == table
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+                ).scalar()
+                == table
+            )
 
 
 def test_colliding_0038_rejects_incomplete_review_table() -> None:
