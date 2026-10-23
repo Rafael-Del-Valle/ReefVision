@@ -45,6 +45,24 @@ def test_log_tail_rejects_unsafe_paths(tmp_path: Path, filename: str) -> None:
     assert error.value.status_code == 403
 
 
+def test_log_tail_strips_terminal_control_sequences(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = (
+        b"\x1b[2J\x1b[31mEpoch 2\x1b[0m\n"
+        b"\x1b]0;Spoofed terminal title\x07"
+        b"train/box_loss=0.25\x00\x08\n"
+    )
+    log.write_bytes(original)
+
+    result = training_routes._training_log_tail("training.log", tmp_path)
+
+    assert result == {
+        "available": True,
+        "text": "Epoch 2\ntrain/box_loss=0.25\n",
+    }
+    assert log.read_bytes() == original
+
+
 def test_training_log_api_uses_persisted_run_path_only(
     client: TestClient,
     test_settings: Settings,

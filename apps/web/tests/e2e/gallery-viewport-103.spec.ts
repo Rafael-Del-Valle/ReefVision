@@ -182,12 +182,30 @@ test("initial image and gallery scrolling", async ({ page }) => {
     filmstrip.evaluate((element) => element.scrollLeft);
   await expect.poll(scrollOffset).toBeGreaterThan(0);
 
+  // Keyboard navigation must not scroll the document or partially displace
+  // the main image. Only the horizontal thumbnail filmstrip may move.
   await workbench.focus();
+  const documentScrollBeforeNavigation = await page.evaluate(
+    () => window.scrollY,
+  );
   await page.keyboard.press("Home");
   await assertDecodedAndContained(1600, 1200);
   await expect(
     workbench.getByRole("listitem", { name: "Focus camera-01.JPEG" }),
   ).toHaveAttribute("aria-current", "true");
+  expect(await page.evaluate(() => window.scrollY)).toBe(
+    documentScrollBeforeNavigation,
+  );
+  await page.keyboard.press("End");
+  await assertDecodedAndContained(6000, 400);
+  expect(await page.evaluate(() => window.scrollY)).toBe(
+    documentScrollBeforeNavigation,
+  );
+  await page.keyboard.press("Home");
+  await assertDecodedAndContained(1600, 1200);
+  expect(await page.evaluate(() => window.scrollY)).toBe(
+    documentScrollBeforeNavigation,
+  );
   expect(displayRequests).toContain("image-1");
   expect(displayRequests).toContain("image-12");
 });
