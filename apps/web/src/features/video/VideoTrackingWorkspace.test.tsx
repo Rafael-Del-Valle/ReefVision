@@ -823,7 +823,9 @@ describe("VideoTrackingWorkspace", () => {
         name: /I confirm external frame indices correspond to this video/,
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Import pose" }));
+    const importButton = screen.getByRole("button", { name: "Import pose" });
+    await waitFor(() => expect(importButton).toBeEnabled());
+    fireEvent.click(importButton);
 
     await waitFor(() =>
       expect(poseInteropApi.importPoseInteroperability).toHaveBeenCalledWith(
