@@ -214,7 +214,8 @@ export function parsePointCloudRenderArtifact(
     radius,
     totalCount: totalCount as number,
     chords,
-    omittedExtrema: omittedExtrema === undefined ? null : (omittedExtrema as string[]),
+    omittedExtrema:
+      omittedExtrema === undefined ? null : (omittedExtrema as string[]),
   };
 }
 
