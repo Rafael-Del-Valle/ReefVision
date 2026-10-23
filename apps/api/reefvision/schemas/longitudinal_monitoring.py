@@ -99,6 +99,22 @@ class LongitudinalAnalysisRequest(BaseModel):
         default=None, max_length=10000
     )
 
+    @field_validator("expected_sampling_dates_by_unit", mode="before")
+    @classmethod
+    def require_explicit_iso_sampling_dates(cls, value: object) -> object:
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("Expected sampling calendar must map unit IDs to UTC dates")
+        for dates in value.values():
+            if not isinstance(dates, list) or any(
+                not isinstance(day, str)
+                or re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", day) is None
+                for day in dates
+            ):
+                raise ValueError("Expected sampling dates must be explicit ISO YYYY-MM-DD strings")
+        return value
+
     @field_validator("experimental_unit_type")
     @classmethod
     def nonempty_unit_type(cls, value: str | None) -> str | None:
