@@ -40,10 +40,8 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     )
     assert forbidden.status_code == 200, forbidden.text
     assert forbidden.json()["valid"] is False
-    assert any(
-        issue["code"] == "pose_dataset_scope_mismatch"
-        for issue in forbidden.json()["issues"]
-    )
+    issue_codes = {issue["code"] for issue in forbidden.json()["issues"]}
+    assert "pose_dataset_scope_mismatch" in issue_codes
 
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
