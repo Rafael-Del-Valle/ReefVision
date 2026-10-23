@@ -13,6 +13,7 @@ from reefvision.db.models import (
     ExperimentRecord,
     Job,
     ModelRegistration,
+    PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
     PoseModelSchemaBinding,
     PoseTrainingDataset,
@@ -140,6 +141,25 @@ def _pose_dataset(
     if canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
         raise ValidationError(
             f"Pose {role} dataset manifest checksum no longer matches frozen truth"
+        )
+
+    # The planner validates frozen truth, but the execution adapter must also
+    # reject schema drift after planning or when invoked independently.
+    schema = session.get(PoseLandmarkSchema, dataset.pose_schema_id)
+    revision = session.scalar(
+        select(PoseLandmarkSchemaRevision).where(
+            PoseLandmarkSchemaRevision.schema_id == dataset.pose_schema_id,
+            PoseLandmarkSchemaRevision.revision == dataset.pose_schema_revision,
+        )
+    )
+    if (
+        schema is None
+        or schema.project_id != project_id
+        or revision is None
+        or revision.content_hash != dataset.pose_schema_content_hash
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset landmark schema no longer matches frozen truth"
         )
 
     advertised_manifest = str(payload.get("manifest_sha256") or "")
