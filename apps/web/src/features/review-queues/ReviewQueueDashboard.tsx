@@ -138,10 +138,9 @@ export function ReviewQueueDashboard({
   }, [project.id]);
 
   useEffect(() => {
-    if (!queues.data?.length) {
-      setSelectedQueueId("");
-      return;
-    }
+    // A just-created queue can be selected before the refreshed list arrives.
+    // Do not erase that selection merely because the previous list was empty.
+    if (!queues.data?.length) return;
     if (!selectedQueueId) {
       setSelectedQueueId(queues.data[0].id);
     }
