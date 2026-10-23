@@ -137,6 +137,10 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             width, height = image.size
             if width <= 0 or height <= 0:
                 raise InvalidImageError("Image dimensions must be greater than zero")
+            # verify() checks the JPEG structure, not complete pixel decoding.
+            # Reject truncated camera files before committing scientific images.
+            if decoded_format == "JPEG":
+                image.load()
             if decoded_format == "GIF" and getattr(image, "n_frames", 1) != 1:
                 raise UnsupportedImageError(
                     "Animated GIFs cannot be safely imported as a single scientific image"
@@ -189,7 +193,8 @@ def create_browser_display(source: Path, destination: Path) -> None:
     temporary.unlink(missing_ok=True)
     try:
         with Image.open(source) as image:
-            display: Image.Image = image
+            # Match EXIF-oriented thumbnails without altering the camera original.
+            display: Image.Image = ImageOps.exif_transpose(image)
             if display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16"}:
                 display = display.convert("RGB")
             display.save(temporary, format="PNG", optimize=True)
