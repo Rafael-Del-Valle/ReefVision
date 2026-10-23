@@ -72,6 +72,46 @@ describe("previewLocalPointCloudFile", () => {
     expect(body.points).toBeUndefined();
   });
 
+  it("passes bounded original source indices to the shared scientific chord engine", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        measurement_status: "caller_supplied_unverified",
+        selected_point_chords: [{ point_indices: [0, 1], chord_distance_m: 0.01 }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const file = localFile("reef.ply", new TextEncoder().encode(ply));
+    const result = await previewLocalPointCloudFile("project", file, calibration, [
+      [0, 1],
+    ]);
+    expect(result.measurement_status).toBe("caller_supplied_unverified");
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.point_index_pairs).toEqual([[0, 1]]);
+    expect(body.ply_text).toBe(ply);
+  });
+
+  it("rejects invalid source point pairs before any network request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const file = localFile("reef.ply", new TextEncoder().encode(ply));
+    const invalid: Array<Array<[number, number]>> = [
+      [[0, 0]],
+      [[-1, 1]],
+      [[0, 2000]],
+      [[0.5, 1]],
+      [[Number.NaN, 1]],
+      Array.from({ length: 33 }, () => [0, 1]),
+    ];
+    for (const pairs of invalid) {
+      await expect(
+        previewLocalPointCloudFile("project", file, calibration, pairs),
+      ).rejects.toThrow("Point chord indices");
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects invalid file, calibration and non-ASCII bytes before network use", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
