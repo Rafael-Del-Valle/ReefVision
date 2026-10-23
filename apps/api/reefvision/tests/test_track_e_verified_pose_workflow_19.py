@@ -177,6 +177,28 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
         )
 
+    # Planning and execution must agree that a complete dataset with no
+    # verified items is not valid training truth.
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        frozen.pose_schema_content_hash = payload["pose_schema_content_hash"]
+        frozen.item_count = 0
+        session.commit()
+
+    empty_plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert empty_plan.status_code == 200, empty_plan.text
+    assert empty_plan.json()["valid"] is False
+    assert "pose_dataset_incomplete" in {issue["code"] for issue in empty_plan.json()["issues"]}
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="complete and contain verified items"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
+
 
 def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
     client: TestClient,
