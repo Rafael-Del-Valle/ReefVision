@@ -19,7 +19,7 @@ import {
 } from "./poseInteroperabilityApi";
 import { useGeographicMovementAnalytics } from "./useGeographicMovementAnalytics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cancelJob, retryJob, type Project } from "../../api/client";
 import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
@@ -531,7 +531,7 @@ export function VideoTrackingWorkspace({
       setSelectedVideoId(videosQuery.data[0].id);
     }
   }, [selectedVideoId, videosQuery.data]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     pendingMapSeekRef.current = null;
     setFrameIndex(0);
     setPreviewFrameIndex(0);
@@ -1942,6 +1942,7 @@ export function VideoTrackingWorkspace({
             <label>
               Pose file
               <input
+                key={selectedVideoId}
                 aria-label="Pose interoperability import file"
                 type="file"
                 accept=".slp,.nwb,.json,.csv,.zip,application/zip"
