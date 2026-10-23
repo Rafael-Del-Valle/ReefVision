@@ -102,9 +102,7 @@ def test_mixed_msi_versions_are_rejected() -> None:
     workflow = valid_workflow() + "      # ReefVision_1.0.2_x64_en-US.msi\n"
     assert any("MSI filename" in error for error in MODULE.check_workflow(workflow, "1.0.3"))
 
-CAB_WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(
-    encoding="utf-8"
-)
+CAB_WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
 
 
 def test_windows_cab_artifact_manifest_preflight_matches_real_workflow() -> None:
