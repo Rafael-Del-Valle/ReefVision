@@ -177,10 +177,12 @@ describe("PointCloudArtifactViewer", () => {
     // Original point 2 is absent from the visualization sample. Do not infer
     // its coordinates or reject a full-cloud measurement without evidence.
     expect(parsePointCloudRenderArtifact(decimated)).not.toBeNull();
-    expect(parsePointCloudRenderArtifact({
-      ...validArtifact,
-      selected_point_chords: [{ point_indices: [0, 2], chord_distance_m: 1 }],
-    })).not.toBeNull();
+    expect(
+      parsePointCloudRenderArtifact({
+        ...validArtifact,
+        selected_point_chords: [{ point_indices: [0, 2], chord_distance_m: 1 }],
+      }),
+    ).not.toBeNull();
   });
 
   it("renders decimated colorless samples with preserved original indices", () => {
