@@ -242,3 +242,27 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - **Acceptance:** source and test committed to the isolated 1.6 draft branch;
   exact-head frontend CI and native installed-Windows GUI/keyboard acceptance
   must still pass. No release or scientific approval claim.
+
+## 2026-10-23 — QC review scope isolation and stale-selection safety
+
+- Audited the existing standalone QC dashboard and executable saved `qc_review_queue`
+  node; this change does **not** add a competing workflow implementation.
+- Previously a selected queue ID could outlive a project or dataset-scope change,
+  causing the item query to request the prior scope's queue while the new list
+  was loading. A dataset-version scope without a selected version also fell
+  back to project-wide queue/runs queries.
+- Item requests and selected-queue callbacks now fail closed unless the ID is
+  present in the loaded scope. Project, dataset-version and queue navigation
+  clear transient quick-review/coordination selections and reset pagination.
+  Missing dataset-version selection disables both QC source-run and queue
+  requests. A newly created queue selection survives an empty old cache list
+  until refresh, preserving the existing create-and-review flow.
+- Added pure scope/cache regressions and React Query dashboard regressions for
+  project navigation and dataset-version selection. Scientific annotations,
+  reviewer decisions, persisted queue IDs and typed Workflow Builder artifacts
+  are unchanged.
+- **Evidence:** commits `e70fcdeb`, `92bc67cd`, `0ccd8d9f`,
+  `896bc6f1`, `2aaa9cfa`, `50b9774f`; GitHub source read-back verified.
+  The previous head `7aba59df` completed 20/20 GitHub Actions successfully.
+  Exact new-head CI and installed-Windows GUI remain unverified at commit time.
+  No release acceptance is claimed.
