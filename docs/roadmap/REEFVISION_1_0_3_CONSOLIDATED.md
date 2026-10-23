@@ -35,36 +35,36 @@ Baseline: approved ReefVision 1.0.2 main line, with the candidate first-open vie
 ## 2026-10-22 laptop sprint evidence (PR #81)
 
 Release decision: **HOLD — not release-ready.** The sprint implementation and automated
-quality gates passed, but a representative segmentation dataset has not yet produced a
-held-out polygon proposal, physical Windows MSI/GUI acceptance is still unverified, and
-the RTX 3090 matrix is deferred. No release, merge, tag, installer publication, or branch
-deletion is authorized by this record.
+quality gates passed and the final laptop-only addendum closed the technical CPU
+segmentation gap, but physical Windows MSI/GUI acceptance is still unverified and the
+RTX 3090 matrix is deferred. The synthetic segmentation run proves software execution,
+not representative scientific accuracy. No release, merge, tag, installer publication,
+or branch deletion is authorized by this record.
 
 ### Roadmap status
 
-| Group | Status | Evidence and remaining acceptance |
-| --- | --- | --- |
-| P0 Image display and import | **UNVERIFIED** | Automated import/display coverage passed, including raw-pixel overlay alignment and a regression for non-neutral EXIF JPEGs. The original image bytes and metadata remain unchanged while the browser display rendition is orientation-free. Physical MSI checks for every supported extension, DPI/resizing, cold/warm cache, and corrupt-file UX remain outstanding. |
-| P1 Gallery and projects | **UNVERIFIED** | Gallery first-open and long-scroll Playwright tests passed. The complete folder/batch import, focus, filtering, bulk organization, and last-image-resume matrix has not been physically exercised in the MSI. |
-| P2 Precision annotation | **UNVERIFIED** | Automated editor tests passed, including raw source-pixel mask rendering/editing and invalid-geometry rejection. Full mouse/keyboard, snapping, performance, copy/paste, undo/redo, and high-DPI physical acceptance remains outstanding. |
-| P3 Review and QA | **UNVERIFIED** | Revision-checked track-mask review persistence and relevant automated UI/API tests passed. The complete reviewer queue, threshold, comparison, audit, and installed interactive workflow has not been physically accepted. |
-| P4 Video and pose usability | **UNVERIFIED** | Detection, segmentation, and hybrid fusion code is automated-test ready. Class-aware fusion accepts only mutual unique-best overlaps and leaves equal-overlap crossing ambiguities unmatched for review. Physical playback/timeline/pose/export acceptance remains outstanding. |
-| P5 Calibration, measurements and export | **UNVERIFIED** | The full backend and browser suites passed without a sprint-specific P5 regression. That is not a substitute for physical scale-bar, measurement, scientific QC, and interchange acceptance. |
+| Group                                         | Status         | Evidence and remaining acceptance                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0 Image display and import                   | **UNVERIFIED** | Automated import/display coverage passed, including raw-pixel overlay alignment and a regression for non-neutral EXIF JPEGs. The original image bytes and metadata remain unchanged while the browser display rendition is orientation-free. Physical MSI checks for every supported extension, DPI/resizing, cold/warm cache, and corrupt-file UX remain outstanding.                            |
+| P1 Gallery and projects                       | **UNVERIFIED** | Gallery first-open and long-scroll Playwright tests passed. The complete folder/batch import, focus, filtering, bulk organization, and last-image-resume matrix has not been physically exercised in the MSI.                                                                                                                                                                                     |
+| P2 Precision annotation                       | **UNVERIFIED** | Automated editor tests passed, including raw source-pixel mask rendering/editing and invalid-geometry rejection. Full mouse/keyboard, snapping, performance, copy/paste, undo/redo, and high-DPI physical acceptance remains outstanding.                                                                                                                                                         |
+| P3 Review and QA                              | **UNVERIFIED** | Revision-checked track-mask review persistence and relevant automated UI/API tests passed. The complete reviewer queue, threshold, comparison, audit, and installed interactive workflow has not been physically accepted.                                                                                                                                                                        |
+| P4 Video and pose usability                   | **UNVERIFIED** | Detection, segmentation, and hybrid fusion code is automated-test ready. Class-aware fusion accepts only mutual unique-best overlaps and leaves equal-overlap crossing ambiguities unmatched for review. Physical playback/timeline/pose/export acceptance remains outstanding.                                                                                                                   |
+| P5 Calibration, measurements and export       | **UNVERIFIED** | The full backend and browser suites passed without a sprint-specific P5 regression. That is not a substitute for physical scale-bar, measurement, scientific QC, and interchange acceptance.                                                                                                                                                                                                      |
 | P6 Workspace, accessibility and live training | **UNVERIFIED** | Training metrics now retain all available train/validation loss series, and the exact **Open Training Console** action launches a restricted, read-only status monitor without starting training. Unit/UI/build checks passed; active/completed/failed run display, unavailable-terminal behavior, detachable panels, dual-monitor, DPI, and keyboard accessibility remain physically unverified. |
-| P7 Stability and release acceptance | **BLOCKED** | Automated gates, migration round-trip, production build, clean installer build, administrative extraction, and packaged-backend self-test passed. A representative segmentation held-out proposal run and physical clean install/upgrade/start/relaunch/uninstall are still required. RTX 3090 checks are **DEFERRED**. |
+| P7 Stability and release acceptance           | **BLOCKED**    | Automated gates, migration round-trip, production build, clean installer build, administrative extraction, extracted-desktop/backend launch, migration, project persistence, and Project Exchange passed. Physical clean install/upgrade/relaunch/uninstall and interactive P0-P7 GUI acceptance still require a disposable Windows host. RTX 3090 checks are **DEFERRED**.                       |
 
 ### Sprint feature readiness
 
 - **Detection training — PASS on CPU:** a real two-epoch laptop run completed training,
   validation, checkpoint creation, model registration, held-out inference, and proposal
   creation.
-- **Segmentation training — FAIL for end-to-end acceptance:** real CPU training,
-  validation, checkpoint creation, and model registration completed for one- and
-  ten-epoch synthetic runs, but the intentionally tiny one-image/random-initialized
-  dataset produced no valid held-out polygon even at very low confidence. Scaled
-  architectures are now resolved through the installed Ultralytics model family, and
-  deterministic registration/inference tests pass, but a representative dataset run is
-  mandatory before release.
+- **Segmentation training — PASS for technical CPU execution:** a deterministic,
+  byte-distinct two-class synthetic dataset used 20 training, 5 validation, and 5
+  held-out images. A 25-epoch CPU run completed training and validation, registered the
+  checkpoint, produced 44 valid pending held-out polygon proposals, persisted an
+  explicitly accepted mask, and repeated inference after restart. Dataset
+  representativeness and scientific segmentation acceptance remain **UNVERIFIED**.
 - **Detection tracking — PASS for automated readiness:** existing tracker execution and
   API persistence passed the video suite.
 - **Segmentation tracking — PASS for automated readiness:** source-pixel masks persist,
@@ -99,33 +99,64 @@ extraction found 19,728 files, the desktop executable, backend sidecar, Pydantic
 all 38 migration files, and no bundled model weights; the packaged backend self-test
 passed. The MSI depends on all five CABs and they must be distributed together.
 
-| Artifact | Bytes | SHA-256 |
-| --- | ---: | --- |
+| Artifact                         |       Bytes | SHA-256                                                            |
+| -------------------------------- | ----------: | ------------------------------------------------------------------ |
 | `ReefVision_1.0.3_x64_en-US.msi` | 219,992,431 | `750fc140bef6a8e0b85d4c3bf3d915e9959f27fa47756efdb9d4406b8fe11f97` |
-| `rv1.cab` | 614,173,680 | `d8b541a7f6516235a31a6a6b4fd1fbfcabaf36c889d5bbab1462576c0fe4faef` |
-| `rv2.cab` | 389,032,911 | `27325450bddab5690fb164b22e154abb04eaf14f1629e7f0914d787bcc5cf959` |
-| `rv3.cab` | 735,884,498 | `9d9e67f1171a5af4a042fc687a65f2224801c9102f564e3437111a10d3cc699e` |
-| `rv4.cab` | 353,162,953 | `b384b635377276af4482495132ec324435c22a57231e8093716deab821ba51f1` |
-| `rv5.cab` | 608,327,808 | `a52cde9a3d6ac4a73e32b55dfbef56403b6a6cfc4824f1febdde0015091ac929` |
+| `rv1.cab`                        | 614,173,680 | `d8b541a7f6516235a31a6a6b4fd1fbfcabaf36c889d5bbab1462576c0fe4faef` |
+| `rv2.cab`                        | 389,032,911 | `27325450bddab5690fb164b22e154abb04eaf14f1629e7f0914d787bcc5cf959` |
+| `rv3.cab`                        | 735,884,498 | `9d9e67f1171a5af4a042fc687a65f2224801c9102f564e3437111a10d3cc699e` |
+| `rv4.cab`                        | 353,162,953 | `b384b635377276af4482495132ec324435c22a57231e8093716deab821ba51f1` |
+| `rv5.cab`                        | 608,327,808 | `a52cde9a3d6ac4a73e32b55dfbef56403b6a6cfc4824f1febdde0015091ac929` |
 
-Physical clean install, upgrade from 1.0.2, application launch/relaunch, console launch,
-project/image/video interaction, and uninstall were **not performed** in this laptop
-sprint and remain **UNVERIFIED**.
+Physical clean install, upgrade from 1.0.2, installed-application relaunch, console
+interaction, project/image/video GUI interaction, and uninstall were **not performed**
+in this laptop sprint and remain **UNVERIFIED**.
+
+### Final laptop-only acceptance addendum
+
+- The Windows workflow no longer hard-codes `1.0.2`. It derives the semver and artifact
+  slug from `tauri.conf.json`, checks the MSI ProductVersion, requires exact CAB/media
+  membership, rejects unexpected model weights, and validates clean-tree/source-commit
+  provenance plus all recorded payload hashes. Focused workflow tests passed.
+- CPU segmentation technical acceptance passed in 40.5 seconds. Evidence is retained at
+  `C:\rv103-final-seg-acceptance\report.json`; the registered checkpoint SHA-256 is
+  `81508398dbb694ba2e24d1f3b9ff565950bbea48161842563ec138fed5a0bdbf`.
+- The existing 1.0.3 MSI was administratively extracted to an isolated directory without
+  installing or overwriting ReefVision 1.0.2. The extracted 1.0.3 backend applied all
+  migrations in a private data root, exposed 25 scratch architectures and zero
+  pretrained/downloadable models, persisted a project/image/annotation across restart,
+  and produced a 16,799-byte Project Exchange archive with 56 entries, media, and a
+  manifest.
+- The first physical extracted-desktop launch was correctly rejected by ReefVision's
+  single-instance guard because the user's installed 1.0.2 desktop was running. That
+  production session was not closed or modified. After it ended independently, the
+  extracted 1.0.3 desktop launched visibly and responsively against the marker-gated
+  private data root; its bundled backend reported version 1.0.3, an up-to-date schema,
+  and the persisted acceptance project and annotation. The native controller exposed no
+  Windows-app interaction surface, and Windows Sandbox is unavailable, so install,
+  upgrade, uninstall, shortcuts, the PowerShell monitor window, and all mouse/keyboard
+  GUI observations remain **UNVERIFIED** rather than inferred from process, backend, or
+  browser tests.
+- No new migration was introduced. The MSI/CAB payloads remain the exact clean-tree
+  `df40f6afc359c45c115a435ae46dc1544018ebba` artifacts listed above; later commits only
+  change acceptance workflow/tests/scripts and documentation.
 
 ### Required follow-up matrix
 
-1. Run a representative multi-image segmentation dataset on CPU or the target RTX 3090;
-   require a valid held-out polygon proposal with preserved source-pixel coordinates.
-2. On a clean supported Windows host, keep the MSI and all five CAB files together;
+1. On a clean supported Windows host, keep the MSI and all five CAB files together;
    verify install, first launch, project creation/open, the P0-P7 interactive workflows,
    relaunch/recovery, upgrade from 1.0.2, and uninstall.
+2. Use an authorized representative, scientist-verified segmentation dataset to evaluate
+   biological performance and held-out mask quality. The laptop synthetic run must not
+   be cited as scientific accuracy evidence.
 3. On the target RTX 3090 host, verify NVIDIA driver/CUDA compatibility, detection and
    segmentation training, CUDA inference, checkpoint reload, hybrid tracking throughput,
    VRAM behavior, cancellation/recovery, and performance benchmarks. These checks are
    **DEFERRED**, not failed.
 
-The only identified non-GPU release blocker is the missing representative segmentation
-held-out proposal acceptance. The physical Windows checks are acceptance gates rather
-than known code defects. Sprint commits are on
+The technical CPU segmentation blocker is closed. The remaining non-GPU release blocker
+is physical clean-install and interactive GUI acceptance on a disposable Windows host;
+representative segmentation is a separate scientific-validation gap rather than an
+observed software defect. Sprint commits are on
 `fix/reefvision-training-architecture-picker-20261022` in draft PR #81; the final
 documentation commit follows the installer build commit recorded above.
