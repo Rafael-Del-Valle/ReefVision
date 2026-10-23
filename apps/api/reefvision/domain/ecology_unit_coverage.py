@@ -16,6 +16,8 @@ def audit_unit_coverage(
     changes: Iterable[Any],
     unit_summaries: Iterable[Any],
     excluded_units: Iterable[Any],
+    *,
+    expected_by_unit: Mapping[str, Sequence[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Reconcile one coverage record per declared experimental unit and metric."""
     changes = list(changes)
@@ -65,16 +67,25 @@ def audit_unit_coverage(
         raise ValueError("Unit coverage does not reconcile with analysis decisions")
 
     results: list[dict[str, Any]] = []
+    expected_by_unit = expected_by_unit or {}
     for (unit_id, metric), flags in sorted(by_unit_metric.items()):
+        observed_ids = {organism_id for organism_id, _ in flags}
+        unobserved_ids = sorted(set(expected_by_unit.get(unit_id, ())) - observed_ids)
         complete = sum(is_complete for _, is_complete in flags)
         missing_ids = sorted(organism_id for organism_id, done in flags if not done)
         reason = exclusions.get((unit_id, metric))
         if (unit_id, metric) in eligible and complete != len(flags):
             raise ValueError("Eligible experimental unit contains missing follow-up")
+        if (unit_id, metric) in eligible and unobserved_ids:
+            raise ValueError("Eligible experimental unit omits expected organisms")
+        if reason == "missing_expected_organisms" and not unobserved_ids:
+            raise ValueError("Expected-roster exclusion requires unobserved organisms")
         if reason == "missing_followup" and complete == len(flags):
             raise ValueError("Missing-followup exclusion requires an incomplete organism")
         if reason == "nonmatching_sampling_window" and complete != len(flags):
             raise ValueError("Sampling-window exclusion cannot conceal missing follow-up")
+        if reason == "nonmatching_sampling_window" and unobserved_ids:
+            raise ValueError("Sampling-window exclusion cannot conceal missing roster organisms")
         results.append(
             {
                 "experimental_unit_id": unit_id,
@@ -83,6 +94,10 @@ def audit_unit_coverage(
                 "complete_organism_count": complete,
                 "missing_followup_organism_count": len(missing_ids),
                 "missing_organism_ids": missing_ids,
+                "expected_organism_count": (
+                    len(expected_by_unit[unit_id]) if unit_id in expected_by_unit else None
+                ),
+                "unobserved_organism_ids": unobserved_ids,
                 "eligible_for_summary": (unit_id, metric) in eligible,
                 "exclusion_reason": reason,
             }

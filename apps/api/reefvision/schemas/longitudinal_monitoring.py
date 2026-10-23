@@ -92,6 +92,9 @@ class LongitudinalAnalysisRequest(BaseModel):
 
     observations: list[MonitoringObservation] = Field(min_length=2, max_length=10000)
     experimental_unit_type: str | None = Field(default=None, max_length=100)
+    expected_organism_ids_by_unit: dict[str, list[str]] | None = Field(
+        default=None, max_length=10000
+    )
 
     @field_validator("experimental_unit_type")
     @classmethod
@@ -173,14 +176,20 @@ class ExperimentalUnitCoverage(BaseModel):
     complete_organism_count: int = Field(ge=0)
     missing_followup_organism_count: int = Field(ge=0)
     missing_organism_ids: list[str] = Field(default_factory=list)
+    expected_organism_count: int | None = Field(default=None, ge=1)
+    unobserved_organism_ids: list[str] = Field(default_factory=list)
     eligible_for_summary: bool
-    exclusion_reason: Literal["missing_followup", "nonmatching_sampling_window"] | None = None
+    exclusion_reason: Literal[
+        "missing_followup", "nonmatching_sampling_window", "missing_expected_organisms"
+    ] | None = None
 
 
 class ExcludedExperimentalUnit(BaseModel):
     experimental_unit_id: str
     metric_name: str
-    reason: Literal["missing_followup", "nonmatching_sampling_window"]
+    reason: Literal[
+        "missing_followup", "nonmatching_sampling_window", "missing_expected_organisms"
+    ]
 
 
 class LongitudinalAnalysisResponse(BaseModel):
@@ -193,6 +202,7 @@ class LongitudinalAnalysisResponse(BaseModel):
     changes: list[LongitudinalChange]
     experimental_unit_type: str | None = None
     independent_unit_count: int | None = None
+    expected_roster_supplied: bool = False
     cross_unit_shared_parent_colony_ids: list[str] = Field(default_factory=list)
     unit_summaries: list[ExperimentalUnitSummary] = Field(default_factory=list)
     population_summaries: list[PopulationUnitSummary] = Field(default_factory=list)

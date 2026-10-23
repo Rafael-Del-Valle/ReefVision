@@ -9,6 +9,7 @@ from reefvision.domain.ecology_lineage_policy import (
     cross_unit_shared_parent_colony_ids,
     validate_declared_lineage,
 )
+from reefvision.domain.ecology_expected_roster import validate_expected_roster
 from reefvision.domain.ecology_unit_coverage import audit_unit_coverage
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.population_unit_summaries import summarize_population_units
@@ -29,6 +30,7 @@ def _summarize_experimental_units(
     request: LongitudinalAnalysisRequest,
     grouped: dict[tuple[str, str], list[MonitoringObservation]],
     changes: list[LongitudinalChange],
+    expected_by_unit: dict[str, list[str]],
 ) -> tuple[int | None, list[ExperimentalUnitSummary], list[ExcludedExperimentalUnit]]:
     """Summarize organisms *within* declared units, never as independent units.
 
@@ -75,6 +77,16 @@ def _summarize_experimental_units(
     summaries: list[ExperimentalUnitSummary] = []
     excluded: list[ExcludedExperimentalUnit] = []
     for (unit_id, metric), keys in sorted(series_by_unit.items()):
+        observed_organisms = {organism_id for organism_id, _ in keys}
+        if set(expected_by_unit.get(unit_id, ())) - observed_organisms:
+            excluded.append(
+                ExcludedExperimentalUnit(
+                    experimental_unit_id=unit_id,
+                    metric_name=metric,
+                    reason="missing_expected_organisms",
+                )
+            )
+            continue
         if any(key not in completed for key in keys):
             excluded.append(
                 ExcludedExperimentalUnit(
@@ -132,6 +144,11 @@ def analyze_longitudinal(
     """
     validate_declared_lineage(
         request.observations, experimental_unit_type=request.experimental_unit_type
+    )
+    expected_by_unit = validate_expected_roster(
+        request.observations,
+        request.expected_organism_ids_by_unit,
+        experimental_unit_type=request.experimental_unit_type,
     )
     grouped: dict[tuple[str, str], list[MonitoringObservation]] = defaultdict(list)
     used_sources: set[str] = set()
@@ -199,12 +216,18 @@ def analyze_longitudinal(
             )
         )
     independent_unit_count, unit_summaries, excluded_units = _summarize_experimental_units(
-        request, grouped, changes
+        request, grouped, changes, expected_by_unit
     )
     unit_coverage = (
         [
             ExperimentalUnitCoverage.model_validate(row)
-            for row in audit_unit_coverage(grouped, changes, unit_summaries, excluded_units)
+            for row in audit_unit_coverage(
+                grouped,
+                changes,
+                unit_summaries,
+                excluded_units,
+                expected_by_unit=expected_by_unit,
+            )
         ]
         if independent_unit_count is not None
         else []
@@ -213,9 +236,14 @@ def analyze_longitudinal(
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-longitudinal-0006",
+            algorithm_version="ecology-longitudinal-0007",
             records=request.observations,
-            parameters={"experimental_unit_type": request.experimental_unit_type},
+            parameters={
+                "experimental_unit_type": request.experimental_unit_type,
+                "expected_organism_ids_by_unit": (
+                    expected_by_unit if request.expected_organism_ids_by_unit is not None else None
+                ),
+            },
             source_record_ids=(obs.source_record_id for obs in request.observations),
         ),
         evaluated_series_count=len(changes),
@@ -223,6 +251,7 @@ def analyze_longitudinal(
         changes=changes,
         experimental_unit_type=request.experimental_unit_type,
         independent_unit_count=independent_unit_count,
+        expected_roster_supplied=request.expected_organism_ids_by_unit is not None,
         cross_unit_shared_parent_colony_ids=cross_unit_shared_parent_colony_ids(
             request.observations
         ),
@@ -233,6 +262,8 @@ def analyze_longitudinal(
         limitations=[
             "Caller-supplied observations are not verified against project data or calibration.",
             "Parent-colony identity and experimental units are declared, not authenticated.",
+            "Optional expected organism rosters are caller-supplied and unverified; "
+            "unobserved organisms are not deaths or zero counts.",
             "Changes compare the first and last sampling dates; "
             "no statistical significance is inferred.",
             "Organisms are the reporting unit; observations are not pooled "

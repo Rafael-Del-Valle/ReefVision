@@ -656,7 +656,10 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             )
         ],
         required_parameters=["observations"],
-        optional_parameters={"experimental_unit_type": None},
+        optional_parameters={
+            "experimental_unit_type": None,
+            "expected_organism_ids_by_unit": None,
+        },
         execution_state="executable",
         executable=True,
         implementation_notes=[
@@ -664,6 +667,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             "Observations are caller-supplied and are not verified against project records.",
             "Workflow artifacts persist source IDs and an explicit unverified evidence level.",
             "Do not treat this output as verified or use it to infer significance or survival.",
+            "Optional caller-declared organism rosters expose completely unobserved specimens; "
+            "they do not establish mortality or authenticated study membership.",
             "Verified ecological reporting requires a future review and lineage gate.",
         ],
     )

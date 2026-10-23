@@ -810,6 +810,7 @@ def _ecology_longitudinal_analysis(
         {
             "observations": parameters.get("observations"),
             "experimental_unit_type": parameters.get("experimental_unit_type"),
+            "expected_organism_ids_by_unit": parameters.get("expected_organism_ids_by_unit"),
         }
     )
     analysis = analyze_longitudinal(request)

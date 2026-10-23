@@ -330,3 +330,28 @@ legitimate fragments from one parent across different tank units. This is a
 **caller-label QC safeguard only**: it does not authenticate colony identity,
 sampling-unit independence, reviewed annotations, or calibration. Persisted
 analysis artifacts retain their unverified evidence and review gates.
+
+## Caller-declared expected-organism roster audit (2026-10-23)
+
+The exploratory longitudinal API and executable `ecology_longitudinal_analysis`
+Workflow Builder node now accept optional `expected_organism_ids_by_unit`,
+a map from declared experimental-unit ID to its expected organism IDs.
+A roster must cover exactly the observed units, contain unique canonical IDs,
+assign each organism to only one unit, and include every observed organism.
+It is deliberately **caller-supplied and unverified**, not a persistent
+experimental-design registration or evidence of specimen identity.
+
+For each observed unit/metric, completely unobserved expected organisms are
+listed in `unit_coverage.unobserved_organism_ids` separately from observed
+organisms lacking follow-up (`missing_organism_ids`). A unit with unobserved
+roster members is excluded from descriptive unit/population means with
+`missing_expected_organisms`; unobserved animals are **not** classified as
+dead, missing tissue, or zero-valued measurements. Cross-metric rosters are
+conservative: every declared organism is expected for every observed metric
+within its unit. The analysis does not invent absent metric series.
+An absent roster preserves the existing observed-only exploratory behavior.
+Roster membership is normalized into SHA-256 provenance; the longitudinal
+algorithm contract advances to `ecology-longitudinal-0007`. Both standalone
+and saved-workflow artifacts retain `caller_supplied_unverified` evidence.
+Full source ownership, verified study design, migrations, GUI and scientific
+acceptance remain pending.
