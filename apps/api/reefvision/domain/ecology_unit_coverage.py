@@ -28,6 +28,7 @@ def audit_unit_coverage(
         raise ValueError("Completed change has no corresponding observed series")
     by_unit_metric: dict[tuple[str, str], list[tuple[str, bool]]] = defaultdict(list)
     organism_memberships: dict[str, str] = {}
+    sampling_dates: dict[tuple[str, str], dict[str, list[Any]]] = defaultdict(dict)
     for (organism_id, metric_name), observations in grouped.items():
         if not observations:
             raise ValueError("An organism/metric series cannot be empty")
@@ -40,9 +41,9 @@ def audit_unit_coverage(
             raise ValueError("An organism cannot change experimental units between metrics")
         if (organism_id, metric_name) in completed and len(observations) < 2:
             raise ValueError("Completed series requires repeated observations")
-        by_unit_metric[(unit_id, metric_name)].append(
-            (organism_id, (organism_id, metric_name) in completed)
-        )
+        key = (unit_id, metric_name)
+        sampling_dates[key][organism_id] = sorted({row.observed_at.date() for row in observations})
+        by_unit_metric[key].append((organism_id, (organism_id, metric_name) in completed))
 
     summaries = list(unit_summaries)
     eligible_rows = [(row.experimental_unit_id, row.metric_name) for row in summaries]
@@ -74,6 +75,8 @@ def audit_unit_coverage(
         complete = sum(is_complete for _, is_complete in flags)
         missing_ids = sorted(organism_id for organism_id, done in flags if not done)
         reason = exclusions.get((unit_id, metric))
+        organism_dates = sampling_dates[(unit_id, metric)]
+        discordant_dates = len({tuple(dates) for dates in organism_dates.values()}) > 1
         if (unit_id, metric) in eligible and complete != len(flags):
             raise ValueError("Eligible experimental unit contains missing follow-up")
         if (unit_id, metric) in eligible and unobserved_ids:
@@ -98,6 +101,8 @@ def audit_unit_coverage(
                     len(expected_by_unit[unit_id]) if unit_id in expected_by_unit else None
                 ),
                 "unobserved_organism_ids": unobserved_ids,
+                "observed_sampling_dates_by_organism": dict(sorted(organism_dates.items())),
+                "discordant_sampling_dates": discordant_dates,
                 "eligible_for_summary": (unit_id, metric) in eligible,
                 "exclusion_reason": reason,
             }
