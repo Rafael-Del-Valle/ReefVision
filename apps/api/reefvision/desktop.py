@@ -23,6 +23,7 @@ from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 
 from reefvision.config import Settings, clear_settings_cache, get_settings
+from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 from reefvision.logging_utils import configure_rotating_json_logging
 
 LOGGER = logging.getLogger("reefvision.desktop")
@@ -256,6 +257,9 @@ def run_pending_migrations(settings: Settings) -> None:
     engine = create_database_engine(settings)
     try:
         with engine.connect() as connection:
+            # A matching revision number alone cannot distinguish the two 0038 lineages.
+            # Check even when no upgrade would otherwise be attempted.
+            assert_compatible_revision_0038(connection)
             current_revision = MigrationContext.configure(connection).get_current_revision()
     finally:
         engine.dispose()
