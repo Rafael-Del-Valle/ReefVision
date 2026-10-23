@@ -21,6 +21,7 @@ import {
 } from "./workflowTemplates";
 import { LocalMeshPreview } from "./LocalMeshPreview";
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
+import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
 
 interface WorkflowGraphWorkspaceProps {
@@ -627,6 +628,9 @@ export function WorkflowGraphWorkspace({
                     <code>{shortHash(artifact.payload_sha256)}</code>
                     {artifact.data_type === "mesh_measurement_preview" && (
                       <MeshArtifactViewer artifact={artifact.payload_json} />
+                    )}
+                    {artifact.data_type === "point_cloud_measurement_preview" && (
+                      <PointCloudArtifactViewer artifact={artifact.payload_json} />
                     )}
                     <details>
                       <summary>Inspect artifact</summary>
