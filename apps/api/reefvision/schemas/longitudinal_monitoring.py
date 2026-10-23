@@ -212,6 +212,20 @@ class ExperimentalUnitCoverage(BaseModel):
     ) = None
 
 
+class PlannedSamplingEffort(BaseModel):
+    """Scheduled organism-visits per declared unit/metric, not a survival estimate."""
+
+    experimental_unit_id: str
+    metric_name: str
+    planned_sampling_date_count: int = Field(ge=2)
+    expected_organism_count: int = Field(ge=1)
+    expected_organism_visits: int = Field(ge=1)
+    observed_organism_visits: int = Field(ge=0)
+    missing_organism_visits: int = Field(ge=0)
+    observation_coverage_fraction: float = Field(ge=0, le=1)
+    expected_roster_supplied: bool = False
+
+
 class ExcludedExperimentalUnit(BaseModel):
     experimental_unit_id: str
     metric_name: str
@@ -240,4 +254,5 @@ class LongitudinalAnalysisResponse(BaseModel):
     population_summaries: list[PopulationUnitSummary] = Field(default_factory=list)
     excluded_units: list[ExcludedExperimentalUnit] = Field(default_factory=list)
     unit_coverage: list[ExperimentalUnitCoverage] = Field(default_factory=list)
+    planned_sampling_effort: list[PlannedSamplingEffort] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
