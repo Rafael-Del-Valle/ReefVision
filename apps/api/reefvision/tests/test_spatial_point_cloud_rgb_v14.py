@@ -165,15 +165,15 @@ def test_coincident_point_indices_have_explicit_chord_qc() -> None:
 def test_rgb_decimation_retains_source_index_alignment(client: TestClient) -> None:
     project_id = str(create_project(client, "RGB sample threshold")["id"])
     header = (
-        "ply\\nformat ascii 1.0\\nelement vertex 513\\n"
-        "property float x\\nproperty float y\\nproperty float z\\n"
-        "property uchar red\\nproperty uchar green\\nproperty uchar blue\\nend_header\\n"
+        "ply\nformat ascii 1.0\nelement vertex 513\n"
+        "property float x\nproperty float y\nproperty float z\n"
+        "property uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
     )
     rows = [f"{i} 0 0 {i % 256} 10 20" for i in range(513)]
     response = client.post(
         f"/api/v1/projects/{project_id}/spatial/point-cloud-preview",
         json={
-            "ply_text": header + "\\n".join(rows) + "\\n",
+            "ply_text": header + "\n".join(rows) + "\n",
             "meters_per_unit": 0.01,
             "calibration_method": "ruler",
             "calibration_evidence": "Unreviewed field ruler",
