@@ -232,6 +232,17 @@ def measure_point_cloud_preview(
         last_index = len(vertices) - 1
         denominator = preview_count - 1
         preview_indices = [i * last_index // denominator for i in range(preview_count)]
+    # A uniform index sample may hide the actual extent of a coral scan.
+    # Compare raw source-axis extrema before scaling to avoid float rounding.
+    # This is display QC, not registration or biological completeness.
+    preview_omitted_axis_extrema: list[str] = []
+    for axis, label in enumerate(("x", "y", "z")):
+        source_values = [vertex[axis] for vertex in vertices]
+        sampled_values = [vertices[index][axis] for index in preview_indices]
+        if min(sampled_values) != min(source_values):
+            preview_omitted_axis_extrema.append(f"{label}_min")
+        if max(sampled_values) != max(source_values):
+            preview_omitted_axis_extrema.append(f"{label}_max")
     preview_points = []
     for index in preview_indices:
         preview_points.append([coordinate * scale for coordinate in vertices[index]])
@@ -240,6 +251,8 @@ def measure_point_cloud_preview(
         "point_count": len(vertices),
         "unique_point_count": unique_count,
         "preview_point_indices": preview_indices,
+        "preview_omitted_axis_extrema": preview_omitted_axis_extrema,
+        "preview_axis_extrema_covered": not preview_omitted_axis_extrema,
         "preview_points_in_source_frame_m": preview_points,
         "selected_point_chords": selected_chords,
         "axis_aligned_dimensions_m": dimensions,
@@ -266,7 +279,10 @@ def measure_point_cloud_preview(
         ),
         "surface_area_m2": None,
         "branch_length_m": None,
-        "qc_warnings": (["duplicate_points_present"] if unique_count < len(vertices) else []),
+        "qc_warnings": (
+            (["duplicate_points_present"] if unique_count < len(vertices) else [])
+            + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
+        ),
         "measurement_status": "caller_supplied_unverified",
         "provenance": {
             "geometry_sha256": geometry_hash,
