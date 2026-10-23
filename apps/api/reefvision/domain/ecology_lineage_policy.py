@@ -89,7 +89,6 @@ def validate_declared_lineage(
                 )
 
 
-
 def cross_unit_shared_parent_colony_ids(
     records: Iterable[DeclaredLineageRecord],
 ) -> list[str]:
