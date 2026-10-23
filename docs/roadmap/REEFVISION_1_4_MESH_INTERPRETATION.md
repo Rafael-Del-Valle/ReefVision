@@ -51,3 +51,22 @@ pairwise distances between referenced vertices, not observed biological branch
 lengths or Feret diameters. They depend on orientation, and comparisons across
 time require reviewed registration, calibration, and organism identity.
 Uncertainty is scale-only; missing uncertainty remains null, not zero.
+
+## Point-cloud chord integrity in decimated previews
+
+The standalone ASCII PLY/XYZ point-cloud endpoint and the executable, saved
+`point_cloud_preview` Workflow Builder node use the same bounded measurement
+service. Selected point-pair chords refer to **original point indices**, not
+the 512-point visualization sample. New artifacts persist the two calibrated
+endpoint coordinates and their chord distance even if display decimation omits
+one or both endpoints. The read-only viewer now checks the internal agreement
+of those stored coordinates and reported chord distances, and cross-checks
+sampled endpoints where available. Malformed or contradictory metadata fails
+closed. Older artifacts without embedded endpoints remain displayable, but a
+chord with an unsampled endpoint cannot be cross-checked by the viewer.
+
+This check detects inconsistent **saved artifact metadata**; it does not
+independently validate the original scan, its point correspondence, coordinate
+registration, or calibration. All chords remain provisional straight-line
+distances, **not** anatomical coral branch lengths. The source-order geometry
+fingerprint is an audit aid, not an organism identity or a review decision.
