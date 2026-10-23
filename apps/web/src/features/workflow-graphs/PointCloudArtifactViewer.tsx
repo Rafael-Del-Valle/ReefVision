@@ -156,9 +156,9 @@ export function parsePointCloudRenderArtifact(
   ) {
     return null;
   }
-  // Do not trust saved display-coverage flags without checking the sampled
-  // geometry against the full-cloud bounding box. A mislabeled preview could
-  // otherwise conceal a missing extreme point and mislead field measurements.
+  // Verify omissions that remain visible after scaling to display units.
+  // Scaling large offsets can round a genuinely missing source extreme onto
+  // the displayed bound; extra warnings are conservative, not contradictions.
   if (Array.isArray(omittedExtrema)) {
     const actualOmissions: string[] = [];
     for (let axis = 0; axis < 3; axis += 1) {
@@ -171,10 +171,7 @@ export function parsePointCloudRenderArtifact(
         actualOmissions.push(`${axisName}_max`);
       }
     }
-    if (
-      actualOmissions.length !== omittedExtrema.length ||
-      actualOmissions.some((label) => !omittedExtrema.includes(label))
-    ) {
+    if (actualOmissions.some((label) => !omittedExtrema.includes(label))) {
       return null;
     }
   }
