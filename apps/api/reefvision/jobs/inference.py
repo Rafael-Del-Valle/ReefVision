@@ -344,6 +344,7 @@ def process_inference_job(
                 if image is None or project is None:
                     raise ValidationError("The inference job references a missing image or project")
                 image_path = resolve_managed_project_path(settings, image.managed_path)
+                invalid_prediction_errors: list[str] = []
 
                 if semantic_provider is not None:
                     indexed_path = semantic_provider.predict(
@@ -376,16 +377,24 @@ def process_inference_job(
                         raise RuntimeError("Inference provider is unavailable")
                     predictions = provider.predict(image_path, inference_settings)
                     proposals = []
-                    for prediction in predictions:
+                    for prediction_index, prediction in enumerate(predictions):
                         polygon = getattr(prediction, "polygon", None)
-                        _validate_model_prediction(
-                            image,
-                            label=prediction.label,
-                            class_index=prediction.class_index,
-                            confidence=prediction.confidence,
-                            box=prediction.box,
-                            polygon=polygon,
-                        )
+                        try:
+                            _validate_model_prediction(
+                                image,
+                                label=prediction.label,
+                                class_index=prediction.class_index,
+                                confidence=prediction.confidence,
+                                box=prediction.box,
+                                polygon=polygon,
+                            )
+                        except ValidationError as exc:
+                            if model_task != "segment":
+                                raise
+                            invalid_prediction_errors.append(
+                                f"Image {image.id} prediction {prediction_index}: {exc}"
+                            )
+                            continue
                         geometry_kind = "polygon_mask" if polygon is not None else "bounding_box"
                         proposals.append(
                             PredictionProposal(
@@ -428,6 +437,14 @@ def process_inference_job(
                 session.add_all(proposals)
                 job.progress_current = index
                 previous = dict(job.result_json or {})
+                invalid_prediction_count = int(previous.get("invalid_prediction_count", 0)) + len(
+                    invalid_prediction_errors
+                )
+                recorded_errors = [
+                    str(item) for item in previous.get("invalid_prediction_errors", [])
+                ]
+                recorded_errors.extend(invalid_prediction_errors)
+                recorded_errors = recorded_errors[:5]
                 job.result_json = {
                     "processed_images": index,
                     "model_task": model_task,
@@ -439,7 +456,18 @@ def process_inference_job(
                         if item.geometry_kind in {"polygon_mask", "raster_mask"}
                     ),
                 }
+                if invalid_prediction_count:
+                    job.result_json["invalid_prediction_count"] = invalid_prediction_count
+                    job.result_json["invalid_prediction_errors"] = recorded_errors
                 if index == len(image_ids):
+                    if (
+                        model_task == "segment"
+                        and job.result_json["proposal_count"] == 0
+                        and invalid_prediction_count > 0
+                    ):
+                        raise ValidationError(
+                            "All segmentation predictions were invalid: " + recorded_errors[0]
+                        )
                     job.status = "succeeded"
                     job.completed_at = _utc_now()
                 session.commit()

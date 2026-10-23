@@ -162,3 +162,22 @@ def test_acceptance_labels_do_not_describe_synthetic_data_as_real() -> None:
 
     assert module.acceptance_dataset_label("synthetic") == "Synthetic technical"
     assert module.acceptance_dataset_label("representative") == "Representative coral"
+
+
+def test_failed_image_import_reports_source_and_api_detail() -> None:
+    module = load_module()
+    report = {
+        "successful": [],
+        "failed": [
+            {
+                "filename": "sample.png",
+                "detail": "managed staging path could not be created",
+            }
+        ],
+    }
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"sample\.png.*managed staging path could not be created",
+    ):
+        module.require_imported_image_id(report, Path("sample.png"))

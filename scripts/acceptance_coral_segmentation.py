@@ -57,6 +57,17 @@ def require(response: Any, status: int) -> dict[str, Any]:
     return dict(response.json())
 
 
+def require_imported_image_id(report: dict[str, Any], source: Path) -> str:
+    """Return the single imported image ID or preserve the API's diagnostic report."""
+
+    successful = report.get("successful")
+    if isinstance(successful, list) and len(successful) == 1:
+        image_id = successful[0].get("image_id")
+        if isinstance(image_id, str) and image_id:
+            return image_id
+    raise RuntimeError(f"Image import failed for {source}: {json.dumps(report, sort_keys=True)}")
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -507,7 +518,7 @@ def main() -> int:
                     ),
                     200,
                 )
-                image_id = imported["successful"][0]["image_id"]
+                image_id = require_imported_image_id(imported, image_path)
                 image_ids[reef_split].append(image_id)
                 image_dimensions[image_id] = (width, height)
                 updated = require(
