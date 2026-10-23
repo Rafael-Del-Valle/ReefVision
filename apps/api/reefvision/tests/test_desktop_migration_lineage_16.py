@@ -73,7 +73,6 @@ def test_desktop_accepts_native_0038_at_head_without_upgrade(
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0038"
 
 
-
 def _prepare_fresh_desktop_migration(
     monkeypatch: pytest.MonkeyPatch,
     engine: object,
