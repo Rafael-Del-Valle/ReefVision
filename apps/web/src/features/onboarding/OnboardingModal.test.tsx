@@ -46,7 +46,9 @@ describe("onboarding local usability", () => {
     opener.focus();
     expect(document.activeElement).toBe(close);
 
-    fireEvent.click(screen.getByRole("button", { name: "Don't show on startup" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Don't show on startup" }),
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(opener);
 
