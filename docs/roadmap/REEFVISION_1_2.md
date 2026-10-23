@@ -412,3 +412,18 @@ enter SHA-256 provenance; the algorithm advances to `ecology-longitudinal-0009`.
 The authenticated specimen registry, calibrated verified source records,
 registered designs, migration reconciliation and Windows acceptance remain
 pending. No 1.1 environmental-context work is duplicated.
+
+## Planned-visit endpoint QC precedence (2026-10-23)
+
+When a caller explicitly declares a planned UTC sampling calendar, an organism
+missing the scheduled first or last date is excluded as
+`missing_scheduled_observations` rather than only
+`nonmatching_sampling_window`. The exact missing UTC dates remain visible
+in `unit_coverage.missing_scheduled_dates_by_organism`, and the unit does not
+contribute to descriptive population means. Without a declared calendar,
+discordant first/last sampling dates retain the existing
+`nonmatching_sampling_window` exclusion. This fixes an actionable QC
+classification without implying death, zero abundance, true independent
+replication, or verified project-owned observations. Standalone API and
+persisted executable Workflow Builder regression coverage is included;
+full exact-head CI and Windows scientific acceptance remain release gates.
