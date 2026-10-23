@@ -77,34 +77,30 @@ describe("previewLocalMeshFile", () => {
       ),
     ).rejects.toThrow("oversized");
     await expect(
-      previewLocalMeshFile(
-        "p",
-        { name: "coral.obj", size: 1 } as File,
-        { ...calibration, meters_per_unit: 0 },
-      ),
+      previewLocalMeshFile("p", { name: "coral.obj", size: 1 } as File, {
+        ...calibration,
+        meters_per_unit: 0,
+      }),
     ).rejects.toThrow("positive scale");
     for (const uncertainty of [-0.01, 1.01, Number.NaN, Infinity]) {
       await expect(
-        previewLocalMeshFile(
-          "p",
-          { name: "coral.obj", size: 1 } as File,
-          { ...calibration, relative_scale_uncertainty: uncertainty },
-        ),
+        previewLocalMeshFile("p", { name: "coral.obj", size: 1 } as File, {
+          ...calibration,
+          relative_scale_uncertainty: uncertainty,
+        }),
       ).rejects.toThrow("Relative scale uncertainty");
     }
     await expect(
-      previewLocalMeshFile(
-        "p",
-        { name: "coral.obj", size: 1 } as File,
-        { ...calibration, meters_per_unit: 1_000_001 },
-      ),
+      previewLocalMeshFile("p", { name: "coral.obj", size: 1 } as File, {
+        ...calibration,
+        meters_per_unit: 1_000_001,
+      }),
     ).rejects.toThrow("positive scale");
     await expect(
-      previewLocalMeshFile(
-        "p",
-        { name: "coral.obj", size: 1 } as File,
-        { ...calibration, calibration_evidence: "   " },
-      ),
+      previewLocalMeshFile("p", { name: "coral.obj", size: 1 } as File, {
+        ...calibration,
+        calibration_evidence: "   ",
+      }),
     ).rejects.toThrow("calibration evidence");
     expect(fetchMock).not.toHaveBeenCalled();
   });
