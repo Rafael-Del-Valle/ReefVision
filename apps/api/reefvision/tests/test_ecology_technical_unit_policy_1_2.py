@@ -22,7 +22,21 @@ from reefvision.tests.test_workflow_model_agreement_1_2 import (
 
 @pytest.mark.parametrize(
     "technical_type",
-    ["image", "video_frame", "per-image", "photograph", "tile", "annotation", "camera"],
+    [
+        "image",
+        "video_frame",
+        "per-image",
+        "photograph",
+        "tile",
+        "annotation",
+        "camera",
+        "roi",
+        "bounding_box",
+        "segmentation",
+        "model_prediction",
+        "augmented_view",
+        "keyframe",
+    ],
 )
 def test_technical_unit_is_rejected_in_both_schema_contracts(
     technical_type: str,
@@ -60,6 +74,7 @@ def test_technical_unit_is_rejected_in_both_schema_contracts(
         PairedCountComparisonRequest(reference_kind="human_consensus", pairs=pairs)
 
 
+@pytest.mark.parametrize("technical_type", ["image", "roi", "model_prediction"])
 @pytest.mark.parametrize(
     ("node_type", "artifact_type"),
     [
@@ -67,8 +82,8 @@ def test_technical_unit_is_rejected_in_both_schema_contracts(
         ("ecology_paired_count_comparison", "paired_count_comparison"),
     ],
 )
-def test_saved_workflow_refuses_image_as_independent_unit(
-    client: TestClient, node_type: str, artifact_type: str
+def test_saved_workflow_refuses_technical_pseudoreplicates(
+    client: TestClient, node_type: str, artifact_type: str, technical_type: str
 ) -> None:
     project = create_project(client, "Technical-unit rejection")
     project_id = str(project["id"])
@@ -78,7 +93,7 @@ def test_saved_workflow_refuses_image_as_independent_unit(
         else comparison_graph()
     )
     node = next(row for row in graph["nodes"] if row["node_type"] == node_type)
-    node["parameters"]["experimental_unit_type"] = "image"
+    node["parameters"]["experimental_unit_type"] = technical_type
     saved = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
         json={"graph": graph, "create_new_revision": True},
