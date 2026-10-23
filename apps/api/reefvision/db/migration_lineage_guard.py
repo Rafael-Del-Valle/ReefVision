@@ -6,10 +6,7 @@ the revision identifier, so a cross-branch upgrade can silently skip the
 missing migration. Do not stamp, mutate, or delete any user schema here.
 """
 
-from __future__ import annotations
-
-from sqlalchemy import inspect, text
-from sqlalchemy.engine import Connection
+from sqlalchemy import Connection, inspect, text
 
 
 _REVIEW_TABLE = "review_queue_item_events"
