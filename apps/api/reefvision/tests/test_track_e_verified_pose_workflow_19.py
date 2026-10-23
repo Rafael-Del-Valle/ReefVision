@@ -91,9 +91,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     ]
     assert len(outputs) == 1
     assert len(outputs[0]["payload_sha256"]) == 64
-    assert outputs[0]["payload_sha256"] == canonical_json_sha256(
-        outputs[0]["payload_json"]
-    )
+    assert outputs[0]["payload_sha256"] == canonical_json_sha256(outputs[0]["payload_json"])
     assert outputs[0]["workflow_run_id"] == run["run"]["id"]
     assert outputs[0]["producer_node_run_id"] == run["nodes"][0]["id"]
     assert outputs[0]["id"] in run["nodes"][0]["output_artifact_ids_json"]
