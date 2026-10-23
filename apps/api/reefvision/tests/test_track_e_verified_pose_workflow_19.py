@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.db.models import PoseTrainingDataset
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_pose_training_phase10 import _frozen_dataset
 
@@ -79,6 +80,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     run = detail.json()
     assert run["run"]["status"] == "succeeded"
     assert run["run"]["graph_sha256"] == graph_record["graph_sha256"]
+    assert run["run"]["workflow_graph_record_id"] == graph_record["id"]
     assert len(run["nodes"]) == 1
     assert run["nodes"][0]["status"] == "succeeded"
 
@@ -89,6 +91,10 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     ]
     assert len(outputs) == 1
     assert len(outputs[0]["payload_sha256"]) == 64
+    assert outputs[0]["payload_sha256"] == canonical_json_sha256(outputs[0]["payload_json"])
+    assert outputs[0]["workflow_run_id"] == run["run"]["id"]
+    assert outputs[0]["producer_node_run_id"] == run["nodes"][0]["id"]
+    assert outputs[0]["id"] in run["nodes"][0]["output_artifact_ids_json"]
     payload = outputs[0]["payload_json"]
     assert payload["project_id"] == project_id
     assert payload["dataset_id"] == dataset_id
