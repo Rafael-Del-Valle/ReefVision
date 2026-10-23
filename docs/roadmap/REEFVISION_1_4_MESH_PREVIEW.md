@@ -89,3 +89,20 @@ Regression coverage:
 `test_spatial_mesh_render_sample_v14.py` checks the 512/513-face threshold,
 original-to-local index mapping, unchanged full-mesh area/uncertainty, and
 standalone versus executed saved Workflow Builder payload parity.
+
+### Render-sample area coverage (development)
+
+`preview_face_fraction` is the fraction of **triangle count** shown. The
+separate `preview_surface_area_fraction` reports the proportion of the
+**full-mesh triangle area** represented by sampled faces. It may be much
+smaller than the face fraction when the preview omits large triangles.
+`preview_sampled_surface_area_m2` reports sampled triangle area using the
+same caller-supplied scale; this is display diagnostic metadata, **not** a
+scientific measurement or biological tissue coverage estimate. The full
+`surface_area_m2` remains computed from every validated input triangle.
+
+When the entire mesh has zero triangle area, the area fraction is `null`
+rather than an invented 100% coverage value. Render sampling can still omit
+geometric or biological features even if its area fraction is high.
+The standalone endpoint and executed saved Workflow Builder graph expose
+the same fields; neither promotes unverified calibration or registration.
