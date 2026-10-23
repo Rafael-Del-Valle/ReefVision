@@ -144,9 +144,7 @@ def test_desktop_verifies_successful_native_review_migration(
                 )
             )
 
-    _prepare_fresh_desktop_migration(
-        monkeypatch, engine, upgrade=apply_native_review_revision
-    )
+    _prepare_fresh_desktop_migration(monkeypatch, engine, upgrade=apply_native_review_revision)
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
     desktop.run_pending_migrations(settings)
 
