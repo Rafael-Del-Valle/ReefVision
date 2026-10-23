@@ -139,9 +139,7 @@ def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
     thumbnail = tmp_path / "thumbnail.jpg"
     colors = [(240, 20, 20), (20, 240, 20), (20, 20, 240), (240, 240, 20)]
     camera = Image.new("RGB", (80, 60))
-    for (x, y), color in zip(
-        [(0, 0), (40, 0), (0, 30), (40, 30)], colors, strict=True
-    ):
+    for (x, y), color in zip([(0, 0), (40, 0), (0, 30), (40, 30)], colors, strict=True):
         camera.paste(color, (x, y, x + 40, y + 30))
     exif = Image.Exif()
     exif[274] = orientation
