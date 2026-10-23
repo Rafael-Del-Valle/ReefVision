@@ -181,3 +181,26 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - **Acceptance:** source committed to the isolated draft PR; exact-head Windows
   CI and a real interactive Windows upgrade/rollback remain mandatory. A
   passing packaging job does not establish installed-GUI acceptance.
+
+## 2026-10-23 — SQLAlchemy 2 / SQLite Alembic revision persistence (Track D)
+
+- **Reproduced root cause:** Windows packaging and Linux full backend CI showed
+  Alembic executing all migrations through 0038 while a *new connection* saw
+  `alembic_version` as `None` (or the older revision). SQLite DDL can survive
+  while SQLAlchemy 2 rolls back Alembic's implicit revision DML on closing
+  `engine.connect()` without an explicit commit.
+- `apps/api/migrations/env.py` now uses `engine.begin()` to commit the
+  revision marker on successful migrations, and roll back pending DML on
+  failures. The existing 0038 collision guard still executes before any
+  migration. No database stamping, asset deletion, or lineage rewrite.
+- Corrected two legacy desktop migration mocks: a synthetic 0038 stamp must
+  include the expected 1.6 review schema; a mocked successful upgrade must
+  produce the post-upgrade revision and schema.
+- Added real SQLite 0038→0037→0038 regression checking both persisted revision
+  markers and the review table across independent database connections, in
+  addition to the existing fresh/restart regression.
+- **Local evidence:** a minimal isolated Alembic + SQLAlchemy 2.0 SQLite
+  upgrade→downgrade→upgrade smoke test passed with `engine.begin()`. This
+  verifies the transaction mechanism, **not** the complete ReefVision migration
+  history. Full exact-head CI, Windows MSI/installed GUI and 1.1/1.6 lineage
+  reconciliation remain outstanding. Version 1.6 stays DRAFT / HOLD.
