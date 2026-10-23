@@ -1,5 +1,6 @@
 """Training workspace API routes."""
 
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -215,6 +216,20 @@ def get_training_run(
     return service(request, session).get_run(run_id)
 
 
+def _safe_terminal_log_text(payload: bytes) -> str:
+    """Render training logs without terminal escape/control side effects."""
+    text = payload.decode("utf-8", errors="replace")
+    # Training frameworks may emit ANSI colors or terminal-title sequences.
+    # Never forward those controls to the external PowerShell monitor.
+    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$)", "", text)
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+    return "".join(
+        char
+        for char in text
+        if char in "\t\n\r" or (ord(char) >= 32 and not 127 <= ord(char) <= 159)
+    )
+
+
 def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool | str]:
     """Read only a bounded tail of a run's persisted log, never an arbitrary path."""
     empty: dict[str, bool | str] = {"available": False, "text": ""}
@@ -240,7 +255,7 @@ def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool |
             payload = handle.read(16384)
     except OSError:
         return empty
-    return {"available": True, "text": payload.decode("utf-8", errors="replace")}
+    return {"available": True, "text": _safe_terminal_log_text(payload)}
 
 
 @router.get("/training-runs/{run_id}/logs/tail")
