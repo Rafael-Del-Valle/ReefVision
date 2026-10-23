@@ -106,7 +106,7 @@ def check_cab_artifact_partition(workflow: str) -> list[str]:
     seen: set[str] = set()
     for step in uploads:
         names = re.findall(
-            r"(?m)^          name: (ReefVision-Windows-Installer-Part-\\d+)\\s*$",
+            r"(?m)^          name: (ReefVision-Windows-Installer-Part-\d+)\s*$",
             step,
         )
         if len(names) != 1 or names[0] not in expected or names[0] in seen:
@@ -116,7 +116,7 @@ def check_cab_artifact_partition(workflow: str) -> list[str]:
         seen.add(name)
         cabs = re.findall(
             r"(?m)^            apps/web/src-tauri/target/x86_64-pc-windows-msvc/"
-            r"release/bundle/msi/(rv\\d+\\.cab)\\s*$",
+            r"release/bundle/msi/(rv\d+\.cab)\s*$",
             step,
         )
         if len(cabs) != len(set(cabs)) or set(cabs) != expected[name]:
@@ -126,7 +126,7 @@ def check_cab_artifact_partition(workflow: str) -> list[str]:
             )
         msi_paths = re.findall(
             r"(?m)^            apps/web/src-tauri/target/x86_64-pc-windows-msvc/"
-            r"release/bundle/msi/\\*\\.msi\\s*$",
+            r"release/bundle/msi/\*\.msi\s*$",
             step,
         )
         if len(msi_paths) != (1 if name.endswith("Part-1") else 0):
