@@ -82,6 +82,8 @@ export function ReviewQueueDashboard({
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
     useState(false);
 
+  // A dataset-version scope without a selected version is not a project scope.
+  const scopeReady = scopeType === "project" || Boolean(datasetVersionId);
   const versions = useQuery({
     queryKey: ["dataset_versions", project.id],
     queryFn: ({ signal }) => getDatasetVersions(project.id, signal),
@@ -92,6 +94,7 @@ export function ReviewQueueDashboard({
       scopeType === "dataset_version" && datasetVersionId
         ? getDatasetVersionQualityControlRuns(datasetVersionId, signal)
         : getQualityControlRuns(project.id, signal),
+    enabled: scopeReady,
   });
   const queues = useQuery({
     queryKey: reviewQueuesQueryKey(project.id, scopeType, datasetVersionId),
@@ -99,6 +102,7 @@ export function ReviewQueueDashboard({
       scopeType === "dataset_version" && datasetVersionId
         ? getDatasetVersionReviewQueues(datasetVersionId, signal)
         : getReviewQueues(project.id, signal),
+    enabled: scopeReady,
   });
   // Do not query a stale queue from another project or dataset scope.
   const activeQueueId = scopedReviewQueueId(selectedQueueId, queues.data);
