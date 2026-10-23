@@ -243,6 +243,23 @@ describe("PointCloudArtifactViewer", () => {
   it("rejects contradictory or malformed extrema-coverage metadata", () => {
     for (const fields of [
       {
+        // Claims a hidden extreme when every source bound is sampled.
+        preview_omitted_axis_extrema: ["x_max"],
+        preview_axis_extrema_covered: false,
+      },
+      {
+        // Claims complete coverage although an unsampled extreme is known.
+        axis_aligned_max_in_source_frame_m: [2, 1, 0],
+        preview_omitted_axis_extrema: [],
+        preview_axis_extrema_covered: true,
+      },
+      {
+        // The omission flag is syntactically valid but names the wrong axis.
+        axis_aligned_max_in_source_frame_m: [2, 1, 0],
+        preview_omitted_axis_extrema: ["y_max"],
+        preview_axis_extrema_covered: false,
+      },
+      {
         preview_omitted_axis_extrema: ["x_max"],
         preview_axis_extrema_covered: true,
       },
