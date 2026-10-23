@@ -96,6 +96,12 @@ class VideoTrackService:
                     raise ValidationError(
                         "Pose keypoints cannot extend outside the source video bounds"
                     )
+            for polygon in keyframe.mask_polygons or []:
+                for point_x, point_y in polygon:
+                    if point_x > video.width_px or point_y > video.height_px:
+                        raise ValidationError(
+                            "Segmentation polygons cannot extend outside the source video bounds"
+                        )
             for observation in keyframe.pose_observations or []:
                 if observation.x > video.width_px or observation.y > video.height_px:
                     raise ValidationError(
