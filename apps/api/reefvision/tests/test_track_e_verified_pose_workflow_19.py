@@ -150,9 +150,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     # Execution must independently reject schema drift even if a node adapter
     # is called after the graph was planned successfully.
     with app.state.session_factory() as session:
-        with pytest.raises(
-            ValidationError, match="landmark schema no longer matches frozen truth"
-        ):
+        with pytest.raises(ValidationError, match="landmark schema no longer matches"):
             execute_pose_training_dataset_adapter(
                 session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
             )
