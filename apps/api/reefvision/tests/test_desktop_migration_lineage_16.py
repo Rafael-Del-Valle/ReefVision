@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 from reefvision import desktop
@@ -113,12 +114,18 @@ def test_desktop_rejects_noop_migration_without_touching_records(
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE preserved (id TEXT PRIMARY KEY)"))
         connection.execute(text("INSERT INTO preserved VALUES ('retain-me')"))
-    _prepare_fresh_desktop_migration(monkeypatch, engine, upgrade=lambda *_args: None)
+    observed_urls: list[str] = []
+
+    def no_op_upgrade(config: Config, _revision: str) -> None:
+        observed_urls.append(config.attributes["desktop_database_url"])
+
+    _prepare_fresh_desktop_migration(monkeypatch, engine, upgrade=no_op_upgrade)
 
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
     with pytest.raises(RuntimeError, match="did not reach the expected Alembic"):
         desktop.run_pending_migrations(settings)
 
+    assert observed_urls == [str(engine.url)]
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT id FROM preserved")) == "retain-me"
         assert not connection.dialect.has_table(connection, "alembic_version")
