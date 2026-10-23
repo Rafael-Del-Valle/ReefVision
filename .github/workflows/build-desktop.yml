@@ -113,19 +113,42 @@ jobs:
           retention-days: 7
 
       # The previous 2.8 GB upload reported success but rv5.cab was absent
-      # after extraction on the acceptance runner. Keep each artifact under 2 GiB.
+      # after extraction on the acceptance runner. Upload all six CABs in
+      # separate bounded-size partitions so acceptance can verify every byte.
       - name: Verify CAB partition matches the packaged 1.0.3 installer
         shell: pwsh
         run: |
           $folder = 'apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi'
           $actual = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File |
             Select-Object -ExpandProperty Name | Sort-Object)
-          $expected = @('rv1.cab', 'rv2.cab', 'rv3.cab', 'rv4.cab', 'rv5.cab')
+          $expected = @('rv1.cab', 'rv2.cab', 'rv3.cab', 'rv4.cab', 'rv5.cab', 'rv6.cab')
           if (($actual -join ',') -ne ($expected -join ',')) {
             throw "Installer CAB partition needs review: found $($actual -join ', ')."
           }
-          if (@(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File).Count -ne 1) {
+          $msi = @(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File)
+          if ($msi.Count -ne 1) {
             throw 'Expected exactly one MSI before artifact upload.'
+          }
+          # GitHub artifact upload previously lost a CAB when the compressed
+          # archive was too large. Fail closed if any intended part reaches 2 GiB.
+          $partitions = @(
+            @{ Name = 'Part-1'; Files = @($msi[0].Name, 'rv1.cab', 'rv2.cab', 'build-provenance.json') }
+            @{ Name = 'Part-2'; Files = @('rv3.cab', 'rv4.cab') }
+            @{ Name = 'Part-3'; Files = @('rv5.cab', 'rv6.cab') }
+          )
+          foreach ($part in $partitions) {
+            [long]$bytes = 0
+            foreach ($filename in $part.Files) {
+              $item = Join-Path $folder $filename
+              if (-not (Test-Path -LiteralPath $item -PathType Leaf)) {
+                throw "Missing installer partition member: $filename"
+              }
+              $bytes += (Get-Item -LiteralPath $item).Length
+            }
+            if ($bytes -ge 2GB) {
+              throw "$($part.Name) is $bytes bytes; keep upload partitions below 2 GiB."
+            }
+            Write-Host "$($part.Name): $bytes bytes"
           }
 
       - name: Upload Windows installer MSI and CABs 1-2
@@ -140,14 +163,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload Windows installer CABs 3-5
+      - name: Upload Windows installer CABs 3-4
         uses: actions/upload-artifact@v4
         with:
           name: ReefVision-Windows-Installer-Part-2
           path: |
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv3.cab
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv4.cab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer CABs 5-6
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-Windows-Installer-Part-3
+          path: |
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv5.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv6.cab
           if-no-files-found: error
           retention-days: 14
 
@@ -166,7 +198,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Retrieve exact MSI and all five external CABs
+      - name: Retrieve exact MSI and all six candidate CABs
         uses: actions/download-artifact@v4
         with:
           pattern: ReefVision-Windows-Installer-Part-*
