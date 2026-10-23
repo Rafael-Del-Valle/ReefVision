@@ -235,3 +235,50 @@ def test_calendar_requires_explicit_iso_calendar_dates(
     result = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
     assert result.status_code == 422, result.text
     assert "explicit ISO YYYY-MM-DD" in result.text
+
+def test_scheduled_analysis_requires_unit_ids_for_every_observation(
+    client: TestClient,
+) -> None:
+    request = _payload()
+    request["observations"][0].pop("experimental_unit_id")
+    result = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert result.status_code == 400, result.text
+    assert "requires unit IDs on all observations" in result.json()["detail"]
+
+
+def test_missing_scheduled_unit_id_fails_saved_workflow_without_analysis_artifact(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Missing sampling unit ID")["id"])
+    request = _payload()
+    request["observations"][0].pop("experimental_unit_id")
+    graph = _graph(request["observations"])
+    graph["nodes"][1]["parameters"].update(
+        {
+            "experimental_unit_type": "tank",
+            "expected_sampling_dates_by_unit": request["expected_sampling_dates_by_unit"],
+        }
+    )
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "longitudinal_analysis" for item in detail.json()["artifacts"]
+    )
