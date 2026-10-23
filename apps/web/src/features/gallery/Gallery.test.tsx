@@ -526,6 +526,33 @@ describe("Gallery", () => {
     expect(retryImage.getAttribute("src")).toContain("rv_retry=1");
   });
 
+  it("reveals the first image even if WebView2 decode never resolves", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery();
+    const focused = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    Object.defineProperty(focused, "decode", {
+      configurable: true,
+      value: vi.fn(() => new Promise<void>(() => {})),
+    });
+
+    fireEvent.load(focused);
+
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+  });
+
   it("resets the first-image loading state during navigation", async () => {
     const secondImage: ProjectImage = {
       ...image,

@@ -143,6 +143,37 @@ describe("ProjectTrainingMonitor", () => {
     ).toHaveAttribute("value", "2");
   });
 
+  it("shows real box, cls and dfl losses from epoch history before other metrics", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        metrics: {
+          "metrics/mAP50(B)": 0.8123,
+          "metrics/precision(B)": 0.902,
+          "train/box_loss": 0.5,
+          "train/dfl_loss": Number.NaN,
+        },
+        metrics_history: {
+          "train/box_loss": [0.8, 0.6],
+          "train/cls_loss": [1.5, 1.2],
+          "train/dfl_loss": [1.1, 0.9],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    expect(screen.getByText("train box loss")).toBeInTheDocument();
+    expect(screen.getByText("train cls loss")).toBeInTheDocument();
+    expect(screen.getByText("train dfl loss")).toBeInTheDocument();
+    expect(screen.getByText("0.5")).toBeInTheDocument();
+    expect(screen.getByText("1.2")).toBeInTheDocument();
+    expect(screen.getByText("0.9")).toBeInTheDocument();
+    expect(screen.getByText("0.8123")).toBeInTheDocument();
+    expect(screen.getByText("0.902")).toBeInTheDocument();
+  });
+
   it("cancels through the existing training-run API and updates the shared cache", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
     vi.mocked(api.cancelTrainingRun).mockResolvedValue({

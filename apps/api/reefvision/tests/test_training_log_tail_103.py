@@ -1,0 +1,73 @@
+"""Read-only training-log tail security and API regression tests for 1.0.3."""
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+
+from reefvision.api.routes import training as training_routes
+from reefvision.config import Settings
+
+
+def test_missing_log_does_not_fabricate_output(tmp_path: Path) -> None:
+    assert training_routes._training_log_tail(None, tmp_path) == {
+        "available": False,
+        "text": "",
+    }
+    assert training_routes._training_log_tail("missing.log", tmp_path) == {
+        "available": False,
+        "text": "",
+    }
+
+
+def test_log_tail_is_bounded_and_read_only(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = b"earlier epochs\n" + b"x" * 20000 + b"\ntrain/box_loss=0.25\n"
+    log.write_bytes(original)
+    result = training_routes._training_log_tail(str(log), tmp_path)
+    assert result["available"] is True
+    assert isinstance(result["text"], str)
+    assert result["text"].endswith("train/box_loss=0.25\n")
+    assert len(result["text"].encode("utf-8")) <= 16384
+    assert log.read_bytes() == original
+
+
+@pytest.mark.parametrize("filename", ["../private.log", "reefvision.db", "private.csv"])
+def test_log_tail_rejects_unsafe_paths(tmp_path: Path, filename: str) -> None:
+    if filename.startswith("../"):
+        (tmp_path.parent / "private.log").write_text("private", encoding="utf-8")
+    else:
+        (tmp_path / filename).write_text("private", encoding="utf-8")
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail(filename, tmp_path)
+    assert error.value.status_code == 403
+
+
+def test_training_log_api_uses_persisted_run_path_only(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    log = test_settings.resolved_data_dir / "training.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("epoch 2 train/cls_loss=0.44\n", encoding="utf-8")
+    looked_up: list[str] = []
+
+    def fake_service(_request: object, _session: object) -> SimpleNamespace:
+        def get_run(run_id: str) -> SimpleNamespace:
+            looked_up.append(run_id)
+            return SimpleNamespace(logs_path=str(log))
+
+        return SimpleNamespace(get_run=get_run)
+
+    monkeypatch.setattr(training_routes, "service", fake_service)
+    response = client.get("/api/v1/training-runs/run-1/logs/tail")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {
+        "available": True,
+        "text": "epoch 2 train/cls_loss=0.44\n",
+    }
+    assert looked_up == ["run-1"]

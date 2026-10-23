@@ -225,20 +225,12 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     phase === "thumbnail-loading" || phase === "thumbnail-loaded";
   const waiting = phase === "loading" || phase === "thumbnail-loading";
 
-  async function handleLoad(event: { currentTarget: HTMLImageElement }) {
-    const element = event.currentTarget;
-    if (typeof element.decode === "function") {
-      try {
-        await element.decode();
-      } catch {
-        if (!element.complete || element.naturalWidth === 0) {
-          if (element.isConnected) handleError();
-          return;
-        }
-      }
-    }
-    // A stale decode must not clear the loading state of a different image.
-    if (element.isConnected) {
+  function handleLoad(event: { currentTarget: HTMLImageElement }) {
+    // The load event is sufficient to reveal the image. In some WebView2
+    // versions decode() can remain pending even after a successful load,
+    // leaving the first image obscured by a perpetual loading indicator.
+    // Keyed previews and the connection check reject stale image events.
+    if (event.currentTarget.isConnected) {
       setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
     }
   }

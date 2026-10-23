@@ -227,6 +227,23 @@ while ($true) {
         Write-Host ('  {0,-30} {1}' -f $key, $latestMetrics[$key])
       }
     }
+    # The API reads only the persisted run log, with path confinement and a
+    # bounded tail. This console never opens a training process or writes logs.
+    try {
+      $tail = Invoke-RestMethod -Uri ($url + '/logs/tail') -Method Get -TimeoutSec 5
+      if ($tail.available -and $tail.text) {
+        Write-Host ''
+        Write-Host 'Training job log (last 20 lines, read-only)'
+        $logLines = @($tail.text -split '\r?\n' | Where-Object { $_ -ne '' })
+        foreach ($line in ($logLines | Select-Object -Last 20)) {
+          Write-Host $line
+        }
+      } else {
+        Write-Host 'No persisted training job log available yet.'
+      }
+    } catch {
+      Write-Host 'Training job log unavailable (status/metrics remain live).'
+    }
     if ($run.error_message) { Write-Host ('Error: {0}' -f $run.error_message) }
     if ($run.status -in @('completed', 'failed', 'cancelled')) {
       Write-Host 'Run ended. This window can now be closed.'

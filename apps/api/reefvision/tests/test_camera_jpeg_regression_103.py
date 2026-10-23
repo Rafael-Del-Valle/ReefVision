@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from reefvision.storage.images import create_browser_display, create_thumbnail
 from reefvision.tests.test_images import create_project, import_one
 
 
@@ -73,3 +75,151 @@ def test_jpeg_camera_filename_aliases_preserve_original_content(
     response = client.get(f"/api/v1/images/{image_id}/content")
     assert response.status_code == 200
     assert response.content == payload
+
+
+@pytest.mark.parametrize("progressive", [False, True])
+def test_truncated_camera_jpeg_rejected_before_import_commit(
+    client: TestClient, progressive: bool
+) -> None:
+    project = create_project(client, "Truncated camera JPEG")
+    stream = BytesIO()
+    Image.new("RGB", (512, 512), (20, 30, 40)).save(stream, format="JPEG", progressive=progressive)
+    truncated = stream.getvalue()[:-2]  # Remove JPEG end-of-image marker.
+    report = import_one(client, project["id"], filename="DSC_0002.JPEG", content=truncated)
+    assert not report["successful"], report
+    assert len(report["failed"]) == 1, report
+
+
+@pytest.mark.parametrize(
+    ("orientation", "expected"),
+    [
+        (1, (64, 48)),
+        (2, (64, 48)),
+        (3, (64, 48)),
+        (4, (64, 48)),
+        (5, (64, 48)),
+        (6, (64, 48)),
+        (7, (64, 48)),
+        (8, (64, 48)),
+    ],
+)
+def test_camera_display_exif_orientation_preserves_original(
+    tmp_path: Path, orientation: int, expected: tuple[int, int]
+) -> None:
+    source = tmp_path / "DSC_0042.JPEG"
+    display = tmp_path / "display.png"
+    exif = Image.Exif()
+    exif[274] = orientation
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(source, format="JPEG", exif=exif)
+    original = source.read_bytes()
+    create_browser_display(source, display)
+    with Image.open(display) as rendered:
+        assert rendered.format == "PNG"
+        assert rendered.size == expected
+        assert rendered.getexif().get(274) is None
+    assert source.read_bytes() == original
+    with Image.open(source) as camera:
+        assert camera.size == (64, 48)
+        assert camera.getexif().get(274) == orientation
+
+
+@pytest.mark.parametrize(
+    ("orientation", "quadrant_order"),
+    [
+        (1, (0, 1, 2, 3)),
+        (2, (1, 0, 3, 2)),
+        (3, (3, 2, 1, 0)),
+        (4, (2, 3, 0, 1)),
+        (5, (0, 2, 1, 3)),
+        (6, (2, 0, 3, 1)),
+        (7, (3, 1, 2, 0)),
+        (8, (1, 3, 0, 2)),
+    ],
+)
+def test_camera_exif_display_preserves_source_pixels_while_thumbnail_is_oriented(
+    tmp_path: Path, orientation: int, quadrant_order: tuple[int, int, int, int]
+) -> None:
+    """Keep editor coordinates source-aligned while orienting the gallery thumbnail."""
+
+    source = tmp_path / "DSC_0043.JPEG"
+    display = tmp_path / "display.png"
+    thumbnail = tmp_path / "thumbnail.jpg"
+    colors = [(240, 20, 20), (20, 240, 20), (20, 20, 240), (240, 240, 20)]
+    camera = Image.new("RGB", (80, 60))
+    for (x, y), color in zip([(0, 0), (40, 0), (0, 30), (40, 30)], colors, strict=True):
+        camera.paste(color, (x, y, x + 40, y + 30))
+    exif = Image.Exif()
+    exif[274] = orientation
+    camera.save(source, format="JPEG", quality=100, subsampling=0, exif=exif)
+    original = source.read_bytes()
+
+    create_browser_display(source, display)
+    create_thumbnail(source, thumbnail, max_width=160, max_height=160)
+
+    sample_points = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)]
+    with Image.open(display) as rendered:
+        assert rendered.size == (80, 60)
+        assert rendered.getexif().get(274) is None
+        for (fx, fy), expected in zip(sample_points, colors, strict=True):
+            actual = rendered.convert("RGB").getpixel(
+                (int(rendered.width * fx), int(rendered.height * fy))
+            )
+            assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
+
+    expected_thumbnail_size = (80, 60) if orientation <= 4 else (60, 80)
+    with Image.open(thumbnail) as rendered:
+        assert rendered.size == expected_thumbnail_size
+        assert rendered.getexif().get(274) is None
+        for (fx, fy), color_index in zip(sample_points, quadrant_order, strict=True):
+            actual = rendered.convert("RGB").getpixel(
+                (int(rendered.width * fx), int(rendered.height * fy))
+            )
+            expected = colors[color_index]
+            assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
+    assert source.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("mode", "color", "expected_display_mode"),
+    [
+        ("CMYK", (10, 40, 80, 5), "RGB"),
+        ("L", 127, "L"),
+    ],
+)
+def test_non_rgb_camera_jpeg_source_aligned_display_and_oriented_thumbnail(
+    client: TestClient,
+    tmp_path: Path,
+    mode: str,
+    color: tuple[int, ...] | int,
+    expected_display_mode: str,
+) -> None:
+    """CMYK and grayscale camera JPEGs must render without altering source bytes."""
+
+    source = tmp_path / "DSC_0003.JPEG"
+    display = tmp_path / "display.png"
+    thumbnail = tmp_path / "thumbnail.jpg"
+    exif = Image.Exif()
+    exif[274] = 6
+    Image.new(mode, (80, 60), color).save(source, format="JPEG", exif=exif)
+    original = source.read_bytes()
+
+    project = create_project(client, f"{mode} camera JPEG")
+    report = import_one(client, project["id"], filename=source.name, content=original)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["media_type"] == "image/jpeg"
+    assert metadata["metadata_json"]["mode"] == mode
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+    create_browser_display(source, display)
+    create_thumbnail(source, thumbnail, max_width=160, max_height=160)
+    with Image.open(display) as rendered:
+        assert rendered.mode == expected_display_mode
+        assert rendered.size == (80, 60)
+        assert rendered.getexif().get(274) is None
+    with Image.open(thumbnail) as rendered:
+        assert rendered.mode == "RGB"
+        assert rendered.size == (60, 80)
+        assert rendered.getexif().get(274) is None
+    assert source.read_bytes() == original

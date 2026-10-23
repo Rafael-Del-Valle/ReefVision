@@ -52,6 +52,7 @@ jobs:
           "release-slug=$($releaseVersion.Replace('.', '-'))" >> $env:GITHUB_OUTPUT
 
       - name: Check Windows installer version before packaging
+        shell: pwsh
         run: python scripts/check-windows-installer-acceptance-version.py
 
       - uses: actions/setup-node@v4
@@ -111,14 +112,42 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-      - name: Upload complete Windows installer (MSI and external CABs)
+      # The previous 2.8 GB upload reported success but rv5.cab was absent
+      # after extraction on the acceptance runner. Keep each artifact under 2 GiB.
+      - name: Verify CAB partition matches the packaged 1.0.3 installer
+        shell: pwsh
+        run: |
+          $folder = 'apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi'
+          $actual = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File |
+            Select-Object -ExpandProperty Name | Sort-Object)
+          $expected = @('rv1.cab', 'rv2.cab', 'rv3.cab', 'rv4.cab', 'rv5.cab')
+          if (($actual -join ',') -ne ($expected -join ',')) {
+            throw "Installer CAB partition needs review: found $($actual -join ', ')."
+          }
+          if (@(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File).Count -ne 1) {
+            throw 'Expected exactly one MSI before artifact upload.'
+          }
+
+      - name: Upload Windows installer MSI and CABs 1-2
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-Windows-Installer
+          name: ReefVision-Windows-Installer-Part-1
           path: |
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
-            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv1.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv2.cab
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/build-provenance.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer CABs 3-5
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-Windows-Installer-Part-2
+          path: |
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv3.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv4.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv5.cab
           if-no-files-found: error
           retention-days: 14
 
@@ -134,10 +163,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Retrieve exact MSI and its external CABs
+      - name: Retrieve exact MSI and all five external CABs
         uses: actions/download-artifact@v4
         with:
-          name: ReefVision-Windows-Installer
+          pattern: ReefVision-Windows-Installer-Part-*
+          merge-multiple: true
           path: ${{ runner.temp }}/reefvision-${{ needs.build-windows-installer.outputs.release-slug }}-installer
 
       - name: Verify MSI-declared cabinet payload before any install
