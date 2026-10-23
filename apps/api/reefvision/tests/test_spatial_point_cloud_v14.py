@@ -266,9 +266,7 @@ def test_hidden_extreme_is_reported_without_changing_full_cloud_measurements() -
     assert result["preview_omitted_axis_extrema"] == ["x_max"]
     assert "preview_omits_axis_extrema" in result["qc_warnings"]
     assert result["axis_aligned_dimensions_m"] == pytest.approx([10000.0, 0, 0])
-    assert result["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
-        [1000.0, 0, 0]
-    )
+    assert result["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx([1000.0, 0, 0])
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["surface_area_m2"] is None
     assert result["branch_length_m"] is None
@@ -315,9 +313,7 @@ def test_hidden_extreme_standalone_and_saved_workflow_parity(
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -327,9 +323,7 @@ def test_hidden_extreme_standalone_and_saved_workflow_parity(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        a
-        for a in detail.json()["artifacts"]
-        if a["data_type"] == "point_cloud_measurement_preview"
+        a for a in detail.json()["artifacts"] if a["data_type"] == "point_cloud_measurement_preview"
     )
     expected = standalone.json()
     for key in (
