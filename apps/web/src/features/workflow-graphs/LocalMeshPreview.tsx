@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { previewLocalMeshFile } from "./workflowGraphApi";
@@ -16,9 +16,18 @@ export function LocalMeshPreview({ projectId }: LocalMeshPreviewProps) {
   const [artifact, setArtifact] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const requestVersion = useRef(0);
+
+  function invalidatePreview(): void {
+    requestVersion.current += 1;
+    setArtifact(null);
+    setError(null);
+    setLoading(false);
+  }
 
   async function preview(): Promise<void> {
     if (!file) return;
+    const version = ++requestVersion.current;
     setLoading(true);
     setError(null);
     setArtifact(null);
@@ -30,11 +39,13 @@ export function LocalMeshPreview({ projectId }: LocalMeshPreviewProps) {
         relative_scale_uncertainty:
           uncertainty.trim() === "" ? null : Number(uncertainty),
       });
-      setArtifact(result);
+      if (version === requestVersion.current) setArtifact(result);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Mesh preview failed.");
+      if (version === requestVersion.current) {
+        setError(reason instanceof Error ? reason.message : "Mesh preview failed.");
+      }
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }
 
@@ -55,8 +66,7 @@ export function LocalMeshPreview({ projectId }: LocalMeshPreviewProps) {
             aria-label="Mesh file"
             onChange={(event) => {
               setFile(event.currentTarget.files?.[0] ?? null);
-              setArtifact(null);
-              setError(null);
+              invalidatePreview();
             }}
           />
         </label>
@@ -67,7 +77,10 @@ export function LocalMeshPreview({ projectId }: LocalMeshPreviewProps) {
             min="0.000000001"
             step="any"
             value={scale}
-            onChange={(event) => setScale(event.target.value)}
+            onChange={(event) => {
+              setScale(event.target.value);
+              invalidatePreview();
+            }}
           />
         </label>
         <label>
@@ -78,7 +91,10 @@ export function LocalMeshPreview({ projectId }: LocalMeshPreviewProps) {
             max="1"
             step="any"
             value={uncertainty}
-            onChange={(event) => setUncertainty(event.target.value)}
+            onChange={(event) => {
+              setUncertainty(event.target.value);
+              invalidatePreview();
+            }}
           />
         </label>
         <label>
@@ -87,14 +103,25 @@ export function LocalMeshPreview({ projectId }: LocalMeshPreviewProps) {
             type="text"
             value={evidence}
             maxLength={2000}
-            onChange={(event) => setEvidence(event.target.value)}
+            onChange={(event) => {
+              setEvidence(event.target.value);
+              invalidatePreview();
+            }}
           />
         </label>
       </div>
-      <button type="button" disabled={!file || loading} onClick={() => void preview()}>
+      <button
+        type="button"
+        disabled={!file || loading}
+        onClick={() => void preview()}
+      >
         {loading ? "Reading mesh..." : "Preview mesh"}
       </button>
-      {error && <p role="alert" className="form-error">{error}</p>}
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
       {artifact && (
         <>
           <p role="status">
