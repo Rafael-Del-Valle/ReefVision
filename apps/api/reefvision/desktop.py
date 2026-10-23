@@ -253,6 +253,11 @@ def run_pending_migrations(settings: Settings) -> None:
 
     script = ScriptDirectory.from_config(config)
     expected_revision = script.get_current_head()
+    if expected_revision is None:
+        raise RuntimeError(
+            "ReefVision desktop has no packaged Alembic migration head; "
+            "refusing to start with an unverifiable database schema."
+        )
 
     engine = create_database_engine(settings)
     try:
@@ -272,6 +277,23 @@ def run_pending_migrations(settings: Settings) -> None:
         return
 
     command.upgrade(config, "head")
+
+    # An upgrade call is not proof that the intended database was migrated.
+    # Reopen the desktop database and verify the exact revision before serving
+    # write requests. Never stamp or mutate a mismatched database here.
+    verification_engine = create_database_engine(settings)
+    try:
+        with verification_engine.connect() as connection:
+            assert_compatible_revision_0038(connection)
+            verified_revision = MigrationContext.configure(connection).get_current_revision()
+    finally:
+        verification_engine.dispose()
+    if verified_revision != expected_revision:
+        raise RuntimeError(
+            "ReefVision desktop migration did not reach the expected Alembic "
+            f"revision {expected_revision!r} (observed {verified_revision!r}); "
+            "refusing to start the API until the database is reconciled."
+        )
 
 
 def require_scale_assistant_marker_runtime() -> None:
