@@ -77,17 +77,11 @@ def test_shared_parent_disclosed_in_standalone_and_saved_workflow(
     result = standalone.json()
     assert result["cross_unit_shared_parent_colony_ids"] == ["shared-parent"]
     assert result["evidence_level"] == "caller_supplied_unverified"
-    count_key = (
-        "declared_independent_unit_count"
-        if kind == "paired"
-        else "independent_unit_count"
-    )
+    count_key = "declared_independent_unit_count" if kind == "paired" else "independent_unit_count"
     assert result[count_key] == 2
 
     project_id = str(create_project(client, f"Shared parent review {kind}")["id"])
-    plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     saved = client.post(
@@ -101,17 +95,18 @@ def test_shared_parent_disclosed_in_standalone_and_saved_workflow(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        str(queued.json()["job_id"]),
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
-    artifacts = [
-        row for row in detail.json()["artifacts"] if row["data_type"] == artifact_type
-    ]
+    artifacts = [row for row in detail.json()["artifacts"] if row["data_type"] == artifact_type]
     assert len(artifacts) == 1
     payload = artifacts[0]["payload_json"]
     assert payload["cross_unit_shared_parent_colony_ids"] == ["shared-parent"]
@@ -122,9 +117,7 @@ def test_shared_parent_disclosed_in_standalone_and_saved_workflow(
 
 
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
-def test_no_false_cross_unit_parent_flag_for_single_tank(
-    client: TestClient, kind: str
-) -> None:
+def test_no_false_cross_unit_parent_flag_for_single_tank(client: TestClient, kind: str) -> None:
     if kind == "longitudinal":
         rows = _rows(
             parent_a="same-parent",
