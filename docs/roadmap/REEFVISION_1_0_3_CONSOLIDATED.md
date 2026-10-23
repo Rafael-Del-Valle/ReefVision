@@ -160,3 +160,71 @@ representative segmentation is a separate scientific-validation gap rather than 
 observed software defect. Sprint commits are on
 `fix/reefvision-training-architecture-picker-20261022` in draft PR #81; the final
 documentation commit follows the installer build commit recorded above.
+
+## 2026-10-23 release-readiness continuation (PR #81)
+
+Release decision remains **HOLD — not release-ready**. Development verification on the
+current PR tree is green, a reproduced segmentation inference blocker is fixed, and the
+Windows workflow now performs a real disposable-runner upgrade from the published 1.0.2
+installer. Those results do not substitute for representative biological validation,
+the RTX 3090 matrix, or installed interactive P0–P7 acceptance.
+
+### Continuation changes and evidence
+
+- The PR integrated the latest consolidated 1.0.3 base, including bounded WebView2
+  gallery-media recovery. Gallery timeout/replacement coverage, the first-open viewport
+  Playwright regression, full TypeScript, and the full frontend suite pass.
+- Instance-segmentation inference now validates provider output per prediction. A
+  malformed polygon is skipped and recorded only when valid proposals survive; if all
+  returned predictions are invalid, the job still fails and cleans up pending proposals.
+  This closes the observed failure where a small number of self-intersecting Ultralytics
+  contours discarded every valid held-out proposal.
+- A fresh deterministic 20/5/5 synthetic technical dataset completed a 25-epoch CPU
+  segmentation lifecycle in 35.1 seconds. It registered checkpoint SHA-256
+  `1f9e8aa1dc94a698a1e0ce0feede0ee6f70c6c82dbae16c7550335d67c711023`,
+  retained 43 valid held-out polygon proposals, explicitly accepted and persisted one
+  mask, and passed restart inference. Two invalid restart contours were reported and
+  skipped while nine valid proposals persisted. Evidence is retained at
+  `C:\Windows\Temp\rv103-seg-final-out\report.json`. Dataset representativeness and
+  scientific segmentation acceptance remain **UNVERIFIED**.
+- The Windows clean-install job now downloads the published 1.0.2 MSI and five CABs,
+  pins its audited source commit and provenance SHA-256, verifies every payload hash and
+  MSI ProductVersion, installs into the marker-gated isolated data root, upgrades to the
+  candidate, verifies the packaged API version changed from 1.0.2 to 1.0.3, checks data
+  persistence/relaunch, and uninstalls. Local preflight tests and 44 PowerShell safeguard
+  assertions pass. The user's installed ReefVision application was not modified.
+- The hosted Windows build/install/upgrade result is authoritative only when the final
+  PR SHA's checks complete successfully. Interactive mouse/keyboard, DPI, dual-monitor,
+  training-console-window, and complete P0–P7 observations remain **UNVERIFIED** even
+  when the headless disposable-runner job passes.
+
+### Fresh local quality gates
+
+- Ruff application scope: **PASS** — 666 Python files formatted and lint-clean.
+- mypy strict package check: **PASS** — 409 source files.
+- Pytest: **PASS** — 1,264 passed, 32 documented opt-in/live integration skips, one
+  Starlette deprecation warning.
+- Segmentation/import/export/dataset focused suite: **PASS** — 170 tests.
+- Lockfile, Prettier, and TypeScript: **PASS**.
+- Vitest: **PASS** — 93 files, 460 tests after the latest gallery-base merge.
+- Playwright: **PASS** — 13 passed, 1 skipped (opt-in live OSM demo); focused first-open
+  gallery viewport also passed independently.
+- Production web build: **PASS** — existing non-blocking large-chunk advisory only.
+- Alembic isolated upgrade -> downgrade -> upgrade: **PASS**, current revision `0037`
+  (`head`). No migration was added by this continuation.
+- Rust training-console run-ID validation: **PASS** — 1 test.
+
+### Remaining required release evidence
+
+1. Complete installed, interactive P0–P7 acceptance on a clean supported Windows host,
+   including real mouse/keyboard navigation, DPI/resizing, relaunch/recovery, shortcuts,
+   the detached PowerShell training monitor, and representative project/media workflows.
+2. Evaluate held-out masks on an authorized representative, scientist-verified coral
+   segmentation dataset with usable ground truth. Synthetic technical execution is not
+   a biological-performance result.
+3. Run the explicitly deferred RTX 3090 matrix: NVIDIA driver/CUDA compatibility,
+   detection and segmentation training/inference, checkpoint reload, hybrid tracking,
+   throughput/VRAM, cancellation/recovery, and performance benchmarks.
+
+No merge, release, tag, installer publication, branch deletion, or rollback is
+authorized by this continuation record.
