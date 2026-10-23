@@ -7,6 +7,7 @@ interface PointChord {
   point_indices: [number, number];
   chord_distance_m: number;
   scale_uncertainty_m?: number | null;
+  endpoint_coordinates_in_source_frame_m?: [Vec3, Vec3] | null;
 }
 
 interface PointCloudRenderArtifact {
@@ -53,6 +54,7 @@ function isPointChord(value: unknown, totalCount: number): value is PointChord {
   const pair = chord.point_indices;
   const distance = chord.chord_distance_m;
   const uncertainty = chord.scale_uncertainty_m;
+  const endpoints = chord.endpoint_coordinates_in_source_frame_m;
   return (
     Array.isArray(pair) &&
     pair.length === 2 &&
@@ -70,7 +72,11 @@ function isPointChord(value: unknown, totalCount: number): value is PointChord {
     (uncertainty == null ||
       (typeof uncertainty === "number" &&
         Number.isFinite(uncertainty) &&
-        uncertainty >= 0))
+        uncertainty >= 0)) &&
+    (endpoints == null ||
+      (Array.isArray(endpoints) &&
+        endpoints.length === 2 &&
+        endpoints.every(isVec3)))
   );
 }
 
@@ -191,9 +197,37 @@ export function parsePointCloudRenderArtifact(
     chords.some((chord) => {
       const firstIndex = (indices as number[]).indexOf(chord.point_indices[0]);
       const secondIndex = (indices as number[]).indexOf(chord.point_indices[1]);
-      if (firstIndex < 0 || secondIndex < 0) return false;
-      const first = (points as Vec3[])[firstIndex];
-      const second = (points as Vec3[])[secondIndex];
+      const embedded = chord.endpoint_coordinates_in_source_frame_m;
+      // New backend artifacts persist both original endpoints even when one
+      // is omitted by display decimation. Check their internal chord distance
+      // without treating the embedded coordinates as verified field evidence.
+      if (embedded) {
+        for (const [position, displayIndex] of [
+          firstIndex,
+          secondIndex,
+        ].entries()) {
+          if (displayIndex < 0) continue;
+          const shown = (points as Vec3[])[displayIndex];
+          const endpoint = embedded[position];
+          const magnitude = Math.max(
+            1,
+            ...shown.map(Math.abs),
+            ...endpoint.map(Math.abs),
+          );
+          if (
+            endpoint.some(
+              (coordinate, axis) =>
+                Math.abs(coordinate - shown[axis]) >
+                16 * Number.EPSILON * magnitude,
+            )
+          ) {
+            return true;
+          }
+        }
+      }
+      if (!embedded && (firstIndex < 0 || secondIndex < 0)) return false;
+      const first = embedded?.[0] ?? (points as Vec3[])[firstIndex];
+      const second = embedded?.[1] ?? (points as Vec3[])[secondIndex];
       const expected = Math.hypot(
         first[0] - second[0],
         first[1] - second[1],
