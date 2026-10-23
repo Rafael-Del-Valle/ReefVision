@@ -35,6 +35,32 @@ describe("onboarding local usability", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("recaptures focus sent to a background control and restores it on dismissal", () => {
+    render(<OnboardingHarness />);
+    const opener = screen.getByRole("button", { name: "Open help" });
+    opener.focus();
+    fireEvent.click(opener);
+    const close = screen.getByRole("button", { name: "Close" });
+
+    // The original Tab-only trap did not handle programmatic/background focus.
+    opener.focus();
+    expect(document.activeElement).toBe(close);
+
+    fireEvent.click(screen.getByRole("button", { name: "Don't show on startup" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+
+    // A stale document focus listener would steal focus after unmount.
+    const background = document.createElement("button");
+    document.body.appendChild(background);
+    try {
+      background.focus();
+      expect(document.activeElement).toBe(background);
+    } finally {
+      background.remove();
+    }
+  });
+
   it("keeps keyboard focus inside the first-run dialog", () => {
     render(
       <OnboardingModal
