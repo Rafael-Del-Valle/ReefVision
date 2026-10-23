@@ -358,7 +358,9 @@ def _validate_sampling_schedule(
         # The earlier whole-request check validates the declared unit set;
         # narrow the optional ID explicitly before indexing a typed calendar.
         if unit_id is None:
-            raise ValidationError("Expected sampling schedule requires unit IDs on all observations")
+            raise ValidationError(
+                "Expected sampling schedule requires unit IDs on all observations"
+            )
         if row.observed_at.date() not in canonical[unit_id]:
             raise ValidationError("Observed UTC date is outside the expected sampling schedule")
     return canonical
