@@ -90,9 +90,7 @@ def test_lineage_changes_input_fingerprint_without_promoting_evidence() -> None:
 
 
 def test_standalone_api_rejects_colony_pseudoreplication(client: TestClient) -> None:
-    response = client.post(
-        "/api/v1/ecology/longitudinal-analysis", json={"observations": _rows()}
-    )
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json={"observations": _rows()})
     assert response.status_code == 400, response.text
     assert "different parent colonies" in response.json()["detail"]
 
