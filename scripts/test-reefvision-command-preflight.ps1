@@ -94,6 +94,26 @@ try {
     Reject "Refusing to replace a file with a ReefVision command directory"
     Assert (Test-Path -LiteralPath $bin -PathType Leaf) "User file occupying bin lost"
     Assert-ConfigUnchanged
+
+    # A junction must not redirect support-script writes outside LOCALAPPDATA.
+    # Windows junctions do not require Developer Mode or administrator access.
+    Remove-Item -LiteralPath $bin -Force
+    $outside = Join-Path $root 'unmanaged-sentinel'
+    New-Item -ItemType Directory -Path $outside -Force | Out-Null
+    $sentinel = Join-Path $outside 'preserve.txt'
+    Set-Content -LiteralPath $sentinel -Value 'do not change' -Encoding ASCII
+    $sentinelHash = (Get-FileHash -LiteralPath $sentinel -Algorithm SHA256).Hash
+    New-Item -ItemType Junction -Path $support -Target $outside | Out-Null
+    try {
+        Reject "reparse-point command directory" -Force
+        Assert ((Get-FileHash -LiteralPath $sentinel -Algorithm SHA256).Hash -eq $sentinelHash) "Junction target changed"
+        Assert-ConfigUnchanged
+    }
+    finally {
+        # Delete only the junction itself; never recursively delete its target.
+        Remove-Item -LiteralPath $support -Force
+    }
+    Assert (Test-Path -LiteralPath $sentinel -PathType Leaf) "Unmanaged junction target lost"
     Write-Host "ReefVision command preflight: $checks assertions passed."
 }
 finally {
