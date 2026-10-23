@@ -54,7 +54,13 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
+    # SQLAlchemy 2 starts an implicit transaction even on SQLite, while
+    # Alembic's SQLite context.begin_transaction() is a no-op for DDL.
+    # Closing a bare Connection therefore rolls back the alembic_version
+    # INSERT/UPDATE although schema changes have already taken effect.
+    # Own the outer transaction so revision bookkeeping is committed only
+    # after a successful migration (and rolled back on failure).
+    with connectable.begin() as connection:
         assert_compatible_revision_0038(connection)
         context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
 
