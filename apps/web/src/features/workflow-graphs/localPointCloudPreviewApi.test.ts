@@ -61,7 +61,9 @@ describe("previewLocalPointCloudFile", () => {
     expect(result.surface_area_m2).toBeNull();
     expect(result.branch_length_m).toBeNull();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/v1/projects/project%201/spatial/point-cloud-preview");
+    expect(url).toBe(
+      "/api/v1/projects/project%201/spatial/point-cloud-preview",
+    );
     const body = JSON.parse(String(init.body));
     expect(body.ply_text).toBe(ply);
     expect(body.source_label).toBe("coral.PLY");
@@ -75,19 +77,37 @@ describe("previewLocalPointCloudFile", () => {
     vi.stubGlobal("fetch", fetchMock);
     const valid = localFile("cloud.ply", new TextEncoder().encode(ply));
     await expect(
-      previewLocalPointCloudFile("p", localFile("cloud.obj", new Uint8Array([1])), calibration),
+      previewLocalPointCloudFile(
+        "p",
+        localFile("cloud.obj", new Uint8Array([1])),
+        calibration,
+      ),
     ).rejects.toThrow("ASCII PLY");
     await expect(
-      previewLocalPointCloudFile("p", localFile("cloud.ply", new Uint8Array()), calibration),
+      previewLocalPointCloudFile(
+        "p",
+        localFile("cloud.ply", new Uint8Array()),
+        calibration,
+      ),
     ).rejects.toThrow("empty");
     await expect(
-      previewLocalPointCloudFile("p", { name: "cloud.ply", size: 256_001 } as File, calibration),
+      previewLocalPointCloudFile(
+        "p",
+        { name: "cloud.ply", size: 256_001 } as File,
+        calibration,
+      ),
     ).rejects.toThrow("oversized");
     await expect(
-      previewLocalPointCloudFile("p", valid, { ...calibration, meters_per_unit: 0 }),
+      previewLocalPointCloudFile("p", valid, {
+        ...calibration,
+        meters_per_unit: 0,
+      }),
     ).rejects.toThrow("positive scale");
     await expect(
-      previewLocalPointCloudFile("p", valid, { ...calibration, calibration_evidence: " " }),
+      previewLocalPointCloudFile("p", valid, {
+        ...calibration,
+        calibration_evidence: " ",
+      }),
     ).rejects.toThrow("calibration evidence");
     for (const uncertainty of [-0.1, 1.1, Number.NaN, Infinity]) {
       await expect(
@@ -98,10 +118,18 @@ describe("previewLocalPointCloudFile", () => {
       ).rejects.toThrow("Relative scale uncertainty");
     }
     await expect(
-      previewLocalPointCloudFile("p", localFile("bad.ply", new Uint8Array([0xff])), calibration),
+      previewLocalPointCloudFile(
+        "p",
+        localFile("bad.ply", new Uint8Array([0xff])),
+        calibration,
+      ),
     ).rejects.toThrow();
     await expect(
-      previewLocalPointCloudFile("p", localFile("bad.ply", new Uint8Array([0xc3, 0xa9])), calibration),
+      previewLocalPointCloudFile(
+        "p",
+        localFile("bad.ply", new Uint8Array([0xc3, 0xa9])),
+        calibration,
+      ),
     ).rejects.toThrow("Only ASCII PLY");
     expect(fetchMock).not.toHaveBeenCalled();
   });
