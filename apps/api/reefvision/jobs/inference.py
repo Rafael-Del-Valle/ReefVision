@@ -36,6 +36,10 @@ from reefvision.services.annotations import _polygon_area, _polygon_self_interse
 from reefvision.storage.projects import resolve_managed_project_path
 
 
+class _InvalidSegmentationPolygonError(ValidationError):
+    """A recoverable per-prediction contour error from a segmentation provider."""
+
+
 def _validate_model_prediction(
     image: ImageAsset,
     *,
@@ -72,27 +76,39 @@ def _validate_model_prediction(
     if polygon is None:
         return
     if len(polygon) < 3:
-        raise ValidationError("Segmentation predictions require at least three polygon points")
+        raise _InvalidSegmentationPolygonError(
+            "Segmentation predictions require at least three polygon points"
+        )
 
     points: list[tuple[float, float]] = []
     for raw_point in polygon:
         if len(raw_point) != 2:
-            raise ValidationError("Every segmentation polygon point must contain x and y")
+            raise _InvalidSegmentationPolygonError(
+                "Every segmentation polygon point must contain x and y"
+            )
         x, y = float(raw_point[0]), float(raw_point[1])
         if not isfinite(x) or not isfinite(y):
-            raise ValidationError("Segmentation prediction polygons contain non-finite coordinates")
+            raise _InvalidSegmentationPolygonError(
+                "Segmentation prediction polygons contain non-finite coordinates"
+            )
         if x < 0 or y < 0 or x > image.width_px or y > image.height_px:
-            raise ValidationError(
+            raise _InvalidSegmentationPolygonError(
                 "Segmentation prediction polygons must remain inside the source image"
             )
         points.append((x, y))
 
     if len(set(points)) < 3:
-        raise ValidationError("Segmentation predictions require at least three unique points")
+        raise _InvalidSegmentationPolygonError(
+            "Segmentation predictions require at least three unique points"
+        )
     if _polygon_self_intersects(points):
-        raise ValidationError("Segmentation prediction polygons may not self-intersect")
+        raise _InvalidSegmentationPolygonError(
+            "Segmentation prediction polygons may not self-intersect"
+        )
     if _polygon_area(points) <= 0:
-        raise ValidationError("Segmentation prediction polygons must have positive area")
+        raise _InvalidSegmentationPolygonError(
+            "Segmentation prediction polygons must have positive area"
+        )
 
 
 def _cleanup_pending_job_proposals(
@@ -404,9 +420,7 @@ def process_inference_job(
                                 box=prediction.box,
                                 polygon=polygon,
                             )
-                        except ValidationError as exc:
-                            if model_task != "segment":
-                                raise
+                        except _InvalidSegmentationPolygonError as exc:
                             invalid_prediction_errors.append(
                                 f"Image {image.id} prediction {prediction_index}: {exc}"
                             )

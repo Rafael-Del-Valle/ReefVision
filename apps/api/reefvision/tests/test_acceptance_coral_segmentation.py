@@ -136,6 +136,13 @@ def test_polygon_validation_requires_class_mapping_and_source_bounds() -> None:
     outside.polygon_json = [[8.0, 6.0], [129.0, 6.0], [80.0, 60.0], [8.0, 60.0]]
     wrong_class = SimpleNamespace(**vars(valid))
     wrong_class.label_class_id = "class-b"
+    self_intersecting = SimpleNamespace(**vars(valid))
+    self_intersecting.polygon_json = [
+        [8.0, 8.0],
+        [80.0, 80.0],
+        [8.0, 80.0],
+        [60.0, 8.0],
+    ]
 
     assert module._polygon_is_valid(
         valid,
@@ -151,6 +158,12 @@ def test_polygon_validation_requires_class_mapping_and_source_bounds() -> None:
     )
     assert not module._polygon_is_valid(
         wrong_class,
+        width=128,
+        height=128,
+        allowed_class_ids={"class-a"},
+    )
+    assert not module._polygon_is_valid(
+        self_intersecting,
         width=128,
         height=128,
         allowed_class_ids={"class-a"},

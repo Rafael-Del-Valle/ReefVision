@@ -35,6 +35,7 @@ from reefvision.db.models import MaskAnnotation, PredictionProposal, TrainingRun
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.main import create_app
+from reefvision.services.annotations import _polygon_self_intersects
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -377,6 +378,7 @@ def _polygon_is_valid(
         proposal.geometry_kind == "polygon_mask"
         and len(set(points)) >= 3
         and area > 0
+        and not _polygon_self_intersects(points)
         and all(0 <= x < width and 0 <= y < height for x, y in points)
         and 0 <= proposal.x_min < proposal.x_max <= width
         and 0 <= proposal.y_min < proposal.y_max <= height
