@@ -37,7 +37,9 @@ def test_review_lineage_0038_is_accepted_without_writes() -> None:
             text("INSERT INTO review_queue_item_events (id) VALUES ('event-preserved')")
         )
         assert_compatible_revision_0038(connection)
-        assert connection.scalar(text("SELECT id FROM review_queue_item_events")) == "event-preserved"
+        assert (
+            connection.scalar(text("SELECT id FROM review_queue_item_events")) == "event-preserved"
+        )
 
 
 @pytest.mark.parametrize(
