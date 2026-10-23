@@ -9,7 +9,9 @@ from reefvision.domain.ecology_unit_coverage import audit_unit_coverage
 
 
 def obs(unit: str) -> Row:
-    return Row(experimental_unit_id=unit, observed_at=datetime(2026, 4, 1, tzinfo=UTC))
+    return Row(
+        experimental_unit_id=unit, observed_at=datetime(2026, 4, 1, tzinfo=UTC)
+    )
 
 
 def change(name: str) -> Row:
