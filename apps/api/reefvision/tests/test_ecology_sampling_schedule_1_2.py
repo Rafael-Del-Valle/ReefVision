@@ -41,7 +41,7 @@ def test_complete_calendar_retains_one_tank(client: TestClient) -> None:
     body = result.json()
     assert body["evidence_level"] == "caller_supplied_unverified"
     assert body["expected_sampling_schedule_supplied"] is True
-    assert body["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0010"
+    assert body["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0011"
     assert body["population_summaries"][0]["independent_unit_count"] == 1
     assert body["unit_coverage"][0]["missing_scheduled_dates_by_organism"] == {}
     effort = body["planned_sampling_effort"]
