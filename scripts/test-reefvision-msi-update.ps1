@@ -101,7 +101,7 @@ try {
         throw 'MSI executable and safe log preflight must precede stopping the desktop.'
     }
     $passed++
-    if ($updateScript -notmatch '(?s)if \\(\\$process\\.ExitCode -eq 3010\\) \\{\\s*Write-Warning[^\\r\\n]*\\s*return\\s*\\}') {
+    if ($updateScript -notmatch '(?s)if \(\$process\.ExitCode -eq 3010\) \{\s*Write-Warning[^\r\n]*\s*return\s*\}') {
         throw 'Reboot-required MSI result must defer version verification and relaunch.'
     }
     $passed++
