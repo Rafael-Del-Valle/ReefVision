@@ -204,3 +204,24 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   verifies the transaction mechanism, **not** the complete ReefVision migration
   history. Full exact-head CI, Windows MSI/installed GUI and 1.1/1.6 lineage
   reconciliation remain outstanding. Version 1.6 stays DRAFT / HOLD.
+
+## 2026-10-23 — First-run onboarding keyboard usability and QC guidance
+
+- Reused the existing `OnboardingModal` and `App` first-run/help entry points;
+  no duplicate onboarding subsystem or 1.0.3 changes were imported.
+- The modal now focuses its Close button on entry, wraps Tab/Shift+Tab
+  between its controls, supports Escape, and restores the previously focused
+  element on exit when it still exists. These are display/accessibility
+  changes only; no project, model, annotation, or review data is modified.
+- The research card explains persistent class visibility, manual QC
+  assignment/comments/bulk triage, and saved typed Workflow Builder QC queues.
+  It explicitly states that priority ranking does not verify model predictions.
+- A focused frontend regression covers entry/exit focus, keyboard wrapping,
+  and the researcher-approval message. The already executable
+  `qc_review_queue` node and its saved-workflow tests remain authoritative;
+  onboarding text is not itself an executable scientific capability.
+- **Validation limits:** local TypeScript/TSX syntax transpilation was
+  available, but frontend dependency installation/Vitest/Prettier and an
+  interactive installed-Windows keyboard test were not available in this
+  runtime. Exact-commit GitHub Actions and installed-GUI acceptance must pass
+  before treating this increment as accepted.
