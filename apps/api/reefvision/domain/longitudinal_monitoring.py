@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from datetime import date
 
 from reefvision.domain.ecology_expected_roster import validate_expected_roster
 from reefvision.domain.ecology_lineage_policy import (
@@ -31,6 +32,7 @@ def _summarize_experimental_units(
     grouped: dict[tuple[str, str], list[MonitoringObservation]],
     changes: list[LongitudinalChange],
     expected_by_unit: dict[str, list[str]],
+    schedule_by_unit: dict[str, list[date]],
 ) -> tuple[int | None, list[ExperimentalUnitSummary], list[ExcludedExperimentalUnit]]:
     """Summarize organisms *within* declared units, never as independent units.
 
@@ -111,6 +113,18 @@ def _summarize_experimental_units(
                 )
             )
             continue
+        scheduled = set(schedule_by_unit.get(unit_id, ()))
+        if scheduled and any(
+            scheduled - {row.observed_at.date() for row in grouped[key]} for key in keys
+        ):
+            excluded.append(
+                ExcludedExperimentalUnit(
+                    experimental_unit_id=unit_id,
+                    metric_name=metric,
+                    reason="missing_scheduled_observations",
+                )
+            )
+            continue
         # Preserve the full within-date acquisition envelope rather than
         # arbitrarily selecting the timestamps of one organism.
         baseline_at = min(item.first_observed_at for item in series)
@@ -150,6 +164,7 @@ def analyze_longitudinal(
         request.expected_organism_ids_by_unit,
         experimental_unit_type=request.experimental_unit_type,
     )
+    schedule_by_unit = _validate_sampling_schedule(request)
     grouped: dict[tuple[str, str], list[MonitoringObservation]] = defaultdict(list)
     used_sources: set[str] = set()
     for obs in request.observations:
@@ -216,7 +231,7 @@ def analyze_longitudinal(
             )
         )
     independent_unit_count, unit_summaries, excluded_units = _summarize_experimental_units(
-        request, grouped, changes, expected_by_unit
+        request, grouped, changes, expected_by_unit, schedule_by_unit
     )
     unit_coverage = (
         [
@@ -227,6 +242,7 @@ def analyze_longitudinal(
                 unit_summaries,
                 excluded_units,
                 expected_by_unit=expected_by_unit,
+                schedule_by_unit=schedule_by_unit,
             )
         ]
         if independent_unit_count is not None
@@ -236,12 +252,26 @@ def analyze_longitudinal(
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-longitudinal-0008",
+            algorithm_version=(
+                "ecology-longitudinal-0009"
+                if request.expected_sampling_dates_by_unit is not None
+                else "ecology-longitudinal-0008"
+            ),
             records=request.observations,
             parameters={
                 "experimental_unit_type": request.experimental_unit_type,
                 "expected_organism_ids_by_unit": (
                     expected_by_unit if request.expected_organism_ids_by_unit is not None else None
+                ),
+                **(
+                    {
+                        "expected_sampling_dates_by_unit": {
+                            unit_id: [day.isoformat() for day in dates]
+                            for unit_id, dates in schedule_by_unit.items()
+                        }
+                    }
+                    if request.expected_sampling_dates_by_unit is not None
+                    else {}
                 ),
             },
             source_record_ids=(obs.source_record_id for obs in request.observations),
@@ -252,6 +282,7 @@ def analyze_longitudinal(
         experimental_unit_type=request.experimental_unit_type,
         independent_unit_count=independent_unit_count,
         expected_roster_supplied=request.expected_organism_ids_by_unit is not None,
+        expected_sampling_schedule_supplied=request.expected_sampling_dates_by_unit is not None,
         cross_unit_shared_parent_colony_ids=cross_unit_shared_parent_colony_ids(
             request.observations
         ),
@@ -273,7 +304,40 @@ def analyze_longitudinal(
             "units with missing follow-up; they are not independent hypothesis tests.",
             "Cross-unit summaries weight eligible units equally and stratify by UTC dates; "
             "no population inference or significance is claimed.",
+            "Declared planned sampling dates exclude units with missing visits; "
+            "missing visits do not establish mortality, absence or zero abundance.",
             "Different intermediate observation dates within a unit are disclosed as QC; "
             "they do not establish missing scheduled visits or invalidate endpoint-only means.",
         ],
     )
+
+
+def _validate_sampling_schedule(
+    request: LongitudinalAnalysisRequest,
+) -> dict[str, list[date]]:
+    """Normalize optional caller-declared UTC visit calendars; never authenticate them."""
+    declared = request.expected_sampling_dates_by_unit
+    if declared is None:
+        return {}
+    if not declared or request.experimental_unit_type is None:
+        raise ValidationError("Expected sampling schedule requires a unit type and nonempty dates")
+    units = {row.experimental_unit_id for row in request.observations}
+    if None in units or set(declared) != units:
+        raise ValidationError("Expected sampling schedule must cover exactly the observed units")
+    canonical: dict[str, list[date]] = {}
+    total = 0
+    for unit_id, dates in sorted(declared.items()):
+        if not unit_id or unit_id.strip() != unit_id:
+            raise ValidationError("Expected sampling schedule unit ID cannot be blank")
+        if len(dates) < 2:
+            raise ValidationError("Expected sampling schedule needs at least two UTC dates")
+        if len(dates) != len(set(dates)):
+            raise ValidationError("Expected sampling schedule contains duplicate UTC dates")
+        total += len(dates)
+        if total > 10000:
+            raise ValidationError("Expected sampling schedule exceeds 10000 dates")
+        canonical[unit_id] = sorted(dates)
+    for row in request.observations:
+        if row.observed_at.date() not in canonical[row.experimental_unit_id]:
+            raise ValidationError("Observed UTC date is outside the expected sampling schedule")
+    return canonical

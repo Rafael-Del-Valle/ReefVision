@@ -393,3 +393,22 @@ validation of caller-declared tank, colony or site independence. No evidence
 is promoted from `caller_supplied_unverified`, and the verified identity,
 calibration, experimental-design registry, migration and installed Windows
 acceptance requirements remain outstanding.
+
+
+## Explicit planned sampling calendar QC (2026-10-23)
+
+Standalone longitudinal analysis and its executable saved Workflow Builder node
+now accept optional `expected_sampling_dates_by_unit` (unit ID to ISO UTC dates).
+The calendar must cover exactly the observed units, have at least two unique
+dates per unit, and include all observed UTC dates. Any off-calendar
+observation is rejected. A unit/metric with missing scheduled observations is
+excluded from eligible descriptive unit and population summaries, with
+`missing_scheduled_dates_by_organism` and `expected_sampling_dates` reported
+in the persisted coverage artifact. Missing visits never imply death, absence,
+or zero abundance. Unscheduled historical analysis retains prior behavior.
+This is an **unverified caller-declared calendar**, not a registered study
+protocol; evidence remains `caller_supplied_unverified`. Canonical calendars
+enter SHA-256 provenance; the algorithm advances to `ecology-longitudinal-0009`.
+The authenticated specimen registry, calibrated verified source records,
+registered designs, migration reconciliation and Windows acceptance remain
+pending. No 1.1 environmental-context work is duplicated.

@@ -659,6 +659,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         optional_parameters={
             "experimental_unit_type": None,
             "expected_organism_ids_by_unit": None,
+            "expected_sampling_dates_by_unit": None,
         },
         execution_state="executable",
         executable=True,
@@ -669,6 +670,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             "Do not treat this output as verified or use it to infer significance or survival.",
             "Optional caller-declared organism rosters expose completely unobserved specimens; "
             "they do not establish mortality or authenticated study membership.",
+            "Caller-declared sampling calendars exclude incomplete planned visits; "
+            "missing visits are not evidence of mortality or biological absence.",
             "Verified ecological reporting requires a future review and lineage gate.",
         ],
     )

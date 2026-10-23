@@ -95,6 +95,9 @@ class LongitudinalAnalysisRequest(BaseModel):
     expected_organism_ids_by_unit: dict[str, list[str]] | None = Field(
         default=None, max_length=10000
     )
+    expected_sampling_dates_by_unit: dict[str, list[date]] | None = Field(
+        default=None, max_length=10000
+    )
 
     @field_validator("experimental_unit_type")
     @classmethod
@@ -180,9 +183,16 @@ class ExperimentalUnitCoverage(BaseModel):
     unobserved_organism_ids: list[str] = Field(default_factory=list)
     observed_sampling_dates_by_organism: dict[str, list[date]] = Field(default_factory=dict)
     discordant_sampling_dates: bool = False
+    expected_sampling_dates: list[date] = Field(default_factory=list)
+    missing_scheduled_dates_by_organism: dict[str, list[date]] = Field(default_factory=dict)
     eligible_for_summary: bool
     exclusion_reason: (
-        Literal["missing_followup", "nonmatching_sampling_window", "missing_expected_organisms"]
+        Literal[
+            "missing_followup",
+            "nonmatching_sampling_window",
+            "missing_expected_organisms",
+            "missing_scheduled_observations",
+        ]
         | None
     ) = None
 
@@ -190,7 +200,12 @@ class ExperimentalUnitCoverage(BaseModel):
 class ExcludedExperimentalUnit(BaseModel):
     experimental_unit_id: str
     metric_name: str
-    reason: Literal["missing_followup", "nonmatching_sampling_window", "missing_expected_organisms"]
+    reason: Literal[
+        "missing_followup",
+        "nonmatching_sampling_window",
+        "missing_expected_organisms",
+        "missing_scheduled_observations",
+    ]
 
 
 class LongitudinalAnalysisResponse(BaseModel):
@@ -204,6 +219,7 @@ class LongitudinalAnalysisResponse(BaseModel):
     experimental_unit_type: str | None = None
     independent_unit_count: int | None = None
     expected_roster_supplied: bool = False
+    expected_sampling_schedule_supplied: bool = False
     cross_unit_shared_parent_colony_ids: list[str] = Field(default_factory=list)
     unit_summaries: list[ExperimentalUnitSummary] = Field(default_factory=list)
     population_summaries: list[PopulationUnitSummary] = Field(default_factory=list)

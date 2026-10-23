@@ -19,6 +19,7 @@ def audit_unit_coverage(
     excluded_units: Iterable[Any],
     *,
     expected_by_unit: Mapping[str, Sequence[str]] | None = None,
+    schedule_by_unit: Mapping[str, Sequence[date]] | None = None,
 ) -> list[dict[str, Any]]:
     """Reconcile one coverage record per declared experimental unit and metric."""
     changes = list(changes)
@@ -70,6 +71,7 @@ def audit_unit_coverage(
 
     results: list[dict[str, Any]] = []
     expected_by_unit = expected_by_unit or {}
+    schedule_by_unit = schedule_by_unit or {}
     for (unit_id, metric), flags in sorted(by_unit_metric.items()):
         observed_ids = {organism_id for organism_id, _ in flags}
         unobserved_ids = sorted(set(expected_by_unit.get(unit_id, ())) - observed_ids)
@@ -78,8 +80,16 @@ def audit_unit_coverage(
         reason = exclusions.get((unit_id, metric))
         organism_dates = sampling_dates[(unit_id, metric)]
         discordant_dates = len({tuple(dates) for dates in organism_dates.values()}) > 1
+        expected_dates = sorted(schedule_by_unit.get(unit_id, ()))
+        missing_scheduled = {
+            organism_id: sorted(set(expected_dates) - set(dates))
+            for organism_id, dates in sorted(organism_dates.items())
+            if set(expected_dates) - set(dates)
+        }
         if (unit_id, metric) in eligible and complete != len(flags):
             raise ValueError("Eligible experimental unit contains missing follow-up")
+        if (unit_id, metric) in eligible and missing_scheduled:
+            raise ValueError("Eligible unit cannot omit scheduled sampling visits")
         if (unit_id, metric) in eligible and unobserved_ids:
             raise ValueError("Eligible experimental unit omits expected organisms")
         if reason == "missing_expected_organisms" and not unobserved_ids:
@@ -90,6 +100,9 @@ def audit_unit_coverage(
             raise ValueError("Sampling-window exclusion cannot conceal missing follow-up")
         if reason == "nonmatching_sampling_window" and unobserved_ids:
             raise ValueError("Sampling-window exclusion cannot conceal missing roster organisms")
+        if reason == "missing_scheduled_observations":
+            if not missing_scheduled or unobserved_ids or complete != len(flags):
+                raise ValueError("Scheduled-visit exclusion must reflect missing scheduled dates")
         results.append(
             {
                 "experimental_unit_id": unit_id,
@@ -104,6 +117,8 @@ def audit_unit_coverage(
                 "unobserved_organism_ids": unobserved_ids,
                 "observed_sampling_dates_by_organism": dict(sorted(organism_dates.items())),
                 "discordant_sampling_dates": discordant_dates,
+                "expected_sampling_dates": expected_dates,
+                "missing_scheduled_dates_by_organism": missing_scheduled,
                 "eligible_for_summary": (unit_id, metric) in eligible,
                 "exclusion_reason": reason,
             }
