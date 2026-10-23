@@ -5,7 +5,6 @@ from sqlalchemy import create_engine, text
 
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 
-
 REVIEW_SCHEMA = (
     "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
     "project_id TEXT, client_request_id TEXT, event_type TEXT, actor TEXT, "
