@@ -5,7 +5,6 @@ import runpy
 
 import pytest
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[4]
 check_workflow = runpy.run_path(
     str(ROOT / "scripts/check-windows-installer-acceptance-version.py")
