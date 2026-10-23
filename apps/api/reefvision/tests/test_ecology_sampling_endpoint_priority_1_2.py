@@ -29,9 +29,7 @@ def test_missing_planned_endpoint_reports_calendar_qc_not_window_qc(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["evidence_level"] == "caller_supplied_unverified"
-    assert body["analysis_provenance"]["algorithm_version"] == (
-        "ecology-longitudinal-0011"
-    )
+    assert body["analysis_provenance"]["algorithm_version"] == ("ecology-longitudinal-0011")
     assert body["unit_summaries"] == []
     assert body["planned_sampling_effort"][0]["expected_organism_visits"] == 6
     assert body["planned_sampling_effort"][0]["observed_organism_visits"] == 5
@@ -120,9 +118,7 @@ def test_scheduled_singleton_reports_missing_visits_and_incomplete_followup(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["evidence_level"] == "caller_supplied_unverified"
-    assert body["analysis_provenance"]["algorithm_version"] == (
-        "ecology-longitudinal-0011"
-    )
+    assert body["analysis_provenance"]["algorithm_version"] == ("ecology-longitudinal-0011")
     assert body["evaluated_series_count"] == 1
     assert body["incomplete_series_count"] == 1
     assert body["unit_summaries"] == []
@@ -133,9 +129,7 @@ def test_scheduled_singleton_reports_missing_visits_and_incomplete_followup(
     assert coverage["complete_organism_count"] == 1
     assert coverage["missing_followup_organism_count"] == 1
     assert coverage["missing_organism_ids"] == ["B"]
-    assert coverage["missing_scheduled_dates_by_organism"] == {
-        "B": ["2026-04-02", "2026-04-03"]
-    }
+    assert coverage["missing_scheduled_dates_by_organism"] == {"B": ["2026-04-02", "2026-04-03"]}
     effort = body["planned_sampling_effort"][0]
     assert effort["expected_organism_visits"] == 6
     assert effort["observed_organism_visits"] == 4
