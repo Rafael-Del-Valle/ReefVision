@@ -82,6 +82,23 @@ class VideoTrackKeyframe(BaseModel):
         default=None,
         max_length=1000,
     )
+    mask_polygons: list[list[tuple[FiniteFloat, FiniteFloat]]] | None = Field(
+        default=None, max_length=30,
+    )
+
+    @field_validator("mask_polygons")
+    @classmethod
+    def validate_mask_polygons(
+        cls, value: list[list[tuple[FiniteFloat, FiniteFloat]]] | None
+    ) -> list[list[tuple[FiniteFloat, FiniteFloat]]] | None:
+        if value is None:
+            return None
+        for polygon in value:
+            if len(polygon) < 3 or len(polygon) > 20000:
+                raise ValueError("Mask polygons require 3–20000 vertices")
+            if any(x < 0 or y < 0 for x, y in polygon):
+                raise ValueError("Mask polygon coordinates must be nonnegative")
+        return value
 
     @field_validator("bbox")
     @classmethod
