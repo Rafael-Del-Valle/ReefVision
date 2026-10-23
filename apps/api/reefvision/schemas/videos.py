@@ -305,6 +305,8 @@ class VideoTrackingRunResponse(BaseModel):
     stage: str
     tracker: str
     model_id: str | None
+    tracking_mode: Literal["auto", "detect", "segment", "hybrid"] = "auto"
+    segmentation_model_id: str | None = None
     link_detections: bool
     confidence: float
     iou: float
