@@ -221,4 +221,40 @@ describe("PointCloudArtifactViewer", () => {
     expect(screen.getByText(/Point coverage:/)).toHaveTextContent("0.6%");
     expect(screen.getByText(/Point coverage:/)).toHaveTextContent("No RGB");
   });
+
+  it("shows source-axis extrema omitted by display decimation", () => {
+    const artifact = {
+      ...validArtifact,
+      point_count: 513,
+      preview_point_indices: [0, 256, 512],
+      axis_aligned_max_in_source_frame_m: [2, 1, 0],
+      preview_omitted_axis_extrema: ["x_max"],
+      preview_axis_extrema_covered: false,
+    };
+    const before = JSON.stringify(artifact);
+    render(<PointCloudArtifactViewer artifact={artifact} />);
+    expect(screen.getByText(/Point coverage:/)).toHaveTextContent(
+      "Display omits source-axis extrema: x_max",
+    );
+    expect(screen.getByText(/Point coverage:/)).toHaveTextContent("0.6%");
+    expect(JSON.stringify(artifact)).toBe(before);
+  });
+
+  it("rejects contradictory or malformed extrema-coverage metadata", () => {
+    for (const fields of [
+      { preview_omitted_axis_extrema: ["x_max"], preview_axis_extrema_covered: true },
+      { preview_omitted_axis_extrema: [], preview_axis_extrema_covered: false },
+      { preview_omitted_axis_extrema: ["x_bad"], preview_axis_extrema_covered: false },
+      { preview_omitted_axis_extrema: ["x_max", "x_max"], preview_axis_extrema_covered: false },
+    ]) {
+      expect(
+        parsePointCloudRenderArtifact({ ...validArtifact, ...fields }),
+      ).toBeNull();
+    }
+    // Older persisted artifacts remain displayable but coverage is unassessed.
+    render(<PointCloudArtifactViewer artifact={validArtifact} />);
+    expect(screen.getByText(/Point coverage:/)).toHaveTextContent(
+      "Source-axis extrema coverage unassessed",
+    );
+  });
 });
