@@ -101,9 +101,13 @@ describe("LocalPointCloudPreview", () => {
     fireEvent.change(screen.getByLabelText("Point-cloud file"), {
       target: { files: [new File(["old"], "old.ply")] },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview point cloud" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview point cloud" }),
+    );
     rerender(<LocalPointCloudPreview projectId="new-project" />);
-    expect(screen.getByRole("button", { name: "Preview point cloud" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Preview point cloud" }),
+    ).toBeDisabled();
     await act(async () => {
       deferred.resolve?.({ measurement_status: "caller_supplied_unverified" });
     });
@@ -115,7 +119,9 @@ describe("LocalPointCloudPreview", () => {
     fireEvent.change(screen.getByLabelText("Point-cloud file"), {
       target: { files: [replacement] },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview point cloud" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview point cloud" }),
+    );
     expect(
       await screen.findByText("Provisional point-cloud viewer"),
     ).toBeInTheDocument();
@@ -134,7 +140,9 @@ describe("LocalPointCloudPreview", () => {
     fireEvent.change(screen.getByLabelText("Point-cloud file"), {
       target: { files: [new File(["bad"], "bad.ply")] },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview point cloud" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview point cloud" }),
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent("vertex-only");
     expect(
       screen.queryByText("Provisional point-cloud viewer"),
