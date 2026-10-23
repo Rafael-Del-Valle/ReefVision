@@ -336,7 +336,9 @@ def _validate_sampling_schedule(
     if not declared or request.experimental_unit_type is None:
         raise ValidationError("Expected sampling schedule requires a unit type and nonempty dates")
     units = {row.experimental_unit_id for row in request.observations}
-    if None in units or set(declared) != units:
+    if None in units:
+        raise ValidationError("Expected sampling schedule requires unit IDs on all observations")
+    if set(declared) != units:
         raise ValidationError("Expected sampling schedule must cover exactly the observed units")
     canonical: dict[str, list[date]] = {}
     total = 0
