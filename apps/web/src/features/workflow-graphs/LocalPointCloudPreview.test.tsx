@@ -44,8 +44,51 @@ describe("LocalPointCloudPreview", () => {
         calibration_evidence: "Unreviewed ruler in image",
         relative_scale_uncertainty: null,
       }),
+      undefined,
     );
     expect(screen.getByText(/Standalone preview only/)).toBeInTheDocument();
+  });
+
+  it("passes original source indices for provisional straight-line chords", async () => {
+    vi.mocked(previewLocalPointCloudFile).mockResolvedValue({
+      measurement_status: "caller_supplied_unverified",
+    });
+    render(<LocalPointCloudPreview projectId="reef-project" />);
+    fireEvent.change(screen.getByLabelText("Point-cloud file"), {
+      target: { files: [new File(["ply"], "reef.ply")] },
+    });
+    fireEvent.change(screen.getByLabelText("Chord start source point index"), {
+      target: { value: "0" },
+    });
+    fireEvent.change(screen.getByLabelText("Chord end source point index"), {
+      target: { value: "1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview point cloud" }));
+    expect(
+      await screen.findByText("Provisional point-cloud viewer"),
+    ).toBeInTheDocument();
+    expect(previewLocalPointCloudFile).toHaveBeenCalledWith(
+      "reef-project",
+      expect.any(File),
+      expect.objectContaining({ meters_per_unit: 0.01 }),
+      [[0, 1]],
+    );
+    expect(screen.getByText(/not anatomical branch length/)).toBeInTheDocument();
+  });
+
+  it("requires both source indices before sending a chord request", async () => {
+    render(<LocalPointCloudPreview projectId="reef-project" />);
+    fireEvent.change(screen.getByLabelText("Point-cloud file"), {
+      target: { files: [new File(["ply"], "reef.ply")] },
+    });
+    fireEvent.change(screen.getByLabelText("Chord start source point index"), {
+      target: { value: "0" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview point cloud" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "both source point indices",
+    );
+    expect(previewLocalPointCloudFile).not.toHaveBeenCalled();
   });
 
   it("discards stale results when the file or calibration changes", async () => {
