@@ -76,9 +76,7 @@ def test_truncated_camera_jpeg_rejected_before_import_commit(
 ) -> None:
     project = create_project(client, "Truncated camera JPEG")
     stream = BytesIO()
-    Image.new("RGB", (512, 512), (20, 30, 40)).save(
-        stream, format="JPEG", progressive=progressive
-    )
+    Image.new("RGB", (512, 512), (20, 30, 40)).save(stream, format="JPEG", progressive=progressive)
     truncated = stream.getvalue()[:-2]  # Remove JPEG end-of-image marker.
     report = import_one(client, project["id"], filename="DSC_0002.JPEG", content=truncated)
     assert not report["successful"], report
