@@ -842,6 +842,41 @@ describe("VideoTrackingWorkspace", () => {
     expect(screen.getByText("Frame mapping confirmed.")).toBeInTheDocument();
   });
 
+  it("clears pending external pose imports when the target video changes", async () => {
+    const [originalVideo] = await api.getVideos(project.id);
+    vi.mocked(api.getVideos).mockResolvedValue([
+      originalVideo,
+      {
+        ...originalVideo,
+        id: "video-2",
+        original_filename: "other-fish.mp4",
+      },
+    ]);
+    renderWorkspace();
+    await screen.findByRole("heading", { name: "Pose interoperability" });
+
+    const poseFile = new File(["pose"], "external.slp", {
+      type: "application/octet-stream",
+    });
+    fireEvent.change(
+      screen.getByLabelText("Pose interoperability import file"),
+      { target: { files: [poseFile] } },
+    );
+    const importButton = screen.getByRole("button", { name: "Import pose" });
+    await waitFor(() => expect(importButton).toBeEnabled());
+
+    fireEvent.change(screen.getByLabelText("Video", { exact: true }), {
+      target: { value: "video-2" },
+    });
+    await waitFor(() => expect(importButton).toBeDisabled());
+    expect(
+      (screen.getByLabelText(
+        "Pose interoperability import file",
+      ) as HTMLInputElement).files,
+    ).toHaveLength(0);
+    expect(poseInteropApi.importPoseInteroperability).not.toHaveBeenCalled();
+  });
+
   it("connects geographic segment seeking to video and map without refetching analytics", async () => {
     vi.mocked(api.getVideoTracks).mockResolvedValue([
       {
