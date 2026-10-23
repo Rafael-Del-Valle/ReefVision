@@ -352,6 +352,11 @@ def _validate_sampling_schedule(
             raise ValidationError("Expected sampling schedule exceeds 10000 dates")
         canonical[unit_id] = sorted(dates)
     for row in request.observations:
-        if row.observed_at.date() not in canonical[row.experimental_unit_id]:
+        unit_id = row.experimental_unit_id
+        # The earlier whole-request check validates the declared unit set;
+        # narrow the optional ID explicitly before indexing a typed calendar.
+        if unit_id is None:
+            raise ValidationError("Expected sampling schedule requires unit IDs on all observations")
+        if row.observed_at.date() not in canonical[unit_id]:
             raise ValidationError("Observed UTC date is outside the expected sampling schedule")
     return canonical
