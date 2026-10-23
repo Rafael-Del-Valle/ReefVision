@@ -60,3 +60,23 @@ def test_two_fragments_from_one_parent_in_colony_unit_are_allowed() -> None:
 def test_unlabeled_legacy_colony_inputs_remain_unverified_and_compatible() -> None:
     rows = [Pair("frag-A", None, "unit-1"), Pair("frag-B", None, "unit-2")]
     validate_declared_lineage(rows, experimental_unit_type="colony")
+
+@pytest.mark.parametrize("unit_type", ["colony replicate", "parent colony sampling unit"])
+def test_colony_level_descriptors_cannot_bypass_parent_check(unit_type: str) -> None:
+    rows = [Pair("frag-A", "colony-1", "unit-1"), Pair("frag-B", "colony-2", "unit-1")]
+    with pytest.raises(ValidationError, match="different parent colonies"):
+        validate_declared_lineage(rows, experimental_unit_type=unit_type)
+
+
+@pytest.mark.parametrize("unit_type", ["fragment replicate", "individual sample"])
+def test_organism_level_descriptors_cannot_merge_individuals(unit_type: str) -> None:
+    rows = [Pair("frag-A", None, "unit-1"), Pair("frag-B", None, "unit-1")]
+    with pytest.raises(ValidationError, match="distinct organisms"):
+        validate_declared_lineage(rows, experimental_unit_type=unit_type)
+
+
+@pytest.mark.parametrize("unit_type", ["colony/tank", "tank and site", "organism-colony"])
+def test_compound_biological_levels_are_rejected(unit_type: str) -> None:
+    rows = [Pair("frag-A", "colony-1", "unit-1"), Pair("frag-B", "colony-2", "unit-1")]
+    with pytest.raises(ValidationError, match="Ambiguous experimental_unit_type"):
+        validate_declared_lineage(rows, experimental_unit_type=unit_type)
