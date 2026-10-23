@@ -1184,10 +1184,10 @@ export function TrainingWorkspace({
                           <p className="form-error">
                             Architectures labeled Provider Required are visible
                             for diagnosis, but cannot train until the matching
-                            provider is installed in ReefVision's backend.
-                            Check provider availability in Model Hub or repair
-                            the desktop installation. Scratch training does
-                            not require pretrained weights or model registration.
+                            provider is installed in ReefVision's backend. Check
+                            provider availability in Model Hub or repair the
+                            desktop installation. Scratch training does not
+                            require pretrained weights or model registration.
                           </p>
                         )}
                       </>

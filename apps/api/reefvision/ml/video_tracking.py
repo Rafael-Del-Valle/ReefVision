@@ -262,8 +262,8 @@ class UltralyticsVideoTrackingProvider:
                 keypoints = getattr(result, "keypoints", None)
                 raw_masks = getattr(getattr(result, "masks", None), "xy", None)
                 mask_rows: list[tuple[tuple[tuple[float, float], ...], ...] | None] = []
-                for polygon in list(raw_masks or [])[:len(classes)]:
-                    points = tuple(
+                for polygon in list(raw_masks or [])[: len(classes)]:
+                    mask_points = tuple(
                         (float(point[0]), float(point[1]))
                         for point in polygon
                         if len(point) >= 2
@@ -272,7 +272,7 @@ class UltralyticsVideoTrackingProvider:
                         and float(point[0]) >= 0
                         and float(point[1]) >= 0
                     )
-                    mask_rows.append((points,) if len(points) >= 3 else None)
+                    mask_rows.append((mask_points,) if len(mask_points) >= 3 else None)
                 mask_rows.extend([None] * max(0, len(classes) - len(mask_rows)))
                 keypoint_data = getattr(keypoints, "data", None)
                 if keypoint_data is None:
@@ -294,30 +294,32 @@ class UltralyticsVideoTrackingProvider:
 
                 # Ultralytics may return no track IDs on early frames; masks
                 # must align to detection rows rather than shortened IDs.
-                for row_index, (track_id, class_index, score, xywh, raw_keypoints) in enumerate(zip(
-                    ids,
-                    classes,
-                    confidences,
-                    coordinates,
-                    keypoint_rows,
-                    strict=False,
-                )):
+                for row_index, (track_id, class_index, score, xywh, raw_keypoints) in enumerate(
+                    zip(
+                        ids,
+                        classes,
+                        confidences,
+                        coordinates,
+                        keypoint_rows,
+                        strict=False,
+                    )
+                ):
                     center_x, center_y, width, height = (float(value) for value in xywh)
                     normalized_keypoints: tuple[tuple[float, float, float], ...] | None = None
                     if raw_keypoints is not None:
-                        points: list[tuple[float, float, float]] = []
+                        pose_points: list[tuple[float, float, float]] = []
                         for point in raw_keypoints:
                             if len(point) < 2:
                                 continue
                             point_confidence = float(point[2]) if len(point) >= 3 else 1.0
-                            points.append(
+                            pose_points.append(
                                 (
                                     float(point[0]),
                                     float(point[1]),
                                     point_confidence,
                                 )
                             )
-                        normalized_keypoints = tuple(points)
+                        normalized_keypoints = tuple(pose_points)
 
                     observations.append(
                         TrackObservation(

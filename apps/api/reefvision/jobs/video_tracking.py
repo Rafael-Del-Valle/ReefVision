@@ -288,7 +288,9 @@ def process_video_tracking_job(
             or not bool(request.get("link_detections", True))
         ):
             job.status = "failed"
-            job.error_message = "Hybrid tracking requires a same-project Ultralytics detector and segmenter"
+            job.error_message = (
+                "Hybrid tracking requires a same-project Ultralytics detector and segmenter"
+            )
             job.completed_at = datetime.now(UTC)
             session.commit()
             return False
@@ -316,9 +318,7 @@ def process_video_tracking_job(
         provider_name = model.provider_name
         class_mapping = _project_class_mapping(model)
         detector_class_mapping = dict(class_mapping)
-        segmenter_class_mapping = (
-            _project_class_mapping(secondary) if secondary is not None else {}
-        )
+        segmenter_class_mapping = _project_class_mapping(secondary) if secondary is not None else {}
         for class_id in segmenter_class_mapping.values():
             class_mapping[f"project:{class_id}"] = class_id
         project_id = video.project_id
@@ -501,7 +501,9 @@ def process_video_tracking_job(
                 report_progress(
                     VideoTrackingProgress(
                         frames_processed=source_frames + progress.frames_processed,
-                        detections_seen=first_pass_progress.detections_seen + progress.detections_seen,
+                        detections_seen=(
+                            first_pass_progress.detections_seen + progress.detections_seen
+                        ),
                         tracked_observations_seen=(
                             first_pass_progress.tracked_observations_seen
                             + progress.tracked_observations_seen
@@ -743,7 +745,8 @@ def process_video_tracking_job(
                         "fused_observations": fusion_report.fused_observations,
                         "masked_observations": fusion_report.masked_observations,
                     }
-                    if fusion_report is not None else None
+                    if fusion_report is not None
+                    else None
                 ),
                 "pose_tracking": model_task == "pose",
                 "pose_landmark_track_count": pose_landmark_track_count,

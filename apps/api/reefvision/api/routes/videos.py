@@ -837,6 +837,7 @@ def create_tracking_job(
                 "Hybrid tracking requires an Ultralytics detector and segmentation model "
                 "registered in the same project"
             )
+
         def mapped_classes(registration: ModelRegistration) -> set[str]:
             raw = dict(registration.class_map_json or {})
             mapping = raw.get("mapping")

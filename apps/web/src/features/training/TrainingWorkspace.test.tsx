@@ -162,7 +162,8 @@ describe("TrainingWorkspace launch", () => {
       architecture_reference: "yolo11n.yaml",
       display_name: "YOLO11 Nano",
       installation_state: "Provider Required",
-      installation_reason: "The compatible provider runtime is required for training.",
+      installation_reason:
+        "The compatible provider runtime is required for training.",
       selection_kind: "builtin_architecture",
       trainable: true,
       resolved_model_id: null,
@@ -186,11 +187,15 @@ describe("TrainingWorkspace launch", () => {
     renderWorkspace();
     const preset = await screen.findByLabelText("Model size or preset");
     expect(preset).toHaveValue("");
-    expect(screen.getByRole("option", { name: /YOLO11 Nano.*Provider Required/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /YOLO11 Nano.*Provider Required/ }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Architectures labeled Provider Required/),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/No supported training architectures/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/No supported training architectures/),
+    ).not.toBeInTheDocument();
 
     fireEvent.change(preset, { target: { value: architecture.catalog_id } });
     await waitFor(() =>
@@ -209,7 +214,9 @@ describe("TrainingWorkspace launch", () => {
   it("distinguishes an empty catalog from provider-required architectures", async () => {
     renderWorkspace();
     expect(
-      await screen.findByText(/No training architectures were returned by the model catalog/),
+      await screen.findByText(
+        /No training architectures were returned by the model catalog/,
+      ),
     ).toBeInTheDocument();
   });
 
