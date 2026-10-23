@@ -29,7 +29,9 @@ def test_missing_planned_endpoint_reports_calendar_qc_not_window_qc(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["evidence_level"] == "caller_supplied_unverified"
-    assert body["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0009"
+    assert body["analysis_provenance"]["algorithm_version"] == (
+        "ecology-longitudinal-0009"
+    )
     assert body["unit_summaries"] == []
     assert body["population_summaries"] == []
     assert body["excluded_units"][0]["reason"] == "missing_scheduled_observations"
@@ -57,10 +59,14 @@ def test_missing_planned_endpoint_persists_same_qc_in_saved_workflow(
     graph["nodes"][1]["parameters"].update(
         {
             "experimental_unit_type": "tank",
-            "expected_sampling_dates_by_unit": request["expected_sampling_dates_by_unit"],
+            "expected_sampling_dates_by_unit": request[
+                "expected_sampling_dates_by_unit"
+            ],
         }
     )
-    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
+    )
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     saved = client.post(
@@ -88,8 +94,8 @@ def test_missing_planned_endpoint_persists_same_qc_in_saved_workflow(
     assert len(artifacts) == 1
     standalone = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
     assert standalone.status_code == 200, standalone.text
-    assert artifacts[0]["payload_json"]["unit_coverage"] == standalone.json()["unit_coverage"]
-    assert artifacts[0]["payload_json"]["excluded_units"] == standalone.json()["excluded_units"]
-    assert artifacts[0]["payload_json"]["analysis_provenance"] == standalone.json()[
-        "analysis_provenance"
-    ]
+    payload = artifacts[0]["payload_json"]
+    result = standalone.json()
+    assert payload["unit_coverage"] == result["unit_coverage"]
+    assert payload["excluded_units"] == result["excluded_units"]
+    assert payload["analysis_provenance"] == result["analysis_provenance"]
