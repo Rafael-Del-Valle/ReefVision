@@ -19,6 +19,7 @@ import {
   createPoseArchitectureWorkflow,
   workflowTemplates,
 } from "./workflowTemplates";
+import { LocalMeshPreview } from "./LocalMeshPreview";
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
 
@@ -263,6 +264,8 @@ export function WorkflowGraphWorkspace({
           }
         </p>
       </div>
+
+      <LocalMeshPreview projectId={project.id} />
 
       {poseDatasetSources.length > 0 && (
         <section className="panel-card">
