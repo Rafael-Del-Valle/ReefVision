@@ -451,3 +451,31 @@ cover complete visits, missing intermediate visits, absent roster organisms,
 legacy behavior and persisted artifact parity. This is **caller-supplied,
 unverified descriptive sampling effort**, not an authenticated sampling design,
 verified calibration, survival estimate, or treatment-effect inference.
+
+
+## Planned singleton visit QC (2026-10-23; development only)
+
+A declared UTC sampling calendar now takes precedence over generic missing-follow-up
+classification even when an organism has **only one observation**. The existing
+standalone `POST /api/v1/ecology/longitudinal-analysis` and executable saved
+`ecology_longitudinal_analysis` Workflow Builder node share the same kernel.
+An incomplete singleton remains visible in `missing_organism_ids` and
+`missing_followup_organism_count`, while its missing planned dates are
+reported explicitly in `missing_scheduled_dates_by_organism`. Its declared
+experimental unit remains excluded from population summaries; the planned
+organism-visit denominator still counts the missing visits, never mortality or
+zero abundance. Expected-roster omissions retain higher priority.
+
+For scheduled analyses, the changed scientific QC contract increments
+`analysis_provenance.algorithm_version` to `ecology-longitudinal-0011`;
+unscheduled legacy analysis retains `ecology-longitudinal-0008`. API and
+saved-workflow regression cases cover singleton calendar gaps, consistent
+persisted QC/provenance, and unchanged unscheduled exclusions. A Ruff line
+length failure from the preceding iteration was also corrected.
+
+This is a **caller-supplied, unverified** descriptive analysis. No verified
+organism registry, project-owned annotation or immutable calibration link,
+authenticated study design, or biological survival inference is introduced.
+Exact-head CI, representative scientific dataset validation, migration
+reconciliation, and installed Windows GUI/installer acceptance are still
+required before release approval.
