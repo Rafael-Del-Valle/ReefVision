@@ -77,14 +77,19 @@ describe("previewLocalPointCloudFile", () => {
       ok: true,
       json: async () => ({
         measurement_status: "caller_supplied_unverified",
-        selected_point_chords: [{ point_indices: [0, 1], chord_distance_m: 0.01 }],
+        selected_point_chords: [
+          { point_indices: [0, 1], chord_distance_m: 0.01 },
+        ],
       }),
     });
     vi.stubGlobal("fetch", fetchMock);
     const file = localFile("reef.ply", new TextEncoder().encode(ply));
-    const result = await previewLocalPointCloudFile("project", file, calibration, [
-      [0, 1],
-    ]);
+    const result = await previewLocalPointCloudFile(
+      "project",
+      file,
+      calibration,
+      [[0, 1]],
+    );
     expect(result.measurement_status).toBe("caller_supplied_unverified");
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(init.body));
