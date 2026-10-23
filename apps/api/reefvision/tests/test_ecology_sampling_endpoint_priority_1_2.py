@@ -46,7 +46,9 @@ def test_missing_planned_endpoint_reports_calendar_qc_not_window_qc(
     legacy = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
     assert legacy.status_code == 200, legacy.text
     assert legacy.json()["excluded_units"][0]["reason"] == "nonmatching_sampling_window"
-    assert legacy.json()["analysis_provenance"]["algorithm_version"] == ("ecology-longitudinal-0008")
+    assert legacy.json()["analysis_provenance"]["algorithm_version"] == (
+        "ecology-longitudinal-0008"
+    )
 
 
 def test_missing_planned_endpoint_persists_same_qc_in_saved_workflow(
