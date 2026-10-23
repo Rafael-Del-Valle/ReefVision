@@ -29,9 +29,12 @@ describe("LocalMeshPreview", () => {
     fireEvent.change(screen.getByLabelText("Mesh file"), {
       target: { files: [file] },
     });
-    fireEvent.change(screen.getByLabelText("Calibration evidence (unverified)"), {
-      target: { value: "Ruler visible, awaiting review" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("Calibration evidence (unverified)"),
+      {
+        target: { value: "Ruler visible, awaiting review" },
+      },
+    );
     fireEvent.click(button);
     expect(
       await screen.findByText("Saved preview rendered"),
@@ -46,22 +49,22 @@ describe("LocalMeshPreview", () => {
         relative_scale_uncertainty: null,
       }),
     );
-    expect(
-      screen.getByText(/Standalone preview only/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Standalone preview only/)).toBeInTheDocument();
   });
 
   it("reports an import failure without displaying fabricated geometry", async () => {
-    vi.mocked(previewLocalMeshFile).mockRejectedValue(new Error("Malformed PLY"));
+    vi.mocked(previewLocalMeshFile).mockRejectedValue(
+      new Error("Malformed PLY"),
+    );
     render(<LocalMeshPreview projectId="reef-project" />);
     fireEvent.change(screen.getByLabelText("Mesh file"), {
       target: { files: [new File(["bad"], "reef.ply")] },
     });
     fireEvent.click(screen.getByRole("button", { name: "Preview mesh" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Malformed PLY",
-    );
-    expect(screen.queryByText("Saved preview rendered")).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Malformed PLY");
+    expect(
+      screen.queryByText("Saved preview rendered"),
+    ).not.toBeInTheDocument();
   });
   it("discards late results after a file or calibration change", async () => {
     const deferred: {
@@ -83,14 +86,19 @@ describe("LocalMeshPreview", () => {
     expect(button).toBeDisabled();
 
     fireEvent.change(fileInput, { target: { files: [replacement] } });
-    fireEvent.change(screen.getByLabelText("Calibration evidence (unverified)"), {
-      target: { value: "New ruler evidence awaiting review" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("Calibration evidence (unverified)"),
+      {
+        target: { value: "New ruler evidence awaiting review" },
+      },
+    );
     expect(button).toBeEnabled();
     await act(async () => {
       deferred.resolve?.({ measurement_status: "caller_supplied_unverified" });
     });
-    expect(screen.queryByText("Saved preview rendered")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Saved preview rendered"),
+    ).not.toBeInTheDocument();
 
     vi.mocked(previewLocalMeshFile).mockResolvedValue({
       measurement_status: "caller_supplied_unverified",
@@ -107,5 +115,4 @@ describe("LocalMeshPreview", () => {
       }),
     );
   });
-
 });
