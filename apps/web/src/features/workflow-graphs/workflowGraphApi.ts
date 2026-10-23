@@ -339,7 +339,9 @@ export async function previewLocalPointCloudFile(
     throw new Error("Choose a vertex-only ASCII PLY point-cloud file.");
   }
   if (!file.size || file.size > 256_000 || file.name.length > 200) {
-    throw new Error("Point-cloud file is empty, oversized, or has an invalid filename.");
+    throw new Error(
+      "Point-cloud file is empty, oversized, or has an invalid filename.",
+    );
   }
   if (
     !Number.isFinite(calibration.meters_per_unit) ||
@@ -348,7 +350,9 @@ export async function previewLocalPointCloudFile(
     !calibration.calibration_evidence.trim() ||
     calibration.calibration_evidence.length > 2_000
   ) {
-    throw new Error("Provide a positive scale and bounded calibration evidence.");
+    throw new Error(
+      "Provide a positive scale and bounded calibration evidence.",
+    );
   }
   if (
     calibration.relative_scale_uncertainty != null &&
