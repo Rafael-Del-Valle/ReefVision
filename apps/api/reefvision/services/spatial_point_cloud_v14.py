@@ -13,8 +13,10 @@ MAX_PLY_BYTES = 256_000
 MAX_PREVIEW_POINTS = 512
 
 
-def parse_ascii_ply_points(text: str) -> list[list[float]]:
-    """Read vertex-only ASCII PLY 1.0 XYZ or XYZ+RGB; discard validated color."""
+def parse_ascii_ply_points(
+    text: str, *, colors_out: list[list[int]] | None = None
+) -> list[list[float]]:
+    """Read XYZ and optionally retain validated raw PLY RGB bytes."""
     if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_PLY_BYTES:
         raise ValueError("Point-cloud PLY exceeds the 256000-byte preview limit")
     lines = text.splitlines()
@@ -97,6 +99,10 @@ def parse_ascii_ply_points(text: str) -> list[list[float]]:
                 if not token.isascii() or not token.isdecimal() or int(token) > 255:
                     raise ValueError("Point-cloud RGB channels must be 0-255 integers")
         points.append(parsed)
+        if colors_out is not None and "red" in properties:
+            colors_out.append(
+                [int(values[properties.index(c)]) for c in ("red", "green", "blue")]
+            )
     return points
 
 
@@ -276,8 +282,9 @@ def measure_point_cloud_preview(
 
 
 def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
+    point_colors: list[list[int]] = []
     if payload.ply_text is not None:
-        points = parse_ascii_ply_points(payload.ply_text)
+        points = parse_ascii_ply_points(payload.ply_text, colors_out=point_colors)
         source_format = "ply_ascii_point_cloud"
     else:
         points = payload.points
@@ -290,6 +297,9 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         relative_scale_uncertainty=payload.relative_scale_uncertainty,
         source_label=payload.source_label,
         point_index_pairs=payload.point_index_pairs,
+    )
+    result["preview_point_colors_rgb_uint8"] = (
+        [point_colors[i] for i in result["preview_point_indices"]] if point_colors else None
     )
     result["provenance"]["source_format"] = source_format
     # Hash the received PLY text (including RGB) separately from XYZ geometry.
