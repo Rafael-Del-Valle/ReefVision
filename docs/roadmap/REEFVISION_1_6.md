@@ -225,3 +225,20 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   interactive installed-Windows keyboard test were not available in this
   runtime. Exact-commit GitHub Actions and installed-GUI acceptance must pass
   before treating this increment as accepted.
+
+## 2026-10-23 — Onboarding focus containment follow-up
+
+- Audited the existing onboarding keyboard fix rather than duplicating it. Its
+  dialog-level Tab handler correctly wraps first/last buttons, but cannot catch
+  focus redirected to a background control outside the dialog.
+- A document `focusin` listener now redirects external focus to the dialog's
+  Close button while onboarding is mounted, and is removed before restoring the
+  previously focused control on either dismissal path. This changes only UI
+  focus; research assets, class visibility, reviewer state and workflow data
+  remain untouched.
+- A new frontend regression exercises background focus escape, permanent
+  dismissal, focus restoration, and listener cleanup. Existing Tab/Escape and
+  QC/Workflow Builder guidance regressions remain in place.
+- **Acceptance:** source and test committed to the isolated 1.6 draft branch;
+  exact-head frontend CI and native installed-Windows GUI/keyboard acceptance
+  must still pass. No release or scientific approval claim.
