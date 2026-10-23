@@ -8,16 +8,24 @@ interface LocalPointCloudPreviewProps {
 }
 
 /** Isolate unverified geometry and in-flight requests when the project changes. */
-export function LocalPointCloudPreview({ projectId }: LocalPointCloudPreviewProps) {
-  return <LocalPointCloudPreviewSession key={projectId} projectId={projectId} />;
+export function LocalPointCloudPreview({
+  projectId,
+}: LocalPointCloudPreviewProps) {
+  return (
+    <LocalPointCloudPreviewSession key={projectId} projectId={projectId} />
+  );
 }
 
-function LocalPointCloudPreviewSession({ projectId }: LocalPointCloudPreviewProps) {
+function LocalPointCloudPreviewSession({
+  projectId,
+}: LocalPointCloudPreviewProps) {
   const [file, setFile] = useState<File | null>(null);
   const [scale, setScale] = useState("0.01");
   const [evidence, setEvidence] = useState("");
   const [uncertainty, setUncertainty] = useState("");
-  const [artifact, setArtifact] = useState<Record<string, unknown> | null>(null);
+  const [artifact, setArtifact] = useState<Record<string, unknown> | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const requestVersion = useRef(0);
@@ -47,7 +55,9 @@ function LocalPointCloudPreviewSession({ projectId }: LocalPointCloudPreviewProp
     } catch (reason) {
       if (version === requestVersion.current) {
         setError(
-          reason instanceof Error ? reason.message : "Point-cloud preview failed.",
+          reason instanceof Error
+            ? reason.message
+            : "Point-cloud preview failed.",
         );
       }
     } finally {
