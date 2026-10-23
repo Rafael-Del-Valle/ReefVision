@@ -495,7 +495,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             )
         ],
         required_parameters=["dataset_id"],
-        optional_parameters={},
+        optional_parameters={"manifest_sha256": None},
         execution_state="executable_pose_dataset",
         executable=True,
         implementation_notes=["Preserves the frozen dataset manifest and landmark schema."],
