@@ -20,13 +20,9 @@ SPEC.loader.exec_module(MODULE)
 
 def test_repository_workflow_matches_tauri_version() -> None:
     config = json.loads(
-        (ROOT / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(
-            encoding="utf-8"
-        )
+        (ROOT / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
     )
-    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
 
     assert MODULE.check_workflow(workflow, str(config["version"])) == []
 
@@ -120,16 +116,14 @@ def test_historical_release_notes_outside_acceptance_job_are_allowed() -> None:
 def test_stale_version_reference_is_rejected(stale_reference: str) -> None:
     workflow = valid_workflow() + f"      # {stale_reference}\n"
     assert any(
-        "hardcoded release version" in error
-        for error in MODULE.check_workflow(workflow, "1.0.3")
+        "hardcoded release version" in error for error in MODULE.check_workflow(workflow, "1.0.3")
     )
 
 
 def test_default_acceptance_rejects_implicit_live_model_downloads() -> None:
     workflow = valid_workflow().replace(
         "      - name: Upload evidence",
-        "          -LiveSam2Acceptance\n"
-        "      - name: Upload evidence",
+        "          -LiveSam2Acceptance\n      - name: Upload evidence",
     )
     assert any(
         "network model downloads" in error for error in MODULE.check_workflow(workflow, "1.0.3")
@@ -153,8 +147,7 @@ def test_invalid_release_version_is_rejected() -> None:
 def test_mixed_msi_versions_are_rejected() -> None:
     workflow = valid_workflow() + "      # ReefVision_1.0.2_x64_en-US.msi\n"
     assert any(
-        "hardcoded release version" in error
-        for error in MODULE.check_workflow(workflow, "1.0.3")
+        "hardcoded release version" in error for error in MODULE.check_workflow(workflow, "1.0.3")
     )
 
 
@@ -170,7 +163,4 @@ def test_mixed_msi_versions_are_rejected() -> None:
 )
 def test_missing_provenance_guard_is_rejected(required_fragment: str) -> None:
     workflow = valid_workflow().replace(required_fragment, "REMOVED")
-    assert any(
-        "provenance" in error.lower()
-        for error in MODULE.check_workflow(workflow, "1.0.3")
-    )
+    assert any("provenance" in error.lower() for error in MODULE.check_workflow(workflow, "1.0.3"))
