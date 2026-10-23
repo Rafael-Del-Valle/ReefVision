@@ -11,7 +11,10 @@ from reefvision.db.base import Base
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 
 config = context.config
-if config.config_file_name is not None:
+# Desktop supplies its own rotating JSON logger before Alembic runs. Reapplying
+# alembic.ini's fileConfig would remove that handler and hide migration failures.
+# Preserve normal CLI logging unless the caller explicitly disables it.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 settings = get_settings()
