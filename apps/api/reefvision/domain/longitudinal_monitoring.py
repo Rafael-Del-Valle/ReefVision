@@ -5,11 +5,11 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
+from reefvision.domain.ecology_expected_roster import validate_expected_roster
 from reefvision.domain.ecology_lineage_policy import (
     cross_unit_shared_parent_colony_ids,
     validate_declared_lineage,
 )
-from reefvision.domain.ecology_expected_roster import validate_expected_roster
 from reefvision.domain.ecology_unit_coverage import audit_unit_coverage
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.population_unit_summaries import summarize_population_units
