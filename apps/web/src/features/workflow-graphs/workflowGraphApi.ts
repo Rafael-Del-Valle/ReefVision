@@ -259,3 +259,59 @@ export function cancelWorkflowRunJob(
     },
   );
 }
+
+/** Bounded local file preview. No asset persistence or calibration verification. */
+export interface MeshPreviewCalibration {
+  meters_per_unit: number;
+  calibration_method: "ruler" | "photogrammetry_control" | "instrument" | "other";
+  calibration_evidence: string;
+  relative_scale_uncertainty?: number | null;
+}
+
+export async function previewLocalMeshFile(
+  projectId: string,
+  file: File,
+  calibration: MeshPreviewCalibration,
+): Promise<Record<string, unknown>> {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension !== "obj" && extension !== "ply" && extension !== "glb") {
+    throw new Error("Choose an OBJ, PLY, or GLB mesh file.");
+  }
+  const maxBytes = extension === "glb" ? 262_500 : 256_000;
+  if (!file.size || file.size > maxBytes || file.name.length > 200) {
+    throw new Error("Mesh file is empty, oversized, or has an invalid filename.");
+  }
+  if (
+    !Number.isFinite(calibration.meters_per_unit) ||
+    calibration.meters_per_unit <= 0 ||
+    !calibration.calibration_evidence.trim()
+  ) {
+    throw new Error("Provide a positive scale and calibration evidence.");
+  }
+  let geometry: Record<string, string>;
+  if (extension === "glb") {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 8192) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+    }
+    geometry = { glb_base64: btoa(binary) };
+  } else {
+    const content = await file.text();
+    if (content.length > 256_000) {
+      throw new Error("Mesh text exceeds the supported preview limit.");
+    }
+    geometry = extension === "obj" ? { obj_text: content } : { ply_text: content };
+  }
+  return request<Record<string, unknown>>(
+    `/projects/${encodeURIComponent(projectId)}/spatial/mesh-preview`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...calibration,
+        ...geometry,
+        source_label: file.name,
+      }),
+    },
+  );
+}
