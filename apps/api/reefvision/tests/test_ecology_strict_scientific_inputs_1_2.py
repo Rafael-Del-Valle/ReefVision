@@ -51,9 +51,7 @@ def test_paired_counts_reject_booleans(client: TestClient, field: str, value: bo
 
 
 @pytest.mark.parametrize("value", ["10", "10.5", None, [], {}])
-def test_longitudinal_rejects_coerced_measurements(
-    client: TestClient, value: object
-) -> None:
+def test_longitudinal_rejects_coerced_measurements(client: TestClient, value: object) -> None:
     observations = longitudinal_observations()
     observations[0]["value"] = value
     payload = {"observations": observations}
