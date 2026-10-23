@@ -193,9 +193,8 @@ def test_preview_sampling_keeps_original_indices_and_provisional_status() -> Non
     assert indices == sorted(set(indices))
     assert 1000 not in indices  # Selected measurement endpoints need not be displayed.
     assert first["axis_aligned_dimensions_m"] == pytest.approx([19.99, 19.99, 0])
-    assert first["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
-        [9.995, -9.995, 0]
-    )
+    centroid = first["arithmetic_centroid_in_source_frame_m"]
+    assert centroid == pytest.approx([9.995, -9.995, 0])
     assert sample == [[value * 0.01 for value in points[i]] for i in indices]
     assert sample == second["preview_points_in_source_frame_m"]
     chord = first["selected_point_chords"][0]
@@ -220,3 +219,27 @@ def test_single_point_preview_preserves_zero_extents_without_biological_inferenc
     assert result["surface_area_m2"] is None
     assert result["branch_length_m"] is None
     assert result["provenance"]["calibration_verified"] is False
+
+
+def test_sampling_threshold_preserves_full_geometry_and_provisional_status() -> None:
+    for count in (512, 513):
+        result = measure_point_cloud_preview(
+            points=[[float(index), 0.0, 0.0] for index in range(count)],
+            meters_per_unit=0.01,
+            calibration_method="ruler",
+            calibration_evidence="Unreviewed scale bar",
+            relative_scale_uncertainty=0.1,
+        )
+        indices = result["preview_point_indices"]
+        assert len(indices) == 512
+        assert indices[0] == 0
+        assert indices[-1] == count - 1
+        assert len(set(indices)) == 512
+        assert result["point_count"] == count
+        expected_extent = (count - 1) * 0.01
+        assert result["axis_aligned_dimensions_m"][0] == pytest.approx(expected_extent)
+        uncertainty = result["axis_aligned_dimension_scale_uncertainty_m"]
+        assert uncertainty[0] == pytest.approx(expected_extent * 0.1)
+        assert result["surface_area_m2"] is None
+        assert result["branch_length_m"] is None
+        assert result["provenance"]["calibration_verified"] is False
