@@ -87,6 +87,10 @@ def _keyframes(
         }
         if item.pose_uncertainty is not None:
             payload["pose_uncertainty"] = dict(item.pose_uncertainty)
+        if item.mask_polygons:
+            payload["mask_polygons"] = [
+                [list(point) for point in polygon] for polygon in item.mask_polygons
+            ]
         if item.keypoints is not None:
             payload["keypoints"] = [list(point) for point in item.keypoints]
             if expanded_labels is not None:
