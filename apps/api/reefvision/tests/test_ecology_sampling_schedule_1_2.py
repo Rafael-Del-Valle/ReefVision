@@ -100,9 +100,7 @@ def test_unscheduled_legacy_analysis_has_no_planned_effort(
     response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
     assert response.status_code == 200, response.text
     assert response.json()["planned_sampling_effort"] == []
-    assert response.json()["analysis_provenance"]["algorithm_version"] == (
-        "ecology-longitudinal-0008"
-    )
+    assert response.json()["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0008"
 
 
 @pytest.mark.parametrize(
