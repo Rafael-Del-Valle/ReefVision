@@ -62,9 +62,7 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    assert expected["preview_point_colors_rgb_uint8"] == [
-        [0, 128, 255], [255, 64, 0], [11, 22, 7]
-    ]
+    assert expected["preview_point_colors_rgb_uint8"] == [[0, 128, 255], [255, 64, 0], [11, 22, 7]]
     assert expected["measurement_status"] == "caller_supplied_unverified"
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["surface_area_m2"] is None
@@ -185,10 +183,57 @@ def test_rgb_decimation_retains_source_index_alignment(client: TestClient) -> No
     indices = result["preview_point_indices"]
     assert len(indices) == 512
     assert indices[0] == 0 and indices[-1] == 512
-    assert result["preview_point_colors_rgb_uint8"] == [
-        [i % 256, 10, 20] for i in indices
-    ]
+    assert result["preview_point_colors_rgb_uint8"] == [[i % 256, 10, 20] for i in indices]
     assert result["axis_aligned_dimensions_m"] == pytest.approx([5.12, 0, 0])
     assert result["provenance"]["calibration_verified"] is False
     assert result["surface_area_m2"] is None
     assert result["branch_length_m"] is None
+
+
+def test_rejected_late_ply_vertex_does_not_modify_existing_colors() -> None:
+    colors = [[12, 34, 56]]
+    malformed = RGB_PLY.replace("7 0 11 0 22 3", "7 nan 11 0 22 3")
+    with pytest.raises(ValueError, match="finite and bounded"):
+        parse_ascii_ply_points(malformed, colors_out=colors)
+    assert colors == [[12, 34, 56]]
+    assert len(parse_ascii_ply_points(RGB_PLY, colors_out=colors)) == 3
+    assert colors == [[12, 34, 56], [0, 128, 255], [255, 64, 0], [11, 22, 7]]
+
+
+def test_rejected_late_rgb_channel_does_not_modify_existing_colors() -> None:
+    colors = [[99, 88, 77]]
+    malformed = RGB_PLY.replace("7 0 11 0 22 3", "7 0 11 0 256 3")
+    with pytest.raises(ValueError, match="0-255 integers"):
+        parse_ascii_ply_points(malformed, colors_out=colors)
+    assert colors == [[99, 88, 77]]
+
+
+def test_colorless_ply_preserves_caller_color_buffer() -> None:
+    colors = [[99, 88, 77]]
+    colorless = (
+        "ply\nformat ascii 1.0\nelement vertex 1\n"
+        "property float x\nproperty float y\nproperty float z\n"
+        "end_header\n1 2 3\n"
+    )
+    assert parse_ascii_ply_points(colorless, colors_out=colors) == [[1.0, 2.0, 3.0]]
+    assert colors == [[99, 88, 77]]
+
+
+def test_rgb_2000_vertices_atomic_on_invalid_last_channel() -> None:
+    colors = [[42, 43, 44]]
+    header = (
+        "ply\nformat ascii 1.0\nelement vertex 2000\n"
+        "property float x\nproperty float y\nproperty float z\n"
+        "property uchar red\nproperty uchar green\nproperty uchar blue\n"
+        "end_header\n"
+    )
+    rows = [f"{i} 0 0 10 20 30" for i in range(1999)]
+    invalid = header + "\n".join([*rows, "1999 0 0 10 20 256"]) + "\n"
+    with pytest.raises(ValueError, match="0-255 integers"):
+        parse_ascii_ply_points(invalid, colors_out=colors)
+    assert colors == [[42, 43, 44]]
+    valid = header + "\n".join([*rows, "1999 0 0 10 20 30"]) + "\n"
+    assert len(parse_ascii_ply_points(valid, colors_out=colors)) == 2000
+    assert len(colors) == 2001
+    assert colors[0] == [42, 43, 44]
+    assert colors[-1] == [10, 20, 30]
