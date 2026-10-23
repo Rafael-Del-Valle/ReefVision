@@ -36,7 +36,9 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     inspector = inspect(connection)
     if not inspector.has_table("alembic_version"):
         return
-    revisions = set(connection.execute(text("SELECT version_num FROM alembic_version")).scalars())
+    revisions: set[str] = set(
+        connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
+    )
     if "0038" not in revisions:
         return
 
