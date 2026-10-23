@@ -217,23 +217,21 @@ def measure_point_cloud_preview(
     # Deterministic, bounded display sample. Original indices are preserved
     # so display decimation never changes the identity of measured point pairs.
     preview_count = min(len(vertices), MAX_PREVIEW_POINTS)
-    preview_indices = (
-        [0]
-        if preview_count == 1
-        else [
-            index * (len(vertices) - 1) // (preview_count - 1)
-            for index in range(preview_count)
-        ]
-    )
+    if preview_count == 1:
+        preview_indices = [0]
+    else:
+        last_index = len(vertices) - 1
+        denominator = preview_count - 1
+        preview_indices = [i * last_index // denominator for i in range(preview_count)]
+    preview_points = []
+    for index in preview_indices:
+        preview_points.append([coordinate * scale for coordinate in vertices[index]])
     return {
         "schema_version": "point-cloud-preview-0001",
         "point_count": len(vertices),
         "unique_point_count": unique_count,
         "preview_point_indices": preview_indices,
-        "preview_points_in_source_frame_m": [
-            [coordinate * scale for coordinate in vertices[index]]
-            for index in preview_indices
-        ],
+        "preview_points_in_source_frame_m": preview_points,
         "selected_point_chords": selected_chords,
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_min_in_source_frame_m": bounds_min,
