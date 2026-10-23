@@ -595,6 +595,76 @@ describe("Gallery", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("recovers a stalled image with its thumbnail", async () => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    vi.spyOn(window, "setTimeout").mockImplementation(
+      (handler, timeout, ...args) =>
+        nativeSetTimeout(handler, timeout === 30_000 ? 250 : timeout, ...args),
+    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [{ ...image, thumbnail_path: "managed/thumbnail.png" }],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery();
+    const original = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(original.getAttribute("src")).toMatch(/display/);
+    // Wait for the watchdog to replace the still-pending original request.
+    await waitFor(
+      () =>
+        expect(
+          screen
+            .getByAltText("Focused project image: swiftia-01.png")
+            .getAttribute("src"),
+        ).toMatch(/thumbnail/),
+      { timeout: 1000 },
+    );
+    const fallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.load(fallback);
+    expect(
+      screen.getByText(/Full-resolution image unavailable/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("offers retry when an image stalls without a thumbnail", async () => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    vi.spyOn(window, "setTimeout").mockImplementation(
+      (handler, timeout, ...args) =>
+        nativeSetTimeout(handler, timeout === 30_000 ? 250 : timeout, ...args),
+    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery();
+    await screen.findByAltText("Focused project image: swiftia-01.png");
+    expect(
+      await screen.findByRole("alert", {}, { timeout: 1000 }),
+    ).toHaveTextContent("Image could not be displayed");
+    await userEvent.click(screen.getByRole("button", { name: "Retry image" }));
+    expect(
+      screen
+        .getByAltText("Focused project image: swiftia-01.png")
+        .getAttribute("src"),
+    ).toContain("rv_retry=1");
+  });
+
   it("labels the thumbnail when the full-resolution source fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
