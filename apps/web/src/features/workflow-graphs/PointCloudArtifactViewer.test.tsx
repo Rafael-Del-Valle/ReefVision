@@ -185,6 +185,68 @@ describe("PointCloudArtifactViewer", () => {
     ).not.toBeNull();
   });
 
+  it("checks persisted endpoint coordinates for chords omitted by display decimation", () => {
+    const decimated = {
+      ...validArtifact,
+      point_count: 513,
+      preview_point_indices: [0, 256, 512],
+      selected_point_chords: [
+        {
+          point_indices: [0, 2],
+          endpoint_coordinates_in_source_frame_m: [
+            [0, 0, 0],
+            [0, 1, 0],
+          ],
+          chord_distance_m: 1,
+        },
+      ],
+    };
+    // Point 2 is absent from the three displayed source indices, but its
+    // stored coordinates still permit a provisional consistency check.
+    expect(parsePointCloudRenderArtifact(decimated)).not.toBeNull();
+    expect(
+      parsePointCloudRenderArtifact({
+        ...decimated,
+        selected_point_chords: [
+          { ...decimated.selected_point_chords[0], chord_distance_m: 2 },
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      parsePointCloudRenderArtifact({
+        ...decimated,
+        selected_point_chords: [
+          {
+            ...decimated.selected_point_chords[0],
+            endpoint_coordinates_in_source_frame_m: [[0, 0, 0]],
+          },
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      parsePointCloudRenderArtifact({
+        ...decimated,
+        selected_point_chords: [
+          {
+            ...decimated.selected_point_chords[0],
+            endpoint_coordinates_in_source_frame_m: [
+              [0.5, 0, 0],
+              [0, 1, 0],
+            ],
+          },
+        ],
+      }),
+    ).toBeNull();
+    // Legacy saved chords without embedded endpoints remain displayable but
+    // cannot be independently cross-checked when the points were decimated.
+    expect(
+      parsePointCloudRenderArtifact({
+        ...decimated,
+        selected_point_chords: [{ point_indices: [0, 2], chord_distance_m: 2 }],
+      }),
+    ).not.toBeNull();
+  });
+
   it("does not falsely reject chords lost to large-offset display rounding", () => {
     const rounded = {
       ...validArtifact,
