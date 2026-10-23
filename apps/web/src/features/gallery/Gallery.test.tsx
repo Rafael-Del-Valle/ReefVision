@@ -616,15 +616,18 @@ describe("Gallery", () => {
       "Focused project image: swiftia-01.png",
     );
     expect(original.getAttribute("src")).toMatch(/display/);
-    const fallback = await screen.findByAltText(
-      "Focused project image: swiftia-01.png",
-      {},
-      { timeout: 1000 },
-    );
     // Wait for the watchdog to replace the still-pending original request.
     await waitFor(
-      () => expect(fallback.getAttribute("src")).toMatch(/thumbnail/),
+      () =>
+        expect(
+          screen
+            .getByAltText("Focused project image: swiftia-01.png")
+            .getAttribute("src"),
+        ).toMatch(/thumbnail/),
       { timeout: 1000 },
+    );
+    const fallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
     );
     fireEvent.load(fallback);
     expect(
@@ -651,9 +654,9 @@ describe("Gallery", () => {
 
     renderGallery();
     await screen.findByAltText("Focused project image: swiftia-01.png");
-    expect(await screen.findByRole("alert", {}, { timeout: 1000 })).toHaveTextContent(
-      "Image could not be displayed",
-    );
+    expect(
+      await screen.findByRole("alert", {}, { timeout: 1000 }),
+    ).toHaveTextContent("Image could not be displayed");
     await userEvent.click(screen.getByRole("button", { name: "Retry image" }));
     expect(
       screen.getByAltText("Focused project image: swiftia-01.png"),
