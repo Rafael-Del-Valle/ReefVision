@@ -28,6 +28,7 @@ from reefvision.schemas.workflow_graphs import (
 )
 from reefvision.services.workflow_node_registry import workflow_node_registry
 from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
+from reefvision.storage.datasets import canonical_json_sha256
 
 SUPPORTED_GRAPH_SCHEMA = "workflow-graph-0001"
 _WORKFLOW_TRAINING_TASKS = {"detect", "segment", "semantic_segment"}
@@ -236,6 +237,15 @@ class WorkflowGraphService:
                     "error",
                     "pose_dataset_incomplete",
                     "Frozen pose dataset must be complete and contain verified items",
+                    node_id=node_id,
+                )
+            )
+        elif canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_manifest_corrupt",
+                    "Frozen pose dataset manifest checksum does not match its stored contents",
                     node_id=node_id,
                 )
             )
