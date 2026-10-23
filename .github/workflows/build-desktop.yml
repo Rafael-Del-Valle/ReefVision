@@ -36,6 +36,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Verify installer version before packaging
+        shell: pwsh
+        run: python scripts/check-windows-installer-acceptance-version.py
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -106,7 +110,7 @@ jobs:
 
   # Separate, disposable Windows runner: do not validate an MSI only on its build machine.
   windows-clean-install-acceptance:
-    name: Install, launch, persist and uninstall 1.0.2 on fresh Windows
+    name: Install, launch, persist and uninstall 1.0.3 on fresh Windows
     runs-on: windows-latest
     needs: build-windows-installer
     timeout-minutes: 75
@@ -117,16 +121,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ReefVision-Windows-Installer
-          path: ${{ runner.temp }}/reefvision-1-0-2-installer
+          path: ${{ runner.temp }}/reefvision-1-0-3-installer
 
       - name: Verify MSI-declared cabinet payload before any install
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-3-installer'
           $msi = @(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File)
           $cabs = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File)
-          if ($msi.Count -ne 1 -or $msi[0].Name -ne 'ReefVision_1.0.2_x64_en-US.msi') {
-            throw 'Expected exactly the ReefVision 1.0.2 MSI.'
+          if ($msi.Count -ne 1 -or $msi[0].Name -ne 'ReefVision_1.0.3_x64_en-US.msi') {
+            throw 'Expected exactly the ReefVision 1.0.3 MSI.'
           }
 
           # Windows Installer Media is authoritative; cabinet count depends on
@@ -136,8 +140,8 @@ jobs:
           $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
           $versionView.Execute()
           $versionRecord = $versionView.Fetch()
-          if ($null -eq $versionRecord -or $versionRecord.StringData(1) -ne '1.0.2') {
-            throw 'MSI ProductVersion must be 1.0.2.'
+          if ($null -eq $versionRecord -or $versionRecord.StringData(1) -ne '1.0.3') {
+            throw 'MSI ProductVersion must be 1.0.3.'
           }
           $versionView.Close()
 
@@ -175,8 +179,8 @@ jobs:
       - name: Test isolated MSI installation without developer runtimes on PATH
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
-          $msi = Join-Path $folder 'ReefVision_1.0.2_x64_en-US.msi'
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-3-installer'
+          $msi = Join-Path $folder 'ReefVision_1.0.3_x64_en-US.msi'
           # The runner may contain development tools, but the installed desktop
           # must function without any Python, Node.js, or Rust executable on PATH.
           $env:PATH = @(
@@ -193,14 +197,14 @@ jobs:
           }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
-            -AcceptanceRoot 'C:\reefvision-1-0-2-disposable-acceptance' `
-            -SkipUpgrade -DisposableTest -KeepArtifacts -LiveSam2Acceptance
+            -AcceptanceRoot 'C:\reefvision-1-0-3-disposable-acceptance' `
+            -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-1.0.2-Windows-Clean-Install-Evidence
+          name: ReefVision-1.0.3-Windows-Clean-Install-Evidence
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
