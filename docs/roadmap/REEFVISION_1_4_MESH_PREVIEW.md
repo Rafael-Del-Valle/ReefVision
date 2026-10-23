@@ -1,10 +1,11 @@
 # ReefVision 1.4: bounded mesh surface preview (development only)
 
-This first 1.4 slice does **not** import or persist full 3D assets, render a 3D viewer,
-or establish validated biological surface area. It accepts at most 256,000 bytes
+This 1.4 development slice does **not** import or persist full 3D assets
+or establish validated biological surface area. A read-only interactive
+orthographic viewer now renders **saved Workflow Builder mesh artifacts only**. It accepts at most 256,000 bytes
 of ASCII OBJ or ASCII PLY text (triangles only), or 2,000 explicit XYZ vertices and 4,000
-triangle faces, for a **read-only preview**. Binary PLY, mesh asset storage,
-interactive viewing, branch metrics and scientific verification are future work.
+triangle faces, for a **read-only preview**. Binary PLY, mesh asset storage, direct standalone viewer integration,
+branch metrics and scientific verification are future work.
 
 Standalone endpoint:
 `POST /api/v1/projects/{project_id}/spatial/mesh-preview`.
@@ -31,7 +32,7 @@ with optional numeric scalar vertex properties) and a triangular vertex-index
 face list. Binary encodings, other elements, and non-triangular faces are
 rejected. Both the standalone API and saved Workflow Builder support PLY,
 recording `provenance.source_format=ply_ascii`. This is not persistent asset
-import or interactive 3D viewing.
+import; saved Workflow Builder mesh artifacts can be rotated and zoomed.
 
 Results report triangle surface area in m² and axis-aligned dimensions in
 meters; dimensions change under rotation. QC reports boundary, nonmanifold,
@@ -53,7 +54,7 @@ GLB 2.0 base64 (`glb_base64`) is supported for one embedded indexed triangle
 primitive without scene transforms, compression or external buffers. The same
 bounded parser is used by the standalone API and saved Workflow Builder node.
 Measurements remain provisional with `source_format=glb_2_0`; no persistent
-3D asset storage, interactive viewer or biological validation is implied.
+3D asset storage, direct file-import viewer or biological validation is implied.
 
 Mesh topology QC also reports `edge_connected_patch_count` (face patches
 connected by shared edges) and `inconsistent_winding_edge_count` (shared edges
@@ -82,8 +83,8 @@ formed. Preview indices retain the original source indexing and face winding;
 the local face indices address only the preview vertex array. Calibrated
 coordinates still depend on caller-supplied, unverified scale evidence.
 Sampling can omit small branches, holes, or defects and must never be used
-for scientific measurement or organism reidentification. No interactive 3D
-viewer, persistence, camera controls, or hardware acceptance is claimed.
+for scientific measurement or organism reidentification. The saved-artifact viewer supports yaw, pitch, and zoom controls; no asset
+persistence, direct standalone upload UI, or hardware acceptance is claimed.
 
 Regression coverage:
 `test_spatial_mesh_render_sample_v14.py` checks the 512/513-face threshold,
@@ -106,3 +107,28 @@ rather than an invented 100% coverage value. Render sampling can still omit
 geometric or biological features even if its area fraction is high.
 The standalone endpoint and executed saved Workflow Builder graph expose
 the same fields; neither promotes unverified calibration or registration.
+
+### Saved-artifact interactive mesh viewer (development)
+
+The Workflow Builder run-detail panel now renders a bounded, read-only
+orthographic SVG mesh preview for persisted `mesh_measurement_preview`
+artifacts. Yaw, pitch and zoom sliders and a reset button change only the
+presentation; the saved artifact, source indices, calibration evidence,
+full-mesh measurements and SHA-256 provenance are not edited. The viewer
+validates finite XYZ coordinates, local triangle indices, camera metadata,
+and 512-face/1,536-vertex display limits before rendering. Invalid payloads
+fail closed with a status message. Each polygon retains its original source
+face index for inspection.
+
+The viewer explicitly displays triangle-count and sampled-area fractions;
+zero-area source geometry has undefined sampled-area coverage. Neither
+coverage fraction is a biological tissue estimate. The renderer is not a
+scientific 3D annotation tool, does not verify scale or registration, and
+does not provide standalone direct OBJ/PLY/GLB file import or persisted asset
+management. Saved workflow execution remains the source of the typed,
+checksummed scientific artifact; visualization is an optional consumer.
+
+Frontend regression coverage: `MeshArtifactViewer.test.tsx` tests rotation,
+reset, immutable artifacts, invalid geometry rejection, bounded display,
+and zero-area coverage. Windows installed-GUI, representative coral scans,
+and full release acceptance remain outstanding.
