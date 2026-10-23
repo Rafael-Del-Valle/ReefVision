@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 from reefvision.config import get_settings
 from reefvision.db import models as _models  # noqa: F401
 from reefvision.db.base import Base
+from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 
 config = context.config
 if config.config_file_name is not None:
@@ -41,6 +42,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        assert_compatible_revision_0038(connection)
         context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
 
         with context.begin_transaction():
