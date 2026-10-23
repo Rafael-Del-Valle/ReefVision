@@ -103,16 +103,9 @@ def _summarize_experimental_units(
         # share a biological sampling window; their photographs are not
         # independent time points. Each organism still retains its exact
         # timestamps for change-per-day calculations.
-        windows = {(item.first_observed_at.date(), item.last_observed_at.date()) for item in series}
-        if len(windows) != 1:
-            excluded.append(
-                ExcludedExperimentalUnit(
-                    experimental_unit_id=unit_id,
-                    metric_name=metric,
-                    reason="nonmatching_sampling_window",
-                )
-            )
-            continue
+        # When a planned calendar is declared, a missing endpoint is first a
+        # missing scheduled visit, not merely a discordant endpoint window.
+        # Prioritize the actionable calendar QC reason without inferring death.
         scheduled = set(schedule_by_unit.get(unit_id, ()))
         if scheduled and any(
             scheduled - {row.observed_at.date() for row in grouped[key]} for key in keys
@@ -122,6 +115,16 @@ def _summarize_experimental_units(
                     experimental_unit_id=unit_id,
                     metric_name=metric,
                     reason="missing_scheduled_observations",
+                )
+            )
+            continue
+        windows = {(item.first_observed_at.date(), item.last_observed_at.date()) for item in series}
+        if len(windows) != 1:
+            excluded.append(
+                ExcludedExperimentalUnit(
+                    experimental_unit_id=unit_id,
+                    metric_name=metric,
+                    reason="nonmatching_sampling_window",
                 )
             )
             continue
