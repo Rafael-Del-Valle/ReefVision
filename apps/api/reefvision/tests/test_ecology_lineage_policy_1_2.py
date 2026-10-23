@@ -61,6 +61,7 @@ def test_unlabeled_legacy_colony_inputs_remain_unverified_and_compatible() -> No
     rows = [Pair("frag-A", None, "unit-1"), Pair("frag-B", None, "unit-2")]
     validate_declared_lineage(rows, experimental_unit_type="colony")
 
+
 @pytest.mark.parametrize("unit_type", ["colony replicate", "parent colony sampling unit"])
 def test_colony_level_descriptors_cannot_bypass_parent_check(unit_type: str) -> None:
     rows = [Pair("frag-A", "colony-1", "unit-1"), Pair("frag-B", "colony-2", "unit-1")]
