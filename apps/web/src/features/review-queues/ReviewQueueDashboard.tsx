@@ -59,6 +59,7 @@ export function ReviewQueueDashboard({
   onSelectedQueueChange?: (queueId: string | null) => void;
 }) {
   const queryClient = useQueryClient();
+  const [scopeProjectId, setScopeProjectId] = useState(project.id);
   const [scopeType, setScopeType] = useState<"project" | "dataset_version">(
     "project",
   );
@@ -83,7 +84,9 @@ export function ReviewQueueDashboard({
     useState(false);
 
   // A dataset-version scope without a selected version is not a project scope.
-  const scopeReady = scopeType === "project" || Boolean(datasetVersionId);
+  const scopeReady =
+    scopeProjectId === project.id &&
+    (scopeType === "project" || Boolean(datasetVersionId));
   const versions = useQuery({
     queryKey: ["dataset_versions", project.id],
     queryFn: ({ signal }) => getDatasetVersions(project.id, signal),
@@ -143,6 +146,7 @@ export function ReviewQueueDashboard({
     setCoordinationItemId(null);
     setOpenQuickReviewWhenReady(false);
     setPage(1);
+    setScopeProjectId(project.id);
   }, [project.id]);
 
   useEffect(() => {
