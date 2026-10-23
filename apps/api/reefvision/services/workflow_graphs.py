@@ -279,7 +279,10 @@ class WorkflowGraphService:
                     self._issue(
                         "error",
                         "pose_dataset_schema_mismatch",
-                        "Frozen pose dataset landmark schema revision no longer matches saved truth",
+                        (
+                            "Frozen pose dataset landmark schema revision no longer "
+                            "matches saved truth"
+                        ),
                         node_id=node_id,
                     )
                 )
