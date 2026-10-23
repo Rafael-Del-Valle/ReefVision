@@ -29,9 +29,7 @@ def test_missing_planned_endpoint_reports_calendar_qc_not_window_qc(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["evidence_level"] == "caller_supplied_unverified"
-    assert body["analysis_provenance"]["algorithm_version"] == (
-        "ecology-longitudinal-0009"
-    )
+    assert body["analysis_provenance"]["algorithm_version"] == ("ecology-longitudinal-0009")
     assert body["unit_summaries"] == []
     assert body["population_summaries"] == []
     assert body["excluded_units"][0]["reason"] == "missing_scheduled_observations"
@@ -45,9 +43,7 @@ def test_missing_planned_endpoint_reports_calendar_qc_not_window_qc(
     legacy = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
     assert legacy.status_code == 200, legacy.text
     assert legacy.json()["excluded_units"][0]["reason"] == "nonmatching_sampling_window"
-    assert legacy.json()["analysis_provenance"]["algorithm_version"] == (
-        "ecology-longitudinal-0008"
-    )
+    assert legacy.json()["analysis_provenance"]["algorithm_version"] == ("ecology-longitudinal-0008")
 
 
 def test_missing_planned_endpoint_persists_same_qc_in_saved_workflow(
@@ -59,14 +55,10 @@ def test_missing_planned_endpoint_persists_same_qc_in_saved_workflow(
     graph["nodes"][1]["parameters"].update(
         {
             "experimental_unit_type": "tank",
-            "expected_sampling_dates_by_unit": request[
-                "expected_sampling_dates_by_unit"
-            ],
+            "expected_sampling_dates_by_unit": request["expected_sampling_dates_by_unit"],
         }
     )
-    plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     saved = client.post(
@@ -80,16 +72,17 @@ def test_missing_planned_endpoint_persists_same_qc_in_saved_workflow(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        item
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "longitudinal_analysis"
+        item for item in detail.json()["artifacts"] if item["data_type"] == "longitudinal_analysis"
     ]
     assert len(artifacts) == 1
     standalone = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
