@@ -18,6 +18,42 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
+def test_six_cab_upload_partitions_are_complete_and_bounded() -> None:
+    """A sixth cabinet must not be silently omitted from uploaded MSI artifacts."""
+    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(
+        encoding="utf-8"
+    )
+    build_job = workflow.split("  build-windows-installer:", 1)[1].split(
+        "  windows-clean-install-acceptance:", 1
+    )[0]
+    expected = [f"rv{i}.cab" for i in range(1, 7)]
+    assert "$expected = @(" in build_job
+    assert "$expected = @(" + ", ".join(f"'{cab}'" for cab in expected) + ")" in build_job
+    assert "if ($bytes -ge 2GB)" in build_job
+    assert "MSI before artifact upload" in build_job
+
+    partitions = []
+    for part in range(1, 4):
+        marker = f"name: ReefVision-Windows-Installer-Part-{part}"
+        assert build_job.count(marker) == 1
+        block = build_job.split(marker, 1)[1].split("retention-days: 14", 1)[0]
+        cab_paths = [
+            line.strip().rsplit("/", 1)[-1]
+            for line in block.splitlines()
+            if "/rv" in line and line.strip().endswith(".cab")
+        ]
+        partitions.append(cab_paths)
+
+    assert partitions == [
+        ["rv1.cab", "rv2.cab"],
+        ["rv3.cab", "rv4.cab"],
+        ["rv5.cab", "rv6.cab"],
+    ]
+    assert sum(partitions, []) == expected
+    assert "merge-multiple: true" in workflow
+    assert "MSI/CAB mismatch." in workflow
+
+
 def test_repository_workflow_matches_tauri_version() -> None:
     config = json.loads(
         (ROOT / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
