@@ -76,6 +76,74 @@ def check_workflow(workflow: str, version: str) -> list[str]:
     return errors
 
 
+def check_cab_artifact_partition(workflow: str) -> list[str]:
+    """Fail before MSI packaging if an external CAB cannot reach the install runner.
+
+    The build currently emits six external cabinets. Verify the three artifact
+    manifests explicitly and reject missing/duplicated cabinets or parts.
+    """
+    errors: list[str] = []
+    build_marker = "  build-windows-installer:"
+    acceptance_marker = "  windows-clean-install-acceptance:"
+    if build_marker not in workflow or acceptance_marker not in workflow:
+        return ["Missing Windows build or clean-install job for CAB partition preflight"]
+
+    build_job = workflow.split(build_marker, 1)[1].split(acceptance_marker, 1)[0]
+    acceptance_job = workflow.split(acceptance_marker, 1)[1]
+    expected = {
+        "ReefVision-Windows-Installer-Part-1": {"rv1.cab", "rv2.cab"},
+        "ReefVision-Windows-Installer-Part-2": {"rv3.cab", "rv4.cab"},
+        "ReefVision-Windows-Installer-Part-3": {"rv5.cab", "rv6.cab"},
+    }
+    uploads = [
+        step
+        for step in re.split(r"(?m)^      - name: ", build_job)
+        if step.startswith("Upload Windows installer ")
+    ]
+    if len(uploads) != len(expected):
+        errors.append(f"Expected three installer artifact uploads; found {len(uploads)}")
+
+    seen: set[str] = set()
+    for step in uploads:
+        names = re.findall(
+            r"(?m)^          name: (ReefVision-Windows-Installer-Part-\\d+)\\s*$",
+            step,
+        )
+        if len(names) != 1 or names[0] not in expected or names[0] in seen:
+            errors.append(f"Invalid or duplicate installer artifact name: {names!r}")
+            continue
+        name = names[0]
+        seen.add(name)
+        cabs = re.findall(
+            r"(?m)^            apps/web/src-tauri/target/x86_64-pc-windows-msvc/"
+            r"release/bundle/msi/(rv\\d+\\.cab)\\s*$",
+            step,
+        )
+        if len(cabs) != len(set(cabs)) or set(cabs) != expected[name]:
+            errors.append(
+                f"{name} CAB manifest mismatch: found {cabs!r}, "
+                f"expected {sorted(expected[name])!r}"
+            )
+        msi_paths = re.findall(
+            r"(?m)^            apps/web/src-tauri/target/x86_64-pc-windows-msvc/"
+            r"release/bundle/msi/\\*\\.msi\\s*$",
+            step,
+        )
+        if len(msi_paths) != (1 if name.endswith("Part-1") else 0):
+            errors.append(f"{name} MSI manifest must appear only in Part-1")
+        if "if-no-files-found: error" not in step:
+            errors.append(f"{name} must reject missing upload files")
+
+    if seen != set(expected):
+        errors.append(f"Installer artifact parts mismatch: found {sorted(seen)!r}")
+    if (
+        "pattern: ReefVision-Windows-Installer-Part-*" not in acceptance_job
+        or "merge-multiple: true" not in acceptance_job
+    ):
+        errors.append("Clean-install runner must download and merge all installer parts")
+    return errors
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     config = json.loads(
@@ -85,6 +153,7 @@ def main() -> int:
         encoding="utf-8"
     )
     errors = check_workflow(workflow, str(config["version"]))
+    errors.extend(check_cab_artifact_partition(workflow))
     if errors:
         for error in errors:
             print(f"Windows acceptance version gate: {error}", file=sys.stderr)
