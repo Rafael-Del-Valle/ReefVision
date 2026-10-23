@@ -595,7 +595,7 @@ describe("Gallery", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("recovers from a stalled WebView2 request using the thumbnail", async () => {
+  it("recovers a stalled image with its thumbnail", async () => {
     const nativeSetTimeout = window.setTimeout.bind(window);
     vi.spyOn(window, "setTimeout").mockImplementation(
       (handler, timeout, ...args) =>
@@ -636,7 +636,7 @@ describe("Gallery", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("offers retry if a stalled full-resolution image has no thumbnail", async () => {
+  it("offers retry when an image stalls without a thumbnail", async () => {
     const nativeSetTimeout = window.setTimeout.bind(window);
     vi.spyOn(window, "setTimeout").mockImplementation(
       (handler, timeout, ...args) =>
@@ -659,8 +659,10 @@ describe("Gallery", () => {
     ).toHaveTextContent("Image could not be displayed");
     await userEvent.click(screen.getByRole("button", { name: "Retry image" }));
     expect(
-      screen.getByAltText("Focused project image: swiftia-01.png"),
-    ).toHaveAttribute("src", expect.stringContaining("rv_retry=1"));
+      screen
+        .getByAltText("Focused project image: swiftia-01.png")
+        .getAttribute("src"),
+    ).toContain("rv_retry=1");
   });
 
   it("labels the thumbnail when the full-resolution source fails", async () => {
