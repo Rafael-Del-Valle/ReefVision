@@ -19,6 +19,45 @@ from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
 from reefvision.services.spatial_mesh_ply_v14 import parse_ply_triangles
 
 
+MAX_PREVIEW_TRIANGLES = 512
+
+
+def _sample_mesh_display_geometry(
+    points: list[tuple[float, float, float]],
+    faces: list[list[int]],
+    scale: float,
+) -> dict[str, Any]:
+    """Bounded render-only triangle sample; scientific metrics use all faces."""
+    count = min(len(faces), MAX_PREVIEW_TRIANGLES)
+    last = len(faces) - 1
+    face_indices = (
+        [0]
+        if count == 1
+        else [index * last // (count - 1) for index in range(count)]
+    )
+    vertex_indices: list[int] = []
+    local_indices: dict[int, int] = {}
+    display_faces: list[list[int]] = []
+    for face_index in face_indices:
+        display_face: list[int] = []
+        for source_index in faces[face_index]:
+            if source_index not in local_indices:
+                local_indices[source_index] = len(vertex_indices)
+                vertex_indices.append(source_index)
+            display_face.append(local_indices[source_index])
+        display_faces.append(display_face)
+    return {
+        "preview_face_indices": face_indices,
+        "preview_vertex_indices": vertex_indices,
+        "preview_faces_local_indices": display_faces,
+        "preview_vertices_in_source_frame_m": [
+            [coordinate * scale for coordinate in points[index]]
+            for index in vertex_indices
+        ],
+        "preview_is_decimated": count < len(faces),
+    }
+
+
 def measure_mesh_preview(
     *,
     vertices: list[list[float]],
@@ -243,6 +282,7 @@ def measure_mesh_preview(
         "area_weighted_surface_centroid_m": centroid_m,
         "area_weighted_centroid_scale_uncertainty_m": centroid_uncertainty_m,
         "face_count": len(faces),
+        **_sample_mesh_display_geometry(points, faces, scale),
         "vertex_count": len(points),
         "unreferenced_vertex_count": unreferenced_vertex_count,
         "degenerate_face_count": degenerate,
