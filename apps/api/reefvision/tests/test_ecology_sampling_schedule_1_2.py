@@ -236,6 +236,7 @@ def test_calendar_requires_explicit_iso_calendar_dates(
     assert result.status_code == 422, result.text
     assert "explicit ISO YYYY-MM-DD" in result.text
 
+
 def test_scheduled_analysis_requires_unit_ids_for_every_observation(
     client: TestClient,
 ) -> None:

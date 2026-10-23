@@ -172,6 +172,7 @@ def summarize_planned_sampling_effort(
         )
     return summaries
 
+
 def summarize_planned_sampling_dates(
     coverage: Iterable[Any],
 ) -> list[dict[str, Any]]:
@@ -207,4 +208,3 @@ def summarize_planned_sampling_dates(
                 }
             )
     return results
-

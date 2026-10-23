@@ -23,23 +23,18 @@ def test_per_date_coverage_counts_missing_organisms_not_mortality(
     assert response.status_code == 200, response.text
     body = response.json()
     rows = body["planned_sampling_date_coverage"]
-    assert [row["sampling_date"] for row in rows] == [
-        "2026-04-01", "2026-04-02", "2026-04-03"
-    ]
-    assert [row["observed_organism_ids"] for row in rows] == [
-        ["A", "B"], ["A"], ["A", "B"]
-    ]
-    assert [row["missing_organism_ids"] for row in rows] == [
-        ["C"], ["B", "C"], ["C"]
-    ]
+    assert [row["sampling_date"] for row in rows] == ["2026-04-01", "2026-04-02", "2026-04-03"]
+    assert [row["observed_organism_ids"] for row in rows] == [["A", "B"], ["A"], ["A", "B"]]
+    assert [row["missing_organism_ids"] for row in rows] == [["C"], ["B", "C"], ["C"]]
     assert [row["expected_organism_count"] for row in rows] == [3, 3, 3]
     assert [row["observed_organism_count"] for row in rows] == [2, 1, 2]
     assert [row["observation_coverage_fraction"] for row in rows] == pytest.approx(
         [2 / 3, 1 / 3, 2 / 3]
     )
     assert all(row["expected_roster_supplied"] for row in rows)
-    assert sum(row["observed_organism_count"] for row in rows) == (
-        body["planned_sampling_effort"][0]["observed_organism_visits"]
+    assert (
+        sum(row["observed_organism_count"] for row in rows)
+        == (body["planned_sampling_effort"][0]["observed_organism_visits"])
     )
     assert body["evidence_level"] == "caller_supplied_unverified"
     assert body["population_summaries"] == []
@@ -91,22 +86,25 @@ def test_saved_workflow_persists_identical_per_date_scientific_qc(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        row for row in detail.json()["artifacts"]
-        if row["data_type"] == "longitudinal_analysis"
+        row for row in detail.json()["artifacts"] if row["data_type"] == "longitudinal_analysis"
     ]
     assert len(artifacts) == 1
     standalone = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
     assert standalone.status_code == 200, standalone.text
     persisted = artifacts[0]["payload_json"]
-    assert persisted["planned_sampling_date_coverage"] == (
-        standalone.json()["planned_sampling_date_coverage"]
+    assert (
+        persisted["planned_sampling_date_coverage"]
+        == (standalone.json()["planned_sampling_date_coverage"])
     )
     assert persisted["analysis_provenance"] == standalone.json()["analysis_provenance"]
     assert persisted["evidence_level"] == "caller_supplied_unverified"

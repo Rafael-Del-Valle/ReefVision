@@ -226,7 +226,6 @@ class PlannedSamplingEffort(BaseModel):
     expected_roster_supplied: bool = False
 
 
-
 class PlannedSamplingDateCoverage(BaseModel):
     """Per-UTC-visit organism coverage, not a mortality or abundance estimate."""
 

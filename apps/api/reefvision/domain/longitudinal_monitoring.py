@@ -324,7 +324,7 @@ def analyze_longitudinal(
             "no population inference or significance is claimed.",
             "Declared planned sampling dates exclude units with missing visits; "
             "missing visits do not establish mortality, absence or zero abundance.",
-            "Per-visit UTC sampling coverage identifies missing organism observations, not " 
+            "Per-visit UTC sampling coverage identifies missing organism observations, not "
             "mortality, absence or zero abundance.",
             "Planned organism-visit coverage counts missing measurements, not mortality; "
             "without a roster, completely unobserved organisms cannot enter its denominator.",
