@@ -172,10 +172,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
         expect.anything(),
       );
     });
-    expect(
-      vi.mocked(getReviewQueueItems).mock.calls.every(
-        ([id]) => id === "dataset-queue",
-      ),
-    ).toBe(true);
+    const fetchedQueueCalls = vi.mocked(getReviewQueueItems).mock.calls;
+    expect(fetchedQueueCalls.every(([id]) => id === "dataset-queue")).toBe(
+      true,
+    );
   });
 });
