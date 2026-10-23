@@ -120,6 +120,48 @@ describe("PointCloudArtifactViewer", () => {
     expect(parsePointCloudRenderArtifact(validArtifact)).not.toBeNull();
   });
 
+  it("renders reviewed source-index chord metadata as provisional straight lines", () => {
+    const artifact = {
+      ...validArtifact,
+      selected_point_chords: [
+        {
+          point_indices: [0, 2],
+          chord_distance_m: 1,
+          scale_uncertainty_m: 0.1,
+        },
+      ],
+    };
+    const before = JSON.stringify(artifact);
+    render(<PointCloudArtifactViewer artifact={artifact} />);
+    expect(screen.getByText(/Source-point chord 0–2:/)).toHaveTextContent(
+      "1.0000 m",
+    );
+    expect(screen.getByText(/Source-point chord 0–2:/)).toHaveTextContent(
+      "scale-only ±0.1000 m",
+    );
+    expect(screen.getByText(/Source-point chord 0–2:/)).toHaveTextContent(
+      "not anatomical branch length",
+    );
+    expect(JSON.stringify(artifact)).toBe(before);
+  });
+
+  it("fails closed on contradictory point-pair indices or distances", () => {
+    for (const chord of [
+      { point_indices: [0, 0], chord_distance_m: 0 },
+      { point_indices: [0, 3], chord_distance_m: 1 },
+      { point_indices: [0, 2], chord_distance_m: Number.NaN },
+      { point_indices: [0, 2], chord_distance_m: -1 },
+      { point_indices: [0, 2], chord_distance_m: 1, scale_uncertainty_m: -1 },
+    ]) {
+      expect(
+        parsePointCloudRenderArtifact({
+          ...validArtifact,
+          selected_point_chords: [chord],
+        }),
+      ).toBeNull();
+    }
+  });
+
   it("renders decimated colorless samples with preserved original indices", () => {
     const { container } = render(
       <PointCloudArtifactViewer
