@@ -177,6 +177,13 @@ def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
         frozen.manifest_json = changed_manifest
         session.commit()
 
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] is False
+    assert plan.json()["executable"] is False
+    issue_codes = {issue["code"] for issue in plan.json()["issues"]}
+    assert "pose_dataset_manifest_corrupt" in issue_codes
+
     assert (
         process_workflow_run_job(
             app.state.settings,
