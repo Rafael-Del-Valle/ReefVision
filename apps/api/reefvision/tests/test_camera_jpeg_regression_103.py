@@ -163,6 +163,7 @@ def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
                 assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
     assert source.read_bytes() == original
 
+
 @pytest.mark.parametrize(
     ("mode", "color", "expected_display_mode"),
     [
