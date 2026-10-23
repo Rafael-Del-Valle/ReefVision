@@ -41,9 +41,16 @@ def test_complete_calendar_retains_one_tank(client: TestClient) -> None:
     body = result.json()
     assert body["evidence_level"] == "caller_supplied_unverified"
     assert body["expected_sampling_schedule_supplied"] is True
-    assert body["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0009"
+    assert body["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0010"
     assert body["population_summaries"][0]["independent_unit_count"] == 1
     assert body["unit_coverage"][0]["missing_scheduled_dates_by_organism"] == {}
+    effort = body["planned_sampling_effort"]
+    assert len(effort) == 1
+    assert effort[0]["expected_organism_visits"] == 6
+    assert effort[0]["observed_organism_visits"] == 6
+    assert effort[0]["missing_organism_visits"] == 0
+    assert effort[0]["observation_coverage_fraction"] == 1.0
+    assert effort[0]["expected_roster_supplied"] is False
 
 
 def test_missing_intermediate_visit_excludes_tank_without_claiming_mortality(
@@ -58,6 +65,44 @@ def test_missing_intermediate_visit_excludes_tank_without_claiming_mortality(
     assert body["independent_unit_count"] == 1
     assert body["unit_coverage"][0]["exclusion_reason"] == "missing_scheduled_observations"
     assert body["unit_coverage"][0]["missing_scheduled_dates_by_organism"] == {"B": ["2026-04-02"]}
+    effort = body["planned_sampling_effort"][0]
+    assert effort["expected_organism_visits"] == 6
+    assert effort["observed_organism_visits"] == 5
+    assert effort["missing_organism_visits"] == 1
+    assert effort["observation_coverage_fraction"] == pytest.approx(5 / 6)
+
+
+def test_expected_roster_counts_completely_unobserved_organism_visits(
+    client: TestClient,
+) -> None:
+    request = _payload(missing=True)
+    request["expected_organism_ids_by_unit"] = {"tank-1": ["A", "B", "C"]}
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["unit_summaries"] == []
+    assert body["unit_coverage"][0]["unobserved_organism_ids"] == ["C"]
+    effort = body["planned_sampling_effort"][0]
+    assert effort["expected_roster_supplied"] is True
+    assert effort["expected_organism_count"] == 3
+    assert effort["expected_organism_visits"] == 9
+    assert effort["observed_organism_visits"] == 5
+    assert effort["missing_organism_visits"] == 4
+    assert effort["observation_coverage_fraction"] == pytest.approx(5 / 9)
+    assert body["evidence_level"] == "caller_supplied_unverified"
+
+
+def test_unscheduled_legacy_analysis_has_no_planned_effort(
+    client: TestClient,
+) -> None:
+    request = _payload()
+    request.pop("expected_sampling_dates_by_unit")
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert response.status_code == 200, response.text
+    assert response.json()["planned_sampling_effort"] == []
+    assert response.json()["analysis_provenance"]["algorithm_version"] == (
+        "ecology-longitudinal-0008"
+    )
 
 
 @pytest.mark.parametrize(
@@ -130,6 +175,10 @@ def test_saved_workflow_persists_schedule_qc(client: TestClient) -> None:
     standalone = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
     assert standalone.status_code == 200, standalone.text
     assert artifacts[0]["payload_json"]["unit_coverage"] == standalone.json()["unit_coverage"]
+    assert (
+        artifacts[0]["payload_json"]["planned_sampling_effort"]
+        == standalone.json()["planned_sampling_effort"]
+    )
     assert (
         artifacts[0]["payload_json"]["analysis_provenance"]
         == standalone.json()["analysis_provenance"]
