@@ -29,6 +29,22 @@ try {
         throw 'Local MSI preflight changed the expected path.'
     }
     $passed++
+    # The cached digest is a second independent guard for --install-only.
+    $pinnedSha = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
+    $pinned = Assert-ReefVisionCachedMsi -InstallerPath $msi -RepoPath $repo -ExpectedSha256 $pinnedSha.ToLowerInvariant()
+    if ($pinned.FullName -ne [System.IO.Path]::GetFullPath($msi)) {
+        throw 'Pinned MSI validation changed the selected installer.'
+    }
+    $passed++
+    Assert-Throws {
+        Assert-ReefVisionCachedMsi -InstallerPath $msi -RepoPath $repo -ExpectedSha256 ('0' * 64)
+    } 'Cached MSI SHA-256 mismatch'
+    Assert-Throws {
+        Assert-ReefVisionCachedMsi -InstallerPath $msi -RepoPath $repo -ExpectedSha256 ''
+    } 'Missing or invalid cached MSI SHA-256'
+    Assert-Throws {
+        Assert-ReefVisionCachedMsi -InstallerPath $sentinel -RepoPath $repo -ExpectedSha256 $pinnedSha
+    } 'outside the exact local build directory'
     Assert-Throws {
         Assert-ReefVisionMsiLocalPath -InstallerPath $sentinel -RepoPath $repo
     } 'outside the exact local build directory'
@@ -89,6 +105,10 @@ try {
     if ($updateScript.Contains('$portableSync = Sync-ReefVisionPortableInstall')) {
         throw 'Updater still overwrites portable backend files.'
     }
+    if (-not $updateScript.Contains('$installer = Assert-ReefVisionCachedMsi') -or
+        $updateScript.Contains('$installer = $latestInstaller')) {
+        throw 'Install-only must use the pinned MSI path and digest, without a fallback.'
+    }
     $verificationPosition = $updateScript.LastIndexOf('Assert-ReefVisionMsiPayload')
     $stopPosition = $updateScript.IndexOf('Stop-ReefVisionRunningProcesses', $verificationPosition)
     if ($verificationPosition -lt 0 -or $stopPosition -le $verificationPosition) {
@@ -112,7 +132,7 @@ try {
     if (-not $installerScript.Contains('Destination = Join-Path $supportDir "reefvision-msi-update.ps1"')) {
         throw 'Managed command installation does not deploy the MSI helper.'
     }
-    $passed += 5
+    $passed += 6
     Write-Host "MSI update preflight: $passed passed" -ForegroundColor Green
 }
 finally {
