@@ -196,5 +196,6 @@ def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
     assert detail.status_code == 200, detail.text
     result = detail.json()
     assert result["run"]["status"] == "failed"
+    assert "pose_dataset_manifest_corrupt" in result["run"]["error_message"]
     assert "manifest checksum" in result["run"]["error_message"]
     assert result["artifacts"] == []
