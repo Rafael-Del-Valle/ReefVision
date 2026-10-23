@@ -518,15 +518,12 @@ try {
     }
 
     if ($installOnly) {
-        if (-not [string]::IsNullOrWhiteSpace($config.last_installer_path) -and (Test-Path $config.last_installer_path -PathType Leaf)) {
-            $installer = Get-Item -LiteralPath $config.last_installer_path
+        # A fresh build or --build-only pins both the local path and its SHA-256.
+        # Never silently fall back to an unpinned MSI discovered by timestamp.
+        if ([string]::IsNullOrWhiteSpace([string]$config.last_installer_path)) {
+            throw "No pinned ReefVision MSI is available. Run update-reefvision --build-only first."
         }
-        elseif ($latestInstaller) {
-            $installer = $latestInstaller
-        }
-        else {
-            throw "No existing ReefVision v$expectedVersion installer is available for --install-only."
-        }
+        $installer = Assert-ReefVisionCachedMsi -InstallerPath ([string]$config.last_installer_path) -RepoPath $repoPath -ExpectedSha256 ([string]$config.last_installer_sha256)
     }
 
     if ($null -eq $installer) {
