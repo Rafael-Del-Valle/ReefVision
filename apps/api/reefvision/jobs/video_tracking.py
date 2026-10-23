@@ -315,6 +315,7 @@ def process_video_tracking_job(
         secondary_model_path = secondary.managed_path if secondary is not None else None
         provider_name = model.provider_name
         class_mapping = _project_class_mapping(model)
+        detector_class_mapping = dict(class_mapping)
         segmenter_class_mapping = (
             _project_class_mapping(secondary) if secondary is not None else {}
         )
@@ -530,7 +531,7 @@ def process_video_tracking_job(
             observations, fusion_report = fuse_tracked_models(
                 observations,
                 segmenter_observations,
-                detector_class_map=_project_class_mapping(model),
+                detector_class_map=detector_class_mapping,
                 segmenter_class_map=segmenter_class_mapping,
                 minimum_iou=float(request.get("hybrid_match_iou", 0.5)),
             )
