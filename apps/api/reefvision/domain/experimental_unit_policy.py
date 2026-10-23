@@ -37,6 +37,29 @@ _TECHNICAL_REPLICATES = frozenset(
         "cameras",
         "sensor",
         "sensors",
+        "roi",
+        "rois",
+        "box",
+        "boxes",
+        "bbox",
+        "bboxes",
+        "bounding",
+        "segmentation",
+        "segmentations",
+        "prediction",
+        "predictions",
+        "inference",
+        "inferences",
+        "keyframe",
+        "keyframes",
+        "view",
+        "views",
+        "augmentation",
+        "augmentations",
+        "thumbnail",
+        "thumbnails",
+        "subimage",
+        "subimages",
     }
 )
 
@@ -45,7 +68,9 @@ def require_ecological_unit_type(value: str | None) -> str | None:
     """Validate declared units without asserting their biological independence.
 
     Reject common image-processing/technical replicate types, including compound
-    labels such as ``video_frame`` and ``per-image``. Other declarations remain
+    labels such as ``video_frame``, ``per-image``, ``bounding_box``, and
+    ``model_prediction``. These are measurements or processing outputs, not
+    independent biological units. Other declarations remain
     caller-supplied and require study-design review before scientific inference.
     """
     if value is None:
