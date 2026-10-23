@@ -50,6 +50,33 @@ def test_paired_counts_reject_booleans(client: TestClient, field: str, value: bo
     assert response.status_code == 422, response.text
 
 
+@pytest.mark.parametrize("value", ["10", "10.5", None, [], {}])
+def test_longitudinal_rejects_coerced_measurements(
+    client: TestClient, value: object
+) -> None:
+    observations = longitudinal_observations()
+    observations[0]["value"] = value
+    payload = {"observations": observations}
+    with pytest.raises(SchemaValidationError, match="JSON number"):
+        LongitudinalAnalysisRequest.model_validate(payload)
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=payload)
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize("field", ["reference_count", "model_count"])
+@pytest.mark.parametrize("value", ["10", "10.5", None, [], {}])
+def test_paired_counts_reject_coerced_measurements(
+    client: TestClient, field: str, value: object
+) -> None:
+    pairs = paired_observations()
+    pairs[0][field] = value
+    payload = {"pairs": pairs, "reference_kind": "human_consensus"}
+    with pytest.raises(SchemaValidationError, match="JSON numbers"):
+        PairedCountComparisonRequest.model_validate(payload)
+    response = client.post("/api/v1/ecology/paired-count-comparison", json=payload)
+    assert response.status_code == 422, response.text
+
+
 @pytest.mark.parametrize(
     ("level", "field", "value"),
     [
@@ -90,21 +117,27 @@ def test_valid_zero_remains_unverified(client: TestClient) -> None:
     assert parsed.pairs[0].reference_count == 0.0
 
 
-@pytest.mark.parametrize("kind", ["longitudinal", "paired", "source_claim"])
+@pytest.mark.parametrize(
+    "kind", ["longitudinal", "paired", "source_claim", "longitudinal_string", "paired_string"]
+)
 def test_saved_workflow_rejects_invalid_scientific_input(client: TestClient, kind: str) -> None:
     project = create_project(client, f"Strict ecological input {kind}")
     project_id = str(project["id"])
-    if kind in {"longitudinal", "source_claim"}:
+    if kind in {"longitudinal", "source_claim", "longitudinal_string"}:
         graph = cast(dict[str, Any], longitudinal_graph(longitudinal_observations()))
         rows = graph["nodes"][1]["parameters"]["observations"]
         if kind == "longitudinal":
             rows[0]["value"] = True
+        elif kind == "longitudinal_string":
+            rows[0]["value"] = "12"
         else:
             rows[0]["verified"] = True
         forbidden_artifact = "longitudinal_analysis"
     else:
         graph = cast(dict[str, Any], paired_graph())
-        graph["nodes"][1]["parameters"]["pairs"][0]["model_count"] = True
+        graph["nodes"][1]["parameters"]["pairs"][0]["model_count"] = (
+            "12" if kind == "paired_string" else True
+        )
         forbidden_artifact = "paired_count_comparison"
 
     saved = client.post(

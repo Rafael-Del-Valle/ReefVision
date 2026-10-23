@@ -54,6 +54,8 @@ class PairedCountObservation(BaseModel):
     def reject_boolean_counts(cls, value: object) -> object:
         if isinstance(value, bool):
             raise ValueError("Count values must be numeric, not Boolean")
+        if not isinstance(value, (int, float)):
+            raise ValueError("Count values must be JSON numbers, not coerced")
         return value
 
     @field_validator("reference_count", "model_count")

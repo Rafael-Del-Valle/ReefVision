@@ -283,3 +283,16 @@ includes declared parent identity and algorithm version
 identities, project-owned observations, calibration, independence or review;
 `caller_supplied_unverified` remains mandatory. Scientific and Windows
 acceptance are still outstanding.
+
+## Strict JSON numeric scientific inputs (2026-10-22)
+
+Exploratory longitudinal measurements and paired human–model count inputs now
+reject coerced numeric strings, null, arrays and objects rather than silently
+parsing them as scientific numbers. Finite JSON numbers and legitimate zero
+values remain valid; booleans remain rejected. Both standalone API endpoints
+and the existing executable, saved Workflow Builder analysis nodes share the
+Pydantic contracts. New API and saved-workflow regressions require invalid
+inputs to fail without producing successful analysis artifacts. This does not
+authenticate source records, calibrations or organism identity, and does not
+change the unverified-evidence/review gate. Full exact-head CI, Windows GUI and
+scientific acceptance remain required.

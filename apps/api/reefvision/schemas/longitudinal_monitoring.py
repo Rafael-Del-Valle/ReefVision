@@ -62,6 +62,8 @@ class MonitoringObservation(BaseModel):
     def reject_boolean_measurements(cls, value: object) -> object:
         if isinstance(value, bool):
             raise ValueError("Observation measurement must be numeric, not Boolean")
+        if not isinstance(value, (int, float)):
+            raise ValueError("Observation measurement must be a JSON number, not coerced")
         return value
 
     @field_validator("value")
