@@ -6,12 +6,15 @@ from collections import Counter, defaultdict, deque
 from collections.abc import Callable
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
     DatasetVersion,
     LabelClass,
     ModelRegistration,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
     PoseTrainingDataset,
     Project,
     VideoAsset,
@@ -258,6 +261,28 @@ class WorkflowGraphService:
                     node_id=node_id,
                 )
             )
+        else:
+            schema = self.session.get(PoseLandmarkSchema, dataset.pose_schema_id)
+            revision = self.session.scalar(
+                select(PoseLandmarkSchemaRevision).where(
+                    PoseLandmarkSchemaRevision.schema_id == dataset.pose_schema_id,
+                    PoseLandmarkSchemaRevision.revision == dataset.pose_schema_revision,
+                )
+            )
+            if (
+                schema is None
+                or schema.project_id != project_id
+                or revision is None
+                or revision.content_hash != dataset.pose_schema_content_hash
+            ):
+                issues.append(
+                    self._issue(
+                        "error",
+                        "pose_dataset_schema_mismatch",
+                        "Frozen pose dataset landmark schema revision no longer matches saved truth",
+                        node_id=node_id,
+                    )
+                )
 
     def _validate_model_source(
         self,
