@@ -274,7 +274,9 @@ def test_hidden_extreme_is_reported_without_changing_full_cloud_measurements() -
     assert result["branch_length_m"] is None
 
 
-def test_hidden_extreme_standalone_and_saved_workflow_parity(client: TestClient) -> None:
+def test_hidden_extreme_standalone_and_saved_workflow_parity(
+    client: TestClient,
+) -> None:
     project_id = str(create_project(client, "Point cloud hidden outlier")["id"])
     base = f"/api/v1/projects/{project_id}"
     points = [[float(index), 0.0, 0.0] for index in range(513)]
@@ -292,7 +294,11 @@ def test_hidden_extreme_standalone_and_saved_workflow_parity(client: TestClient)
         "name": "Hidden source extent",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": parameters},
+            {
+                "node_id": "cloud",
+                "node_type": "point_cloud_preview",
+                "parameters": parameters,
+            },
         ],
         "edges": [
             {
@@ -309,7 +315,9 @@ def test_hidden_extreme_standalone_and_saved_workflow_parity(client: TestClient)
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -319,7 +327,9 @@ def test_hidden_extreme_standalone_and_saved_workflow_parity(client: TestClient)
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        a for a in detail.json()["artifacts"] if a["data_type"] == "point_cloud_measurement_preview"
+        a
+        for a in detail.json()["artifacts"]
+        if a["data_type"] == "point_cloud_measurement_preview"
     )
     expected = standalone.json()
     for key in (
