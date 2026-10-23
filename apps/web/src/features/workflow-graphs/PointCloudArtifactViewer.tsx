@@ -162,10 +162,21 @@ export function parsePointCloudRenderArtifact(
         first[1] - second[1],
         first[2] - second[2],
       );
+      // Scaling a large source-frame offset can erase small differences
+      // through floating-point cancellation. Do not reject a valid full-cloud
+      // measurement when the display coordinates lack that precision.
+      const coordinateMagnitude = Math.max(
+        1,
+        ...first.map(Math.abs),
+        ...second.map(Math.abs),
+      );
+      const tolerance = Math.max(
+        1e-9 * Math.max(1, expected, chord.chord_distance_m),
+        16 * Number.EPSILON * coordinateMagnitude,
+      );
       return (
         !Number.isFinite(expected) ||
-        Math.abs(expected - chord.chord_distance_m) >
-          1e-9 * Math.max(1, expected, chord.chord_distance_m)
+        Math.abs(expected - chord.chord_distance_m) > tolerance
       );
     })
   ) {
