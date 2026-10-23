@@ -125,3 +125,45 @@ def audit_unit_coverage(
             }
         )
     return results
+
+
+def summarize_planned_sampling_effort(
+    coverage: Iterable[Any],
+) -> list[dict[str, Any]]:
+    """Count scheduled organism-visits, not photographs or biological survival.
+
+    When no expected organism roster exists, only *observed* organisms can
+    contribute to the denominator. A declared roster additionally accounts
+    for organisms never observed for the given metric. These are missing
+    measurements, not evidence of death or a zero-valued observation.
+    """
+    summaries: list[dict[str, Any]] = []
+    for row in sorted(coverage, key=lambda item: (item.experimental_unit_id, item.metric_name)):
+        scheduled_dates = row.expected_sampling_dates
+        if not scheduled_dates:
+            continue
+        organism_count = row.expected_organism_count or row.observed_organism_count
+        expected_visits = organism_count * len(scheduled_dates)
+        observed_visits = sum(
+            len(dates) for dates in row.observed_sampling_dates_by_organism.values()
+        )
+        missing_visits = expected_visits - observed_visits
+        audited_missing = sum(
+            len(dates) for dates in row.missing_scheduled_dates_by_organism.values()
+        ) + len(row.unobserved_organism_ids) * len(scheduled_dates)
+        if missing_visits < 0 or missing_visits != audited_missing:
+            raise ValueError("Planned sampling effort does not reconcile with unit coverage")
+        summaries.append(
+            {
+                "experimental_unit_id": row.experimental_unit_id,
+                "metric_name": row.metric_name,
+                "planned_sampling_date_count": len(scheduled_dates),
+                "expected_organism_count": organism_count,
+                "expected_organism_visits": expected_visits,
+                "observed_organism_visits": observed_visits,
+                "missing_organism_visits": missing_visits,
+                "observation_coverage_fraction": observed_visits / expected_visits,
+                "expected_roster_supplied": row.expected_organism_count is not None,
+            }
+        )
+    return summaries
