@@ -427,3 +427,27 @@ classification without implying death, zero abundance, true independent
 replication, or verified project-owned observations. Standalone API and
 persisted executable Workflow Builder regression coverage is included;
 full exact-head CI and Windows scientific acceptance remain release gates.
+
+
+## Planned organism-visit sampling effort (2026-10-23)
+
+The existing standalone longitudinal endpoint and **executable, persisted**
+`ecology_longitudinal_analysis` Workflow Builder node now include typed
+`planned_sampling_effort` rows, one per declared unit and metric **only when a
+planned UTC sampling calendar is provided**. Each row reports the scheduled
+sampling-date count, expected organism count, expected organism-visits,
+observed organism-visits, missing organism-visits, observation coverage
+fraction and whether an expected-organism roster was supplied. The denominator
+is biological organism × scheduled date, **never image, mask or crop count**.
+Completely unobserved roster organisms contribute their planned visits to the
+missing denominator, not zero abundance or inferred mortality. Without a roster,
+the denominator includes only observed organisms and cannot represent unknown
+missing animals. All totals reconcile against the existing unit-coverage audit
+and fail closed on contradictions. Input-order determinism and source SHA-256
+provenance remain intact; scheduled-analysis algorithm version advances to
+`ecology-longitudinal-0010`. Unscheduled legacy analysis remains `0008`
+and returns an empty effort list. Standalone and saved-workflow regression tests
+cover complete visits, missing intermediate visits, absent roster organisms,
+legacy behavior and persisted artifact parity. This is **caller-supplied,
+unverified descriptive sampling effort**, not an authenticated sampling design,
+verified calibration, survival estimate, or treatment-effect inference.
