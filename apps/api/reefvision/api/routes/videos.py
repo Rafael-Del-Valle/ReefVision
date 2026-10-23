@@ -837,16 +837,22 @@ def create_tracking_job(
                 "Hybrid tracking requires an Ultralytics detector and segmentation model "
                 "registered in the same project"
             )
-        detector_classes = {
-            str(value) for value in (
-                dict(model.class_map_json or {}).get("mapping") or {}
-            ).values()
-        }
-        segmenter_classes = {
-            str(value) for value in (
-                dict(secondary.class_map_json or {}).get("mapping") or {}
-            ).values()
-        }
+        def mapped_classes(registration: ModelRegistration) -> set[str]:
+            raw = dict(registration.class_map_json or {})
+            mapping = raw.get("mapping")
+            if isinstance(mapping, dict):
+                return {str(value) for value in mapping.values() if value}
+            provider_classes = raw.get("provider_classes")
+            if isinstance(provider_classes, dict):
+                return {
+                    str(metadata["label_class_id"])
+                    for metadata in provider_classes.values()
+                    if isinstance(metadata, dict) and metadata.get("label_class_id")
+                }
+            return set()
+
+        detector_classes = mapped_classes(model)
+        segmenter_classes = mapped_classes(secondary)
         if not detector_classes.intersection(segmenter_classes):
             raise ValidationError(
                 "Hybrid tracking models must map at least one class to the same project label"
