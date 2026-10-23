@@ -17,6 +17,7 @@ interface PointCloudRenderArtifact {
   radius: number;
   totalCount: number;
   chords: PointChord[];
+  omittedExtrema: string[] | null;
 }
 
 function isVec3(value: unknown): value is Vec3 {
@@ -88,6 +89,7 @@ export function parsePointCloudRenderArtifact(
   const max = data.axis_aligned_max_in_source_frame_m;
   const totalCount = data.point_count;
   const rawChords = data.selected_point_chords;
+  const omittedExtrema = data.preview_omitted_axis_extrema;
   const provenance = data.provenance;
   // A point-cloud preview is provisional geometry, never verified biology.
   // Reject contradictory saved metadata instead of displaying a misleading artifact.
@@ -135,6 +137,20 @@ export function parsePointCloudRenderArtifact(
         (coordinate, axis) => coordinate < min[axis] || coordinate > max[axis],
       ),
     )
+  ) {
+    return null;
+  }
+  // Newer artifacts carry source-axis coverage QC; legacy artifacts are unassessed.
+  if (
+    omittedExtrema !== undefined &&
+    (!Array.isArray(omittedExtrema) ||
+      !omittedExtrema.every(
+        (value) =>
+          typeof value === "string" &&
+          ["x_min", "x_max", "y_min", "y_max", "z_min", "z_max"].includes(value),
+      ) ||
+      new Set(omittedExtrema).size !== omittedExtrema.length ||
+      data.preview_axis_extrema_covered !== (omittedExtrema.length === 0))
   ) {
     return null;
   }
@@ -198,6 +214,7 @@ export function parsePointCloudRenderArtifact(
     radius,
     totalCount: totalCount as number,
     chords,
+    omittedExtrema: omittedExtrema === undefined ? null : (omittedExtrema as string[]),
   };
 }
 
@@ -351,6 +368,11 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
         Display points: {cloud.points.length} / {cloud.totalCount} · Point
         coverage: {((cloud.points.length / cloud.totalCount) * 100).toFixed(1)}%
         {cloud.colors ? " · Uncalibrated RGB display" : " · No RGB"}
+        {cloud.omittedExtrema === null
+          ? " · Source-axis extrema coverage unassessed"
+          : cloud.omittedExtrema.length > 0
+            ? ` · Display omits source-axis extrema: ${cloud.omittedExtrema.join(", ")}`
+            : " · Source-axis extrema represented"}
       </p>
     </section>
   );
