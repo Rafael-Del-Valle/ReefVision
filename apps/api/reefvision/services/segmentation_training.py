@@ -27,6 +27,7 @@ from reefvision.services.training import (
     TRAINING_PRECISIONS,
     TRAINING_PROVIDER_ARCHITECTURE_TTL_SECONDS,
     TrainingService,
+    _ultralytics_architecture_available,
 )
 from reefvision.services.training_tasks import (
     DETECTION_TASK,
@@ -209,7 +210,10 @@ class SegmentationTrainingService(TrainingService):
             blockers.append(
                 "Choose a local Ultralytics segmentation architecture before launching training"
             )
-        elif architecture not in available_architectures:
+        elif not _ultralytics_architecture_available(
+            architecture,
+            available_architectures,
+        ):
             blockers.append(
                 "The selected segmentation architecture is not available in the "
                 "installed pinned Ultralytics package"

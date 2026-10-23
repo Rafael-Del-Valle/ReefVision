@@ -257,8 +257,11 @@ class ImageService:
         # consistently supported. Keep original source and source-pixel geometry;
         # a separate PNG rendition is used for the display only.
         source_mode = str((image.metadata_json or {}).get("mode", ""))
+        source_exif = (image.metadata_json or {}).get("exif", {})
+        exif_orientation = source_exif.get("Orientation") if isinstance(source_exif, dict) else None
         needs_png = image.media_type in {"image/tiff", "image/bmp", "image/gif"} or (
-            image.media_type == "image/jpeg" and source_mode not in {"RGB", "L"}
+            image.media_type == "image/jpeg"
+            and (source_mode not in {"RGB", "L"} or exif_orientation not in {None, 1})
         )
         if not needs_png:
             return source, image.media_type

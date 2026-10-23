@@ -255,7 +255,11 @@ def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool |
             payload = handle.read(16384)
     except OSError:
         return empty
-    return {"available": True, "text": _safe_terminal_log_text(payload)}
+    text = _safe_terminal_log_text(payload)
+    # Trainer logs may use Windows CRLF while the API is also exercised from
+    # Linux runners. Normalize line endings so the browser and PowerShell
+    # monitor receive the same bounded text contract on every platform.
+    return {"available": True, "text": text.replace("\r\n", "\n").replace("\r", "\n")}
 
 
 @router.get("/training-runs/{run_id}/logs/tail")

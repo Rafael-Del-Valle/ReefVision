@@ -152,6 +152,74 @@ describe("TrainingWorkspace launch", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows missing-provider architectures instead of an empty task selector", async () => {
+    const architecture = {
+      catalog_id: "ultralytics/yolo11/detect/n",
+      category: "architecture",
+      task: "detect",
+      provider: "ultralytics",
+      architecture_family: "YOLO11",
+      architecture_reference: "yolo11n.yaml",
+      display_name: "YOLO11 Nano",
+      installation_state: "Provider Required",
+      installation_reason:
+        "The compatible provider runtime is required for training.",
+      selection_kind: "builtin_architecture",
+      trainable: true,
+      resolved_model_id: null,
+    } as api.ModelCatalogEntry;
+    vi.mocked(api.getTrainingWorkspaceBootstrap).mockResolvedValue({
+      providers: [],
+      catalog: { models: [architecture] },
+      draft_summaries: [draft],
+      selected_draft: {
+        ...draft,
+        task: "",
+        architecture: "",
+        catalog_model_id: null,
+      },
+    } as unknown as api.TrainingWorkspaceBootstrapResponse);
+    vi.mocked(api.updateTrainingDraft).mockResolvedValue({
+      ...draft,
+      catalog_model_id: architecture.catalog_id,
+    });
+
+    renderWorkspace();
+    const preset = await screen.findByLabelText("Model size or preset");
+    expect(preset).toHaveValue("");
+    expect(
+      screen.getByRole("option", { name: /YOLO11 Nano.*Provider Required/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Architectures labeled Provider Required/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No supported training architectures/),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(preset, { target: { value: architecture.catalog_id } });
+    await waitFor(() =>
+      expect(api.updateTrainingDraft).toHaveBeenCalledWith(
+        draft.id,
+        expect.objectContaining({
+          catalog_model_id: architecture.catalog_id,
+          task: "detect",
+          architecture: "yolo11n.yaml",
+          initial_checkpoint_source: "scratch",
+        }),
+      ),
+    );
+  });
+
+  it("distinguishes an empty catalog from provider-required architectures", async () => {
+    renderWorkspace();
+    expect(
+      await screen.findByText(
+        /No training architectures were returned by the model catalog/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("rechecks stale blocked validation and only launches after a fresh ready preflight", async () => {
     vi.mocked(api.getTrainingWorkspaceBootstrap).mockResolvedValue({
       providers: [],

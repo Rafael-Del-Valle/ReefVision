@@ -47,6 +47,13 @@ def test_progressive_camera_jpeg_keeps_original_bytes_and_exif(
     assert original.status_code == 200
     assert original.content == payload
 
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as decoded:
+        assert decoded.size == (64, 48)
+        assert decoded.getexif().get(274) is None
+
 
 @pytest.mark.parametrize("extension", [".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"])
 def test_jpeg_camera_filename_aliases_preserve_original_content(
@@ -90,10 +97,10 @@ def test_truncated_camera_jpeg_rejected_before_import_commit(
         (2, (64, 48)),
         (3, (64, 48)),
         (4, (64, 48)),
-        (5, (48, 64)),
-        (6, (48, 64)),
-        (7, (48, 64)),
-        (8, (48, 64)),
+        (5, (64, 48)),
+        (6, (64, 48)),
+        (7, (64, 48)),
+        (8, (64, 48)),
     ],
 )
 def test_camera_display_exif_orientation_preserves_original(
@@ -129,10 +136,10 @@ def test_camera_display_exif_orientation_preserves_original(
         (8, (1, 3, 0, 2)),
     ],
 )
-def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
+def test_camera_exif_display_preserves_source_pixels_while_thumbnail_is_oriented(
     tmp_path: Path, orientation: int, quadrant_order: tuple[int, int, int, int]
 ) -> None:
-    """Detect incorrect mirrored/rotated camera pixels, not just swapped dimensions."""
+    """Keep editor coordinates source-aligned while orienting the gallery thumbnail."""
 
     source = tmp_path / "DSC_0043.JPEG"
     display = tmp_path / "display.png"
@@ -149,18 +156,26 @@ def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
     create_browser_display(source, display)
     create_thumbnail(source, thumbnail, max_width=160, max_height=160)
 
-    expected_size = (80, 60) if orientation <= 4 else (60, 80)
     sample_points = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)]
-    for rendition in (display, thumbnail):
-        with Image.open(rendition) as rendered:
-            assert rendered.size == expected_size
-            assert rendered.getexif().get(274) is None
-            for (fx, fy), color_index in zip(sample_points, quadrant_order, strict=True):
-                actual = rendered.convert("RGB").getpixel(
-                    (int(rendered.width * fx), int(rendered.height * fy))
-                )
-                expected = colors[color_index]
-                assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
+    with Image.open(display) as rendered:
+        assert rendered.size == (80, 60)
+        assert rendered.getexif().get(274) is None
+        for (fx, fy), expected in zip(sample_points, colors, strict=True):
+            actual = rendered.convert("RGB").getpixel(
+                (int(rendered.width * fx), int(rendered.height * fy))
+            )
+            assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
+
+    expected_thumbnail_size = (80, 60) if orientation <= 4 else (60, 80)
+    with Image.open(thumbnail) as rendered:
+        assert rendered.size == expected_thumbnail_size
+        assert rendered.getexif().get(274) is None
+        for (fx, fy), color_index in zip(sample_points, quadrant_order, strict=True):
+            actual = rendered.convert("RGB").getpixel(
+                (int(rendered.width * fx), int(rendered.height * fy))
+            )
+            expected = colors[color_index]
+            assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
     assert source.read_bytes() == original
 
 
@@ -171,7 +186,7 @@ def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
         ("L", 127, "L"),
     ],
 )
-def test_non_rgb_camera_jpeg_import_and_oriented_renditions(
+def test_non_rgb_camera_jpeg_source_aligned_display_and_oriented_thumbnail(
     client: TestClient,
     tmp_path: Path,
     mode: str,
@@ -201,7 +216,7 @@ def test_non_rgb_camera_jpeg_import_and_oriented_renditions(
     create_thumbnail(source, thumbnail, max_width=160, max_height=160)
     with Image.open(display) as rendered:
         assert rendered.mode == expected_display_mode
-        assert rendered.size == (60, 80)
+        assert rendered.size == (80, 60)
         assert rendered.getexif().get(274) is None
     with Image.open(thumbnail) as rendered:
         assert rendered.mode == "RGB"
