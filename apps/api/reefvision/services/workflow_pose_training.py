@@ -138,7 +138,9 @@ def _pose_dataset(
         raise ValidationError(f"Pose {role} dataset must be complete")
 
     if canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
-        raise ValidationError(f"Pose {role} dataset manifest checksum no longer matches frozen truth")
+        raise ValidationError(
+            f"Pose {role} dataset manifest checksum no longer matches frozen truth"
+        )
 
     advertised_manifest = str(payload.get("manifest_sha256") or "")
 
