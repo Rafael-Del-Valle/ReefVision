@@ -133,3 +133,60 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         assert frozen.status == "complete"
         assert frozen.manifest_sha256 == payload["manifest_sha256"]
         assert frozen.pose_schema_content_hash == payload["pose_schema_content_hash"]
+
+def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    dataset_id = str(dataset["id"])
+    graph = {
+        "graph_id": "track-e-frozen-pose-integrity",
+        "name": "Frozen pose manifest integrity at execution",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": {
+                    "dataset_id": dataset_id,
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+            }
+        ],
+        "edges": [],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        changed_manifest = dict(frozen.manifest_json)
+        changed_manifest["truth_policy"] = "tampered_after_queue"
+        frozen.manifest_json = changed_manifest
+        session.commit()
+
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    result = detail.json()
+    assert result["run"]["status"] == "failed"
+    assert "manifest checksum" in result["run"]["error_message"]
+    assert result["artifacts"] == []
