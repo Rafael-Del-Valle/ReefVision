@@ -21,50 +21,79 @@ def check_workflow(workflow: str, version: str) -> list[str]:
     if workflow.count(marker) != 1:
         return ["Expected exactly one Windows clean-install job"]
     job = workflow.split(marker, 1)[1]
-    expected_msi = f"ReefVision_{version}_x64_en-US.msi"
-    slug = version.replace(".", "-")
-    checks = {
-        "MSI filename": (
-            set(re.findall(r"ReefVision_\d+\.\d+\.\d+_x64_en-US\.msi", job)),
-            {expected_msi},
-        ),
-        "ProductVersion": (
-            set(re.findall(r"MSI ProductVersion must be (\d+\.\d+\.\d+)\.", job)),
-            {version},
-        ),
-        # Check the PowerShell condition, not only the diagnostic string.
-        "ProductVersion comparison": (
-            set(re.findall(
-                r"\$versionRecord\.StringData\(1\)\s+-ne\s+'(\d+\.\d+\.\d+)'",
-                job,
-            )),
-            {version},
-        ),
-        "artifact staging directory": (
-            set(re.findall(r"reefvision-(\d+-\d+-\d+)-installer", job)),
-            {slug},
-        ),
-        "disposable acceptance root": (
-            set(re.findall(r"reefvision-(\d+-\d+-\d+)-disposable-acceptance", job)),
-            {slug},
-        ),
-        "evidence artifact": (
-            set(re.findall(r"ReefVision-(\d+\.\d+\.\d+)-Windows-Clean-Install-Evidence", job)),
-            {version},
-        ),
-    }
-    for label, (actual, expected) in checks.items():
-        if actual != expected:
-            errors.append(f"{label}: found {sorted(actual)!r}, expected {sorted(expected)!r}")
-    if f"Install, launch, persist and uninstall {version} on fresh Windows" not in job:
-        errors.append("Clean-install job label does not match Tauri version")
-    if "-LiveSam2Acceptance" in job:
-        errors.append("Default clean-install job must not opt into network model downloads")
+    hardcoded_patterns = (
+        r"ReefVision_\d+\.\d+\.\d+_x64_en-US\.msi",
+        r"MSI ProductVersion must be \d+\.\d+\.\d+\.",
+        r"reefvision-\d+-\d+-\d+-(?:installer|disposable-acceptance)",
+        r"Install, launch, persist and uninstall \d+\.\d+\.\d+ on fresh Windows",
+        r"ReefVision-\d+\.\d+\.\d+-Windows-Clean-Install-Evidence",
+    )
+    hardcoded = sorted(
+        {
+            match.group(0)
+            for pattern in hardcoded_patterns
+            for match in re.finditer(pattern, job)
+        }
+    )
+    if hardcoded:
+        errors.append(
+            "Clean-install job contains hardcoded release version references: "
+            f"{hardcoded!r}"
+        )
+
     build_marker = "  build-windows-installer:"
     if workflow.count(build_marker) != 1:
         errors.append("Expected exactly one Windows installer build job")
+        build_job = ""
     else:
         build_job = workflow.split(build_marker, 1)[1].split(marker, 1)[0]
+
+    required_build_fragments = (
+        "release-version: ${{ steps.package-version.outputs.release-version }}",
+        "release-slug: ${{ steps.package-version.outputs.release-slug }}",
+        "id: package-version",
+        "apps/web/src-tauri/tauri.conf.json",
+        "ConvertFrom-Json",
+        "release-version=$releaseVersion",
+        "release-slug=$($releaseVersion.Replace('.', '-'))",
+        "$env:GITHUB_OUTPUT",
+    )
+    for fragment in required_build_fragments:
+        if fragment not in build_job:
+            errors.append(f"Dynamic package version output is missing: {fragment}")
+
+    required_clean_fragments = (
+        "Install, launch, persist and uninstall "
+        "${{ needs.build-windows-installer.outputs.release-version }} on fresh Windows",
+        "REEFVISION_RELEASE_VERSION: ${{ needs.build-windows-installer.outputs.release-version }}",
+        "REEFVISION_RELEASE_SLUG: ${{ needs.build-windows-installer.outputs.release-slug }}",
+        '"reefvision-$releaseSlug-installer"',
+        '"ReefVision_${releaseVersion}_x64_en-US.msi"',
+        "$versionRecord.StringData(1) -ne $releaseVersion",
+        '"C:\\reefvision-$releaseSlug-disposable-acceptance"',
+        "ReefVision-${{ needs.build-windows-installer.outputs.release-version }}-"
+        "Windows-Clean-Install-Evidence",
+    )
+    for fragment in required_clean_fragments:
+        if fragment not in job:
+            errors.append(f"Dynamic clean-install version use is missing: {fragment}")
+
+    required_provenance_fragments = (
+        "build-provenance.json",
+        "$provenance.version -ne $releaseVersion",
+        "$provenance.source_commit -ne $env:GITHUB_SHA",
+        "$provenance.source_tree_clean -ne $true",
+        "$provenance.msi_verified -ne $true",
+        "$manifestByName",
+        "Get-FileHash",
+    )
+    for fragment in required_provenance_fragments:
+        if fragment not in job:
+            errors.append(f"Installer provenance guard is missing: {fragment}")
+
+    if "-LiveSam2Acceptance" in job:
+        errors.append("Default clean-install job must not opt into network model downloads")
+    if build_job:
         invocation = "run: python scripts/check-windows-installer-acceptance-version.py"
         packaging = "- name: Build MSI desktop installer with bundled checkpoints"
         if build_job.count(invocation) != 1:

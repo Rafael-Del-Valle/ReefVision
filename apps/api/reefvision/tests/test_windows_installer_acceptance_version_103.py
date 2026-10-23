@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -17,29 +18,79 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-def valid_workflow(version: str = "1.0.3") -> str:
-    slug = version.replace(".", "-")
-    return f"""name: Build Windows Desktop
+def test_repository_workflow_matches_tauri_version() -> None:
+    config = json.loads(
+        (ROOT / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert MODULE.check_workflow(workflow, str(config["version"])) == []
+
+
+def valid_workflow() -> str:
+    workflow = r"""name: Build Windows Desktop
   historical_document: docs/RELEASE_1.0.2.md
   build-windows-installer:
+    outputs:
+      release-version: ${{ steps.package-version.outputs.release-version }}
+      release-slug: ${{ steps.package-version.outputs.release-slug }}
     steps:
       - uses: actions/setup-python@v5
+      - name: Resolve package version
+        id: package-version
+        run: |
+          $config = Get-Content apps/web/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $releaseVersion = [string]$config.version
+          if ($releaseVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'bad version' }
+          "release-version=$releaseVersion" >> $env:GITHUB_OUTPUT
+          "release-slug=$($releaseVersion.Replace('.', '-'))" >> $env:GITHUB_OUTPUT
       - name: Check Windows installer version before packaging
         run: python scripts/check-windows-installer-acceptance-version.py
       - name: Build MSI desktop installer with bundled checkpoints
         run: npm run build:desktop
   windows-clean-install-acceptance:
-    name: Install, launch, persist and uninstall {version} on fresh Windows
+    name: JOB_LABEL
+    needs: build-windows-installer
+    env:
+      REEFVISION_RELEASE_VERSION: ${{ needs.build-windows-installer.outputs.release-version }}
+      REEFVISION_RELEASE_SLUG: ${{ needs.build-windows-installer.outputs.release-slug }}
     steps:
       - run: |
-          $folder = 'reefvision-{slug}-installer'
-          $msi = 'ReefVision_{version}_x64_en-US.msi'
-          if ($msi.Name -ne 'ReefVision_{version}_x64_en-US.msi') {{ throw 'bad' }}
-          if ($versionRecord.StringData(1) -ne '{version}') {{ throw 'bad' }}
-          throw 'MSI ProductVersion must be {version}.'
-          -AcceptanceRoot 'C:\\reefvision-{slug}-disposable-acceptance'
-      - name: ReefVision-{version}-Windows-Clean-Install-Evidence
+          $releaseVersion = $env:REEFVISION_RELEASE_VERSION
+          $releaseSlug = $env:REEFVISION_RELEASE_SLUG
+          $folder = Join-Path $env:RUNNER_TEMP "reefvision-$releaseSlug-installer"
+          $expectedMsiName = "ReefVision_${releaseVersion}_x64_en-US.msi"
+          if ($msi[0].Name -ne $expectedMsiName) { throw 'bad' }
+          if ($versionRecord.StringData(1) -ne $releaseVersion) { throw 'bad' }
+          $provenancePath = Join-Path $folder 'build-provenance.json'
+          $provenance = Get-Content $provenancePath -Raw | ConvertFrom-Json
+          if ($provenance.version -ne $releaseVersion) { throw 'bad provenance version' }
+          if ($provenance.source_commit -ne $env:GITHUB_SHA) { throw 'bad source commit' }
+          if ($provenance.source_tree_clean -ne $true) { throw 'dirty source' }
+          if ($provenance.msi_verified -ne $true) { throw 'unverified msi' }
+          $manifestByName = @{}
+          $actualHash = (
+            Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+          -AcceptanceRoot "C:\reefvision-$releaseSlug-disposable-acceptance"
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: EVIDENCE_NAME
 """
+    job_label = (
+        "Install, launch, persist and uninstall "
+        "${{ needs.build-windows-installer.outputs.release-version }} on fresh Windows"
+    )
+    evidence_name = (
+        "ReefVision-${{ needs.build-windows-installer.outputs.release-version }}-"
+        "Windows-Clean-Install-Evidence"
+    )
+    return workflow.replace("JOB_LABEL", job_label).replace("EVIDENCE_NAME", evidence_name)
 
 
 def test_matching_installer_and_acceptance_version_pass() -> None:
@@ -56,28 +107,29 @@ def test_historical_release_notes_outside_acceptance_job_are_allowed() -> None:
 
 
 @pytest.mark.parametrize(
-    ("original", "replacement"),
+    "stale_reference",
     [
-        ("ReefVision_1.0.3_x64_en-US.msi", "ReefVision_1.0.2_x64_en-US.msi"),
-        ("MSI ProductVersion must be 1.0.3.", "MSI ProductVersion must be 1.0.2."),
-        ("reefvision-1-0-3-installer", "reefvision-1-0-2-installer"),
-        ("uninstall 1.0.3", "uninstall 1.0.2"),
-        (
-            "ReefVision-1.0.3-Windows-Clean-Install-Evidence",
-            "ReefVision-1.0.2-Windows-Clean-Install-Evidence",
-        ),
-        ("reefvision-1-0-3-disposable-acceptance", "reefvision-1-0-2-disposable-acceptance"),
+        "ReefVision_1.0.2_x64_en-US.msi",
+        "MSI ProductVersion must be 1.0.2.",
+        "reefvision-1-0-2-installer",
+        "Install, launch, persist and uninstall 1.0.2 on fresh Windows",
+        "ReefVision-1.0.2-Windows-Clean-Install-Evidence",
+        "reefvision-1-0-2-disposable-acceptance",
     ],
 )
-def test_stale_version_reference_is_rejected(original: str, replacement: str) -> None:
-    assert MODULE.check_workflow(valid_workflow().replace(original, replacement), "1.0.3")
+def test_stale_version_reference_is_rejected(stale_reference: str) -> None:
+    workflow = valid_workflow() + f"      # {stale_reference}\n"
+    assert any(
+        "hardcoded release version" in error
+        for error in MODULE.check_workflow(workflow, "1.0.3")
+    )
 
 
 def test_default_acceptance_rejects_implicit_live_model_downloads() -> None:
     workflow = valid_workflow().replace(
-        "      - name: ReefVision-1.0.3-Windows-Clean-Install-Evidence",
+        "      - name: Upload evidence",
         "          -LiveSam2Acceptance\n"
-        "      - name: ReefVision-1.0.3-Windows-Clean-Install-Evidence",
+        "      - name: Upload evidence",
     )
     assert any(
         "network model downloads" in error for error in MODULE.check_workflow(workflow, "1.0.3")
@@ -100,4 +152,25 @@ def test_invalid_release_version_is_rejected() -> None:
 
 def test_mixed_msi_versions_are_rejected() -> None:
     workflow = valid_workflow() + "      # ReefVision_1.0.2_x64_en-US.msi\n"
-    assert any("MSI filename" in error for error in MODULE.check_workflow(workflow, "1.0.3"))
+    assert any(
+        "hardcoded release version" in error
+        for error in MODULE.check_workflow(workflow, "1.0.3")
+    )
+
+
+@pytest.mark.parametrize(
+    "required_fragment",
+    [
+        "source_commit",
+        "source_tree_clean",
+        "msi_verified",
+        "Get-FileHash",
+        "build-provenance.json",
+    ],
+)
+def test_missing_provenance_guard_is_rejected(required_fragment: str) -> None:
+    workflow = valid_workflow().replace(required_fragment, "REMOVED")
+    assert any(
+        "provenance" in error.lower()
+        for error in MODULE.check_workflow(workflow, "1.0.3")
+    )
