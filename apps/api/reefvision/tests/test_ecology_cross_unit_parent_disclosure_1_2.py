@@ -37,7 +37,10 @@ def test_cross_unit_parent_audit_is_sorted_and_ignores_technical_repeats() -> No
         _DeclaredRow("parent-D", None),
     ]
     assert cross_unit_shared_parent_colony_ids(rows) == ["parent-A", "parent-B"]
-    assert cross_unit_shared_parent_colony_ids(reversed(rows)) == ["parent-A", "parent-B"]
+    assert cross_unit_shared_parent_colony_ids(reversed(rows)) == [
+        "parent-A",
+        "parent-B",
+    ]
 
 
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
@@ -72,11 +75,15 @@ def test_shared_parent_disclosed_in_standalone_and_saved_workflow(
     result = standalone.json()
     assert result["cross_unit_shared_parent_colony_ids"] == ["shared-parent"]
     assert result["evidence_level"] == "caller_supplied_unverified"
-    count_key = "declared_independent_unit_count" if kind == "paired" else "independent_unit_count"
+    count_key = (
+        "declared_independent_unit_count" if kind == "paired" else "independent_unit_count"
+    )
     assert result[count_key] == 2
 
     project_id = str(create_project(client, f"Shared parent review {kind}")["id"])
-    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
+    )
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     saved = client.post(
