@@ -178,6 +178,8 @@ class ExperimentalUnitCoverage(BaseModel):
     missing_organism_ids: list[str] = Field(default_factory=list)
     expected_organism_count: int | None = Field(default=None, ge=1)
     unobserved_organism_ids: list[str] = Field(default_factory=list)
+    observed_sampling_dates_by_organism: dict[str, list[date]] = Field(default_factory=dict)
+    discordant_sampling_dates: bool = False
     eligible_for_summary: bool
     exclusion_reason: Literal[
         "missing_followup", "nonmatching_sampling_window", "missing_expected_organisms"
