@@ -106,9 +106,7 @@ def audit_unit_coverage(
             raise ValueError("Sampling-window exclusion cannot conceal missing scheduled visits")
         # A scheduled singleton is incomplete but still has actionable missing
         # calendar dates; retain both counts instead of rejecting its audit.
-        if reason == "missing_scheduled_observations" and (
-            not missing_scheduled or unobserved_ids
-        ):
+        if reason == "missing_scheduled_observations" and (not missing_scheduled or unobserved_ids):
             raise ValueError("Scheduled-visit exclusion must reflect missing scheduled dates")
         results.append(
             {
