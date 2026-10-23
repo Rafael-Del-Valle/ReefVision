@@ -19,6 +19,7 @@ import {
   createPoseArchitectureWorkflow,
   workflowTemplates,
 } from "./workflowTemplates";
+import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
 
 interface WorkflowGraphWorkspaceProps {
@@ -621,6 +622,9 @@ export function WorkflowGraphWorkspace({
                     <code>{artifact.data_type}</code> from{" "}
                     {artifact.producer_port_id} ·{" "}
                     <code>{shortHash(artifact.payload_sha256)}</code>
+                    {artifact.data_type === "mesh_measurement_preview" && (
+                      <MeshArtifactViewer artifact={artifact.payload_json} />
+                    )}
                     <details>
                       <summary>Inspect artifact</summary>
                       <pre>
