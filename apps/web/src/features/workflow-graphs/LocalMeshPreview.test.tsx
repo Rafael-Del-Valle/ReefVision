@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LocalMeshPreview } from "./LocalMeshPreview";
@@ -23,7 +23,9 @@ describe("LocalMeshPreview", () => {
     render(<LocalMeshPreview projectId="reef-project" />);
     const button = screen.getByRole("button", { name: "Preview mesh" });
     expect(button).toBeDisabled();
-    const file = new File(["v 0 0 0"], "reef.obj", { type: "text/plain" });
+    const file = new File(["v 0 0 0"], "reef.obj", {
+      type: "text/plain",
+    });
     fireEvent.change(screen.getByLabelText("Mesh file"), {
       target: { files: [file] },
     });
@@ -31,7 +33,9 @@ describe("LocalMeshPreview", () => {
       target: { value: "Ruler visible, awaiting review" },
     });
     fireEvent.click(button);
-    expect(await screen.findByText("Saved preview rendered")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Saved preview rendered"),
+    ).toBeInTheDocument();
     expect(previewLocalMeshFile).toHaveBeenCalledWith(
       "reef-project",
       file,
@@ -42,7 +46,9 @@ describe("LocalMeshPreview", () => {
         relative_scale_uncertainty: null,
       }),
     );
-    expect(screen.getByText(/Standalone preview only/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Standalone preview only/),
+    ).toBeInTheDocument();
   });
 
   it("reports an import failure without displaying fabricated geometry", async () => {
@@ -52,7 +58,54 @@ describe("LocalMeshPreview", () => {
       target: { files: [new File(["bad"], "reef.ply")] },
     });
     fireEvent.click(screen.getByRole("button", { name: "Preview mesh" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Malformed PLY");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Malformed PLY",
+    );
     expect(screen.queryByText("Saved preview rendered")).not.toBeInTheDocument();
   });
+  it("discards late results after a file or calibration change", async () => {
+    const deferred: {
+      resolve?: (value: Record<string, unknown>) => void;
+    } = {};
+    vi.mocked(previewLocalMeshFile).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          deferred.resolve = resolve;
+        }),
+    );
+    render(<LocalMeshPreview projectId="reef-project" />);
+    const fileInput = screen.getByLabelText("Mesh file");
+    const button = screen.getByRole("button", { name: "Preview mesh" });
+    const original = new File(["old"], "old.obj");
+    const replacement = new File(["new"], "new.obj");
+    fireEvent.change(fileInput, { target: { files: [original] } });
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+
+    fireEvent.change(fileInput, { target: { files: [replacement] } });
+    fireEvent.change(screen.getByLabelText("Calibration evidence (unverified)"), {
+      target: { value: "New ruler evidence awaiting review" },
+    });
+    expect(button).toBeEnabled();
+    await act(async () => {
+      deferred.resolve?.({ measurement_status: "caller_supplied_unverified" });
+    });
+    expect(screen.queryByText("Saved preview rendered")).not.toBeInTheDocument();
+
+    vi.mocked(previewLocalMeshFile).mockResolvedValue({
+      measurement_status: "caller_supplied_unverified",
+    });
+    fireEvent.click(button);
+    expect(
+      await screen.findByText("Saved preview rendered"),
+    ).toBeInTheDocument();
+    expect(previewLocalMeshFile).toHaveBeenLastCalledWith(
+      "reef-project",
+      replacement,
+      expect.objectContaining({
+        calibration_evidence: "New ruler evidence awaiting review",
+      }),
+    );
+  });
+
 });
