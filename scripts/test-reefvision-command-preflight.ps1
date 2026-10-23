@@ -35,7 +35,7 @@ try {
     }
     foreach ($file in @("pyproject.toml", "apps\web\package.json", "scripts\build-desktop.ps1",
                        "scripts\start-reefvision.ps1", "scripts\update-reefvision.ps1",
-                       "scripts\lib\reefvision-commands.ps1")) {
+                       "scripts\lib\reefvision-commands.ps1", "scripts\lib\reefvision-msi-update.ps1")) {
         Set-Content -LiteralPath (Join-Path $repo $file) -Value "fixture" -Encoding ASCII
     }
     New-Item -ItemType Directory -Path (Split-Path -Parent $config) -Force | Out-Null
@@ -61,6 +61,14 @@ try {
     Assert (-not (Test-Path -LiteralPath $support)) "Support directory created with missing source"
     Assert-ConfigUnchanged
     Set-Content -LiteralPath $missing -Value "fixture" -Encoding ASCII
+
+    # The installed updater must not be deployed without its MSI helper.
+    $missingMsiHelper = Join-Path $repo "scripts\lib\reefvision-msi-update.ps1"
+    Remove-Item -LiteralPath $missingMsiHelper -Force
+    Reject "Required command asset is missing"
+    Assert (-not (Test-Path -LiteralPath $support)) "Support directory created with missing MSI helper"
+    Assert-ConfigUnchanged
+    Set-Content -LiteralPath $missingMsiHelper -Value "fixture" -Encoding ASCII
 
     # -Force cannot replace a directory masquerading as a wrapper.
     New-Item -ItemType Directory -Path $updateWrapper -Force | Out-Null
