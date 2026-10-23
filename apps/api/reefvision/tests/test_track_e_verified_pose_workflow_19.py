@@ -177,13 +177,13 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
         )
 
-    # Planning and execution must agree that a complete dataset with no
-    # verified items is not valid training truth.
+    # The database enforces item_count >= 1, so an empty frozen dataset
+    # cannot be persisted. Test the executable incomplete-status path instead.
     with app.state.session_factory() as session:
         frozen = session.get(PoseTrainingDataset, dataset_id)
         assert frozen is not None
         frozen.pose_schema_content_hash = payload["pose_schema_content_hash"]
-        frozen.item_count = 0
+        frozen.status = "incomplete"
         session.commit()
 
     empty_plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
