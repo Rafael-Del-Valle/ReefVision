@@ -8,11 +8,13 @@ from collections import Counter
 from math import dist, isfinite
 from typing import Any
 
-from reefvision.services.spatial_mesh_glb_v14 import parse_glb_triangles
-from reefvision.services.spatial_mesh_measurements import triangle_area
-from reefvision.services.spatial_mesh_obj_v14 import MAX_FACES, MAX_VERTICES, parse_obj_triangles
-from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
-from reefvision.services.spatial_mesh_ply_v14 import parse_ply_triangles
+from reefvision.services import (
+    spatial_mesh_glb_v14,
+    spatial_mesh_measurements,
+    spatial_mesh_obj_v14,
+    spatial_mesh_paths_v14,
+    spatial_mesh_ply_v14,
+)
 
 
 MAX_PREVIEW_TRIANGLES = 512
@@ -51,6 +53,9 @@ def _sample_mesh_display_geometry(
             for index in vertex_indices
         ],
         "preview_is_decimated": count < len(faces),
+        "preview_face_count": count,
+        "preview_face_fraction": count / len(faces),
+        # Render-only sampling coverage, not biological area coverage.
     }
 
 
@@ -65,7 +70,7 @@ def measure_mesh_preview(
     source_label: str | None = None,
     surface_path_vertex_pairs: list[list[int]] | None = None,
 ) -> dict[str, Any]:
-    if not 3 <= len(vertices) <= MAX_VERTICES or not 1 <= len(faces) <= MAX_FACES:
+    if not 3 <= len(vertices) <= spatial_mesh_obj_v14.MAX_VERTICES or not 1 <= len(faces) <= spatial_mesh_obj_v14.MAX_FACES:
         raise ValueError("Mesh preview vertex/face count is outside supported bounds")
     scale = float(meters_per_unit)
     if not isfinite(scale) or not 0 < scale <= 1_000_000:
@@ -118,7 +123,7 @@ def measure_mesh_preview(
         if key in seen_faces:
             raise ValueError("Duplicate triangles would double-count surface area")
         seen_faces.add(key)
-        area = triangle_area(points[face[0]], points[face[1]], points[face[2]])
+        area = spatial_mesh_measurements.triangle_area(points[face[0]], points[face[1]], points[face[2]])
         if not isfinite(area):
             raise ValueError("Mesh triangle area overflowed")
         degenerate += area == 0
@@ -284,7 +289,7 @@ def measure_mesh_preview(
         "degenerate_face_count": degenerate,
         "boundary_edge_count": boundary,
         "boundary_edge_length_m": boundary_length_m,
-        "surface_edge_paths": mesh_edge_paths(
+        "surface_edge_paths": spatial_mesh_paths_v14.mesh_edge_paths(
             points, faces, surface_path_vertex_pairs, scale, relative_scale_uncertainty
         ),
         "boundary_edge_length_scale_uncertainty_m": (
@@ -376,13 +381,13 @@ def measure_mesh_preview(
 
 def preview_from_request(payload: Any) -> dict[str, Any]:
     if payload.obj_text is not None:
-        vertices, faces = parse_obj_triangles(payload.obj_text)
+        vertices, faces = spatial_mesh_obj_v14.parse_obj_triangles(payload.obj_text)
         source_format = "obj"
     elif payload.ply_text is not None:
-        vertices, faces = parse_ply_triangles(payload.ply_text)
+        vertices, faces = spatial_mesh_ply_v14.parse_ply_triangles(payload.ply_text)
         source_format = "ply_ascii"
     elif payload.glb_base64 is not None:
-        vertices, faces = parse_glb_triangles(payload.glb_base64)
+        vertices, faces = spatial_mesh_glb_v14.parse_glb_triangles(payload.glb_base64)
         source_format = "glb_2_0"
     else:
         vertices, faces = payload.vertices, payload.faces
