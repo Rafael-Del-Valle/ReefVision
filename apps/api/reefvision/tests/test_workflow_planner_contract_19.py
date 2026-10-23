@@ -22,7 +22,7 @@ def test_extended_workflow_registry_has_planner_actions_and_runtime_dispatch() -
     assert RUNTIME_ADAPTER_NODE_TYPES.issubset(_ADAPTERS)
 
 
-def test_frozen_pose_dataset_node_plans_and_saves_as_versioned_graph(
+def test_frozen_pose_dataset_planner_rejects_nonexistent_dataset(
     client: TestClient,
 ) -> None:
     project = create_project(client, "Frozen pose workflow planner regression")
@@ -40,21 +40,9 @@ def test_frozen_pose_dataset_node_plans_and_saves_as_versioned_graph(
     }
     plan = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
-    assert plan.json()["valid"] is True
-    assert plan.json()["executable"] is True
-    assert plan.json()["steps"][0]["node_type"] == "pose_training_dataset"
-
-    saved = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs",
-        json={"graph": graph, "create_new_revision": True},
+    assert plan.json()["valid"] is False
+    assert plan.json()["executable"] is False
+    assert any(
+        issue["code"] == "pose_dataset_scope_mismatch"
+        for issue in plan.json()["issues"]
     )
-    assert saved.status_code == 201, saved.text
-    assert saved.json()["revision"] == 1
-    assert len(saved.json()["graph_sha256"]) == 64
-    queued = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-runs",
-        json={"graph_record_id": saved.json()["id"]},
-    )
-    assert queued.status_code == 202, queued.text
-    assert queued.json()["status"] == "queued"
-    assert queued.json()["graph_sha256"] == saved.json()["graph_sha256"]
