@@ -479,3 +479,20 @@ authenticated study design, or biological survival inference is introduced.
 Exact-head CI, representative scientific dataset validation, migration
 reconciliation, and installed Windows GUI/installer acceptance are still
 required before release approval.
+
+## Explicit scheduled-unit identity guard (2026-10-23; development only)
+
+The optional planned UTC sampling calendar now fails closed with a specific
+validation error if **any** observation lacks its declared experimental-unit
+ID. The domain validator narrows the optional ID before calendar indexing,
+addressing the strict mypy failure observed on previous head
+`dacd98dc892ba959e38a9420ddfdf567e1228997` (11/14 Actions workflows
+passed; the other three failed strict typing). API and executable saved-workflow
+regressions assert the missing-ID rejection; a failed saved run must not
+produce a successful `longitudinal_analysis` artifact. No change to
+sampling calculations, provenance algorithm versions, or historical results.
+
+This check does **not** authenticate experimental units, organisms, reviewed
+source annotations, or calibration. Persistent project-owned identity,
+verified longitudinal records, registered study designs, source review gates,
+full exact-head CI and installed Windows acceptance remain outstanding.
