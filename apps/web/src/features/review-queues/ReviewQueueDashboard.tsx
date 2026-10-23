@@ -134,6 +134,10 @@ export function ReviewQueueDashboard({
   });
 
   useEffect(() => {
+    // Dataset IDs and QC source runs belong to the prior project too.
+    setScopeType("project");
+    setDatasetVersionId("");
+    setSelectedRunId("");
     setSelectedQueueId("");
     setQuickReviewItemId(null);
     setCoordinationItemId(null);
@@ -294,6 +298,8 @@ export function ReviewQueueDashboard({
                   setScopeType(
                     event.target.value as "project" | "dataset_version",
                   );
+                  setDatasetVersionId("");
+                  setSelectedRunId("");
                   setSelectedQueueId("");
                   setQuickReviewItemId(null);
                   setCoordinationItemId(null);
@@ -312,6 +318,7 @@ export function ReviewQueueDashboard({
                   value={datasetVersionId}
                   onChange={(event) => {
                     setDatasetVersionId(event.target.value);
+                    setSelectedRunId("");
                     setSelectedQueueId("");
                     setQuickReviewItemId(null);
                     setCoordinationItemId(null);
