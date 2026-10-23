@@ -107,7 +107,8 @@ describe("ReviewQueueDashboard scope isolation", () => {
         expect.anything(),
       );
     });
-    const queueIds = vi.mocked(getReviewQueueItems).mock.calls.map(([id]) => id);
+    const calls = vi.mocked(getReviewQueueItems).mock.calls;
+    const queueIds = calls.map(([id]) => id);
     expect(queueIds.every((id) => id === "queue-b")).toBe(true);
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
   });
@@ -139,7 +140,8 @@ describe("ReviewQueueDashboard scope isolation", () => {
       ),
     );
     expect(getDatasetVersionReviewQueues).not.toHaveBeenCalled();
-    const queueIds = vi.mocked(getReviewQueueItems).mock.calls.map(([id]) => id);
+    const calls = vi.mocked(getReviewQueueItems).mock.calls;
+    const queueIds = calls.map(([id]) => id);
     expect(queueIds.every((id) => id === "queue-b")).toBe(true);
   });
 
@@ -172,7 +174,8 @@ describe("ReviewQueueDashboard scope isolation", () => {
         expect.anything(),
       );
     });
-    const queueIds = vi.mocked(getReviewQueueItems).mock.calls.map(([id]) => id);
+    const calls = vi.mocked(getReviewQueueItems).mock.calls;
+    const queueIds = calls.map(([id]) => id);
     expect(queueIds.every((id) => id === "dataset-queue")).toBe(true);
   });
 });
