@@ -73,6 +73,19 @@ foreach ($directory in $managedDirectories) {
     if (Test-Path -LiteralPath $directory -PathType Leaf) {
         throw "Refusing to replace a file with a ReefVision command directory: $directory"
     }
+    # A junction/symlink may redirect writes outside the managed user area.
+    $entry = Get-Item -LiteralPath $directory -Force -ErrorAction SilentlyContinue
+    if ($null -ne $entry -and
+        ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing to write through a reparse-point command directory: $directory"
+    }
+}
+# Configuration must not be redirected even when its parent is safe.
+$configPath = Get-ReefVisionCommandConfigPath
+$configEntry = Get-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
+if ($null -ne $configEntry -and
+    ($configEntry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Refusing to overwrite a reparse-point command configuration: $configPath"
 }
 foreach ($asset in $sourceAssets) {
     if (-not (Test-Path -LiteralPath $asset.Source -PathType Leaf)) {
@@ -81,11 +94,21 @@ foreach ($asset in $sourceAssets) {
     if (Test-Path -LiteralPath $asset.Destination -PathType Container) {
         throw "Refusing to replace a directory with a ReefVision support script: $($asset.Destination)"
     }
+    $destinationEntry = Get-Item -LiteralPath $asset.Destination -Force -ErrorAction SilentlyContinue
+    if ($null -ne $destinationEntry -and
+        ($destinationEntry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing to overwrite a reparse-point support script: $($asset.Destination)"
+    }
 }
 $conflicts = @()
 foreach ($wrapper in $wrappers) {
     if (Test-Path -LiteralPath $wrapper.Path -PathType Container) {
         throw "Refusing to replace a directory with a ReefVision command wrapper: $($wrapper.Path)"
+    }
+    $wrapperEntry = Get-Item -LiteralPath $wrapper.Path -Force -ErrorAction SilentlyContinue
+    if ($null -ne $wrapperEntry -and
+        ($wrapperEntry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing to overwrite a reparse-point command wrapper: $($wrapper.Path)"
     }
     if ((Test-Path -LiteralPath $wrapper.Path -PathType Leaf) -and -not $Force -and -not (Test-ReefVisionManagedWrapper -Path $wrapper.Path)) {
         $conflicts += $wrapper.Path
