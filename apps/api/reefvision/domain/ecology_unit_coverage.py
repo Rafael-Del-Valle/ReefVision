@@ -100,9 +100,10 @@ def audit_unit_coverage(
             raise ValueError("Sampling-window exclusion cannot conceal missing follow-up")
         if reason == "nonmatching_sampling_window" and unobserved_ids:
             raise ValueError("Sampling-window exclusion cannot conceal missing roster organisms")
-        if reason == "missing_scheduled_observations":
-            if not missing_scheduled or unobserved_ids or complete != len(flags):
-                raise ValueError("Scheduled-visit exclusion must reflect missing scheduled dates")
+        if reason == "missing_scheduled_observations" and (
+            not missing_scheduled or unobserved_ids or complete != len(flags)
+        ):
+            raise ValueError("Scheduled-visit exclusion must reflect missing scheduled dates")
         results.append(
             {
                 "experimental_unit_id": unit_id,
