@@ -23,6 +23,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
     EcologyMeasurementExclusion,
     EcologyProjectedEndpointChange,
+    EcologyProjectedPopulationSummary,
     EcologyProjectedUnitSummary,
     EcologySamplingDateQC,
 )
@@ -176,9 +177,7 @@ def summarize_projected_unit_summaries(
     Incomplete organisms or mismatched UTC windows exclude the whole unit.
     Image/frame/annotation records cannot be independent ecological units.
     """
-    groups: dict[
-        tuple[str | None, str | None, str], list[EcologyMeasurementCandidate]
-    ] = {}
+    groups: dict[tuple[str | None, str | None, str], list[EcologyMeasurementCandidate]] = {}
     for candidate in candidates:
         key = (
             candidate.experimental_unit_type,
@@ -197,9 +196,7 @@ def summarize_projected_unit_summaries(
         records = groups[(unit_type, unit_id, metric)]
         organism_keys = sorted({row.organism_key for row in records})
         units = sorted({row.unit for row in records})
-        parent_keys = sorted(
-            {row.parent_colony_key for row in records if row.parent_colony_key}
-        )
+        parent_keys = sorted({row.parent_colony_key for row in records if row.parent_colony_key})
         completed = [
             change_index[(organism_key, metric)]
             for organism_key in organism_keys
@@ -236,12 +233,8 @@ def summarize_projected_unit_summaries(
         if status == "candidate":
             count = len(completed)
             try:
-                mean_absolute = math.fsum(
-                    row.absolute_change / count for row in completed
-                )
-                mean_percent = math.fsum(
-                    row.percent_change / count for row in completed
-                )
+                mean_absolute = math.fsum(row.absolute_change / count for row in completed)
+                mean_percent = math.fsum(row.percent_change / count for row in completed)
             except OverflowError as exc:
                 raise ValidationError("Projected unit summary is nonfinite") from exc
             if not math.isfinite(mean_absolute) or not math.isfinite(mean_percent):
@@ -261,6 +254,86 @@ def summarize_projected_unit_summaries(
                 unit_status=status,
                 mean_absolute_change=mean_absolute,
                 mean_percent_change=mean_percent,
+            )
+        )
+    return results
+
+
+def summarize_projected_population_summaries(
+    unit_summaries: list[EcologyProjectedUnitSummary],
+) -> list[EcologyProjectedPopulationSummary]:
+    """Stratified descriptive means with one vote per eligible declared unit.
+
+    Units with failed QC are never pooled. Different measurement dimensions,
+    declared unit types and UTC sampling windows remain separate strata.
+    Parent-colony reuse across units is disclosed, not assumed independent.
+    """
+    groups: dict[
+        tuple[str, str, str, str], list[EcologyProjectedUnitSummary]
+    ] = {}
+    for row in unit_summaries:
+        if row.unit_status != "candidate":
+            continue
+        if (
+            not row.experimental_unit_type
+            or not row.experimental_unit_id
+            or len(row.units) != 1
+            or len(row.sampling_windows_utc) != 1
+            or row.mean_absolute_change is None
+            or row.mean_percent_change is None
+        ):
+            raise ValidationError("Incomplete projected unit cannot enter population summary")
+        key = (
+            row.experimental_unit_type,
+            row.metric,
+            row.units[0],
+            row.sampling_windows_utc[0],
+        )
+        groups.setdefault(key, []).append(row)
+
+    results: list[EcologyProjectedPopulationSummary] = []
+    for (unit_type, metric, unit, window), records in sorted(groups.items()):
+        unit_ids = sorted(str(row.experimental_unit_id) for row in records)
+        if len(set(unit_ids)) != len(records):
+            raise ValidationError("Duplicate declared unit in projected population stratum")
+        count = len(records)
+        parent_counts: dict[str, int] = {}
+        for record in records:
+            for parent_key in record.parent_colony_keys:
+                parent_counts[parent_key] = parent_counts.get(parent_key, 0) + 1
+        try:
+            mean_absolute = math.fsum(
+                float(row.mean_absolute_change) / count for row in records
+            )
+            mean_percent = math.fsum(
+                float(row.mean_percent_change) / count for row in records
+            )
+        except OverflowError as exc:
+            raise ValidationError("Projected population summary is nonfinite") from exc
+        if not math.isfinite(mean_absolute) or not math.isfinite(mean_percent):
+            raise ValidationError("Projected population summary is nonfinite")
+        results.append(
+            EcologyProjectedPopulationSummary(
+                experimental_unit_type=unit_type,
+                metric=metric,
+                unit=unit,
+                sampling_window_utc=window,
+                experimental_unit_ids=unit_ids,
+                declared_unit_count=count,
+                contributing_organism_count=sum(
+                    len(row.complete_organism_keys) for row in records
+                ),
+                parent_colony_keys=sorted(parent_counts),
+                shared_parent_colony_keys=sorted(
+                    key for key, n in parent_counts.items() if n > 1
+                ),
+                units_missing_parent_colony=sorted(
+                    str(row.experimental_unit_id)
+                    for row in records
+                    if not row.parent_colony_keys
+                ),
+                mean_unit_absolute_change=mean_absolute,
+                mean_unit_percent_change=mean_percent,
             )
         )
     return results
@@ -389,14 +462,16 @@ class EcologyMeasurementCandidateService:
         sampling_date_qc = summarize_sampling_date_qc(candidates)
         projected_changes = summarize_projected_endpoint_changes(candidates, sampling_date_qc)
         unit_summaries = summarize_projected_unit_summaries(candidates, projected_changes)
+        population_summaries = summarize_projected_population_summaries(unit_summaries)
         rows = [row.model_dump(mode="json") for row in candidates]
         qc_rows = [row.model_dump(mode="json") for row in sampling_date_qc]
         change_rows = [row.model_dump(mode="json") for row in projected_changes]
         unit_rows = [row.model_dump(mode="json") for row in unit_summaries]
+        population_rows = [row.model_dump(mode="json") for row in population_summaries]
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0004",
+                "algorithm_version": "ecology-measurement-candidates-0005",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
@@ -406,6 +481,7 @@ class EcologyMeasurementCandidateService:
                 "sampling_date_qc": qc_rows,
                 "projected_endpoint_changes": change_rows,
                 "projected_unit_summaries": unit_rows,
+                "projected_population_summaries": population_rows,
                 "exclusions": skipped,
             }
         )
@@ -418,6 +494,7 @@ class EcologyMeasurementCandidateService:
             sampling_date_qc=sampling_date_qc,
             projected_endpoint_changes=projected_changes,
             projected_unit_summaries=unit_summaries,
+            projected_population_summaries=population_summaries,
             exclusions=exclusions,
             input_sha256=fingerprint,
         )
