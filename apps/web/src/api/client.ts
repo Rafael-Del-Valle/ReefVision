@@ -1333,7 +1333,7 @@ export interface ReviewQueueEventsPage {
 
 export interface ReviewQueueEventCreate {
   client_request_id: string;
-  event_type: ReviewQueueEventType;
+  event_type: "comment" | "assign" | "unassign";
   actor: string;
   comment?: string;
   assignee?: string;
