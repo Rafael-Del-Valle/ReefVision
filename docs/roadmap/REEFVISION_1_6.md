@@ -633,3 +633,10 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   including the offline-only disposable MSI install/persist/uninstall run.
   That evidence **does not** validate these new path guards or a real upgrade.
   No release, model acquisition, branch merge or user-data deletion.
+
+## 2026-10-24 — Packaged Windows QC coordination acceptance (new, CI pending)
+
+- Extended the disposable MSI clean-install/upgrade acceptance harness to create a real scoped QC queue via the **installed** loopback API, post an idempotent researcher comment, assign a local reviewer, and exercise manual bulk skip/retry/return/start. It checks that no researcher annotation is changed or automatically verified.
+- Added a second installed-desktop restart and read-back of the queue, five append-only audit events, in-progress review state, reviewer assignment and original annotation. Evidence is recorded as `qc_review_coordination` only after persistence passes.
+- Extended the existing native Windows preflight test with explicit coverage guards for these checks. The earlier Python standalone and executable saved-Workflow-Builder QC regressions are preserved; this is additional packaged-runtime coverage, not a replacement.
+- **Validation limitation:** local runtime has no PowerShell/Windows or full repository checkout (GitHub DNS unavailable); exact-head native Windows Actions must execute the new harness before any PASS claim. Still missing interactive GUI, MSI cross-version upgrade/rollback, migration-branch reconciliation, large-scene profiling and full scientific acceptance. **HOLD; no release.**

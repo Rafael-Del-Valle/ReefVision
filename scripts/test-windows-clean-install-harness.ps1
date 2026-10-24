@@ -123,6 +123,17 @@ $parseErrors = $null
 )
 Assert-True (@($parseErrors).Count -eq 0) "Windows acceptance PowerShell syntax invalid: $($parseErrors -join '; ')"
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+
+# The disposable installed-MSI test must exercise 1.6 QC coordination through
+# HTTP and verify persisted audit/review state after a second desktop restart.
+Assert-True ($acceptanceScript.Contains('qc_review_coordination = New-ReefVisionEvidenceResult')) 'Installed QC acceptance evidence field is missing.'
+Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/review-queues"')) 'Installed QC acceptance must generate a real scoped review queue.'
+Assert-True ($acceptanceScript.Contains('requires_researcher_review -ne $true')) 'Installed QC acceptance must assert researcher-review gating.'
+Assert-True ($acceptanceScript.Contains('qcComment.id -ne $qcCommentRetry.id')) 'Installed QC comment idempotence regression is missing.'
+Assert-True ($acceptanceScript.Contains('qcSkipRetry.changed_count -ne 0')) 'Installed QC bulk retry regression is missing.'
+Assert-True ($acceptanceScript.Contains('qcPersistedEvents.total -ne 5')) 'Installed QC audit history must be checked after desktop restart.'
+Assert-True ($acceptanceScript.Contains('qcPersistedAnnotations.annotations')) 'Installed QC acceptance must preserve the original annotation.'
+
 # Guard the packaged acceptance request against retired project templates and
 # legacy model catalog selectors. Production API supports blank projects only.
 Assert-True ($acceptanceScript.Contains("template='blank'")) 'Acceptance project must use the supported blank template.'

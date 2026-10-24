@@ -73,6 +73,7 @@ $report = [ordered]@{
     external_annotation_imports = New-ReefVisionEvidenceResult
     confidence_review = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real pending prediction review not requested' }
     project_persistence = New-ReefVisionEvidenceResult
+    qc_review_coordination = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
     upgrade = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
@@ -492,6 +493,90 @@ try {
     }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
+
+    # 1.6 packaged QC acceptance: exercise the actual installed API against
+    # disposable project media, not a source-tree TestClient or synthetic mock.
+    # Triage is manual coordination only; no prediction or annotation approval.
+    $qcQueue = Invoke-RestMethod "$api/projects/$projectId/review-queues" -Method Post -ContentType 'application/json' -Body '{}'
+    if ($qcQueue.project_id -ne $projectId -or [int]$qcQueue.item_count -lt 1) {
+        throw 'Installed QC review queue did not retain the disposable project scope.'
+    }
+    $qcPage = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items"
+    $qcMatches = @($qcPage.items | Where-Object { $_.image_id -eq $imageId })
+    if ($qcMatches.Count -ne 1) { throw 'Installed QC queue did not contain exactly one acceptance image.' }
+    $qcItemId = [string]$qcMatches[0].id
+    $qcEventsUrl = "$api/review-queues/$($qcQueue.id)/items/$qcItemId/events"
+    $qcCommentBody = @{
+        client_request_id = [guid]::NewGuid().ToString()
+        event_type = 'comment'
+        actor = 'disposable-lab-reviewer'
+        comment = 'Review synthetic annotation boundary'
+    } | ConvertTo-Json
+    $qcComment = Invoke-RestMethod $qcEventsUrl -Method Post -ContentType 'application/json' -Body $qcCommentBody
+    $qcCommentRetry = Invoke-RestMethod $qcEventsUrl -Method Post -ContentType 'application/json' -Body $qcCommentBody
+    if ($qcComment.id -ne $qcCommentRetry.id) { throw 'Installed QC comment retry duplicated the audit event.' }
+    $qcAssignBody = @{
+        client_request_id = [guid]::NewGuid().ToString()
+        event_type = 'assign'
+        actor = 'disposable-lab-reviewer'
+        assignee = 'disposable-reviewer-two'
+    } | ConvertTo-Json
+    $null = Invoke-RestMethod $qcEventsUrl -Method Post -ContentType 'application/json' -Body $qcAssignBody
+    $qcBulkUrl = "$api/review-queues/$($qcQueue.id)/items/bulk"
+    $qcSkipBody = @{
+        item_ids = @($qcItemId)
+        action = 'skip'
+        reason = 'Synthetic QC acceptance'
+        actor = 'disposable-lab-reviewer'
+    } | ConvertTo-Json
+    $qcSkipped = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcSkipBody
+    $qcSkipRetry = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcSkipBody
+    if ($qcSkipped.changed_count -ne 1 -or $qcSkipRetry.changed_count -ne 0 -or
+        $qcSkipped.requires_researcher_review -ne $true) {
+        throw 'Installed QC bulk skip was not guarded and retry-safe.'
+    }
+    $qcReturnBody = @{item_ids=@($qcItemId);action='return';actor='disposable-lab-reviewer'} | ConvertTo-Json
+    $qcReturned = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcReturnBody
+    $qcStartBody = @{item_ids=@($qcItemId);action='start';actor='disposable-lab-reviewer'} | ConvertTo-Json
+    $qcStarted = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcStartBody
+    if ($qcReturned.changed_count -ne 1 -or $qcStarted.changed_count -ne 1 -or
+        @($qcStarted.items)[0].review_state -ne 'in_progress') {
+        throw 'Installed QC bulk return/start transitions did not persist.'
+    }
+    $qcHistory = Invoke-RestMethod $qcEventsUrl
+    $qcEventTypes = @($qcHistory.items | ForEach-Object { $_.event_type } | Sort-Object)
+    if ($qcHistory.total -ne 5 -or
+        ($qcEventTypes -join ',') -ne 'assign,comment,triage_return,triage_skip,triage_start' -or
+        $qcHistory.current_assignee -ne 'disposable-reviewer-two') {
+        throw 'Installed QC audit history or reviewer assignment is inconsistent.'
+    }
+    $qcAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
+    if (@($qcAnnotations.annotations | Where-Object { $_.id -eq $annotationId }).Count -ne 1) {
+        throw 'QC triage modified the original researcher annotation.'
+    }
+
+    # A second packaged-desktop restart proves QC coordination survives SQLite
+    # closure/reopen; the prior test already covered ordinary image persistence.
+    Stop-AcceptanceDesktop $desktop
+    $desktop = Start-AcceptanceDesktop
+    $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
+    $api = "http://127.0.0.1:$port/api/v1"
+    $qcPersistedQueue = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)"
+    $qcPersistedItems = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items"
+    $qcPersistedEvents = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items/$qcItemId/events"
+    $qcPersistedItem = @($qcPersistedItems.items | Where-Object { $_.id -eq $qcItemId })
+    if ($qcPersistedQueue.project_id -ne $projectId -or $qcPersistedItem.Count -ne 1 -or
+        $qcPersistedItem[0].review_state -ne 'in_progress' -or
+        $qcPersistedEvents.total -ne 5 -or
+        $qcPersistedEvents.current_assignee -ne 'disposable-reviewer-two') {
+        throw 'QC queue, bulk triage, audit events or reviewer assignment did not survive desktop restart.'
+    }
+    $qcPersistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
+    if (@($qcPersistedAnnotations.annotations | Where-Object { $_.id -eq $annotationId }).Count -ne 1) {
+        throw 'Packaged QC review changed the researcher annotation across restart.'
+    }
+    $report.qc_review_coordination = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Installed API: scoped queue, idempotent comment and bulk skip, assignment, return/start, five durable audit events and unchanged annotation across desktop restart.'
+
 
     $exchange = Invoke-RestMethod "$api/projects/$projectId/exchange-packages" -Method Post -ContentType 'application/json' -Body (@{include_media=$true;include_model_weights=$false;include_generated_artifacts=$true;notes='clean install acceptance'} | ConvertTo-Json)
     $jobId = $exchange.job_id
