@@ -286,3 +286,29 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - **Validation:** source and tests committed on the isolated 1.6 draft branch.
   Full exact-head CI and installed-Windows/scientific acceptance are required;
   no release, merge or researcher-approval claim is made.
+
+
+## 2026-10-23 — Full immutable QC item evidence digest (Track D)
+
+- **Audited existing support:** standalone QC queue generation, the executable
+  `qc_review_queue` Workflow Builder node, persisted typed queue references,
+  scoring-configuration digest and saved retry integrity already existed.
+- **Gap:** the queue-level scope digest covered image IDs and numeric scores but
+  not saved per-image signal values, contribution explanations, original input
+  fingerprints or scientific class/model/QC references. An explanation could
+  change without invalidating a saved workflow retry.
+- New standalone and workflow-generated queues now record
+  `item_evidence_sha256` over immutable item identity, rank, score, original
+  input checksum, class/model/QC references, normalized and raw signals, score
+  breakdown, source severity/split and reason summary. Ordering is by image ID
+  for deterministic verification independent of database query order.
+- Saved Workflow Builder retries validate that digest **without rerunning
+  inference or recomputing live QC**. Reviewer states, comments, assignments
+  and skip reasons are intentionally excluded and remain editable.
+- Legacy queues lacking the additional digest remain readable under the older
+  checks. This is **consistency/replay detection**, not a signed or external
+  audit log: someone able to rewrite both data and hashes can defeat it.
+- Unit tests cover altered evidence, legacy compatibility and mutable review
+  state; standalone API and persisted-workflow tests check the new digest and
+  reject modified explanations. Exact-head CI and installed Windows/scientific
+  acceptance remain required. No merge or release authorization.
