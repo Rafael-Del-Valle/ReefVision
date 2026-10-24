@@ -15,7 +15,9 @@ ReviewEventType = Literal[
 
 class ReviewQueueEventCreate(BaseModel):
     client_request_id: UUID
-    event_type: ReviewEventType
+    # State-transition audit events are server-generated only. Clients may
+    # submit comments and assignments but cannot forge triage history.
+    event_type: Literal["comment", "assign", "unassign"]
     actor: str = Field(min_length=1, max_length=100)
     comment: str | None = Field(default=None, max_length=2000)
     assignee: str | None = Field(default=None, max_length=100)
