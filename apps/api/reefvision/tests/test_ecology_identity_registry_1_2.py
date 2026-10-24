@@ -214,3 +214,128 @@ def test_saved_workflow_snapshots_registry_without_verification_promotion(
         issue["code"] == "incompatible_port_types"
         for issue in invalid.json()["issues"]
     )
+
+
+def test_parent_colony_reclassification_requires_reassigning_fragments(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Parent colony lineage integrity")["id"])
+    assert _register(client, project_id, "parent-20").status_code == 201
+    assert (
+        _register(
+            client, project_id, "fragment-20a", "fragment",
+            parent_colony_key="parent-20",
+        ).status_code
+        == 201
+    )
+    registry_url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
+    before = client.get(registry_url).json()
+    parent_url = (
+        f"/api/v1/projects/{project_id}/ecology/organisms/parent-20/revisions"
+    )
+    change = {
+        "expected_revision": 1,
+        "kind": "individual",
+        "reason": "Correct the parent colony taxonomic designation",
+    }
+    blocked = client.post(parent_url, json=change)
+    assert blocked.status_code == 400, blocked.text
+    assert "reclassify a parent colony" in blocked.json()["detail"]
+    assert client.get(registry_url).json() == before
+
+    # A reviewed correction may first unlink the child in a new revision.
+    fragment_url = (
+        f"/api/v1/projects/{project_id}/ecology/organisms/fragment-20a/revisions"
+    )
+    unlinked = client.post(
+        fragment_url,
+        json={
+            "expected_revision": 1,
+            "kind": "fragment",
+            "reason": "Scientist corrected the fragment's parent assignment",
+        },
+    )
+    assert unlinked.status_code == 201, unlinked.text
+    allowed = client.post(parent_url, json=change)
+    assert allowed.status_code == 201, allowed.text
+    assert allowed.json()["revision"] == 2
+    latest = client.get(registry_url).json()
+    assert latest["evidence_level"] == "registered_unverified"
+    assert latest["snapshot_sha256"] != before["snapshot_sha256"]
+
+
+def test_corrupt_latest_lineage_fails_closed_in_api_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Imported lineage integrity")["id"])
+    assert _register(client, project_id, "parent-39").status_code == 201
+    assert (
+        _register(
+            client, project_id, "fragment-39a", "fragment",
+            parent_colony_key="parent-39",
+        ).status_code
+        == 201
+    )
+
+    # Simulate an invalid external import bypassing service-level revisions.
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        session.add(
+            EcologyIdentityRevision(
+                project_id=project_id,
+                organism_key="parent-39",
+                revision=2,
+                kind="individual",
+                reason="Simulated malformed external identity import",
+            )
+        )
+        session.commit()
+
+    registry_url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
+    standalone = client.get(registry_url)
+    assert standalone.status_code == 400, standalone.text
+    assert "invalid parent-colony link" in standalone.json()["detail"]
+
+    graph: dict[str, Any] = {
+        "graph_id": "ecology-invalid-lineage-1-2",
+        "name": "Reject corrupt ecological lineage",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert "invalid parent-colony link" in detail.json()["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry"
+        for row in detail.json()["artifacts"]
+    )

@@ -56,6 +56,24 @@ class EcologyIdentityService:
         if parent is None or parent.kind != "colony":
             raise ValidationError("Parent colony must be registered in the same project")
 
+    @staticmethod
+    def _assert_parent_links(
+        latest: dict[str, EcologyIdentityRevision],
+    ) -> None:
+        """Reject broken biological lineage before publishing registry snapshots.
+
+        Imported or externally modified revision histories may bypass the API.
+        An invalid latest parent cannot become a workflow science artifact.
+        """
+        for record in latest.values():
+            if record.parent_colony_key is None:
+                continue
+            parent = latest.get(record.parent_colony_key)
+            if record.kind != "fragment" or parent is None or parent.kind != "colony":
+                raise ValidationError(
+                    "Ecological identity registry contains an invalid parent-colony link"
+                )
+
     def _append(
         self,
         project_id: str,
@@ -85,6 +103,7 @@ class EcologyIdentityService:
     def register(self, project_id: str, payload: EcologyIdentityCreate) -> EcologyIdentityRow:
         self._project(project_id)
         latest = self._latest(project_id)
+        self._assert_parent_links(latest)
         if payload.organism_key in latest:
             raise ConflictError("Organism key already registered in this project")
         self._parent_valid(payload.organism_key, payload, latest)
@@ -98,17 +117,27 @@ class EcologyIdentityService:
     ) -> EcologyIdentityRow:
         self._project(project_id)
         latest = self._latest(project_id)
+        self._assert_parent_links(latest)
         current = latest.get(organism_key)
         if current is None:
             raise NotFoundError("Ecological organism not found in project")
         if current.revision != payload.expected_revision:
             raise ConflictError("Stale organism revision; reload before changing identity")
+        if current.kind == "colony" and payload.kind != "colony":
+            if any(
+                row.parent_colony_key == organism_key
+                for row in latest.values()
+            ):
+                raise ValidationError(
+                    "Cannot reclassify a parent colony while fragments reference it"
+                )
         self._parent_valid(organism_key, payload, latest)
         return self._append(project_id, organism_key, current.revision + 1, payload)
 
     def registry(self, project_id: str) -> EcologyIdentityRegistryResponse:
         self._project(project_id)
         latest = self._latest(project_id)
+        self._assert_parent_links(latest)
         identities = [
             EcologyIdentityRow.model_validate(record)
             for _, record in sorted(latest.items())

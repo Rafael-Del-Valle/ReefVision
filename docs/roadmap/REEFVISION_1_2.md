@@ -534,3 +534,19 @@ annotation/calibration linkage, immutable evidence review, experiment-design
 attestation, UI, migration reconciliation with unmerged 1.1 `0038`, real study
 acceptance and installed Windows checks remain pending. The exploratory
 longitudinal and human/model analyses still reject promotion to verified truth.
+
+## Parent-colony revision integrity (2026-10-23)
+
+The project-owned identity service rejects reclassification of a colony while
+its latest revision is still referenced as the parent of any registered
+fragment. Scientists may explicitly revise fragment parent assignments first;
+the prior revisions remain append-only for audit. The registry additionally
+fails closed when an externally imported or corrupted latest revision leaves
+an invalid parent-colony link. This applies to the standalone registry API and
+the existing executable, persisted `ecology_identity_registry_source`
+Workflow Builder node: no successful registry artifact is emitted for broken
+lineage. Tests cover both API and saved-workflow failure, plus legitimate
+reviewed correction sequences. The registry remains
+`registered_unverified`, never verified biological truth. No new migration
+or cross-version merge is introduced. Exact-head CI, migration reconciliation,
+source/calibration verification, and Windows acceptance remain outstanding.
