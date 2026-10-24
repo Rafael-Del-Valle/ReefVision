@@ -122,7 +122,7 @@ class EcologyProjectedPopulationSummary(BaseModel):
     unit: str
     sampling_window_utc: str
     experimental_unit_ids: list[str]
-    independent_unit_count: int = Field(ge=1)
+    declared_unit_count: int = Field(ge=1)
     contributing_organism_count: int = Field(ge=1)
     parent_colony_keys: list[str]
     shared_parent_colony_keys: list[str]
