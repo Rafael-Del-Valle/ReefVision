@@ -1,0 +1,119 @@
+"""Exact scale-only mesh area intervals, including saved workflow parity."""
+
+from __future__ import annotations
+
+from typing import cast
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
+from reefvision.tests.test_annotations import create_project
+
+PARAMETERS = {
+    "vertices": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [10, 0, 0],
+        [11, 0, 0],
+        [10, 1, 0],
+    ],
+    "faces": [[0, 1, 2], [3, 4, 5]],
+    "meters_per_unit": 0.1,
+    "calibration_method": "ruler",
+    "calibration_evidence": "Unreviewed scale bar",
+    "relative_scale_uncertainty": 0.1,
+}
+
+
+def test_area_intervals_use_squared_scale_bounds_per_patch() -> None:
+    result = measure_mesh_preview(**PARAMETERS)
+    assert result["surface_area_m2"] == pytest.approx(0.01)
+    assert result["surface_area_scale_interval_m2"] == pytest.approx([0.0081, 0.0121])
+    assert result["edge_connected_patch_area_scale_intervals_m2"] == pytest.approx(
+        [[0.00405, 0.00605], [0.00405, 0.00605]]
+    )
+    # Existing linearized sensitivity is retained for compatibility, but it
+    # is not an exact lower/upper interval and is not a confidence interval.
+    assert result["area_scale_uncertainty_m2"] == pytest.approx(0.002)
+    assert result["confidence_interval"] is None
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize("uncertainty", [None, 0.0, 1.0])
+def test_area_interval_missing_zero_and_full_scale_uncertainty(
+    uncertainty: float | None,
+) -> None:
+    result = measure_mesh_preview(
+        **{**PARAMETERS, "relative_scale_uncertainty": uncertainty}
+    )
+    if uncertainty is None:
+        assert result["surface_area_scale_interval_m2"] is None
+        assert result["edge_connected_patch_area_scale_intervals_m2"] is None
+    else:
+        lower = 0.01 * (1 - uncertainty) ** 2
+        upper = 0.01 * (1 + uncertainty) ** 2
+        assert result["surface_area_scale_interval_m2"] == pytest.approx([lower, upper])
+        assert result["edge_connected_patch_area_scale_intervals_m2"] == pytest.approx(
+            [[lower / 2, upper / 2], [lower / 2, upper / 2]]
+        )
+
+
+def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None:
+    project_id = str(create_project(client, "Mesh area scale interval"))
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=PARAMETERS)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["surface_area_scale_interval_m2"] == pytest.approx(
+        [0.0081, 0.0121]
+    )
+
+    graph = {
+        "graph_id": "mesh-area-scale-intervals-v14",
+        "name": "Unverified scale-only surface intervals",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": PARAMETERS},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_area_scale_interval_m2"] == expected[
+        "surface_area_scale_interval_m2"
+    ]
+    assert artifact["edge_connected_patch_area_scale_intervals_m2"] == expected[
+        "edge_connected_patch_area_scale_intervals_m2"
+    ]
+    assert artifact["provenance"]["geometry_sha256"] == expected["provenance"][
+        "geometry_sha256"
+    ]
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
