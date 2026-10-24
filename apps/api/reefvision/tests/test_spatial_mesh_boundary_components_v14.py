@@ -114,6 +114,10 @@ def test_boundary_components_standalone_and_saved_workflow(
         "noncycle_boundary_component_lengths_m",
         "edge_connected_patch_boundary_loop_perimeters_m",
         "edge_connected_patch_noncycle_boundary_component_lengths_m",
+        "boundary_loop_perimeter_scale_intervals_m",
+        "noncycle_boundary_component_length_scale_intervals_m",
+        "edge_connected_patch_boundary_loop_perimeter_scale_intervals_m",
+        "edge_connected_patch_noncycle_boundary_component_length_scale_intervals_m",
         "qc_warnings",
     )
     assert direct["boundary_loop_count"] == loops
@@ -125,6 +129,18 @@ def test_boundary_components_standalone_and_saved_workflow(
     assert ("noncycle_mesh_boundary_components" in direct["qc_warnings"]) == bool(noncycles)
     assert len(direct["boundary_loop_perimeters_m"]) == loops
     assert len(direct["noncycle_boundary_component_lengths_m"]) == noncycles
+    for length, interval in zip(
+        direct["boundary_loop_perimeters_m"],
+        direct["boundary_loop_perimeter_scale_intervals_m"],
+        strict=True,
+    ):
+        assert interval == pytest.approx([length * 0.9, length * 1.1])
+    for length, interval in zip(
+        direct["noncycle_boundary_component_lengths_m"],
+        direct["noncycle_boundary_component_length_scale_intervals_m"],
+        strict=True,
+    ):
+        assert interval == pytest.approx([length * 0.9, length * 1.1])
     assert sum(direct["boundary_loop_perimeters_m"]) + sum(
         direct["noncycle_boundary_component_lengths_m"]
     ) == pytest.approx(direct["boundary_edge_length_m"])
@@ -180,3 +196,26 @@ def test_boundary_components_standalone_and_saved_workflow(
         assert artifact[key] == standalone.json()[key] == direct[key]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+def test_boundary_component_uncertainty_requires_explicit_scale_range() -> None:
+    params = {
+        "vertices": [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
+        "faces": [[0, 1, 2], [0, 2, 3]],
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unreviewed field ruler",
+    }
+    result = measure_mesh_preview(**params)
+    assert result["boundary_loop_perimeters_m"] == pytest.approx([0.04])
+    assert result["boundary_loop_perimeter_scale_intervals_m"] is None
+    assert result["noncycle_boundary_component_length_scale_intervals_m"] is None
+    assert result["edge_connected_patch_boundary_loop_perimeter_scale_intervals_m"] is None
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["provenance"]["calibration_verified"] is False
+
+    result = measure_mesh_preview(**params, relative_scale_uncertainty=0.0)
+    assert result["boundary_loop_perimeter_scale_intervals_m"] == [[0.04, 0.04]]
+    assert result["edge_connected_patch_boundary_loop_perimeter_scale_intervals_m"] == [
+        [[0.04, 0.04]]
+    ]
