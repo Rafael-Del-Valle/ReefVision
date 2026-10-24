@@ -107,6 +107,11 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     response = client.get(f"/api/v1/review-queues/{result['queue_id']}")
     assert response.status_code == 200, response.text
     assert response.json()["created_by"].startswith("workflow:")
+    # The executable saved graph must persist a meaningful scoring
+    # normalization, not merely a well-formed queue reference.
+    persisted_weights = response.json()["configuration_json"]["weights"]
+    assert sum(persisted_weights.values()) > 0
+    assert all(value >= 0 for value in persisted_weights.values())
     assert len(response.json()["input_checksums_json"]["scoring_provenance_sha256"]) == 64
     assert len(response.json()["input_checksums_json"]["item_evidence_sha256"]) == 64
 
