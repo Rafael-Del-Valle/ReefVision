@@ -271,6 +271,13 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen.manifest_sha256 = tampered_manifest_sha
         session.commit()
 
+    # Manifest retrieval must not expose re-signed unverified training truth.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="only scientist-verified items"),
+    ):
+        PoseTrainingDatasetService(session).manifest(dataset_id)
+
     # Native exports must enforce the same verified-only policy as saved workflows,
     # even when a modified manifest has been assigned a matching new checksum.
     with (
@@ -466,6 +473,13 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen.manifest_sha256 = lineage_sha
         session.commit()
 
+    # Retrieval and export must agree on source lineage, even with a new checksum.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="manifest lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).manifest(dataset_id)
+
     # Re-signing source selection lineage must not make a native package exportable.
     with (
         app.state.session_factory() as session,
@@ -625,6 +639,12 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen.pose_schema_content_hash = payload["pose_schema_content_hash"]
         frozen.status = "incomplete"
         session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="manifest lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).manifest(dataset_id)
 
     empty_plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert empty_plan.status_code == 200, empty_plan.text
