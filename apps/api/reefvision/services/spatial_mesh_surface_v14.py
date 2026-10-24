@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from datetime import timezone
 from math import dist, fsum, isfinite
 from typing import Any
 
@@ -766,4 +767,16 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         surface_path_vertex_pairs=payload.surface_path_vertex_pairs,
     )
     result["provenance"]["source_format"] = source_format
+    observed_at_utc = (
+        payload.observed_at_utc.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        if payload.observed_at_utc is not None
+        else None
+    )
+    result["provenance"].update(
+        specimen_id=payload.specimen_id,
+        observation_id=payload.observation_id,
+        observed_at_utc=observed_at_utc,
+        specimen_identity_verified=False,
+        observation_metadata_verified=False,
+    )
     return result
