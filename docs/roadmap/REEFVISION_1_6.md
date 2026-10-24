@@ -266,3 +266,23 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   The previous head `7aba59df` completed 20/20 GitHub Actions successfully.
   Exact new-head CI and installed-Windows GUI remain unverified at commit time.
   No release acceptance is claimed.
+
+## 2026-10-23 — Saved QC scoring-provenance integrity (Track D)
+
+- Audited the already executable `qc_review_queue` Workflow Builder node and
+  existing standalone queue generator; retained the same deterministic scoring
+  service rather than adding a duplicate workflow path.
+- New queues store `scoring_provenance_sha256` alongside the existing scope
+  digest. It covers the persisted formula identifier/version, QC ruleset,
+  scoring weights, confidence threshold, and resolved QC source configuration.
+- Saved-workflow retries reject scoring metadata drift and item-level weight
+  disagreement without rescoring observations or modifying human review state.
+  The validator also rejects nonfinite/negative/boolean weight metadata.
+- Older saved queues lacking this additional digest remain readable when their
+  existing scoring metadata and item weights are internally consistent; the
+  additional tamper detection is not retroactively guaranteed for old records.
+- Added unit corruption/legacy-compatibility regressions and a persisted,
+  executable Workflow Builder retry regression for altered formula provenance.
+- **Validation:** source and tests committed on the isolated 1.6 draft branch.
+  Full exact-head CI and installed-Windows/scientific acceptance are required;
+  no release, merge or researcher-approval claim is made.
