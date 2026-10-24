@@ -26,6 +26,9 @@ PARAMS = {
     "calibration_method": "ruler",
     "calibration_evidence": "Unreviewed ruler",
     "relative_scale_uncertainty": 0.1,
+    "specimen_id": "coral-16",
+    "observation_id": "survey:2026-10-24",
+    "observed_at_utc": "2026-10-24T10:30:00-05:00",
 }
 
 
@@ -76,6 +79,11 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["provenance"]["source_format"] == "ply_ascii_point_cloud"
+    assert expected["provenance"]["specimen_id"] == "coral-16"
+    assert expected["provenance"]["observation_id"] == "survey:2026-10-24"
+    assert expected["provenance"]["observed_at_utc"] == "2026-10-24T15:30:00Z"
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["provenance"]["observation_metadata_verified"] is False
     assert (
         client.post(
             f"{base}/spatial/point-cloud-preview",
@@ -87,6 +95,9 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     node = next(n for n in registry.json() if n["node_type"] == "point_cloud_preview")
     assert node["executable"] is True
     assert node["output_ports"][0]["accepted_types"] == ["point_cloud_measurement_preview"]
+    assert node["optional_parameters"]["specimen_id"] is None
+    assert node["optional_parameters"]["observation_id"] is None
+    assert node["optional_parameters"]["observed_at_utc"] is None
     graph = {
         "graph_id": "point-cloud-v14",
         "name": "Point cloud extents",
@@ -340,3 +351,53 @@ def test_hidden_extreme_standalone_and_saved_workflow_parity(
     assert expected["preview_omitted_axis_extrema"] == ["x_max"]
     assert artifact["payload_json"]["surface_area_m2"] is None
     assert len(artifact["payload_sha256"]) == 64
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"specimen_id": "invalid id"},
+        {"specimen_id": ""},
+        {"observation_id": "invalid/observation"},
+        {"observation_id": " "},
+        {"observed_at_utc": "2026-10-24T10:30:00"},
+    ],
+)
+def test_point_cloud_rejects_unreviewable_identity_and_naive_time(
+    client: TestClient, invalid: dict[str, str]
+) -> None:
+    project_id = str(create_project(client, "Point cloud metadata validation")["id"])
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/point-cloud-preview",
+        json={**PARAMS, **invalid},
+    )
+    assert response.status_code == 422, response.text
+
+
+def test_point_cloud_observation_metadata_does_not_change_geometry_identity(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Point cloud provenance")["id"])
+    endpoint = f"/api/v1/projects/{project_id}/spatial/point-cloud-preview"
+    original = client.post(endpoint, json=PARAMS)
+    alternate = client.post(
+        endpoint,
+        json={
+            **PARAMS,
+            "specimen_id": "coral-20",
+            "observation_id": "survey:2026-10-25",
+            "observed_at_utc": "2026-10-25T15:30:00Z",
+        },
+    )
+    assert original.status_code == 200, original.text
+    assert alternate.status_code == 200, alternate.text
+    first = original.json()
+    second = alternate.json()
+    assert first["provenance"]["geometry_sha256"] == second["provenance"]["geometry_sha256"]
+    assert first["provenance"]["ordered_geometry_sha256"] == (
+        second["provenance"]["ordered_geometry_sha256"]
+    )
+    assert first["provenance"]["specimen_id"] != second["provenance"]["specimen_id"]
+    assert second["provenance"]["specimen_identity_verified"] is False
+    assert second["provenance"]["observation_metadata_verified"] is False
+    assert second["measurement_status"] == "caller_supplied_unverified"
