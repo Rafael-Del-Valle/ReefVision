@@ -206,6 +206,18 @@ test("initial image and gallery scrolling", async ({ page }) => {
   expect(await page.evaluate(() => window.scrollY)).toBe(
     documentScrollBeforeNavigation,
   );
+  // Mouse-wheel input over the filmstrip must scroll thumbnails horizontally
+  // without moving the page or clipping the initial full-resolution image.
+  await filmstrip.hover();
+  await expect.poll(scrollOffset).toBe(0);
+  const documentScrollBeforeWheel = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 280);
+  await expect.poll(scrollOffset).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(
+    documentScrollBeforeWheel,
+  );
+  await assertDecodedAndContained(1600, 1200);
+
   expect(displayRequests).toContain("image-1");
   expect(displayRequests).toContain("image-12");
 });
