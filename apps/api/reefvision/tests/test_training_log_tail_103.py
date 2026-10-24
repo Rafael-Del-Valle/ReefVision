@@ -71,8 +71,6 @@ def test_log_tail_omits_oversized_unterminated_line(tmp_path: Path) -> None:
     assert log.read_bytes() == original
 
 
-
-
 def test_live_log_tail_waits_for_complete_loss_record(tmp_path: Path) -> None:
     """An in-progress worker write must not look like a finished loss value."""
     log = tmp_path / "training.log"
