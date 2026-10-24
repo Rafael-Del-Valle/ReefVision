@@ -102,18 +102,12 @@ def test_bulk_review_rejects_partial_changes_and_foreign_queue_members(
     ] in {"pending", "skipped"}
 
     # Rejected mixed-state and foreign-queue batches must not leave orphan audit events.
-    first_history = client.get(
-        f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events"
-    )
-    second_history = client.get(
-        f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
-    )
+    first_history = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events")
+    second_history = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events")
     assert first_history.status_code == 200, first_history.text
     assert second_history.status_code == 200, second_history.text
     assert first_history.json()["total"] == 0
-    assert [event["event_type"] for event in second_history.json()["items"]] == [
-        "triage_skip"
-    ]
+    assert [event["event_type"] for event in second_history.json()["items"]] == ["triage_skip"]
 
 
 def test_bulk_triage_appends_atomic_actor_labeled_events(client: TestClient) -> None:
