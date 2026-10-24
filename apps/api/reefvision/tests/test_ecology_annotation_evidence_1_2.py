@@ -1,0 +1,189 @@
+"""Annotation revision links are project-scoped, unverified and fail closed."""
+
+from __future__ import annotations
+
+from typing import cast
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from reefvision.db.models import Annotation, MaskAnnotation
+from reefvision.tests.test_annotations import create_project, import_one
+from reefvision.tests.test_ecology_image_evidence_1_2 import (
+    _link,
+    _register,
+    _workflow,
+)
+
+
+def _box(client: TestClient, image_id: str, label_id: str) -> str:
+    annotation_id = "38abbe44-1d2a-4bd3-a6a7-6d0dffafc105"
+    response = client.put(
+        f"/api/v1/images/{image_id}/annotations",
+        json={
+            "base_revision": 0,
+            "annotation_status": "reviewed",
+            "annotations": [
+                {
+                    "id": annotation_id,
+                    "label_class_id": label_id,
+                    "x_min": 5,
+                    "y_min": 5,
+                    "x_max": 30,
+                    "y_max": 25,
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    return annotation_id
+
+
+def _mask(client: TestClient, image_id: str, label_id: str) -> str:
+    mask_id = "6a16bda5-7b56-4985-849d-34bc334a80e1"
+    response = client.put(
+        f"/api/v1/images/{image_id}/annotations",
+        json={
+            "base_revision": 0,
+            "annotation_status": "reviewed",
+            "annotations": [],
+            "mask_annotations": [
+                {
+                    "id": mask_id,
+                    "label_class_id": label_id,
+                    "geometry_kind": "polygon",
+                    "points": [
+                        {"x": 5, "y": 5},
+                        {"x": 25, "y": 5},
+                        {"x": 25, "y": 20},
+                        {"x": 5, "y": 20},
+                    ],
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    return mask_id
+
+
+def _annotation_link(
+    client: TestClient,
+    project_id: str,
+    image_evidence_id: str,
+    kind: str,
+    annotation_id: str,
+    *,
+    expected_revision: int = 1,
+) -> object:
+    return client.post(
+        f"/api/v1/projects/{project_id}/ecology/organisms/colony-a/annotation-evidence",
+        json={
+            "image_evidence_id": image_evidence_id,
+            "annotation_kind": kind,
+            "annotation_id": annotation_id,
+            "expected_annotation_revision": expected_revision,
+            "reason": "Annotation linked for scientist review",
+        },
+    )
+
+
+def test_annotation_link_persists_unverified_source_in_saved_workflow(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Annotation evidence parity")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201, image_link.text
+    box_id = _box(client, image_id, str(project["label_classes"][0]["id"]))
+    linked = _annotation_link(
+        client, project_id, image_link.json()["id"], "box", box_id
+    )
+    assert linked.status_code == 201, linked.text
+    assert linked.json()["evidence_level"] == "linked_unverified"
+    assert len(linked.json()["annotation_sha256"]) == 64
+    assert (
+        _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
+        .status_code
+        == 409
+    )
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 200, registry.text
+    snapshot = registry.json()
+    assert snapshot["annotation_evidence_count"] == 1
+    assert snapshot["annotation_evidence_links"] == [linked.json()]
+    assert snapshot["review_gate"] == "scientist_review_required"
+    assert snapshot["evidence_level"] == "registered_unverified"
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == snapshot
+
+
+def test_mask_annotation_change_blocks_api_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Mask annotation source integrity")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201
+    mask_id = _mask(client, image_id, str(project["label_classes"][0]["id"]))
+    linked = _annotation_link(
+        client, project_id, image_link.json()["id"], "mask", mask_id
+    )
+    assert linked.status_code == 201, linked.text
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        mask = session.get(MaskAnnotation, mask_id)
+        assert mask is not None
+        mask.area_pixels = 1
+        session.commit()
+
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "revision is missing or changed" in registry.json()["detail"]
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "failed"
+    assert "revision is missing or changed" in run["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in run["artifacts"]
+    )
+
+
+def test_annotation_link_rejects_foreign_image_and_stale_revision(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Annotation ownership")
+    project_id = str(project["id"])
+    first_image = str(import_one(client, project_id)["successful"][0]["image_id"])
+    second_image = str(
+        import_one(client, project_id, size=(82, 61))["successful"][0]["image_id"]
+    )
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", first_image)
+    assert image_link.status_code == 201
+    box_id = _box(client, second_image, str(project["label_classes"][0]["id"]))
+    foreign = _annotation_link(
+        client, project_id, image_link.json()["id"], "box", box_id
+    )
+    assert foreign.status_code == 400, foreign.text
+    assert "mismatched" in foreign.json()["detail"]
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        box = session.get(Annotation, box_id)
+        assert box is not None
+        box.image_id = first_image
+        box.revision = 2
+        session.commit()
+    stale = _annotation_link(
+        client, project_id, image_link.json()["id"], "box", box_id
+    )
+    assert stale.status_code == 409, stale.text
+    assert "Stale annotation revision" in stale.json()["detail"]
