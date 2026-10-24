@@ -185,7 +185,9 @@ def summarize_projected_unit_summaries(
             candidate.metric,
         )
         groups.setdefault(key, []).append(candidate)
-    change_index = {(row.organism_key, row.metric): row for row in changes}
+    change_index: dict[tuple[str, str], EcologyProjectedEndpointChange] = {
+        (row.organism_key, row.metric): row for row in changes
+    }
     if len(change_index) != len(changes):
         raise ValidationError("Duplicate projected organism endpoint changes")
 
@@ -278,8 +280,8 @@ def summarize_projected_population_summaries(
             raise ValidationError("Eligible projected unit is missing its declaration")
         owner = (row.experimental_unit_type, row.experimental_unit_id)
         for organism_key in row.complete_organism_keys:
-            key = (row.metric, organism_key)
-            previous = organism_unit_owners.setdefault(key, owner)
+            organism_metric_key = (row.metric, organism_key)
+            previous = organism_unit_owners.setdefault(organism_metric_key, owner)
             if previous != owner:
                 raise ValidationError(
                     "One organism cannot be pooled across declared experimental units"
@@ -298,13 +300,13 @@ def summarize_projected_population_summaries(
             or row.mean_percent_change is None
         ):
             raise ValidationError("Incomplete projected unit cannot enter population summary")
-        key = (
+        stratum_key = (
             row.experimental_unit_type,
             row.metric,
             row.units[0],
             row.sampling_windows_utc[0],
         )
-        groups.setdefault(key, []).append(row)
+        groups.setdefault(stratum_key, []).append(row)
 
     results: list[EcologyProjectedPopulationSummary] = []
     for (unit_type, metric, unit, window), records in sorted(groups.items()):
@@ -316,9 +318,18 @@ def summarize_projected_population_summaries(
         for record in records:
             for parent_key in record.parent_colony_keys:
                 parent_counts[parent_key] = parent_counts.get(parent_key, 0) + 1
+        # Recheck nullable unit means at the aggregation boundary. This also
+        # narrows their types without trusting prior filtering or model copies.
+        absolute_changes: list[float] = []
+        percent_changes: list[float] = []
+        for record in records:
+            if record.mean_absolute_change is None or record.mean_percent_change is None:
+                raise ValidationError("Incomplete projected unit cannot enter population summary")
+            absolute_changes.append(record.mean_absolute_change)
+            percent_changes.append(record.mean_percent_change)
         try:
-            mean_absolute = math.fsum(float(row.mean_absolute_change) / count for row in records)
-            mean_percent = math.fsum(float(row.mean_percent_change) / count for row in records)
+            mean_absolute = math.fsum(value / count for value in absolute_changes)
+            mean_percent = math.fsum(value / count for value in percent_changes)
         except OverflowError as exc:
             raise ValidationError("Projected population summary is nonfinite") from exc
         if not math.isfinite(mean_absolute) or not math.isfinite(mean_percent):
@@ -329,12 +340,8 @@ def summarize_projected_population_summaries(
             try:
                 # hypot avoids squaring overflow for finite, large unit-level
                 # changes when the sample standard deviation is itself finite.
-                absolute_deviations = [
-                    float(row.mean_absolute_change) - mean_absolute for row in records
-                ]
-                percent_deviations = [
-                    float(row.mean_percent_change) - mean_percent for row in records
-                ]
+                absolute_deviations = [value - mean_absolute for value in absolute_changes]
+                percent_deviations = [value - mean_percent for value in percent_changes]
                 sample_sd_absolute = math.hypot(*absolute_deviations) / math.sqrt(count - 1)
                 sample_sd_percent = math.hypot(*percent_deviations) / math.sqrt(count - 1)
             except (OverflowError, ValueError) as exc:
