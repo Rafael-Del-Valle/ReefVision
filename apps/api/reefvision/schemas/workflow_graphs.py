@@ -25,6 +25,7 @@ WorkflowDataType = Literal[
     "reviewed_labels",
     "measurement_table",
     "mesh_measurement_preview",
+    "mesh_longitudinal_comparison",
     "point_cloud_measurement_preview",
     "relative_depth_maps",
     "training_result",
