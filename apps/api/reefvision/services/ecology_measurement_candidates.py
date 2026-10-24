@@ -111,6 +111,19 @@ def summarize_projected_endpoint_changes(
     provenance, missing acquisition timezones, or fewer than two UTC dates.
     Every included value still requires independent scientist review.
     """
+    # A previously calculated QC decision must never authorize endpoint
+    # changes after source dates, units or identity context have changed.
+    expected_qc = {
+        (row.organism_key, row.metric): row.model_dump(mode="json")
+        for row in summarize_sampling_date_qc(candidates)
+    }
+    supplied_qc = {
+        (row.organism_key, row.metric): row.model_dump(mode="json")
+        for row in sampling_date_qc
+    }
+    if len(supplied_qc) != len(sampling_date_qc) or supplied_qc != expected_qc:
+        raise ValidationError("Projected endpoint sampling-date QC does not match sources")
+
     groups: dict[tuple[str, str], list[EcologyMeasurementCandidate]] = {}
     for candidate in candidates:
         groups.setdefault((candidate.organism_key, candidate.metric), []).append(candidate)

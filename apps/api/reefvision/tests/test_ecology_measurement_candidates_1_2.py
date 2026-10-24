@@ -220,7 +220,8 @@ def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     assert len(changes) == 1
     change = changes[0]
     assert change.absolute_change == 2.5
-    assert change.percent_change == 40.0
+    assert change.baseline_value == 5.0
+    assert change.percent_change == pytest.approx(50.0)
     assert change.elapsed_days == 1.0
     assert change.observed_timepoint_count == 2
     assert change.baseline_image_id == baseline.image_id
@@ -244,6 +245,58 @@ def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     duplicate_qc = summarize_sampling_date_qc([baseline, same_day])
     assert duplicate_qc[0].qc_status == "same_day_technical_replicates"
     assert summarize_projected_endpoint_changes([baseline, same_day], duplicate_qc) == []
+
+
+def test_projected_endpoint_rechecks_qc_against_current_sources(
+    client: TestClient,
+) -> None:
+    """Stale review decisions cannot turn changed sources into growth."""
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    width = next(
+        EcologyMeasurementCandidate.model_validate(row)
+        for row in _get(client, project_id).json()["candidates"]
+        if row["metric"] == "box_width"
+    )
+    baseline = width.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    final = baseline.model_copy(
+        update={
+            "image_id": "later-width-image",
+            "annotation_evidence_id": "later-width-annotation",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
+            "value": baseline.value + 2.5,
+        }
+    )
+    qc = summarize_sampling_date_qc([baseline, final])
+    changes = summarize_projected_endpoint_changes([baseline, final], qc)
+    assert len(changes) == 1
+    assert changes[0].baseline_value == 6.25
+    assert changes[0].absolute_change == 2.5
+    assert changes[0].percent_change == pytest.approx(40.0)
+
+    # Each change invalidates the previously computed date/identity/unit QC.
+    changed_sources = [
+        final.model_copy(
+            update={"capture_timestamp_utc": datetime(2026, 4, 3, 12, tzinfo=UTC)}
+        ),
+        final.model_copy(update={"identity_revision": baseline.identity_revision + 1}),
+        final.model_copy(update={"unit": "cm"}),
+    ]
+    for changed in changed_sources:
+        with pytest.raises(ValidationError, match="sampling-date QC does not match"):
+            summarize_projected_endpoint_changes([baseline, changed], qc)
+
+    forged = qc[0].model_copy(update={"source_image_ids": ["unlinked-image"]})
+    with pytest.raises(ValidationError, match="sampling-date QC does not match"):
+        summarize_projected_endpoint_changes([baseline, final], [forged])
+    with pytest.raises(ValidationError, match="sampling-date QC does not match"):
+        summarize_projected_endpoint_changes([baseline, final], qc + qc)
 
 
 def test_projected_unit_qc_excludes_incomplete_and_technical_replicates(

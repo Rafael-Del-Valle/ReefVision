@@ -1112,3 +1112,25 @@ rows with missing absolute or percentage means. This is a type-safety and
 integrity repair, not verified longitudinal biology. Exact-new-head mypy,
 focused scientific tests, saved-workflow tests, migrations and installed
 Windows acceptance must pass before any release-ready claim.
+
+
+## Exact-head projected endpoint QC consistency (2026-10-24)
+
+The previous head `cb321536` completed 17/19 Actions workflows. Backend
+pytest failed on a stale test expectation: the fixture's calibrated box
+height is 5.0 mm, so a +2.5 mm endpoint difference is **50%**, not 40%.
+The separate 6.25 mm box-width case correctly yields 40% for +2.5 mm.
+The test now checks both physical baselines explicitly; the production
+percentage formula remains unchanged. An unrelated video-pose frontend test
+also failed and is not silently treated as a 1.2 science failure repair.
+
+The existing projected endpoint kernel now recomputes sampling-date QC from
+its current source-linked candidates and rejects missing, duplicated, forged
+or stale audit rows before producing changes. This fails closed if capture
+dates, units or identity revisions are altered after an earlier QC pass.
+Focused regressions exercise stale and forged decisions. The standalone
+source-linked API and existing executable, persisted typed Workflow Builder
+use this same kernel, retain deterministic provenance and mandatory scientist
+review, and do **not** promote projected geometry to verified growth. No new
+migration or node is introduced. Exact-new-head CI, real biological review,
+installed Windows GUI and complete release acceptance remain pending.
