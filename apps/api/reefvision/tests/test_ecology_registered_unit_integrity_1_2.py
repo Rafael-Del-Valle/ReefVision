@@ -126,9 +126,7 @@ def test_registered_colony_and_organism_units_do_not_inflate_replicates(
     assert "multiple organisms" in duplicate_individual.json()["detail"]
 
     # Revisions must enforce the same guard without appending invalid history.
-    revise_url = (
-        f"/api/v1/projects/{project_id}/ecology/organisms/fragment-B1/revisions"
-    )
+    revise_url = f"/api/v1/projects/{project_id}/ecology/organisms/fragment-B1/revisions"
     revision = client.post(
         revise_url,
         json={
@@ -144,9 +142,10 @@ def test_registered_colony_and_organism_units_do_not_inflate_replicates(
     assert "mix parent colonies" in revision.json()["detail"]
     after = client.get(registry_url).json()
     assert after["evidence_level"] == "registered_unverified"
-    assert next(
-        row for row in after["identities"] if row["organism_key"] == "fragment-B1"
-    )["revision"] == 1
+    assert (
+        next(row for row in after["identities"] if row["organism_key"] == "fragment-B1")["revision"]
+        == 1
+    )
 
 
 def test_imported_unit_collision_blocks_registry_and_saved_workflow(
@@ -196,9 +195,7 @@ def test_imported_unit_collision_blocks_registry_and_saved_workflow(
         )
         session.commit()
 
-    registry = client.get(
-        f"/api/v1/projects/{project_id}/ecology/identity-registry"
-    )
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
     assert registry.status_code == 400, registry.text
     assert "mix parent colonies" in registry.json()["detail"]
 
