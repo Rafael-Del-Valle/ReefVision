@@ -21,9 +21,12 @@ import {
   type ReviewScoreWeights,
 } from "../../api/client";
 import { QuickConfidenceReviewDialog } from "./QuickConfidenceReviewDialog";
+import { ReviewQueueBulkTriage } from "./ReviewQueueBulkTriage";
+import { ReviewQueueCoordinationPanel } from "./ReviewQueueCoordinationPanel";
 import {
   reviewQueueItemsQueryKey,
   reviewQueuesQueryKey,
+  scopedReviewQueueId,
 } from "./reviewQueueState";
 
 const defaultWeights: ReviewScoreWeights = {
@@ -56,6 +59,7 @@ export function ReviewQueueDashboard({
   onSelectedQueueChange?: (queueId: string | null) => void;
 }) {
   const queryClient = useQueryClient();
+  const [scopeProjectId, setScopeProjectId] = useState(project.id);
   const [scopeType, setScopeType] = useState<"project" | "dataset_version">(
     "project",
   );
@@ -73,9 +77,16 @@ export function ReviewQueueDashboard({
   const [quickReviewItemId, setQuickReviewItemId] = useState<string | null>(
     null,
   );
+  const [coordinationItemId, setCoordinationItemId] = useState<string | null>(
+    null,
+  );
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
     useState(false);
 
+  // A dataset-version scope without a selected version is not a project scope.
+  const scopeReady =
+    scopeProjectId === project.id &&
+    (scopeType === "project" || Boolean(datasetVersionId));
   const versions = useQuery({
     queryKey: ["dataset_versions", project.id],
     queryFn: ({ signal }) => getDatasetVersions(project.id, signal),
@@ -86,6 +97,7 @@ export function ReviewQueueDashboard({
       scopeType === "dataset_version" && datasetVersionId
         ? getDatasetVersionQualityControlRuns(datasetVersionId, signal)
         : getQualityControlRuns(project.id, signal),
+    enabled: scopeReady,
   });
   const queues = useQuery({
     queryKey: reviewQueuesQueryKey(project.id, scopeType, datasetVersionId),
@@ -93,10 +105,13 @@ export function ReviewQueueDashboard({
       scopeType === "dataset_version" && datasetVersionId
         ? getDatasetVersionReviewQueues(datasetVersionId, signal)
         : getReviewQueues(project.id, signal),
+    enabled: scopeReady,
   });
+  // Do not query a stale queue from another project or dataset scope.
+  const activeQueueId = scopedReviewQueueId(selectedQueueId, queues.data);
   const items = useQuery({
     queryKey: reviewQueueItemsQueryKey(
-      selectedQueueId,
+      activeQueueId,
       page,
       labelClassId,
       split,
@@ -106,7 +121,7 @@ export function ReviewQueueDashboard({
     ),
     queryFn: ({ signal }) =>
       getReviewQueueItems(
-        selectedQueueId,
+        activeQueueId,
         {
           page,
           pageSize: 25,
@@ -118,22 +133,35 @@ export function ReviewQueueDashboard({
         },
         signal,
       ),
-    enabled: selectedQueueId.length > 0,
+    enabled: activeQueueId.length > 0,
   });
 
   useEffect(() => {
-    if (!queues.data?.length) {
-      setSelectedQueueId("");
-      return;
-    }
+    // Dataset IDs and QC source runs belong to the prior project too.
+    setScopeType("project");
+    setDatasetVersionId("");
+    setSelectedRunId("");
+    setSelectedQueueId("");
+    setQuickReviewItemId(null);
+    setCoordinationItemId(null);
+    setOpenQuickReviewWhenReady(false);
+    setPage(1);
+    setScopeProjectId(project.id);
+  }, [project.id]);
+
+  useEffect(() => {
+    // A just-created queue can be selected before the refreshed list arrives.
+    // Do not erase that selection merely because the previous list was empty.
+    if (!queues.data?.length) return;
     if (!selectedQueueId) {
       setSelectedQueueId(queues.data[0].id);
     }
   }, [queues.data, selectedQueueId]);
 
   useEffect(() => {
-    onSelectedQueueChange?.(selectedQueueId || null);
-  }, [onSelectedQueueChange, selectedQueueId]);
+    setCoordinationItemId(null);
+    onSelectedQueueChange?.(activeQueueId || null);
+  }, [onSelectedQueueChange, activeQueueId]);
 
   useEffect(
     () => () => {
@@ -154,6 +182,9 @@ export function ReviewQueueDashboard({
 
   const createQueue = useMutation({
     mutationFn: async () => {
+      if (!scopeReady) {
+        throw new Error("Review scope is not ready");
+      }
       const payload = {
         source_quality_control_run_id: selectedRunId || undefined,
         signal_weights: weights,
@@ -224,8 +255,8 @@ export function ReviewQueueDashboard({
   });
 
   const selectedQueue = useMemo(
-    () => queues.data?.find((queue) => queue.id === selectedQueueId) ?? null,
-    [queues.data, selectedQueueId],
+    () => queues.data?.find((queue) => queue.id === activeQueueId) ?? null,
+    [queues.data, activeQueueId],
   );
   const quickReviewItems = items.data?.items ?? [];
   const quickReviewIndex = quickReviewItems.findIndex(
@@ -270,11 +301,18 @@ export function ReviewQueueDashboard({
               Scope
               <select
                 value={scopeType}
-                onChange={(event) =>
+                onChange={(event) => {
                   setScopeType(
                     event.target.value as "project" | "dataset_version",
-                  )
-                }
+                  );
+                  setDatasetVersionId("");
+                  setSelectedRunId("");
+                  setSelectedQueueId("");
+                  setQuickReviewItemId(null);
+                  setCoordinationItemId(null);
+                  setOpenQuickReviewWhenReady(false);
+                  setPage(1);
+                }}
               >
                 <option value="project">Entire project</option>
                 <option value="dataset_version">Dataset version</option>
@@ -285,7 +323,15 @@ export function ReviewQueueDashboard({
                 Dataset version
                 <select
                   value={datasetVersionId}
-                  onChange={(event) => setDatasetVersionId(event.target.value)}
+                  onChange={(event) => {
+                    setDatasetVersionId(event.target.value);
+                    setSelectedRunId("");
+                    setSelectedQueueId("");
+                    setQuickReviewItemId(null);
+                    setCoordinationItemId(null);
+                    setOpenQuickReviewWhenReady(false);
+                    setPage(1);
+                  }}
                 >
                   <option value="">Choose a version</option>
                   {versions.data?.map((version) => (
@@ -299,6 +345,7 @@ export function ReviewQueueDashboard({
             <label>
               Source QC run
               <select
+                disabled={!scopeReady || runs.isPending}
                 value={selectedRunId}
                 onChange={(event) => setSelectedRunId(event.target.value)}
               >
@@ -352,6 +399,7 @@ export function ReviewQueueDashboard({
               <button
                 type="button"
                 disabled={
+                  !scopeReady ||
                   createQueue.isPending ||
                   (scopeType === "dataset_version" && !datasetVersionId)
                 }
@@ -391,7 +439,13 @@ export function ReviewQueueDashboard({
                   className={`version-card ${
                     selectedQueueId === queue.id ? "selected" : ""
                   }`}
-                  onClick={() => setSelectedQueueId(queue.id)}
+                  onClick={() => {
+                    setSelectedQueueId(queue.id);
+                    setQuickReviewItemId(null);
+                    setCoordinationItemId(null);
+                    setOpenQuickReviewWhenReady(false);
+                    setPage(1);
+                  }}
                 >
                   <strong>{new Date(queue.created_at).toLocaleString()}</strong>
                   <span>{queueLabel(queue)}</span>
@@ -502,6 +556,21 @@ export function ReviewQueueDashboard({
             </div>
             {items.isPending && <p>Loading review queue items...</p>}
             {items.error && <p className="form-error">{items.error.message}</p>}
+            {activeQueueId && items.data && (
+              <ReviewQueueBulkTriage
+                key={[
+                  selectedQueueId,
+                  page,
+                  labelClassId,
+                  split,
+                  qcSeverity,
+                  reviewState,
+                  modelId,
+                ].join(":")}
+                queueId={selectedQueueId}
+                items={items.data.items}
+              />
+            )}
             <div className="dashboard-list">
               {items.data?.items.map((item) => (
                 <article key={item.id} className="dashboard-row">
@@ -553,6 +622,13 @@ export function ReviewQueueDashboard({
                     >
                       Open image
                     </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setCoordinationItemId(item.id)}
+                    >
+                      Comments &amp; assignments
+                    </button>
                     {item.review_state === "pending" && (
                       <button
                         type="button"
@@ -592,6 +668,14 @@ export function ReviewQueueDashboard({
                 </article>
               ))}
             </div>
+            {activeQueueId && coordinationItemId && (
+              <ReviewQueueCoordinationPanel
+                key={`${selectedQueueId}:${coordinationItemId}`}
+                queueId={selectedQueueId}
+                itemId={coordinationItemId}
+                onClose={() => setCoordinationItemId(null)}
+              />
+            )}
             {items.data && items.data.pages > 1 && (
               <nav className="pagination" aria-label="Review queue item pages">
                 <button

@@ -1,3 +1,5 @@
+import { useEffect, useRef, type KeyboardEvent } from "react";
+
 interface OnboardingModalProps {
   version: string;
   onClose: () => void;
@@ -9,20 +11,80 @@ export function OnboardingModal({
   onClose,
   onDismissPermanently,
 }: OnboardingModalProps) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    closeButtonRef.current?.focus();
+
+    // A dialog-level Tab handler cannot catch focus moved outside the dialog
+    // by browser chrome, extensions, scripts, or a dynamically mounted control.
+    // Keep the first-run help modal truly modal without changing background data.
+    function keepFocusInDialog(event: FocusEvent) {
+      const dialog = dialogRef.current;
+      if (
+        dialog &&
+        event.target instanceof Node &&
+        !dialog.contains(event.target)
+      ) {
+        closeButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener("focusin", keepFocusInDialog);
+    return () => {
+      document.removeEventListener("focusin", keepFocusInDialog);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, []);
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const buttons = dialogRef.current?.querySelectorAll<HTMLButtonElement>(
+      "button:not([disabled])",
+    );
+    if (!buttons?.length) return;
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   return (
     <div className="modal-backdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="modal onboarding-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
+        onKeyDown={handleDialogKeyDown}
       >
         <div className="section-heading">
           <div>
             <p className="eyebrow">First run</p>
             <h2 id="onboarding-title">Welcome to ReefVision {version}</h2>
           </div>
-          <button type="button" className="icon-button" onClick={onClose}>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+          >
             Close
           </button>
         </div>
@@ -47,12 +109,14 @@ export function OnboardingModal({
             </p>
           </article>
           <article className="onboarding-card">
-            <h3>Research pipeline</h3>
+            <h3>Research review and workflows</h3>
             <p>
-              Register local checkpoints, run inference, review predictions,
-              create immutable dataset versions, run quality control, and build
-              review queues from the current project state. YOLO export is
-              available from dataset versions.
+              Manage classes and saved per-user or project visibility settings,
+              then use quality-control review queues to prioritize images.
+              Assign reviewers, add comments, or manually triage multiple items.
+              Workflow Builder can save and rerun a QC queue with typed results
+              and provenance; queue rankings never approve model predictions or
+              replace researcher verification.
             </p>
           </article>
           <article className="onboarding-card">

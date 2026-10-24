@@ -1,0 +1,308 @@
+"""Fail-closed integrity check for an existing saved QC workflow queue.
+
+The queue's original scope checksum excludes mutable reviewer decisions. This
+validator deliberately leaves review states, comments and assignments alone.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from collections.abc import Sequence
+from math import isfinite
+from statistics import mean
+from typing import Any
+
+from reefvision.domain.errors import ValidationError
+from reefvision.storage.datasets import canonical_json_sha256
+
+
+def _finite_scientific_number(value: Any) -> bool:
+    """Reject booleans, NaN and infinity in saved numeric QC evidence."""
+    return type(value) in (int, float) and isfinite(value)
+
+
+def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
+    """Cross-check saved component explanations against the deterministic formula.
+
+    A checksum alone cannot establish that a re-signed saved explanation is
+    scientifically self-consistent. Compare against persisted signals only:
+    never rescore live annotations or change mutable reviewer decisions.
+    """
+    raw = item.signal_values_json
+    normalized = item.normalized_signals_json
+    breakdown = item.score_breakdown_json
+    if (
+        not isinstance(raw, dict)
+        or not isinstance(normalized, dict)
+        or not isinstance(breakdown, list)
+        or raw.keys() != normalized.keys()
+        or len(breakdown) != len(raw)
+        or raw.keys() != weights.keys()
+        or any(not _finite_scientific_number(value) for value in raw.values())
+        or any(
+            not _finite_scientific_number(value) or not 0 <= value <= 1
+            for value in normalized.values()
+        )
+    ):
+        return False
+
+    # New versioned snapshots must not reinterpret an all-zero scoring vector
+    # as a meaningful priority formula. Legacy unversioned queues retain their
+    # existing compatibility path without invoking this validator.
+    total_weight = float(sum(weights.values()))
+    if not isfinite(total_weight) or total_weight <= 0:
+        return False
+
+    seen: set[str] = set()
+    for part in breakdown:
+        if not isinstance(part, dict):
+            return False
+        signal_id = part.get("signal_id")
+        if (
+            not isinstance(signal_id, str)
+            or signal_id not in raw
+            or signal_id in seen
+            or any(
+                not _finite_scientific_number(part.get(field))
+                for field in ("raw_value", "normalized_value", "weight", "contribution")
+            )
+        ):
+            return False
+        seen.add(signal_id)
+        expected_contribution = round(
+            (normalized[signal_id] * weights[signal_id] / total_weight) * 100.0, 2
+        )
+        if (
+            part["raw_value"] != float(raw[signal_id])
+            or part["normalized_value"] != round(normalized[signal_id], 6)
+            or part["weight"] != float(weights[signal_id])
+            or part["contribution"] != expected_contribution
+        ):
+            return False
+
+    expected_score = round(
+        sum(normalized[signal] * weights[signal] / total_weight * 100.0 for signal in raw),
+        2,
+    )
+    return (
+        len(seen) == len(raw)
+        and item.score == expected_score
+        and breakdown
+        == sorted(breakdown, key=lambda part: (-part["contribution"], part["signal_id"]))
+    )
+
+
+def queue_item_evidence_sha256(items: Sequence[Any]) -> str:
+    """Digest immutable scientific queue evidence, excluding mutable reviewer decisions.
+
+    Sort by image identity, not query order, so database retrieval order cannot
+    change a valid digest. A changed score, priority, signal explanation, input
+    fingerprint, or biological/QC source reference invalidates saved replay.
+    """
+    return canonical_json_sha256(
+        [
+            {
+                "image_id": item.image_id,
+                "rank_position": item.rank_position,
+                "score": item.score,
+                "input_checksum": item.input_checksum,
+                "split": item.split,
+                "highest_qc_severity": item.highest_qc_severity,
+                "label_class_ids": item.label_class_ids_json,
+                "model_ids": item.model_ids_json,
+                "related_issue_ids": item.related_issue_ids_json,
+                "signal_values": item.signal_values_json,
+                "normalized_signals": item.normalized_signals_json,
+                "weights": item.weights_json,
+                "score_breakdown": item.score_breakdown_json,
+                "reason_summary": item.reason_summary,
+            }
+            for item in sorted(items, key=lambda row: row.image_id)
+        ]
+    )
+
+
+def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
+    """Reject modified snapshot scope/count/order before a workflow retry.
+
+    Validate persisted records only; never recalculate from live annotations.
+    """
+    invalid = ValidationError("Saved QC review queue snapshot failed integrity validation")
+    # The generator stores the resolved QC source in both locations. A
+    # workflow without an explicit source may select the latest historical
+    # run, so compare persisted records rather than current QC state.
+    configuration = queue.configuration_json
+    if (
+        not isinstance(configuration, dict)
+        or "source_quality_control_run_id" not in configuration
+        or configuration["source_quality_control_run_id"] != queue.source_quality_control_run_id
+    ):
+        raise invalid
+
+    checksums = queue.input_checksums_json
+    if not isinstance(checksums, dict):
+        raise invalid
+
+    # Queues written with the v2 contract must retain both independent
+    # digests. Older unversioned queues remain readable without a migration.
+    integrity_version = checksums.get("integrity_schema_version")
+    if integrity_version is not None and integrity_version != "qc-review-queue-v2":
+        raise invalid
+    if integrity_version == "qc-review-queue-v2" and (
+        "scoring_provenance_sha256" not in checksums or "item_evidence_sha256" not in checksums
+    ):
+        raise invalid
+
+    # Historical snapshots may predate the scoring digest; retain their
+    # compatibility while requiring internally consistent scoring metadata.
+    # Newly generated queues include a digest so edits to the formula,
+    # ruleset, thresholds or weights cannot silently change retry provenance.
+    weights = configuration.get("weights")
+    if (
+        not isinstance(queue.formula_id, str)
+        or not queue.formula_id.strip()
+        or not isinstance(queue.formula_version, str)
+        or not queue.formula_version.strip()
+        or not isinstance(weights, dict)
+        or not weights
+        or any(
+            not isinstance(signal, str)
+            or not signal
+            or type(weight) not in (int, float)
+            or not isfinite(weight)
+            or weight < 0
+            for signal, weight in weights.items()
+        )
+    ):
+        raise invalid
+    scoring_digest = checksums.get("scoring_provenance_sha256")
+    if scoring_digest is not None:
+        expected_scoring_digest = canonical_json_sha256(
+            {
+                "formula_id": queue.formula_id,
+                "formula_version": queue.formula_version,
+                "configuration": configuration,
+            }
+        )
+        if (
+            not isinstance(scoring_digest, str)
+            or len(scoring_digest) != 64
+            or any(char not in "0123456789abcdef" for char in scoring_digest)
+            or scoring_digest != expected_scoring_digest
+        ):
+            raise invalid
+    saved_count = checksums.get("item_count")
+    digest = checksums.get("queue_scope_sha256")
+    if (
+        type(saved_count) is not int
+        or saved_count < 0
+        or type(queue.item_count) is not int
+        or queue.item_count != saved_count
+        or len(items) != saved_count
+        or not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest)
+        or queue.scope_type != "project"
+        or queue.dataset_version_id is not None
+    ):
+        raise invalid
+
+    scores: dict[str, float] = {}
+    ranks: set[int] = set()
+    for item in items:
+        if (
+            not isinstance(item.image_id, str)
+            or not item.image_id
+            or item.image_id in scores
+            or item.project_id != queue.project_id
+            or item.review_queue_id != queue.id
+            or item.dataset_version_id is not None
+            or item.weights_json != weights
+            or type(item.rank_position) is not int
+            or item.rank_position in ranks
+            or type(item.score) not in (int, float)
+            or not isfinite(item.score)
+            or not 0 <= item.score <= 100
+        ):
+            raise invalid
+        # Versioned snapshots must preserve both finite scientific evidence
+        # and its deterministic per-signal/aggregate score explanation.
+        if integrity_version == "qc-review-queue-v2" and not _valid_v2_score_explanation(
+            item, weights
+        ):
+            raise invalid
+        scores[item.image_id] = item.score
+        ranks.add(item.rank_position)
+    if ranks != set(range(1, saved_count + 1)):
+        raise invalid
+
+    # The queue creator ranks by descending priority and then image ID for
+    # deterministic ties. The original scope digest does not encode ranks,
+    # so two otherwise unchanged items could silently exchange priorities.
+    saved_order = [item.image_id for item in sorted(items, key=lambda item: item.rank_position)]
+    expected_order = [
+        item.image_id for item in sorted(items, key=lambda item: (-item.score, item.image_id))
+    ]
+    if saved_order != expected_order:
+        raise invalid
+
+    # Queue creation saves a scientific summary separately from the scope
+    # checksum. Reconstruct it only from the persisted queue items, never
+    # from current annotations or mutable reviewer decisions.
+    summary = queue.summary_json
+    if not isinstance(summary, dict):
+        raise invalid
+    expected_average = round(mean(scores.values()), 2) if scores else 0.0
+    stored_average = summary.get("average_score")
+    if (
+        not isinstance(stored_average, (int, float))
+        or isinstance(stored_average, bool)
+        or not isfinite(stored_average)
+        or stored_average != expected_average
+    ):
+        raise invalid
+
+    def matches_counts(field: str, expected: Counter[str]) -> bool:
+        saved = summary.get(field)
+        return (
+            isinstance(saved, dict)
+            and all(
+                isinstance(key, str) and type(count) is int and count >= 0
+                for key, count in saved.items()
+            )
+            and saved == dict(expected)
+        )
+
+    if (
+        not matches_counts(
+            "counts_by_severity",
+            Counter(item.highest_qc_severity for item in items if item.highest_qc_severity),
+        )
+        or not matches_counts(
+            "counts_by_split", Counter(item.split or "unspecified" for item in items)
+        )
+        or summary.get("top_image_ids") != saved_order[:10]
+    ):
+        raise invalid
+
+    actual = canonical_json_sha256(
+        {
+            "image_ids": sorted(scores),
+            "scores": scores,
+            "source_quality_control_run_id": queue.source_quality_control_run_id,
+        }
+    )
+    if actual != digest:
+        raise invalid
+
+    # Legacy queues lack this field. New queues protect their full immutable
+    # scientific explanations as well as score/scope; mutable review state,
+    # assignments and comments are intentionally excluded.
+    item_evidence_digest = checksums.get("item_evidence_sha256")
+    if item_evidence_digest is not None and (
+        not isinstance(item_evidence_digest, str)
+        or len(item_evidence_digest) != 64
+        or any(char not in "0123456789abcdef" for char in item_evidence_digest)
+        or item_evidence_digest != queue_item_evidence_sha256(items)
+    ):
+        raise invalid

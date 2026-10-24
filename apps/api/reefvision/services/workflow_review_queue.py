@@ -1,0 +1,114 @@
+"""Workflow Builder adapter for persistent, human-reviewable QC queues.
+
+Queues rank review effort; they never establish verified biological truth.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from reefvision.config import Settings
+from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun, WorkflowRun
+from reefvision.domain.errors import ValidationError
+from reefvision.schemas.review_queues import ReviewQueueCreateRequest
+from reefvision.services.review_queues import ReviewQueueService
+from reefvision.services.workflow_review_queue_integrity import (
+    validate_saved_queue_snapshot,
+)
+
+
+def create_review_queue_workflow_artifact(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    """Generate once per workflow node, reusing persisted output on interrupted retries."""
+    sources = inputs.get("project", [])
+    if len(sources) != 1 or sources[0].data_type != "project_reference":
+        raise ValidationError("QC Review Queue requires exactly one project reference")
+    if (sources[0].payload_json or {}).get("project_id") != project_id:
+        raise ValidationError("QC Review Queue received a foreign project reference")
+
+    run_id = str(parameters.get("__workflow_run_id") or "")
+    node_run_id = str(parameters.get("__workflow_node_run_id") or "")
+    run = session.get(WorkflowRun, run_id) if run_id else None
+    node = session.get(WorkflowNodeRun, node_run_id) if node_run_id else None
+    if (
+        run is None
+        or run.project_id != project_id
+        or node is None
+        or node.workflow_run_id != run_id
+        or node.node_type != "qc_review_queue"
+        or sources[0].workflow_run_id != run_id
+    ):
+        raise ValidationError("QC Review Queue requires valid persisted workflow provenance")
+
+    # The saved node is the authoritative execution contract. An interrupted
+    # retry must not silently change its source QC run or review threshold,
+    # including explicit None versus an omitted value. Ignore only runtime
+    # identifiers injected by WorkflowExecutionService.
+    saved_parameters = dict(node.parameters_json or {})
+    supplied_parameters = {
+        key: value
+        for key, value in parameters.items()
+        if key not in {"__workflow_run_id", "__workflow_node_run_id"}
+    }
+    if supplied_parameters != saved_parameters:
+        raise ValidationError("QC review-queue retry parameters changed from saved node")
+
+    request = ReviewQueueCreateRequest(
+        source_quality_control_run_id=parameters.get("source_quality_control_run_id"),
+        review_below_confidence=parameters.get("review_below_confidence"),
+        created_by=f"workflow:{run_id}:{node_run_id}",
+    )
+    service = ReviewQueueService(session, settings)
+    existing = session.scalar(
+        select(ReviewQueue)
+        .where(
+            ReviewQueue.project_id == project_id,
+            ReviewQueue.created_by == request.created_by,
+        )
+        .limit(1)
+    )
+    if existing is not None:
+        config = dict(existing.configuration_json or {})
+        if (
+            existing.status != "complete"
+            or config.get("review_below_confidence") != request.review_below_confidence
+            or (
+                request.source_quality_control_run_id is not None
+                and config.get("source_quality_control_run_id")
+                != request.source_quality_control_run_id
+            )
+        ):
+            raise ValidationError("QC review-queue retry parameters changed or queue incomplete")
+        validate_saved_queue_snapshot(existing, existing.items)
+        queue = service.get_queue(existing.id)
+    else:
+        queue = service.create_queue_for_project(project_id, request)
+
+    return [
+        {
+            "port_id": "queue",
+            "data_type": "review_queue_reference",
+            "payload": {
+                "schema_version": "workflow-qc-review-queue-0001",
+                "project_id": project_id,
+                "queue_id": queue.id,
+                "item_count": queue.item_count,
+                "source_quality_control_run_id": queue.source_quality_control_run_id,
+                "formula_id": queue.formula_id,
+                "formula_version": queue.formula_version,
+                "input_checksums": queue.input_checksums_json,
+                "review_status": "requires_researcher_review",
+                "priority_score_unit": "dimensionless",
+                "workflow_run_id": run_id,
+                "workflow_node_run_id": node_run_id,
+            },
+        }
+    ]

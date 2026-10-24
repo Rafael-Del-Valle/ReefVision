@@ -59,6 +59,7 @@ $report = [ordered]@{
     shortcuts = New-ReefVisionEvidenceResult
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
+    migration = $null
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     external_annotation_imports = New-ReefVisionEvidenceResult
@@ -252,6 +253,30 @@ try {
     $api = "http://127.0.0.1:$port/api/v1"
     $versionPayload = Invoke-RestMethod "$api/system/version"
     $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
+    # A healthy HTTP endpoint is not proof that the installed SQLite schema
+    # was migrated. Verify both its revision and its disposable data boundary
+    # before the first project write. Report only schema metadata, never rows.
+    $expectedDatabase = [System.IO.Path]::GetFullPath((Join-Path $DataRoot 'reefvision.db'))
+    $actualDatabase = if ($versionPayload.database_path) {
+        [System.IO.Path]::GetFullPath([string]$versionPayload.database_path)
+    } else { '' }
+    $databaseIsIsolated = [string]::Equals(
+        $actualDatabase, $expectedDatabase,
+        [System.StringComparison]::OrdinalIgnoreCase
+    )
+    $report.migration = [ordered]@{
+        schema_status = [string]$migrationPayload.schema_status
+        current_revision = [string]$migrationPayload.current_schema_revision
+        expected_revision = [string]$migrationPayload.expected_schema_revision
+        database_path_is_isolated = $databaseIsIsolated
+    }
+    if (-not $databaseIsIsolated) {
+        throw 'Packaged API database path escapes the disposable acceptance data root; refusing project writes.'
+    }
+    if ($migrationPayload.schema_status -ne 'up_to_date' -or
+        $migrationPayload.current_schema_revision -ne $migrationPayload.expected_schema_revision) {
+        throw "Packaged API schema is not migrated: status=$($migrationPayload.schema_status); current=$($migrationPayload.current_schema_revision); expected=$($migrationPayload.expected_schema_revision). Refusing project writes."
+    }
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
     $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
 
