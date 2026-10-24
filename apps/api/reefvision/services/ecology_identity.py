@@ -74,6 +74,58 @@ class EcologyIdentityService:
                     "Ecological identity registry contains an invalid parent-colony link"
                 )
 
+    @staticmethod
+    def _assert_experimental_units(
+        latest: dict[str, EcologyIdentityRevision | EcologyIdentityFields],
+    ) -> None:
+        """Fail closed on contradictory independent-unit registrations.
+
+        This validates declared identifiers, not the independence of the
+        biological design. Tank/site units may contain multiple organisms.
+        """
+        single_organism_units: dict[tuple[str, str], str] = {}
+        colony_units: dict[tuple[str, str], str] = {}
+        for key, record in sorted(latest.items()):
+            unit_type = record.experimental_unit_type
+            unit_id = record.experimental_unit_id
+            if (unit_type is None) != (unit_id is None):
+                raise ValidationError(
+                    "Ecological identity registry contains an incomplete experimental unit"
+                )
+            if unit_type is None or unit_id is None:
+                continue
+            normalized_type = unit_type.strip().casefold()
+            if normalized_type in {"organism", "individual", "fragment"}:
+                unit_key = (normalized_type, unit_id)
+                prior = single_organism_units.setdefault(unit_key, key)
+                if prior != key:
+                    raise ValidationError(
+                        "An organism-level experimental unit cannot contain multiple organisms"
+                    )
+            if normalized_type == "colony":
+                lineage = (
+                    key
+                    if record.kind == "colony"
+                    else record.parent_colony_key
+                    if record.kind == "fragment"
+                    else None
+                )
+                if lineage is None:
+                    raise ValidationError(
+                        "Colony-level units require a registered parent colony"
+                    )
+                parent = latest.get(lineage)
+                if parent is None or parent.kind != "colony":
+                    raise ValidationError(
+                        "Colony-level units require a registered parent colony"
+                    )
+                unit_key = (normalized_type, unit_id)
+                prior = colony_units.setdefault(unit_key, lineage)
+                if prior != lineage:
+                    raise ValidationError(
+                        "A colony-level experimental unit cannot mix parent colonies"
+                    )
+
     def _append(
         self,
         project_id: str,
@@ -104,9 +156,11 @@ class EcologyIdentityService:
         self._project(project_id)
         latest = self._latest(project_id)
         self._assert_parent_links(latest)
+        self._assert_experimental_units(latest)
         if payload.organism_key in latest:
             raise ConflictError("Organism key already registered in this project")
         self._parent_valid(payload.organism_key, payload, latest)
+        self._assert_experimental_units({**latest, payload.organism_key: payload})
         return self._append(project_id, payload.organism_key, 1, payload)
 
     def revise(
@@ -118,26 +172,32 @@ class EcologyIdentityService:
         self._project(project_id)
         latest = self._latest(project_id)
         self._assert_parent_links(latest)
+        self._assert_experimental_units(latest)
         current = latest.get(organism_key)
         if current is None:
             raise NotFoundError("Ecological organism not found in project")
         if current.revision != payload.expected_revision:
             raise ConflictError("Stale organism revision; reload before changing identity")
-        if current.kind == "colony" and payload.kind != "colony":
-            if any(
+        if (
+            current.kind == "colony"
+            and payload.kind != "colony"
+            and any(
                 row.parent_colony_key == organism_key
                 for row in latest.values()
-            ):
-                raise ValidationError(
-                    "Cannot reclassify a parent colony while fragments reference it"
-                )
+            )
+        ):
+            raise ValidationError(
+                "Cannot reclassify a parent colony while fragments reference it"
+            )
         self._parent_valid(organism_key, payload, latest)
+        self._assert_experimental_units({**latest, organism_key: payload})
         return self._append(project_id, organism_key, current.revision + 1, payload)
 
     def registry(self, project_id: str) -> EcologyIdentityRegistryResponse:
         self._project(project_id)
         latest = self._latest(project_id)
         self._assert_parent_links(latest)
+        self._assert_experimental_units(latest)
         identities = [
             EcologyIdentityRow.model_validate(record)
             for _, record in sorted(latest.items())
