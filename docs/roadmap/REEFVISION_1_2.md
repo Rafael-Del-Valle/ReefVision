@@ -819,3 +819,44 @@ gate are retained. This is **source geometry QC only**, not calibrated area,
 confirmed organism identity, an immutable calibration snapshot, or verified
 longitudinal biological evidence. Calibration linking remains the next
 scientific dependency. No new migration or model weights are involved.
+
+
+## Frozen source-image calibration evidence (2026-10-24; development only)
+
+Branch-local migration `b12_identity_0004` adds append-only calibration evidence
+for an **existing, project-owned, reviewed-human annotation revision** already
+linked to an organism. The
+`POST /api/v1/projects/{project_id}/ecology/organisms/{organism_key}/calibration-evidence`
+endpoint requires the annotation evidence ID, its expected SHA-256 and explicit
+source-calibration confirmation. It reads ReefVision's existing saved
+`measurement_calibration` image metadata; it does **not** introduce a
+parallel calibration system or accept a detector candidate as a physical scale.
+
+The record freezes a normalized calibration payload, source-image ID/SHA-256,
+SHA-256 fingerprint, scientist-entered reason and creation time. A missing or
+malformed calibration, nonfinite scale, camera-resolution mismatch, stale
+annotation fingerprint, cross-organism link or duplicate association fails
+closed. Subsequent changes to the source calibration or frozen snapshot also
+invalidate the standalone identity-registry read and the **executable, typed,
+persisted** `ecology_identity_registry_source` Workflow Builder output.
+Deterministic `calibration_evidence_sha256`, counts and links are exposed
+alongside existing identity/image/annotation fingerprints; saved-workflow
+and standalone regression cases exercise parity and failure without a
+successful scientific artifact.
+
+**Scientific limitations:** a user-confirmed saved image scale is not
+independently verified specimen identity, calibrated longitudinal measurement,
+experimental-unit independence or an immutable verified dataset. These records
+remain `linked_unverified`; the registry remains `registered_unverified`
+with `scientist_review_required`. Source changes are conservatively treated
+as invalidating evidence, even if a legitimate correction was made; no
+automatic promotion or rewriting of historical records occurs.
+
+The previous exact-head `68c15650` had **16 successful and 3 failed
+GitHub Actions workflows**, all three stopping at two Ruff formatter
+differences in ecological source/tests. Those exact diffs were corrected
+before adding this calibration unit. The new head still needs exact-head
+CI (including Ruff, pytest, typing, frontend and E2E), Alembic
+upgrade/downgrade and SQLite FK checks, realistic calibration fixtures,
+scientist acceptance, 1.1 `0038` migration reconciliation and installed
+Windows GUI/installer acceptance. No new-head pass is claimed.
