@@ -220,7 +220,7 @@ def test_revision_0039_rejects_permissive_event_checks_without_writes(
         connection.execute(
             text(
                 "INSERT INTO review_queue_item_events (id, event_type) "
-                "VALUES ('preserved-event', 'comment')"
+                "VALUES ('preserved-event', 'triage_start')"
             )
         )
         schema_before = connection.scalar(
