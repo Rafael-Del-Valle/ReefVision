@@ -9,6 +9,7 @@ import pytest
 
 from reefvision.domain.errors import ValidationError
 from reefvision.services.workflow_review_queue_integrity import (
+    queue_item_evidence_sha256,
     validate_saved_queue_snapshot,
 )
 from reefvision.storage.datasets import canonical_json_sha256
@@ -24,6 +25,14 @@ def snapshot():
             rank_position=1,
             score=80.0,
             weights_json={"signal": 1.0},
+            input_checksum="a" * 64,
+            label_class_ids_json=["class-a"],
+            model_ids_json=["model-a"],
+            related_issue_ids_json=["qc-issue-a"],
+            signal_values_json={"signal": 0.8},
+            normalized_signals_json={"signal": 0.8},
+            score_breakdown_json=[{"signal_id": "signal", "contribution": 80.0}],
+            reason_summary="Requires manual review",
             highest_qc_severity="warning",
             split="train",
             review_state="pending",
@@ -36,6 +45,14 @@ def snapshot():
             rank_position=2,
             score=20.0,
             weights_json={"signal": 1.0},
+            input_checksum="b" * 64,
+            label_class_ids_json=["class-a"],
+            model_ids_json=["model-a"],
+            related_issue_ids_json=["qc-issue-a"],
+            signal_values_json={"signal": 0.8},
+            normalized_signals_json={"signal": 0.8},
+            score_breakdown_json=[{"signal_id": "signal", "contribution": 80.0}],
+            reason_summary="Requires manual review",
             highest_qc_severity=None,
             split=None,
             review_state="pending",
@@ -78,6 +95,7 @@ def snapshot():
             "configuration": queue.configuration_json,
         }
     )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
     return queue, items
 
 
@@ -85,6 +103,7 @@ def test_valid_saved_snapshot_and_mutable_reviewer_state():
     queue, items = snapshot()
     validate_saved_queue_snapshot(queue, items)
     items[0].review_state = "completed"
+    items[0].skip_reason = "Researcher requested a second look"
     validate_saved_queue_snapshot(queue, items)
 
 
@@ -117,6 +136,12 @@ def test_valid_saved_snapshot_and_mutable_reviewer_state():
         "nonfinite_weight",
         "boolean_weight",
         "scoring_digest",
+        "item_evidence_digest",
+        "input_checksum",
+        "score_breakdown",
+        "normalized_signal",
+        "class_reference",
+        "reason_summary",
     ],
 )
 def test_rejects_corrupted_saved_snapshot(corruption):
@@ -184,6 +209,18 @@ def test_rejects_corrupted_saved_snapshot(corruption):
         queue.configuration_json["weights"]["signal"] = True
     elif corruption == "scoring_digest":
         queue.input_checksums_json["scoring_provenance_sha256"] = "0" * 64
+    elif corruption == "item_evidence_digest":
+        queue.input_checksums_json["item_evidence_sha256"] = "0" * 64
+    elif corruption == "input_checksum":
+        items[0].input_checksum = "f" * 64
+    elif corruption == "score_breakdown":
+        items[0].score_breakdown_json[0]["contribution"] = 10.0
+    elif corruption == "normalized_signal":
+        items[0].normalized_signals_json["signal"] = 0.1
+    elif corruption == "class_reference":
+        items[0].label_class_ids_json.append("other-class")
+    elif corruption == "reason_summary":
+        items[0].reason_summary = "Altered scientific explanation"
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
 
@@ -200,6 +237,13 @@ def test_rejects_modified_saved_source_configuration(corruption):
         queue.configuration_json = None
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
+
+
+def test_historical_snapshot_without_item_evidence_digest_remains_readable():
+    """Old queues retain their prior integrity checks without forced migration."""
+    queue, items = snapshot()
+    queue.input_checksums_json.pop("item_evidence_sha256")
+    validate_saved_queue_snapshot(queue, items)
 
 
 def test_historical_snapshot_without_scoring_digest_remains_readable():
