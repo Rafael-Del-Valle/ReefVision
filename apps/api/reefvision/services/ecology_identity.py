@@ -51,9 +51,7 @@ class EcologyIdentityService:
         for record in records:
             expected = expected_revision.get(record.organism_key, 1)
             if record.revision != expected:
-                raise ValidationError(
-                    "Ecological identity revision history is not contiguous"
-                )
+                raise ValidationError("Ecological identity revision history is not contiguous")
             expected_revision[record.organism_key] = expected + 1
             latest[record.organism_key] = record
         return latest
@@ -221,6 +219,33 @@ class EcologyIdentityService:
         identities = [
             EcologyIdentityRow.model_validate(record) for _, record in sorted(latest.items())
         ]
+        # The latest-only snapshot intentionally remains backward compatible.
+        # Separately fingerprint the *entire* append-only revision chain so
+        # earlier identity corrections cannot disappear from provenance.
+        history = list(
+            self.session.scalars(
+                select(EcologyIdentityRevision)
+                .where(EcologyIdentityRevision.project_id == project_id)
+                .order_by(
+                    EcologyIdentityRevision.organism_key,
+                    EcologyIdentityRevision.revision,
+                )
+            )
+        )
+        history_rows = [
+            {
+                "id": row.id,
+                "organism_key": row.organism_key,
+                "revision": row.revision,
+                "kind": row.kind,
+                "parent_colony_key": row.parent_colony_key,
+                "experimental_unit_type": row.experimental_unit_type,
+                "experimental_unit_id": row.experimental_unit_id,
+                "reason": row.reason,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in history
+        ]
         fingerprint_rows = [
             {
                 "id": row.id,
@@ -236,6 +261,14 @@ class EcologyIdentityService:
         return EcologyIdentityRegistryResponse(
             project_id=project_id,
             identities=identities,
+            history_revision_count=len(history_rows),
+            history_sha256=canonical_json_sha256(
+                {
+                    "algorithm_version": "ecology-identity-history-0001",
+                    "project_id": project_id,
+                    "revisions": history_rows,
+                }
+            ),
             snapshot_sha256=canonical_json_sha256(
                 {
                     "schema_version": "ecology-identity-registry-0001",

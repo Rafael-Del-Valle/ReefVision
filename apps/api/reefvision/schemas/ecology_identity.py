@@ -72,5 +72,8 @@ class EcologyIdentityRegistryResponse(BaseModel):
     project_id: str
     identities: list[EcologyIdentityRow]
     snapshot_sha256: str
+    # Optional defaults preserve deserialization of earlier persisted artifacts.
+    history_sha256: str | None = None
+    history_revision_count: int = 0
     evidence_level: Literal["registered_unverified"] = "registered_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"

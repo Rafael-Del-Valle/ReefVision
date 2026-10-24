@@ -688,3 +688,27 @@ required; tests committed are not equivalent to tests passed. Linking identities
 to reviewed annotations, immutable calibration snapshots and registered
 experimental designs is still unfinished. No Windows installed-GUI or real
 longitudinal scientific acceptance is claimed.
+
+
+## Full identity-revision provenance fingerprint (2026-10-24; development only)
+
+The project-owned registry now exposes an additive `history_sha256` and
+`history_revision_count` alongside its backwards-compatible latest-identity
+`snapshot_sha256`. The history fingerprint covers **every** project-owned
+revision, including revision IDs, lineage, experimental-unit declarations,
+scientist-entered correction reasons and creation timestamps. A retroactive
+change to an earlier revision changes the history digest even if the current
+latest-identity snapshot remains identical. The existing executable, persisted
+`ecology_identity_registry_source` Workflow Builder node emits the same typed
+provenance as the standalone registry API. Defaults on the new schema fields
+allow previously persisted unverified artifacts to deserialize.
+
+This is a history-sensitive reproducibility checksum, **not** an immutable
+external attestation or a verification of specimen identity, annotation
+ownership, calibration or experimental-unit independence. Both outputs remain
+`registered_unverified` and `scientist_review_required`. Focused regression
+tests cover earlier-revision mutation and saved-workflow artifact parity.
+The previous head's three failed Actions workflows shared three Ruff-format
+violations; those exact lines were also corrected. Exact-head CI, real
+scientific acceptance, cross-version migration reconciliation, installed
+Windows GUI and release approval remain outstanding.

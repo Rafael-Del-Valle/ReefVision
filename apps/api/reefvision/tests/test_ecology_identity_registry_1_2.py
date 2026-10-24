@@ -264,7 +264,6 @@ def test_saved_identity_source_rejects_scientist_supplied_parameters(
     )
 
 
-
 def test_imported_technical_unit_cannot_enter_registry_or_saved_workflow(
     client: TestClient,
 ) -> None:
