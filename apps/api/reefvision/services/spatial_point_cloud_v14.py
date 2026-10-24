@@ -252,9 +252,7 @@ def measure_point_cloud_preview(
     if preserve_axis_extrema_in_preview and len(vertices) > preview_count:
         protected = set(extrema_indices) | {0, len(vertices) - 1}
         retained = [index for index in preview_indices if index not in protected]
-        preview_indices = sorted(
-            protected | set(retained[: preview_count - len(protected)])
-        )
+        preview_indices = sorted(protected | set(retained[: preview_count - len(protected)]))
     # A uniform index sample may hide the actual extent of a coral scan.
     # Compare raw source-axis extrema before scaling to avoid float rounding.
     # This is display QC, not registration or biological completeness.
