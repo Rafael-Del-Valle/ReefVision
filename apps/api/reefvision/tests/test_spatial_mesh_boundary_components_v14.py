@@ -9,7 +9,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.spatial_mesh_boundary_v14 import boundary_component_counts
+from reefvision.services.spatial_mesh_boundary_v14 import (
+    boundary_component_counts,
+    boundary_component_lengths,
+)
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 from reefvision.tests.test_annotations import create_project
 
@@ -19,6 +22,25 @@ def test_boundary_graph_classifies_cycles_without_inventing_holes() -> None:
     assert boundary_component_counts([(0, 1), (1, 2), (2, 0)]) == (1, 0)
     assert boundary_component_counts([(0, 1), (1, 2)]) == (0, 1)
     assert boundary_component_counts([(0, 1), (1, 2), (2, 0), (0, 3)]) == (0, 1)
+
+
+def test_boundary_component_lengths_are_separate_and_order_independent() -> None:
+    points = [
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (3.0, 0.0, 0.0),
+        (4.0, 0.0, 0.0),
+    ]
+    edges = [(0, 1), (1, 2), (2, 0), (3, 4)]
+    cycles, noncycles = boundary_component_lengths(edges, points)
+    assert cycles == pytest.approx([2 + 2**0.5])
+    assert noncycles == pytest.approx([1.0])
+    assert boundary_component_lengths(list(reversed(edges)), points) == (
+        cycles,
+        noncycles,
+    )
+    assert boundary_component_lengths([], points) == ([], [])
 
 
 @pytest.mark.parametrize(
@@ -88,6 +110,10 @@ def test_boundary_components_standalone_and_saved_workflow(
         "noncycle_boundary_component_count",
         "edge_connected_patch_boundary_loop_counts",
         "edge_connected_patch_noncycle_boundary_component_counts",
+        "boundary_loop_perimeters_m",
+        "noncycle_boundary_component_lengths_m",
+        "edge_connected_patch_boundary_loop_perimeters_m",
+        "edge_connected_patch_noncycle_boundary_component_lengths_m",
         "qc_warnings",
     )
     assert direct["boundary_loop_count"] == loops
@@ -97,6 +123,19 @@ def test_boundary_components_standalone_and_saved_workflow(
         noncycles if case == "pinched-boundary" else 0 for _ in patch_loops
     ]
     assert ("noncycle_mesh_boundary_components" in direct["qc_warnings"]) == bool(noncycles)
+    assert len(direct["boundary_loop_perimeters_m"]) == loops
+    assert len(direct["noncycle_boundary_component_lengths_m"]) == noncycles
+    assert sum(direct["boundary_loop_perimeters_m"]) + sum(
+        direct["noncycle_boundary_component_lengths_m"]
+    ) == pytest.approx(direct["boundary_edge_length_m"])
+    if case == "open-square":
+        assert direct["boundary_loop_perimeters_m"] == pytest.approx([0.04])
+    if case == "disconnected-triangles":
+        assert direct["boundary_loop_perimeters_m"] == pytest.approx(
+            [0.01 * (2 + 2**0.5)] * 2
+        )
+    if case == "closed-tetra":
+        assert direct["boundary_loop_perimeters_m"] == []
     assert direct["measurement_status"] == "caller_supplied_unverified"
     assert direct["provenance"]["calibration_verified"] is False
 
