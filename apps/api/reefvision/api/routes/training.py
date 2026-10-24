@@ -228,7 +228,7 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     text = re.sub(r"\x1b[ -/]*[@-_]", "", text)
     # Progress bars use carriage returns to overwrite the current line.
     # Show each update on a new line instead of allowing terminal rewrites.
-    text = text.replace("\r", "\n")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     # Directional Unicode controls can visually reorder loss labels/values in
     # PowerShell. Preserve normal Unicode (including scientific units), but
     # prevent invisible bidi overrides and isolates from spoofing output.
