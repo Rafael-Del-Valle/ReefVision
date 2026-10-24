@@ -252,8 +252,8 @@ def test_boundary_length_scale_intervals_preserve_missing_and_extreme_uncertaint
     else:
         expected = [0.12 * (1 - uncertainty), 0.12 * (1 + uncertainty)]
         assert result["boundary_edge_length_scale_interval_m"] == pytest.approx(expected)
-        patch_interval = result["edge_connected_patch_boundary_length_scale_intervals_m"][0]
-        assert patch_interval == pytest.approx(expected)
+        patch_intervals = result["edge_connected_patch_boundary_length_scale_intervals_m"]
+        assert patch_intervals[0] == pytest.approx(expected)
     assert result["confidence_interval"] is None
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
