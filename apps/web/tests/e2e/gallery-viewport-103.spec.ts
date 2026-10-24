@@ -180,8 +180,6 @@ test("initial image and gallery scrolling", async ({ page }) => {
   const filmstrip = workbench.locator(".rv-media-filmstrip");
   const scrollOffset = () =>
     filmstrip.evaluate((element) => element.scrollLeft);
-  await expect.poll(scrollOffset).toBeGreaterThan(scrollBeforeWheel);
-
   // Keyboard navigation must not scroll the document or partially displace
   // the main image. Only the horizontal thumbnail filmstrip may move.
   await workbench.focus();
@@ -214,7 +212,7 @@ test("initial image and gallery scrolling", async ({ page }) => {
   const scrollBeforeWheel = await scrollOffset();
   const documentScrollBeforeWheel = await page.evaluate(() => window.scrollY);
   await page.mouse.wheel(0, 280);
-  await expect.poll(scrollOffset).toBeGreaterThan(0);
+  await expect.poll(scrollOffset).toBeGreaterThan(scrollBeforeWheel);
   expect(await page.evaluate(() => window.scrollY)).toBe(
     documentScrollBeforeWheel,
   );
