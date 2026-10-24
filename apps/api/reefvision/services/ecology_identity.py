@@ -288,6 +288,7 @@ class EcologyIdentityService:
         self, kind: str, annotation_id: str, image_id: str
     ) -> tuple[int, str]:
         """Resolve a current source revision, never a verified research observation."""
+        annotation: Annotation | MaskAnnotation | None
         if kind == "box":
             annotation = self.session.get(Annotation, annotation_id)
             snapshot = annotation_snapshot(annotation) if annotation is not None else None
