@@ -115,13 +115,22 @@ def _json_safe(value: object) -> object | None:
 
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
-    for key in (36867, 36868, 306):
+    # Camera-local EXIF timestamps may include explicit UTC offsets. Pair each
+    # date field with its own offset; never borrow an offset from another field.
+    for key, offset_key in ((36867, 36881), (36868, 36882), (306, 36880)):
         raw = exif.get(key)
-        if isinstance(raw, str):
-            try:
-                return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
-            except ValueError:
-                continue
+        if not isinstance(raw, str):
+            continue
+        offset = exif.get(offset_key)
+        try:
+            if isinstance(offset, str) and offset:
+                return datetime.strptime(
+                    raw + offset, "%Y:%m:%d %H:%M:%S%z"
+                ).astimezone(UTC)
+            # Legacy offset-free camera imports retain their previous behavior.
+            return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
+        except ValueError:
+            continue
     return None
 
 
