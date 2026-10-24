@@ -394,8 +394,9 @@ def test_point_cloud_observation_metadata_does_not_change_geometry_identity(
     first = original.json()
     second = alternate.json()
     assert first["provenance"]["geometry_sha256"] == second["provenance"]["geometry_sha256"]
-    assert first["provenance"]["ordered_geometry_sha256"] == (
-        second["provenance"]["ordered_geometry_sha256"]
+    assert (
+        first["provenance"]["ordered_geometry_sha256"]
+        == (second["provenance"]["ordered_geometry_sha256"])
     )
     assert first["provenance"]["specimen_id"] != second["provenance"]["specimen_id"]
     assert second["provenance"]["specimen_identity_verified"] is False
