@@ -88,3 +88,25 @@ survival, or a confirmed observation. A geometry hash may match even when
 specimen labels differ; neither hash nor label is evidence of biological identity.
 Scale-only uncertainties do not account for scan reconstruction or registration
 errors. No user-trained model weights or cloud services are involved.
+
+## Opt-in extrema-preserving display sample (October 24, 2026)
+
+Both the standalone point-cloud preview request and the executable, persisted
+`point_cloud_preview` Workflow Builder node now accept the strict boolean
+`preserve_axis_extrema_in_preview` (default `false` for backward compatibility).
+When enabled for more than 512 points, the deterministic source-index sample
+retains the first source occurrence of each minimum and maximum XYZ coordinate,
+plus its original first and last point, within the same 512-point budget. Other
+uniformly sampled indices are displaced, never reindexed; the full input is
+still used for bounds, chords, hashes and calibration measurements.
+
+The result records `preview_extrema_source_indices` and
+`preview_sampling_strategy` alongside the existing
+`preview_axis_extrema_covered` QC fields. The opt-in sampling policy can make
+axis extrema visible in the interactive sample, but does not prove that a
+single isolated outlier is a biological feature or that a reconstruction is
+complete. No source points are deleted, no coordinates are registered, and
+calibration and specimen identity remain explicitly unverified. Scientists
+should compare the original scan with the preview before accepting biological
+interpretations. Regression coverage includes a 513-point hidden-extreme
+example, strict request validation and saved-workflow parity.
