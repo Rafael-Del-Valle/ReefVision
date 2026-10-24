@@ -142,6 +142,61 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert package_bytes
     assert len(package_sha256) == 64
 
+    # A valid checksum cannot authorize an unsupported frozen dataset or
+    # manifest schema version. Verify the existing saved workflow, native
+    # export, and downstream training all reject either kind of schema drift.
+    for schema_target in ("dataset", "manifest"):
+        with app.state.session_factory() as session:
+            frozen = session.get(PoseTrainingDataset, dataset_id)
+            assert frozen is not None
+            original_schema_version = frozen.schema_version
+            original_manifest = dict(frozen.manifest_json)
+            original_manifest_sha = frozen.manifest_sha256
+            if schema_target == "dataset":
+                frozen.schema_version = "pose-training-dataset-9999"
+            else:
+                changed_manifest = {
+                    **original_manifest,
+                    "schema_version": "pose-training-dataset-manifest-9999",
+                }
+                frozen.manifest_json = changed_manifest
+                frozen.manifest_sha256 = canonical_json_sha256(changed_manifest)
+            session.commit()
+
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ConflictError, match="item lineage no longer matches"),
+        ):
+            PoseTrainingDatasetService(session).native_package(dataset_id)
+
+        schema_plan = client.post(
+            f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
+        )
+        assert schema_plan.status_code == 200, schema_plan.text
+        assert schema_plan.json()["valid"] is False
+        assert "pose_dataset_item_lineage_mismatch" in {
+            issue["code"] for issue in schema_plan.json()["issues"]
+        }
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="item fingerprints no longer match"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                app.state.settings,
+                project_id=project_id,
+                dataset_payload=payload,
+                parameters={},
+            )
+
+        with app.state.session_factory() as session:
+            frozen = session.get(PoseTrainingDataset, dataset_id)
+            assert frozen is not None
+            frozen.schema_version = original_schema_version
+            frozen.manifest_json = original_manifest
+            frozen.manifest_sha256 = original_manifest_sha
+            session.commit()
+
     # Mutating the persisted canonical landmarks does not change the signed
     # manifest or the item's stored SHA-256. The frozen scientist-approved
     # pose digest must independently protect export, planning and training.
