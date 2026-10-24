@@ -152,7 +152,11 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 raise UnsupportedImageError(
                     "Animated GIFs cannot be safely imported as a single scientific image"
                 )
-            exif = dict(image.getexif())
+            image_exif = image.getexif()
+            exif = dict(image_exif)
+            # Real cameras normally store DateTimeOriginal and OffsetTimeOriginal
+            # in the nested Exif IFD. The top-level dict contains only its offset.
+            exif.update(image_exif.get_ifd(ExifTags.IFD.Exif))
             named_exif = {
                 ExifTags.TAGS.get(key, str(key)): _json_safe(value)
                 for key, value in exif.items()
