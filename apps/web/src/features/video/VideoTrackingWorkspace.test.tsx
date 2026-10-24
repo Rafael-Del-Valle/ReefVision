@@ -655,6 +655,10 @@ describe("VideoTrackingWorkspace", () => {
 
     renderWorkspace();
 
+    // Finish initial video selection before supplying input that resets on video changes.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Video")).toHaveValue("video-1"),
+    );
     expect(
       await screen.findByRole("heading", { name: "Pose interoperability" }),
     ).toBeInTheDocument();
