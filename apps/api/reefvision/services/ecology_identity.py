@@ -486,9 +486,53 @@ class EcologyIdentityService:
             calibration = MeasurementCalibrationUpdate.model_validate(raw)
         except ValueError as exc:
             raise ValidationError("Ecological image calibration metadata is invalid") from exc
-        if calibration.unit.strip().casefold() in {"px", "pixel", "pixels"}:
+        # An arbitrary text unit (e.g. seconds or frames) cannot yield physical lengths.
+        # Validate dimensionality here without silently converting the saved scale.
+        unit = calibration.unit.strip().casefold()
+        if unit not in {
+            "nm",
+            "nanometer",
+            "nanometers",
+            "nanometre",
+            "nanometres",
+            "um",
+            "μm",
+            "micrometer",
+            "micrometers",
+            "micrometre",
+            "micrometres",
+            "mm",
+            "millimeter",
+            "millimeters",
+            "millimetre",
+            "millimetres",
+            "cm",
+            "centimeter",
+            "centimeters",
+            "centimetre",
+            "centimetres",
+            "m",
+            "meter",
+            "meters",
+            "metre",
+            "metres",
+            "km",
+            "kilometer",
+            "kilometers",
+            "kilometre",
+            "kilometres",
+            "in",
+            "inch",
+            "inches",
+            "ft",
+            "foot",
+            "feet",
+            "yd",
+            "yard",
+            "yards",
+        }:
             raise ValidationError(
-                "Ecological calibration requires a physical length unit, not pixels"
+                "Ecological calibration requires a recognized physical length unit"
             )
         for field in (
             "distance_per_pixel",
@@ -549,8 +593,7 @@ class EcologyIdentityService:
             (
                 row
                 for row in image_links
-                if row.id == annotation_link.image_evidence_id
-                and row.organism_key == organism_key
+                if row.id == annotation_link.image_evidence_id and row.organism_key == organism_key
             ),
             None,
         )
@@ -625,10 +668,7 @@ class EcologyIdentityService:
             if image is None or image.project_id != project_id:
                 raise ValidationError("Ecological calibration image source is missing")
             snapshot, fingerprint = self._calibration_source(image)
-            if (
-                fingerprint != record.calibration_sha256
-                or snapshot != record.calibration_json
-            ):
+            if fingerprint != record.calibration_sha256 or snapshot != record.calibration_json:
                 raise ValidationError("Ecological calibration source or frozen snapshot changed")
         return records
 
