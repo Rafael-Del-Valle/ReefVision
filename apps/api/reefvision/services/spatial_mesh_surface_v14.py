@@ -286,8 +286,13 @@ def measure_mesh_preview(
         "surface_area_m2": area_m2,
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_dimension_scale_intervals_m": (
-            [[dimension * (1 - relative_scale_uncertainty), dimension * (1 + relative_scale_uncertainty)]
-             for dimension in dimensions]
+            [
+                [
+                    dimension * (1 - relative_scale_uncertainty),
+                    dimension * (1 + relative_scale_uncertainty),
+                ]
+                for dimension in dimensions
+            ]
             if relative_scale_uncertainty is not None
             else None
         ),
@@ -354,7 +359,10 @@ def measure_mesh_preview(
         "edge_connected_patch_dimension_scale_intervals_m": (
             [
                 [
-                    [dimension * (1 - relative_scale_uncertainty), dimension * (1 + relative_scale_uncertainty)]
+                    [
+                        dimension * (1 - relative_scale_uncertainty),
+                        dimension * (1 + relative_scale_uncertainty),
+                    ]
                     for dimension in patch_dimensions
                 ]
                 for patch_dimensions in patch_dimensions_m
