@@ -18,11 +18,13 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowPortDefinition,
 )
 from reefvision.services import workflow_runtime_adapters as runtime_adapters
+from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.services.spatial_point_cloud_v14 import preview_point_cloud_from_request
 
 NODE_TYPE = "mesh_surface_preview"
 POINT_NODE_TYPE = "point_cloud_preview"
+LONGITUDINAL_NODE_TYPE = "mesh_longitudinal_comparison"
 
 
 def extend_mesh_registry(
@@ -125,6 +127,43 @@ def extend_mesh_registry(
                 "Not a persistent asset importer or interactive viewer.",
             ],
         )
+        nodes[LONGITUDINAL_NODE_TYPE] = WorkflowNodeDefinitionResponse(
+            node_type=LONGITUDINAL_NODE_TYPE,
+            display_name="3D Mesh Longitudinal Comparison (Provisional)",
+            category="Scientific analysis",
+            description="Compare two unverified mesh observations without inferring coral growth.",
+            input_ports=[
+                WorkflowPortDefinition(
+                    port_id="before",
+                    display_name="Earlier mesh observation",
+                    accepted_types=["mesh_measurement_preview"],
+                ),
+                WorkflowPortDefinition(
+                    port_id="after",
+                    display_name="Later mesh observation",
+                    accepted_types=["mesh_measurement_preview"],
+                ),
+            ],
+            output_ports=[
+                WorkflowPortDefinition(
+                    port_id="comparison",
+                    display_name="Provisional longitudinal comparison",
+                    accepted_types=["mesh_longitudinal_comparison"],
+                    required=False,
+                    multiple=True,
+                )
+            ],
+            required_parameters=[],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Both observations must have the same provisional specimen identifier.",
+                "Observation IDs must differ and timestamps must increase.",
+                "No identity, calibration, registration or biological growth is verified.",
+                "Conservative area-difference bounds reflect scale uncertainty only.",
+            ],
+        )
         return nodes
 
     return registry
@@ -182,8 +221,44 @@ def execute_point_cloud_preview(
     ]
 
 
+
+
+def execute_mesh_longitudinal_comparison(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del session, settings
+    if parameters:
+        raise ValidationError("Longitudinal comparison takes no node parameters")
+    records: list[dict[str, Any]] = []
+    for port in ("before", "after"):
+        artifacts = inputs.get(port, [])
+        if (
+            len(artifacts) != 1
+            or artifacts[0].data_type != "mesh_measurement_preview"
+            or (artifacts[0].payload_json or {}).get("project_id") != project_id
+        ):
+            raise ValidationError("Each longitudinal input must be one current-project mesh preview")
+        records.append(artifacts[0].payload_json)
+    try:
+        result = compare_mesh_observations(records[0], records[1])
+    except ValueError as exc:
+        raise ValidationError(f"Invalid longitudinal comparison: {exc}") from exc
+    return [
+        {
+            "port_id": "comparison",
+            "data_type": "mesh_longitudinal_comparison",
+            "payload": result,
+        }
+    ]
+
 def register_mesh_adapter() -> None:
     runtime_adapters.RUNTIME_ADAPTER_NODE_TYPES.add(NODE_TYPE)
     runtime_adapters._ADAPTERS[NODE_TYPE] = execute_mesh_preview
     runtime_adapters.RUNTIME_ADAPTER_NODE_TYPES.add(POINT_NODE_TYPE)
     runtime_adapters._ADAPTERS[POINT_NODE_TYPE] = execute_point_cloud_preview
+    runtime_adapters.RUNTIME_ADAPTER_NODE_TYPES.add(LONGITUDINAL_NODE_TYPE)
+    runtime_adapters._ADAPTERS[LONGITUDINAL_NODE_TYPE] = execute_mesh_longitudinal_comparison
