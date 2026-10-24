@@ -327,20 +327,16 @@ def summarize_projected_population_summaries(
         sample_sd_percent: float | None = None
         if count >= 2:
             try:
-                sample_sd_absolute = math.sqrt(
-                    math.fsum(
-                        (float(row.mean_absolute_change) - mean_absolute) ** 2
-                        for row in records
-                    )
-                    / (count - 1)
-                )
-                sample_sd_percent = math.sqrt(
-                    math.fsum(
-                        (float(row.mean_percent_change) - mean_percent) ** 2
-                        for row in records
-                    )
-                    / (count - 1)
-                )
+                # hypot avoids squaring overflow for finite, large unit-level
+                # changes when the sample standard deviation is itself finite.
+                absolute_deviations = [
+                    float(row.mean_absolute_change) - mean_absolute for row in records
+                ]
+                percent_deviations = [
+                    float(row.mean_percent_change) - mean_percent for row in records
+                ]
+                sample_sd_absolute = math.hypot(*absolute_deviations) / math.sqrt(count - 1)
+                sample_sd_percent = math.hypot(*percent_deviations) / math.sqrt(count - 1)
             except (OverflowError, ValueError) as exc:
                 raise ValidationError("Projected unit dispersion is nonfinite") from exc
             if not math.isfinite(sample_sd_absolute) or not math.isfinite(sample_sd_percent):

@@ -411,14 +411,47 @@ def test_population_rejects_one_organism_reused_across_declared_units() -> None:
             "sampling_windows_utc": ["2026-04-03/2026-04-05"],
         }
     )
-    with pytest.raises(
-        ValidationError, match="pooled across declared experimental units"
-    ):
+    with pytest.raises(ValidationError, match="pooled across declared experimental units"):
         summarize_projected_population_summaries([base, moved])
     # Different metrics on the same organism are distinct measurements,
     # not duplicate organism replicates of the same response.
     different_metric = moved.model_copy(update={"metric": "box_height"})
     assert len(summarize_projected_population_summaries([base, different_metric])) == 2
+
+
+def test_projected_population_sd_is_stable_for_large_finite_unit_changes() -> None:
+    """Large finite unit changes must not overflow from squaring deviations."""
+    first = EcologyProjectedUnitSummary(
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
+        metric="box_width",
+        units=["mm"],
+        organism_keys=["A"],
+        complete_organism_keys=["A"],
+        incomplete_organism_keys=[],
+        parent_colony_keys=["colony-A"],
+        sampling_windows_utc=["2026-04-03/2026-04-04"],
+        unit_status="candidate",
+        mean_absolute_change=1e155,
+        mean_percent_change=10.0,
+    )
+    second = first.model_copy(
+        update={
+            "experimental_unit_id": "tank-B",
+            "organism_keys": ["B"],
+            "complete_organism_keys": ["B"],
+            "parent_colony_keys": ["colony-B"],
+            "mean_absolute_change": 2e155,
+            "mean_percent_change": 30.0,
+        }
+    )
+    summary = summarize_projected_population_summaries([second, first])[0]
+    assert summary.declared_unit_count == 2
+    assert summary.mean_unit_absolute_change == pytest.approx(1.5e155)
+    assert summary.sample_sd_unit_absolute_change == pytest.approx(7.071067811865475e154)
+    assert summary.sample_sd_unit_percent_change == pytest.approx(14.142135623730951)
+    assert summary.independent_unit_inference_allowed is False
+    assert summary.review_gate == "scientist_review_required"
 
 
 def test_population_design_review_flags_missing_parent_without_inference() -> None:

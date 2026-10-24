@@ -1078,3 +1078,22 @@ organism exclusion; the existing saved-workflow/API artifact-parity test
 covers serialization through the executable typed port. Exact-head CI,
 representative scientific review, full migration reconciliation and
 installed Windows acceptance remain required.
+
+## Numerically stable declared-unit dispersion (2026-10-24; development only)
+
+The source-linked projected population summary now computes descriptive sample
+standard deviation with a scaled Euclidean norm (math.hypot) rather than
+squaring unit-mean deviations directly. This avoids an intermediate overflow
+for large but finite projected changes whose standard deviation is representable
+as a finite float. The denominator remains **n declared units - 1**, never
+n fragments or n images; single-unit strata continue to return null SD.
+The CI formatter discrepancies in the previous head's schema and regression
+test were also corrected. A focused scientific regression covers finite
+unit means around 10^155, where direct squared deviations would overflow,
+and confirms the result still prohibits inferential claims. The existing
+standalone API and saved Workflow Builder artifact share this service and
+typed schema; no new migration or workflow port is needed. The evidence remains
+linked_unverified, requires scientist review, and does not establish
+independent replication or biological growth. Exact-head CI, scientific
+acceptance, migration reconciliation and installed Windows GUI tests remain
+required.

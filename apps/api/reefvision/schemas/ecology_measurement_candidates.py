@@ -129,12 +129,8 @@ class EcologyProjectedPopulationSummary(BaseModel):
     units_missing_parent_colony: list[str]
     mean_unit_absolute_change: float = Field(allow_inf_nan=False)
     mean_unit_percent_change: float = Field(allow_inf_nan=False)
-    sample_sd_unit_absolute_change: float | None = Field(
-        default=None, ge=0, allow_inf_nan=False
-    )
-    sample_sd_unit_percent_change: float | None = Field(
-        default=None, ge=0, allow_inf_nan=False
-    )
+    sample_sd_unit_absolute_change: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    sample_sd_unit_percent_change: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     design_review_blockers: list[
         Literal[
             "independence_not_authenticated",
