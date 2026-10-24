@@ -243,6 +243,15 @@ class WorkflowGraphService:
                     node_id=node_id,
                 )
             )
+        elif not isinstance(dataset.manifest_json, dict):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_manifest_corrupt",
+                    "Frozen pose dataset manifest must be a JSON object",
+                    node_id=node_id,
+                )
+            )
         elif canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
             issues.append(
                 self._issue(
