@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -114,6 +114,30 @@ class EcologyAnnotationEvidenceRow(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
 
 
+class EcologyCalibrationEvidenceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    annotation_evidence_id: str = Field(min_length=36, max_length=36)
+    expected_annotation_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+    confirm_source_calibration: Literal[True]
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class EcologyCalibrationEvidenceRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    annotation_evidence_id: str
+    image_id: str
+    image_sha256: str
+    calibration_json: dict[str, Any]
+    calibration_sha256: str
+    reason: str
+    created_at: datetime
+    evidence_level: Literal["linked_unverified"] = "linked_unverified"
+
+
 class EcologyIdentityRegistryResponse(BaseModel):
     schema_version: Literal["ecology-identity-registry-0001"] = "ecology-identity-registry-0001"
     project_id: str
@@ -125,6 +149,9 @@ class EcologyIdentityRegistryResponse(BaseModel):
     annotation_evidence_links: list[EcologyAnnotationEvidenceRow] = Field(default_factory=list)
     annotation_evidence_count: int = 0
     annotation_evidence_sha256: str | None = None
+    calibration_evidence_links: list[EcologyCalibrationEvidenceRow] = Field(default_factory=list)
+    calibration_evidence_count: int = 0
+    calibration_evidence_sha256: str | None = None
     # Optional defaults preserve deserialization of earlier persisted artifacts.
     history_sha256: str | None = None
     history_revision_count: int = 0
