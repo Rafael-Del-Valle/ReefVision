@@ -71,6 +71,67 @@ def test_log_tail_omits_oversized_unterminated_line(tmp_path: Path) -> None:
     assert log.read_bytes() == original
 
 
+
+
+def test_live_log_tail_waits_for_complete_loss_record(tmp_path: Path) -> None:
+    """An in-progress worker write must not look like a finished loss value."""
+    log = tmp_path / "training.log"
+    partial = b"epoch=3\ntrain/box_loss=0."
+    log.write_bytes(partial)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "epoch=3\n",
+    }
+    assert log.read_bytes() == partial
+
+    with log.open("ab") as handle:
+        handle.write(b"25\ntrain/cls_loss=0.3")
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "epoch=3\ntrain/box_loss=0.25\n",
+    }
+
+    with log.open("ab") as handle:
+        handle.write(b"0\ntrain/dfl_loss=0.10\n")
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "epoch=3\ntrain/box_loss=0.25\n"
+            "train/cls_loss=0.30\ntrain/dfl_loss=0.10\n"
+        ),
+    }
+
+
+def test_live_log_tail_accepts_carriage_return_progress_records(
+    tmp_path: Path,
+) -> None:
+    """CR progress is complete, but the currently written line is not."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\rtrain/box_loss=0.22\rtrain/dfl_loss=0."
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "epoch=4\ntrain/box_loss=0.22\n",
+    }
+    assert log.read_bytes() == original
+
+
+def test_live_log_tail_omits_unterminated_only_record(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = b"train/box_loss=0.2"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "",
+    }
+    assert log.read_bytes() == original
+
+
 @pytest.mark.parametrize("filename", ["../private.log", "reefvision.db", "private.csv"])
 def test_log_tail_rejects_unsafe_paths(tmp_path: Path, filename: str) -> None:
     if filename.startswith("../"):
