@@ -819,6 +819,51 @@ describe("Gallery", () => {
     ).toBeInTheDocument();
   });
 
+  it("recovers a failed thumbnail when its background job publishes a new path", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const response = (thumbnailPath: string) => ({
+      items: [{ ...image, thumbnail_path: thumbnailPath }],
+      total: 1,
+      page: 1,
+      page_size: 24,
+      pages: 1,
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(response("projects/project-1/images/thumbnails/old.jpg")),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Gallery project={project} />
+      </QueryClientProvider>,
+    );
+    const failed = await screen.findByAltText("Thumbnail of swiftia-01.png");
+    const failedUrl = failed.getAttribute("src");
+    fireEvent.error(failed);
+    expect(
+      screen.queryByAltText("Thumbnail of swiftia-01.png"),
+    ).not.toBeInTheDocument();
+
+    const updated = response("projects/project-1/images/thumbnails/new.jpg");
+    await act(async () => {
+      queryClient.setQueriesData({ queryKey: ["images", project.id] }, updated);
+    });
+    const recovered = await screen.findByAltText("Thumbnail of swiftia-01.png");
+    expect(recovered.getAttribute("src")).not.toBe(failedUrl);
+    expect(recovered.getAttribute("src")).toContain("rv_thumb=");
+
+    // A normal query refresh with the same path must not retry indefinitely.
+    fireEvent.error(recovered);
+    await act(async () => {
+      queryClient.setQueriesData({ queryKey: ["images", project.id] }, response(updated.items[0].thumbnail_path));
+    });
+    expect(
+      screen.queryByAltText("Thumbnail of swiftia-01.png"),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps focus navigation inside the horizontal filmstrip", async () => {
     const secondImage: ProjectImage = {
       ...image,
