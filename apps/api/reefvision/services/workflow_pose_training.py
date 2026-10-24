@@ -138,6 +138,9 @@ def _pose_dataset(
     if dataset.status != "complete" or (dataset.item_count or 0) < 1:
         raise ValidationError(f"Pose {role} dataset must be complete and contain verified items")
 
+    if not isinstance(dataset.manifest_json, dict):
+        raise ValidationError(f"Pose {role} dataset manifest must be a JSON object")
+
     if canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
         raise ValidationError(
             f"Pose {role} dataset manifest checksum no longer matches frozen truth"
