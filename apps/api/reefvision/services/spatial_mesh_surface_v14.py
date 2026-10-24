@@ -445,6 +445,14 @@ def measure_mesh_preview(
         "degenerate_face_count": degenerate,
         "boundary_edge_count": boundary,
         "boundary_edge_length_m": boundary_length_m,
+        "boundary_edge_length_scale_interval_m": (
+            [
+                boundary_length_m * (1 - relative_scale_uncertainty),
+                boundary_length_m * (1 + relative_scale_uncertainty),
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "surface_edge_paths": spatial_mesh_paths_v14.mesh_edge_paths(
             points, faces, surface_path_vertex_pairs, scale, relative_scale_uncertainty
         ),
@@ -469,6 +477,17 @@ def measure_mesh_preview(
         ],
         "edge_connected_patch_boundary_edge_counts": patch_boundary_edge_counts,
         "edge_connected_patch_boundary_edge_lengths_m": patch_boundary_lengths_m,
+        "edge_connected_patch_boundary_length_scale_intervals_m": (
+            [
+                [
+                    length * (1 - relative_scale_uncertainty),
+                    length * (1 + relative_scale_uncertainty),
+                ]
+                for length in patch_boundary_lengths_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "edge_connected_patch_boundary_length_scale_uncertainties_m": (
             [length * relative_scale_uncertainty for length in patch_boundary_lengths_m]
             if relative_scale_uncertainty is not None
@@ -548,11 +567,7 @@ def measure_mesh_preview(
             + (["nonmanifold_mesh_edges"] if nonmanifold else [])
             + (["disconnected_mesh_patches"] if edge_connected_patch_count > 1 else [])
             + (["vertex_touching_mesh_patches"] if vertex_touching_patch_vertices else [])
-            + (
-                ["coincident_mesh_patch_coordinates"]
-                if coincident_patch_coordinates
-                else []
-            )
+            + (["coincident_mesh_patch_coordinates"] if coincident_patch_coordinates else [])
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
             + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
             + (
