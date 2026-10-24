@@ -506,3 +506,13 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Four new parameterized corruption/repair regressions cover existing-but-mismatched queue, item, project, and paired queue/item references; existing orphan, preservation, upgrade/downgrade, and file-backed SQLite cases remain. Exact Ruff formatting corrections to the prior regression file were applied.
 - An isolated Python sqlite3 query smoke reproduced 6/6 valid/orphan/cross-scope outcomes. This does **not** establish that repository pytest, Ruff, or migration integration tests pass. Exact-head GitHub Actions results must be checked.
 - Version remains **HOLD** pending full CI, cross-version Alembic 0038 reconciliation, scientific Workflow Builder acceptance, and native Windows MSI upgrade/rollback and installed-GUI validation. No completion marker or release authorization.
+
+
+### 2026-10-24 — Desktop migration 0039 CI repair and at-head lineage safety
+
+- Inspected draft PR #77 and #71, master issue #76, prior roadmap and exact-head CI at `5b4cdfb1`. The 1.6 branch remains isolated from 1.1's incompatible `0038` migration.
+- **Observed CI failure:** 18/20 Actions workflows succeeded; backend CI and 1.0 Acceptance failed with the same three regressions (1299 backend passed, 32 skipped, 3 failed). Two real desktop migration assertions and one mocked upgrade fixture still expected `0038` after additive `0039` became head.
+- Updated real SQLite fresh/restart and `0037` downgrade/re-upgrade tests to require persisted revision `0039`; corrected the mocked upgrade fixture to report `0039`.
+- Closed an additional startup safety gap: the desktop lineage guard now validates review-event table columns and incompatible scientific tables for **both** stamped `0038` and already-at-head `0039` databases. Parameterized native/foreign-lineage tests exercise both revisions, including no mutation on refusal; the at-head runtime fixture includes the expected table.
+- **Isolated validation:** four SQLite/SQLAlchemy smoke cases (native vs incompatible schema for each revision) passed. This is a local reproduction, not full ReefVision pytest or native Windows validation. New exact-head CI was queued at inspection; no CI pass is claimed.
+- **HOLD:** still requires exact-head backend/frontend/E2E/Windows checks, cross-version Alembic reconciliation, native installed-GUI MSI upgrade/rollback, and representative scientific/Workflow Builder acceptance. No release/completion marker.
