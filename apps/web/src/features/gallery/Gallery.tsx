@@ -62,6 +62,13 @@ function ImageCard({
     setStatus(image.annotation_status);
   }, [image]);
 
+  // A thumbnail job can finish after an earlier 404. Retry only when its
+  // persisted path changes; ordinary query refreshes must not retry a
+  // permanently broken thumbnail on every render.
+  useEffect(() => {
+    setThumbnailFailed(false);
+  }, [image.thumbnail_path]);
+
   const update = useMutation({
     mutationFn: () =>
       updateImage(image.id, {
@@ -91,7 +98,7 @@ function ImageCard({
       <div className="thumbnail-frame">
         {image.thumbnail_path && !thumbnailFailed ? (
           <img
-            src={imageThumbnailUrl(image.id)}
+            src={`${imageThumbnailUrl(image.id)}&rv_thumb=${encodeURIComponent(image.thumbnail_path)}`}
             alt={`Thumbnail of ${image.original_filename}`}
             loading="lazy"
             decoding="async"
