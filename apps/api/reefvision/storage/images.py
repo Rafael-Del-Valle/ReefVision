@@ -124,9 +124,26 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
         (306, 36880, 37520),
     ):
         raw = exif.get(key)
-        if not isinstance(raw, str):
+        if raw is None:
             continue
+        # A present but malformed exposure timestamp is not evidence that a
+        # later digitization or file-modification timestamp is the exposure.
+        # Some camera libraries return ASCII EXIF values as bytes.
+        if isinstance(raw, bytes):
+            try:
+                raw = raw.decode("ascii").rstrip("\x00")
+            except UnicodeDecodeError:
+                return None
+        if not isinstance(raw, str):
+            return None
         offset = exif.get(offset_key)
+        if isinstance(offset, bytes):
+            try:
+                offset = offset.decode("ascii").rstrip("\x00")
+            except UnicodeDecodeError:
+                return None
+        if offset is not None and not isinstance(offset, str):
+            return None
         try:
             if isinstance(offset, str) and offset:
                 timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
@@ -134,7 +151,9 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
                 # Preserve the existing legacy behavior for offset-free images.
                 timestamp = datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
         except ValueError:
-            continue
+            # Do not silently substitute DateTimeDigitized/DateTime when a
+            # higher-priority acquisition field exists but cannot be trusted.
+            return None
 
         fraction = exif.get(subsec_key)
         if isinstance(fraction, bytes):
