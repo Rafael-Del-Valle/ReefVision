@@ -185,12 +185,14 @@ def measure_mesh_preview(
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
     # Edge incidents belong to one edge-connected patch. Report topology QC
     # per patch so a defective surface is not hidden by an aggregate count.
+    patch_edge_counts: Counter[int] = Counter()
     patch_boundary_edges: Counter[int] = Counter()
     patch_nonmanifold_edges: Counter[int] = Counter()
     patch_winding_edges: Counter[int] = Counter()
     patch_boundary_lengths_mesh_units: dict[int, float] = {}
     for (a, b), incidents in edge_faces.items():
         patch = root(incidents[0][0])
+        patch_edge_counts[patch] += 1
         if len(incidents) == 1:
             patch_boundary_edges[patch] += 1
             patch_boundary_lengths_mesh_units[patch] = patch_boundary_lengths_mesh_units.get(
@@ -200,6 +202,13 @@ def measure_mesh_preview(
             patch_nonmanifold_edges[patch] += 1
         elif incidents[0][1] == incidents[1][1]:
             patch_winding_edges[patch] += 1
+    # Combinatorial Euler characteristic V - E + F, per edge-connected patch.
+    # Even a closed patch can have singular vertices or self-intersections;
+    # this diagnostic is not a genus estimate or biological completeness proof.
+    patch_euler_characteristics = [
+        len(patch_vertex_indices[patch]) - patch_edge_counts[patch] + patch_face_counts[patch]
+        for patch in ordered_patches
+    ]
     patch_boundary_edge_counts = [patch_boundary_edges[patch] for patch in ordered_patches]
     patch_nonmanifold_edge_counts = [patch_nonmanifold_edges[patch] for patch in ordered_patches]
     patch_winding_edge_counts = [patch_winding_edges[patch] for patch in ordered_patches]
@@ -220,9 +229,7 @@ def measure_mesh_preview(
             or patch_degenerate_faces[patch]
         ):
             patch_volumes_m3.append(None)
-            volume_qc_warnings.add(
-                "enclosed_volume_requires_closed_oriented_nondegenerate_patch"
-            )
+            volume_qc_warnings.add("enclosed_volume_requires_closed_oriented_nondegenerate_patch")
             continue
         try:
             raw_volume = abs(
@@ -413,6 +420,11 @@ def measure_mesh_preview(
         "nonmanifold_edge_count": nonmanifold,
         "edge_connected_patch_count": edge_connected_patch_count,
         "edge_connected_patch_face_counts": [patch_face_counts[patch] for patch in ordered_patches],
+        "edge_connected_patch_vertex_counts": [
+            len(patch_vertex_indices[patch]) for patch in ordered_patches
+        ],
+        "edge_connected_patch_edge_counts": [patch_edge_counts[patch] for patch in ordered_patches],
+        "edge_connected_patch_euler_characteristics": patch_euler_characteristics,
         "edge_connected_patch_geometry_sha256": patch_geometry_hashes,
         "edge_connected_patch_degenerate_face_counts": [
             patch_degenerate_faces[patch] for patch in ordered_patches
