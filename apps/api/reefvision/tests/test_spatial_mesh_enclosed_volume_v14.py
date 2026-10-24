@@ -59,9 +59,9 @@ def test_closed_tetrahedron_surface_volume_ratio_and_inverse_scale_bounds() -> N
     assert result["surface_to_enclosed_volume_ratio_scale_interval_per_m"] == pytest.approx(
         [expected / 1.1, expected / 0.9]
     )
-    assert result[
-        "edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"
-    ][0] == pytest.approx([expected / 1.1, expected / 0.9])
+    assert result["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"][
+        0
+    ] == pytest.approx([expected / 1.1, expected / 0.9])
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
 
