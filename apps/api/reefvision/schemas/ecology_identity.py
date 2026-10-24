@@ -17,7 +17,9 @@ class EcologyIdentityFields(BaseModel):
 
     kind: Literal["colony", "fragment", "individual"]
     parent_colony_key: str | None = Field(
-        default=None, min_length=1, max_length=100,
+        default=None,
+        min_length=1,
+        max_length=100,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
     )
     experimental_unit_type: str | None = Field(default=None, max_length=100)
@@ -40,7 +42,8 @@ class EcologyIdentityFields(BaseModel):
 
 class EcologyIdentityCreate(EcologyIdentityFields):
     organism_key: str = Field(
-        min_length=1, max_length=100,
+        min_length=1,
+        max_length=100,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
     )
 
@@ -65,9 +68,7 @@ class EcologyIdentityRow(BaseModel):
 
 
 class EcologyIdentityRegistryResponse(BaseModel):
-    schema_version: Literal["ecology-identity-registry-0001"] = (
-        "ecology-identity-registry-0001"
-    )
+    schema_version: Literal["ecology-identity-registry-0001"] = "ecology-identity-registry-0001"
     project_id: str
     identities: list[EcologyIdentityRow]
     snapshot_sha256: str
