@@ -39,19 +39,20 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["delta_surface_area_m2"] == pytest.approx(0.5)
-    assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx(
-        [0.205, 0.805]
-    )
+    assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
     assert expected["elapsed_days"] == pytest.approx(1)
+    assert expected["average_surface_area_change_m2_per_day"] == pytest.approx(0.5)
+    rate_bounds = expected["average_surface_area_change_scale_interval_m2_per_day"]
+    assert rate_bounds == pytest.approx([0.205, 0.805])
+    assert "average_change_per_day_is_not_a_biological_growth_rate" in expected["qc_warnings"]
     assert expected["measurement_status"] == "provisional_unverified_longitudinal_comparison"
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     node = next(
-        item for item in registry.json()
-        if item["node_type"] == "mesh_longitudinal_comparison"
+        item for item in registry.json() if item["node_type"] == "mesh_longitudinal_comparison"
     )
     assert node["executable"] is True
     assert [port["accepted_types"] for port in node["input_ports"]] == [
@@ -113,7 +114,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_longitudinal_comparison"
     )
     assert artifact["payload_json"] == expected
@@ -170,6 +172,8 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
     result = compare_mesh_observations(base, later)
     assert result["delta_surface_area_m2"] == 1
     assert result["delta_surface_area_scale_interval_m2"] is None
+    assert result["average_surface_area_change_m2_per_day"] == pytest.approx(1)
+    assert result["average_surface_area_change_scale_interval_m2_per_day"] is None
     assert result["relative_surface_area_scale_interval_percent"] is None
     assert "scale_uncertainty_interval_unavailable" in result["qc_warnings"]
     with pytest.raises(ValueError, match="verification state"):
@@ -177,3 +181,22 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
             {**base, "provenance": {**base["provenance"], "calibration_verified": True}},
             later,
         )
+
+
+def test_mesh_comparison_average_rate_preserves_negative_change(client: TestClient) -> None:
+    project_id = str(create_project(client, "Mesh declining area")["id"])
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
+        json={
+            "before": _mesh("early", "2026-10-01T12:00:00Z", 2),
+            "after": _mesh("late", "2026-10-03T12:00:00Z", 1),
+        },
+    )
+    assert response.status_code == 200, response.text
+    comparison = response.json()
+    assert comparison["elapsed_days"] == pytest.approx(2)
+    assert comparison["delta_surface_area_m2"] == pytest.approx(-0.5)
+    assert comparison["average_surface_area_change_m2_per_day"] == pytest.approx(-0.25)
+    rate_bounds = comparison["average_surface_area_change_scale_interval_m2_per_day"]
+    assert rate_bounds == pytest.approx([-0.4025, -0.1025])
+    assert comparison["provenance"]["coordinate_registration_verified"] is False
