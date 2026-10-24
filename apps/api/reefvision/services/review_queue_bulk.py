@@ -7,11 +7,13 @@ All items are validated before any state is changed; one transaction commits the
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import ReviewQueue, ReviewQueueItem
+from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.review_queues import (
     ReviewQueueBulkRequest,
@@ -67,22 +69,43 @@ def bulk_triage_review_queue(
 
     now = datetime.now(UTC)
     changed = 0
+    changed_ids: set[str] = set()
     for item in ordered:
         if request.action == "start" and item.review_state == "pending":
             item.review_state = "in_progress"
             item.started_at = now
             changed += 1
+            changed_ids.add(item.id)
         elif request.action == "skip" and item.review_state != "skipped":
             item.review_state = "skipped"
             item.skip_reason = reason
             item.completed_at = None
             changed += 1
+            changed_ids.add(item.id)
         elif request.action == "return" and item.review_state == "skipped":
             item.review_state = "pending"
             item.returned_at = now
             changed += 1
+            changed_ids.add(item.id)
 
     if changed:
+        # Record only actual state transitions. Persist events and state changes
+        # in one transaction so an interrupted batch cannot leave partial audit.
+        # Retried identical requests are no-ops and do not duplicate events.
+        for item in ordered:
+            if item.id not in changed_ids:
+                continue
+            session.add(
+                ReviewQueueItemEvent(
+                    review_queue_id=queue_id,
+                    review_queue_item_id=item.id,
+                    project_id=item.project_id,
+                    client_request_id=str(uuid4()),
+                    event_type=f"triage_{request.action}",
+                    actor=request.actor,
+                    comment=reason if request.action == "skip" else None,
+                )
+            )
         session.commit()
         for item in ordered:
             session.refresh(item)
