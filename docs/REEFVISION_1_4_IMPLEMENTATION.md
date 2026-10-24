@@ -129,3 +129,27 @@ nonmanifold vertices, and reconstruction artifacts can invalidate topological
 interpretation even when edge incidence appears closed. Geometry and
 calibration remain caller-supplied and unverified; no genus or longitudinal
 reidentification is inferred from these counts.
+
+
+## Boundary-component lengths (provisional)
+
+The mesh preview engine now reports `boundary_loop_perimeters_m` for
+individual simple closed boundary-edge cycles and
+`noncycle_boundary_component_lengths_m` for branching/pinched/open
+boundary components. Per-edge-connected-patch nested arrays retain
+component membership. Component order is deterministic by the smallest
+source vertex index within each patch. The total of these lengths
+equals the mesh boundary-edge length, within floating-point rounding.
+
+For each component length `L` and caller-supplied relative calibration
+uncertainty `u`, the optional scale-only interval is
+`[L * (1-u), L * (1+u)]`. The global and per-patch fields preserve
+`null` when uncertainty is not supplied, rather than implying zero
+uncertainty. The standalone API and saved executable `mesh_surface_preview`
+Workflow Builder node use the same engine and persist the same results.
+
+A topological boundary loop is **not** a confirmed biological opening,
+coral branch circumference, skeleton centerline, or organism identity.
+These measurements remain `caller_supplied_unverified`, even when a
+numerical uncertainty interval is provided. Reconstruction defects,
+registration uncertainty, and observer error are not represented.
