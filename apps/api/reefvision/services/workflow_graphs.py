@@ -29,6 +29,7 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowPlanInputBinding,
     WorkflowPlanStep,
 )
+from reefvision.services.pose_training_datasets import frozen_pose_item_fingerprints_match
 from reefvision.services.workflow_node_registry import workflow_node_registry
 from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
 from reefvision.storage.datasets import canonical_json_sha256
@@ -307,6 +308,15 @@ class WorkflowGraphService:
                     "error",
                     "pose_dataset_item_count_mismatch",
                     "Frozen pose dataset item count differs from its signed manifest",
+                    node_id=node_id,
+                )
+            )
+        elif not frozen_pose_item_fingerprints_match(self.session, dataset):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_item_lineage_mismatch",
+                    "Frozen pose item fingerprints differ from persisted verified items",
                     node_id=node_id,
                 )
             )
