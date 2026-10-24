@@ -801,3 +801,104 @@ def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
     assert "pose_dataset_manifest_corrupt" in result["run"]["error_message"]
     assert expected_error in result["run"]["error_message"]
     assert result["artifacts"] == []
+
+
+def test_frozen_pose_review_evidence_corruption_fails_closed(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Reuse the scientist-verified persisted dataset rather than a synthetic
+    # manifest. Corrupt only its frozen review/acquisition JSON columns.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    dataset_id = str(dataset["id"])
+    app = cast(FastAPI, client.app)
+    graph = {
+        "graph_id": "track-e-review-evidence-integrity",
+        "name": "Frozen review evidence integrity",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": {
+                    "dataset_id": dataset_id,
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+            }
+        ],
+        "edges": [],
+    }
+
+    with app.state.session_factory() as session:
+        service = PoseTrainingDatasetService(session)
+        assert service.manifest(dataset_id).manifest_sha256 == dataset["manifest_sha256"]
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
+        )
+        assert item is not None
+        original_review = dict(item.review_provenance_json)
+        original_acquisition = dict(item.acquisition_provenance_json)
+
+    cases = (
+        ("review_provenance_json", ["not-a-review-record"]),
+        (
+            "review_provenance_json",
+            {**original_review, "action": "skip_active_learning_pose"},
+        ),
+        (
+            "review_provenance_json",
+            {**original_review, "target_id": "unrelated-candidate"},
+        ),
+        ("acquisition_provenance_json", ["not-an-acquisition-record"]),
+    )
+    for field, invalid_value in cases:
+        with app.state.session_factory() as session:
+            item = session.scalar(
+                select(PoseTrainingDatasetItem).where(
+                    PoseTrainingDatasetItem.dataset_id == dataset_id
+                )
+            )
+            assert item is not None
+            setattr(item, field, invalid_value)
+            session.commit()
+
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ConflictError, match="item lineage no longer matches"),
+        ):
+            PoseTrainingDatasetService(session).manifest(dataset_id)
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ConflictError, match="item lineage no longer matches"),
+        ):
+            PoseTrainingDatasetService(session).native_package(dataset_id)
+
+        plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+        assert plan.status_code == 200, plan.text
+        assert plan.json()["valid"] is False
+        assert "pose_dataset_item_lineage_mismatch" in {
+            issue["code"] for issue in plan.json()["issues"]
+        }
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="item fingerprints no longer match"),
+        ):
+            execute_pose_training_dataset_adapter(
+                session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+            )
+
+        with app.state.session_factory() as session:
+            item = session.scalar(
+                select(PoseTrainingDatasetItem).where(
+                    PoseTrainingDatasetItem.dataset_id == dataset_id
+                )
+            )
+            assert item is not None
+            item.review_provenance_json = original_review
+            item.acquisition_provenance_json = original_acquisition
+            session.commit()
+
+    with app.state.session_factory() as session:
+        assert PoseTrainingDatasetService(session).manifest(dataset_id).manifest_sha256 == (
+            dataset["manifest_sha256"]
+        )
