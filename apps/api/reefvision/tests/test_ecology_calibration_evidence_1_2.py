@@ -156,3 +156,71 @@ def test_calibration_rejects_foreign_organism_and_nonfinite_source(
     invalid = _link_calibration(client, project_id, annotation)
     assert invalid.status_code == 400, invalid.text
     assert "nonfinite" in invalid.json()["detail"]
+
+
+def test_pixel_unit_calibration_cannot_enter_scientific_registry_or_workflow(
+    client: TestClient,
+) -> None:
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        metadata = dict(image.metadata_json or {})
+        calibration = dict(metadata["measurement_calibration"])
+        calibration["unit"] = "pixels"
+        metadata["measurement_calibration"] = calibration
+        image.metadata_json = metadata
+        session.commit()
+
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "physical length unit" in registry.json()["detail"]
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "failed"
+    assert "physical length unit" in workflow["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
+    )
+
+
+def test_nonfinite_camera_signature_rejected_before_link_and_after_link(
+    client: TestClient,
+) -> None:
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    app = cast(FastAPI, client.app)
+
+    def set_focal_length(value: float) -> None:
+        with app.state.session_factory() as session:
+            image = session.get(ImageAsset, image_id)
+            assert image is not None
+            metadata = dict(image.metadata_json or {})
+            calibration = dict(metadata["measurement_calibration"])
+            calibration["camera_signature"] = {"focal_length_mm": value}
+            metadata["measurement_calibration"] = calibration
+            image.metadata_json = metadata
+            session.commit()
+
+    set_focal_length(float("inf"))
+    invalid = _link_calibration(client, project_id, annotation)
+    assert invalid.status_code == 400, invalid.text
+    assert "nonfinite" in invalid.json()["detail"]
+
+    set_focal_length(85.0)
+    linked = _link_calibration(client, project_id, annotation)
+    assert linked.status_code == 201, linked.text
+
+    set_focal_length(float("inf"))
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "nonfinite" in registry.json()["detail"]
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "failed"
+    assert "nonfinite" in workflow["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
+    )
