@@ -516,3 +516,25 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Closed an additional startup safety gap: the desktop lineage guard now validates review-event table columns and incompatible scientific tables for **both** stamped `0038` and already-at-head `0039` databases. Parameterized native/foreign-lineage tests exercise both revisions, including no mutation on refusal; the at-head runtime fixture includes the expected table.
 - **Isolated validation:** four SQLite/SQLAlchemy smoke cases (native vs incompatible schema for each revision) passed. This is a local reproduction, not full ReefVision pytest or native Windows validation. New exact-head CI was queued at inspection; no CI pass is claimed.
 - **HOLD:** still requires exact-head backend/frontend/E2E/Windows checks, cross-version Alembic reconciliation, native installed-GUI MSI upgrade/rollback, and representative scientific/Workflow Builder acceptance. No release/completion marker.
+
+## 2026-10-24 — Stale 0039 QC event constraint safety
+
+- Inspected the 1.6 `0038`/ `0039` migrations, the read-only desktop
+  lineage guard, and the exact previous-head Actions logs. Backend CI,
+  pose validation and 1.0 acceptance all stopped at Ruff E501 in
+  `test_migration_lineage_guard_16.py`; the offending line was split.
+- A database could report Alembic `0039` while retaining the older named
+  `ck_review_queue_item_event_type` constraint from `0038`. The
+  read-only startup guard now rejects a **present but obsolete** named
+  event-type CHECK before Alembic or desktop startup can write to it.
+  It does not stamp a revision, recreate a table or delete audit history.
+- Standalone SQLite regression fixtures cover genuine `0038`, obsolete
+  `0039` and valid `0039` CHECK expressions and verify retained
+  version markers and event rows. A separate isolated SQLAlchemy/SQLite
+  reproduction passed 3/3 cases; the committed repository tests still
+  require exact-head CI confirmation.
+- **Limit:** this narrowly scoped check does not yet authenticate a
+  missing or renamed CHECK constraint; full schema verification and
+  cross-version Alembic reconciliation remain release blockers.
+- No changes to Workflow Builder's existing executable `qc_review_queue`
+  node, its saved runs or researcher approval gates. No merge or release.
