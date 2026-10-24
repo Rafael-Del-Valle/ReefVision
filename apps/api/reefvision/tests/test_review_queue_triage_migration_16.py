@@ -29,11 +29,27 @@ def _migration():
 
 def _legacy_schema(connection) -> None:
     connection.execute(text("CREATE TABLE projects (id VARCHAR(36) PRIMARY KEY)"))
-    connection.execute(text("CREATE TABLE review_queues (id VARCHAR(36) PRIMARY KEY)"))
-    connection.execute(text("CREATE TABLE review_queue_items (id VARCHAR(36) PRIMARY KEY)"))
+    connection.execute(
+        text(
+            "CREATE TABLE review_queues "
+            "(id VARCHAR(36) PRIMARY KEY, project_id VARCHAR(36) NOT NULL)"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE TABLE review_queue_items "
+            "(id VARCHAR(36) PRIMARY KEY, review_queue_id VARCHAR(36) NOT NULL, "
+            "project_id VARCHAR(36) NOT NULL)"
+        )
+    )
     connection.execute(text("INSERT INTO projects VALUES ('project')"))
-    connection.execute(text("INSERT INTO review_queues VALUES ('queue')"))
-    connection.execute(text("INSERT INTO review_queue_items VALUES ('item')"))
+    connection.execute(text("INSERT INTO projects VALUES ('other_project')"))
+    connection.execute(text("INSERT INTO review_queues VALUES ('queue', 'project')"))
+    connection.execute(text("INSERT INTO review_queues VALUES ('other_queue', 'other_project')"))
+    connection.execute(text("INSERT INTO review_queue_items VALUES ('item', 'queue', 'project')"))
+    connection.execute(
+        text("INSERT INTO review_queue_items VALUES ('other_item', 'other_queue', 'other_project')")
+    )
     connection.execute(
         text(
             "CREATE TABLE review_queue_item_events ("
@@ -190,6 +206,49 @@ def test_upgrade_refuses_orphan_audit_events_without_rewriting(
         )
         migration.upgrade()
         _insert(connection, "triage-after-repair", "triage_start")
+        assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_item_events")) == 2
+    engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("invalid_scope", "repaired_scope"),
+    [
+        ("review_queue_id='other_queue'", "review_queue_id='queue'"),
+        ("review_queue_item_id='other_item'", "review_queue_item_id='item'"),
+        ("project_id='other_project'", "project_id='project'"),
+        (
+            "review_queue_id='other_queue', review_queue_item_id='other_item'",
+            "review_queue_id='queue', review_queue_item_id='item'",
+        ),
+    ],
+)
+def test_upgrade_refuses_cross_scoped_audit_events_with_existing_parents(
+    monkeypatch, invalid_scope: str, repaired_scope: str
+) -> None:
+    # Every FK target exists, but the event's queue/item/project disagree.
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        _legacy_schema(connection)
+        migration = _migration()
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        connection.execute(
+            text(f"UPDATE review_queue_item_events SET {invalid_scope} WHERE id='original'")
+        )
+        with pytest.raises(RuntimeError, match="repair parent references and scope"):
+            migration.upgrade()
+        assert (
+            connection.scalar(
+                text("SELECT comment FROM review_queue_item_events WHERE id='original'")
+            )
+            == "preserve comment"
+        )
+        with pytest.raises(IntegrityError):
+            _insert(connection, "triage-before-scope-repair", "triage_start")
+        connection.execute(
+            text(f"UPDATE review_queue_item_events SET {repaired_scope} WHERE id='original'")
+        )
+        migration.upgrade()
+        _insert(connection, "triage-after-scope-repair", "triage_start")
         assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_item_events")) == 2
     engine.dispose()
 
