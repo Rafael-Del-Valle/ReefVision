@@ -260,10 +260,10 @@ def measure_mesh_preview(
             volume_qc_warnings.add("enclosed_volume_zero_or_underflow")
         else:
             patch_volumes_m3.append(calibrated_volume)
+    all_patches_have_volume = all(volume is not None for volume in patch_volumes_m3)
     enclosed_volume_m3 = (
         fsum(volume for volume in patch_volumes_m3 if volume is not None)
-        if all(volume is not None for volume in patch_volumes_m3)
-        and not vertex_touching_patch_vertices
+        if all_patches_have_volume and not vertex_touching_patch_vertices
         else None
     )
     if vertex_touching_patch_vertices:
