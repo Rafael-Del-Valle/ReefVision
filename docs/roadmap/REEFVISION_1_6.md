@@ -609,3 +609,27 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   user-data deletion was performed by this iteration. Windows interactive
   GUI, actual MSI upgrade/rollback, cross-version Alembic reconciliation and
   representative scientific data remain release blockers.
+
+## 2026-10-24 — Windows acceptance junction containment (Track D)
+
+- Audited the existing Windows clean-install/upgrade harness and its disposable
+  cleanup path after the offline-only CI run. The previous lexical-only
+  acceptance-root check did not reject a junction/symlink in an existing path
+  ancestor; a seemingly disposable directory could resolve into unrelated
+  research data. This is a validation safety gap, not a scientific feature.
+- The acceptance-root guard now rejects existing reparse-point ancestors before
+  MSI installation or disposable directory creation. Automatic run-root cleanup
+  also refuses any linked ancestor **or descendant** before recursion, even
+  when the generated run marker is present.
+- Added native Windows disposable-fixture regressions for a linked root,
+  a linked parent of a nonexistent run, a nested junction during cleanup, and
+  SHA-256 preservation of an unrelated sentinel. Fixtures are acyclic and
+  remove only their own generated directories/junctions.
+- Commits: `1bb90f7`, `e21589f`, `d81d13a`, `8b1940c`.
+  Exact GitHub source read-back and static invariants verified. Native PowerShell
+  regression, Windows installed-app upgrade/rollback, interactive GUI and
+  scientific acceptance still require exact-head CI or physical Windows tests.
+- Previous branch head `eb10fdaa` completed 20/20 Actions workflows,
+  including the offline-only disposable MSI install/persist/uninstall run.
+  That evidence **does not** validate these new path guards or a real upgrade.
+  No release, model acquisition, branch merge or user-data deletion.
