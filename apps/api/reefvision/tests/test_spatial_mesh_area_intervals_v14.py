@@ -64,7 +64,7 @@ def test_area_interval_missing_zero_and_full_scale_uncertainty(
 
 
 def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None:
-    project_id = str(create_project(client, "Mesh area scale interval"))
+    project_id = str(create_project(client, "Mesh area scale interval")["id"])
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/mesh-preview", json=PARAMETERS)
     assert standalone.status_code == 200, standalone.text
