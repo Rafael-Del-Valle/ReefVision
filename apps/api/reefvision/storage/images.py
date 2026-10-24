@@ -181,14 +181,18 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             width, height = image.size
             if width <= 0 or height <= 0:
                 raise InvalidImageError("Image dimensions must be greater than zero")
-            # verify() checks the JPEG structure, not complete pixel decoding.
-            # Reject truncated camera files before committing scientific images.
-            if decoded_format == "JPEG":
-                image.load()
+            # A valid container/header does not guarantee decodable pixels:
+            # TIFF, BMP, and GIF can pass verify() with truncated image data.
+            # Never commit a scientific image that cannot produce a rendition.
             if decoded_format == "GIF" and getattr(image, "n_frames", 1) != 1:
                 raise UnsupportedImageError(
                     "Animated GIFs cannot be safely imported as a single scientific image"
                 )
+            if decoded_format == "TIFF" and getattr(image, "n_frames", 1) != 1:
+                raise UnsupportedImageError(
+                    "Multi-page TIFFs cannot be safely imported as a single scientific image"
+                )
+            image.load()
             image_exif = image.getexif()
             exif = dict(image_exif)
             # Real cameras normally store DateTimeOriginal and OffsetTimeOriginal
