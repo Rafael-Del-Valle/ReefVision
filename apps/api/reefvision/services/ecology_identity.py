@@ -13,6 +13,9 @@ from reefvision.db.models.annotation import Annotation
 from reefvision.db.models.ecology_identity_annotation_evidence import (
     EcologyIdentityAnnotationEvidence,
 )
+from reefvision.db.models.ecology_identity_calibration_evidence import (
+    EcologyIdentityCalibrationEvidence,
+)
 from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
 from reefvision.db.models.image import ImageAsset
@@ -25,6 +28,8 @@ from reefvision.domain.experimental_unit_policy import require_ecological_unit_t
 from reefvision.schemas.ecology_identity import (
     EcologyAnnotationEvidenceCreate,
     EcologyAnnotationEvidenceRow,
+    EcologyCalibrationEvidenceCreate,
+    EcologyCalibrationEvidenceRow,
     EcologyIdentityCreate,
     EcologyIdentityFields,
     EcologyIdentityRegistryResponse,
@@ -33,6 +38,7 @@ from reefvision.schemas.ecology_identity import (
     EcologyImageEvidenceCreate,
     EcologyImageEvidenceRow,
 )
+from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.services.annotations import annotation_snapshot, mask_annotation_snapshot
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -467,6 +473,148 @@ class EcologyIdentityService:
                 raise ValidationError("Ecological annotation source revision is missing or changed")
         return records
 
+    @staticmethod
+    def _calibration_source(image: ImageAsset) -> tuple[dict[str, object], str]:
+        """Validate a saved image calibration; never infer scale from a detector candidate."""
+        metadata = image.metadata_json
+        raw = metadata.get("measurement_calibration") if isinstance(metadata, dict) else None
+        if not isinstance(raw, dict):
+            raise ValidationError("Ecological calibration evidence requires saved image calibration")
+        try:
+            calibration = MeasurementCalibrationUpdate.model_validate(raw)
+        except ValueError as exc:
+            raise ValidationError("Ecological image calibration metadata is invalid") from exc
+        for field in (
+            "distance_per_pixel",
+            "reference_length",
+            "reference_pixel_length",
+            "default_depth",
+            "confidence",
+        ):
+            value = getattr(calibration, field)
+            if value is not None and not math.isfinite(value):
+                raise ValidationError("Ecological calibration evidence contains nonfinite values")
+        signature = calibration.camera_signature
+        if signature is not None and (
+            (signature.width_px is not None and signature.width_px != image.width_px)
+            or (signature.height_px is not None and signature.height_px != image.height_px)
+        ):
+            raise ValidationError("Ecological calibration camera dimensions mismatch source image")
+        snapshot = calibration.model_dump(mode="json", exclude_none=True)
+        digest = canonical_json_sha256(
+            {
+                "algorithm_version": "ecology-calibration-source-0001",
+                "image_id": image.id,
+                "image_sha256": image.sha256,
+                "calibration": snapshot,
+            }
+        )
+        return snapshot, digest
+
+    def link_calibration(
+        self,
+        project_id: str,
+        organism_key: str,
+        payload: EcologyCalibrationEvidenceCreate,
+    ) -> EcologyCalibrationEvidenceRow:
+        """Append a reviewed-source calibration claim, never a verified measurement."""
+        self._project(project_id)
+        latest = self._latest(project_id)
+        self._assert_parent_links(latest)
+        self._assert_experimental_units(latest)
+        if organism_key not in latest:
+            raise NotFoundError("Ecological organism not found in project")
+        image_links = self._image_evidence(project_id, latest)
+        annotation_links = self._annotation_evidence(project_id, image_links)
+        annotation_link = next(
+            (row for row in annotation_links if row.id == payload.annotation_evidence_id),
+            None,
+        )
+        if annotation_link is None:
+            raise ValidationError("Calibration requires a current project annotation evidence link")
+        image_link = next(
+            (
+                row
+                for row in image_links
+                if row.id == annotation_link.image_evidence_id
+                and row.organism_key == organism_key
+            ),
+            None,
+        )
+        if image_link is None:
+            raise ValidationError("Calibration evidence must belong to the organism")
+        if annotation_link.annotation_sha256 != payload.expected_annotation_sha256:
+            raise ConflictError("Stale annotation fingerprint; reload before linking calibration")
+        image = self.session.get(ImageAsset, image_link.image_id)
+        if image is None or image.project_id != project_id:
+            raise ValidationError("Ecological calibration image source is missing")
+        snapshot, fingerprint = self._calibration_source(image)
+        existing = self.session.scalar(
+            select(EcologyIdentityCalibrationEvidence).where(
+                EcologyIdentityCalibrationEvidence.project_id == project_id,
+                EcologyIdentityCalibrationEvidence.annotation_evidence_id == annotation_link.id,
+            )
+        )
+        if existing is not None:
+            raise ConflictError("Calibration already linked to this annotation evidence")
+        record = EcologyIdentityCalibrationEvidence(
+            project_id=project_id,
+            annotation_evidence_id=annotation_link.id,
+            image_id=image.id,
+            image_sha256=image.sha256,
+            calibration_json=snapshot,
+            calibration_sha256=fingerprint,
+            reason=payload.reason,
+        )
+        self.session.add(record)
+        try:
+            self.session.commit()
+        except IntegrityError as exc:
+            self.session.rollback()
+            raise ConflictError("Concurrent or duplicate ecological calibration link") from exc
+        self.session.refresh(record)
+        return EcologyCalibrationEvidenceRow.model_validate(record)
+
+    def _calibration_evidence(
+        self,
+        project_id: str,
+        image_links: list[EcologyIdentityImageEvidence],
+        annotation_links: list[EcologyIdentityAnnotationEvidence],
+    ) -> list[EcologyIdentityCalibrationEvidence]:
+        images = {row.id: row for row in image_links}
+        annotations = {row.id: row for row in annotation_links}
+        records = list(
+            self.session.scalars(
+                select(EcologyIdentityCalibrationEvidence)
+                .where(EcologyIdentityCalibrationEvidence.project_id == project_id)
+                .order_by(
+                    EcologyIdentityCalibrationEvidence.annotation_evidence_id,
+                    EcologyIdentityCalibrationEvidence.id,
+                )
+            )
+        )
+        for record in records:
+            annotation = annotations.get(record.annotation_evidence_id)
+            if annotation is None:
+                raise ValidationError("Ecological calibration evidence has an invalid annotation link")
+            image_link = images.get(annotation.image_evidence_id)
+            if (
+                image_link is None
+                or record.image_id != image_link.image_id
+                or record.image_sha256 != image_link.image_sha256
+            ):
+                raise ValidationError("Ecological calibration evidence has a mismatched image source")
+            image = self.session.get(ImageAsset, record.image_id)
+            if image is None or image.project_id != project_id:
+                raise ValidationError("Ecological calibration image source is missing")
+            snapshot, fingerprint = self._calibration_source(image)
+            if (
+                fingerprint != record.calibration_sha256
+                or snapshot != record.calibration_json
+            ):
+                raise ValidationError("Ecological calibration source or frozen snapshot changed")
+        return records
+
     def _image_evidence(
         self,
         project_id: str,
@@ -503,6 +651,22 @@ class EcologyIdentityService:
         annotation_links = self._annotation_evidence(project_id, image_links)
         annotation_rows = [
             EcologyAnnotationEvidenceRow.model_validate(link) for link in annotation_links
+        ]
+        calibration_links = self._calibration_evidence(project_id, image_links, annotation_links)
+        calibration_rows = [
+            EcologyCalibrationEvidenceRow.model_validate(link) for link in calibration_links
+        ]
+        calibration_fingerprint = [
+            {
+                "id": row.id,
+                "annotation_evidence_id": row.annotation_evidence_id,
+                "image_id": row.image_id,
+                "image_sha256": row.image_sha256,
+                "calibration_sha256": row.calibration_sha256,
+                "reason": row.reason,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in calibration_rows
         ]
         annotation_fingerprint = [
             {
@@ -576,6 +740,15 @@ class EcologyIdentityService:
             identities=identities,
             image_evidence_links=image_link_rows,
             annotation_evidence_links=annotation_rows,
+            calibration_evidence_links=calibration_rows,
+            calibration_evidence_count=len(calibration_rows),
+            calibration_evidence_sha256=canonical_json_sha256(
+                {
+                    "algorithm_version": "ecology-calibration-evidence-0001",
+                    "project_id": project_id,
+                    "links": calibration_fingerprint,
+                }
+            ),
             annotation_evidence_count=len(annotation_rows),
             annotation_evidence_sha256=canonical_json_sha256(
                 {
