@@ -190,6 +190,64 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen.manifest_sha256 = original_manifest_sha
         session.commit()
 
+    # A newly checksummed manifest cannot substitute an item fingerprint:
+    # saved Workflow Builder planning and runtime must agree with frozen rows.
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        modified_items = [dict(item) for item in original_manifest["items"]]
+        modified_items[0]["item_sha256"] = "0" * 64
+        item_manifest = {**original_manifest, "items": modified_items}
+        item_manifest_sha = canonical_json_sha256(item_manifest)
+        frozen.manifest_json = item_manifest
+        frozen.manifest_sha256 = item_manifest_sha
+        session.commit()
+
+    item_graph = {
+        **graph,
+        "nodes": [
+            {
+                **graph["nodes"][0],
+                "parameters": {
+                    **graph["nodes"][0]["parameters"],
+                    "manifest_sha256": item_manifest_sha,
+                },
+            }
+        ],
+    }
+    item_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=item_graph
+    )
+    assert item_plan.status_code == 200, item_plan.text
+    assert item_plan.json()["valid"] is False
+    assert "pose_dataset_item_lineage_mismatch" in {
+        issue["code"] for issue in item_plan.json()["issues"]
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, item_graph["nodes"][0]["parameters"], {}
+        )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            app.state.settings,
+            project_id=project_id,
+            dataset_payload={**payload, "manifest_sha256": item_manifest_sha},
+            parameters={},
+        )
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        frozen.manifest_json = original_manifest
+        frozen.manifest_sha256 = original_manifest_sha
+        session.commit()
+
     # Re-signing a modified provenance field must not make saved training
     # truth appear reproducible when its frozen source lineage has changed.
     with app.state.session_factory() as session:
