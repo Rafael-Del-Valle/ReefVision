@@ -16,13 +16,18 @@ TETRA_FACES = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]]
 TETRA_VERTICES = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]
 
 
-@pytest.mark.parametrize("touching", [True, False], ids=["vertex-touching", "disjoint"])
+@pytest.mark.parametrize("case", ["shared-index", "coincident-coordinate", "disjoint"])
 def test_closed_patch_union_volume_standalone_and_saved_workflow(
-    client: TestClient, touching: bool
+    client: TestClient, case: str
 ) -> None:
-    if touching:
+    if case == "shared-index":
         vertices = [*TETRA_VERTICES, [-1, 0, 0], [0, -1, 0], [0, 0, -1]]
         second_faces = [[0 if index == 0 else index + 3 for index in face] for face in TETRA_FACES]
+    elif case == "coincident-coordinate":
+        # The second tetrahedron has a separate vertex ID at the same origin.
+        # Edge-only and index-only topology would incorrectly accept the sum.
+        vertices = [*TETRA_VERTICES, [0, 0, 0], [-1, 0, 0], [0, -1, 0], [0, 0, -1]]
+        second_faces = [[index + 4 for index in face] for face in TETRA_FACES]
     else:
         vertices = [
             *TETRA_VERTICES,
@@ -46,12 +51,18 @@ def test_closed_patch_union_volume_standalone_and_saved_workflow(
     assert direct["edge_connected_patch_enclosed_volumes_m3"] == pytest.approx(
         [individual_volume, individual_volume]
     )
-    assert direct["vertex_touching_patch_vertex_count"] == int(touching)
-    if touching:
+    assert direct["vertex_touching_patch_vertex_count"] == int(case == "shared-index")
+    assert direct["coincident_patch_coordinate_count"] == int(case == "coincident-coordinate")
+    if case != "disjoint":
         assert direct["enclosed_volume_m3"] is None
         assert direct["enclosed_volume_scale_interval_m3"] is None
-        assert "vertex_touching_mesh_patches" in direct["qc_warnings"]
-        assert "enclosed_volume_vertex_touching_patches" in direct["qc_warnings"]
+        if case == "shared-index":
+            assert "vertex_touching_mesh_patches" in direct["qc_warnings"]
+            assert "enclosed_volume_vertex_touching_patches" in direct["qc_warnings"]
+        else:
+            assert "coincident_mesh_patch_coordinates" in direct["qc_warnings"]
+            assert "enclosed_volume_coincident_patch_coordinates" in direct["qc_warnings"]
+            assert "vertex_touching_mesh_patches" not in direct["qc_warnings"]
     else:
         assert direct["enclosed_volume_m3"] == pytest.approx(2 * individual_volume)
         assert direct["enclosed_volume_scale_interval_m3"] == pytest.approx(
@@ -100,6 +111,7 @@ def test_closed_patch_union_volume_standalone_and_saved_workflow(
     )
     for key in (
         "vertex_touching_patch_vertex_count",
+        "coincident_patch_coordinate_count",
         "enclosed_volume_m3",
         "enclosed_volume_scale_interval_m3",
         "edge_connected_patch_enclosed_volumes_m3",
