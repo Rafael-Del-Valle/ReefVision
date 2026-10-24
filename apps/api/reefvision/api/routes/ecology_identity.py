@@ -11,6 +11,8 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.ecology_identity import (
     EcologyAnnotationEvidenceCreate,
     EcologyAnnotationEvidenceRow,
+    EcologyCalibrationEvidenceCreate,
+    EcologyCalibrationEvidenceRow,
     EcologyIdentityCreate,
     EcologyIdentityRegistryResponse,
     EcologyIdentityRevisionCreate,
@@ -69,6 +71,20 @@ def link_organism_annotation(
     session: DbSession,
 ) -> EcologyAnnotationEvidenceRow:
     return EcologyIdentityService(session).link_annotation(project_id, organism_key, payload)
+
+
+@router.post(
+    "/projects/{project_id}/ecology/organisms/{organism_key}/calibration-evidence",
+    response_model=EcologyCalibrationEvidenceRow,
+    status_code=status.HTTP_201_CREATED,
+)
+def link_organism_calibration(
+    project_id: str,
+    organism_key: str,
+    payload: EcologyCalibrationEvidenceCreate,
+    session: DbSession,
+) -> EcologyCalibrationEvidenceRow:
+    return EcologyIdentityService(session).link_calibration(project_id, organism_key, payload)
 
 
 @router.post(
