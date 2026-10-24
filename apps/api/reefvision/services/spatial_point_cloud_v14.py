@@ -119,10 +119,13 @@ def measure_point_cloud_preview(
     relative_scale_uncertainty: float | None = None,
     source_label: str | None = None,
     point_index_pairs: list[list[int]] | None = None,
+    preserve_axis_extrema_in_preview: bool = False,
 ) -> dict[str, Any]:
     """Report point extents, not surface area, organism size, or branch length."""
     if not 1 <= len(points) <= MAX_VERTICES:
         raise ValueError("Point-cloud size outside preview bounds")
+    if type(preserve_axis_extrema_in_preview) is not bool:
+        raise ValueError("preserve_axis_extrema_in_preview must be a boolean")
     scale = float(meters_per_unit)
     if not isfinite(scale) or not 0 < scale <= 1_000_000:
         raise ValueError("meters_per_unit must be finite and within bounds")
@@ -233,6 +236,25 @@ def measure_point_cloud_preview(
         last_index = len(vertices) - 1
         denominator = preview_count - 1
         preview_indices = [i * last_index // denominator for i in range(preview_count)]
+    # Optionally pin first-occurrence XYZ extrema to the display sample.
+    # Preserve original point indices and the fixed display budget; this is
+    # source-frame visualization QC, not registration or outlier removal.
+    extrema_indices = sorted(
+        {
+            index
+            for axis in range(3)
+            for index in (
+                min(range(len(vertices)), key=lambda i: vertices[i][axis]),
+                max(range(len(vertices)), key=lambda i: vertices[i][axis]),
+            )
+        }
+    )
+    if preserve_axis_extrema_in_preview and len(vertices) > preview_count:
+        protected = set(extrema_indices) | {0, len(vertices) - 1}
+        retained = [index for index in preview_indices if index not in protected]
+        preview_indices = sorted(
+            protected | set(retained[: preview_count - len(protected)])
+        )
     # A uniform index sample may hide the actual extent of a coral scan.
     # Compare raw source-axis extrema before scaling to avoid float rounding.
     # This is display QC, not registration or biological completeness.
@@ -252,6 +274,12 @@ def measure_point_cloud_preview(
         "point_count": len(vertices),
         "unique_point_count": unique_count,
         "preview_point_indices": preview_indices,
+        "preview_extrema_source_indices": extrema_indices,
+        "preview_sampling_strategy": (
+            "uniform_index_extrema_preserving"
+            if preserve_axis_extrema_in_preview
+            else "uniform_index"
+        ),
         "preview_omitted_axis_extrema": preview_omitted_axis_extrema,
         "preview_axis_extrema_covered": not preview_omitted_axis_extrema,
         "preview_points_in_source_frame_m": preview_points,
@@ -317,6 +345,7 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         relative_scale_uncertainty=payload.relative_scale_uncertainty,
         source_label=payload.source_label,
         point_index_pairs=payload.point_index_pairs,
+        preserve_axis_extrema_in_preview=payload.preserve_axis_extrema_in_preview,
     )
     result["preview_point_colors_rgb_uint8"] = (
         [point_colors[i] for i in result["preview_point_indices"]] if point_colors else None
