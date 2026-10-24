@@ -78,9 +78,14 @@ def mesh_edge_paths(
                 raise ValueError("Calibrated endpoint chord length overflowed")
             # Dimensionless geometry-only ratio; undefined for coincident endpoints.
             detour_ratio = meters / chord_m if chord_m > 0 else None
+            # Very small nonzero chords can overflow the ratio even though both
+            # calibrated lengths are finite. Never persist nonfinite JSON values.
             # Route flags are topology evidence, not biological branch validation.
             route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
             path_qc_warnings = []
+            if detour_ratio is not None and not isfinite(detour_ratio):
+                detour_ratio = None
+                path_qc_warnings.append("geometric_detour_ratio_overflow")
             if any(edge_incidence[edge] > 2 for edge in route_edges):
                 path_qc_warnings.append("nonmanifold_edge_on_path")
             if any(edge_incidence[edge] == 1 for edge in route_edges):
