@@ -468,3 +468,33 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   migrations. This additive 0039 is safe only on the isolated 1.6 lineage.
   Resolve the 0038 collision and retest both upgrade paths before integrating
   version branches. Never rewrite an already-applied migration in place.
+
+
+## 2026-10-24 — Orphan-safe QC triage migration and durable audit regressions
+
+- Inspected existing 0038/0039 migrations, migration-lineage guard, persisted QC
+  events, saved executable `qc_review_queue` Workflow Builder integration,
+  and exact-head CI before editing. This preserves existing class visibility,
+  reviewer decisions, queue artifacts, and all independent version branches.
+- The 0039 migration now **fails before table recreation** if any audit event
+  refers to a missing queue, item, or project. Older SQLite databases may have
+  foreign-key enforcement disabled; silently copying orphan events would break
+  the biological review trail. The error preserves the original database for
+  explicit researcher repair; it never deletes or rewrites those events.
+- Three parameterized regression cases exercise each missing parent, confirm
+  failed upgrades preserve the event and old event-type constraint, then repair
+  the parent reference and complete the upgrade. A separate file-backed SQLite
+  regression enables FK enforcement and checks preserved cascade relationships,
+  event persistence after reopening, refusal to downgrade active triage history,
+  safe downgrade after explicit fixture cleanup, and restored legacy checks.
+- The previous exact head `aa1d7147` finished **17/20 Actions successful**;
+  CI, Pose Workflow Validation and ReefVision 1.0 Acceptance failed on Ruff
+  I001 in the new migration regression. The final style commit `9c3b5ff3`
+  restores canonical import ordering and removes the extra blank line before
+  a module constant; 20 exact-head workflow runs were registered and still
+  queued/pending at inspection. **No new CI pass is claimed.**
+- An isolated local SQLite/Alembic/SQLAlchemy smoke reproduction passed the
+  orphan-refusal/repaired-upgrade and FK-preserving upgrade/downgrade paths;
+  it is **not** a complete ReefVision repository test. Full CI, 1.1/1.6 0038
+  collision reconciliation, actual MSI upgrade/rollback, installed Windows GUI
+  and representative scientific acceptance remain **HOLD**.
