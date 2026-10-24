@@ -124,9 +124,7 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
         offset = exif.get(offset_key)
         try:
             if isinstance(offset, str) and offset:
-                return datetime.strptime(
-                    raw + offset, "%Y:%m:%d %H:%M:%S%z"
-                ).astimezone(UTC)
+                return datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
             # Legacy offset-free camera imports retain their previous behavior.
             return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
         except ValueError:
