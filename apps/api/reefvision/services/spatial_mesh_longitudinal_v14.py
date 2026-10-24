@@ -50,8 +50,16 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         raise ValueError("Unexpected calibration verification state")
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
-    if any(
-        type(value) not in (int, float) or not isfinite(value) or value < 0 for value in (a0, a1)
+    # Narrow each value before arithmetic; a missing area must not reach isfinite.
+    if (
+        not isinstance(a0, (int, float))
+        or isinstance(a0, bool)
+        or not isfinite(a0)
+        or a0 < 0
+        or not isinstance(a1, (int, float))
+        or isinstance(a1, bool)
+        or not isfinite(a1)
+        or a1 < 0
     ):
         raise ValueError("Both surface areas must be finite and nonnegative")
     difference = a1 - a0
@@ -61,7 +69,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
 
     # Independent per-timepoint scale bounds: subtract worst-case endpoints.
     # Never infer zero uncertainty when a calibration interval is absent.
-    bounds = []
+    bounds: list[list[float]] = []
     for record in (before, after):
         pair = record.get("surface_area_scale_interval_m2")
         if (
