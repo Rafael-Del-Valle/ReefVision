@@ -1097,3 +1097,18 @@ linked_unverified, requires scientist review, and does not establish
 independent replication or biological growth. Exact-head CI, scientific
 acceptance, migration reconciliation and installed Windows GUI tests remain
 required.
+
+## Projected population type-safety and exact-head CI repair (2026-10-24)
+
+The latest prior head (`8de92f66`) completed 16/19 GitHub Actions workflows;
+CI, Pose Workflow Validation and ReefVision 1.0 Acceptance failed in strict
+mypy on seven diagnostics in `ecology_measurement_candidates.py`. The repair
+uses an explicitly typed organism/metric endpoint lookup, distinct keys for
+organism ownership versus population strata, and a fail-closed check for
+nullable eligible-unit means before descriptive aggregation. The existing
+unit-balanced statistics, scientific review gates and `linked_unverified`
+evidence status remain unchanged. Added regression coverage for eligible
+rows with missing absolute or percentage means. This is a type-safety and
+integrity repair, not verified longitudinal biology. Exact-new-head mypy,
+focused scientific tests, saved-workflow tests, migrations and installed
+Windows acceptance must pass before any release-ready claim.
