@@ -71,7 +71,8 @@ def test_colliding_review_revision_rejected_without_mutating_assets(
         for table in tables:
             schema = REVIEW_SCHEMA if table == "review_queue_item_events" else "id TEXT PRIMARY KEY"
             connection.execute(text(f"CREATE TABLE {table} ({schema})"))
-        with pytest.raises(RuntimeError, match=f"Unsafe ReefVision Alembic revision {revision} collision"):
+        expected_error = f"Unsafe ReefVision Alembic revision {revision} collision"
+        with pytest.raises(RuntimeError, match=expected_error):
             assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT value FROM preserved")) == "do not delete"
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
@@ -95,3 +96,49 @@ def test_colliding_review_revision_rejects_incomplete_review_table(revision: str
         connection.execute(text("CREATE TABLE review_queue_item_events (id TEXT PRIMARY KEY)"))
         with pytest.raises(RuntimeError, match="missing review columns"):
             assert_compatible_revision_0038(connection)
+
+
+@pytest.mark.parametrize(
+    ("revision", "supports_triage", "should_reject"),
+    [
+        ("0038", False, False),
+        ("0039", False, True),
+        ("0039", True, False),
+    ],
+)
+def test_revision_0039_rejects_obsolete_event_check_without_writes(
+    revision: str, supports_triage: bool, should_reject: bool
+) -> None:
+    """Do not trust a 0039 stamp if SQLite still has the 0038 event constraint."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    allowed = "'comment', 'assign', 'unassign'"
+    if supports_triage:
+        allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
+        )
+        connection.execute(
+            text(
+                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
+                "CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed})))"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO review_queue_item_events (id, event_type) "
+                "VALUES ('preserved-event', 'comment')"
+            )
+        )
+        if should_reject:
+            with pytest.raises(RuntimeError, match="obsolete|still excludes"):
+                assert_compatible_revision_0038(connection)
+        else:
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        assert (
+            connection.scalar(text("SELECT id FROM review_queue_item_events"))
+            == "preserved-event"
+        )
