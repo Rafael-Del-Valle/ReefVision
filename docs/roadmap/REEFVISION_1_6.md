@@ -558,3 +558,26 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - **Validation limitation:** SQLite constraint reflection was reproduced
   locally, but complete repository Ruff/mypy/pytest/frontend/Windows acceptance
   must pass on the exact new head. This is **HOLD**, not release acceptance.
+
+## 2026-10-24 — Strict QC event-type constraint validation
+
+- Exact previous head `60ded5f` finished 20 Actions workflows: 17 passed,
+  three failed on Ruff formatting in `test_migration_lineage_guard_16.py`.
+  Frontend, desktop packaging build and other completed workflows passed, but
+  installed-GUI and scientific release acceptance remain outstanding.
+- The read-only startup guard now requires the full six-value event-type
+  CHECK expression from migration 0039, not merely the presence of three
+  triage substrings. It rejects permissive `OR 1=1` checks, extra unreviewed
+  event types and missing coordination types without altering any records.
+- Regression fixtures cover those three tampering cases and verify the
+  migration marker, event history and table DDL remain unchanged.
+- Repaired the exact prior Ruff format findings in the same test module.
+  An isolated SQLAlchemy/SQLite reflection reproduction passed 4/4 cases;
+  full repository tests and exact new-head CI are pending.
+- No new scientific Workflow Builder node was introduced: the existing
+  executable, typed, persisted `qc_review_queue` node, standalone review
+  API and human approval gates remain unchanged. This change protects
+  the audit data those workflows rely on.
+- Release remains **HOLD** pending CI, reconciliation of colliding 0038
+  lineages, real Windows MSI upgrade/rollback, installed-GUI, and
+  representative scientific acceptance.
