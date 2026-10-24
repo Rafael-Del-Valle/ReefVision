@@ -8,7 +8,10 @@ from typing import cast
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import pytest
+
 from reefvision.db.models import ImageAsset
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
     EcologyProjectedUnitSummary,
@@ -346,7 +349,14 @@ def test_projected_population_is_unit_weighted_and_stratified() -> None:
     assert summary.contributing_organism_count == 4
     assert summary.mean_unit_absolute_change == 5.0
     assert summary.mean_unit_percent_change == 50.0
+    assert summary.sample_sd_unit_absolute_change == pytest.approx(5.656854249492381)
+    assert summary.sample_sd_unit_percent_change == pytest.approx(56.568542494923804)
     assert summary.shared_parent_colony_keys == ["colony-1"]
+    assert summary.design_review_blockers == [
+        "independence_not_authenticated",
+        "shared_parent_colonies",
+    ]
+    assert summary.independent_unit_inference_allowed is False
     assert summary.evidence_level == "linked_unverified"
     assert summary.review_gate == "scientist_review_required"
 
@@ -360,6 +370,12 @@ def test_projected_population_is_unit_weighted_and_stratified() -> None:
     eligible = summarize_projected_population_summaries([tank_a, incomplete])
     assert len(eligible) == 1
     assert eligible[0].experimental_unit_ids == ["tank-A"]
+    assert eligible[0].sample_sd_unit_absolute_change is None
+    assert eligible[0].sample_sd_unit_percent_change is None
+    assert eligible[0].design_review_blockers == [
+        "independence_not_authenticated",
+        "single_declared_unit",
+    ]
 
     later = tank_b.model_copy(update={"sampling_windows_utc": ["2026-04-03/2026-04-05"]})
     assert len(summarize_projected_population_summaries([tank_a, later])) == 2
@@ -372,3 +388,59 @@ def test_projected_population_is_unit_weighted_and_stratified() -> None:
     assert parent_qc.units_missing_parent_colony == ["tank-B"]
     technical = tank_b.model_copy(update={"unit_status": "technical_replicate_unit"})
     assert summarize_projected_population_summaries([technical]) == []
+
+
+def test_population_rejects_one_organism_reused_across_declared_units() -> None:
+    """Technical fragments cannot silently become independent unit replicates."""
+    base = EcologyProjectedUnitSummary(
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
+        metric="box_width",
+        units=["mm"],
+        organism_keys=["same-organism"],
+        complete_organism_keys=["same-organism"],
+        incomplete_organism_keys=[],
+        parent_colony_keys=["parent-A"],
+        sampling_windows_utc=["2026-04-03/2026-04-04"],
+        unit_status="candidate",
+        mean_absolute_change=1.0,
+        mean_percent_change=10.0,
+    )
+    moved = base.model_copy(
+        update={
+            "experimental_unit_id": "tank-B",
+            "sampling_windows_utc": ["2026-04-03/2026-04-05"],
+        }
+    )
+    with pytest.raises(ValidationError, match="pooled across declared experimental units"):
+        summarize_projected_population_summaries([base, moved])
+    # Different metrics on the same organism are distinct measurements,
+    # not duplicate organism replicates of the same response.
+    different_metric = moved.model_copy(update={"metric": "box_height"})
+    assert len(summarize_projected_population_summaries([base, different_metric])) == 2
+
+
+def test_population_design_review_flags_missing_parent_without_inference() -> None:
+    unit = EcologyProjectedUnitSummary(
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
+        metric="box_width",
+        units=["mm"],
+        organism_keys=["A"],
+        complete_organism_keys=["A"],
+        incomplete_organism_keys=[],
+        parent_colony_keys=[],
+        sampling_windows_utc=["2026-04-03/2026-04-04"],
+        unit_status="candidate",
+        mean_absolute_change=2.0,
+        mean_percent_change=20.0,
+    )
+    summary = summarize_projected_population_summaries([unit])[0]
+    assert summary.units_missing_parent_colony == ["tank-A"]
+    assert summary.design_review_blockers == [
+        "independence_not_authenticated",
+        "single_declared_unit",
+        "missing_parent_colony",
+    ]
+    assert summary.independent_unit_inference_allowed is False
+    assert summary.review_gate == "scientist_review_required"
