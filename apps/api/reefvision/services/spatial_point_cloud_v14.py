@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC
 from math import dist, isfinite
 from typing import Any
 
@@ -321,6 +322,18 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         [point_colors[i] for i in result["preview_point_indices"]] if point_colors else None
     )
     result["provenance"]["source_format"] = source_format
+    observed_at_utc = (
+        payload.observed_at_utc.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        if payload.observed_at_utc is not None
+        else None
+    )
+    result["provenance"].update(
+        specimen_id=payload.specimen_id,
+        observation_id=payload.observation_id,
+        observed_at_utc=observed_at_utc,
+        specimen_identity_verified=False,
+        observation_metadata_verified=False,
+    )
     # Hash the received PLY text (including RGB) separately from XYZ geometry.
     # This is not a digest of the original on-disk file or a verification mark.
     result["provenance"]["source_text_sha256"] = (
