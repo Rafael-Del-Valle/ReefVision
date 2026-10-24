@@ -203,3 +203,38 @@ def test_mesh_comparison_average_rate_preserves_negative_change(
     rate_bounds = comparison["average_surface_area_change_scale_interval_m2_per_day"]
     assert rate_bounds == pytest.approx([-0.4025, -0.1025])
     assert comparison["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "invalid_area",
+    [None, True, False, "1.0", -0.01, float("nan"), float("inf")],
+)
+@pytest.mark.parametrize("invalid_timepoint", ["before", "after"])
+def test_mesh_comparison_rejects_non_numeric_area(
+    invalid_area: object, invalid_timepoint: str
+) -> None:
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "surface_area_scale_interval_m2": [0.8, 1.2],
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "survey-1",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+        },
+    }
+    after = {
+        **before,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "survey-2",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+        },
+    }
+    target = before if invalid_timepoint == "before" else after
+    target["surface_area_m2"] = invalid_area
+    with pytest.raises(ValueError, match="finite and nonnegative"):
+        compare_mesh_observations(before, after)
