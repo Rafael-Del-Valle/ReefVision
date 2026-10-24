@@ -90,3 +90,23 @@ or incomplete observations. Calibration, coordinate registration,
 organism identity, and biological completeness remain unverified.
 Human scientific review is required before interpreting these provisional
 geometric results. No confidence intervals are inferred.
+
+## Per-patch Euler topology diagnostics (provisional)
+
+The standalone mesh-preview API and saved executable `mesh_surface_preview`
+Workflow Builder artifacts expose `edge_connected_patch_vertex_counts`,
+`edge_connected_patch_edge_counts`, and
+`edge_connected_patch_euler_characteristics`. Each characteristic is the
+combinatorial count `V - E + F` for one **edge-connected** triangle patch,
+using referenced source vertex indices and unique undirected edges. Patches
+that meet only at a vertex remain separate; shared source vertices may be
+counted in each patch, so the patch values must not be mistaken for a global
+mesh Euler characteristic.
+
+The diagnostic is useful for detecting changes in reconstruction topology
+across scans, but it does **not** prove manifoldness, genus, biological
+identity, surface completeness, or organism condition. Self-intersections,
+nonmanifold vertices, and reconstruction artifacts can invalidate topological
+interpretation even when edge incidence appears closed. Geometry and
+calibration remain caller-supplied and unverified; no genus or longitudinal
+reidentification is inferred from these counts.
