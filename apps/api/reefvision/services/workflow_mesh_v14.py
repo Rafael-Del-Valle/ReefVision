@@ -108,6 +108,7 @@ def extend_mesh_registry(
                 "ply_text": None,
                 "points": None,
                 "point_index_pairs": None,
+                "preserve_axis_extrema_in_preview": False,
                 "relative_scale_uncertainty": None,
                 "source_label": None,
                 "specimen_id": None,
