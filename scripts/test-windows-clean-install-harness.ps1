@@ -63,6 +63,8 @@ try {
     New-Item -ItemType Directory -Path $externalRoot,$unrelatedRoot -Force | Out-Null
     Set-Content -LiteralPath $externalSentinel -Value 'research assets stay untouched'
     $originalHash = (Get-FileHash -LiteralPath $externalSentinel -Algorithm SHA256).Hash
+    Assert-True ((Assert-ReefVisionAcceptanceTreeNoReparsePoints -Path $externalRoot) -eq $true) 'Normal disposable cleanup tree was rejected.'
+    Assert-True ((Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $externalRoot 'new-run') -RepositoryRoot $Root -DefaultDataRoot $defaultData) -eq (Resolve-ReefVisionAcceptancePath (Join-Path $externalRoot 'new-run'))) 'Normal nested acceptance root was rejected.'
     New-Item -ItemType Junction -Path $linkedRoot -Target $externalRoot | Out-Null
     Assert-ThrowsContaining {
         Assert-ReefVisionSafeAcceptanceRoot -Path $linkedRoot -RepositoryRoot $Root -DefaultDataRoot $defaultData
