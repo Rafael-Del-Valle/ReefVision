@@ -77,6 +77,8 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
             or len(pair) != 2
             or any(type(v) not in (int, float) or not isfinite(v) or v < 0 for v in pair)
             or pair[0] > pair[1]
+            or pair[0] > record["surface_area_m2"]
+            or pair[1] < record["surface_area_m2"]
         ):
             bounds = []
             break
@@ -118,9 +120,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
             raise ValueError("Bounding-box diagonals must be finite and nonnegative")
     early_extent, late_extent = extents
     extent_delta = (
-        late_extent - early_extent
-        if early_extent is not None and late_extent is not None
-        else None
+        late_extent - early_extent if early_extent is not None and late_extent is not None else None
     )
     extent_rate = extent_delta / elapsed_days if extent_delta is not None else None
     extent_intervals: list[list[float]] = []
@@ -172,13 +172,8 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         isfinite(value) for value in extent_relative_bounds
     ):
         extent_relative_bounds = None
-    if any(
-        not isfinite(value)
-        for value in (extent_delta, extent_rate)
-        if value is not None
-    ) or (
-        extent_rate_bounds is not None
-        and not all(isfinite(value) for value in extent_rate_bounds)
+    if any(not isfinite(value) for value in (extent_delta, extent_rate) if value is not None) or (
+        extent_rate_bounds is not None and not all(isfinite(value) for value in extent_rate_bounds)
     ):
         raise ValueError("Bounding-box extent change exceeds finite numeric range")
     warnings = [
