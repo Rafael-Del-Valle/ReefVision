@@ -9,7 +9,11 @@ def test_mask_migrations_form_one_linear_head() -> None:
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["0037"]
+    # Track B adds one branch-local descendant; do not introduce a second head.
+    assert scripts.get_heads() == ["b12_identity_0001"]
+    ecology_identity = scripts.get_revision("b12_identity_0001")
+    assert ecology_identity is not None
+    assert ecology_identity.down_revision == "0037"
     editable_masks = scripts.get_revision("0015")
     mask_datasets = scripts.get_revision("0016")
     segmentation_proposals = scripts.get_revision("0017")
