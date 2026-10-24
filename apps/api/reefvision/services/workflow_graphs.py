@@ -262,6 +262,29 @@ class WorkflowGraphService:
                 )
             )
         elif (
+            dataset.manifest_json.get("dataset_id") != dataset.id
+            or dataset.manifest_json.get("project_id") != dataset.project_id
+            or dataset.manifest_json.get("source_round_id") != dataset.source_round_id
+            or dataset.manifest_json.get("source_selection_sha256")
+            != dataset.source_selection_sha256
+            or dataset.manifest_json.get("source_retraining_manifest_sha256")
+            != dataset.source_retraining_manifest_sha256
+            or not isinstance(dataset.manifest_json.get("pose_schema"), dict)
+            or dataset.manifest_json["pose_schema"].get("schema_id") != dataset.pose_schema_id
+            or dataset.manifest_json["pose_schema"].get("schema_revision")
+            != dataset.pose_schema_revision
+            or dataset.manifest_json["pose_schema"].get("content_hash")
+            != dataset.pose_schema_content_hash
+        ):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_lineage_mismatch",
+                    "Frozen pose dataset manifest lineage differs from persisted truth",
+                    node_id=node_id,
+                )
+            )
+        elif (
             dataset.manifest_json.get("truth_policy") != "scientist_verified_only"
             or dataset.manifest_json.get("skipped_candidates_included") is not False
             or dataset.manifest_json.get("pending_candidates_included") is not False
