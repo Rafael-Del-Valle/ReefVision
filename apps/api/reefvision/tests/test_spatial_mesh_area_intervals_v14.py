@@ -38,6 +38,21 @@ def test_area_intervals_use_squared_scale_bounds_per_patch() -> None:
     # Existing linearized sensitivity is retained for compatibility, but it
     # is not an exact lower/upper interval and is not a confidence interval.
     assert result["area_scale_uncertainty_m2"] == pytest.approx(0.002)
+    assert result["axis_aligned_dimension_scale_intervals_m"] == pytest.approx(
+        [[0.99, 1.21], [0.09, 0.11], [0.0, 0.0]]
+    )
+    for intervals in result["edge_connected_patch_dimension_scale_intervals_m"]:
+        assert intervals == pytest.approx([[0.09, 0.11], [0.09, 0.11], [0.0, 0.0]])
+    diagonal = result["axis_aligned_bounding_box_diagonal_m"]
+    assert result["axis_aligned_bounding_box_diagonal_scale_interval_m"] == pytest.approx(
+        [diagonal * 0.9, diagonal * 1.1]
+    )
+    for diagonal, interval in zip(
+        result["edge_connected_patch_bounding_box_diagonals_m"],
+        result["edge_connected_patch_bounding_box_diagonal_scale_intervals_m"],
+        strict=True,
+    ):
+        assert interval == pytest.approx([diagonal * 0.9, diagonal * 1.1])
     assert result["confidence_interval"] is None
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
@@ -51,12 +66,24 @@ def test_area_interval_missing_zero_and_full_scale_uncertainty(
     if uncertainty is None:
         assert result["surface_area_scale_interval_m2"] is None
         assert result["edge_connected_patch_area_scale_intervals_m2"] is None
+        assert result["axis_aligned_dimension_scale_intervals_m"] is None
+        assert result["axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
+        assert result["edge_connected_patch_dimension_scale_intervals_m"] is None
+        assert result["edge_connected_patch_bounding_box_diagonal_scale_intervals_m"] is None
     else:
         lower = 0.01 * (1 - uncertainty) ** 2
         upper = 0.01 * (1 + uncertainty) ** 2
         assert result["surface_area_scale_interval_m2"] == pytest.approx([lower, upper])
         for interval in result["edge_connected_patch_area_scale_intervals_m2"]:
             assert interval == pytest.approx([lower / 2, upper / 2])
+        for dimension, interval in zip(
+            result["axis_aligned_dimensions_m"],
+            result["axis_aligned_dimension_scale_intervals_m"],
+            strict=True,
+        ):
+            assert interval == pytest.approx(
+                [dimension * (1 - uncertainty), dimension * (1 + uncertainty)]
+            )
 
 
 def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None:
@@ -110,5 +137,12 @@ def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None
         == expected["edge_connected_patch_area_scale_intervals_m2"]
     )
     assert artifact["provenance"]["geometry_sha256"] == expected["provenance"]["geometry_sha256"]
+    for key in (
+        "axis_aligned_dimension_scale_intervals_m",
+        "axis_aligned_bounding_box_diagonal_scale_interval_m",
+        "edge_connected_patch_dimension_scale_intervals_m",
+        "edge_connected_patch_bounding_box_diagonal_scale_intervals_m",
+    ):
+        assert artifact[key] == expected[key]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
