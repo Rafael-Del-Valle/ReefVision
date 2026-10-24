@@ -762,3 +762,43 @@ reviewed annotation, calibration or biological identity. The evidence
 remains `linked_unverified`; no scientific observation is promoted.
 The migration lineage remains `b12_identity_0002` for this no-schema-change
 increment and still needs reviewed reconciliation with unmerged 1.1.
+
+## Project-owned annotation revision evidence (2026-10-24; development only)
+
+Migration `b12_identity_0003` adds append-only, project-scoped evidence
+linking an existing organism/image association to a **specific box or mask
+annotation revision**. The new
+`POST /api/v1/projects/{project_id}/ecology/organisms/{organism_key}/annotation-evidence`
+requires the exact organism-owned image-evidence ID, annotation kind, source
+annotation ID, expected revision and scientist-entered reason. The service
+rejects missing, deleted, cross-image, stale, duplicate or model-generated
+annotations. Image annotation status must be `reviewed`; mask status must
+also be `verified`. These are *editor workflow statuses*, not independent
+scientific verification or an immutable reviewed dataset.
+
+The link captures a SHA-256 digest of the current canonical annotation
+snapshot (geometry, class, source, revision and provenance) without copying,
+editing or promoting the source annotation. Subsequent annotation edits,
+deletion, source-kind changes, or revoked image review cause standalone
+registry reads and the executable, persisted
+`ecology_identity_registry_source` Workflow Builder node to fail closed
+rather than emit a successful scientific artifact. The existing typed
+`ecology_identity_registry` port now carries
+`annotation_evidence_links`, `annotation_evidence_count` and
+`annotation_evidence_sha256`. Default fields preserve deserialization of
+earlier unverified workflow results. Both standalone and saved-workflow
+artifacts remain `registered_unverified`, with
+`scientist_review_required`; annotation links are `linked_unverified`.
+No training weights are downloaded or deployed.
+
+Focused regressions cover box and mask links, duplicate and cross-image
+rejection, stale revisions, changed geometry, model-source refusal, review
+revocation and saved-workflow artifact parity/failure. The prior
+`92ca54e6` exact-head Actions finished **16/19 successful**, with three
+backend failures sharing Ruff formatting in the image-evidence service/tests;
+those reported formatting differences were corrected in this increment.
+The new head has not been validated by CI or installed Windows GUI testing.
+A verified calibration snapshot, independent reviewer decision, authenticated
+study design and real longitudinal dataset remain required before any
+calibrated measurement or inference can be labeled verified. The new migration
+also requires reviewed reconciliation with unmerged 1.1 migration `0038`.
