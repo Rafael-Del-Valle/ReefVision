@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.ecology_identity import (
+    EcologyAnnotationEvidenceCreate,
+    EcologyAnnotationEvidenceRow,
     EcologyIdentityCreate,
     EcologyIdentityRegistryResponse,
     EcologyIdentityRevisionCreate,
@@ -53,6 +55,20 @@ def link_organism_image(
     session: DbSession,
 ) -> EcologyImageEvidenceRow:
     return EcologyIdentityService(session).link_image(project_id, organism_key, payload)
+
+
+@router.post(
+    "/projects/{project_id}/ecology/organisms/{organism_key}/annotation-evidence",
+    response_model=EcologyAnnotationEvidenceRow,
+    status_code=status.HTTP_201_CREATED,
+)
+def link_organism_annotation(
+    project_id: str,
+    organism_key: str,
+    payload: EcologyAnnotationEvidenceCreate,
+    session: DbSession,
+) -> EcologyAnnotationEvidenceRow:
+    return EcologyIdentityService(session).link_annotation(project_id, organism_key, payload)
 
 
 @router.post(
