@@ -21,9 +21,7 @@ def _prepared_annotation(client: TestClient) -> tuple[str, str, dict[str, object
     image_link = _link(client, project_id, "colony-a", image_id)
     assert image_link.status_code == 201, image_link.text
     box_id = _box(client, image_id, str(project["label_classes"][0]["id"]))
-    annotation_link = _annotation_link(
-        client, project_id, image_link.json()["id"], "box", box_id
-    )
+    annotation_link = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
     assert annotation_link.status_code == 201, annotation_link.text
     return project_id, image_id, annotation_link.json()
 
@@ -44,8 +42,12 @@ def _save_calibration(client: TestClient, image_id: str, scale: float = 0.25) ->
 
 
 def _link_calibration(
-    client: TestClient, project_id: str, annotation: dict[str, object], *,
-    organism_key: str = "colony-a", confirmed: bool = True,
+    client: TestClient,
+    project_id: str,
+    annotation: dict[str, object],
+    *,
+    organism_key: str = "colony-a",
+    confirmed: bool = True,
 ):
     return client.post(
         f"/api/v1/projects/{project_id}/ecology/organisms/{organism_key}/calibration-evidence",
@@ -107,9 +109,7 @@ def test_source_calibration_change_revokes_api_and_workflow(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "failed"
     assert "source or frozen snapshot changed" in workflow["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
 
 
 def test_calibration_snapshot_tampering_fails_closed(client: TestClient) -> None:
@@ -127,9 +127,7 @@ def test_calibration_snapshot_tampering_fails_closed(client: TestClient) -> None
     assert registry.status_code == 400
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "failed"
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
 
 
 def test_calibration_rejects_foreign_organism_and_nonfinite_source(
@@ -182,9 +180,7 @@ def test_pixel_unit_calibration_cannot_enter_scientific_registry_or_workflow(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "failed"
     assert "physical length unit" in workflow["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
 
 
 def test_nonfinite_camera_signature_rejected_before_link_and_after_link(
@@ -221,6 +217,47 @@ def test_nonfinite_camera_signature_rejected_before_link_and_after_link(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "failed"
     assert "nonfinite" in workflow["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
+
+
+def test_non_length_calibration_units_fail_closed_before_and_after_link(
+    client: TestClient,
+) -> None:
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    app = cast(FastAPI, client.app)
+
+    def set_unit(unit: str) -> None:
+        with app.state.session_factory() as session:
+            image = session.get(ImageAsset, image_id)
+            assert image is not None
+            metadata = dict(image.metadata_json or {})
+            calibration = dict(metadata["measurement_calibration"])
+            calibration["unit"] = unit
+            metadata["measurement_calibration"] = calibration
+            image.metadata_json = metadata
+            session.commit()
+
+    for invalid_unit in ("seconds", "degrees", "banana", "px/mm"):
+        set_unit(invalid_unit)
+        rejected = _link_calibration(client, project_id, annotation)
+        assert rejected.status_code == 400, rejected.text
+        assert "physical length unit" in rejected.json()["detail"]
+
+    # Micro-symbol units remain valid physical lengths (casefold normalizes µ/μ).
+    set_unit("µm")
+    accepted = _link_calibration(client, project_id, annotation)
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["calibration_json"]["unit"] == "µm"
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "succeeded"
+
+    # A subsequent dimensionality change invalidates persisted source evidence.
+    set_unit("seconds")
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "physical length unit" in registry.json()["detail"]
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "failed"
+    assert "physical length unit" in workflow["run"]["error_message"]
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
