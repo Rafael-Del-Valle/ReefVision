@@ -493,7 +493,7 @@ def measure_mesh_preview(
         "inconsistent_winding_edge_count": inconsistent_winding_edge_count,
         "qc_warnings": (
             sorted(volume_qc_warnings)
-            (["degenerate_triangles_present"] if degenerate else [])
+            + (["degenerate_triangles_present"] if degenerate else [])
             + (["open_mesh_surface_not_enclosed"] if boundary else [])
             + (["nonmanifold_mesh_edges"] if nonmanifold else [])
             + (["disconnected_mesh_patches"] if edge_connected_patch_count > 1 else [])
