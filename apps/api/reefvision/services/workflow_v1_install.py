@@ -19,3 +19,6 @@ def install_workflow_v1_extensions() -> None:
     workflow_graphs._ACTIONS["point_cloud_preview"] = (
         "Calculate unverified calibrated XYZ point-cloud extents."
     )
+    workflow_graphs._ACTIONS["mesh_longitudinal_comparison"] = (
+        "Compare two unverified 3D mesh observations with scale-only uncertainty bounds."
+    )
