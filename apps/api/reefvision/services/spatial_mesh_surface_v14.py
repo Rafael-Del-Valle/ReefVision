@@ -183,6 +183,17 @@ def measure_mesh_preview(
         patch_faces.setdefault(patch, []).append(faces[face_index])
         patch_first_face.setdefault(patch, face_index)
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
+    # Separate edge-connected patches can still touch at source vertices. Such
+    # a union is not a regular closed surface, even if every patch is closed.
+    # Retain individual patch volumes but withhold a misleading global total.
+    vertex_patch_owners: dict[int, int] = {}
+    vertex_touching_patch_vertices: set[int] = set()
+    for patch in ordered_patches:
+        for vertex_index in patch_vertex_indices[patch]:
+            if vertex_index in vertex_patch_owners:
+                vertex_touching_patch_vertices.add(vertex_index)
+            else:
+                vertex_patch_owners[vertex_index] = patch
     # Edge incidents belong to one edge-connected patch. Report topology QC
     # per patch so a defective surface is not hidden by an aggregate count.
     patch_edge_counts: Counter[int] = Counter()
@@ -252,8 +263,11 @@ def measure_mesh_preview(
     enclosed_volume_m3 = (
         fsum(volume for volume in patch_volumes_m3 if volume is not None)
         if all(volume is not None for volume in patch_volumes_m3)
+        and not vertex_touching_patch_vertices
         else None
     )
+    if vertex_touching_patch_vertices:
+        volume_qc_warnings.add("enclosed_volume_vertex_touching_patches")
     if enclosed_volume_m3 is not None and not isfinite(enclosed_volume_m3):
         enclosed_volume_m3 = None
         volume_qc_warnings.add("enclosed_volume_numeric_overflow")
@@ -419,6 +433,7 @@ def measure_mesh_preview(
         ),
         "nonmanifold_edge_count": nonmanifold,
         "edge_connected_patch_count": edge_connected_patch_count,
+        "vertex_touching_patch_vertex_count": len(vertex_touching_patch_vertices),
         "edge_connected_patch_face_counts": [patch_face_counts[patch] for patch in ordered_patches],
         "edge_connected_patch_vertex_counts": [
             len(patch_vertex_indices[patch]) for patch in ordered_patches
@@ -509,6 +524,7 @@ def measure_mesh_preview(
             + (["open_mesh_surface_not_enclosed"] if boundary else [])
             + (["nonmanifold_mesh_edges"] if nonmanifold else [])
             + (["disconnected_mesh_patches"] if edge_connected_patch_count > 1 else [])
+            + (["vertex_touching_mesh_patches"] if vertex_touching_patch_vertices else [])
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
             + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
             + (
