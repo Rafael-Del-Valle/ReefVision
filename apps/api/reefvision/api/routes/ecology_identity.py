@@ -24,9 +24,7 @@ DbSession = Annotated[Session, Depends(get_db_session)]
     "/projects/{project_id}/ecology/identity-registry",
     response_model=EcologyIdentityRegistryResponse,
 )
-def list_identity_registry(
-    project_id: str, session: DbSession
-) -> EcologyIdentityRegistryResponse:
+def list_identity_registry(project_id: str, session: DbSession) -> EcologyIdentityRegistryResponse:
     return EcologyIdentityService(session).registry(project_id)
 
 
