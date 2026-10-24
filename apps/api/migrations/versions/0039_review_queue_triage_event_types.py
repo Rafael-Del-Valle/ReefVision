@@ -29,7 +29,7 @@ _NEW_TYPES = (
 def _replace_check(expression: str) -> None:
     # SQLite cannot DROP CHECK in place. Batch mode recreates the table while
     # copying existing events and restoring named indexes and foreign keys.
-    with op.batch_alter_table("review_queue_item_events", recreate="always") as batch:
+    with op.batch_alter_table("review_queue_item_events", recreate="auto") as batch:
         batch.drop_constraint(_CHECK_NAME, type_="check")
         batch.create_check_constraint(_CHECK_NAME, expression)
 
