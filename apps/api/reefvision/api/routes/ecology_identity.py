@@ -10,11 +10,11 @@ from sqlalchemy.orm import Session
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.ecology_identity import (
     EcologyIdentityCreate,
-    EcologyImageEvidenceCreate,
-    EcologyImageEvidenceRow,
     EcologyIdentityRegistryResponse,
     EcologyIdentityRevisionCreate,
     EcologyIdentityRow,
+    EcologyImageEvidenceCreate,
+    EcologyImageEvidenceRow,
 )
 from reefvision.services.ecology_identity import EcologyIdentityService
 
