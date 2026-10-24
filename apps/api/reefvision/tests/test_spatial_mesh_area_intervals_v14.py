@@ -38,11 +38,19 @@ def test_area_intervals_use_squared_scale_bounds_per_patch() -> None:
     # Existing linearized sensitivity is retained for compatibility, but it
     # is not an exact lower/upper interval and is not a confidence interval.
     assert result["area_scale_uncertainty_m2"] == pytest.approx(0.002)
-    assert result["axis_aligned_dimension_scale_intervals_m"] == pytest.approx(
-        [[0.99, 1.21], [0.09, 0.11], [0.0, 0.0]]
-    )
+    for interval, expected in zip(
+        result["axis_aligned_dimension_scale_intervals_m"],
+        ([0.99, 1.21], [0.09, 0.11], [0.0, 0.0]),
+        strict=True,
+    ):
+        assert interval == pytest.approx(expected)
     for intervals in result["edge_connected_patch_dimension_scale_intervals_m"]:
-        assert intervals == pytest.approx([[0.09, 0.11], [0.09, 0.11], [0.0, 0.0]])
+        for interval, expected in zip(
+            intervals,
+            ([0.09, 0.11], [0.09, 0.11], [0.0, 0.0]),
+            strict=True,
+        ):
+            assert interval == pytest.approx(expected)
     diagonal = result["axis_aligned_bounding_box_diagonal_m"]
     assert result["axis_aligned_bounding_box_diagonal_scale_interval_m"] == pytest.approx(
         [diagonal * 0.9, diagonal * 1.1]
