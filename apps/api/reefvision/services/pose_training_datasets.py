@@ -201,6 +201,12 @@ class PoseTrainingDatasetService:
             raise ConflictError(
                 "Pose training dataset manifest checksum no longer matches frozen content"
             )
+        # A valid manifest checksum alone cannot authenticate the persisted
+        # scientist-verified poses or their frozen source identities.
+        if not frozen_pose_item_fingerprints_match(self.session, dataset):
+            raise ConflictError(
+                "Pose training dataset item lineage no longer matches persisted verified items"
+            )
         return PoseTrainingDatasetManifestResponse(
             dataset_id=dataset.id,
             manifest_sha256=dataset.manifest_sha256,
