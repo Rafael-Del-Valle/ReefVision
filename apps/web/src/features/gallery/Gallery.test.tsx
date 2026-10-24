@@ -850,9 +850,7 @@ describe("Gallery", () => {
     await act(async () => {
       queryClient.setQueriesData({ queryKey: ["images", project.id] }, updated);
     });
-    const recovered = await screen.findByAltText(
-      "Thumbnail of swiftia-01.png",
-    );
+    const recovered = await screen.findByAltText("Thumbnail of swiftia-01.png");
     expect(recovered.getAttribute("src")).not.toBe(failedUrl);
     expect(recovered.getAttribute("src")).toContain("rv_thumb=");
 
