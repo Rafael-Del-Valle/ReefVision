@@ -130,7 +130,9 @@ def test_bulk_triage_appends_atomic_actor_labeled_events(client: TestClient) -> 
     assert client.post(url, json=payload).json()["changed_count"] == 0
     assert all(client.get(event_url).json()["total"] == 1 for event_url in event_urls)
 
-    invalid = client.post(url, json={"item_ids": ids, "action": "return", "actor": "   "})
+    invalid = client.post(
+        url, json={"item_ids": ids, "action": "return", "actor": "   "}
+    )
     assert invalid.status_code == 422, invalid.text
     # Public coordination API must not permit a forged triage audit event.
     forged = client.post(
@@ -144,7 +146,9 @@ def test_bulk_triage_appends_atomic_actor_labeled_events(client: TestClient) -> 
     assert forged.status_code == 422, forged.text
     assert all(client.get(event_url).json()["total"] == 1 for event_url in event_urls)
 
-    returned = client.post(url, json={"item_ids": ids, "action": "return", "actor": "lab reviewer"})
+    returned = client.post(
+        url, json={"item_ids": ids, "action": "return", "actor": "lab reviewer"}
+    )
     assert returned.status_code == 200, returned.text
     assert returned.json()["changed_count"] == 2
     for event_url in event_urls:
