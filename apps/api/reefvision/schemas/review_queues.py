@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from math import isfinite
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from reefvision.domain.enums import ReviewQueueItemState
 
 
 class ReviewScoreWeights(BaseModel):
+    # NaN/Inf cannot be scientifically interpreted as priority weights.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     low_mean_confidence: float = Field(default=24.0, ge=0)
     low_min_confidence: float = Field(default=12.0, ge=0)
     pending_proposals: float = Field(default=14.0, ge=0)
@@ -24,6 +28,15 @@ class ReviewScoreWeights(BaseModel):
     incomplete_provenance: float = Field(default=5.0, ge=0)
     recent_import: float = Field(default=4.0, ge=0)
     stale_review_state: float = Field(default=6.0, ge=0)
+
+    @model_validator(mode="after")
+    def require_finite_positive_total_weight(self) -> Self:
+        # Individual finite weights can still overflow when summed; an
+        # all-zero vector also has no meaningful priority normalization.
+        total_weight = sum(self.model_dump().values())
+        if not isfinite(total_weight) or total_weight <= 0:
+            raise ValueError("Review score weights require a finite, positive total")
+        return self
 
 
 class ReviewQueueCreateRequest(BaseModel):
