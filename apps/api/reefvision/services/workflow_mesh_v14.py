@@ -221,8 +221,6 @@ def execute_point_cloud_preview(
     ]
 
 
-
-
 def execute_mesh_longitudinal_comparison(
     session: Session,
     settings: Settings,
@@ -256,6 +254,7 @@ def execute_mesh_longitudinal_comparison(
             "payload": result,
         }
     ]
+
 
 def register_mesh_adapter() -> None:
     runtime_adapters.RUNTIME_ADAPTER_NODE_TYPES.add(NODE_TYPE)
