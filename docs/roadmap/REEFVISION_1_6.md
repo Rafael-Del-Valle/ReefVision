@@ -439,3 +439,32 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - No model inference, reviewer approval, migration, or dataset changes.
   Exact new-head CI, native Windows installed-GUI/upgrade/rollback, and
   cross-version Alembic lineage acceptance remain required. **HOLD.**
+
+## 2026-10-24 — Repair persisted QC bulk-triage audit migration
+
+- **Pre-edit audit:** isolated draft PR #77 at `e12c9a89`; its exact-head
+  GitHub Actions completed 17/20 successfully. The CI, Pose and 1.0 Acceptance
+  workflows failed at Ruff formatting in the new bulk-audit regression. The
+  existing 0038 migration also declared a CHECK permitting only `comment`,
+  `assign`, `unassign`, while the already-implemented atomic bulk triage
+  service writes `triage_start`, `triage_skip`, `triage_return`.
+  An upgraded SQLite database would reject these events at commit time.
+- **Fix:** apply the precise Ruff formatting correction and add an **additive**
+  Alembic `0039_review_queue_triage_event_types` successor. It retains the
+  original applied 0038 migration unchanged, rebuilds the SQLite CHECK using
+  Alembic batch operations, and preserves existing review history, unique
+  request constraints, indexes and foreign keys.
+- **Safety:** downgrades refuse to proceed while any triage events exist rather
+  than deleting or disguising researcher audit history. New regression tests
+  exercise legacy-event preservation, all three server triage types, unknown
+  event rejection, unique-request preservation, index/foreign-key integrity,
+  and downgrade refusal/restoration.
+- **Local isolated evidence:** 2/2 SQLite/Alembic migration regressions passed
+  on Python with SQLAlchemy 2.0.50 and Alembic 1.18.4; Python compile checks
+  passed. The complete ReefVision checkout was unavailable locally due to
+  GitHub DNS resolution. Exact-head repository CI, installed Windows GUI/MSI
+  upgrade, and full scientific acceptance remain mandatory; no release claim.
+- **Cross-version caveat:** 1.1 and 1.6 independently own different 0038
+  migrations. This additive 0039 is safe only on the isolated 1.6 lineage.
+  Resolve the 0038 collision and retest both upgrade paths before integrating
+  version branches. Never rewrite an already-applied migration in place.
