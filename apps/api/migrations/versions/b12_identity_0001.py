@@ -39,7 +39,9 @@ def upgrade() -> None:
             name="ck_ecology_identity_complete_unit",
         ),
         sa.UniqueConstraint(
-            "project_id", "organism_key", "revision",
+            "project_id",
+            "organism_key",
+            "revision",
             name="uq_ecology_identity_project_key_revision",
         ),
     )
