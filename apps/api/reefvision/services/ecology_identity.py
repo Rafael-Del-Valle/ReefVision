@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -76,7 +78,7 @@ class EcologyIdentityService:
 
     @staticmethod
     def _assert_experimental_units(
-        latest: dict[str, EcologyIdentityRevision | EcologyIdentityFields],
+        latest: Mapping[str, EcologyIdentityRevision | EcologyIdentityFields],
     ) -> None:
         """Fail closed on contradictory independent-unit registrations.
 
