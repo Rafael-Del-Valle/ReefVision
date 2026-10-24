@@ -388,6 +388,13 @@ def test_projected_population_is_unit_weighted_and_stratified() -> None:
     technical = tank_b.model_copy(update={"unit_status": "technical_replicate_unit"})
     assert summarize_projected_population_summaries([technical]) == []
 
+    # A row marked eligible must not slip into population statistics with
+    # missing means, even when an unchecked model_copy supplies the values.
+    for field in ("mean_absolute_change", "mean_percent_change"):
+        invalid = tank_b.model_copy(update={field: None})
+        with pytest.raises(ValidationError, match="Incomplete projected unit"):
+            summarize_projected_population_summaries([tank_a, invalid])
+
 
 def test_population_rejects_one_organism_reused_across_declared_units() -> None:
     """Technical fragments cannot silently become independent unit replicates."""
