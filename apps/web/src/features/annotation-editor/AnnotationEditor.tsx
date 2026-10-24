@@ -570,7 +570,7 @@ export function AnnotationEditor({
     }
     const preloader = new window.Image();
     let cancelled = false;
-    let decodeFallback: ReturnType<typeof setTimeout> | null = null;
+    let decodeFallback: number | null = null;
     let fallbackActivated = false;
     const retry = fullImageRetry;
     setImagePreload({ imageId, retry, phase: "loading" });
