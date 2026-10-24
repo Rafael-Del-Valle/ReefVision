@@ -276,17 +276,74 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert stale_schema_plan.json()["valid"] is False
     assert stale_schema_plan.json()["executable"] is False
     stale_schema_codes = {issue["code"] for issue in stale_schema_plan.json()["issues"]}
-    assert "pose_dataset_schema_mismatch" in stale_schema_codes
+    # A changed persisted hash first violates the frozen manifest's lineage.
+    assert "pose_dataset_lineage_mismatch" in stale_schema_codes
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="manifest lineage no longer matches"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
 
-    # Execution must independently reject schema drift even if a node adapter
-    # is called after the graph was planned successfully.
+    # Even if the manifest is re-signed to agree with the tampered dataset,
+    # the independent landmark revision must still reject schema drift.
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        resigned_schema_manifest = {
+            **frozen.manifest_json,
+            "pose_schema": {
+                **frozen.manifest_json["pose_schema"],
+                "content_hash": frozen.pose_schema_content_hash,
+            },
+        }
+        frozen.manifest_json = resigned_schema_manifest
+        frozen.manifest_sha256 = canonical_json_sha256(resigned_schema_manifest)
+        resigned_schema_sha = frozen.manifest_sha256
+        session.commit()
+
+    resigned_schema_graph = {
+        **graph,
+        "nodes": [
+            {
+                **graph["nodes"][0],
+                "parameters": {
+                    **graph["nodes"][0]["parameters"],
+                    "manifest_sha256": resigned_schema_sha,
+                },
+            }
+        ],
+    }
+    schema_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=resigned_schema_graph
+    )
+    assert schema_plan.status_code == 200, schema_plan.text
+    assert schema_plan.json()["valid"] is False
+    assert "pose_dataset_schema_mismatch" in {
+        issue["code"] for issue in schema_plan.json()["issues"]
+    }
+
+    # Execution independently rejects the same drift after successful planning.
     with (
         app.state.session_factory() as session,
         pytest.raises(ValidationError, match="landmark schema no longer matches"),
     ):
         execute_pose_training_dataset_adapter(
-            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+            session,
+            app.state.settings,
+            project_id,
+            resigned_schema_graph["nodes"][0]["parameters"],
+            {},
         )
+
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        frozen.manifest_json = original_manifest
+        frozen.manifest_sha256 = original_manifest_sha
+        frozen.pose_schema_content_hash = payload["pose_schema_content_hash"]
+        session.commit()
 
     # The database enforces item_count >= 1, so an empty frozen dataset
     # cannot be persisted. Test the executable incomplete-status path instead.
