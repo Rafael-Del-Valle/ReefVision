@@ -225,8 +225,29 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     phase === "thumbnail-loading" || phase === "thumbnail-loaded";
   const waiting = phase === "loading" || phase === "thumbnail-loading";
 
-  function handleLoad() {
-    setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+  useEffect(() => {
+    if (!waiting) return;
+    // Some Windows WebView2 media requests stall without either a load or an
+    // error event. Never leave the first image obscured indefinitely.
+    const timer = window.setTimeout(() => {
+      setPhase((current) => {
+        if (current === "loading") {
+          return image.thumbnail_path ? "thumbnail-loading" : "error";
+        }
+        return current === "thumbnail-loading" ? "error" : current;
+      });
+    }, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [image.thumbnail_path, phase, waiting]);
+
+  function handleLoad(event: { currentTarget: HTMLImageElement }) {
+    // The load event is sufficient to reveal the image. In some WebView2
+    // versions decode() can remain pending even after a successful load,
+    // leaving the first image obscured by a perpetual loading indicator.
+    // Keyed previews and the connection check reject stale image events.
+    if (event.currentTarget.isConnected) {
+      setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+    }
   }
 
   function handleError() {
@@ -301,6 +322,7 @@ export function Gallery({
     readGalleryPreference(window.localStorage, project.id),
   );
   const activeThumbnail = useRef<HTMLButtonElement | null>(null);
+  const filmstripRef = useRef<HTMLDivElement | null>(null);
   const [page, setPage] = useState(initialPreference.current.page);
   const [pageDraft, setPageDraft] = useState(
     String(initialPreference.current.page),
@@ -473,12 +495,54 @@ export function Gallery({
   }, [focusedImage, page, project.id, wrapNavigation]);
 
   useEffect(() => {
-    if (typeof activeThumbnail.current?.scrollIntoView === "function") {
-      activeThumbnail.current.scrollIntoView({
-        block: "nearest",
-        inline: "nearest",
-      });
+    const filmstrip = filmstripRef.current;
+    const thumbnail = activeThumbnail.current;
+    if (!filmstrip || !thumbnail) return;
+    // Only move the horizontal strip, not the surrounding image viewport.
+    const strip = filmstrip.getBoundingClientRect();
+    const active = thumbnail.getBoundingClientRect();
+    if (active.left < strip.left) {
+      filmstrip.scrollLeft += active.left - strip.left;
+    } else if (active.right > strip.right) {
+      filmstrip.scrollLeft += active.right - strip.right;
     }
+  }, [focusedImage?.id]);
+
+  useEffect(() => {
+    const filmstrip = filmstripRef.current;
+    if (!filmstrip) return;
+
+    // A vertical mouse wheel should browse the horizontal thumbnail strip,
+    // not scroll the page and partially displace the focused image.
+    // A non-passive native listener is needed to suppress WebView2's default
+    // document scrolling; React wheel listeners can be passive at the root.
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || filmstrip.scrollWidth <= filmstrip.clientWidth)
+        return;
+      const delta =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY;
+      if (!Number.isFinite(delta) || delta === 0) return;
+      const multiplier =
+        event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? filmstrip.clientWidth
+            : 1;
+      event.preventDefault();
+      event.stopPropagation();
+      filmstrip.scrollLeft = Math.max(
+        0,
+        Math.min(
+          filmstrip.scrollWidth - filmstrip.clientWidth,
+          filmstrip.scrollLeft + delta * multiplier,
+        ),
+      );
+    };
+
+    filmstrip.addEventListener("wheel", handleWheel, { passive: false });
+    return () => filmstrip.removeEventListener("wheel", handleWheel);
   }, [focusedImage?.id]);
 
   useEffect(
@@ -597,9 +661,13 @@ export function Gallery({
             <input
               className="visually-hidden"
               type="file"
-              accept=".jpg,.jpeg,.png,.tif,.tiff,.webp"
+              accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
-              onChange={(event) => acceptFiles(event.target.files)}
+              onChange={(event) => {
+                acceptFiles(event.currentTarget.files);
+                // Permit retrying the same camera file after a failed import.
+                event.currentTarget.value = "";
+              }}
             />
           </label>
           <label className="button-label secondary-label">
@@ -608,9 +676,13 @@ export function Gallery({
               ref={folderInput}
               className="visually-hidden"
               type="file"
-              accept=".jpg,.jpeg,.png,.tif,.tiff,.webp"
+              accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
-              onChange={(event) => acceptFiles(event.target.files)}
+              onChange={(event) => {
+                acceptFiles(event.currentTarget.files);
+                // Permit retrying the same camera file after a failed import.
+                event.currentTarget.value = "";
+              }}
             />
           </label>
         </div>
@@ -690,6 +762,7 @@ export function Gallery({
             </div>
 
             <div
+              ref={filmstripRef}
               className="rv-media-filmstrip"
               role="list"
               aria-label="Nearby images"

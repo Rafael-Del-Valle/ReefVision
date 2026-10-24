@@ -258,13 +258,26 @@ def test_supported_image_formats_import(client: TestClient) -> None:
     project = create_project(client, "Format coverage")
     expected = {
         "sample.jpg": ("JPEG", "image/jpeg"),
+        "sample.jpeg": ("JPEG", "image/jpeg"),
+        "sample.JPG": ("JPEG", "image/jpeg"),
+        "sample.JPEG": ("JPEG", "image/jpeg"),
+        "sample.jpe": ("JPEG", "image/jpeg"),
+        "sample.JFIF": ("JPEG", "image/jpeg"),
+        "sample.jfi": ("JPEG", "image/jpeg"),
+        "sample.jif": ("JPEG", "image/jpeg"),
         "sample.png": ("PNG", "image/png"),
+        "sample.tif": ("TIFF", "image/tiff"),
         "sample.tiff": ("TIFF", "image/tiff"),
         "sample.webp": ("WEBP", "image/webp"),
+        "sample.bmp": ("BMP", "image/bmp"),
+        "sample.DIB": ("BMP", "image/bmp"),
+        "sample.gif": ("GIF", "image/gif"),
     }
     for index, (filename, (format_name, media_type)) in enumerate(expected.items()):
         stream = BytesIO()
-        Image.new("RGB", (30 + index, 20), (index * 20, 80, 120)).save(stream, format=format_name)
+        Image.new("RGB", (30 + index, 20), ((index * 17) % 256, 80, 120)).save(
+            stream, format=format_name
+        )
         report = import_one(
             client,
             project["id"],
@@ -274,6 +287,51 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         )
         image_id = report["successful"][0]["image_id"]
         assert client.get(f"/api/v1/images/{image_id}").json()["media_type"] == media_type
+
+
+def test_cmyk_jpeg_import_has_browser_safe_display(client: TestClient) -> None:
+    project = create_project(client, "CMYK JPEG")
+    stream = BytesIO()
+    Image.new("CMYK", (64, 48), (80, 20, 30, 10)).save(stream, format="JPEG")
+    report = import_one(
+        client,
+        project["id"],
+        filename="lab-export.JPEG",
+        content=stream.getvalue(),
+    )
+    image_id = report["successful"][0]["image_id"]
+    original = client.get(f"/api/v1/images/{image_id}/content")
+    assert original.status_code == 200
+    assert original.headers["content-type"].startswith("image/jpeg")
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as decoded:
+        assert decoded.size == (64, 48)
+
+
+def test_animated_gif_is_rejected_instead_of_silently_losing_frames(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Animated image validation")
+    stream = BytesIO()
+    Image.new("RGB", (32, 24), "red").save(
+        stream,
+        format="GIF",
+        save_all=True,
+        append_images=[Image.new("RGB", (32, 24), "blue")],
+        duration=100,
+        loop=0,
+    )
+    report = import_one(
+        client,
+        project["id"],
+        filename="sequence.gif",
+        content=stream.getvalue(),
+    )
+    assert len(report["successful"]) == 0
+    assert len(report["unsupported"]) == 1
+    assert "Animated GIFs" in report["unsupported"][0]["detail"]
 
 
 def test_imports_16_bit_grayscale_tiff(client: TestClient, test_settings: Settings) -> None:

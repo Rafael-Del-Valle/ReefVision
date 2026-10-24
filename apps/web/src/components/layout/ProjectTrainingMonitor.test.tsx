@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../../api/client";
+import * as runtime from "../../runtime";
 import { ProjectTrainingMonitor } from "./ProjectTrainingMonitor";
 
 vi.mock("../../api/client", async (importOriginal) => ({
@@ -104,6 +105,25 @@ afterEach(() => {
 });
 
 describe("ProjectTrainingMonitor", () => {
+  it("opens the active run in a desktop PowerShell monitor", async () => {
+    vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+      apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+      dataDir: "C:/ReefVision",
+      desktopMode: true,
+    });
+    const open = vi
+      .spyOn(runtime, "openDesktopTrainingConsole")
+      .mockResolvedValue(undefined);
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open PowerShell monitor" }),
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledWith("run-active"));
+  });
+
   it("shows active canonical training progress, metrics, and provenance", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
 
@@ -121,6 +141,37 @@ describe("ProjectTrainingMonitor", () => {
         name: "Swiftia detector progress",
       }),
     ).toHaveAttribute("value", "2");
+  });
+
+  it("shows real box, cls and dfl losses from epoch history before other metrics", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        metrics: {
+          "metrics/mAP50(B)": 0.8123,
+          "metrics/precision(B)": 0.902,
+          "train/box_loss": 0.5,
+          "train/dfl_loss": Number.NaN,
+        },
+        metrics_history: {
+          "train/box_loss": [0.8, 0.6],
+          "train/cls_loss": [1.5, 1.2],
+          "train/dfl_loss": [1.1, 0.9],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    expect(screen.getByText("train box loss")).toBeInTheDocument();
+    expect(screen.getByText("train cls loss")).toBeInTheDocument();
+    expect(screen.getByText("train dfl loss")).toBeInTheDocument();
+    expect(screen.getByText("0.5")).toBeInTheDocument();
+    expect(screen.getByText("1.2")).toBeInTheDocument();
+    expect(screen.getByText("0.9")).toBeInTheDocument();
+    expect(screen.getByText("0.8123")).toBeInTheDocument();
+    expect(screen.getByText("0.902")).toBeInTheDocument();
   });
 
   it("cancels through the existing training-run API and updates the shared cache", async () => {

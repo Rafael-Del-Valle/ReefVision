@@ -1,8 +1,10 @@
 """Training workspace API routes."""
 
+import re
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -212,6 +214,92 @@ def get_training_run(
     session: DbSession,
 ) -> TrainingRunResponse:
     return service(request, session).get_run(run_id)
+
+
+def _safe_terminal_log_text(payload: bytes) -> str:
+    """Render training logs without terminal escape/control side effects."""
+    text = payload.decode("utf-8", errors="replace")
+    # Strip entire OSC (title/hyperlink), DCS, SOS, PM, and APC strings.
+    # Removing just ESC would expose their printable payload as fake log data.
+    # A truncated terminal string is discarded through the end of the tail.
+    text = re.sub(r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\|$)", "", text)
+    text = re.sub(r"[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
+    text = re.sub(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", "", text)
+    text = re.sub(r"\x1b[ -/]*[@-_]", "", text)
+    # Progress bars use carriage returns to overwrite the current line.
+    # Show each update on a new line instead of allowing terminal rewrites.
+    text = text.replace("\r", "\n")
+    # Directional Unicode controls can visually reorder loss labels/values in
+    # PowerShell. Preserve normal Unicode (including scientific units), but
+    # prevent invisible bidi overrides and isolates from spoofing output.
+    return "".join(
+        char
+        for char in text
+        if (char in "\t\n" or (ord(char) >= 32 and not 127 <= ord(char) <= 159))
+        and ord(char) not in {0x061C, 0x200E, 0x200F}
+        and not 0x202A <= ord(char) <= 0x202E
+        and not 0x2066 <= ord(char) <= 0x2069
+    )
+
+
+def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool | str]:
+    """Read only a bounded tail of a run's persisted log, never an arbitrary path."""
+    empty: dict[str, bool | str] = {"available": False, "text": ""}
+    if not log_path:
+        return empty
+    root = data_dir.resolve()
+    candidate = Path(log_path)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    try:
+        path = candidate.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return empty
+    if not path.is_relative_to(root) or path.suffix.lower() not in {".log", ".txt"}:
+        raise HTTPException(status_code=403, detail="Training log path is not permitted")
+    if not path.is_file():
+        return empty
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            start = max(0, size - 16384)
+            handle.seek(start)
+            payload = handle.read(16384)
+            if start:
+                # Never present the middle of a truncated line as a complete
+                # epoch or loss value in the read-only PowerShell monitor.
+                handle.seek(start - 1)
+                previous = handle.read(1)
+                if previous not in {b"\n", b"\r"}:
+                    boundary = next(
+                        (index for index, byte in enumerate(payload) if byte in (10, 13)),
+                        -1,
+                    )
+                    payload = payload[boundary + 1 :] if boundary >= 0 else b""
+            # Training workers may still be appending the final epoch/loss
+            # record. Never display a partially written value as complete.
+            # CR-terminated progress updates are complete records too.
+            if payload and payload[-1] not in (10, 13):
+                boundary = max(payload.rfind(b"\n"), payload.rfind(b"\r"))
+                payload = payload[: boundary + 1] if boundary >= 0 else b""
+    except OSError:
+        return empty
+    return {"available": True, "text": _safe_terminal_log_text(payload)}
+
+
+@router.get("/training-runs/{run_id}/logs/tail")
+def get_training_log_tail(
+    run_id: str,
+    request: Request,
+    response: Response,
+    session: DbSession,
+) -> dict[str, bool | str]:
+    """Expose a bounded, read-only log tail for the desktop PowerShell monitor."""
+    response.headers["Cache-Control"] = "no-store"
+    run = service(request, session).get_run(run_id)
+    settings: Settings = request.app.state.settings
+    return _training_log_tail(run.logs_path, settings.resolved_data_dir)
 
 
 @router.get("/training-runs/{run_id}/artifacts/{artifact_index}", response_class=FileResponse)

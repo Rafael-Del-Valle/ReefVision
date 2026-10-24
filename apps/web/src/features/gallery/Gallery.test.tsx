@@ -177,7 +177,8 @@ describe("Gallery", () => {
     expect(onOpenAnnotation).toHaveBeenCalledWith("image-1");
   });
 
-  it("uploads selected files and shows the structured import report", async () => {
+  it("uploads selected files and allows retrying the same camera JPEG", async () => {
+    const importCalls = vi.fn();
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.includes(`/projects/${project.id}/images`)) {
@@ -190,14 +191,15 @@ describe("Gallery", () => {
         });
       }
       if (url.endsWith(`/projects/${project.id}/imports/images`)) {
+        importCalls();
         expect(init?.method).toBe("POST");
         expect(init?.body).toBeInstanceOf(FormData);
         return jsonResponse({
           project_id: project.id,
           successful: [
             {
-              filename: "coral.png",
-              relative_path: "coral.png",
+              filename: "coral.JPEG",
+              relative_path: "coral.JPEG",
               status: "successful",
               detail: null,
               image_id: "image-2",
@@ -215,11 +217,17 @@ describe("Gallery", () => {
 
     renderGallery();
     await screen.findByText("No images yet");
-    const file = new File(["image bytes"], "coral.png", { type: "image/png" });
-    await userEvent.upload(screen.getByLabelText("Import files"), file);
+    const file = new File(["image bytes"], "coral.JPEG", {
+      type: "image/jpeg",
+    });
+    const fileInput = screen.getByLabelText("Import files") as HTMLInputElement;
+    await userEvent.upload(fileInput, file);
 
     expect(await screen.findByText("1 files processed")).toBeInTheDocument();
     expect(screen.getByText("1 imported")).toBeInTheDocument();
+    expect(fileInput.value).toBe("");
+    await userEvent.upload(fileInput, file);
+    await waitFor(() => expect(importCalls).toHaveBeenCalledTimes(2));
   });
 
   it("jumps directly to a requested page with global newest-first ordering", async () => {
@@ -518,6 +526,33 @@ describe("Gallery", () => {
     expect(retryImage.getAttribute("src")).toContain("rv_retry=1");
   });
 
+  it("reveals the first image even if WebView2 decode never resolves", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery();
+    const focused = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    Object.defineProperty(focused, "decode", {
+      configurable: true,
+      value: vi.fn(() => new Promise<void>(() => {})),
+    });
+
+    fireEvent.load(focused);
+
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+  });
+
   it("resets the first-image loading state during navigation", async () => {
     const secondImage: ProjectImage = {
       ...image,
@@ -558,6 +593,76 @@ describe("Gallery", () => {
     expect(
       screen.queryByText("Loading full-resolution image..."),
     ).not.toBeInTheDocument();
+  });
+
+  it("recovers a stalled image with its thumbnail", async () => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    vi.spyOn(window, "setTimeout").mockImplementation(
+      (handler, timeout, ...args) =>
+        nativeSetTimeout(handler, timeout === 30_000 ? 250 : timeout, ...args),
+    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [{ ...image, thumbnail_path: "managed/thumbnail.png" }],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery();
+    const original = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(original.getAttribute("src")).toMatch(/display/);
+    // Wait for the watchdog to replace the still-pending original request.
+    await waitFor(
+      () =>
+        expect(
+          screen
+            .getByAltText("Focused project image: swiftia-01.png")
+            .getAttribute("src"),
+        ).toMatch(/thumbnail/),
+      { timeout: 1000 },
+    );
+    const fallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.load(fallback);
+    expect(
+      screen.getByText(/Full-resolution image unavailable/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("offers retry when an image stalls without a thumbnail", async () => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    vi.spyOn(window, "setTimeout").mockImplementation(
+      (handler, timeout, ...args) =>
+        nativeSetTimeout(handler, timeout === 30_000 ? 250 : timeout, ...args),
+    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery();
+    await screen.findByAltText("Focused project image: swiftia-01.png");
+    expect(
+      await screen.findByRole("alert", {}, { timeout: 1000 }),
+    ).toHaveTextContent("Image could not be displayed");
+    await userEvent.click(screen.getByRole("button", { name: "Retry image" }));
+    expect(
+      screen
+        .getByAltText("Focused project image: swiftia-01.png")
+        .getAttribute("src"),
+    ).toContain("rv_retry=1");
   });
 
   it("labels the thumbnail when the full-resolution source fails", async () => {
@@ -712,5 +817,57 @@ describe("Gallery", () => {
     expect(
       screen.getByRole("heading", { name: "active-project.png", level: 3 }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps focus navigation inside the horizontal filmstrip", async () => {
+    const secondImage: ProjectImage = {
+      ...image,
+      id: "image-2",
+      original_filename: "swiftia-02.png",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image, secondImage],
+        total: 2,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    const first = screen.getByRole("listitem", {
+      name: "Focus swiftia-01.png",
+    });
+    const second = screen.getByRole("listitem", {
+      name: "Focus swiftia-02.png",
+    });
+    vi.spyOn(filmstrip, "getBoundingClientRect").mockReturnValue({
+      left: 100,
+      right: 400,
+    } as DOMRect);
+    vi.spyOn(second, "getBoundingClientRect").mockReturnValue({
+      left: 450,
+      right: 550,
+    } as DOMRect);
+    vi.spyOn(first, "getBoundingClientRect").mockReturnValue({
+      left: 50,
+      right: 150,
+    } as DOMRect);
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(second, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    await userEvent.click(second);
+    await waitFor(() => expect(filmstrip.scrollLeft).toBe(150));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    await userEvent.click(first);
+    await waitFor(() => expect(filmstrip.scrollLeft).toBe(100));
   });
 });

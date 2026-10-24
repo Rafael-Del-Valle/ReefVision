@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { getRuntimeContext, openDesktopTrainingConsole } from "../../runtime";
 
 import {
   cancelTrainingRun,
@@ -20,12 +21,40 @@ function metricLabel(value: string): string {
 }
 
 function metricEntries(run: TrainingRun): Array<[string, number]> {
-  return Object.entries(run.metrics)
-    .filter(
-      (entry): entry is [string, number] =>
-        typeof entry[1] === "number" && Number.isFinite(entry[1]),
-    )
-    .slice(0, 2);
+  // Providers may publish losses only in epoch history. Prefer the latest
+  // actual observation; a finite summary metric takes precedence if present.
+  const latest = new Map<string, number>();
+  for (const [key, values] of Object.entries(run.metrics_history ?? {})) {
+    if (!Array.isArray(values)) continue;
+    const value = values.at(-1);
+    if (typeof value === "number" && Number.isFinite(value)) {
+      latest.set(key, value);
+    }
+  }
+  for (const [key, value] of Object.entries(run.metrics ?? {})) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      latest.set(key, value);
+    }
+  }
+
+  const preferred = [
+    "train/box_loss",
+    "train/cls_loss",
+    "train/dfl_loss",
+    "train/seg_loss",
+    "train/loss",
+    "metrics/mAP50(B)",
+    "metrics/mAP50(M)",
+    "metrics/mAP50-95(B)",
+    "metrics/mAP50-95(M)",
+  ];
+  const priority = (key: string) => {
+    const index = preferred.indexOf(key);
+    return index < 0 ? preferred.length : index;
+  };
+  return [...latest.entries()]
+    .sort(([left], [right]) => priority(left) - priority(right))
+    .slice(0, 5);
 }
 
 function metricValue(value: number): string {
@@ -38,6 +67,21 @@ function metricValue(value: number): string {
 
 export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
+  const [openingRunId, setOpeningRunId] = useState<string | null>(null);
+  const [terminalError, setTerminalError] = useState<string | null>(null);
+  const showPowerShell = getRuntimeContext().desktopMode;
+
+  async function openConsole(runId: string) {
+    setOpeningRunId(runId);
+    setTerminalError(null);
+    try {
+      await openDesktopTrainingConsole(runId);
+    } catch (error) {
+      setTerminalError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpeningRunId(null);
+    }
+  }
 
   const runsQuery = useQuery({
     queryKey: ["training_runs", projectId],
@@ -205,6 +249,19 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                   <p className="form-error">{run.error_message}</p>
                 )}
 
+                {active && showPowerShell && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={openingRunId !== null}
+                    onClick={() => void openConsole(run.id)}
+                  >
+                    {openingRunId === run.id
+                      ? "Opening PowerShell…"
+                      : "Open PowerShell monitor"}
+                  </button>
+                )}
+
                 {canCancel && (
                   <button
                     type="button"
@@ -233,6 +290,12 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
             );
           })}
         </div>
+      )}
+
+      {terminalError && (
+        <p className="form-error" role="alert">
+          {terminalError}
+        </p>
       )}
 
       {cancelMutation.error && (

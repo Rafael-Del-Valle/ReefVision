@@ -15,12 +15,29 @@ from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.projects import resolve_managed_project_path
 
-SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
+# File extensions are only a preflight filter; Pillow verifies the actual decoded format.
+SUPPORTED_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".jpe",
+    ".jfif",
+    ".jfi",
+    ".jif",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".webp",
+    ".bmp",
+    ".dib",
+    ".gif",
+}
 FORMAT_DETAILS = {
     "JPEG": (".jpg", "image/jpeg"),
     "PNG": (".png", "image/png"),
     "TIFF": (".tiff", "image/tiff"),
     "WEBP": (".webp", "image/webp"),
+    "BMP": (".bmp", "image/bmp"),
+    "GIF": (".gif", "image/gif"),
 }
 
 
@@ -64,7 +81,7 @@ def safe_original_name(filename: str | None) -> str:
 
 def ensure_supported_extension(filename: str) -> None:
     if Path(filename).suffix.lower() not in SUPPORTED_EXTENSIONS:
-        raise UnsupportedImageError("Supported image types are JPEG, PNG, TIFF, and WebP")
+        raise UnsupportedImageError("Supported image types are JPEG, PNG, TIFF, WebP, BMP, and GIF")
 
 
 def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
@@ -98,13 +115,57 @@ def _json_safe(value: object) -> object | None:
 
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
-    for key in (36867, 36868, 306):
+    # Camera-local EXIF timestamps may include explicit UTC offsets and
+    # subsecond tags. Pair each date with its own offset and fractional time;
+    # never borrow either from a different acquisition field.
+    for key, offset_key, subsec_key in (
+        (36867, 36881, 37521),
+        (36868, 36882, 37522),
+        (306, 36880, 37520),
+    ):
         raw = exif.get(key)
-        if isinstance(raw, str):
+        if raw is None:
+            continue
+        # A present but malformed exposure timestamp is not evidence that a
+        # later digitization or file-modification timestamp is the exposure.
+        # Some camera libraries return ASCII EXIF values as bytes.
+        if isinstance(raw, bytes):
             try:
-                return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
-            except ValueError:
-                continue
+                raw = raw.decode("ascii").rstrip("\x00")
+            except UnicodeDecodeError:
+                return None
+        if not isinstance(raw, str):
+            return None
+        offset = exif.get(offset_key)
+        if isinstance(offset, bytes):
+            try:
+                offset = offset.decode("ascii").rstrip("\x00")
+            except UnicodeDecodeError:
+                return None
+        if offset is not None and not isinstance(offset, str):
+            return None
+        try:
+            if isinstance(offset, str) and offset:
+                timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
+            else:
+                # Preserve the existing legacy behavior for offset-free images.
+                timestamp = datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
+        except ValueError:
+            # Do not silently substitute DateTimeDigitized/DateTime when a
+            # higher-priority acquisition field exists but cannot be trusted.
+            return None
+
+        fraction = exif.get(subsec_key)
+        if isinstance(fraction, bytes):
+            try:
+                fraction = fraction.decode("ascii")
+            except UnicodeDecodeError:
+                fraction = None
+        if isinstance(fraction, str) and fraction.isascii() and fraction.isdigit():
+            # Datetimes represent microseconds; preserve the unmodified raw
+            # EXIF string in metadata when cameras record finer precision.
+            timestamp = timestamp.replace(microsecond=int(fraction[:6].ljust(6, "0")))
+        return timestamp
     return None
 
 
@@ -120,7 +181,19 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             width, height = image.size
             if width <= 0 or height <= 0:
                 raise InvalidImageError("Image dimensions must be greater than zero")
-            exif = dict(image.getexif())
+            # verify() checks the JPEG structure, not complete pixel decoding.
+            # Reject truncated camera files before committing scientific images.
+            if decoded_format == "JPEG":
+                image.load()
+            if decoded_format == "GIF" and getattr(image, "n_frames", 1) != 1:
+                raise UnsupportedImageError(
+                    "Animated GIFs cannot be safely imported as a single scientific image"
+                )
+            image_exif = image.getexif()
+            exif = dict(image_exif)
+            # Real cameras normally store DateTimeOriginal and OffsetTimeOriginal
+            # in the nested Exif IFD. The top-level dict contains only its offset.
+            exif.update(image_exif.get_ifd(ExifTags.IFD.Exif))
             named_exif = {
                 ExifTags.TAGS.get(key, str(key)): _json_safe(value)
                 for key, value in exif.items()
@@ -168,7 +241,8 @@ def create_browser_display(source: Path, destination: Path) -> None:
     temporary.unlink(missing_ok=True)
     try:
         with Image.open(source) as image:
-            display: Image.Image = image
+            # Match EXIF-oriented thumbnails without altering the camera original.
+            display: Image.Image = ImageOps.exif_transpose(image)
             if display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16"}:
                 display = display.convert("RGB")
             display.save(temporary, format="PNG", optimize=True)
