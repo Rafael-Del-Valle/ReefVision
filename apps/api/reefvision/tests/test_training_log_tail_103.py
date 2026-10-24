@@ -96,10 +96,7 @@ def test_live_log_tail_waits_for_complete_loss_record(tmp_path: Path) -> None:
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
-        "text": (
-            "epoch=3\ntrain/box_loss=0.25\n"
-            "train/cls_loss=0.30\ntrain/dfl_loss=0.10\n"
-        ),
+        "text": ("epoch=3\ntrain/box_loss=0.25\ntrain/cls_loss=0.30\ntrain/dfl_loss=0.10\n"),
     }
 
 
@@ -114,6 +111,24 @@ def test_live_log_tail_accepts_carriage_return_progress_records(
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
         "text": "epoch=4\ntrain/box_loss=0.22\n",
+    }
+    assert log.read_bytes() == original
+
+
+def test_live_log_tail_normalizes_windows_crlf_without_blank_records(
+    tmp_path: Path,
+) -> None:
+    """Windows CRLF logs and CR progress should produce one line per record."""
+    log = tmp_path / "training.log"
+    original = (
+        b"epoch=5\r\ntrain/box_loss=0.20\r\n"
+        b"train/cls_loss=0.30\rtrain/dfl_loss=0.10\r\n"
+    )
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "epoch=5\ntrain/box_loss=0.20\ntrain/cls_loss=0.30\ntrain/dfl_loss=0.10\n",
     }
     assert log.read_bytes() == original
 
