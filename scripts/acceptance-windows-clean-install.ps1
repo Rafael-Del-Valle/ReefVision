@@ -78,6 +78,7 @@ $report = [ordered]@{
     external_annotation_imports = New-ReefVisionEvidenceResult
     confidence_review = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real pending prediction review not requested' }
     project_persistence = New-ReefVisionEvidenceResult
+    class_visibility_persistence = New-ReefVisionEvidenceResult
     qc_review_coordination = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
@@ -301,6 +302,28 @@ try {
     $projectId = $project.id
     $testClass = Invoke-RestMethod "$api/projects/$projectId/classes" -Method Post -ContentType 'application/json' -Body (@{class_index=0;name='Acceptance coral';display_color='#7A8C9D'} | ConvertTo-Json)
     if (-not $testClass.id) { throw 'Acceptance label class could not be created.' }
+    # 1.6 class visibility must persist in the installed, isolated backend,
+    # not just in source-tree API tests. A saved empty user preference
+    # intentionally overrides the project's nonempty default.
+    $visibilityUrl = "$api/projects/$projectId/class-visibility"
+    $defaultVisibility = Invoke-RestMethod "$visibilityUrl/defaults/annotations" -Method Put -ContentType 'application/json' -Body (@{
+        hidden_class_ids = @([string]$testClass.id)
+    } | ConvertTo-Json -Depth 4)
+    $userVisibility = Invoke-RestMethod "$visibilityUrl/preferences/annotations" -Method Put -ContentType 'application/json' -Body (@{
+        hidden_class_ids = @()
+    } | ConvertTo-Json -Depth 4)
+    $initialVisibility = Invoke-RestMethod $visibilityUrl
+    if (-not $defaultVisibility.saved -or -not $userVisibility.saved -or
+        $initialVisibility.project_id -ne $projectId -or
+        -not ([string]$initialVisibility.user_identity).StartsWith('local-user:') -or
+        -not $initialVisibility.project_defaults.annotations.saved -or
+        @($initialVisibility.project_defaults.annotations.hidden_class_ids).Count -ne 1 -or
+        $initialVisibility.project_defaults.annotations.hidden_class_ids[0] -ne $testClass.id -or
+        -not $initialVisibility.user_preferences.annotations.saved -or
+        @($initialVisibility.user_preferences.annotations.hidden_class_ids).Count -ne 0) {
+        throw 'Installed class visibility did not save a project default and explicit empty local-user override.'
+    }
+    $visibilityIdentity = [string]$initialVisibility.user_identity
     $Catalog = Invoke-RestMethod "$api/projects/$projectId/model-catalog"
     # Architecture entries use selection_kind=builtin_architecture;
     # category=architecture is a separate display grouping.
@@ -493,6 +516,17 @@ try {
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
+    $persistedVisibility = Invoke-RestMethod $visibilityUrl
+    if ($persistedVisibility.project_id -ne $projectId -or
+        [string]$persistedVisibility.user_identity -ne $visibilityIdentity -or
+        -not $persistedVisibility.project_defaults.annotations.saved -or
+        @($persistedVisibility.project_defaults.annotations.hidden_class_ids).Count -ne 1 -or
+        $persistedVisibility.project_defaults.annotations.hidden_class_ids[0] -ne $testClass.id -or
+        -not $persistedVisibility.user_preferences.annotations.saved -or
+        @($persistedVisibility.user_preferences.annotations.hidden_class_ids).Count -ne 0) {
+        throw 'Installed class visibility project default, saved empty override, or local identity changed after restart/upgrade.'
+    }
+    $report.class_visibility_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Packaged API persisted project annotation default, explicit empty local-user override, and stable local identity across restart/upgrade.'
     if ($LiveSam2Acceptance) {
         $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
         if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
