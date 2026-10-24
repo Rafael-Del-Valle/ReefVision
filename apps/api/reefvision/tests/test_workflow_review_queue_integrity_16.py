@@ -217,6 +217,13 @@ def test_automatic_source_run_id_is_not_required_to_be_none():
     queue, items = snapshot()
     queue.source_quality_control_run_id = "qc-run-auto"
     queue.configuration_json["source_quality_control_run_id"] = "qc-run-auto"
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+        }
+    )
     queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
         {
             "image_ids": ["img-a", "img-b"],
