@@ -668,3 +668,23 @@ corrected in this increment. **New-head CI, full scientific verification,
 migration compatibility, and installed Windows GUI acceptance remain
 required.** This is a safeguard for registered-unverified identity metadata,
 not a claim that independent sampling units have been authenticated.
+
+## Imported identity revision continuity (2026-10-24)
+
+The project-owned ecological identity service now verifies that every
+organism's append-only revision chain begins at 1 and has no missing revision
+numbers. The previous latest-only lookup could silently accept a corrupted
+import with revision 1 followed by revision 3, or a revision 0 preceding the
+original registration. All registry reads, registration/revision writes, and
+the executable `ecology_identity_registry_source` Workflow Builder node now
+fail closed when such a gap is present. This does not alter valid contiguous
+revision histories, does not delete imported data, and does not promote
+`registered_unverified` identities to scientific observations.
+
+Regression coverage includes valid two-revision histories, project isolation,
+both malformed revision patterns, API write refusal, and persisted saved-workflow
+failure without a successful identity-registry artifact. Exact-head CI remains
+required; tests committed are not equivalent to tests passed. Linking identities
+to reviewed annotations, immutable calibration snapshots and registered
+experimental designs is still unfinished. No Windows installed-GUI or real
+longitudinal scientific acceptance is claimed.
