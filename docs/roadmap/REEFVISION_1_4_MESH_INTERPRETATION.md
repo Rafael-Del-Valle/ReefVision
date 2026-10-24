@@ -108,3 +108,33 @@ calibration remain unverified. Tests exercise a closed tetrahedron, an open
 square, a nonmanifold pinched boundary, and disconnected triangle patches
 through the measurement engine, standalone API, and persisted executable
 Workflow Builder graphs.
+
+
+## Provisional longitudinal mesh comparison (Track C)
+
+The standalone project endpoint `POST /api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison`
+accepts `before` and `after` mesh-preview requests. The typed executable
+`mesh_longitudinal_comparison` Workflow Builder node accepts two persisted
+`mesh_measurement_preview` artifacts, one on each named input port, and
+persists a `mesh_longitudinal_comparison` artifact. Both paths delegate to
+the same conservative comparison engine.
+
+Both observations must have matching nonempty **provisional** specimen IDs,
+different nonempty observation IDs, strictly increasing timezone-aware UTC
+timestamps, and matching project scope. The output reports elapsed days,
+surface-area difference (later minus earlier), and percent difference when
+the earlier area is positive. When both observations include scale-only area
+intervals, the difference interval uses the conservative endpoints
+`[later_min - earlier_max, later_max - earlier_min]`. Percent-change bounds
+use the corresponding extreme ratios when the earlier lower bound is positive.
+Missing uncertainty stays missing, never zero.
+
+**This is not verified coral growth or re-identification.** Matching
+caller-supplied IDs are not human-reviewed identity evidence. The engine does
+not infer coordinate registration, biological condition, reconstruction
+completeness, correlated calibration errors, or uncertainty due to sampling.
+The output retains both source geometry hashes and calibration evidence,
+unverified flags, and explicit QC warnings. A researcher must independently
+review identity, geometry quality, scale, and comparable survey methods before
+interpreting area differences biologically. No model weights, assets, or
+research data are transmitted to a cloud service.
