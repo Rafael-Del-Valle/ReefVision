@@ -12,7 +12,6 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 from reefvision.tests.test_annotations import create_project
 
-
 TETRA_FACES = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]]
 TETRA_VERTICES = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]
 
@@ -69,14 +68,29 @@ def test_translation_and_inward_winding_preserve_unsigned_volume() -> None:
 
 
 def test_open_patch_does_not_hide_valid_disconnected_patch_volume() -> None:
-    vertices = TETRA_VERTICES + [[3, 0, 0], [4, 0, 0], [3, 1, 0]]
-    faces = TETRA_FACES + [[4, 5, 6]]
+    vertices = [*TETRA_VERTICES, [3, 0, 0], [4, 0, 0], [3, 1, 0]]
+    faces = [*TETRA_FACES, [4, 5, 6]]
     result = measure_mesh_preview(**_params(vertices=vertices, faces=faces))
     assert result["edge_connected_patch_enclosed_volumes_m3"][0] == pytest.approx(
         0.01**3 / 6
     )
     assert result["edge_connected_patch_enclosed_volumes_m3"][1] is None
     assert result["enclosed_volume_m3"] is None
+
+
+def test_open_disconnected_patch_preserves_volume_and_topology_qc() -> None:
+    vertices = [*TETRA_VERTICES, [3, 0, 0], [4, 0, 0], [3, 1, 0]]
+    faces = [*TETRA_FACES, [4, 5, 6]]
+    result = measure_mesh_preview(**_params(vertices=vertices, faces=faces))
+    warnings = result["qc_warnings"]
+    assert "enclosed_volume_requires_closed_oriented_nondegenerate_patch" in warnings
+    assert "open_mesh_surface_not_enclosed" in warnings
+    assert "disconnected_mesh_patches" in warnings
+    assert len(warnings) == len(set(warnings))
+    assert result["enclosed_volume_m3"] is None
+    assert result["edge_connected_patch_enclosed_volumes_m3"][0] == pytest.approx(
+        0.01**3 / 6
+    )
 
 
 def test_missing_scale_uncertainty_does_not_invent_bounds() -> None:
@@ -86,9 +100,12 @@ def test_missing_scale_uncertainty_does_not_invent_bounds() -> None:
     assert result["edge_connected_patch_enclosed_volume_scale_intervals_m3"] is None
 
 
-def test_standalone_and_persisted_workflow_volume_parity(client: TestClient) -> None:
+@pytest.mark.parametrize("faces", [TETRA_FACES, TETRA_FACES[:-1]], ids=["closed", "open"])
+def test_standalone_and_persisted_workflow_volume_parity(
+    client: TestClient, faces: list[list[int]]
+) -> None:
     project_id = str(create_project(client, "Mesh volume parity")["id"])
-    params = _params()
+    params = _params(faces=faces)
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
@@ -136,3 +153,8 @@ def test_standalone_and_persisted_workflow_volume_parity(client: TestClient) -> 
         assert artifact[key] == standalone.json()[key]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+    if len(faces) == 3:
+        assert artifact["enclosed_volume_m3"] is None
+        assert "enclosed_volume_requires_closed_oriented_nondegenerate_patch" in artifact[
+            "qc_warnings"
+        ]
