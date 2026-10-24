@@ -317,3 +317,70 @@ def test_calibrated_mesh_edge_underflow_warns_in_standalone_and_saved_graph(
     )
     assert artifact["surface_edge_paths"] == direct["surface_edge_paths"]
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+def test_inconsistent_winding_on_route_persists_in_saved_workflow(
+    client: TestClient,
+) -> None:
+    # Two triangles traverse the same shared edge in the same direction.
+    # The shortest path is valid geometry but needs explicit topology review.
+    parameters = {
+        "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, -1, 0]],
+        "faces": [[0, 1, 2], [0, 1, 3]],
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified winding test mesh",
+        "surface_path_vertex_pairs": [[0, 1]],
+    }
+    direct = measure_mesh_preview(**parameters)
+    route = direct["surface_edge_paths"][0]
+    assert route["status"] == "connected"
+    assert route["path_vertex_indices"] == [0, 1]
+    assert route["length_m"] == pytest.approx(0.1)
+    assert route["path_qc_warnings"] == ["inconsistent_winding_edge_on_path"]
+    assert "inconsistent_face_winding" in direct["qc_warnings"]
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Winding QC mesh edge")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
+    assert standalone.status_code == 200, standalone.text
+    assert standalone.json()["surface_edge_paths"] == direct["surface_edge_paths"]
+
+    graph = {
+        "graph_id": "mesh-path-winding-v14",
+        "name": "Mesh winding route review",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": parameters},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_edge_paths"] == direct["surface_edge_paths"]
+    assert "inconsistent_face_winding" in artifact["qc_warnings"]
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
