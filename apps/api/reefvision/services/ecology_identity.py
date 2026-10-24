@@ -479,11 +479,17 @@ class EcologyIdentityService:
         metadata = image.metadata_json
         raw = metadata.get("measurement_calibration") if isinstance(metadata, dict) else None
         if not isinstance(raw, dict):
-            raise ValidationError("Ecological calibration evidence requires saved image calibration")
+            raise ValidationError(
+                "Ecological calibration evidence requires saved image calibration"
+            )
         try:
             calibration = MeasurementCalibrationUpdate.model_validate(raw)
         except ValueError as exc:
             raise ValidationError("Ecological image calibration metadata is invalid") from exc
+        if calibration.unit.strip().casefold() in {"px", "pixel", "pixels"}:
+            raise ValidationError(
+                "Ecological calibration requires a physical length unit, not pixels"
+            )
         for field in (
             "distance_per_pixel",
             "reference_length",
@@ -495,6 +501,13 @@ class EcologyIdentityService:
             if value is not None and not math.isfinite(value):
                 raise ValidationError("Ecological calibration evidence contains nonfinite values")
         signature = calibration.camera_signature
+        if signature is not None:
+            for field in ("focal_length_mm", "capture_distance"):
+                value = getattr(signature, field)
+                if value is not None and not math.isfinite(value):
+                    raise ValidationError(
+                        "Ecological calibration camera signature contains nonfinite values"
+                    )
         if signature is not None and (
             (signature.width_px is not None and signature.width_px != image.width_px)
             or (signature.height_px is not None and signature.height_px != image.height_px)
@@ -596,14 +609,18 @@ class EcologyIdentityService:
         for record in records:
             annotation = annotations.get(record.annotation_evidence_id)
             if annotation is None:
-                raise ValidationError("Ecological calibration evidence has an invalid annotation link")
+                raise ValidationError(
+                    "Ecological calibration evidence has an invalid annotation link"
+                )
             image_link = images.get(annotation.image_evidence_id)
             if (
                 image_link is None
                 or record.image_id != image_link.image_id
                 or record.image_sha256 != image_link.image_sha256
             ):
-                raise ValidationError("Ecological calibration evidence has a mismatched image source")
+                raise ValidationError(
+                    "Ecological calibration evidence has a mismatched image source"
+                )
             image = self.session.get(ImageAsset, record.image_id)
             if image is None or image.project_id != project_id:
                 raise ValidationError("Ecological calibration image source is missing")
