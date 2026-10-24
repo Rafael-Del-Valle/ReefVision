@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, Field, StrictInt, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, StrictBool, StrictInt, model_validator
 
 
 class PointCloudPreviewRequest(BaseModel):
@@ -23,6 +23,7 @@ class PointCloudPreviewRequest(BaseModel):
     )
     observed_at_utc: AwareDatetime | None = None
     point_index_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=32)
+    preserve_axis_extrema_in_preview: StrictBool = False
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> PointCloudPreviewRequest:
