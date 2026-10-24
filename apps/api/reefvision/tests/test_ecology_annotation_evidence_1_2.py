@@ -98,17 +98,12 @@ def test_annotation_link_persists_unverified_source_in_saved_workflow(
     image_link = _link(client, project_id, "colony-a", image_id)
     assert image_link.status_code == 201, image_link.text
     box_id = _box(client, image_id, str(project["label_classes"][0]["id"]))
-    linked = _annotation_link(
-        client, project_id, image_link.json()["id"], "box", box_id
-    )
+    linked = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
     assert linked.status_code == 201, linked.text
     assert linked.json()["evidence_level"] == "linked_unverified"
     assert len(linked.json()["annotation_sha256"]) == 64
-    assert (
-        _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
-        .status_code
-        == 409
-    )
+    duplicate = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
+    assert duplicate.status_code == 409
     registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
     assert registry.status_code == 200, registry.text
     snapshot = registry.json()
@@ -135,9 +130,7 @@ def test_mask_annotation_change_blocks_api_and_saved_workflow(
     image_link = _link(client, project_id, "colony-a", image_id)
     assert image_link.status_code == 201
     mask_id = _mask(client, image_id, str(project["label_classes"][0]["id"]))
-    linked = _annotation_link(
-        client, project_id, image_link.json()["id"], "mask", mask_id
-    )
+    linked = _annotation_link(client, project_id, image_link.json()["id"], "mask", mask_id)
     assert linked.status_code == 201, linked.text
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
@@ -174,9 +167,7 @@ def test_annotation_link_rejects_foreign_image_and_stale_revision(
     image_link = _link(client, project_id, "colony-a", first_image)
     assert image_link.status_code == 201
     box_id = _box(client, second_image, str(project["label_classes"][0]["id"]))
-    foreign = _annotation_link(
-        client, project_id, image_link.json()["id"], "box", box_id
-    )
+    foreign = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
     assert foreign.status_code == 400, foreign.text
     assert "mismatched" in foreign.json()["detail"]
 
@@ -187,9 +178,7 @@ def test_annotation_link_rejects_foreign_image_and_stale_revision(
         box.image_id = first_image
         box.revision = 2
         session.commit()
-    stale = _annotation_link(
-        client, project_id, image_link.json()["id"], "box", box_id
-    )
+    stale = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
     assert stale.status_code == 409, stale.text
     assert "Stale annotation revision" in stale.json()["detail"]
 
@@ -210,9 +199,7 @@ def test_unreviewed_annotation_cannot_be_linked_or_promoted(
         assert box is not None
         box.source_type = "model"
         session.commit()
-    rejected = _annotation_link(
-        client, project_id, image_link.json()["id"], "box", box_id
-    )
+    rejected = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
     assert rejected.status_code == 400, rejected.text
     assert "reviewed human annotations" in rejected.json()["detail"]
     registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
@@ -237,9 +224,7 @@ def test_review_status_revocation_blocks_saved_workflow(
     image_link = _link(client, project_id, "colony-a", image_id)
     assert image_link.status_code == 201
     box_id = _box(client, image_id, str(project["label_classes"][0]["id"]))
-    linked = _annotation_link(
-        client, project_id, image_link.json()["id"], "box", box_id
-    )
+    linked = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
     assert linked.status_code == 201
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
