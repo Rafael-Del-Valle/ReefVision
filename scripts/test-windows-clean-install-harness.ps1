@@ -91,6 +91,18 @@ Assert-True ($acceptanceSource.Contains('Assert-ReefVisionAcceptanceTreeNoRepars
 $arguments = New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -InstallRoot 'C:\rv-test\install' -LogPath 'C:\rv-test\install.log'
 Assert-True ($arguments[0] -eq '/i') 'Install command does not use /i.'
 Assert-True (($arguments -join ' ') -match 'INSTALLDIR=') 'Install command omitted isolated INSTALLDIR.'
+# A same-version MSI reinstall is not an upgrade, and must never earn
+# a passing migration/rollback acceptance result.
+Assert-True (Assert-ReefVisionUpgradeVersion -PreviousVersion '1.0.1' -TargetVersion '1.0.2') 'Valid patch upgrade was rejected.'
+Assert-True (Assert-ReefVisionUpgradeVersion -PreviousVersion '1.9.65535' -TargetVersion '2.0.0') 'Valid major upgrade was rejected.'
+Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion '1.0.2' -TargetVersion '1.0.2' } 'Refusing non-upgrade'
+Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion '1.0.2' -TargetVersion '1.0.1' } 'Refusing non-upgrade'
+Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion '1.0.2' -TargetVersion '1.0.2.1' } 'Invalid MSI ProductVersion'
+Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion '1.0.2' -TargetVersion '256.0.0' } 'Windows Installer limits'
+Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion '1.0.2' -TargetVersion '1.256.0' } 'Windows Installer limits'
+Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion '1.0.2' -TargetVersion '1.0.65536' } 'Windows Installer limits'
+Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion 'not-an-msi-version' -TargetVersion '1.0.2' } 'Invalid MSI ProductVersion'
+
 $uninstall = New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00000000-0000-0000-0000-000000000000}' -LogPath 'C:\rv-test\uninstall.log'
 Assert-True ($uninstall[0] -eq '/x') 'Uninstall command does not use /x.'
 
@@ -123,6 +135,19 @@ $parseErrors = $null
 )
 Assert-True (@($parseErrors).Count -eq 0) "Windows acceptance PowerShell syntax invalid: $($parseErrors -join '; ')"
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+Assert-True ($acceptanceScript.Contains('Assert-ReefVisionUpgradeVersion -PreviousVersion $PreviousProductVersion -TargetVersion $ProductVersion')) 'Upgrade must check strict MSI version ordering before any install.'
+Assert-True ($acceptanceScript.Contains("MSI returned success; post-upgrade checks pending.")) 'msiexec exit alone must not mark upgrade PASS.'
+Assert-True ($acceptanceScript.Contains('$upgradedMigration.current_schema_revision -ne $upgradedMigration.expected_schema_revision')) 'Upgrade must verify migrated schema after restart.'
+Assert-True ($acceptanceScript.Contains('$registrations[0].DisplayVersion -ne $ProductVersion')) 'Upgrade must verify registered MSI version.'
+Assert-True ($acceptanceScript.Contains('Verified version $PreviousProductVersion -> $ProductVersion')) 'Upgrade PASS must follow installed version and scientific-data checks.'
+$libraryTokens = $null
+$libraryParseErrors = $null
+[void][System.Management.Automation.Language.Parser]::ParseFile(
+    (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1'),
+    [ref]$libraryTokens,
+    [ref]$libraryParseErrors
+)
+Assert-True (@($libraryParseErrors).Count -eq 0) "Windows acceptance helper syntax invalid: $($libraryParseErrors -join '; ')"
 
 # The disposable installed-MSI test must exercise 1.6 QC coordination through
 # HTTP and verify persisted audit/review state after a second desktop restart.
