@@ -63,3 +63,23 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "resolve the two lineages with a reviewed data-preserving "
             "migration; do not stamp, downgrade, or delete tables."
         )
+
+    # A 0039 revision marker must not conceal an unrevised 0038 CHECK. This
+    # can occur when revision bookkeeping and SQLite DDL were committed
+    # separately. Inspect only the existing schema; never repair it here.
+    if revision == "0039" and not missing_columns and not unexpected_science:
+        event_checks = inspector.get_check_constraints(_REVIEW_TABLE)
+        for constraint in event_checks:
+            if constraint.get("name") != "ck_review_queue_item_event_type":
+                continue
+            expression = str(constraint.get("sqltext") or "").casefold()
+            if any(
+                f"'{event}'" not in expression
+                for event in ("triage_start", "triage_skip", "triage_return")
+            ):
+                raise RuntimeError(
+                    "Unsafe ReefVision Alembic revision 0039 collision: the "
+                    "review-event CHECK constraint still excludes one or more "
+                    "triage event types. Preserve the database and reconcile "
+                    "the migration lineage without stamping or deleting records."
+                )
