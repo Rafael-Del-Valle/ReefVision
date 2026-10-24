@@ -47,6 +47,84 @@ PACKAGE_MANIFEST_FILENAME = "reefvision-pose-training-manifest.json"
 PACKAGE_ITEMS_FILENAME = "items.jsonl"
 
 
+def frozen_pose_item_fingerprints_match(
+    session: Session,
+    dataset: PoseTrainingDataset,
+) -> bool:
+    """Compare signed item summaries with independently persisted frozen items."""
+    manifest = dataset.manifest_json
+    if (
+        dataset.schema_version != DATASET_SCHEMA_VERSION
+        or not isinstance(manifest, dict)
+        or manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION
+        or not isinstance(manifest.get("items"), list)
+    ):
+        return False
+
+    rows = session.scalars(
+        select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset.id)
+    ).all()
+    if len(rows) != dataset.item_count:
+        return False
+
+    # A matching manifest and item_sha256 column cannot prove that the
+    # persisted canonical landmarks are still the scientist-verified pose.
+    # Recompute the original verification fingerprint from frozen row data.
+    for row in rows:
+        canonical_pose = row.canonical_pose_json
+        if (
+            not isinstance(canonical_pose, dict)
+            or canonical_pose.get("schema_version") != "reefvision-canonical-pose-frame-0001"
+            or canonical_pose.get("frame_index") != row.frame_index
+        ):
+            return False
+        verified_payload = {
+            "schema_version": "pose-active-learning-verified-pose-0001",
+            "video_track_id": row.video_track_id,
+            "track_revision": row.verified_track_revision,
+            "focus_frame": row.frame_index,
+            "pose_schema_id": row.pose_schema_id,
+            "pose_schema_revision": row.pose_schema_revision,
+            "pose_observations": canonical_pose.get("pose_observations"),
+            "keypoints": canonical_pose.get("keypoints"),
+        }
+        if canonical_json_sha256(verified_payload) != row.verified_pose_sha256:
+            return False
+
+    # Fingerprints alone do not bind the manifest's source identities to
+    # persisted items: a re-signed summary could otherwise swap candidate,
+    # video, track, frame, or schema lineage without changing item_sha256.
+    expected = {
+        row.id: {
+            "item_sha256": row.item_sha256,
+            "candidate_id": row.candidate_id,
+            "video_id": row.video_id,
+            "video_sha256": row.video_sha256,
+            "video_track_id": row.video_track_id,
+            "frame_index": row.frame_index,
+            "verified_track_revision": row.verified_track_revision,
+            "verified_pose_sha256": row.verified_pose_sha256,
+            "pose_schema_id": row.pose_schema_id,
+            "pose_schema_revision": row.pose_schema_revision,
+            "pose_schema_content_hash": row.pose_schema_content_hash,
+            # The source candidate hash must remain bound to the frozen
+            # acquisition provenance, even if the manifest is re-signed.
+            "candidate_provenance_sha256": canonical_json_sha256(row.acquisition_provenance_json),
+            "correction_id": (row.review_provenance_json or {}).get("correction_id"),
+        }
+        for row in rows
+    }
+    observed: dict[str, dict[str, Any]] = {}
+    for summary in manifest["items"]:
+        if not isinstance(summary, dict) or not isinstance(summary.get("item_id"), str):
+            return False
+        item_id = summary["item_id"]
+        if item_id in observed:
+            return False
+        observed[item_id] = {field: summary.get(field) for field in expected.get(item_id, {})}
+    return observed == expected
+
+
 class PoseTrainingDatasetService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -600,6 +678,50 @@ class PoseTrainingDatasetService:
         if len(items) != dataset.item_count:
             raise ConflictError(
                 "Pose training dataset item count does not match its immutable manifest"
+            )
+        if not isinstance(dataset.manifest_json, dict):
+            raise ConflictError("Pose training dataset manifest must be a JSON object")
+        if canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
+            raise ConflictError(
+                "Pose training dataset manifest checksum no longer matches frozen content"
+            )
+        manifest = dataset.manifest_json
+        pose_schema = manifest.get("pose_schema")
+        if (
+            dataset.status != "complete"
+            or manifest.get("dataset_id") != dataset.id
+            or manifest.get("project_id") != dataset.project_id
+            or manifest.get("source_round_id") != dataset.source_round_id
+            or manifest.get("source_selection_sha256") != dataset.source_selection_sha256
+            or manifest.get("source_retraining_manifest_sha256")
+            != dataset.source_retraining_manifest_sha256
+            or not isinstance(pose_schema, dict)
+            or pose_schema.get("schema_id") != dataset.pose_schema_id
+            or pose_schema.get("schema_revision") != dataset.pose_schema_revision
+            or pose_schema.get("content_hash") != dataset.pose_schema_content_hash
+        ):
+            raise ConflictError(
+                "Pose training dataset manifest lineage no longer matches frozen truth"
+            )
+        if (
+            manifest.get("truth_policy") != "scientist_verified_only"
+            or manifest.get("skipped_candidates_included") is not False
+            or manifest.get("pending_candidates_included") is not False
+        ):
+            raise ConflictError(
+                "Pose training dataset manifest must contain only scientist-verified items"
+            )
+        if (
+            not isinstance(manifest.get("items"), list)
+            or manifest.get("item_count") != dataset.item_count
+            or len(manifest["items"]) != dataset.item_count
+        ):
+            raise ConflictError(
+                "Pose training dataset manifest item count no longer matches frozen truth"
+            )
+        if not frozen_pose_item_fingerprints_match(self.session, dataset):
+            raise ConflictError(
+                "Pose training dataset item lineage no longer matches persisted verified items"
             )
 
         manifest_bytes = (

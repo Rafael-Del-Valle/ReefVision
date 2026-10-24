@@ -235,7 +235,15 @@ def process_workflow_run_job(
         plan = WorkflowGraphService(session).plan(run.project_id, graph)
         if not plan.valid:
             job.status = "failed"
-            job.error_message = "Workflow graph no longer validates"
+            first_error = next((issue for issue in plan.issues if issue.severity == "error"), None)
+            job.error_message = (
+                "Workflow graph no longer validates"
+                if first_error is None
+                else (
+                    f"Workflow graph no longer validates ({first_error.code}): "
+                    f"{first_error.message}"
+                )
+            )
             job.completed_at = _now()
             run.status = "failed"
             run.error_message = job.error_message

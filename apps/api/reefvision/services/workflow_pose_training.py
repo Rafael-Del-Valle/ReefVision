@@ -13,6 +13,7 @@ from reefvision.db.models import (
     ExperimentRecord,
     Job,
     ModelRegistration,
+    PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
     PoseModelSchemaBinding,
     PoseTrainingDataset,
@@ -31,6 +32,7 @@ from reefvision.ml.ultralytics_registry import (
 from reefvision.services import (
     workflow_runtime_adapters as runtime_adapters,
 )
+from reefvision.services.pose_training_datasets import frozen_pose_item_fingerprints_match
 from reefvision.storage.datasets import (
     canonical_json_sha256,
 )
@@ -134,13 +136,93 @@ def _pose_dataset(
     if dataset is None or dataset.project_id != project_id:
         raise ValidationError(f"Pose {role} dataset does not belong to this project")
 
-    if dataset.status != "complete":
-        raise ValidationError(f"Pose {role} dataset must be complete")
+    if dataset.status != "complete" or (dataset.item_count or 0) < 1:
+        raise ValidationError(f"Pose {role} dataset must be complete and contain verified items")
+
+    if not isinstance(dataset.manifest_json, dict):
+        raise ValidationError(f"Pose {role} dataset manifest must be a JSON object")
+
+    if canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
+        raise ValidationError(
+            f"Pose {role} dataset manifest checksum no longer matches frozen truth"
+        )
+
+    manifest = dataset.manifest_json
+    manifest_schema = manifest.get("pose_schema")
+    if (
+        manifest.get("dataset_id") != dataset.id
+        or manifest.get("project_id") != dataset.project_id
+        or manifest.get("source_round_id") != dataset.source_round_id
+        or manifest.get("source_selection_sha256") != dataset.source_selection_sha256
+        or manifest.get("source_retraining_manifest_sha256")
+        != dataset.source_retraining_manifest_sha256
+        or not isinstance(manifest_schema, dict)
+        or manifest_schema.get("schema_id") != dataset.pose_schema_id
+        or manifest_schema.get("schema_revision") != dataset.pose_schema_revision
+        or manifest_schema.get("content_hash") != dataset.pose_schema_content_hash
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset manifest lineage no longer matches frozen truth"
+        )
+
+    if (
+        dataset.manifest_json.get("truth_policy") != "scientist_verified_only"
+        or dataset.manifest_json.get("skipped_candidates_included") is not False
+        or dataset.manifest_json.get("pending_candidates_included") is not False
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset manifest must contain only scientist-verified items"
+        )
+
+    if (
+        not isinstance(dataset.manifest_json.get("items"), list)
+        or dataset.manifest_json.get("item_count") != dataset.item_count
+        or len(dataset.manifest_json["items"]) != dataset.item_count
+    ):
+        raise ValidationError(f"Pose {role} dataset item count no longer matches frozen manifest")
+
+    if not frozen_pose_item_fingerprints_match(session, dataset):
+        raise ValidationError(
+            f"Pose {role} dataset item fingerprints no longer match persisted frozen truth"
+        )
+
+    # The planner validates frozen truth, but the execution adapter must also
+    # reject schema drift after planning or when invoked independently.
+    schema = session.get(PoseLandmarkSchema, dataset.pose_schema_id)
+    revision = session.scalar(
+        select(PoseLandmarkSchemaRevision).where(
+            PoseLandmarkSchemaRevision.schema_id == dataset.pose_schema_id,
+            PoseLandmarkSchemaRevision.revision == dataset.pose_schema_revision,
+        )
+    )
+    if (
+        schema is None
+        or schema.project_id != project_id
+        or revision is None
+        or revision.content_hash != dataset.pose_schema_content_hash
+    ):
+        raise ValidationError(f"Pose {role} dataset landmark schema no longer matches frozen truth")
 
     advertised_manifest = str(payload.get("manifest_sha256") or "")
 
     if advertised_manifest and advertised_manifest != dataset.manifest_sha256:
         raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
+
+    # Downstream training must not silently accept a stale or substituted
+    # landmark schema identity from a persisted Workflow Builder artifact.
+    schema_fields = (
+        "pose_schema_id",
+        "pose_schema_revision",
+        "pose_schema_content_hash",
+    )
+    if any(
+        str(payload[field]) != str(getattr(dataset, field))
+        for field in schema_fields
+        if field in payload
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset artifact landmark schema metadata no longer matches frozen truth"
+        )
 
     return dataset
 
