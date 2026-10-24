@@ -190,6 +190,59 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen.manifest_sha256 = original_manifest_sha
         session.commit()
 
+    # Re-signing a modified provenance field must not make saved training
+    # truth appear reproducible when its frozen source lineage has changed.
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        lineage_manifest = {**original_manifest, "source_selection_sha256": "0" * 64}
+        lineage_sha = canonical_json_sha256(lineage_manifest)
+        frozen.manifest_json = lineage_manifest
+        frozen.manifest_sha256 = lineage_sha
+        session.commit()
+
+    lineage_graph = {
+        **graph,
+        "nodes": [
+            {
+                **graph["nodes"][0],
+                "parameters": {**graph["nodes"][0]["parameters"], "manifest_sha256": lineage_sha},
+            }
+        ],
+    }
+    lineage_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=lineage_graph
+    )
+    assert lineage_plan.status_code == 200, lineage_plan.text
+    assert lineage_plan.json()["valid"] is False
+    assert "pose_dataset_lineage_mismatch" in {
+        issue["code"] for issue in lineage_plan.json()["issues"]
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="manifest lineage no longer matches"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, lineage_graph["nodes"][0]["parameters"], {}
+        )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="manifest lineage no longer matches"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            app.state.settings,
+            project_id=project_id,
+            dataset_payload={**payload, "manifest_sha256": lineage_sha},
+            parameters={},
+        )
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        frozen.manifest_json = original_manifest
+        frozen.manifest_sha256 = original_manifest_sha
+        session.commit()
+
     # The saved workflow's real output artifact must not be reusable for
     # training after any of its frozen landmark identity fields are changed.
     with app.state.session_factory() as session:
