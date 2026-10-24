@@ -15,6 +15,7 @@ from reefvision.schemas.spatial_mesh_preview_v14 import (
     MeshPreviewRequest,
 )
 from reefvision.schemas.spatial_point_cloud_v14 import PointCloudPreviewRequest
+from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.services.spatial_point_cloud_v14 import preview_point_cloud_from_request
 
