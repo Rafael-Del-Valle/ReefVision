@@ -363,6 +363,17 @@ def measure_mesh_preview(
             if relative_scale_uncertainty is not None
             else None
         ),
+        "edge_connected_patch_area_scale_intervals_m2": (
+            [
+                [
+                    area * (1 - relative_scale_uncertainty) ** 2,
+                    area * (1 + relative_scale_uncertainty) ** 2,
+                ]
+                for area in patch_areas_m2
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "inconsistent_winding_edge_count": inconsistent_winding_edge_count,
         "qc_warnings": (
             (["degenerate_triangles_present"] if degenerate else [])
@@ -379,6 +390,14 @@ def measure_mesh_preview(
         ),
         "area_scale_uncertainty_m2": (
             2 * relative_scale_uncertainty * area_m2
+            if relative_scale_uncertainty is not None
+            else None
+        ),
+        "surface_area_scale_interval_m2": (
+            [
+                area_m2 * (1 - relative_scale_uncertainty) ** 2,
+                area_m2 * (1 + relative_scale_uncertainty) ** 2,
+            ]
             if relative_scale_uncertainty is not None
             else None
         ),
