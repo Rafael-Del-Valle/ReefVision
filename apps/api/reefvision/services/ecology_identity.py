@@ -284,9 +284,7 @@ class EcologyIdentityService:
         self.session.refresh(link)
         return EcologyImageEvidenceRow.model_validate(link)
 
-    def _annotation_source(
-        self, kind: str, annotation_id: str, image_id: str
-    ) -> tuple[int, str]:
+    def _annotation_source(self, kind: str, annotation_id: str, image_id: str) -> tuple[int, str]:
         """Resolve a current source revision, never a verified research observation."""
         annotation: Annotation | MaskAnnotation | None
         if kind == "box":
