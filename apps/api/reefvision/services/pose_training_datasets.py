@@ -195,6 +195,12 @@ class PoseTrainingDatasetService:
         dataset_id: str,
     ) -> PoseTrainingDatasetManifestResponse:
         dataset = self._dataset(dataset_id)
+        if not isinstance(dataset.manifest_json, dict):
+            raise ConflictError("Pose training dataset manifest must be a JSON object")
+        if canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
+            raise ConflictError(
+                "Pose training dataset manifest checksum no longer matches frozen content"
+            )
         return PoseTrainingDatasetManifestResponse(
             dataset_id=dataset.id,
             manifest_sha256=dataset.manifest_sha256,
