@@ -54,7 +54,8 @@ def test_identity_registry_is_project_owned_and_deterministic(
     assert one.status_code == 200, one.text
     assert one.json() == two.json()
     assert [row["organism_key"] for row in one.json()["identities"]] == [
-        "colony-16", "fragment-16a"
+        "colony-16",
+        "fragment-16a",
     ]
     assert one.json()["evidence_level"] == "registered_unverified"
     assert one.json()["review_gate"] == "scientist_review_required"
@@ -85,13 +86,9 @@ def test_identity_rejects_cross_project_parents_and_technical_units(
         experimental_unit_id="frame-9",
     )
     assert invalid.status_code == 422, invalid.text
-    incomplete = _register(
-        client, first, "fragment-3", "fragment", experimental_unit_id="tank-1"
-    )
+    incomplete = _register(client, first, "fragment-3", "fragment", experimental_unit_id="tank-1")
     assert incomplete.status_code == 422, incomplete.text
-    self_parent = _register(
-        client, first, "fragment-4", "fragment", parent_colony_key="fragment-4"
-    )
+    self_parent = _register(client, first, "fragment-4", "fragment", parent_colony_key="fragment-4")
     assert self_parent.status_code == 400, self_parent.text
 
 
@@ -100,8 +97,12 @@ def test_identity_revision_is_append_only_and_stale_writes_fail(
 ) -> None:
     project_id = str(create_project(client, "Identity history")["id"])
     created = _register(
-        client, project_id, "coral-1", "individual",
-        experimental_unit_type="tank", experimental_unit_id="tank-A",
+        client,
+        project_id,
+        "coral-1",
+        "individual",
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
     )
     assert created.status_code == 201, created.text
     before = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry").json()
@@ -130,7 +131,8 @@ def test_identity_revision_is_append_only_and_stale_writes_fail(
             )
         )
     assert [(row.revision, row.experimental_unit_id) for row in history] == [
-        (1, "tank-A"), (2, "tank-B")
+        (1, "tank-A"),
+        (2, "tank-B"),
     ]
 
 
@@ -186,13 +188,10 @@ def test_saved_workflow_snapshots_registry_without_verification_promotion(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        row for row in detail.json()["artifacts"]
-        if row["data_type"] == "ecology_identity_registry"
+        row for row in detail.json()["artifacts"] if row["data_type"] == "ecology_identity_registry"
     ]
     assert len(artifacts) == 1
-    standalone = client.get(
-        f"/api/v1/projects/{project_id}/ecology/identity-registry"
-    )
+    standalone = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
     assert standalone.status_code == 200, standalone.text
     assert artifacts[0]["payload_json"] == standalone.json()
     graph["nodes"].append({"node_id": "dataset", "node_type": "dataset_version_create"})
@@ -205,15 +204,10 @@ def test_saved_workflow_snapshots_registry_without_verification_promotion(
             "target_port_id": "reviewed",
         }
     )
-    invalid = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph
-    )
+    invalid = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph)
     assert invalid.status_code == 200, invalid.text
     assert invalid.json()["valid"] is False
-    assert any(
-        issue["code"] == "incompatible_port_types"
-        for issue in invalid.json()["issues"]
-    )
+    assert any(issue["code"] == "incompatible_port_types" for issue in invalid.json()["issues"])
 
 
 def test_parent_colony_reclassification_requires_reassigning_fragments(
@@ -223,16 +217,17 @@ def test_parent_colony_reclassification_requires_reassigning_fragments(
     assert _register(client, project_id, "parent-20").status_code == 201
     assert (
         _register(
-            client, project_id, "fragment-20a", "fragment",
+            client,
+            project_id,
+            "fragment-20a",
+            "fragment",
             parent_colony_key="parent-20",
         ).status_code
         == 201
     )
     registry_url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
     before = client.get(registry_url).json()
-    parent_url = (
-        f"/api/v1/projects/{project_id}/ecology/organisms/parent-20/revisions"
-    )
+    parent_url = f"/api/v1/projects/{project_id}/ecology/organisms/parent-20/revisions"
     change = {
         "expected_revision": 1,
         "kind": "individual",
@@ -244,9 +239,7 @@ def test_parent_colony_reclassification_requires_reassigning_fragments(
     assert client.get(registry_url).json() == before
 
     # A reviewed correction may first unlink the child in a new revision.
-    fragment_url = (
-        f"/api/v1/projects/{project_id}/ecology/organisms/fragment-20a/revisions"
-    )
+    fragment_url = f"/api/v1/projects/{project_id}/ecology/organisms/fragment-20a/revisions"
     unlinked = client.post(
         fragment_url,
         json={
@@ -271,7 +264,10 @@ def test_corrupt_latest_lineage_fails_closed_in_api_and_saved_workflow(
     assert _register(client, project_id, "parent-39").status_code == 201
     assert (
         _register(
-            client, project_id, "fragment-39a", "fragment",
+            client,
+            project_id,
+            "fragment-39a",
+            "fragment",
             parent_colony_key="parent-39",
         ).status_code
         == 201
@@ -336,6 +332,5 @@ def test_corrupt_latest_lineage_fails_closed_in_api_and_saved_workflow(
     assert detail.json()["run"]["status"] == "failed"
     assert "invalid parent-colony link" in detail.json()["run"]["error_message"]
     assert not any(
-        row["data_type"] == "ecology_identity_registry"
-        for row in detail.json()["artifacts"]
+        row["data_type"] == "ecology_identity_registry" for row in detail.json()["artifacts"]
     )
