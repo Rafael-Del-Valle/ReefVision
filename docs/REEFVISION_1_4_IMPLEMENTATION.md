@@ -91,6 +91,25 @@ organism identity, and biological completeness remain unverified.
 Human scientific review is required before interpreting these provisional
 geometric results. No confidence intervals are inferred.
 
+## Vertex-touching closed mesh patches (aggregate volume withheld)
+
+Distinct edge-connected patches may share one or more source vertex indices
+without sharing any mesh edges. Even if each patch separately passes closed,
+oriented, nondegenerate edge checks, their union has a nonmanifold point
+contact and is not a single regular closed surface. The standalone preview
+and persisted executable `mesh_surface_preview` node now expose
+`vertex_touching_patch_vertex_count` and the QC warning
+`vertex_touching_mesh_patches`. When this count is positive, the
+`enclosed_volume_m3` aggregate and its scale-only interval are withheld
+(`null`) with `enclosed_volume_vertex_touching_patches` QC, while
+individual provisional patch volumes remain available for inspection.
+
+This conservative gate does **not** detect all nonmanifold vertex fans,
+self-intersections, coincident-but-separately-indexed points, or actual
+organism identity. No human-verified biological volume is inferred. Saved
+Workflow Builder parity tests cover both vertex-touching and vertex-disjoint
+closed tetrahedral patch pairs.
+
 ## Per-patch Euler topology diagnostics (provisional)
 
 The standalone mesh-preview API and saved executable `mesh_surface_preview`
