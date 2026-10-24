@@ -90,6 +90,18 @@ Assert-True ($acceptanceScript.Contains('function Import-AcceptanceAnnotations')
 Assert-True ($acceptanceScript.Contains('cocoResult.boxes_imported -ne 1')) 'COCO imported box acceptance is missing.'
 Assert-True ($acceptanceScript.Contains('yoloResult.boxes_imported -ne 1')) 'YOLO imported box acceptance is missing.'
 Assert-True ($acceptanceScript.Contains('LiveSam2Acceptance')) 'Live SAM mode must be declared.'
+Assert-True ($acceptanceScript.Contains('if ($LiveSam2Acceptance -and -not $ApprovedCheckpointDownload)')) 'Network checkpoint acquisition must require explicit researcher approval.'
+$buildWorkflow = Get-Content -LiteralPath (Join-Path $Root '.github\workflows\build-desktop.yml') -Raw
+Assert-True (-not $buildWorkflow.Contains('-LiveSam2Acceptance')) 'Automated Windows PR acceptance must never download pretrained weights.'
+# This must fail before resolving an MSI, creating a test data root, or
+# downloading any checkpoint; no actual installer or network is required.
+try {
+    & $acceptancePath -InstallerPath 'C:\reefvision-unapproved-checkpoint-test.msi' -AcceptanceRoot $safeRoot -PlanOnly -LiveSam2Acceptance
+    throw 'Expected approval refusal'
+} catch {
+    if ($_.Exception.Message -eq 'Expected approval refusal') { throw }
+    Assert-True ($_.Exception.Message -like '*-ApprovedCheckpointDownload*') 'Unapproved live SAM acceptance did not fail closed before installer access.'
+}
 Assert-True ($acceptanceScript.Contains("HF_HUB_OFFLINE'] = '0'")) 'Opt-in live SAM must allow a real network download.'
 Assert-True ($acceptanceScript.Contains('samAcceptedMaskId')) 'Live SAM acceptance must validate mask preservation.'
 Assert-True ($acceptanceScript.Contains("'api.log', 'api.log.1'")) 'Failed SAM2 acceptance must archive API logs, not only startup backend.log.'
