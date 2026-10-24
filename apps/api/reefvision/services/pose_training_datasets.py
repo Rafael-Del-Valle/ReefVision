@@ -177,7 +177,9 @@ class PoseTrainingDatasetService:
         self,
         dataset_id: str,
     ) -> list[PoseTrainingDatasetItemResponse]:
-        self._dataset(dataset_id)
+        # Never expose altered frozen landmarks or provenance through the
+        # item-list API when manifest retrieval and native export reject them.
+        self.manifest(dataset_id)
         rows = self.session.scalars(
             select(PoseTrainingDatasetItem)
             .where(PoseTrainingDatasetItem.dataset_id == dataset_id)
