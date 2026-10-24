@@ -82,10 +82,7 @@ def test_log_tail_strips_hyperlinks_graphics_and_carriage_return_rewrites(
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
-        "text": (
-            "epoch 3\ntrain/box_loss=0.20\n"
-            "train/cls_loss=0.30\ntrain/dfl_loss=0.10\n"
-        ),
+        "text": ("epoch 3\ntrain/box_loss=0.20\ntrain/cls_loss=0.30\ntrain/dfl_loss=0.10\n"),
     }
     assert log.read_bytes() == original
 
