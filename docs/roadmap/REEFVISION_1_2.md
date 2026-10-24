@@ -1051,3 +1051,30 @@ corrections. Current-head CI, migration lineage reconciliation with unmerged
 1.1, authenticated longitudinal review, representative scientific datasets,
 installed Windows GUI/installer acceptance and independent scientific review
 remain outstanding. This increment does not make 1.2 release-ready.
+
+## Projected population dispersion and experimental-unit identity QC (2026-10-24)
+
+The source-linked `projected_population_summaries` API and the existing
+persisted, typed `ecology_measurement_candidates` Workflow Builder artifact
+now report **sample standard deviation across declared experimental-unit
+means**, not across fragments, images or annotations. For one eligible unit
+the sample SD is null (not zero); for two or more units the denominator is
+`n_units - 1`. The prior equal-weight means and sampling-window strata are
+unchanged. A single organism/metric occurring in two eligible declared units
+is rejected, even when the records are split across UTC sampling windows.
+Different metrics of the same organism remain separate responses.
+
+Machine-readable `design_review_blockers` disclose unauthenticated unit
+independence, single-unit strata, shared parent colonies and missing
+parent-colony provenance. `independent_unit_inference_allowed` is always
+false for this unverified evidence; no standard error, confidence interval,
+p-value or treatment inference is emitted. This is descriptive QC, not
+independent experimental-design validation or biological growth verification.
+The deterministic fingerprint advances to
+`ecology-measurement-candidates-0006`; additive schema fields default for
+older persisted artifacts. Standalone regression tests cover equal-unit
+dispersion, one-unit suppression, parent-lineage warnings and duplicate
+organism exclusion; the existing saved-workflow/API artifact-parity test
+covers serialization through the executable typed port. Exact-head CI,
+representative scientific review, full migration reconciliation and
+installed Windows acceptance remain required.
