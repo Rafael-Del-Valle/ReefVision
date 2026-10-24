@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import sqrt
 from typing import cast
 
 import pytest
@@ -48,12 +49,55 @@ def test_closed_tetrahedron_volume_and_exact_cubic_scale_bounds() -> None:
     assert result["provenance"]["calibration_verified"] is False
 
 
+def test_closed_tetrahedron_surface_volume_ratio_and_inverse_scale_bounds() -> None:
+    result = measure_mesh_preview(**_params())
+    expected = (3 + sqrt(3)) * 3 / 0.01
+    assert result["surface_to_enclosed_volume_ratio_per_m"] == pytest.approx(expected)
+    assert result["edge_connected_patch_surface_to_enclosed_volume_ratios_per_m"] == pytest.approx(
+        [expected]
+    )
+    assert result["surface_to_enclosed_volume_ratio_scale_interval_per_m"] == pytest.approx(
+        [expected / 1.1, expected / 0.9]
+    )
+    assert result[
+        "edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"
+    ][0] == pytest.approx([expected / 1.1, expected / 0.9])
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize("uncertainty", [None, 0.0, 1.0])
+def test_surface_volume_ratio_bounds_do_not_invent_finite_uncertainty(
+    uncertainty: float | None,
+) -> None:
+    result = measure_mesh_preview(**_params(uncertainty=uncertainty))
+    ratio = result["surface_to_enclosed_volume_ratio_per_m"]
+    assert ratio is not None
+    interval = result["surface_to_enclosed_volume_ratio_scale_interval_per_m"]
+    if uncertainty == 0:
+        assert interval == pytest.approx([ratio, ratio])
+    else:
+        assert interval is None
+    patch_intervals = result[
+        "edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"
+    ]
+    if uncertainty is None:
+        assert patch_intervals is None
+    elif uncertainty == 1:
+        assert patch_intervals == [None]
+    else:
+        assert patch_intervals[0] == pytest.approx([ratio, ratio])
+
+
 def test_open_and_inconsistent_meshes_withhold_volume() -> None:
     for faces in (TETRA_FACES[:-1], [[0, 1, 2], *TETRA_FACES[1:]]):
         result = measure_mesh_preview(**_params(faces=faces))
         assert result["enclosed_volume_m3"] is None
         assert result["edge_connected_patch_enclosed_volumes_m3"] == [None]
         assert result["enclosed_volume_scale_interval_m3"] is None
+        assert result["surface_to_enclosed_volume_ratio_per_m"] is None
+        assert result["surface_to_enclosed_volume_ratio_scale_interval_per_m"] is None
+        assert result["edge_connected_patch_surface_to_enclosed_volume_ratios_per_m"] == [None]
         assert (
             "enclosed_volume_requires_closed_oriented_nondegenerate_patch"
             in (result["qc_warnings"])
@@ -75,6 +119,9 @@ def test_open_patch_does_not_hide_valid_disconnected_patch_volume() -> None:
     assert result["edge_connected_patch_enclosed_volumes_m3"][0] == pytest.approx(0.01**3 / 6)
     assert result["edge_connected_patch_enclosed_volumes_m3"][1] is None
     assert result["enclosed_volume_m3"] is None
+    assert result["surface_to_enclosed_volume_ratio_per_m"] is None
+    assert result["edge_connected_patch_surface_to_enclosed_volume_ratios_per_m"][0] is not None
+    assert result["edge_connected_patch_surface_to_enclosed_volume_ratios_per_m"][1] is None
 
 
 def test_open_disconnected_patch_preserves_volume_and_topology_qc() -> None:
@@ -166,6 +213,10 @@ def test_standalone_and_persisted_workflow_volume_parity(
         "enclosed_volume_scale_interval_m3",
         "edge_connected_patch_enclosed_volume_scale_intervals_m3",
         "enclosed_volume_is_provisional",
+        "surface_to_enclosed_volume_ratio_per_m",
+        "surface_to_enclosed_volume_ratio_scale_interval_per_m",
+        "edge_connected_patch_surface_to_enclosed_volume_ratios_per_m",
+        "edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m",
         "edge_connected_patch_vertex_counts",
         "edge_connected_patch_edge_counts",
         "edge_connected_patch_euler_characteristics",
