@@ -595,3 +595,31 @@ The seven files flagged by previous exact-head CI were also updated using
 the reported Ruff formatter diff. Exact-head CI, real ecological dataset,
 migration reconciliation with unmerged 1.1, and installed Windows scientific
 acceptance remain outstanding.
+
+## Canonical biological-unit alias safeguards (2026-10-23)
+
+The project-owned organism identity registry now applies the **same**
+biological-unit classifier as exploratory lineage analysis. Organism,
+individual, fragment, and their plural/level variants refer to one
+organism-level independent-unit class; colony/colonies and "colony-level"
+refer to one colony-level class. Mixing biological levels in one label,
+such as "colony/tank", fails closed rather than bypassing safeguards.
+Different parents cannot share one colony unit, and one parent cannot
+be split into independent colony units merely by changing label spelling.
+Multiple parents within tanks remain legitimate. Unrecognized study-specific
+unit labels remain caller-declared and require scientist review.
+
+Standalone registration, revision, imported-record read-back, and the
+executable saved Workflow Builder identity source share the same guard.
+New regressions cover alias collisions and prevent successful workflow
+artifacts for corrupted imported registries. The existing
+`registered_unverified` designation, deterministic registry snapshot,
+typed workflow ports, and review gate are unchanged. No schema migration
+or model download is required. This is **not** verification of biological
+identity, source annotations, calibration, or experimental independence.
+
+The exact-head CI mypy failure at
+`domain/longitudinal_monitoring.py:365` was also corrected by using a
+distinct optional-ID variable for the observed row instead of assigning
+a `str | None` into the loop's inferred `str` calendar key. CI and
+Windows scientific acceptance must still be rechecked.

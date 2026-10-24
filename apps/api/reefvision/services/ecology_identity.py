@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
 from reefvision.db.models.project import Project
+from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.ecology_identity import (
     EcologyIdentityCreate,
@@ -97,8 +98,8 @@ class EcologyIdentityService:
                 )
             if unit_type is None or unit_id is None:
                 continue
-            normalized_type = unit_type.strip().casefold()
-            if normalized_type in {"organism", "individual", "fragment"}:
+            normalized_type = classify_ecological_unit_level(unit_type)
+            if normalized_type == "organism":
                 unit_key = (normalized_type, unit_id)
                 prior = single_organism_units.setdefault(unit_key, key)
                 if prior != key:

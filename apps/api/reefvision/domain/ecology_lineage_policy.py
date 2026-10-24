@@ -19,6 +19,38 @@ class DeclaredLineageRecord(Protocol):
     experimental_unit_id: str | None
 
 
+def classify_ecological_unit_level(experimental_unit_type: str | None) -> str | None:
+    """Interpret common biological-unit aliases without claiming independence.
+
+    Unknown study-specific units remain caller-declared and unverified.
+    Ambiguous mixed-level labels fail closed for both analyses and registries.
+    """
+    words = {
+        word
+        for word in re.findall(r"[a-z0-9]+", (experimental_unit_type or "").casefold())
+        if word not in {"experimental", "independent", "biological", "unit", "units", "level"}
+    }
+    declared_levels = {
+        level
+        for level, vocabulary in (
+            (
+                "organism",
+                {"organism", "organisms", "individual", "individuals", "fragment", "fragments"},
+            ),
+            ("colony", {"colony", "colonies"}),
+            ("tank", {"tank", "tanks", "aquarium", "aquaria"}),
+            ("site", {"site", "sites", "plot", "plots", "transect", "transects"}),
+        )
+        if words & vocabulary
+    }
+    if len(declared_levels) > 1:
+        raise ValidationError(
+            "Ambiguous experimental_unit_type mixes biological sampling levels; "
+            "declare one independent experimental unit"
+        )
+    return next(iter(declared_levels), None)
+
+
 def validate_declared_lineage(
     records: Iterable[DeclaredLineageRecord], *, experimental_unit_type: str | None
 ) -> None:
@@ -35,42 +67,10 @@ def validate_declared_lineage(
             "Partial parent_colony_id coverage; declare lineage for every paired observation"
         )
 
-    # Recognize common plural and "-level" designations without conflating
-    # parent colonies with the fragments that belong to them.
-    words = [
-        word
-        for word in re.findall(r"[a-z0-9]+", (experimental_unit_type or "").casefold())
-        if word not in {"experimental", "independent", "biological", "unit", "units", "level"}
-    ]
-    organism_units = {
-        "organism",
-        "organisms",
-        "individual",
-        "individuals",
-        "fragment",
-        "fragments",
-    }
-    colony_units = {"colony", "colonies"}
-    # Extra descriptors such as "colony replicate" must not bypass the
-    # parent-lineage guard. Conversely, compound labels such as "colony/tank"
-    # cannot silently select whichever level is convenient for a comparison.
-    declared_levels = {
-        level
-        for level, vocabulary in (
-            ("organism", organism_units),
-            ("colony", colony_units),
-            ("tank", {"tank", "tanks", "aquarium", "aquaria"}),
-            ("site", {"site", "sites", "plot", "plots", "transect", "transects"}),
-        )
-        if set(words) & vocabulary
-    }
-    if len(declared_levels) > 1:
-        raise ValidationError(
-            "Ambiguous experimental_unit_type mixes biological sampling levels; "
-            "declare one independent experimental unit"
-        )
-    organism_level = "organism" in declared_levels
-    colony_level = "colony" in declared_levels
+    level = classify_ecological_unit_level(experimental_unit_type)
+    organism_level = level == "organism"
+    colony_level = level == "colony"
+
     unit_to_organism: dict[str, str] = {}
     organism_to_parent: dict[str, str] = {}
     unit_to_parent: dict[str, str] = {}
