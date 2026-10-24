@@ -33,9 +33,8 @@ def test_area_intervals_use_squared_scale_bounds_per_patch() -> None:
     result = measure_mesh_preview(**PARAMETERS)
     assert result["surface_area_m2"] == pytest.approx(0.01)
     assert result["surface_area_scale_interval_m2"] == pytest.approx([0.0081, 0.0121])
-    assert result["edge_connected_patch_area_scale_intervals_m2"] == pytest.approx(
-        [[0.00405, 0.00605], [0.00405, 0.00605]]
-    )
+    for interval in result["edge_connected_patch_area_scale_intervals_m2"]:
+        assert interval == pytest.approx([0.00405, 0.00605])
     # Existing linearized sensitivity is retained for compatibility, but it
     # is not an exact lower/upper interval and is not a confidence interval.
     assert result["area_scale_uncertainty_m2"] == pytest.approx(0.002)
@@ -58,9 +57,8 @@ def test_area_interval_missing_zero_and_full_scale_uncertainty(
         lower = 0.01 * (1 - uncertainty) ** 2
         upper = 0.01 * (1 + uncertainty) ** 2
         assert result["surface_area_scale_interval_m2"] == pytest.approx([lower, upper])
-        assert result["edge_connected_patch_area_scale_intervals_m2"] == pytest.approx(
-            [[lower / 2, upper / 2], [lower / 2, upper / 2]]
-        )
+        for interval in result["edge_connected_patch_area_scale_intervals_m2"]:
+            assert interval == pytest.approx([lower / 2, upper / 2])
 
 
 def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None:
@@ -78,7 +76,11 @@ def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None
         "name": "Unverified scale-only surface intervals",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": PARAMETERS},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": PARAMETERS,
+            },
         ],
         "edges": [
             {
@@ -92,7 +94,9 @@ def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
