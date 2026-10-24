@@ -233,6 +233,34 @@ def test_boundary_length_unknown_scale_uncertainty_remains_none() -> None:
     assert result["confidence_interval"] is None
 
 
+
+@pytest.mark.parametrize("uncertainty", [None, 0.0, 0.1, 1.0])
+def test_boundary_length_scale_intervals_preserve_missing_and_extreme_uncertainty(
+    uncertainty: float | None,
+) -> None:
+    result = measure_mesh_preview(
+        vertices=[[0, 0, 0], [3, 0, 0], [0, 4, 0]],
+        faces=[[0, 1, 2]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unreviewed field ruler",
+        relative_scale_uncertainty=uncertainty,
+    )
+    assert result["boundary_edge_length_m"] == pytest.approx(0.12)
+    if uncertainty is None:
+        assert result["boundary_edge_length_scale_interval_m"] is None
+        assert result["edge_connected_patch_boundary_length_scale_intervals_m"] is None
+    else:
+        expected = [0.12 * (1 - uncertainty), 0.12 * (1 + uncertainty)]
+        assert result["boundary_edge_length_scale_interval_m"] == pytest.approx(expected)
+        assert result["edge_connected_patch_boundary_length_scale_intervals_m"][0] == (
+            pytest.approx(expected)
+        )
+    assert result["confidence_interval"] is None
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["provenance"]["calibration_verified"] is False
+
+
 def test_area_weighted_centroids_use_triangle_areas_not_vertex_average() -> None:
     result = measure_mesh_preview(
         vertices=[
