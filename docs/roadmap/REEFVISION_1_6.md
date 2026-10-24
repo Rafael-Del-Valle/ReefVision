@@ -312,3 +312,23 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   state; standalone API and persisted-workflow tests check the new digest and
   reject modified explanations. Exact-head CI and installed Windows/scientific
   acceptance remain required. No merge or release authorization.
+
+
+## 2026-10-23 — Exact-head QC integrity CI repair and retry determinism
+
+- Inspected draft PR #77 at `035e22b` and all 20 exact-head GitHub Actions
+  workflows: 17 successful, three failing (CI, Pose Workflow Validation,
+  ReefVision 1.0 Acceptance). All three failed at backend Ruff before the
+  scientific regression suite, not at a scientific assertion.
+- Ruff logs identified `I001` (an extra blank line after imports) and
+  `SIM102` (nested evidence-digest condition) in
+  `workflow_review_queue_integrity.py`. Corrected both without changing
+  digest inputs, legacy compatibility, review approval, or persisted data.
+- Added two focused regression tests: persisted scientific evidence remains
+  invariant under ORM row-order changes, and reviewer coordination fields
+  remain mutable without invalidating immutable QC evidence.
+- Commits: `9981f80989e53eef89b0d68c442c34a258525994`,
+  `7e4c724f505077049337b5e164772b6d6e315f01`.
+- Exact-new-head CI and native Windows installed-GUI/upgrade tests remain
+  mandatory. No claim of newly passing tests until CI completes. No merge,
+  release, or automatic approval.
