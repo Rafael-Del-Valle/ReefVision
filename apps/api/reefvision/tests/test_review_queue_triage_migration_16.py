@@ -67,9 +67,7 @@ def _legacy_schema(connection) -> None:
     _insert(connection, "original", "comment")
 
 
-def _insert(
-    connection, event_id: str, event_type: str, request_id: str | None = None
-) -> None:
+def _insert(connection, event_id: str, event_type: str, request_id: str | None = None) -> None:
     connection.execute(
         text(
             "INSERT INTO review_queue_item_events "
@@ -103,9 +101,12 @@ def test_upgrade_preserves_coordination_and_accepts_server_triage(monkeypatch) -
         migration = _migration()
         monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
         migration.upgrade()
-        assert connection.scalar(
-            text("SELECT comment FROM review_queue_item_events WHERE id='original'")
-        ) == "preserve comment"
+        assert (
+            connection.scalar(
+                text("SELECT comment FROM review_queue_item_events WHERE id='original'")
+            )
+            == "preserve comment"
+        )
         _assert_indexes(connection)
         for action in ("triage_start", "triage_skip", "triage_return"):
             _insert(connection, action, action)
@@ -114,9 +115,7 @@ def test_upgrade_preserves_coordination_and_accepts_server_triage(monkeypatch) -
         with pytest.raises(IntegrityError):
             _insert(connection, "duplicate", "triage_skip")
             _insert(connection, "duplicate-other", "triage_skip", request_id="duplicate")
-        assert connection.scalar(
-            text("SELECT COUNT(*) FROM review_queue_item_events")
-        ) == 5
+        assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_item_events")) == 5
         assert connection.scalar(text("PRAGMA foreign_key_check")) is None
     engine.dispose()
 
@@ -131,15 +130,21 @@ def test_downgrade_refuses_to_destroy_triage_history(monkeypatch) -> None:
         _insert(connection, "triaged", "triage_skip")
         with pytest.raises(RuntimeError, match="Cannot downgrade QC triage audit schema"):
             migration.downgrade()
-        assert connection.scalar(
-            text("SELECT event_type FROM review_queue_item_events WHERE id='triaged'")
-        ) == "triage_skip"
+        assert (
+            connection.scalar(
+                text("SELECT event_type FROM review_queue_item_events WHERE id='triaged'")
+            )
+            == "triage_skip"
+        )
         connection.execute(text("DELETE FROM review_queue_item_events WHERE id='triaged'"))
         migration.downgrade()
         _assert_indexes(connection)
-        assert connection.scalar(
-            text("SELECT comment FROM review_queue_item_events WHERE id='original'")
-        ) == "preserve comment"
+        assert (
+            connection.scalar(
+                text("SELECT comment FROM review_queue_item_events WHERE id='original'")
+            )
+            == "preserve comment"
+        )
         with pytest.raises(IntegrityError):
             _insert(connection, "not-allowed", "triage_start")
     engine.dispose()
@@ -164,21 +169,22 @@ def test_upgrade_refuses_orphan_audit_events_without_rewriting(
         monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
         connection.execute(
             text(
-                f"UPDATE review_queue_item_events SET {parent_column}='missing' "
-                "WHERE id='original'"
+                f"UPDATE review_queue_item_events SET {parent_column}='missing' WHERE id='original'"
             )
         )
         with pytest.raises(RuntimeError, match="orphan review events"):
             migration.upgrade()
-        assert connection.scalar(
-            text("SELECT COUNT(*) FROM review_queue_item_events WHERE id='original'")
-        ) == 1
+        assert (
+            connection.scalar(
+                text("SELECT COUNT(*) FROM review_queue_item_events WHERE id='original'")
+            )
+            == 1
+        )
         with pytest.raises(IntegrityError):
             _insert(connection, "triage-before-repair", "triage_start")
         connection.execute(
             text(
-                f"UPDATE review_queue_item_events SET {parent_column}=:parent "
-                "WHERE id='original'"
+                f"UPDATE review_queue_item_events SET {parent_column}=:parent WHERE id='original'"
             ),
             {"parent": parent_id},
         )
@@ -198,9 +204,7 @@ def test_file_backed_upgrade_and_downgrade_preserve_audit_foreign_keys(
         with connection.begin():
             _legacy_schema(connection)
             migration = _migration()
-            monkeypatch.setattr(
-                migration, "op", Operations(MigrationContext.configure(connection))
-            )
+            monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
             migration.upgrade()
             _insert(connection, "triaged", "triage_skip")
             references = {
@@ -222,9 +226,12 @@ def test_file_backed_upgrade_and_downgrade_preserve_audit_foreign_keys(
                     )
                 )
     with engine.begin() as connection:
-        assert connection.scalar(
-            text("SELECT event_type FROM review_queue_item_events WHERE id='triaged'")
-        ) == "triage_skip"
+        assert (
+            connection.scalar(
+                text("SELECT event_type FROM review_queue_item_events WHERE id='triaged'")
+            )
+            == "triage_skip"
+        )
         migration = _migration()
         monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
         with pytest.raises(RuntimeError, match="Cannot downgrade QC triage audit schema"):
@@ -243,9 +250,12 @@ def test_file_backed_upgrade_and_downgrade_preserve_audit_foreign_keys(
             ("project_id", "projects", "CASCADE"),
         }
     with engine.connect() as connection:
-        assert connection.scalar(
-            text("SELECT comment FROM review_queue_item_events WHERE id='original'")
-        ) == "preserve comment"
+        assert (
+            connection.scalar(
+                text("SELECT comment FROM review_queue_item_events WHERE id='original'")
+            )
+            == "preserve comment"
+        )
         with pytest.raises(IntegrityError):
             _insert(connection, "triage-after-downgrade", "triage_start")
     engine.dispose()
