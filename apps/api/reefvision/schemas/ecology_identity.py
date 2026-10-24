@@ -89,6 +89,31 @@ class EcologyImageEvidenceRow(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
 
 
+class EcologyAnnotationEvidenceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    image_evidence_id: str = Field(min_length=1, max_length=36)
+    annotation_kind: Literal["box", "mask"]
+    annotation_id: str = Field(min_length=1, max_length=36)
+    expected_annotation_revision: int = Field(ge=1)
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class EcologyAnnotationEvidenceRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    image_evidence_id: str
+    annotation_kind: Literal["box", "mask"]
+    annotation_id: str
+    annotation_revision: int
+    annotation_sha256: str
+    reason: str
+    created_at: datetime
+    evidence_level: Literal["linked_unverified"] = "linked_unverified"
+
+
 class EcologyIdentityRegistryResponse(BaseModel):
     schema_version: Literal["ecology-identity-registry-0001"] = "ecology-identity-registry-0001"
     project_id: str
@@ -97,6 +122,9 @@ class EcologyIdentityRegistryResponse(BaseModel):
     image_evidence_links: list[EcologyImageEvidenceRow] = Field(default_factory=list)
     image_evidence_count: int = 0
     image_evidence_sha256: str | None = None
+    annotation_evidence_links: list[EcologyAnnotationEvidenceRow] = Field(default_factory=list)
+    annotation_evidence_count: int = 0
+    annotation_evidence_sha256: str | None = None
     # Optional defaults preserve deserialization of earlier persisted artifacts.
     history_sha256: str | None = None
     history_revision_count: int = 0
