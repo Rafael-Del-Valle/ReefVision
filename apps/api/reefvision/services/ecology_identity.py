@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
 from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
+from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.ecology_identity import (
     EcologyIdentityCreate,
@@ -98,6 +99,14 @@ class EcologyIdentityService:
                 )
             if unit_type is None or unit_id is None:
                 continue
+            # API schemas reject technical units, but imported database revisions
+            # can bypass Pydantic. Validate again before exposing registry artifacts.
+            try:
+                require_ecological_unit_type(unit_type)
+            except ValueError as exc:
+                raise ValidationError(
+                    "Ecological identity registry contains an invalid experimental unit type"
+                ) from exc
             normalized_type = classify_ecological_unit_level(unit_type)
             if normalized_type == "organism":
                 unit_key = (normalized_type, unit_id)
