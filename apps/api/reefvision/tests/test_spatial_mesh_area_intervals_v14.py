@@ -47,9 +47,7 @@ def test_area_intervals_use_squared_scale_bounds_per_patch() -> None:
 def test_area_interval_missing_zero_and_full_scale_uncertainty(
     uncertainty: float | None,
 ) -> None:
-    result = measure_mesh_preview(
-        **{**PARAMETERS, "relative_scale_uncertainty": uncertainty}
-    )
+    result = measure_mesh_preview(**{**PARAMETERS, "relative_scale_uncertainty": uncertainty})
     if uncertainty is None:
         assert result["surface_area_scale_interval_m2"] is None
         assert result["edge_connected_patch_area_scale_intervals_m2"] is None
@@ -67,9 +65,7 @@ def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None
     standalone = client.post(f"{base}/spatial/mesh-preview", json=PARAMETERS)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    assert expected["surface_area_scale_interval_m2"] == pytest.approx(
-        [0.0081, 0.0121]
-    )
+    assert expected["surface_area_scale_interval_m2"] == pytest.approx([0.0081, 0.0121])
 
     graph = {
         "graph_id": "mesh-area-scale-intervals-v14",
@@ -94,9 +90,7 @@ def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -110,14 +104,11 @@ def test_area_scale_intervals_survive_saved_workflow(client: TestClient) -> None
         for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
-    assert artifact["surface_area_scale_interval_m2"] == expected[
-        "surface_area_scale_interval_m2"
-    ]
-    assert artifact["edge_connected_patch_area_scale_intervals_m2"] == expected[
-        "edge_connected_patch_area_scale_intervals_m2"
-    ]
-    assert artifact["provenance"]["geometry_sha256"] == expected["provenance"][
-        "geometry_sha256"
-    ]
+    assert artifact["surface_area_scale_interval_m2"] == expected["surface_area_scale_interval_m2"]
+    assert (
+        artifact["edge_connected_patch_area_scale_intervals_m2"]
+        == expected["edge_connected_patch_area_scale_intervals_m2"]
+    )
+    assert artifact["provenance"]["geometry_sha256"] == expected["provenance"]["geometry_sha256"]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
