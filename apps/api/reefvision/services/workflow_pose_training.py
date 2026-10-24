@@ -160,7 +160,9 @@ def _pose_dataset(
         or manifest_schema.get("schema_revision") != dataset.pose_schema_revision
         or manifest_schema.get("content_hash") != dataset.pose_schema_content_hash
     ):
-        raise ValidationError(f"Pose {role} dataset manifest lineage no longer matches frozen truth")
+        raise ValidationError(
+            f"Pose {role} dataset manifest lineage no longer matches frozen truth"
+        )
 
     if (
         dataset.manifest_json.get("truth_policy") != "scientist_verified_only"
