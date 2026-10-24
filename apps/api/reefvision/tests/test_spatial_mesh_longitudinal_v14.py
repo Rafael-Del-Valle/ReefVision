@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import sqrt
 from typing import cast
 
 import pytest
@@ -43,6 +44,18 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
     assert expected["elapsed_days"] == pytest.approx(1)
     assert expected["average_surface_area_change_m2_per_day"] == pytest.approx(0.5)
+    assert expected["before_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(sqrt(2))
+    assert expected["after_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(sqrt(5))
+    assert expected["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
+        sqrt(5) - sqrt(2)
+    )
+    assert expected["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] == pytest.approx(
+        [0.9 * sqrt(5) - 1.1 * sqrt(2), 1.1 * sqrt(5) - 0.9 * sqrt(2)]
+    )
+    assert expected["average_axis_aligned_bounding_box_diagonal_change_m_per_day"] == pytest.approx(
+        sqrt(5) - sqrt(2)
+    )
+    assert "axis_aligned_extent_change_is_not_verified_branch_growth" in expected["qc_warnings"]
     rate_bounds = expected["average_surface_area_change_scale_interval_m2_per_day"]
     assert rate_bounds == pytest.approx([0.205, 0.805])
     warnings = expected["qc_warnings"]
@@ -104,9 +117,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     compare_step = next(
-        step
-        for step in plan.json()["steps"]
-        if step["node_type"] == "mesh_longitudinal_comparison"
+        step for step in plan.json()["steps"] if step["node_type"] == "mesh_longitudinal_comparison"
     )
     assert "unverified 3D mesh observations" in compare_step["action"]
     assert compare_step["output_types"]["comparison"] == ["mesh_longitudinal_comparison"]
@@ -180,6 +191,8 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
     result = compare_mesh_observations(base, later)
     assert result["delta_surface_area_m2"] == 1
     assert result["delta_surface_area_scale_interval_m2"] is None
+    assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
+    assert "axis_aligned_extent_comparison_unavailable" in result["qc_warnings"]
     assert result["average_surface_area_change_m2_per_day"] == pytest.approx(1)
     assert result["average_surface_area_change_scale_interval_m2_per_day"] is None
     assert result["relative_surface_area_scale_interval_percent"] is None
@@ -206,6 +219,12 @@ def test_mesh_comparison_average_rate_preserves_negative_change(
     comparison = response.json()
     assert comparison["elapsed_days"] == pytest.approx(2)
     assert comparison["delta_surface_area_m2"] == pytest.approx(-0.5)
+    assert comparison["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
+        sqrt(2) - sqrt(5)
+    )
+    assert comparison["average_axis_aligned_bounding_box_diagonal_change_m_per_day"] == pytest.approx(
+        (sqrt(2) - sqrt(5)) / 2
+    )
     assert comparison["average_surface_area_change_m2_per_day"] == pytest.approx(-0.25)
     rate_bounds = comparison["average_surface_area_change_scale_interval_m2_per_day"]
     assert rate_bounds == pytest.approx([-0.4025, -0.1025])
