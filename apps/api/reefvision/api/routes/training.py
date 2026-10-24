@@ -263,8 +263,20 @@ def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool |
         with path.open("rb") as handle:
             handle.seek(0, 2)
             size = handle.tell()
-            handle.seek(max(0, size - 16384))
+            start = max(0, size - 16384)
+            handle.seek(start)
             payload = handle.read(16384)
+            if start:
+                # Never present the middle of a truncated line as a complete
+                # epoch or loss value in the read-only PowerShell monitor.
+                handle.seek(start - 1)
+                previous = handle.read(1)
+                if previous not in {b"\n", b"\r"}:
+                    boundary = next(
+                        (index for index, byte in enumerate(payload) if byte in (10, 13)),
+                        -1,
+                    )
+                    payload = payload[boundary + 1 :] if boundary >= 0 else b""
     except OSError:
         return empty
     return {"available": True, "text": _safe_terminal_log_text(payload)}

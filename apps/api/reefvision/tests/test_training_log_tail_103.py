@@ -34,6 +34,43 @@ def test_log_tail_is_bounded_and_read_only(tmp_path: Path) -> None:
     assert log.read_bytes() == original
 
 
+def test_log_tail_discards_truncated_first_metric_line(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = b"train/box_loss=999" + b"x" * 20000 + b"\ntrain/box_loss=0.25\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "train/box_loss=0.25\n",
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_keeps_complete_line_at_tail_boundary(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    complete_tail = b"epoch=1\n" * 2048  # Exactly 16 KiB, all complete lines.
+    original = b"older epoch\n" + complete_tail
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": complete_tail.decode("utf-8"),
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_omits_oversized_unterminated_line(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = b"train/cls_loss=" + b"9" * 20000
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "",
+    }
+    assert log.read_bytes() == original
+
+
 @pytest.mark.parametrize("filename", ["../private.log", "reefvision.db", "private.csv"])
 def test_log_tail_rejects_unsafe_paths(tmp_path: Path, filename: str) -> None:
     if filename.startswith("../"):
