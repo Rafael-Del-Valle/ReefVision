@@ -124,7 +124,7 @@ def measure_point_cloud_preview(
     """Report point extents, not surface area, organism size, or branch length."""
     if not 1 <= len(points) <= MAX_VERTICES:
         raise ValueError("Point-cloud size outside preview bounds")
-    if type(preserve_axis_extrema_in_preview) is not bool:
+    if not isinstance(preserve_axis_extrema_in_preview, bool):
         raise ValueError("preserve_axis_extrema_in_preview must be a boolean")
     scale = float(meters_per_unit)
     if not isfinite(scale) or not 0 < scale <= 1_000_000:
