@@ -12,7 +12,7 @@ REVIEW_SCHEMA = (
 )
 
 
-@pytest.mark.parametrize("revision", [None, "0037", "0039"])
+@pytest.mark.parametrize("revision", [None, "0037"])
 def test_fresh_and_noncolliding_revisions_are_not_modified(revision: str | None) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
@@ -27,11 +27,14 @@ def test_fresh_and_noncolliding_revisions_are_not_modified(revision: str | None)
         assert connection.scalar(text("SELECT value FROM preserved")) == "scientific observation"
 
 
-def test_review_lineage_0038_is_accepted_without_writes() -> None:
+@pytest.mark.parametrize("revision", ["0038", "0039"])
+def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
-        connection.execute(text("INSERT INTO alembic_version VALUES ('0038')"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
+        )
         connection.execute(text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA})"))
         connection.execute(
             text("INSERT INTO review_queue_item_events (id) VALUES ('event-preserved')")
@@ -42,6 +45,7 @@ def test_review_lineage_0038_is_accepted_without_writes() -> None:
         )
 
 
+@pytest.mark.parametrize("revision", ["0038", "0039"])
 @pytest.mark.parametrize(
     "tables",
     [
@@ -53,20 +57,24 @@ def test_review_lineage_0038_is_accepted_without_writes() -> None:
         ("review_queue_item_events", "environmental_cache_entries"),
     ],
 )
-def test_colliding_0038_rejected_without_mutating_assets(tables: tuple[str, ...]) -> None:
+def test_colliding_review_revision_rejected_without_mutating_assets(
+    tables: tuple[str, ...], revision: str
+) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
-        connection.execute(text("INSERT INTO alembic_version VALUES ('0038')"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
+        )
         connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
         connection.execute(text("INSERT INTO preserved VALUES ('do not delete')"))
         for table in tables:
             schema = REVIEW_SCHEMA if table == "review_queue_item_events" else "id TEXT PRIMARY KEY"
             connection.execute(text(f"CREATE TABLE {table} ({schema})"))
-        with pytest.raises(RuntimeError, match="Unsafe ReefVision Alembic revision 0038 collision"):
+        with pytest.raises(RuntimeError, match=f"Unsafe ReefVision Alembic revision {revision} collision"):
             assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT value FROM preserved")) == "do not delete"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0038"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
         for table in tables:
             assert (
                 connection.exec_driver_sql(
@@ -76,11 +84,14 @@ def test_colliding_0038_rejected_without_mutating_assets(tables: tuple[str, ...]
             )
 
 
-def test_colliding_0038_rejects_incomplete_review_table() -> None:
+@pytest.mark.parametrize("revision", ["0038", "0039"])
+def test_colliding_review_revision_rejects_incomplete_review_table(revision: str) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
-        connection.execute(text("INSERT INTO alembic_version VALUES ('0038')"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
+        )
         connection.execute(text("CREATE TABLE review_queue_item_events (id TEXT PRIMARY KEY)"))
         with pytest.raises(RuntimeError, match="missing review columns"):
             assert_compatible_revision_0038(connection)
