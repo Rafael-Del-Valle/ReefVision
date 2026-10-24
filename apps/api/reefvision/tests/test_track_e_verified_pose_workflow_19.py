@@ -154,6 +154,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen.manifest_sha256 = tampered_manifest_sha
         session.commit()
 
+    # Native exports must enforce the same verified-only policy as saved workflows,
+    # even when a modified manifest has been assigned a matching new checksum.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="only scientist-verified items"),
+    ):
+        PoseTrainingDatasetService(session).native_package(dataset_id)
+
     resigned_graph = {
         **graph,
         "nodes": [
@@ -340,6 +348,13 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen.manifest_json = lineage_manifest
         frozen.manifest_sha256 = lineage_sha
         session.commit()
+
+    # Re-signing source selection lineage must not make a native package exportable.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="manifest lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).native_package(dataset_id)
 
     lineage_graph = {
         **graph,
