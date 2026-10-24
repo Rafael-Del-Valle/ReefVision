@@ -6,6 +6,7 @@ from typing import cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from reefvision.db.models import Annotation, MaskAnnotation
 from reefvision.tests.test_annotations import create_project, import_one
@@ -74,7 +75,7 @@ def _annotation_link(
     annotation_id: str,
     *,
     expected_revision: int = 1,
-) -> object:
+) -> Response:
     return client.post(
         f"/api/v1/projects/{project_id}/ecology/organisms/colony-a/annotation-evidence",
         json={
@@ -151,9 +152,7 @@ def test_mask_annotation_change_blocks_api_and_saved_workflow(
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "failed"
     assert "revision is missing or changed" in run["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in run["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in run["artifacts"])
 
 
 def test_annotation_link_rejects_foreign_image_and_stale_revision(
@@ -163,7 +162,13 @@ def test_annotation_link_rejects_foreign_image_and_stale_revision(
     project_id = str(project["id"])
     first_image = str(import_one(client, project_id)["successful"][0]["image_id"])
     second_image = str(
-        import_one(client, project_id, size=(82, 61))["successful"][0]["image_id"]
+        import_one(
+            client,
+            project_id,
+            filename="other-coral.png",
+            relative_path="trial-1/other-coral.png",
+            size=(82, 61),
+        )["successful"][0]["image_id"]
     )
     _register(client, project_id, "colony-a")
     image_link = _link(client, project_id, "colony-a", first_image)
