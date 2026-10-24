@@ -74,7 +74,6 @@ def frozen_pose_item_fingerprints_match(
     return observed == expected
 
 
-
 class PoseTrainingDatasetService:
     def __init__(self, session: Session) -> None:
         self.session = session
