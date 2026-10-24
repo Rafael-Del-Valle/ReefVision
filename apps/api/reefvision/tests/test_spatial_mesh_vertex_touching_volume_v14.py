@@ -22,9 +22,7 @@ def test_closed_patch_union_volume_standalone_and_saved_workflow(
 ) -> None:
     if touching:
         vertices = [*TETRA_VERTICES, [-1, 0, 0], [0, -1, 0], [0, 0, -1]]
-        second_faces = [
-            [0 if index == 0 else index + 3 for index in face] for face in TETRA_FACES
-        ]
+        second_faces = [[0 if index == 0 else index + 3 for index in face] for face in TETRA_FACES]
     else:
         vertices = [
             *TETRA_VERTICES,
