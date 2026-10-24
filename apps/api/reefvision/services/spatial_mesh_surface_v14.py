@@ -285,8 +285,22 @@ def measure_mesh_preview(
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
         "axis_aligned_dimensions_m": dimensions,
+        "axis_aligned_dimension_scale_intervals_m": (
+            [[dimension * (1 - relative_scale_uncertainty), dimension * (1 + relative_scale_uncertainty)]
+             for dimension in dimensions]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         # This global-axis diagonal is not an anatomical measurement.
         "axis_aligned_bounding_box_diagonal_m": dist((0.0, 0.0, 0.0), dimensions),
+        "axis_aligned_bounding_box_diagonal_scale_interval_m": (
+            [
+                dist((0.0, 0.0, 0.0), dimensions) * (1 - relative_scale_uncertainty),
+                dist((0.0, 0.0, 0.0), dimensions) * (1 + relative_scale_uncertainty),
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "axis_aligned_bounding_box_diagonal_scale_uncertainty_m": (
             dist((0.0, 0.0, 0.0), dimensions) * relative_scale_uncertainty
             if relative_scale_uncertainty is not None
@@ -337,9 +351,31 @@ def measure_mesh_preview(
         "edge_connected_patch_inconsistent_winding_edge_counts": patch_winding_edge_counts,
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,
         "edge_connected_patch_axis_aligned_dimensions_m": patch_dimensions_m,
+        "edge_connected_patch_dimension_scale_intervals_m": (
+            [
+                [
+                    [dimension * (1 - relative_scale_uncertainty), dimension * (1 + relative_scale_uncertainty)]
+                    for dimension in patch_dimensions
+                ]
+                for patch_dimensions in patch_dimensions_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "edge_connected_patch_bounding_box_diagonals_m": [
             dist((0.0, 0.0, 0.0), dims) for dims in patch_dimensions_m
         ],
+        "edge_connected_patch_bounding_box_diagonal_scale_intervals_m": (
+            [
+                [
+                    dist((0.0, 0.0, 0.0), dims) * (1 - relative_scale_uncertainty),
+                    dist((0.0, 0.0, 0.0), dims) * (1 + relative_scale_uncertainty),
+                ]
+                for dims in patch_dimensions_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "edge_connected_patch_bounding_box_diagonal_scale_uncertainties_m": (
             [
                 dist((0.0, 0.0, 0.0), dims) * relative_scale_uncertainty
