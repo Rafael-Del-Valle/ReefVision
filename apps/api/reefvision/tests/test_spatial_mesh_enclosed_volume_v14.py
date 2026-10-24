@@ -54,8 +54,9 @@ def test_open_and_inconsistent_meshes_withhold_volume() -> None:
         assert result["enclosed_volume_m3"] is None
         assert result["edge_connected_patch_enclosed_volumes_m3"] == [None]
         assert result["enclosed_volume_scale_interval_m3"] is None
-        assert "enclosed_volume_requires_closed_oriented_nondegenerate_patch" in (
-            result["qc_warnings"]
+        assert (
+            "enclosed_volume_requires_closed_oriented_nondegenerate_patch"
+            in (result["qc_warnings"])
         )
 
 
@@ -71,9 +72,7 @@ def test_open_patch_does_not_hide_valid_disconnected_patch_volume() -> None:
     vertices = [*TETRA_VERTICES, [3, 0, 0], [4, 0, 0], [3, 1, 0]]
     faces = [*TETRA_FACES, [4, 5, 6]]
     result = measure_mesh_preview(**_params(vertices=vertices, faces=faces))
-    assert result["edge_connected_patch_enclosed_volumes_m3"][0] == pytest.approx(
-        0.01**3 / 6
-    )
+    assert result["edge_connected_patch_enclosed_volumes_m3"][0] == pytest.approx(0.01**3 / 6)
     assert result["edge_connected_patch_enclosed_volumes_m3"][1] is None
     assert result["enclosed_volume_m3"] is None
 
@@ -88,9 +87,32 @@ def test_open_disconnected_patch_preserves_volume_and_topology_qc() -> None:
     assert "disconnected_mesh_patches" in warnings
     assert len(warnings) == len(set(warnings))
     assert result["enclosed_volume_m3"] is None
-    assert result["edge_connected_patch_enclosed_volumes_m3"][0] == pytest.approx(
-        0.01**3 / 6
-    )
+    assert result["edge_connected_patch_enclosed_volumes_m3"][0] == pytest.approx(0.01**3 / 6)
+
+
+@pytest.mark.parametrize(
+    ("faces", "expected_euler"), [(TETRA_FACES, 2), (TETRA_FACES[:-1], 1)]
+)
+def test_mesh_patch_euler_counts_are_source_topology_not_genus(
+    faces: list[list[int]], expected_euler: int
+) -> None:
+    result = measure_mesh_preview(**_params(faces=faces))
+    assert result["edge_connected_patch_vertex_counts"] == [4]
+    assert result["edge_connected_patch_edge_counts"] == [6]
+    assert result["edge_connected_patch_face_counts"] == [len(faces)]
+    assert result["edge_connected_patch_euler_characteristics"] == [expected_euler]
+    assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_vertex_touching_patches_keep_separate_euler_diagnostics() -> None:
+    vertices = [*TETRA_VERTICES, [2, 0, 0], [0, 2, 0]]
+    faces = [*TETRA_FACES, [0, 4, 5]]
+    result = measure_mesh_preview(**_params(vertices=vertices, faces=faces))
+    assert result["edge_connected_patch_count"] == 2
+    assert result["edge_connected_patch_vertex_counts"] == [4, 3]
+    assert result["edge_connected_patch_edge_counts"] == [6, 3]
+    assert result["edge_connected_patch_euler_characteristics"] == [2, 1]
+    assert result["enclosed_volume_m3"] is None
 
 
 def test_missing_scale_uncertainty_does_not_invent_bounds() -> None:
@@ -148,6 +170,9 @@ def test_standalone_and_persisted_workflow_volume_parity(
         "enclosed_volume_scale_interval_m3",
         "edge_connected_patch_enclosed_volume_scale_intervals_m3",
         "enclosed_volume_is_provisional",
+        "edge_connected_patch_vertex_counts",
+        "edge_connected_patch_edge_counts",
+        "edge_connected_patch_euler_characteristics",
         "qc_warnings",
     ):
         assert artifact[key] == standalone.json()[key]
@@ -155,6 +180,7 @@ def test_standalone_and_persisted_workflow_volume_parity(
     assert artifact["provenance"]["calibration_verified"] is False
     if len(faces) == 3:
         assert artifact["enclosed_volume_m3"] is None
-        assert "enclosed_volume_requires_closed_oriented_nondegenerate_patch" in artifact[
-            "qc_warnings"
-        ]
+        assert (
+            "enclosed_volume_requires_closed_oriented_nondegenerate_patch"
+            in artifact["qc_warnings"]
+        )
