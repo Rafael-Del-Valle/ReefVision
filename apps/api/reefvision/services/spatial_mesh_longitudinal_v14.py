@@ -51,7 +51,10 @@ def compare_mesh_observations(
         raise ValueError("Unexpected calibration verification state")
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
-    if any(type(value) not in (int, float) or not isfinite(value) or value < 0 for value in (a0, a1)):
+    if any(
+        type(value) not in (int, float) or not isfinite(value) or value < 0
+        for value in (a0, a1)
+    ):
         raise ValueError("Both surface areas must be finite and nonnegative")
     difference = a1 - a0
     relative = (100 * difference / a0) if a0 > 0 else None
