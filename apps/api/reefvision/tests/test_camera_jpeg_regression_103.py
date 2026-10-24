@@ -85,6 +85,49 @@ def test_truncated_camera_jpeg_rejected_before_import_commit(
 
 
 @pytest.mark.parametrize(
+    ("image_format", "extension", "truncated_bytes"),
+    [
+        ("TIFF", ".tiff", 20),
+        ("BMP", ".bmp", 20),
+        ("BMP", ".dib", 20),
+        ("GIF", ".gif", 10),
+    ],
+)
+def test_truncated_static_scientific_image_rejected_before_import_commit(
+    client: TestClient,
+    image_format: str,
+    extension: str,
+    truncated_bytes: int,
+) -> None:
+    """Pillow verify() alone can accept a file with missing image pixels."""
+    project = create_project(client, f"Truncated {image_format}")
+    stream = BytesIO()
+    Image.new("RGB", (120, 100), (20, 90, 120)).save(stream, format=image_format)
+    truncated = stream.getvalue()[:-truncated_bytes]
+
+    report = import_one(
+        client, project["id"], filename=f"CAMERA_0002{extension}", content=truncated
+    )
+    assert not report["successful"], report
+    assert len(report["failed"]) == 1, report
+
+
+def test_multi_page_tiff_is_not_silently_imported_as_one_image(client: TestClient) -> None:
+    """A scientific image stack must not be mistaken for a single 2D exposure."""
+    project = create_project(client, "Multi-page TIFF")
+    stream = BytesIO()
+    first = Image.new("RGB", (40, 30), (20, 90, 120))
+    second = Image.new("RGB", (40, 30), (120, 90, 20))
+    first.save(stream, format="TIFF", save_all=True, append_images=[second])
+
+    report = import_one(
+        client, project["id"], filename="CAMERA_STACK.TIFF", content=stream.getvalue()
+    )
+    assert not report["successful"], report
+    assert len(report["failed"]) == 1, report
+
+
+@pytest.mark.parametrize(
     ("orientation", "expected"),
     [
         (1, (64, 48)),
