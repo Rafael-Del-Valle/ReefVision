@@ -31,6 +31,7 @@ from reefvision.services.quality_control import (
     SEVERITY_SCORES,
     QualityControlService,
 )
+from reefvision.services.workflow_review_queue_integrity import queue_item_evidence_sha256
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMULA_ID = "review_priority_v1"
@@ -410,6 +411,9 @@ class ReviewQueueService:
                 }
             ),
             "item_count": len(items),
+            # Preserve immutable scientific explanations, not mutable reviewer
+            # state, across saved Workflow Builder retries.
+            "item_evidence_sha256": queue_item_evidence_sha256(items),
             # Retain the scoring contract independently from the image/score
             # checksum. A saved Workflow Builder retry must not silently
             # re-label its formula, ruleset or weight provenance.
