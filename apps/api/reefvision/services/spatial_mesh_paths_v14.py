@@ -23,9 +23,12 @@ def mesh_edge_paths(
     referenced = {index for face in faces for index in face}
     adjacency: dict[int, dict[int, float]] = {index: {} for index in referenced}
     edge_incidence: Counter[tuple[int, int]] = Counter()
+    edge_orientations: dict[tuple[int, int], list[bool]] = {}
     for a, b, c in faces:
         for first, second in ((a, b), (b, c), (c, a)):
-            edge_incidence[(min(first, second), max(first, second))] += 1
+            edge = (min(first, second), max(first, second))
+            edge_incidence[edge] += 1
+            edge_orientations.setdefault(edge, []).append(first < second)
             length = dist(points[first], points[second])
             if not isfinite(length):
                 raise ValueError("Mesh edge length overflowed")
@@ -82,9 +85,7 @@ def mesh_edge_paths(
             # An underflowed calibrated chord is not a usable physical endpoint
             # distance, however, so do not report a ratio against zero meters.
             detour_ratio = (
-                shortest[end] / chord_mesh_units
-                if chord_mesh_units > 0 and chord_m > 0
-                else None
+                shortest[end] / chord_mesh_units if chord_mesh_units > 0 and chord_m > 0 else None
             )
             # Route flags are topology evidence, not biological branch validation.
             route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
@@ -100,6 +101,12 @@ def mesh_edge_paths(
                 path_qc_warnings.append("nonmanifold_edge_on_path")
             if any(edge_incidence[edge] == 1 for edge in route_edges):
                 path_qc_warnings.append("open_boundary_edge_on_path")
+            if any(
+                len(edge_orientations[edge]) == 2
+                and edge_orientations[edge][0] == edge_orientations[edge][1]
+                for edge in route_edges
+            ):
+                path_qc_warnings.append("inconsistent_winding_edge_on_path")
             if any(adjacency[a][b] == 0 for a, b in pairwise(route)):
                 path_qc_warnings.append("zero_length_edge_on_path")
         results.append(
