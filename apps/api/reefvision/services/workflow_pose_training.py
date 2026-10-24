@@ -32,6 +32,7 @@ from reefvision.ml.ultralytics_registry import (
 from reefvision.services import (
     workflow_runtime_adapters as runtime_adapters,
 )
+from reefvision.services.pose_training_datasets import frozen_pose_item_fingerprints_match
 from reefvision.storage.datasets import (
     canonical_json_sha256,
 )
@@ -179,6 +180,11 @@ def _pose_dataset(
         or len(dataset.manifest_json["items"]) != dataset.item_count
     ):
         raise ValidationError(f"Pose {role} dataset item count no longer matches frozen manifest")
+
+    if not frozen_pose_item_fingerprints_match(session, dataset):
+        raise ValidationError(
+            f"Pose {role} dataset item fingerprints no longer match persisted frozen truth"
+        )
 
     # The planner validates frozen truth, but the execution adapter must also
     # reject schema drift after planning or when invoked independently.
