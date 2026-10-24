@@ -67,11 +67,36 @@ class EcologyIdentityRow(BaseModel):
     created_at: datetime
 
 
+class EcologyImageEvidenceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    image_id: str = Field(min_length=1, max_length=36)
+    expected_identity_revision: int = Field(ge=1)
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class EcologyImageEvidenceRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    organism_key: str
+    identity_revision: int
+    image_id: str
+    image_sha256: str
+    reason: str
+    created_at: datetime
+    evidence_level: Literal["linked_unverified"] = "linked_unverified"
+
+
 class EcologyIdentityRegistryResponse(BaseModel):
     schema_version: Literal["ecology-identity-registry-0001"] = "ecology-identity-registry-0001"
     project_id: str
     identities: list[EcologyIdentityRow]
     snapshot_sha256: str
+    image_evidence_links: list[EcologyImageEvidenceRow] = Field(default_factory=list)
+    image_evidence_count: int = 0
+    image_evidence_sha256: str | None = None
     # Optional defaults preserve deserialization of earlier persisted artifacts.
     history_sha256: str | None = None
     history_revision_count: int = 0

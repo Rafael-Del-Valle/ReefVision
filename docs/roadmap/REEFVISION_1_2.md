@@ -712,3 +712,37 @@ The previous head's three failed Actions workflows shared three Ruff-format
 violations; those exact lines were also corrected. Exact-head CI, real
 scientific acceptance, cross-version migration reconciliation, installed
 Windows GUI and release approval remain outstanding.
+
+
+## Project-owned immutable image-source identity links (2026-10-24; development only)
+
+An additive branch-local migration `b12_identity_0002` introduces append-only
+organism-to-image evidence links. The new
+`POST /api/v1/projects/{project_id}/ecology/organisms/{organism_key}/image-evidence`
+requires a registered organism, its current expected identity revision, and a
+source image owned by the same project. It captures the managed image's SHA-256,
+the identity revision and the scientist-entered association reason. Duplicate
+organism/image links, stale revisions and foreign-project images are rejected.
+No image or identity record is modified or deleted.
+
+The existing standalone registry and executable, persisted
+`ecology_identity_registry_source` Workflow Builder node expose identical
+typed `image_evidence_links`, `image_evidence_count` and deterministic
+`image_evidence_sha256` provenance. A changed/missing source image or broken
+imported link fails closed before a successful registry artifact can be emitted.
+The earlier latest-identity and full-revision history fingerprints remain
+backward-compatible; an independent image-evidence fingerprint changes when
+a link is added. Saved-workflow and API regressions cover parity, project
+isolation, duplicate/stale rejection, and source integrity.
+
+**Critical limitation:** this links an organism *claim* to an immutable image
+fingerprint; it does **not** verify which animal appears in the image, that an
+annotation was reviewed, that calibration is immutable, or that a longitudinal
+measurement is scientifically verified. All links are `linked_unverified`;
+the registry remains `registered_unverified` and
+`scientist_review_required`. No predictions or caller-supplied observations
+are promoted to verified truth. Next: link specific reviewed mask/box
+annotation revisions and calibration snapshots with scientist review and
+registered experimental design. The new migration is isolated from unmerged
+1.1 `0038` and requires explicit reconciliation, exact-head CI, scientific
+dataset validation, and Windows installed-GUI acceptance.

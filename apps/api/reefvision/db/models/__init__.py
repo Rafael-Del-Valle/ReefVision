@@ -19,6 +19,7 @@ from reefvision.db.models.classification_dataset import ClassificationDataset
 from reefvision.db.models.classification_prediction import ClassificationPrediction
 from reefvision.db.models.dataset_version import DatasetVersion
 from reefvision.db.models.dataset_version_item import DatasetVersionItem
+from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
 from reefvision.db.models.experiment_record import ExperimentRecord
 from reefvision.db.models.export_record import ExportRecord
@@ -89,6 +90,7 @@ __all__ = [
     "ClassificationPrediction",
     "DatasetVersion",
     "DatasetVersionItem",
+    "EcologyIdentityImageEvidence",
     "EcologyIdentityRevision",
     "ExperimentRecord",
     "ExportRecord",

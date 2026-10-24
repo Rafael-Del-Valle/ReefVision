@@ -8,13 +8,17 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
+from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.ecology_identity import (
     EcologyIdentityCreate,
+    EcologyImageEvidenceCreate,
+    EcologyImageEvidenceRow,
     EcologyIdentityFields,
     EcologyIdentityRegistryResponse,
     EcologyIdentityRevisionCreate,
@@ -211,11 +215,101 @@ class EcologyIdentityService:
         self._assert_experimental_units({**latest, organism_key: payload})
         return self._append(project_id, organism_key, current.revision + 1, payload)
 
+    def link_image(
+        self,
+        project_id: str,
+        organism_key: str,
+        payload: EcologyImageEvidenceCreate,
+    ) -> EcologyImageEvidenceRow:
+        """Record a project-owned source image without claiming biological verification."""
+        self._project(project_id)
+        latest = self._latest(project_id)
+        self._assert_parent_links(latest)
+        self._assert_experimental_units(latest)
+        current = latest.get(organism_key)
+        if current is None:
+            raise NotFoundError("Ecological organism not found in project")
+        if current.revision != payload.expected_identity_revision:
+            raise ConflictError("Stale organism revision; reload before linking image")
+        image = self.session.get(ImageAsset, payload.image_id)
+        if image is None or image.project_id != project_id:
+            raise ValidationError("Image evidence must belong to the current project")
+        existing = self.session.scalar(
+            select(EcologyIdentityImageEvidence).where(
+                EcologyIdentityImageEvidence.project_id == project_id,
+                EcologyIdentityImageEvidence.organism_key == organism_key,
+                EcologyIdentityImageEvidence.image_id == payload.image_id,
+            )
+        )
+        if existing is not None:
+            raise ConflictError("Image already linked to this organism")
+        link = EcologyIdentityImageEvidence(
+            project_id=project_id,
+            organism_key=organism_key,
+            identity_revision=current.revision,
+            image_id=image.id,
+            image_sha256=image.sha256,
+            reason=payload.reason,
+        )
+        self.session.add(link)
+        try:
+            self.session.commit()
+        except IntegrityError as exc:
+            self.session.rollback()
+            raise ConflictError("Concurrent or duplicate ecological image link") from exc
+        self.session.refresh(link)
+        return EcologyImageEvidenceRow.model_validate(link)
+
+    def _image_evidence(
+        self,
+        project_id: str,
+        latest: dict[str, EcologyIdentityRevision],
+    ) -> list[EcologyIdentityImageEvidence]:
+        links = list(
+            self.session.scalars(
+                select(EcologyIdentityImageEvidence)
+                .where(EcologyIdentityImageEvidence.project_id == project_id)
+                .order_by(
+                    EcologyIdentityImageEvidence.organism_key,
+                    EcologyIdentityImageEvidence.image_id,
+                    EcologyIdentityImageEvidence.id,
+                )
+            )
+        )
+        for link in links:
+            organism = latest.get(link.organism_key)
+            if organism is None or not 1 <= link.identity_revision <= organism.revision:
+                raise ValidationError("Ecological image evidence references an invalid identity")
+            image = self.session.get(ImageAsset, link.image_id)
+            if (
+                image is None
+                or image.project_id != project_id
+                or image.sha256 != link.image_sha256
+            ):
+                raise ValidationError("Ecological image evidence source is missing or changed")
+        return links
+
     def registry(self, project_id: str) -> EcologyIdentityRegistryResponse:
         self._project(project_id)
         latest = self._latest(project_id)
         self._assert_parent_links(latest)
         self._assert_experimental_units(latest)
+        image_links = self._image_evidence(project_id, latest)
+        image_link_rows = [
+            EcologyImageEvidenceRow.model_validate(link) for link in image_links
+        ]
+        image_link_fingerprint = [
+            {
+                "id": row.id,
+                "organism_key": row.organism_key,
+                "identity_revision": row.identity_revision,
+                "image_id": row.image_id,
+                "image_sha256": row.image_sha256,
+                "reason": row.reason,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in image_link_rows
+        ]
         identities = [
             EcologyIdentityRow.model_validate(record) for _, record in sorted(latest.items())
         ]
@@ -261,6 +355,15 @@ class EcologyIdentityService:
         return EcologyIdentityRegistryResponse(
             project_id=project_id,
             identities=identities,
+            image_evidence_links=image_link_rows,
+            image_evidence_count=len(image_link_rows),
+            image_evidence_sha256=canonical_json_sha256(
+                {
+                    "algorithm_version": "ecology-image-evidence-0001",
+                    "project_id": project_id,
+                    "links": image_link_fingerprint,
+                }
+            ),
             history_revision_count=len(history_rows),
             history_sha256=canonical_json_sha256(
                 {
