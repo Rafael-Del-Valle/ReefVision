@@ -279,11 +279,14 @@ def test_real_camera_nested_exif_ifd_capture_time_and_provenance(
     Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
     payload = stream.getvalue()
 
-    report = import_one(client, project["id"], filename="DSC_SUBIFD.JPEG", content=payload)
+    report = import_one(
+        client, project["id"], filename="DSC_SUBIFD.JPEG", content=payload
+    )
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
     metadata = client.get(f"/api/v1/images/{image_id}").json()
     assert metadata["capture_timestamp"].startswith(expected_utc)
-    assert metadata["metadata_json"]["exif"]["DateTimeOriginal"] == "2026:10:01 12:30:00"
-    assert metadata["metadata_json"]["exif"]["OffsetTimeOriginal"] == offset
+    exif_metadata = metadata["metadata_json"]["exif"]
+    assert exif_metadata["DateTimeOriginal"] == "2026:10:01 12:30:00"
+    assert exif_metadata["OffsetTimeOriginal"] == offset
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
