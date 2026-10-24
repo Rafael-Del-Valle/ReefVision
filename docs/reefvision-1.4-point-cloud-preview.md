@@ -71,3 +71,20 @@ and scientific provenance are unchanged by display decimation. Tests include a
 saved executable workflow parity, and malformed frontend metadata.
 
 The saved viewer now independently compares displayed point extrema with the persisted full-cloud bounding box. If a missing axis extreme remains numerically visible after calibration scaling, its omission must appear in `preview_omitted_axis_extrema`; otherwise the artifact fails closed. Conversely, a reported omission is treated conservatively even if large source-frame offsets make the scaled sample and bound numerically equal: rounding can erase evidence of a genuinely missing raw extreme. This validation does not upgrade the preview to a verified measurement. Regression tests cover falsely claimed complete coverage, wrong-axis omission flags, and conservative warnings.
+
+
+## Provisional specimen/timepoint provenance
+
+Point-cloud previews accept optional `specimen_id`, `observation_id`, and
+timezone-aware `observed_at_utc` fields. The standalone endpoint and executable,
+persisted `point_cloud_preview` Workflow Builder node normalize the observation
+timestamp to UTC and save these fields in measurement provenance. Invalid IDs and
+timestamps without a timezone are rejected; omitted fields remain null.
+
+Both `specimen_identity_verified` and `observation_metadata_verified` are
+always false. These caller-provided labels do not establish a reviewed organism
+registry, point-cloud registration, longitudinal re-identification, growth,
+survival, or a confirmed observation. A geometry hash may match even when
+specimen labels differ; neither hash nor label is evidence of biological identity.
+Scale-only uncertainties do not account for scan reconstruction or registration
+errors. No user-trained model weights or cloud services are involved.
