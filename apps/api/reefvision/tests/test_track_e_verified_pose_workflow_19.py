@@ -139,9 +139,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         service = PoseTrainingDatasetService(session)
         retrieved = service.manifest(dataset_id)
         assert retrieved.manifest_sha256 == dataset["manifest_sha256"]
-        _, package_bytes, package_sha256 = service.native_package(
-            dataset_id
-        )
+        _, package_bytes, package_sha256 = service.native_package(dataset_id)
     assert package_bytes
     assert len(package_sha256) == 64
 
@@ -226,7 +224,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     ):
         PoseTrainingDatasetService(session).native_package(dataset_id)
 
-    changed_pose_plan = client.post
+    changed_pose_plan = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
     )
     assert changed_pose_plan.status_code == 200, changed_pose_plan.text
