@@ -281,7 +281,7 @@ def test_changed_box_bounds_fail_registry_and_saved_workflow(
     with app.state.session_factory() as session:
         box = session.get(Annotation, box_id)
         assert box is not None
-        box.x_min = float("nan")
+        box.x_min = float("inf")
         session.commit()
     registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
     assert registry.status_code == 400, registry.text
