@@ -6,6 +6,8 @@ the revision identifier, so a cross-branch upgrade can silently skip the
 missing migration. Do not stamp, mutate, or delete any user schema here.
 """
 
+import re
+
 from sqlalchemy import Connection, inspect, text
 
 _REVIEW_TABLE = "review_queue_item_events"
@@ -83,14 +85,21 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "review-event CHECK constraint is missing or renamed. "
                 "Preserve the database; do not stamp or rewrite audit history."
             )
-        expression = str(named_check.get("sqltext") or "").casefold()
-        if any(
-            f"'{event}'" not in expression
-            for event in ("triage_start", "triage_skip", "triage_return")
-        ):
+        # The 0039 migration specifies exactly six allowed values. A mere
+        # substring search would accept a weakened CHECK (for example OR 1=1),
+        # extra unreviewed event types, or missing coordination types.
+        # Compare the full reflected expression, without executing it.
+        expected_check = (
+            r"\s*event_type\s+IN\s*\(\s*'comment'\s*,\s*'assign'\s*,"
+            r"\s*'unassign'\s*,\s*'triage_start'\s*,"
+            r"\s*'triage_skip'\s*,\s*'triage_return'\s*\)\s*"
+        )
+        expression = str(named_check.get("sqltext") or "")
+        if re.fullmatch(expected_check, expression, flags=re.IGNORECASE) is None:
             raise RuntimeError(
                 "Unsafe ReefVision Alembic revision 0039 collision: the "
-                "review-event CHECK constraint still excludes one or more "
-                "triage event types. Preserve the database and reconcile "
-                "the migration lineage without stamping or deleting records."
+                "review-event CHECK constraint still excludes required event "
+                "types or permits unsupported event types. Preserve the "
+                "database and reconcile the migration lineage without "
+                "stamping or deleting records."
             )
