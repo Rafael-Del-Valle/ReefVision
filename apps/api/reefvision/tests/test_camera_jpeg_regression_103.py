@@ -348,8 +348,8 @@ def test_camera_exif_subseconds_preserve_acquisition_precision_and_original(
     [
         ("not-a-date", "-04:00"),
         ("2026:10:01 12:30:00", "invalid-offset"),
-        (b"\\xff", "-04:00"),
-        ("2026:10:01 12:30:00", b"\\xff"),
+        (b"\xff", "-04:00"),
+        ("2026:10:01 12:30:00", b"\xff"),
     ],
 )
 def test_malformed_exposure_exif_does_not_fall_back_to_digitization_or_file_time(
@@ -369,8 +369,8 @@ def test_malformed_exposure_exif_does_not_fall_back_to_digitization_or_file_time
 def test_camera_exif_ascii_byte_strings_keep_explicit_offset_and_subseconds() -> None:
     """Preserve acquisition time when camera decoders expose EXIF ASCII as bytes."""
     exif = {
-        36867: b"2026:10:01 12:30:00\\x00",
-        36881: b"-04:00\\x00",
+        36867: b"2026:10:01 12:30:00\x00",
+        36881: b"-04:00\x00",
         37521: b"123",
     }
     assert _capture_timestamp(exif) == datetime(2026, 10, 1, 16, 30, 0, 123000, tzinfo=UTC)
