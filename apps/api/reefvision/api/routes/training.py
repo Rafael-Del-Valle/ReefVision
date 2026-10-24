@@ -281,7 +281,7 @@ def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool |
             # record. Never display a partially written value as complete.
             # CR-terminated progress updates are complete records too.
             if payload and payload[-1] not in (10, 13):
-                boundary = max(payload.rfind(b"\\n"), payload.rfind(b"\\r"))
+                boundary = max(payload.rfind(b"\n"), payload.rfind(b"\r"))
                 payload = payload[: boundary + 1] if boundary >= 0 else b""
     except OSError:
         return empty
