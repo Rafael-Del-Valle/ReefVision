@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from math import dist, isfinite
+from math import dist, fsum, isfinite
 from typing import Any
 
 from reefvision.services import (
@@ -14,6 +14,7 @@ from reefvision.services import (
     spatial_mesh_obj_v14,
     spatial_mesh_paths_v14,
     spatial_mesh_ply_v14,
+    spatial_mesh_volume_v14,
 )
 
 MAX_PREVIEW_TRIANGLES = 512
@@ -165,6 +166,7 @@ def measure_mesh_preview(
     patch_vertex_indices: dict[int, set[int]] = {}
     patch_centroid_moments: dict[int, list[float]] = {}
     patch_triangles: dict[int, list[list[tuple[float, float, float]]]] = {}
+    patch_faces: dict[int, list[list[int]]] = {}
     for face_index, face_area in enumerate(face_areas):
         patch = root(face_index)
         patch_area_mesh_units[patch] = patch_area_mesh_units.get(patch, 0.0) + face_area
@@ -178,6 +180,7 @@ def measure_mesh_preview(
         patch_triangles.setdefault(patch, []).append(
             sorted(points[index] for index in faces[face_index])
         )
+        patch_faces.setdefault(patch, []).append(faces[face_index])
         patch_first_face.setdefault(patch, face_index)
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
     # Edge incidents belong to one edge-connected patch. Report topology QC
@@ -204,6 +207,47 @@ def measure_mesh_preview(
         patch_boundary_lengths_mesh_units.get(patch, 0.0) * scale for patch in ordered_patches
     ]
     boundary_length_m = sum(patch_boundary_lengths_m)
+    # Only report provisional enclosed volume for closed, consistently wound,
+    # nondegenerate edge-connected patches. This is not a biological volume:
+    # self-intersections and reconstruction completeness remain unverified.
+    patch_volumes_m3: list[float | None] = []
+    volume_qc_warnings: set[str] = set()
+    for patch in ordered_patches:
+        if (
+            patch_boundary_edges[patch]
+            or patch_nonmanifold_edges[patch]
+            or patch_winding_edges[patch]
+            or patch_degenerate_faces[patch]
+        ):
+            patch_volumes_m3.append(None)
+            volume_qc_warnings.add("enclosed_volume_requires_closed_oriented_nondegenerate_patch")
+            continue
+        try:
+            raw_volume = abs(
+                spatial_mesh_volume_v14.signed_enclosed_volume_mesh_units(
+                    points, patch_faces[patch]
+                )
+            )
+            calibrated_volume = raw_volume * scale**3
+        except (ValueError, OverflowError):
+            calibrated_volume = float("inf")
+            raw_volume = float("inf")
+        if not isfinite(calibrated_volume):
+            patch_volumes_m3.append(None)
+            volume_qc_warnings.add("enclosed_volume_numeric_overflow")
+        elif raw_volume == 0 or calibrated_volume == 0:
+            patch_volumes_m3.append(None)
+            volume_qc_warnings.add("enclosed_volume_zero_or_underflow")
+        else:
+            patch_volumes_m3.append(calibrated_volume)
+    enclosed_volume_m3 = (
+        fsum(volume for volume in patch_volumes_m3 if volume is not None)
+        if all(volume is not None for volume in patch_volumes_m3)
+        else None
+    )
+    if enclosed_volume_m3 is not None and not isfinite(enclosed_volume_m3):
+        enclosed_volume_m3 = None
+        volume_qc_warnings.add("enclosed_volume_numeric_overflow")
     patch_areas_m2 = [patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches]
     # Extents use only vertices belonging to each edge-connected patch.
     # These are global-axis bounds, not branch lengths or organism identities.
@@ -284,6 +328,32 @@ def measure_mesh_preview(
     return {
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
+        "enclosed_volume_m3": enclosed_volume_m3,
+        "edge_connected_patch_enclosed_volumes_m3": patch_volumes_m3,
+        "enclosed_volume_scale_interval_m3": (
+            [
+                enclosed_volume_m3 * (1 - relative_scale_uncertainty) ** 3,
+                enclosed_volume_m3 * (1 + relative_scale_uncertainty) ** 3,
+            ]
+            if enclosed_volume_m3 is not None and relative_scale_uncertainty is not None
+            else None
+        ),
+        "edge_connected_patch_enclosed_volume_scale_intervals_m3": (
+            [
+                (
+                    [
+                        volume * (1 - relative_scale_uncertainty) ** 3,
+                        volume * (1 + relative_scale_uncertainty) ** 3,
+                    ]
+                    if volume is not None
+                    else None
+                )
+                for volume in patch_volumes_m3
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
+        "enclosed_volume_is_provisional": True,
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_dimension_scale_intervals_m": (
             [
@@ -420,6 +490,7 @@ def measure_mesh_preview(
         ),
         "inconsistent_winding_edge_count": inconsistent_winding_edge_count,
         "qc_warnings": (
+            sorted(volume_qc_warnings)
             (["degenerate_triangles_present"] if degenerate else [])
             + (["open_mesh_surface_not_enclosed"] if boundary else [])
             + (["nonmanifold_mesh_edges"] if nonmanifold else [])
