@@ -89,9 +89,7 @@ def frozen_pose_item_fingerprints_match(
         item_id = summary["item_id"]
         if item_id in observed:
             return False
-        observed[item_id] = {
-            field: summary.get(field) for field in expected.get(item_id, {})
-        }
+        observed[item_id] = {field: summary.get(field) for field in expected.get(item_id, {})}
     return observed == expected
 
 
