@@ -850,14 +850,19 @@ describe("Gallery", () => {
     await act(async () => {
       queryClient.setQueriesData({ queryKey: ["images", project.id] }, updated);
     });
-    const recovered = await screen.findByAltText("Thumbnail of swiftia-01.png");
+    const recovered = await screen.findByAltText(
+      "Thumbnail of swiftia-01.png",
+    );
     expect(recovered.getAttribute("src")).not.toBe(failedUrl);
     expect(recovered.getAttribute("src")).toContain("rv_thumb=");
 
     // A normal query refresh with the same path must not retry indefinitely.
     fireEvent.error(recovered);
     await act(async () => {
-      queryClient.setQueriesData({ queryKey: ["images", project.id] }, response(updated.items[0].thumbnail_path));
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response(updated.items[0].thumbnail_path),
+      );
     });
     expect(
       screen.queryByAltText("Thumbnail of swiftia-01.png"),
