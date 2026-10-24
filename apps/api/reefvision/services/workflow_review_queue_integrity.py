@@ -73,8 +73,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     if integrity_version is not None and integrity_version != "qc-review-queue-v2":
         raise invalid
     if integrity_version == "qc-review-queue-v2" and (
-        "scoring_provenance_sha256" not in checksums
-        or "item_evidence_sha256" not in checksums
+        "scoring_provenance_sha256" not in checksums or "item_evidence_sha256" not in checksums
     ):
         raise invalid
 
