@@ -59,16 +59,16 @@ def snapshot():
             label_class_ids_json=["class-a"],
             model_ids_json=["model-a"],
             related_issue_ids_json=["qc-issue-a"],
-            signal_values_json={"signal": 0.8},
-            normalized_signals_json={"signal": 0.8},
+            signal_values_json={"signal": 0.2},
+            normalized_signals_json={"signal": 0.2},
             score_breakdown_json=[
                 {
                     "signal_id": "signal",
                     "label": "Signal",
-                    "raw_value": 0.8,
-                    "normalized_value": 0.8,
+                    "raw_value": 0.2,
+                    "normalized_value": 0.2,
                     "weight": 1.0,
-                    "contribution": 80.0,
+                    "contribution": 20.0,
                     "description": "Deterministic priority contribution",
                 }
             ],
@@ -423,3 +423,65 @@ def test_empty_saved_queue_summary_is_valid():
         "top_image_ids": [],
     }
     validate_saved_queue_snapshot(queue, [])
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "wrong_raw_value",
+        "wrong_normalized_value",
+        "wrong_weight",
+        "wrong_contribution",
+        "missing_component",
+        "duplicate_component",
+        "unknown_signal",
+        "raw_signal_disagreement",
+        "normalized_signal_disagreement",
+        "unregistered_signal",
+    ],
+)
+def test_v2_rejects_resigned_inconsistent_scientific_explanation(corruption):
+    """A valid digest cannot excuse an internally false saved score explanation."""
+    queue, items = snapshot()
+    part = items[0].score_breakdown_json[0]
+    if corruption == "wrong_raw_value":
+        part["raw_value"] = 0.1
+    elif corruption == "wrong_normalized_value":
+        part["normalized_value"] = 0.1
+    elif corruption == "wrong_weight":
+        part["weight"] = 2.0
+    elif corruption == "wrong_contribution":
+        part["contribution"] = 70.0
+    elif corruption == "missing_component":
+        items[0].score_breakdown_json.clear()
+    elif corruption == "duplicate_component":
+        items[0].score_breakdown_json.append(dict(part))
+    elif corruption == "unknown_signal":
+        part["signal_id"] = "unknown"
+    elif corruption == "raw_signal_disagreement":
+        items[0].signal_values_json["signal"] = 0.5
+    elif corruption == "normalized_signal_disagreement":
+        items[0].normalized_signals_json["signal"] = 0.7
+    elif corruption == "unregistered_signal":
+        items[0].signal_values_json["unknown"] = 0.5
+        items[0].normalized_signals_json["unknown"] = 0.5
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_v2_rejects_resigned_score_with_updated_scope_and_summary():
+    """All recorded digests and summary may agree while the score formula does not."""
+    queue, items = snapshot()
+    items[0].score = 79.0
+    queue.summary_json["average_score"] = 49.5
+    queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+        {
+            "image_ids": ["img-a", "img-b"],
+            "scores": {"img-a": 79.0, "img-b": 20.0},
+            "source_quality_control_run_id": None,
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
