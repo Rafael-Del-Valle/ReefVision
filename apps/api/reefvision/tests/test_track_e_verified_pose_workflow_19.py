@@ -132,6 +132,64 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["pose_schema_revision"] == dataset["pose_schema_revision"]
     assert payload["pose_schema_content_hash"] == dataset["pose_schema_content_hash"]
 
+    # A recomputed checksum must not legitimize a frozen manifest that no
+    # longer guarantees scientist-verified-only training truth.
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        original_manifest = dict(frozen.manifest_json)
+        original_manifest_sha = frozen.manifest_sha256
+        tampered_manifest = {**original_manifest, "truth_policy": "unverified_allowed"}
+        tampered_manifest_sha = canonical_json_sha256(tampered_manifest)
+        frozen.manifest_json = tampered_manifest
+        frozen.manifest_sha256 = tampered_manifest_sha
+        session.commit()
+
+    resigned_graph = {
+        **graph,
+        "nodes": [
+            {
+                **graph["nodes"][0],
+                "parameters": {
+                    **graph["nodes"][0]["parameters"],
+                    "manifest_sha256": tampered_manifest_sha,
+                },
+            }
+        ],
+    }
+    resigned_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=resigned_graph
+    )
+    assert resigned_plan.status_code == 200, resigned_plan.text
+    assert resigned_plan.json()["valid"] is False
+    assert "pose_dataset_truth_policy_mismatch" in {
+        issue["code"] for issue in resigned_plan.json()["issues"]
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="only scientist-verified items"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, resigned_graph["nodes"][0]["parameters"], {}
+        )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="only scientist-verified items"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            app.state.settings,
+            project_id=project_id,
+            dataset_payload={**payload, "manifest_sha256": tampered_manifest_sha},
+            parameters={},
+        )
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        frozen.manifest_json = original_manifest
+        frozen.manifest_sha256 = original_manifest_sha
+        session.commit()
+
     # The saved workflow's real output artifact must not be reusable for
     # training after any of its frozen landmark identity fields are changed.
     with app.state.session_factory() as session:
