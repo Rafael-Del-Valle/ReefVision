@@ -93,7 +93,9 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         if difference_bounds is not None
         else None
     )
-    if not isfinite(rate) or (rate_bounds is not None and not all(isfinite(v) for v in rate_bounds)):
+    if not isfinite(rate) or (
+        rate_bounds is not None and not all(isfinite(v) for v in rate_bounds)
+    ):
         raise ValueError("Surface-area change rate exceeds finite numeric range")
     warnings = [
         "specimen_identity_not_verified",
