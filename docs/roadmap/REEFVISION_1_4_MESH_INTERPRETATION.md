@@ -27,6 +27,16 @@ coral branch lengths, colony perimeter, or verified tissue boundaries. Scale-onl
 uncertainty is a common multiplicative error; absent scale uncertainty stays
 unknown rather than being treated as zero. Human review remains required.
 
+New `boundary_edge_length_scale_interval_m` and
+`edge_connected_patch_boundary_length_scale_intervals_m` fields provide exact
+lower/upper bounds for a **shared multiplicative calibration-scale error**:
+`[L(1-u), L(1+u)]` for relative scale uncertainty `u`. They are not
+confidence intervals or estimates of mesh reconstruction uncertainty. Unknown
+`u` yields null intervals, while explicitly zero uncertainty yields
+`[L, L]`. The standalone endpoint and persisted `mesh_surface_preview`
+Workflow Builder node share this calculation and preserve unverified
+calibration provenance.
+
 Exact per-patch geometry SHA-256 fingerprints are calculated from sorted triangle
 coordinates, ignoring source vertex numbering, triangle order, and winding. They
 support audit of unchanged geometry through standalone and saved Workflow Builder
