@@ -88,9 +88,7 @@ def test_opt_in_extrema_standalone_and_saved_workflow_parity(client: TestClient)
     standalone = client.post(endpoint, json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    invalid = client.post(
-        endpoint, json={**params, "preserve_axis_extrema_in_preview": "true"}
-    )
+    invalid = client.post(endpoint, json={**params, "preserve_axis_extrema_in_preview": "true"})
     assert invalid.status_code == 422, invalid.text
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     node = next(n for n in registry.json() if n["node_type"] == "point_cloud_preview")
