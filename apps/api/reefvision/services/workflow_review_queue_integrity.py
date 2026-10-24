@@ -60,20 +60,21 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     ):
         raise invalid
     scoring_digest = checksums.get("scoring_provenance_sha256")
-    if scoring_digest is not None and (
-        not isinstance(scoring_digest, str)
-        or len(scoring_digest) != 64
-        or any(char not in "0123456789abcdef" for char in scoring_digest)
-        or scoring_digest
-        != canonical_json_sha256(
+    if scoring_digest is not None:
+        expected_scoring_digest = canonical_json_sha256(
             {
                 "formula_id": queue.formula_id,
                 "formula_version": queue.formula_version,
                 "configuration": configuration,
             }
         )
-    ):
-        raise invalid
+        if (
+            not isinstance(scoring_digest, str)
+            or len(scoring_digest) != 64
+            or any(char not in "0123456789abcdef" for char in scoring_digest)
+            or scoring_digest != expected_scoring_digest
+        ):
+            raise invalid
     saved_count = checksums.get("item_count")
     digest = checksums.get("queue_scope_sha256")
     if (
