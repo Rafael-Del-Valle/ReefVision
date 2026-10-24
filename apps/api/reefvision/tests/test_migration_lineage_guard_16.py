@@ -35,7 +35,16 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
         connection.execute(
             text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
         )
-        connection.execute(text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA})"))
+        check = (
+            ", CONSTRAINT ck_review_queue_item_event_type "
+            "CHECK (event_type IN ('comment', 'assign', 'unassign', "
+            "'triage_start', 'triage_skip', 'triage_return'))"
+            if revision == "0039"
+            else ""
+        )
+        connection.execute(
+            text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})")
+        )
         connection.execute(
             text("INSERT INTO review_queue_item_events (id) VALUES ('event-preserved')")
         )
@@ -133,7 +142,7 @@ def test_revision_0039_rejects_obsolete_event_check_without_writes(
             )
         )
         if should_reject:
-            with pytest.raises(RuntimeError, match="obsolete|still excludes"):
+            with pytest.raises(RuntimeError, match=r"obsolete|still excludes"):
                 assert_compatible_revision_0038(connection)
         else:
             assert_compatible_revision_0038(connection)
@@ -141,4 +150,49 @@ def test_revision_0039_rejects_obsolete_event_check_without_writes(
         assert (
             connection.scalar(text("SELECT id FROM review_queue_item_events"))
             == "preserved-event"
+        )
+
+
+
+@pytest.mark.parametrize(
+    ("revision", "constraint_name", "should_reject"),
+    [
+        ("0038", None, False),
+        ("0039", None, True),
+        ("0039", "renamed_event_type_check", True),
+        ("0039", "ck_review_queue_item_event_type", False),
+    ],
+)
+def test_revision_0039_requires_named_triage_check_without_writes(
+    revision: str, constraint_name: str | None, should_reject: bool
+) -> None:
+    """An already-at-head database must not silently lose audit constraints."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
+        )
+        check = (
+            f", CONSTRAINT {constraint_name} CHECK (event_type IN "
+            "('comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return'))"
+            if constraint_name is not None
+            else ""
+        )
+        connection.execute(
+            text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})")
+        )
+        connection.execute(
+            text("INSERT INTO review_queue_item_events (id) VALUES ('preserve-event')")
+        )
+        if should_reject:
+            with pytest.raises(RuntimeError, match="missing or renamed"):
+                assert_compatible_revision_0038(connection)
+        else:
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        assert (
+            connection.scalar(text("SELECT id FROM review_queue_item_events"))
+            == "preserve-event"
         )

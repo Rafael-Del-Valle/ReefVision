@@ -49,11 +49,23 @@ def _add_native_review_table(database: Path, *, revision: str | None = None) -> 
     The separate real-migration regression exercises actual Alembic DDL.
     """
     with sqlite3.connect(database) as connection:
+        stamped_revision = revision
+        if stamped_revision is None:
+            stamped_revision = connection.execute(
+                "SELECT version_num FROM alembic_version"
+            ).fetchone()[0]
+        event_type_check = (
+            ", CONSTRAINT ck_review_queue_item_event_type "
+            "CHECK (event_type IN ('comment', 'assign', 'unassign', "
+            "'triage_start', 'triage_skip', 'triage_return'))"
+            if stamped_revision == "0039"
+            else ""
+        )
         connection.execute(
             "CREATE TABLE review_queue_item_events ("
             "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
             "project_id TEXT, client_request_id TEXT, event_type TEXT, actor TEXT, "
-            "comment TEXT, assignee TEXT, created_at TEXT)"
+            f"comment TEXT, assignee TEXT, created_at TEXT{event_type_check})"
         )
         if revision is not None:
             connection.execute("UPDATE alembic_version SET version_num = ?", (revision,))
