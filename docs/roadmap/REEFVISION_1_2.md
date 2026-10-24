@@ -573,3 +573,25 @@ independent experimental replication, verified source annotations, calibration,
 or a reviewed study design. Those remain release blockers. The identity
 registry is still isolated from the separate 1.1 scientific schema until
 reviewed integration.
+
+
+## Parent-colony uniqueness across colony-level units (2026-10-23)
+
+The project-owned identity registry now rejects a parent colony assigned to
+multiple purported independent **colony-level** unit IDs through different
+fragments or its own colony record. It enforces both unit-to-parent and
+parent-to-unit consistency on registration, append-only revision, and registry
+read-back after external imports. Fragments from one parent may still occur
+in distinct **tank** units when tanks are the declared experimental units.
+
+Standalone API and executable saved Workflow Builder regressions cover
+registration, revision, corrupt imports, and refusal to persist a successful
+registry artifact for contradictory units. Typed outputs, deterministic
+provenance, `registered_unverified` status, and scientist review are retained.
+This safeguard prevents a form of pseudoreplication; it does not authenticate
+biological independence or promote source evidence to verified status.
+
+The seven files flagged by previous exact-head CI were also updated using
+the reported Ruff formatter diff. Exact-head CI, real ecological dataset,
+migration reconciliation with unmerged 1.1, and installed Windows scientific
+acceptance remain outstanding.
