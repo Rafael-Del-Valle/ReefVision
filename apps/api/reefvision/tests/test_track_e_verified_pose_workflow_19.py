@@ -169,9 +169,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         ):
             PoseTrainingDatasetService(session).native_package(dataset_id)
 
-        schema_plan = client.post(
-            f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-        )
+        schema_plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
         assert schema_plan.status_code == 200, schema_plan.text
         assert schema_plan.json()["valid"] is False
         assert "pose_dataset_item_lineage_mismatch" in {
