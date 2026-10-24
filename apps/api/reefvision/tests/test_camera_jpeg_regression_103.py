@@ -231,9 +231,7 @@ def test_camera_exif_offset_normalizes_capture_time_without_mutating_original(
     exif[timestamp_tag] = "2026:10:01 12:30:00"
     exif[offset_tag] = offset
     stream = BytesIO()
-    Image.new("RGB", (64, 48), (20, 90, 120)).save(
-        stream, format="JPEG", exif=exif
-    )
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
     payload = stream.getvalue()
 
     report = import_one(
@@ -255,9 +253,7 @@ def test_invalid_camera_exif_offset_does_not_invent_utc_capture_time(
     exif[36867] = "2026:10:01 12:30:00"
     exif[36881] = "not-an-offset"
     stream = BytesIO()
-    Image.new("RGB", (64, 48), (20, 90, 120)).save(
-        stream, format="JPEG", exif=exif
-    )
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
     payload = stream.getvalue()
 
     report = import_one(
