@@ -102,9 +102,7 @@ def test_project_image_link_is_append_only_and_workflow_persists_same_unverified
 
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
-    artifacts = [
-        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
-    ]
+    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == snapshot
 
@@ -154,9 +152,7 @@ def test_changed_source_image_hash_fails_closed_for_api_and_saved_workflow(
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "failed"
     assert "source is missing or changed" in run["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in run["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in run["artifacts"])
 
 
 def test_malformed_imported_image_metadata_fails_closed_before_linking(
@@ -200,6 +196,4 @@ def test_malformed_source_dimensions_fail_closed_in_api_and_saved_workflow(
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "failed"
     assert "invalid source dimensions or size" in run["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in run["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in run["artifacts"])
