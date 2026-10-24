@@ -66,15 +66,15 @@ def boundary_component_lengths(
             continue
         component_index = len(is_cycle)
         stack = [start]
+        component_vertices: list[int] = []
         while stack:
             vertex = stack.pop()
             if vertex in owner:
                 continue
             owner[vertex] = component_index
+            component_vertices.append(vertex)
             stack.extend(adjacency[vertex] - owner.keys())
-        is_cycle.append(
-            all(len(adjacency[vertex]) == 2 for vertex in owner if owner[vertex] == component_index)
-        )
+        is_cycle.append(all(len(adjacency[vertex]) == 2 for vertex in component_vertices))
 
     component_lengths: list[list[float]] = [[] for _ in is_cycle]
     for first, second in edges:
