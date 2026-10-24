@@ -78,3 +78,20 @@ disjoint tetrahedra through the direct engine, standalone API, and a saved,
 executed Workflow Builder graph. No persistent mesh-asset registry, verified
 biological branch-length inference, or longitudinal organism matching is
 implied by this slice.
+
+## Caller-supplied specimen and observation provenance
+
+The standalone mesh preview and persisted `mesh_surface_preview` Workflow
+Builder node accept optional `specimen_id`, `observation_id`, and
+`observed_at_utc` fields. The timestamp must include a timezone offset and
+is normalized to UTC in the measurement provenance. Identifiers are bounded
+and must not contain whitespace. A saved workflow retains these values in
+its result artifact, alongside the geometry fingerprint and scale evidence.
+
+These are **unverified caller assertions**, not an organism identity registry,
+survey linkage, independently checked observation time, or a longitudinal
+comparison. The provenance explicitly sets `specimen_identity_verified`
+and `observation_metadata_verified` to `false`. Repeated specimen IDs must
+not be interpreted as confirmed re-identification, and temporal differences
+must not be presented as growth without reviewed registration, calibration,
+and identity evidence.
