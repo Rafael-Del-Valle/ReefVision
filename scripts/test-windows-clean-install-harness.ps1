@@ -55,11 +55,12 @@ Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Split-Path -Parent $d
 # installation or later recursive cleanup into an unrelated research tree.
 $fixtureRoot = Join-Path $env:TEMP ('rv-acceptance-link-test-' + [guid]::NewGuid().ToString('N'))
 $externalRoot = Join-Path $fixtureRoot 'external'
+$unrelatedRoot = Join-Path $fixtureRoot 'unrelated'
 $linkedRoot = Join-Path $fixtureRoot 'linked'
 $nestedLink = Join-Path $externalRoot 'nested-link'
 $externalSentinel = Join-Path $externalRoot 'preserve.txt'
 try {
-    New-Item -ItemType Directory -Path $externalRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $externalRoot,$unrelatedRoot -Force | Out-Null
     Set-Content -LiteralPath $externalSentinel -Value 'research assets stay untouched'
     $originalHash = (Get-FileHash -LiteralPath $externalSentinel -Algorithm SHA256).Hash
     New-Item -ItemType Junction -Path $linkedRoot -Target $externalRoot | Out-Null
@@ -69,7 +70,7 @@ try {
     Assert-ThrowsContaining {
         Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $linkedRoot 'new-run') -RepositoryRoot $Root -DefaultDataRoot $defaultData
     } 'symlink/junction'
-    New-Item -ItemType Junction -Path $nestedLink -Target $fixtureRoot | Out-Null
+    New-Item -ItemType Junction -Path $nestedLink -Target $unrelatedRoot | Out-Null
     Assert-ThrowsContaining {
         Assert-ReefVisionAcceptanceTreeNoReparsePoints -Path $externalRoot
     } 'symlink/junction'
