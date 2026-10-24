@@ -332,3 +332,22 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Exact-new-head CI and native Windows installed-GUI/upgrade tests remain
   mandatory. No claim of newly passing tests until CI completes. No merge,
   release, or automatic approval.
+
+## 2026-10-23 — Finite QC scientific evidence on saved Workflow Builder retries
+
+- Audited existing standalone `ReviewQueueService`, the typed persisted
+  `qc_review_queue` node, and v2 scientific-evidence digests before editing.
+- **Gap:** Python's JSON encoder can represent NaN/Infinity, while a
+  checksum alone does not establish whether saved raw signals, normalized
+  signals or contribution numbers are scientifically valid.
+- For v2 saved queues, retries now reject nonfinite/boolean raw signals,
+  nonfinite/out-of-range normalized signals, incomplete raw/normalized
+  signal keys, and malformed/nonfinite contribution metadata. Normalized
+  scores must remain in [0, 1]; raw count signals may legitimately exceed 1.
+- Older unversioned queues retain their historical compatibility path.
+  Reviewer decisions remain editable, and the workflow never auto-approves
+  model predictions or re-runs inference.
+- Added focused corruption regressions plus an actual saved executable
+  Workflow Builder retry regression for a NaN raw signal and restoration.
+  Native Windows GUI, cross-version Alembic and full release acceptance
+  remain outstanding.

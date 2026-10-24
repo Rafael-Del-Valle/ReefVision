@@ -16,6 +16,11 @@ from reefvision.domain.errors import ValidationError
 from reefvision.storage.datasets import canonical_json_sha256
 
 
+def _finite_scientific_number(value: Any) -> bool:
+    """Reject booleans, NaN and infinity in saved numeric QC evidence."""
+    return type(value) in (int, float) and isfinite(value)
+
+
 def queue_item_evidence_sha256(items: Sequence[Any]) -> str:
     """Digest immutable scientific queue evidence, excluding mutable reviewer decisions.
 
@@ -149,6 +154,33 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             or not 0 <= item.score <= 100
         ):
             raise invalid
+        # v2 queues must contain finite, dimensionless scientific evidence.
+        # JSON can encode NaN/Infinity in Python, but those values cannot
+        # represent reproducible normalized scores on a saved workflow retry.
+        if integrity_version == "qc-review-queue-v2":
+            raw_signals = item.signal_values_json
+            normalized_signals = item.normalized_signals_json
+            breakdown = item.score_breakdown_json
+            if (
+                not isinstance(raw_signals, dict)
+                or not isinstance(normalized_signals, dict)
+                or not isinstance(breakdown, list)
+                or raw_signals.keys() != normalized_signals.keys()
+                or any(not _finite_scientific_number(v) for v in raw_signals.values())
+                or any(
+                    not _finite_scientific_number(v) or not 0 <= v <= 1
+                    for v in normalized_signals.values()
+                )
+                or any(
+                    not isinstance(part, dict)
+                    or any(
+                        not _finite_scientific_number(part.get(field))
+                        for field in ("raw_value", "normalized_value", "weight", "contribution")
+                    )
+                    for part in breakdown
+                )
+            ):
+                raise invalid
         scores[item.image_id] = item.score
         ranks.add(item.rank_position)
     if ranks != set(range(1, saved_count + 1)):

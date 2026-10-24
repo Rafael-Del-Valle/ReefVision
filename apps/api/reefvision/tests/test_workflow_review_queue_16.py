@@ -174,6 +174,25 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             )
         saved_item.score = original_score
         session.flush()
+        # A persisted Workflow Builder retry must reject nonfinite raw
+        # scientific signals even if the score itself is still finite.
+        original_signals = saved_item.signal_values_json
+        saved_item.signal_values_json = {
+            **original_signals,
+            "pending_proposals": float("nan"),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        saved_item.signal_values_json = original_signals
+        session.flush()
         # A score-only checksum cannot detect a rewritten scientific
         # explanation. The full evidence digest must protect persisted signal
         # contributions while leaving reviewer decisions editable.

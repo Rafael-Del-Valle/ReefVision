@@ -31,7 +31,17 @@ def snapshot():
             related_issue_ids_json=["qc-issue-a"],
             signal_values_json={"signal": 0.8},
             normalized_signals_json={"signal": 0.8},
-            score_breakdown_json=[{"signal_id": "signal", "contribution": 80.0}],
+            score_breakdown_json=[
+                {
+                    "signal_id": "signal",
+                    "label": "Signal",
+                    "raw_value": 0.8,
+                    "normalized_value": 0.8,
+                    "weight": 1.0,
+                    "contribution": 80.0,
+                    "description": "Deterministic priority contribution",
+                }
+            ],
             reason_summary="Requires manual review",
             highest_qc_severity="warning",
             split="train",
@@ -51,7 +61,17 @@ def snapshot():
             related_issue_ids_json=["qc-issue-a"],
             signal_values_json={"signal": 0.8},
             normalized_signals_json={"signal": 0.8},
-            score_breakdown_json=[{"signal_id": "signal", "contribution": 80.0}],
+            score_breakdown_json=[
+                {
+                    "signal_id": "signal",
+                    "label": "Signal",
+                    "raw_value": 0.8,
+                    "normalized_value": 0.8,
+                    "weight": 1.0,
+                    "contribution": 80.0,
+                    "description": "Deterministic priority contribution",
+                }
+            ],
             reason_summary="Requires manual review",
             highest_qc_severity=None,
             split=None,
@@ -163,6 +183,13 @@ def test_reviewer_coordination_does_not_invalidate_scientific_snapshot():
         "normalized_signal",
         "class_reference",
         "reason_summary",
+        "raw_signal_nan",
+        "normalized_signal_infinity",
+        "normalized_signal_negative",
+        "normalized_signal_above_one",
+        "breakdown_contribution_nan",
+        "breakdown_weight_boolean",
+        "missing_normalized_signal",
     ],
 )
 def test_rejects_corrupted_saved_snapshot(corruption):
@@ -242,6 +269,20 @@ def test_rejects_corrupted_saved_snapshot(corruption):
         items[0].label_class_ids_json.append("other-class")
     elif corruption == "reason_summary":
         items[0].reason_summary = "Altered scientific explanation"
+    elif corruption == "raw_signal_nan":
+        items[0].signal_values_json["signal"] = float("nan")
+    elif corruption == "normalized_signal_infinity":
+        items[0].normalized_signals_json["signal"] = float("inf")
+    elif corruption == "normalized_signal_negative":
+        items[0].normalized_signals_json["signal"] = -0.1
+    elif corruption == "normalized_signal_above_one":
+        items[0].normalized_signals_json["signal"] = 1.1
+    elif corruption == "breakdown_contribution_nan":
+        items[0].score_breakdown_json[0]["contribution"] = float("nan")
+    elif corruption == "breakdown_weight_boolean":
+        items[0].score_breakdown_json[0]["weight"] = True
+    elif corruption == "missing_normalized_signal":
+        items[0].normalized_signals_json.clear()
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
 
