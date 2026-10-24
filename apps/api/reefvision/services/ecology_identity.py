@@ -17,12 +17,12 @@ from reefvision.domain.errors import ConflictError, NotFoundError, ValidationErr
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.ecology_identity import (
     EcologyIdentityCreate,
-    EcologyImageEvidenceCreate,
-    EcologyImageEvidenceRow,
     EcologyIdentityFields,
     EcologyIdentityRegistryResponse,
     EcologyIdentityRevisionCreate,
     EcologyIdentityRow,
+    EcologyImageEvidenceCreate,
+    EcologyImageEvidenceRow,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 
