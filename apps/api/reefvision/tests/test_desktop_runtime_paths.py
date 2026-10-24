@@ -111,9 +111,9 @@ def test_current_database_revision_skips_alembic_upgrade(
         settings,
         current_head,
     )
-    # A bare Alembic stamp is no longer a valid 0038 database: the lineage
-    # guard deliberately requires the matching review-events schema.
-    if current_head == "0038":
+    # A bare 0038/0039 stamp is not a valid review-events database.
+    # The desktop must validate schema identity even on its fast path.
+    if current_head in {"0038", "0039"}:
         _add_native_review_table(database)
     before = database.read_bytes()
 
