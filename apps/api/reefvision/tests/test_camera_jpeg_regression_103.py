@@ -279,9 +279,7 @@ def test_real_camera_nested_exif_ifd_capture_time_and_provenance(
     Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
     payload = stream.getvalue()
 
-    report = import_one(
-        client, project["id"], filename="DSC_SUBIFD.JPEG", content=payload
-    )
+    report = import_one(client, project["id"], filename="DSC_SUBIFD.JPEG", content=payload)
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
     metadata = client.get(f"/api/v1/images/{image_id}").json()
