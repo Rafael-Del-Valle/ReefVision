@@ -279,9 +279,7 @@ def test_historical_snapshot_without_scoring_digest_remains_readable():
         validate_saved_queue_snapshot(queue, items)
 
 
-@pytest.mark.parametrize(
-    "missing_digest", ["scoring_provenance_sha256", "item_evidence_sha256"]
-)
+@pytest.mark.parametrize("missing_digest", ["scoring_provenance_sha256", "item_evidence_sha256"])
 def test_versioned_queue_fails_closed_when_provenance_digest_is_missing(missing_digest):
     queue, items = snapshot()
     queue.input_checksums_json.pop(missing_digest)
