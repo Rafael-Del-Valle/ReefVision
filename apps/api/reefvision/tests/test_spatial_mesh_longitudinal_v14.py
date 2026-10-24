@@ -45,7 +45,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["average_surface_area_change_m2_per_day"] == pytest.approx(0.5)
     rate_bounds = expected["average_surface_area_change_scale_interval_m2_per_day"]
     assert rate_bounds == pytest.approx([0.205, 0.805])
-    assert "average_change_per_day_is_not_a_biological_growth_rate" in expected["qc_warnings"]
+    warnings = expected["qc_warnings"]
+    assert "average_change_per_day_is_not_a_biological_growth_rate" in warnings
     assert expected["measurement_status"] == "provisional_unverified_longitudinal_comparison"
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
@@ -183,7 +184,9 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
         )
 
 
-def test_mesh_comparison_average_rate_preserves_negative_change(client: TestClient) -> None:
+def test_mesh_comparison_average_rate_preserves_negative_change(
+    client: TestClient,
+) -> None:
     project_id = str(create_project(client, "Mesh declining area")["id"])
     response = client.post(
         f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
