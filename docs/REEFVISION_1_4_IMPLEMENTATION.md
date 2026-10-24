@@ -26,3 +26,22 @@ Outstanding: persistent asset ingestion and versioning, registered
 coordinate frames, independent calibration review, direct point-cloud
 visualization, validated anatomical branch lengths, longitudinal identity
 linkage, and installed desktop/GPU/scientific acceptance.
+
+## Scale-only surface-area bounds (provisional)
+
+The standalone mesh API and saved `mesh_surface_preview` Workflow Builder
+artifacts report `surface_area_scale_interval_m2` and
+`edge_connected_patch_area_scale_intervals_m2` when a relative scale
+uncertainty `u` is supplied. For measured area `A`, the lower and upper
+bounds are `A * (1 - u)^2` and `A * (1 + u)^2`, respectively. This uses the
+exact square-law dependence of area on a common multiplicative scale. The
+existing `area_scale_uncertainty_m2 = 2 * u * A` remains a first-order
+sensitivity estimate for backwards compatibility; it is **not** an exact
+interval half-width.
+
+These bounds represent **only** the caller-supplied scale range. They are
+not statistical confidence intervals and do not include reconstruction,
+segmentation, surface incompleteness, calibration verification, or
+registration uncertainty. All areas remain `caller_supplied_unverified`;
+an open or nonmanifold mesh must not be interpreted as a complete coral
+surface without independent human review.
