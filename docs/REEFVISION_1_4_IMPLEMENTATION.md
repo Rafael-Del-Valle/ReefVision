@@ -179,3 +179,22 @@ Regression tests in `test_spatial_mesh_longitudinal_v14.py` cover positive
 and negative signed rates, 48-hour intervals, missing uncertainty, and exact
 standalone-versus-executed-saved-workflow payload parity. CI, independent
 scientific validation, and installed Windows acceptance remain outstanding.
+
+## Longitudinal axis-aligned 3D extent (provisional)
+
+The standalone mesh longitudinal comparison endpoint and executable persisted
+`mesh_longitudinal_comparison` Workflow Builder node now additionally report
+the before/after axis-aligned bounding-box diagonal (m), signed change (m),
+and average signed change per elapsed UTC day (m/day). Where both observation
+previews include valid scale-only diagonal intervals enclosing the nominal
+values, conservative difference and per-day bounds are computed by subtracting
+opposite interval endpoints. Missing dimensions or uncertainty remain
+`null`, with explicit QC warnings, rather than being imputed.
+
+**Important:** An axis-aligned bounding-box diagonal depends on scan
+orientation and reconstruction coverage. It is **not** a coral branch length,
+biological extension rate, verified growth, or evidence of specimen
+reidentification. The new fields are descriptive geometric diagnostics only.
+Registration, independent calibration review, observation identity, and
+reconstruction uncertainty remain unverified. The same engine is exercised
+through the standalone endpoint and saved typed Workflow Builder execution.
