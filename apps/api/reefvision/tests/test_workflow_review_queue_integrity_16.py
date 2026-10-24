@@ -470,7 +470,6 @@ def test_v2_rejects_resigned_inconsistent_scientific_explanation(corruption):
         validate_saved_queue_snapshot(queue, items)
 
 
-
 def test_v2_rejects_resigned_omission_of_configured_scoring_signal():
     """A re-signed snapshot cannot silently omit a configured QC signal."""
     queue, items = snapshot()
@@ -507,3 +506,36 @@ def test_v2_rejects_resigned_score_with_updated_scope_and_summary():
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
+
+
+def test_v2_rejects_resigned_zero_total_weight_even_when_scores_agree():
+    """A checksum-consistent all-zero vector must not define a v2 priority score."""
+    queue, items = snapshot()
+    queue.configuration_json["weights"] = {"signal": 0.0}
+    for item in items:
+        item.weights_json = {"signal": 0.0}
+        item.score = 0.0
+        item.score_breakdown_json[0]["weight"] = 0.0
+        item.score_breakdown_json[0]["contribution"] = 0.0
+    queue.summary_json["average_score"] = 0.0
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+        }
+    )
+    queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+        {
+            "image_ids": ["img-a", "img-b"],
+            "scores": {"img-a": 0.0, "img-b": 0.0},
+            "source_quality_control_run_id": None,
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+    # Historical unversioned queues remain readable without rewriting data.
+    queue.input_checksums_json.pop("integrity_schema_version")
+    validate_saved_queue_snapshot(queue, items)
