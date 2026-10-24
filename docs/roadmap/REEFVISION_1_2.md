@@ -550,3 +550,26 @@ reviewed correction sequences. The registry remains
 `registered_unverified`, never verified biological truth. No new migration
 or cross-version merge is introduced. Exact-head CI, migration reconciliation,
 source/calibration verification, and Windows acceptance remain outstanding.
+
+## Registered independent-unit identity integrity (2026-10-23)
+
+The append-only project-owned organism identity registry now rejects contradictory
+**declared** experimental-unit assignments before creating a revision and when
+reading a registry snapshot. For organism/individual/fragment-level unit types,
+one declared unit ID cannot be assigned to multiple organisms. For a
+colony-level unit, all fragments sharing that unit ID must resolve to the same
+registered parent colony; a fragment without a registered parent cannot claim
+a colony-level independent unit. Mixed parent colonies remain valid within a
+tank or site, where they are not silently promoted into independent colonies.
+Checks apply to new registrations, append-only corrections and malformed
+imported histories. The existing typed `ecology_identity_registry_source`
+Workflow Builder node fails closed without publishing an artifact if the
+latest registry violates these rules; API and saved-workflow regressions cover
+the behavior. The registry fingerprint, `registered_unverified` evidence level
+and scientist-review gate remain unchanged. No database migration is needed.
+
+These are consistency checks on researcher-entered labels, **not** proof of
+independent experimental replication, verified source annotations, calibration,
+or a reviewed study design. Those remain release blockers. The identity
+registry is still isolated from the separate 1.1 scientific schema until
+reviewed integration.
