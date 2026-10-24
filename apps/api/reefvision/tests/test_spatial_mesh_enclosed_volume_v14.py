@@ -90,18 +90,14 @@ def test_open_disconnected_patch_preserves_volume_and_topology_qc() -> None:
     assert result["edge_connected_patch_enclosed_volumes_m3"][0] == pytest.approx(0.01**3 / 6)
 
 
-@pytest.mark.parametrize(
-    ("faces", "expected_euler"), [(TETRA_FACES, 2), (TETRA_FACES[:-1], 1)]
-)
-def test_mesh_patch_euler_counts_are_source_topology_not_genus(
-    faces: list[list[int]], expected_euler: int
-) -> None:
-    result = measure_mesh_preview(**_params(faces=faces))
-    assert result["edge_connected_patch_vertex_counts"] == [4]
-    assert result["edge_connected_patch_edge_counts"] == [6]
-    assert result["edge_connected_patch_face_counts"] == [len(faces)]
-    assert result["edge_connected_patch_euler_characteristics"] == [expected_euler]
-    assert result["measurement_status"] == "caller_supplied_unverified"
+def test_mesh_patch_euler_counts_are_source_topology_not_genus() -> None:
+    for faces, expected_euler in ((TETRA_FACES, 2), (TETRA_FACES[:-1], 1)):
+        result = measure_mesh_preview(**_params(faces=faces))
+        assert result["edge_connected_patch_vertex_counts"] == [4]
+        assert result["edge_connected_patch_edge_counts"] == [6]
+        assert result["edge_connected_patch_face_counts"] == [len(faces)]
+        assert result["edge_connected_patch_euler_characteristics"] == [expected_euler]
+        assert result["measurement_status"] == "caller_supplied_unverified"
 
 
 def test_vertex_touching_patches_keep_separate_euler_diagnostics() -> None:
