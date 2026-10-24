@@ -42,9 +42,7 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
             if revision == "0039"
             else ""
         )
-        connection.execute(
-            text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})")
-        )
+        connection.execute(text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})"))
         connection.execute(
             text("INSERT INTO review_queue_item_events (id) VALUES ('event-preserved')")
         )
@@ -148,11 +146,8 @@ def test_revision_0039_rejects_obsolete_event_check_without_writes(
             assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
         assert (
-            connection.scalar(text("SELECT id FROM review_queue_item_events"))
-            == "preserved-event"
+            connection.scalar(text("SELECT id FROM review_queue_item_events")) == "preserved-event"
         )
-
-
 
 @pytest.mark.parametrize(
     ("revision", "constraint_name", "should_reject"),
@@ -180,9 +175,7 @@ def test_revision_0039_requires_named_triage_check_without_writes(
             if constraint_name is not None
             else ""
         )
-        connection.execute(
-            text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})")
-        )
+        connection.execute(text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})"))
         connection.execute(
             text("INSERT INTO review_queue_item_events (id) VALUES ('preserve-event')")
         )
@@ -193,6 +186,56 @@ def test_revision_0039_requires_named_triage_check_without_writes(
             assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
         assert (
-            connection.scalar(text("SELECT id FROM review_queue_item_events"))
-            == "preserve-event"
+            connection.scalar(text("SELECT id FROM review_queue_item_events")) == "preserve-event"
         )
+
+_VALID_EVENT_TYPES = (
+    "'comment', 'assign', 'unassign', 'triage_start', "
+    "'triage_skip', 'triage_return'"
+)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        f"event_type IN ({_VALID_EVENT_TYPES}) OR 1=1",
+        f"event_type IN ({_VALID_EVENT_TYPES}, 'unreviewed')",
+        "event_type IN ('triage_start', 'triage_skip', 'triage_return')",
+    ],
+)
+def test_revision_0039_rejects_permissive_event_checks_without_writes(
+    expression: str,
+) -> None:
+    """A 0039 stamp must not accept arbitrary or incomplete event types."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0039')"))
+        connection.execute(
+            text(
+                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
+                f"CONSTRAINT ck_review_queue_item_event_type CHECK ({expression}))"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO review_queue_item_events (id, event_type) "
+                "VALUES ('preserved-event', 'comment')"
+            )
+        )
+        schema_before = connection.scalar(
+            text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type='table' AND name='review_queue_item_events'"
+            )
+        )
+        with pytest.raises(RuntimeError, match="permits unsupported|still excludes"):
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0039"
+        assert connection.scalar(text("SELECT id FROM review_queue_item_events")) == "preserved-event"
+        assert connection.scalar(
+            text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type='table' AND name='review_queue_item_events'"
+            )
+        ) == schema_before
