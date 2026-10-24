@@ -234,9 +234,7 @@ def test_camera_exif_offset_normalizes_capture_time_without_mutating_original(
     Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
     payload = stream.getvalue()
 
-    report = import_one(
-        client, project["id"], filename="DSC_TIME.JPEG", content=payload
-    )
+    report = import_one(client, project["id"], filename="DSC_TIME.JPEG", content=payload)
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
     metadata = client.get(f"/api/v1/images/{image_id}").json()
@@ -256,9 +254,7 @@ def test_invalid_camera_exif_offset_does_not_invent_utc_capture_time(
     Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
     payload = stream.getvalue()
 
-    report = import_one(
-        client, project["id"], filename="DSC_INVALID_TIME.JPEG", content=payload
-    )
+    report = import_one(client, project["id"], filename="DSC_INVALID_TIME.JPEG", content=payload)
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
     metadata = client.get(f"/api/v1/images/{image_id}").json()
