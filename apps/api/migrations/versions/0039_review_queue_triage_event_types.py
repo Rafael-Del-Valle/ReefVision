@@ -36,8 +36,9 @@ def _replace_check(expression: str) -> None:
 
 def upgrade() -> None:
     # Some historical SQLite databases were opened with FK checks disabled.
-    # Never rewrite an audit table containing events without their source
-    # queue, item, or project: preserve it for researcher reconciliation.
+    # Never rewrite audit records with missing parents or inconsistent
+    # queue/item/project scope, even when every referenced parent exists.
+    # Preserve the database for explicit researcher reconciliation.
     connection = op.get_bind()
     orphan_count = connection.scalar(
         sa.text(
@@ -45,13 +46,16 @@ def upgrade() -> None:
             "LEFT JOIN review_queues AS queue ON queue.id = event.review_queue_id "
             "LEFT JOIN review_queue_items AS item ON item.id = event.review_queue_item_id "
             "LEFT JOIN projects AS project ON project.id = event.project_id "
-            "WHERE queue.id IS NULL OR item.id IS NULL OR project.id IS NULL"
+            "WHERE queue.id IS NULL OR item.id IS NULL OR project.id IS NULL "
+            "OR item.review_queue_id != event.review_queue_id "
+            "OR item.project_id != event.project_id "
+            "OR queue.project_id != event.project_id"
         )
     )
     if orphan_count:
         raise RuntimeError(
             "Cannot upgrade QC triage audit schema with orphan review events; "
-            "preserve the database and repair parent references before retrying"
+            "preserve the database and repair parent references and scope before retrying"
         )
     _replace_check(_NEW_TYPES)
 
