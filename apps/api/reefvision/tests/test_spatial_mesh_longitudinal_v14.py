@@ -197,6 +197,26 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
     assert result["average_surface_area_change_scale_interval_m2_per_day"] is None
     assert result["relative_surface_area_scale_interval_percent"] is None
     assert "scale_uncertainty_interval_unavailable" in result["qc_warnings"]
+    early_extent = {
+        **base,
+        "axis_aligned_bounding_box_diagonal_m": 1.0,
+        "axis_aligned_bounding_box_diagonal_scale_interval_m": [0.9, 1.1],
+    }
+    late_extent = {
+        **later,
+        "axis_aligned_bounding_box_diagonal_m": 2.0,
+        "axis_aligned_bounding_box_diagonal_scale_interval_m": None,
+    }
+    extent_result = compare_mesh_observations(early_extent, late_extent)
+    assert extent_result["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(1)
+    assert extent_result["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
+    assert "extent_scale_uncertainty_interval_unavailable" in extent_result["qc_warnings"]
+    malformed = {
+        **late_extent,
+        "axis_aligned_bounding_box_diagonal_scale_interval_m": [2.1, 2.2],
+    }
+    malformed_result = compare_mesh_observations(early_extent, malformed)
+    assert malformed_result["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
     with pytest.raises(ValueError, match="verification state"):
         compare_mesh_observations(
             {**base, "provenance": {**base["provenance"], "calibration_verified": True}},
