@@ -5,10 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta, timezone
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-import pytest
 
 from reefvision.db.models import ImageAsset
 from reefvision.domain.errors import ValidationError
@@ -412,7 +411,9 @@ def test_population_rejects_one_organism_reused_across_declared_units() -> None:
             "sampling_windows_utc": ["2026-04-03/2026-04-05"],
         }
     )
-    with pytest.raises(ValidationError, match="pooled across declared experimental units"):
+    with pytest.raises(
+        ValidationError, match="pooled across declared experimental units"
+    ):
         summarize_projected_population_summaries([base, moved])
     # Different metrics on the same organism are distinct measurements,
     # not duplicate organism replicates of the same response.
