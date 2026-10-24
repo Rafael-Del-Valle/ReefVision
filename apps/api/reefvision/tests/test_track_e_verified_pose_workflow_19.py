@@ -290,7 +290,11 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             pytest.raises(ValidationError, match="item fingerprints no longer match"),
         ):
             execute_pose_training_dataset_adapter(
-                session, app.state.settings, project_id, identity_graph["nodes"][0]["parameters"], {}
+                session,
+                app.state.settings,
+                project_id,
+                identity_graph["nodes"][0]["parameters"],
+                {},
             )
         with (
             app.state.session_factory() as session,
