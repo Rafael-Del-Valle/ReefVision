@@ -36,6 +36,44 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     checksums = queue.input_checksums_json
     if not isinstance(checksums, dict):
         raise invalid
+
+    # Historical snapshots may predate the scoring digest; retain their
+    # compatibility while requiring internally consistent scoring metadata.
+    # Newly generated queues include a digest so edits to the formula,
+    # ruleset, thresholds or weights cannot silently change retry provenance.
+    weights = configuration.get("weights")
+    if (
+        not isinstance(queue.formula_id, str)
+        or not queue.formula_id.strip()
+        or not isinstance(queue.formula_version, str)
+        or not queue.formula_version.strip()
+        or not isinstance(weights, dict)
+        or not weights
+        or any(
+            not isinstance(signal, str)
+            or not signal
+            or type(weight) not in (int, float)
+            or not isfinite(weight)
+            or weight < 0
+            for signal, weight in weights.items()
+        )
+    ):
+        raise invalid
+    scoring_digest = checksums.get("scoring_provenance_sha256")
+    if scoring_digest is not None and (
+        not isinstance(scoring_digest, str)
+        or len(scoring_digest) != 64
+        or any(char not in "0123456789abcdef" for char in scoring_digest)
+        or scoring_digest
+        != canonical_json_sha256(
+            {
+                "formula_id": queue.formula_id,
+                "formula_version": queue.formula_version,
+                "configuration": configuration,
+            }
+        )
+    ):
+        raise invalid
     saved_count = checksums.get("item_count")
     digest = checksums.get("queue_scope_sha256")
     if (
@@ -62,6 +100,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             or item.project_id != queue.project_id
             or item.review_queue_id != queue.id
             or item.dataset_version_id is not None
+            or item.weights_json != weights
             or type(item.rank_position) is not int
             or item.rank_position in ranks
             or type(item.score) not in (int, float)
