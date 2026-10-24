@@ -498,3 +498,11 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   it is **not** a complete ReefVision repository test. Full CI, 1.1/1.6 0038
   collision reconciliation, actual MSI upgrade/rollback, installed Windows GUI
   and representative scientific acceptance remain **HOLD**.
+
+### 2026-10-24 — QC audit migration cross-scope preservation
+
+- The existing 0039 preflight rejected missing review-event parent rows, but independently valid queue, item, and project IDs could still be combined into a scientifically misleading cross-project audit event. Foreign keys alone do not enforce the matching queue/project scope.
+- Upgrade preflight now also requires `event.review_queue_id == item.review_queue_id`, `event.project_id == item.project_id`, and `event.project_id == queue.project_id`. Any mismatch fails **before** SQLite table recreation; no events are deleted, remapped, or automatically approved.
+- Four new parameterized corruption/repair regressions cover existing-but-mismatched queue, item, project, and paired queue/item references; existing orphan, preservation, upgrade/downgrade, and file-backed SQLite cases remain. Exact Ruff formatting corrections to the prior regression file were applied.
+- An isolated Python sqlite3 query smoke reproduced 6/6 valid/orphan/cross-scope outcomes. This does **not** establish that repository pytest, Ruff, or migration integration tests pass. Exact-head GitHub Actions results must be checked.
+- Version remains **HOLD** pending full CI, cross-version Alembic 0038 reconciliation, scientific Workflow Builder acceptance, and native Windows MSI upgrade/rollback and installed-GUI validation. No completion marker or release authorization.
