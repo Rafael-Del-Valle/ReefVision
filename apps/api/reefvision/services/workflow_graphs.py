@@ -252,6 +252,19 @@ class WorkflowGraphService:
                     node_id=node_id,
                 )
             )
+        elif (
+            not isinstance(dataset.manifest_json.get("items"), list)
+            or dataset.manifest_json.get("item_count") != dataset.item_count
+            or len(dataset.manifest_json["items"]) != dataset.item_count
+        ):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_item_count_mismatch",
+                    "Frozen pose dataset item count differs from its signed manifest",
+                    node_id=node_id,
+                )
+            )
         elif expected_manifest and expected_manifest != dataset.manifest_sha256:
             issues.append(
                 self._issue(
