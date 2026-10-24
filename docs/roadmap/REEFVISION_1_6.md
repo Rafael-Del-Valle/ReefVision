@@ -351,3 +351,30 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   Workflow Builder retry regression for a NaN raw signal and restoration.
   Native Windows GUI, cross-version Alembic and full release acceptance
   remain outstanding.
+
+## 2026-10-24 — Saved QC scoring semantics on Workflow Builder retry
+
+- **Audited existing behavior first:** the versioned v2 snapshot already required
+  finite numeric signals, independent scoring/evidence digests, stable ranks,
+  scientific summary consistency, and editable reviewer coordination. The
+  missing invariant was that an individually well-formed and re-signed score
+  breakdown could disagree with its saved raw/normalized signals, configured
+  weights, or total score.
+- The v2 replay validator now checks exact per-signal membership, unique
+  breakdown components, stored raw values, six-decimal normalized values,
+  weights, two-decimal weighted contributions, deterministic component order,
+  and the aggregate score. It uses **persisted evidence only** and never
+  re-runs inference or changes review decisions.
+- Unit regressions deliberately recompute the evidence digest after ten
+  types of semantic corruption; a separate case re-signs both the score scope
+  and evidence while adjusting the summary. A saved executable Workflow
+  Builder regression likewise re-signs a modified breakdown and requires
+  retry rejection, followed by a restored successful retry.
+- Historical unversioned queues remain on their existing compatibility
+  validation path. No database migration, model acquisition, or new workflow
+  node was required.
+- **Validation at implementation time:** prior exact head `3e34dc89` had
+  20/20 successful GitHub Actions workflows. New code/tests were pushed on
+  the isolated 1.6 draft PR, but their exact-head CI was queued; native Windows
+  installed-GUI, upgrade/rollback and scientific dataset acceptance remain
+  **HOLD**.
