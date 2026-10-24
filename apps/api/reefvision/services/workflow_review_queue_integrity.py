@@ -16,7 +16,6 @@ from reefvision.domain.errors import ValidationError
 from reefvision.storage.datasets import canonical_json_sha256
 
 
-
 def queue_item_evidence_sha256(items: Sequence[Any]) -> str:
     """Digest immutable scientific queue evidence, excluding mutable reviewer decisions.
 
@@ -208,11 +207,10 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # scientific explanations as well as score/scope; mutable review state,
     # assignments and comments are intentionally excluded.
     item_evidence_digest = checksums.get("item_evidence_sha256")
-    if item_evidence_digest is not None:
-        if (
-            not isinstance(item_evidence_digest, str)
-            or len(item_evidence_digest) != 64
-            or any(char not in "0123456789abcdef" for char in item_evidence_digest)
-            or item_evidence_digest != queue_item_evidence_sha256(items)
-        ):
-            raise invalid
+    if item_evidence_digest is not None and (
+        not isinstance(item_evidence_digest, str)
+        or len(item_evidence_digest) != 64
+        or any(char not in "0123456789abcdef" for char in item_evidence_digest)
+        or item_evidence_digest != queue_item_evidence_sha256(items)
+    ):
+        raise invalid
