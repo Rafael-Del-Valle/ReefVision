@@ -103,6 +103,11 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
+    compare_step = next(
+        step for step in plan.json()["steps"] if step["node_type"] == "mesh_longitudinal_comparison"
+    )
+    assert "unverified 3D mesh observations" in compare_step["action"]
+    assert compare_step["output_types"]["comparison"] == ["mesh_longitudinal_comparison"]
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
