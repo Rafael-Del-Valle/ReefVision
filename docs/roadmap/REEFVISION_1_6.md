@@ -110,6 +110,29 @@
   CI, full backend/frontend/E2E, migration compatibility and installed Windows
   acceptance remain outstanding.
 
+## 1.6 actor-labeled bulk triage audit (pending exact-head CI)
+
+- Audited the existing class visibility, QC bulk API, coordination-event persistence,
+  saved `qc_review_queue` Workflow Builder node and frontend bulk triage controls.
+  Class creation and per-user/project visibility already exist; this iteration
+  addresses the remaining bulk-triage audit gap instead of duplicating them.
+- Start/skip/return bulk actions now append per-item server-generated events
+  within the **same database transaction** as actual review-state transitions.
+  Events carry a self-reported local actor label; skip events retain the reason.
+  Exact idempotent retries create no additional events.
+- The manual bulk UI now requires a reviewer label. Older API clients remain
+  compatible through an explicit `local_user` fallback. These labels are
+  **not authenticated identities**, and triage never verifies biological data.
+- Public comment/assignment requests cannot forge server-generated triage
+  events. Existing assignments remain separate from triage state changes.
+- Standalone API regressions cover audit persistence, repeat requests, invalid
+  actors and forged-event rejection. The saved executable Workflow Builder
+  regression manually triages its generated queue and verifies the typed
+  review-required artifact can still be retried without scientific mutation.
+  Frontend tests cover reviewer-label payloads and retry behavior.
+- This is a development increment, **not release acceptance**. The new tests
+  and Windows GUI have not yet been validated at this commit.
+
 ## Outstanding acceptance
 
 Run Ruff, mypy, backend/frontend/E2E and migration/backwards-compatibility checks
