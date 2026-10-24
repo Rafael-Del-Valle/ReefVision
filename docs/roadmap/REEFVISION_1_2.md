@@ -860,3 +860,32 @@ CI (including Ruff, pytest, typing, frontend and E2E), Alembic
 upgrade/downgrade and SQLite FK checks, realistic calibration fixtures,
 scientist acceptance, 1.1 `0038` migration reconciliation and installed
 Windows GUI/installer acceptance. No new-head pass is claimed.
+
+
+## Physical-unit and camera-signature calibration QC (2026-10-24)
+
+The existing organism/annotation calibration-evidence path now rejects
+source-image calibrations whose declared unit is `px`, `pixel` or
+`pixels`. A pixels-per-pixel declaration cannot serve as a physical
+length scale for longitudinal ecology. The same source validator rejects
+nonfinite focal length and capture-distance values in optional camera
+signatures, in addition to existing nonfinite scale and camera-resolution
+checks. This validation runs both when linking evidence through the
+standalone API and when re-reading existing evidence for the executable
+`ecology_identity_registry_source` Workflow Builder node.
+
+Regression tests exercise rejection of a previously linked calibration
+changed to pixel units, rejection of nonfinite camera metadata before
+linking, and revocation after linking. Saved workflows must fail without
+a successful `ecology_identity_registry` artifact when these conditions
+are detected. All evidence remains `linked_unverified` and subject to
+`scientist_review_required`; this is input QC, not proof of biological
+identity, a reviewed measurement or experimental independence.
+
+At the preceding head `7ca157a5`, GitHub Actions completed 16/19
+workflows successfully; CI, Pose Workflow Validation and ReefVision 1.0
+Acceptance stopped at the same three E501 Ruff errors in
+`services/ecology_identity.py`. This iteration corrects those lines
+and adds the scientific checks above. Exact-head CI, complete migration
+roundtrip, scientific data acceptance and installed Windows GUI checks
+remain outstanding. No release-readiness claim is made.
