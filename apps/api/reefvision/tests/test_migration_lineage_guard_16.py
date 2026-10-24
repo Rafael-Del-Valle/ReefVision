@@ -149,6 +149,7 @@ def test_revision_0039_rejects_obsolete_event_check_without_writes(
             connection.scalar(text("SELECT id FROM review_queue_item_events")) == "preserved-event"
         )
 
+
 @pytest.mark.parametrize(
     ("revision", "constraint_name", "should_reject"),
     [
@@ -191,8 +192,7 @@ def test_revision_0039_requires_named_triage_check_without_writes(
 
 
 _VALID_EVENT_TYPES = (
-    "'comment', 'assign', 'unassign', 'triage_start', "
-    "'triage_skip', 'triage_return'"
+    "'comment', 'assign', 'unassign', 'triage_start', 'triage_skip', 'triage_return'"
 )
 
 
@@ -236,9 +236,12 @@ def test_revision_0039_rejects_permissive_event_checks_without_writes(
         assert (
             connection.scalar(text("SELECT id FROM review_queue_item_events")) == "preserved-event"
         )
-        assert connection.scalar(
-            text(
-                "SELECT sql FROM sqlite_master "
-                "WHERE type='table' AND name='review_queue_item_events'"
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT sql FROM sqlite_master "
+                    "WHERE type='table' AND name='review_queue_item_events'"
+                )
             )
-        ) == schema_before
+            == schema_before
+        )
