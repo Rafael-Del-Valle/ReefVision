@@ -1,0 +1,110 @@
+# ReefVision 1.4 — mesh measurement interpretation
+
+A connected triangle patch is a geometric component, not an identified coral colony. A disconnected mesh may contain multiple fragments, reconstruction artifacts, or both. Do not interpret aggregate surface area as an individual organism's area without human verification of patch membership.
+
+Unreferenced vertices must not change calibrated dimensions. Preserve the original geometry hash and report the excluded-vertex count. Calibration uncertainty reflects only scale uncertainty, not photogrammetric reconstruction, segmentation, occlusion, or tissue-boundary error.
+
+Any longitudinal growth comparison must require reviewed organism identity, comparable calibration and acquisition methods, and explicit provenance for each timepoint. Current mesh previews remain provisional, including saved Workflow Builder artifacts.
+
+Per-edge-connected-patch areas are reported in square meters, ordered by the first
+face in each patch. Their scale uncertainties assume a common relative scale error;
+these are not independent confidence intervals. Patch indices are not persistent
+organism identities and must not be used to infer biological growth or survival.
+
+Per-patch global-axis dimensions (meters) and their scale-only uncertainty are
+calculated from vertices referenced by that patch's faces. These bounding-box
+extents do not measure skeletal branch length or guarantee anatomical alignment;
+comparison across timepoints requires a reviewed common coordinate frame.
+
+Per-patch degenerate-triangle counts localize zero-area faces without silently
+removing them from the input geometry or claiming a valid enclosed surface.
+They must be reviewed alongside topology warnings before biological interpretation.
+
+Open-boundary edge lengths are reported in meters both for the entire mesh and
+for each edge-connected patch. Shared interior edges are excluded. These lengths
+measure exposed mesh edges (which may reflect incomplete photogrammetry), **not**
+coral branch lengths, colony perimeter, or verified tissue boundaries. Scale-only
+uncertainty is a common multiplicative error; absent scale uncertainty stays
+unknown rather than being treated as zero. Human review remains required.
+
+New `boundary_edge_length_scale_interval_m` and
+`edge_connected_patch_boundary_length_scale_intervals_m` fields provide exact
+lower/upper bounds for a **shared multiplicative calibration-scale error**:
+`[L(1-u), L(1+u)]` for relative scale uncertainty `u`. They are not
+confidence intervals or estimates of mesh reconstruction uncertainty. Unknown
+`u` yields null intervals, while explicitly zero uncertainty yields
+`[L, L]`. The standalone endpoint and persisted `mesh_surface_preview`
+Workflow Builder node share this calculation and preserve unverified
+calibration provenance.
+
+Exact per-patch geometry SHA-256 fingerprints are calculated from sorted triangle
+coordinates, ignoring source vertex numbering, triangle order, and winding. They
+support audit of unchanged geometry through standalone and saved Workflow Builder
+analyses. Fingerprints are **not** persistent organism identities, registration,
+or proof of biological reidentification; any coordinate change may change a hash.
+
+Area-weighted surface centroids are calculated from triangle areas, not the
+average of all mesh vertices. They are reported in calibrated meters relative
+to the **unregistered source-coordinate origin** for each edge-connected patch
+and for the aggregate surface. A patch with zero total triangle area has an
+undefined centroid (null), accompanied by a QC warning. Reported centroid
+uncertainty includes only multiplicative scale uncertainty relative to that
+origin; unknown scale uncertainty remains null. It does **not** include
+registration, reconstruction, coordinate-origin, navigation, or biological
+localization error. Do not interpret a centroid displacement between surveys
+as growth, movement, or reidentification without reviewed registration and
+organism identity.
+
+Global-axis bounding-box diagonals are calibrated lengths spanning each mesh
+or edge-connected patch's axis-aligned bounding box. They are upper bounds on
+pairwise distances between referenced vertices, not observed biological branch
+lengths or Feret diameters. They depend on orientation, and comparisons across
+time require reviewed registration, calibration, and organism identity.
+Uncertainty is scale-only; missing uncertainty remains null, not zero.
+
+## Point-cloud chord integrity in decimated previews
+
+The standalone ASCII PLY/XYZ point-cloud endpoint and the executable, saved
+`point_cloud_preview` Workflow Builder node use the same bounded measurement
+service. Selected point-pair chords refer to **original point indices**, not
+the 512-point visualization sample. New artifacts persist the two calibrated
+endpoint coordinates and their chord distance even if display decimation omits
+one or both endpoints. The read-only viewer now checks the internal agreement
+of those stored coordinates and reported chord distances, and cross-checks
+sampled endpoints where available. Malformed or contradictory metadata fails
+closed. Older artifacts without embedded endpoints remain displayable, but a
+chord with an unsampled endpoint cannot be cross-checked by the viewer.
+
+This check detects inconsistent **saved artifact metadata**; it does not
+independently validate the original scan, its point correspondence, coordinate
+registration, or calibration. All chords remain provisional straight-line
+distances, **not** anatomical coral branch lengths. The source-order geometry
+fingerprint is an audit aid, not an organism identity or a review decision.
+
+## Boundary-cycle topology QC
+
+The mesh engine now distinguishes **closed boundary-edge cycles** from
+**noncycle boundary components** in each edge-connected patch. Only edges
+incident to exactly one triangle participate. A connected boundary graph
+counts as one loop only when every referenced boundary vertex has degree two.
+Branches, pinches, and open chains are counted separately rather than being
+misrepresented as complete cycles.
+
+The fields `boundary_loop_count`, `noncycle_boundary_component_count`,
+`edge_connected_patch_boundary_loop_counts`, and
+`edge_connected_patch_noncycle_boundary_component_counts` preserve these
+diagnostics in standalone API responses and executed saved Workflow Builder
+artifacts. A noncycle component adds the `noncycle_mesh_boundary_components`
+QC warning. Existing surface-area, boundary-length, and enclosed-volume
+calculations are unchanged; open surfaces already have their provisional
+enclosed volume withheld.
+
+These are **combinatorial properties of the indexed triangle mesh**, not
+biological holes, coral branching structures, proof of watertight geometry,
+or a measure of reconstruction completeness. Duplicate positions with
+different vertex indices and nonmanifold edges can affect topology; review
+them alongside existing QC warnings. The imported coordinate frame and
+calibration remain unverified. Tests exercise a closed tetrahedron, an open
+square, a nonmanifold pinched boundary, and disconnected triangle patches
+through the measurement engine, standalone API, and persisted executable
+Workflow Builder graphs.

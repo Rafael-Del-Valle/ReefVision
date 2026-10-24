@@ -1,0 +1,100 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import {
+  MeshArtifactViewer,
+  parseMeshRenderArtifact,
+} from "./MeshArtifactViewer";
+
+const validArtifact = {
+  preview_vertices_in_source_frame_m: [
+    [0, 0, 0],
+    [1, 0, 0],
+    [0, 1, 0],
+  ],
+  preview_faces_local_indices: [[0, 1, 2]],
+  preview_face_indices: [7],
+  preview_camera_target_in_source_frame_m: [0.5, 0.5, 0],
+  preview_camera_radius_m: 1,
+  preview_face_fraction: 0.5,
+  preview_surface_area_fraction: 0.25,
+  preview_is_decimated: true,
+  measurement_status: "caller_supplied_unverified",
+  provenance: { calibration_verified: false },
+};
+
+describe("MeshArtifactViewer", () => {
+  it("rotates and resets the persisted preview without changing the scientific artifact", () => {
+    const before = JSON.stringify(validArtifact);
+    const { container } = render(
+      <MeshArtifactViewer artifact={validArtifact} />,
+    );
+    const polygon = container.querySelector("polygon");
+    expect(polygon).not.toBeNull();
+    expect(polygon?.getAttribute("data-source-face-index")).toBe("7");
+    const originalPoints = polygon?.getAttribute("points");
+    fireEvent.change(screen.getByRole("slider", { name: "Yaw" }), {
+      target: { value: "90" },
+    });
+    expect(polygon?.getAttribute("points")).not.toBe(originalPoints);
+    fireEvent.click(screen.getByRole("button", { name: "Reset 3D view" }));
+    expect(polygon?.getAttribute("points")).toBe(originalPoints);
+    expect(screen.getByText(/Surface-area coverage:/)).toHaveTextContent(
+      "25.0%",
+    );
+    expect(screen.getByText(/Surface-area coverage:/)).toHaveTextContent(
+      "Decimated preview",
+    );
+    expect(JSON.stringify(validArtifact)).toBe(before);
+  });
+
+  it("fails closed on malformed indices, non-finite geometry, and oversized payloads", () => {
+    expect(
+      parseMeshRenderArtifact({
+        ...validArtifact,
+        preview_faces_local_indices: [[0, 1, 999]],
+      }),
+    ).toBeNull();
+    expect(
+      parseMeshRenderArtifact({
+        ...validArtifact,
+        preview_vertices_in_source_frame_m: [
+          [0, 0, 0],
+          [Number.POSITIVE_INFINITY, 0, 0],
+          [0, 1, 0],
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      parseMeshRenderArtifact({
+        ...validArtifact,
+        preview_faces_local_indices: Array.from({ length: 513 }, () => [
+          0, 1, 2,
+        ]),
+        preview_face_indices: Array.from({ length: 513 }, (_, index) => index),
+      }),
+    ).toBeNull();
+    render(
+      <MeshArtifactViewer
+        artifact={{ ...validArtifact, preview_face_fraction: Number.NaN }}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "no valid bounded 3D display geometry",
+    );
+  });
+
+  it("does not misrepresent zero-area sampling as verified area coverage", () => {
+    render(
+      <MeshArtifactViewer
+        artifact={{ ...validArtifact, preview_surface_area_fraction: null }}
+      />,
+    );
+    expect(screen.getByText(/Surface-area coverage:/)).toHaveTextContent(
+      "undefined (zero-area geometry)",
+    );
+    expect(
+      screen.getByText(/Calibration and coordinate registration/),
+    ).toHaveTextContent("unverified");
+  });
+});

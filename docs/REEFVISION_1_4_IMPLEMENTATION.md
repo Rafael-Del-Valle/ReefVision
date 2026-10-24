@@ -1,0 +1,155 @@
+# ReefVision 1.4 implementation
+
+Work in progress on isolated branch. Scientific 3D mesh measurement and Workflow Builder integration are the first planned vertical slice. This document does not imply release readiness.
+
+## Local mesh file preview (in development)
+
+The Workflow Builder workspace now offers a standalone, bounded OBJ/ASCII PLY/GLB
+file picker. The local desktop UI reads a selected file and sends it to the
+project-scoped local API mesh-preview endpoint, then renders the returned
+bounded triangle sample using the existing interactive yaw/pitch/zoom viewer.
+
+The current request contract limits OBJ and PLY files to 256,000 bytes and GLB
+files to 262,500 bytes before base64 encoding. Backend geometry validation
+still applies. The UI requests a positive meters-per-source-unit scale and
+human-entered calibration evidence; optional relative scale uncertainty is
+propagated into measurements. Calibration is **not** automatically verified.
+
+Standalone preview results are transient. To persist a reproducible
+measurement and provenance, users must configure and execute the typed
+`mesh_surface_preview` node in a saved Workflow Builder graph. The full
+mesh is used for scientific surface-area and dimension calculations; the
+512-triangle visualization sample must never be treated as a biological
+measurement or as evidence of specimen identity.
+
+Outstanding: persistent asset ingestion and versioning, registered
+coordinate frames, independent calibration review, persistent point-cloud asset ingestion,
+validated anatomical branch lengths, longitudinal identity linkage, and
+installed desktop/GPU/scientific acceptance. A separate bounded ASCII PLY
+point-cloud preview and interactive viewer already exist, but their transient
+visualization and chord measurements do not establish verified anatomy.
+
+## Scale-only surface-area bounds (provisional)
+
+The standalone mesh API and saved `mesh_surface_preview` Workflow Builder
+artifacts report `surface_area_scale_interval_m2` and
+`edge_connected_patch_area_scale_intervals_m2` when a relative scale
+uncertainty `u` is supplied. For measured area `A`, the lower and upper
+bounds are `A * (1 - u)^2` and `A * (1 + u)^2`, respectively. This uses the
+exact square-law dependence of area on a common multiplicative scale. The
+existing `area_scale_uncertainty_m2 = 2 * u * A` remains a first-order
+sensitivity estimate for backwards compatibility; it is **not** an exact
+interval half-width.
+
+These bounds represent **only** the caller-supplied scale range. They are
+not statistical confidence intervals and do not include reconstruction,
+segmentation, surface incompleteness, calibration verification, or
+registration uncertainty. All areas remain `caller_supplied_unverified`;
+an open or nonmanifold mesh must not be interpreted as a complete coral
+surface without independent human review.
+
+## Calibrated extent intervals (provisional)
+
+Mesh previews and saved executable `mesh_surface_preview` Workflow Builder
+artifacts now expose scale-only intervals for global and edge-connected-patch
+axis-aligned dimensions and bounding-box diagonals. For any nonnegative
+reported distance `L` and caller-supplied relative scale uncertainty `u`,
+the interval is `[L * (1 - u), L * (1 + u)]`. When `u` is omitted, interval
+fields are `null`; zero uncertainty produces equal bounds. The previous
+first-order scale uncertainty fields are preserved for existing consumers.
+
+These intervals use a **single shared multiplicative calibration error**,
+not independent axis errors. They do not quantify geometry reconstruction,
+surface incompleteness, registration, observer disagreement, or camera
+distortion. Imported axes are unregistered: a bounding-box diagonal is
+**not** a biological branch length, organism identity, or longitudinal
+growth measurement. Calibration and interpretation require human review.
+
+
+## Provisional enclosed mesh volume (scientific QC gated)
+
+The standalone mesh-preview API and persisted executable `mesh_surface_preview`
+Workflow Builder node now report `enclosed_volume_m3` and
+`edge_connected_patch_enclosed_volumes_m3` for triangular patches that
+have no open boundary edges, nonmanifold edges, inconsistent shared-edge
+winding, or degenerate faces. Oriented tetrahedron sums use a local
+reference point for translation stability. Either globally consistent
+winding direction yields the same unsigned enclosed volume.
+
+An invalid/open patch has `null` volume and an explicit QC warning.
+When some patches are valid and others invalid, the per-patch values are
+retained but **total enclosed volume is null**, not a misleading partial
+total. Missing relative scale uncertainty leaves the interval fields null.
+For supplied relative scale uncertainty `u`, scale-only bounds use the
+cubic law `[V(1-u)^3, V(1+u)^3]`.
+
+**Do not interpret this as coral biomass, tissue volume, or validated
+organism size.** Topological edge checks do not detect self-intersections,
+internal voids, surface reconstruction artifacts, overlapping components,
+or incomplete observations. Calibration, coordinate registration,
+organism identity, and biological completeness remain unverified.
+Human scientific review is required before interpreting these provisional
+geometric results. No confidence intervals are inferred.
+
+## Vertex-touching closed mesh patches (aggregate volume withheld)
+
+Distinct edge-connected patches may share one or more source vertex indices
+without sharing any mesh edges. Even if each patch separately passes closed,
+oriented, nondegenerate edge checks, their union has a nonmanifold point
+contact and is not a single regular closed surface. The standalone preview
+and persisted executable `mesh_surface_preview` node now expose
+`vertex_touching_patch_vertex_count` and the QC warning
+`vertex_touching_mesh_patches`. When this count is positive, the
+`enclosed_volume_m3` aggregate and its scale-only interval are withheld
+(`null`) with `enclosed_volume_vertex_touching_patches` QC, while
+individual provisional patch volumes remain available for inspection.
+
+This conservative gate does **not** detect all nonmanifold vertex fans,
+self-intersections, coincident-but-separately-indexed points, or actual
+organism identity. No human-verified biological volume is inferred. Saved
+Workflow Builder parity tests cover both vertex-touching and vertex-disjoint
+closed tetrahedral patch pairs.
+
+## Per-patch Euler topology diagnostics (provisional)
+
+The standalone mesh-preview API and saved executable `mesh_surface_preview`
+Workflow Builder artifacts expose `edge_connected_patch_vertex_counts`,
+`edge_connected_patch_edge_counts`, and
+`edge_connected_patch_euler_characteristics`. Each characteristic is the
+combinatorial count `V - E + F` for one **edge-connected** triangle patch,
+using referenced source vertex indices and unique undirected edges. Patches
+that meet only at a vertex remain separate; shared source vertices may be
+counted in each patch, so the patch values must not be mistaken for a global
+mesh Euler characteristic.
+
+The diagnostic is useful for detecting changes in reconstruction topology
+across scans, but it does **not** prove manifoldness, genus, biological
+identity, surface completeness, or organism condition. Self-intersections,
+nonmanifold vertices, and reconstruction artifacts can invalidate topological
+interpretation even when edge incidence appears closed. Geometry and
+calibration remain caller-supplied and unverified; no genus or longitudinal
+reidentification is inferred from these counts.
+
+
+## Boundary-component lengths (provisional)
+
+The mesh preview engine now reports `boundary_loop_perimeters_m` for
+individual simple closed boundary-edge cycles and
+`noncycle_boundary_component_lengths_m` for branching/pinched/open
+boundary components. Per-edge-connected-patch nested arrays retain
+component membership. Component order is deterministic by the smallest
+source vertex index within each patch. The total of these lengths
+equals the mesh boundary-edge length, within floating-point rounding.
+
+For each component length `L` and caller-supplied relative calibration
+uncertainty `u`, the optional scale-only interval is
+`[L * (1-u), L * (1+u)]`. The global and per-patch fields preserve
+`null` when uncertainty is not supplied, rather than implying zero
+uncertainty. The standalone API and saved executable `mesh_surface_preview`
+Workflow Builder node use the same engine and persist the same results.
+
+A topological boundary loop is **not** a confirmed biological opening,
+coral branch circumference, skeleton centerline, or organism identity.
+These measurements remain `caller_supplied_unverified`, even when a
+numerical uncertainty interval is provided. Reconstruction defects,
+registration uncertainty, and observer error are not represented.

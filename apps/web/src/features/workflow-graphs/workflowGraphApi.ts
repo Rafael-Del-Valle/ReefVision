@@ -259,3 +259,147 @@ export function cancelWorkflowRunJob(
     },
   );
 }
+
+/** Bounded local file preview. No asset persistence or calibration verification. */
+export interface MeshPreviewCalibration {
+  meters_per_unit: number;
+  calibration_method:
+    "ruler" | "photogrammetry_control" | "instrument" | "other";
+  calibration_evidence: string;
+  relative_scale_uncertainty?: number | null;
+}
+
+export async function previewLocalMeshFile(
+  projectId: string,
+  file: File,
+  calibration: MeshPreviewCalibration,
+): Promise<Record<string, unknown>> {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension !== "obj" && extension !== "ply" && extension !== "glb") {
+    throw new Error("Choose an OBJ, PLY, or GLB mesh file.");
+  }
+  const maxBytes = extension === "glb" ? 262_500 : 256_000;
+  if (!file.size || file.size > maxBytes || file.name.length > 200) {
+    throw new Error(
+      "Mesh file is empty, oversized, or has an invalid filename.",
+    );
+  }
+  if (
+    !Number.isFinite(calibration.meters_per_unit) ||
+    calibration.meters_per_unit <= 0 ||
+    calibration.meters_per_unit > 1_000_000 ||
+    !calibration.calibration_evidence.trim()
+  ) {
+    throw new Error("Provide a positive scale and calibration evidence.");
+  }
+  if (
+    calibration.relative_scale_uncertainty != null &&
+    (!Number.isFinite(calibration.relative_scale_uncertainty) ||
+      calibration.relative_scale_uncertainty < 0 ||
+      calibration.relative_scale_uncertainty > 1)
+  ) {
+    throw new Error("Relative scale uncertainty must be between 0 and 1.");
+  }
+  let geometry: Record<string, string>;
+  if (extension === "glb") {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 8192) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+    }
+    geometry = { glb_base64: btoa(binary) };
+  } else {
+    const content = await file.text();
+    if (content.length > 256_000) {
+      throw new Error("Mesh text exceeds the supported preview limit.");
+    }
+    geometry =
+      extension === "obj" ? { obj_text: content } : { ply_text: content };
+  }
+  return request<Record<string, unknown>>(
+    `/projects/${encodeURIComponent(projectId)}/spatial/mesh-preview`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...calibration,
+        ...geometry,
+        source_label: file.name,
+      }),
+    },
+  );
+}
+
+/** Temporary vertex-only ASCII PLY preview; no persistence or verification. */
+export async function previewLocalPointCloudFile(
+  projectId: string,
+  file: File,
+  calibration: MeshPreviewCalibration,
+  pointIndexPairs?: Array<[number, number]>,
+): Promise<Record<string, unknown>> {
+  if (file.name.split(".").pop()?.toLowerCase() !== "ply") {
+    throw new Error("Choose a vertex-only ASCII PLY point-cloud file.");
+  }
+  if (!file.size || file.size > 256_000 || file.name.length > 200) {
+    throw new Error(
+      "Point-cloud file is empty, oversized, or has an invalid filename.",
+    );
+  }
+  if (
+    !Number.isFinite(calibration.meters_per_unit) ||
+    calibration.meters_per_unit <= 0 ||
+    calibration.meters_per_unit > 1_000_000 ||
+    !calibration.calibration_evidence.trim() ||
+    calibration.calibration_evidence.length > 2_000
+  ) {
+    throw new Error(
+      "Provide a positive scale and bounded calibration evidence.",
+    );
+  }
+  if (
+    calibration.relative_scale_uncertainty != null &&
+    (!Number.isFinite(calibration.relative_scale_uncertainty) ||
+      calibration.relative_scale_uncertainty < 0 ||
+      calibration.relative_scale_uncertainty > 1)
+  ) {
+    throw new Error("Relative scale uncertainty must be between 0 and 1.");
+  }
+  if (
+    pointIndexPairs &&
+    (pointIndexPairs.length > 32 ||
+      pointIndexPairs.some(
+        (pair) =>
+          !Array.isArray(pair) ||
+          pair.length !== 2 ||
+          pair.some(
+            (index) => !Number.isInteger(index) || index < 0 || index >= 2_000,
+          ) ||
+          pair[0] === pair[1],
+      ))
+  ) {
+    throw new Error(
+      "Point chord indices must be distinct integers from 0 to 1999.",
+    );
+  }
+  const bytes = await file.arrayBuffer();
+  if (!bytes.byteLength || bytes.byteLength > 256_000) {
+    throw new Error("Point-cloud file exceeds the supported preview limit.");
+  }
+  const plyText = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  if (!/^[\x00-\x7F]*$/.test(plyText)) {
+    throw new Error("Only ASCII PLY point clouds are supported.");
+  }
+  return request<Record<string, unknown>>(
+    `/projects/${encodeURIComponent(projectId)}/spatial/point-cloud-preview`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...calibration,
+        ply_text: plyText,
+        source_label: file.name,
+        ...(pointIndexPairs?.length
+          ? { point_index_pairs: pointIndexPairs }
+          : {}),
+      }),
+    },
+  );
+}
