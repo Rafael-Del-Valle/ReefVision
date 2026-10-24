@@ -262,6 +262,19 @@ class WorkflowGraphService:
                 )
             )
         elif (
+            dataset.manifest_json.get("truth_policy") != "scientist_verified_only"
+            or dataset.manifest_json.get("skipped_candidates_included") is not False
+            or dataset.manifest_json.get("pending_candidates_included") is not False
+        ):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_truth_policy_mismatch",
+                    "Frozen pose dataset manifest must contain only scientist-verified items",
+                    node_id=node_id,
+                )
+            )
+        elif (
             not isinstance(dataset.manifest_json.get("items"), list)
             or dataset.manifest_json.get("item_count") != dataset.item_count
             or len(dataset.manifest_json["items"]) != dataset.item_count
