@@ -80,3 +80,31 @@ independently validate the original scan, its point correspondence, coordinate
 registration, or calibration. All chords remain provisional straight-line
 distances, **not** anatomical coral branch lengths. The source-order geometry
 fingerprint is an audit aid, not an organism identity or a review decision.
+
+## Boundary-cycle topology QC
+
+The mesh engine now distinguishes **closed boundary-edge cycles** from
+**noncycle boundary components** in each edge-connected patch. Only edges
+incident to exactly one triangle participate. A connected boundary graph
+counts as one loop only when every referenced boundary vertex has degree two.
+Branches, pinches, and open chains are counted separately rather than being
+misrepresented as complete cycles.
+
+The fields `boundary_loop_count`, `noncycle_boundary_component_count`,
+`edge_connected_patch_boundary_loop_counts`, and
+`edge_connected_patch_noncycle_boundary_component_counts` preserve these
+diagnostics in standalone API responses and executed saved Workflow Builder
+artifacts. A noncycle component adds the `noncycle_mesh_boundary_components`
+QC warning. Existing surface-area, boundary-length, and enclosed-volume
+calculations are unchanged; open surfaces already have their provisional
+enclosed volume withheld.
+
+These are **combinatorial properties of the indexed triangle mesh**, not
+biological holes, coral branching structures, proof of watertight geometry,
+or a measure of reconstruction completeness. Duplicate positions with
+different vertex indices and nonmanifold edges can affect topology; review
+them alongside existing QC warnings. The imported coordinate frame and
+calibration remain unverified. Tests exercise a closed tetrahedron, an open
+square, a nonmanifold pinched boundary, and disconnected triangle patches
+through the measurement engine, standalone API, and persisted executable
+Workflow Builder graphs.
