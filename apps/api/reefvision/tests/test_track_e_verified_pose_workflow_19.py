@@ -7,8 +7,9 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from reefvision.db.models import PoseTrainingDataset
+from reefvision.db.models import PoseTrainingDataset, PoseTrainingDatasetItem
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
@@ -140,6 +141,61 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         )
     assert package_bytes
     assert len(package_sha256) == 64
+
+    # Mutating the persisted canonical landmarks does not change the signed
+    # manifest or the item's stored SHA-256. The frozen scientist-approved
+    # pose digest must independently protect export, planning and training.
+    with app.state.session_factory() as session:
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
+        )
+        assert item is not None
+        original_pose = dict(item.canonical_pose_json)
+        item.canonical_pose_json = {
+            **original_pose,
+            "keypoints": [*list(original_pose.get("keypoints") or []), {"tampered": True}],
+        }
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).native_package(dataset_id)
+
+    changed_pose_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
+    )
+    assert changed_pose_plan.status_code == 200, changed_pose_plan.text
+    assert changed_pose_plan.json()["valid"] is False
+    assert "pose_dataset_item_lineage_mismatch" in {
+        issue["code"] for issue in changed_pose_plan.json()["issues"]
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            app.state.settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={},
+        )
+    with app.state.session_factory() as session:
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
+        )
+        assert item is not None
+        item.canonical_pose_json = original_pose
+        session.commit()
 
     # A recomputed checksum must not legitimize a frozen manifest that no
     # longer guarantees scientist-verified-only training truth.
