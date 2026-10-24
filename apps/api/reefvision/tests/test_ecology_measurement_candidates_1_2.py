@@ -13,6 +13,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
 )
 from reefvision.services.ecology_measurement_candidates import (
+    summarize_projected_endpoint_changes,
     summarize_sampling_date_qc,
 )
 from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
@@ -24,9 +25,7 @@ from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
 
 
 def _get(client: TestClient, project_id: str):
-    return client.get(
-        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
-    )
+    return client.get(f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates")
 
 
 def test_projected_box_candidates_are_typed_unverified_and_saved(
@@ -50,20 +49,16 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     assert all(row["capture_timestamp_utc"] is None for row in payload["candidates"])
     assert len(payload["input_sha256"]) == 64
     assert len(payload["sampling_date_qc"]) == 2
+    assert all(row["qc_status"] == "missing_timestamps" for row in payload["sampling_date_qc"])
     assert all(
-        row["qc_status"] == "missing_timestamps"
-        for row in payload["sampling_date_qc"]
+        row["review_gate"] == "scientist_review_required" for row in payload["sampling_date_qc"]
     )
-    assert all(
-        row["review_gate"] == "scientist_review_required"
-        for row in payload["sampling_date_qc"]
-    )
+    assert payload["projected_endpoint_changes"] == []
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200
     node = next(
-        item for item in registry.json()
-        if item["node_type"] == "ecology_identity_registry_source"
+        item for item in registry.json() if item["node_type"] == "ecology_identity_registry_source"
     )
     assert any(
         port["port_id"] == "measurement_candidates"
@@ -73,7 +68,8 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        item for item in workflow["artifacts"]
+        item
+        for item in workflow["artifacts"]
         if item["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
@@ -92,8 +88,7 @@ def test_source_change_revokes_candidate_api_and_saved_workflow(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "failed"
     assert not any(
-        row["data_type"] == "ecology_measurement_candidates"
-        for row in workflow["artifacts"]
+        row["data_type"] == "ecology_measurement_candidates" for row in workflow["artifacts"]
     )
 
 
@@ -123,8 +118,7 @@ def test_perspective_transform_is_explicitly_excluded_not_scaled(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        row for row in workflow["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == payload
@@ -182,6 +176,60 @@ def test_utc_date_qc_rejects_replicates_missing_dates_and_mixed_units(
             )
         }
     )
-    assert summarize_sampling_date_qc([first, local_time])[0].qc_status == (
-        "date_series_candidate"
+    assert summarize_sampling_date_qc([first, local_time])[0].qc_status == ("date_series_candidate")
+
+
+def test_source_linked_projected_endpoint_change_is_not_verified_growth(
+    client: TestClient,
+) -> None:
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    candidate = EcologyMeasurementCandidate.model_validate(
+        _get(client, project_id).json()["candidates"][0]
     )
+    baseline = candidate.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    final = baseline.model_copy(
+        update={
+            "image_id": "different-image",
+            "annotation_evidence_id": "different-annotation-evidence",
+            "calibration_evidence_id": "different-calibration-evidence",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
+            "value": baseline.value + 2.5,
+        }
+    )
+    qc = summarize_sampling_date_qc([final, baseline])
+    assert qc[0].qc_status == "date_series_candidate"
+    changes = summarize_projected_endpoint_changes([final, baseline], qc)
+    assert len(changes) == 1
+    change = changes[0]
+    assert change.absolute_change == 2.5
+    assert change.percent_change == 40.0
+    assert change.elapsed_days == 1.0
+    assert change.observed_timepoint_count == 2
+    assert change.baseline_image_id == baseline.image_id
+    assert change.final_image_id == "different-image"
+    assert change.evidence_level == "linked_unverified"
+    assert change.review_gate == "scientist_review_required"
+
+    # A revision or declared independent-unit change cannot become growth.
+    revised = final.model_copy(update={"identity_revision": 2})
+    revised_qc = summarize_sampling_date_qc([baseline, revised])
+    assert revised_qc[0].qc_status == "identity_context_changed"
+    assert summarize_projected_endpoint_changes([baseline, revised], revised_qc) == []
+    moved_unit = final.model_copy(update={"experimental_unit_id": "other-tank"})
+    moved_qc = summarize_sampling_date_qc([baseline, moved_unit])
+    assert moved_qc[0].qc_status == "identity_context_changed"
+    assert summarize_projected_endpoint_changes([baseline, moved_unit], moved_qc) == []
+
+    same_day = final.model_copy(
+        update={"capture_timestamp_utc": datetime(2026, 4, 3, 11, tzinfo=UTC)}
+    )
+    duplicate_qc = summarize_sampling_date_qc([baseline, same_day])
+    assert duplicate_qc[0].qc_status == "same_day_technical_replicates"
+    assert summarize_projected_endpoint_changes([baseline, same_day], duplicate_qc) == []

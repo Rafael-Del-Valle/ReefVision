@@ -21,6 +21,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
     EcologyMeasurementCandidatesResponse,
     EcologyMeasurementExclusion,
+    EcologyProjectedEndpointChange,
     EcologySamplingDateQC,
 )
 from reefvision.services.ecology_identity import EcologyIdentityService
@@ -58,10 +59,19 @@ def summarize_sampling_date_qc(
             date_counts[utc_date] = date_counts.get(utc_date, 0) + 1
 
         units = sorted({record.unit for record in records})
-        duplicate_dates = sorted(
-            date for date, count in date_counts.items() if count > 1
-        )
-        if len(units) > 1:
+        duplicate_dates = sorted(date for date, count in date_counts.items() if count > 1)
+        contexts = {
+            (
+                record.identity_revision,
+                record.parent_colony_key,
+                record.experimental_unit_type,
+                record.experimental_unit_id,
+            )
+            for record in records
+        }
+        if len(contexts) > 1:
+            qc_status = "identity_context_changed"
+        elif len(units) > 1:
             qc_status = "mixed_units"
         elif missing_timestamp_image_ids:
             qc_status = "missing_timestamps"
@@ -88,6 +98,72 @@ def summarize_sampling_date_qc(
     return rows
 
 
+def summarize_projected_endpoint_changes(
+    candidates: list[EcologyMeasurementCandidate],
+    sampling_date_qc: list[EcologySamplingDateQC],
+) -> list[EcologyProjectedEndpointChange]:
+    """Compare source-linked projected endpoints without inferring biological growth.
+
+    Exclude series with technical replicates, inconsistent identity/unit
+    provenance, missing acquisition timezones, or fewer than two UTC dates.
+    Every included value still requires independent scientist review.
+    """
+    groups: dict[tuple[str, str], list[EcologyMeasurementCandidate]] = {}
+    for candidate in candidates:
+        groups.setdefault((candidate.organism_key, candidate.metric), []).append(candidate)
+
+    changes: list[EcologyProjectedEndpointChange] = []
+    for audit in sampling_date_qc:
+        if audit.qc_status != "date_series_candidate":
+            continue
+        records = sorted(
+            groups[(audit.organism_key, audit.metric)],
+            key=lambda row: (
+                row.capture_timestamp_utc,
+                row.image_id,
+                row.annotation_evidence_id,
+            ),
+        )
+        first, last = records[0], records[-1]
+        start = first.capture_timestamp_utc
+        end = last.capture_timestamp_utc
+        if start is None or end is None:
+            raise ValidationError("Projected endpoint series requires dated source images")
+        elapsed_days = (end - start).total_seconds() / 86400
+        difference = last.value - first.value
+        percent_change = 100 * (difference / first.value)
+        if not all(
+            math.isfinite(value) for value in (elapsed_days, difference, percent_change)
+        ) or elapsed_days <= 0:
+            raise ValidationError("Projected endpoint change is nonfinite or unordered")
+        changes.append(
+            EcologyProjectedEndpointChange(
+                organism_key=first.organism_key,
+                metric=first.metric,
+                identity_revision=first.identity_revision,
+                parent_colony_key=first.parent_colony_key,
+                experimental_unit_type=first.experimental_unit_type,
+                experimental_unit_id=first.experimental_unit_id,
+                unit=first.unit,
+                baseline_capture_timestamp_utc=start.astimezone(UTC),
+                final_capture_timestamp_utc=end.astimezone(UTC),
+                baseline_image_id=first.image_id,
+                final_image_id=last.image_id,
+                baseline_annotation_evidence_id=first.annotation_evidence_id,
+                final_annotation_evidence_id=last.annotation_evidence_id,
+                baseline_calibration_evidence_id=first.calibration_evidence_id,
+                final_calibration_evidence_id=last.calibration_evidence_id,
+                baseline_value=first.value,
+                final_value=last.value,
+                absolute_change=difference,
+                percent_change=percent_change,
+                elapsed_days=elapsed_days,
+                observed_timepoint_count=len(records),
+            )
+        )
+    return changes
+
+
 class EcologyMeasurementCandidateService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -108,9 +184,7 @@ class EcologyMeasurementCandidateService:
         annotations = {row.id: row for row in snapshot.annotation_evidence_links}
         candidates: list[EcologyMeasurementCandidate] = []
         exclusions: list[EcologyMeasurementExclusion] = []
-        for calibration in sorted(
-            snapshot.calibration_evidence_links, key=lambda row: row.id
-        ):
+        for calibration in sorted(snapshot.calibration_evidence_links, key=lambda row: row.id):
             annotation = annotations[calibration.annotation_evidence_id]
             image_link = image_links[annotation.image_evidence_id]
             identity = identities[image_link.organism_key]
@@ -145,11 +219,13 @@ class EcologyMeasurementCandidateService:
             else:
                 assert isinstance(source, MaskAnnotation)
                 values = (
-                    [(
-                        "mask_projected_area",
-                        float(source.area_pixels) * scale * scale,
-                        f"{unit}^2",
-                    )]
+                    [
+                        (
+                            "mask_projected_area",
+                            float(source.area_pixels) * scale * scale,
+                            f"{unit}^2",
+                        )
+                    ]
                     if source.area_pixels is not None
                     else []
                 )
@@ -209,12 +285,14 @@ class EcologyMeasurementCandidateService:
             )
         )
         sampling_date_qc = summarize_sampling_date_qc(candidates)
+        projected_changes = summarize_projected_endpoint_changes(candidates, sampling_date_qc)
         rows = [row.model_dump(mode="json") for row in candidates]
         qc_rows = [row.model_dump(mode="json") for row in sampling_date_qc]
+        change_rows = [row.model_dump(mode="json") for row in projected_changes]
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0002",
+                "algorithm_version": "ecology-measurement-candidates-0003",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
@@ -222,6 +300,7 @@ class EcologyMeasurementCandidateService:
                 "registry_calibration_evidence_sha256": snapshot.calibration_evidence_sha256,
                 "candidates": rows,
                 "sampling_date_qc": qc_rows,
+                "projected_endpoint_changes": change_rows,
                 "exclusions": skipped,
             }
         )
@@ -232,6 +311,7 @@ class EcologyMeasurementCandidateService:
             candidates=candidates,
             candidate_count=len(candidates),
             sampling_date_qc=sampling_date_qc,
+            projected_endpoint_changes=projected_changes,
             exclusions=exclusions,
             input_sha256=fingerprint,
         )

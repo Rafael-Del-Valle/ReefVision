@@ -54,7 +54,36 @@ class EcologySamplingDateQC(BaseModel):
         "same_day_technical_replicates",
         "insufficient_dates",
         "date_series_candidate",
+        "identity_context_changed",
     ]
+    evidence_level: Literal["linked_unverified"] = "linked_unverified"
+    review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+
+class EcologyProjectedEndpointChange(BaseModel):
+    """Descriptive projected-geometry endpoint change; not verified growth."""
+
+    organism_key: str
+    metric: Literal["box_width", "box_height", "mask_projected_area"]
+    identity_revision: int = Field(ge=1)
+    parent_colony_key: str | None
+    experimental_unit_type: str | None
+    experimental_unit_id: str | None
+    unit: str
+    baseline_capture_timestamp_utc: datetime
+    final_capture_timestamp_utc: datetime
+    baseline_image_id: str
+    final_image_id: str
+    baseline_annotation_evidence_id: str
+    final_annotation_evidence_id: str
+    baseline_calibration_evidence_id: str
+    final_calibration_evidence_id: str
+    baseline_value: float = Field(gt=0, allow_inf_nan=False)
+    final_value: float = Field(gt=0, allow_inf_nan=False)
+    absolute_change: float = Field(allow_inf_nan=False)
+    percent_change: float = Field(allow_inf_nan=False)
+    elapsed_days: float = Field(gt=0, allow_inf_nan=False)
+    observed_timepoint_count: int = Field(ge=2)
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
@@ -69,6 +98,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
     candidates: list[EcologyMeasurementCandidate] = Field(default_factory=list)
     candidate_count: int = 0
     sampling_date_qc: list[EcologySamplingDateQC] = Field(default_factory=list)
+    projected_endpoint_changes: list[EcologyProjectedEndpointChange] = Field(default_factory=list)
     exclusions: list[EcologyMeasurementExclusion] = Field(default_factory=list)
     input_sha256: str
     evidence_level: Literal["linked_unverified"] = "linked_unverified"

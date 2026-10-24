@@ -827,9 +827,9 @@ def _ecology_identity_registry_source(
         {
             "port_id": "measurement_candidates",
             "data_type": "ecology_measurement_candidates",
-            "payload": EcologyMeasurementCandidateService(session).candidates(
-                project_id, registry=snapshot
-            ).model_dump(mode="json"),
+            "payload": EcologyMeasurementCandidateService(session)
+            .candidates(project_id, registry=snapshot)
+            .model_dump(mode="json"),
         },
     ]
 

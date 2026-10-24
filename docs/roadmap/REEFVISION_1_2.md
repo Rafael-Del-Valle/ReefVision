@@ -963,3 +963,31 @@ migration `b12_identity_0004` is unchanged. Authenticated observation dates,
 identity confirmation, experimental-unit registration, verified source datasets,
 independent scientific review, full exact-head CI and installed Windows
 acceptance remain outstanding.
+
+
+## Source-linked projected endpoint-change candidates (2026-10-24; development only)
+
+The existing project-owned calibrated-measurement-candidates API and the
+executable, persisted `ecology_identity_registry_source` Workflow Builder
+artifact now expose typed `projected_endpoint_changes`. Each descriptive
+record compares the earliest and latest **UTC-dated** reviewed-source
+projected geometry for one organism and metric, retaining the source image,
+annotation evidence, calibration evidence, identity revision, experimental-unit
+declaration, timepoint denominator, physical units, absolute/percentage
+difference and elapsed days. The algorithm fingerprint advances to
+`ecology-measurement-candidates-0003`; older artifacts deserialize with an
+empty default field. No schema migration or new workflow node is necessary.
+
+The shared QC now reports `identity_context_changed` and suppresses endpoint
+changes if the organism's linked identity revision, parent-colony lineage or
+declared experimental-unit assignment differs across dates. Mixed units,
+missing/naive timestamps, same-day technical replicates and insufficient
+follow-up dates likewise produce **no** endpoint change. No p-values,
+mortality, survival, biological growth or treatment inference is calculated.
+The output remains `linked_unverified` with
+`scientist_review_required`: projected box width/height and mask area
+are not validated colony growth, and the identity and sampling design are not
+independently verified. Source provenance and prior review gates remain intact.
+Focused pure scientific regression and saved-workflow payload-parity tests are
+included. Exact-head CI, real acquisition-date datasets, migration-lineage
+reconciliation and installed Windows acceptance remain outstanding.
