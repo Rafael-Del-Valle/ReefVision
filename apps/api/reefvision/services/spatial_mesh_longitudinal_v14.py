@@ -151,6 +151,27 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         if extent_delta_bounds is not None
         else None
     )
+    # Relative change is undefined for a zero baseline. These are descriptive
+    # reconstruction extents, not biological growth or branch-length changes.
+    extent_relative = (
+        100 * (late_extent / early_extent - 1)
+        if early_extent is not None and early_extent > 0 and late_extent is not None
+        else None
+    )
+    extent_relative_bounds = (
+        [
+            100 * (extent_intervals[1][0] / extent_intervals[0][1] - 1),
+            100 * (extent_intervals[1][1] / extent_intervals[0][0] - 1),
+        ]
+        if len(extent_intervals) == 2 and extent_intervals[0][0] > 0
+        else None
+    )
+    if extent_relative is not None and not isfinite(extent_relative):
+        extent_relative = None
+    if extent_relative_bounds is not None and not all(
+        isfinite(value) for value in extent_relative_bounds
+    ):
+        extent_relative_bounds = None
     if any(
         not isfinite(value)
         for value in (extent_delta, extent_rate)
@@ -170,6 +191,8 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     ]
     if extent_delta is not None:
         warnings.append("axis_aligned_extent_change_is_not_verified_branch_growth")
+        if extent_relative is None:
+            warnings.append("relative_axis_aligned_extent_change_unavailable")
         if extent_delta_bounds is None:
             warnings.append("extent_scale_uncertainty_interval_unavailable")
     else:
@@ -192,9 +215,14 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "before_axis_aligned_bounding_box_diagonal_m": early_extent,
         "after_axis_aligned_bounding_box_diagonal_m": late_extent,
         "delta_axis_aligned_bounding_box_diagonal_m": extent_delta,
+        "relative_axis_aligned_bounding_box_diagonal_change_percent": extent_relative,
+        "relative_axis_aligned_bounding_box_diagonal_scale_interval_percent": (
+            extent_relative_bounds
+        ),
         "delta_axis_aligned_bounding_box_diagonal_scale_interval_m": extent_delta_bounds,
         "average_axis_aligned_bounding_box_diagonal_change_m_per_day": extent_rate,
-        "average_axis_aligned_bounding_box_diagonal_change_scale_interval_m_per_day": extent_rate_bounds,
+        "average_axis_aligned_bounding_box_diagonal_change_"
+        "scale_interval_m_per_day": extent_rate_bounds,
         "average_surface_area_change_m2_per_day": rate,
         "average_surface_area_change_scale_interval_m2_per_day": rate_bounds,
         "delta_surface_area_scale_interval_m2": difference_bounds,
