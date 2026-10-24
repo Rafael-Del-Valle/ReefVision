@@ -9,8 +9,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import PoseTrainingDataset
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
     execute_pose_training_dataset_adapter,
@@ -132,6 +133,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["pose_schema_revision"] == dataset["pose_schema_revision"]
     assert payload["pose_schema_content_hash"] == dataset["pose_schema_content_hash"]
 
+    # The unmodified scientist-verified dataset remains exportable.
+    with app.state.session_factory() as session:
+        _, package_bytes, package_sha256 = PoseTrainingDatasetService(session).native_package(
+            dataset_id
+        )
+    assert package_bytes
+    assert len(package_sha256) == 64
+
     # A recomputed checksum must not legitimize a frozen manifest that no
     # longer guarantees scientist-verified-only training truth.
     with app.state.session_factory() as session:
@@ -202,6 +211,13 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen.manifest_json = item_manifest
         frozen.manifest_sha256 = item_manifest_sha
         session.commit()
+
+    # Re-signing the manifest must not bypass native package export validation.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).native_package(dataset_id)
 
     item_graph = {
         **graph,
@@ -581,6 +597,13 @@ def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
             changed_manifest["truth_policy"] = "tampered_after_queue"
             frozen.manifest_json = changed_manifest
         session.commit()
+
+    # Export must reject the same corrupted frozen manifest as workflow execution.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="manifest"),
+    ):
+        PoseTrainingDatasetService(session).native_package(dataset_id)
 
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
