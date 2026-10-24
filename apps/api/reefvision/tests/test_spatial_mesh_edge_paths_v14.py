@@ -204,7 +204,7 @@ def test_overflowing_detour_ratio_is_qc_flagged_and_persists_as_null(
     assert "geometric_detour_ratio_overflow" in route["path_qc_warnings"]
     assert direct["measurement_status"] == "caller_supplied_unverified"
 
-    project_id = str(create_project(client, "Finite mesh detour ratio"))
+    project_id = str(create_project(client, "Finite mesh detour ratio")["id"])
     base = f"/api/v1/projects/{project_id}"
     response = client.post(f"{base}/spatial/mesh-preview", json=parameters)
     assert response.status_code == 200, response.text
