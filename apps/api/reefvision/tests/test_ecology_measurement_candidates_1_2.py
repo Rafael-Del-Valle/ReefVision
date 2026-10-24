@@ -282,9 +282,7 @@ def test_projected_endpoint_rechecks_qc_against_current_sources(
 
     # Each change invalidates the previously computed date/identity/unit QC.
     changed_sources = [
-        final.model_copy(
-            update={"capture_timestamp_utc": datetime(2026, 4, 3, 12, tzinfo=UTC)}
-        ),
+        final.model_copy(update={"capture_timestamp_utc": datetime(2026, 4, 3, 12, tzinfo=UTC)}),
         final.model_copy(update={"identity_revision": baseline.identity_revision + 1}),
         final.model_copy(update={"unit": "cm"}),
     ]
