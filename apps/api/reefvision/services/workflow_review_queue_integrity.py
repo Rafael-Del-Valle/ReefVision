@@ -67,6 +67,17 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     if not isinstance(checksums, dict):
         raise invalid
 
+    # Queues written with the v2 contract must retain both independent
+    # digests. Older unversioned queues remain readable without a migration.
+    integrity_version = checksums.get("integrity_schema_version")
+    if integrity_version is not None and integrity_version != "qc-review-queue-v2":
+        raise invalid
+    if integrity_version == "qc-review-queue-v2" and (
+        "scoring_provenance_sha256" not in checksums
+        or "item_evidence_sha256" not in checksums
+    ):
+        raise invalid
+
     # Historical snapshots may predate the scoring digest; retain their
     # compatibility while requiring internally consistent scoring metadata.
     # Newly generated queues include a digest so edits to the formula,
