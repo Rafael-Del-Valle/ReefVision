@@ -81,9 +81,7 @@ def boundary_component_lengths(
         component_lengths[owner[first]].append(dist(points[first], points[second]))
 
     cycle_lengths = [
-        fsum(lengths)
-        for cycle, lengths in zip(is_cycle, component_lengths, strict=True)
-        if cycle
+        fsum(lengths) for cycle, lengths in zip(is_cycle, component_lengths, strict=True) if cycle
     ]
     noncycle_lengths = [
         fsum(lengths)
