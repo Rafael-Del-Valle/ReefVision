@@ -53,7 +53,12 @@ def frozen_pose_item_fingerprints_match(
 ) -> bool:
     """Compare signed item summaries with independently persisted frozen items."""
     manifest = dataset.manifest_json
-    if not isinstance(manifest, dict) or not isinstance(manifest.get("items"), list):
+    if (
+        dataset.schema_version != DATASET_SCHEMA_VERSION
+        or not isinstance(manifest, dict)
+        or manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION
+        or not isinstance(manifest.get("items"), list)
+    ):
         return False
 
     rows = session.scalars(
