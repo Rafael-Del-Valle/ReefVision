@@ -107,6 +107,27 @@ def test_valid_saved_snapshot_and_mutable_reviewer_state():
     validate_saved_queue_snapshot(queue, items)
 
 
+
+def test_saved_evidence_digest_is_independent_of_database_row_order():
+    """A saved workflow retry must not depend on ORM relationship load order."""
+    queue, items = snapshot()
+    original_digest = queue.input_checksums_json["item_evidence_sha256"]
+    assert queue_item_evidence_sha256(list(reversed(items))) == original_digest
+    validate_saved_queue_snapshot(queue, list(reversed(items)))
+
+
+def test_reviewer_coordination_does_not_invalidate_scientific_snapshot():
+    """Review coordination stays mutable without changing scientific provenance."""
+    queue, items = snapshot()
+    original_digest = queue.input_checksums_json["item_evidence_sha256"]
+    items[0].review_state = "in_progress"
+    items[0].assigned_to = "reviewer-2"
+    items[0].skip_reason = "Needs specialist verification"
+    items[0].review_comment = "Check colony identity"
+    assert queue_item_evidence_sha256(items) == original_digest
+    validate_saved_queue_snapshot(queue, items)
+
+
 @pytest.mark.parametrize(
     "corruption",
     [
