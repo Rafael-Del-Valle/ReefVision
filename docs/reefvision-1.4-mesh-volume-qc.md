@@ -36,6 +36,31 @@ remain available for human review. Relevant QC flags are
 `coincident_mesh_patch_coordinates`, and
 `enclosed_volume_coincident_patch_coordinates`.
 
+## Provisional surface-to-volume descriptor
+
+For a closed, consistently oriented mesh with accepted provisional enclosed
+volume, `surface_to_enclosed_volume_ratio_per_m` reports the geometric ratio
+`A/V` (units: inverse meters). Individual eligible edge-connected patches
+also report ratios, even when a touching or invalid patch causes the global
+volume and global ratio to be withheld. Open, zero-volume, numerically invalid,
+or rejected surfaces report `null` rather than fabricating a ratio.
+
+The optional scale-only interval is
+`[R/(1+u), R/(1-u)]` for relative scale uncertainty `0 <= u < 1`.
+Missing uncertainty produces `null` rather than zero uncertainty. At
+`u = 1`, no finite upper bound exists, so the interval is `null` while
+the nominal provisional ratio is retained. Per-patch intervals use the same
+rule. These are deterministic scale bounds, **not confidence intervals**.
+They omit mesh reconstruction, segmentation, self-intersection, and
+biological validation errors.
+
+Surface-to-volume ratio is a geometry descriptor, not a validated coral
+biomass, health, porosity, or surface-to-tissue-volume measurement. It is
+available through the same standalone endpoint and persisted executable
+`mesh_surface_preview` Workflow Builder node. Scientific regression tests
+cover closed and open surfaces, missing/zero/100% scale uncertainty, and
+standalone-versus-saved-workflow consistency.
+
 ## Scientific interpretation and reproducibility
 
 Scale-only volume intervals are computed as
