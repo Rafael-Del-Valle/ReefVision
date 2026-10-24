@@ -991,3 +991,29 @@ independently verified. Source provenance and prior review gates remain intact.
 Focused pure scientific regression and saved-workflow payload-parity tests are
 included. Exact-head CI, real acquisition-date datasets, migration-lineage
 reconciliation and installed Windows acceptance remain outstanding.
+
+
+## Provisional projected independent-unit coverage (2026-10-24; development only)
+
+The source-linked calibrated-measurement API and existing executable, persisted
+`ecology_measurement_candidates` Workflow Builder output now include typed
+`projected_unit_summaries`. Each row represents one *declared* experimental
+unit and metric, with organism denominators, incomplete follow-up IDs, parent
+colony disclosures, physical units and UTC sampling windows. Descriptive
+within-unit means require complete paired follow-up for **every organism**,
+consistent physical units and matching sampling windows. An incomplete tank
+is excluded as a whole rather than silently dropping a fragment. Image/frame/
+camera and other technical replicate units are excluded; missing declarations
+and incompatible windows are explicit. Multiple organism observations in one
+tank produce **one unit summary**, not multiple independent replicates.
+
+The result remains `linked_unverified` and
+`scientist_review_required`: declared units have not been authenticated as
+independent, and projected geometry is not verified biological growth. No
+cross-unit pooling, survival estimates, p-values or model promotion are added.
+The deterministic fingerprint advances to
+`ecology-measurement-candidates-0004` and includes unit QC; the additive
+field defaults to an empty list for older persisted artifacts. Focused QC
+regressions and existing API/saved-workflow payload parity cover the new output.
+Exact-head CI, migration reconciliation, independent scientific acceptance
+and installed Windows GUI acceptance remain outstanding.

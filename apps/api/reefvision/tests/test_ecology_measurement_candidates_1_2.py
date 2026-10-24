@@ -14,6 +14,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
 )
 from reefvision.services.ecology_measurement_candidates import (
     summarize_projected_endpoint_changes,
+    summarize_projected_unit_summaries,
     summarize_sampling_date_qc,
 )
 from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
@@ -54,6 +55,11 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
         row["review_gate"] == "scientist_review_required" for row in payload["sampling_date_qc"]
     )
     assert payload["projected_endpoint_changes"] == []
+    assert len(payload["projected_unit_summaries"]) == 2
+    assert all(
+        row["unit_status"] == "missing_unit_declaration"
+        for row in payload["projected_unit_summaries"]
+    )
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200
@@ -233,3 +239,81 @@ def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     duplicate_qc = summarize_sampling_date_qc([baseline, same_day])
     assert duplicate_qc[0].qc_status == "same_day_technical_replicates"
     assert summarize_projected_endpoint_changes([baseline, same_day], duplicate_qc) == []
+
+
+def test_projected_unit_qc_excludes_incomplete_and_technical_replicates(
+    client: TestClient,
+) -> None:
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    source = EcologyMeasurementCandidate.model_validate(
+        _get(client, project_id).json()["candidates"][0]
+    )
+    first = source.model_copy(
+        update={
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-A",
+            "parent_colony_key": "parent-A",
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    last = first.model_copy(
+        update={
+            "image_id": "A-later",
+            "annotation_evidence_id": "annotation-A-later",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
+            "value": first.value + 2.5,
+        }
+    )
+    second_first = first.model_copy(
+        update={
+            "organism_key": "organism-B",
+            "parent_colony_key": "parent-B",
+            "image_id": "B-earlier",
+            "annotation_evidence_id": "annotation-B-earlier",
+            "value": 4.0,
+        }
+    )
+    second_last = second_first.model_copy(
+        update={
+            "image_id": "B-later",
+            "annotation_evidence_id": "annotation-B-later",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 9, tzinfo=UTC),
+            "value": 5.0,
+        }
+    )
+
+    def summarize(rows: list[EcologyMeasurementCandidate]):
+        changes = summarize_projected_endpoint_changes(
+            rows, summarize_sampling_date_qc(rows)
+        )
+        return summarize_projected_unit_summaries(rows, changes)[0]
+
+    full = [first, last, second_first, second_last]
+    unit = summarize(full)
+    assert unit.unit_status == "candidate"
+    assert len(unit.organism_keys) == 2
+    assert unit.mean_absolute_change == 1.75
+    assert unit.parent_colony_keys == ["parent-A", "parent-B"]
+    assert unit.review_gate == "scientist_review_required"
+
+    incomplete = summarize([first, last, second_first])
+    assert incomplete.unit_status == "incomplete_followup"
+    assert incomplete.incomplete_organism_keys == ["organism-B"]
+    assert incomplete.mean_absolute_change is None
+
+    delayed = second_last.model_copy(
+        update={"capture_timestamp_utc": datetime(2026, 4, 5, 9, tzinfo=UTC)}
+    )
+    assert (
+        summarize([first, last, second_first, delayed]).unit_status
+        == "sampling_window_mismatch"
+    )
+    technical = [
+        row.model_copy(update={"experimental_unit_type": "video_frame"})
+        for row in full
+    ]
+    assert summarize(technical).unit_status == "technical_replicate_unit"
+    assert summarize(technical).mean_absolute_change is None

@@ -16,12 +16,14 @@ from reefvision.db.models.annotation import Annotation
 from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
     EcologyMeasurementCandidatesResponse,
     EcologyMeasurementExclusion,
     EcologyProjectedEndpointChange,
+    EcologyProjectedUnitSummary,
     EcologySamplingDateQC,
 )
 from reefvision.services.ecology_identity import EcologyIdentityService
@@ -132,9 +134,10 @@ def summarize_projected_endpoint_changes(
         elapsed_days = (end - start).total_seconds() / 86400
         difference = last.value - first.value
         percent_change = 100 * (difference / first.value)
-        if not all(
-            math.isfinite(value) for value in (elapsed_days, difference, percent_change)
-        ) or elapsed_days <= 0:
+        if (
+            not all(math.isfinite(value) for value in (elapsed_days, difference, percent_change))
+            or elapsed_days <= 0
+        ):
             raise ValidationError("Projected endpoint change is nonfinite or unordered")
         changes.append(
             EcologyProjectedEndpointChange(
@@ -162,6 +165,105 @@ def summarize_projected_endpoint_changes(
             )
         )
     return changes
+
+
+def summarize_projected_unit_summaries(
+    candidates: list[EcologyMeasurementCandidate],
+    changes: list[EcologyProjectedEndpointChange],
+) -> list[EcologyProjectedUnitSummary]:
+    """Provisional one-row-per-unit summaries, never biological inference.
+
+    Incomplete organisms or mismatched UTC windows exclude the whole unit.
+    Image/frame/annotation records cannot be independent ecological units.
+    """
+    groups: dict[
+        tuple[str | None, str | None, str], list[EcologyMeasurementCandidate]
+    ] = {}
+    for candidate in candidates:
+        key = (
+            candidate.experimental_unit_type,
+            candidate.experimental_unit_id,
+            candidate.metric,
+        )
+        groups.setdefault(key, []).append(candidate)
+    change_index = {(row.organism_key, row.metric): row for row in changes}
+    if len(change_index) != len(changes):
+        raise ValidationError("Duplicate projected organism endpoint changes")
+
+    results: list[EcologyProjectedUnitSummary] = []
+    for unit_type, unit_id, metric in sorted(
+        groups, key=lambda key: tuple(part or "" for part in key)
+    ):
+        records = groups[(unit_type, unit_id, metric)]
+        organism_keys = sorted({row.organism_key for row in records})
+        units = sorted({row.unit for row in records})
+        parent_keys = sorted(
+            {row.parent_colony_key for row in records if row.parent_colony_key}
+        )
+        completed = [
+            change_index[(organism_key, metric)]
+            for organism_key in organism_keys
+            if (organism_key, metric) in change_index
+        ]
+        complete_keys = sorted(row.organism_key for row in completed)
+        incomplete_keys = sorted(set(organism_keys) - set(complete_keys))
+        windows = sorted(
+            {
+                f"{row.baseline_capture_timestamp_utc.astimezone(UTC).date()}/"
+                f"{row.final_capture_timestamp_utc.astimezone(UTC).date()}"
+                for row in completed
+            }
+        )
+        if not unit_type or not unit_id or not unit_id.strip():
+            status = "missing_unit_declaration"
+        else:
+            try:
+                require_ecological_unit_type(unit_type)
+            except ValueError:
+                status = "technical_replicate_unit"
+            else:
+                status = "candidate"
+        if status == "candidate":
+            if len(units) != 1:
+                status = "mixed_units"
+            elif incomplete_keys:
+                status = "incomplete_followup"
+            elif len(windows) != 1:
+                status = "sampling_window_mismatch"
+
+        mean_absolute: float | None = None
+        mean_percent: float | None = None
+        if status == "candidate":
+            count = len(completed)
+            try:
+                mean_absolute = math.fsum(
+                    row.absolute_change / count for row in completed
+                )
+                mean_percent = math.fsum(
+                    row.percent_change / count for row in completed
+                )
+            except OverflowError as exc:
+                raise ValidationError("Projected unit summary is nonfinite") from exc
+            if not math.isfinite(mean_absolute) or not math.isfinite(mean_percent):
+                raise ValidationError("Projected unit summary is nonfinite")
+
+        results.append(
+            EcologyProjectedUnitSummary(
+                experimental_unit_type=unit_type,
+                experimental_unit_id=unit_id,
+                metric=metric,
+                units=units,
+                organism_keys=organism_keys,
+                complete_organism_keys=complete_keys,
+                incomplete_organism_keys=incomplete_keys,
+                parent_colony_keys=parent_keys,
+                sampling_windows_utc=windows,
+                unit_status=status,
+                mean_absolute_change=mean_absolute,
+                mean_percent_change=mean_percent,
+            )
+        )
+    return results
 
 
 class EcologyMeasurementCandidateService:
@@ -286,13 +388,15 @@ class EcologyMeasurementCandidateService:
         )
         sampling_date_qc = summarize_sampling_date_qc(candidates)
         projected_changes = summarize_projected_endpoint_changes(candidates, sampling_date_qc)
+        unit_summaries = summarize_projected_unit_summaries(candidates, projected_changes)
         rows = [row.model_dump(mode="json") for row in candidates]
         qc_rows = [row.model_dump(mode="json") for row in sampling_date_qc]
         change_rows = [row.model_dump(mode="json") for row in projected_changes]
+        unit_rows = [row.model_dump(mode="json") for row in unit_summaries]
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0003",
+                "algorithm_version": "ecology-measurement-candidates-0004",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
@@ -301,6 +405,7 @@ class EcologyMeasurementCandidateService:
                 "candidates": rows,
                 "sampling_date_qc": qc_rows,
                 "projected_endpoint_changes": change_rows,
+                "projected_unit_summaries": unit_rows,
                 "exclusions": skipped,
             }
         )
@@ -312,6 +417,7 @@ class EcologyMeasurementCandidateService:
             candidate_count=len(candidates),
             sampling_date_qc=sampling_date_qc,
             projected_endpoint_changes=projected_changes,
+            projected_unit_summaries=unit_summaries,
             exclusions=exclusions,
             input_sha256=fingerprint,
         )

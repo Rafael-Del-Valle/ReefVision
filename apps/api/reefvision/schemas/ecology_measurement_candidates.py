@@ -88,6 +88,32 @@ class EcologyProjectedEndpointChange(BaseModel):
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
 
+class EcologyProjectedUnitSummary(BaseModel):
+    """One declared unit, never a verified independent replicate."""
+
+    experimental_unit_type: str | None
+    experimental_unit_id: str | None
+    metric: Literal["box_width", "box_height", "mask_projected_area"]
+    units: list[str]
+    organism_keys: list[str]
+    complete_organism_keys: list[str]
+    incomplete_organism_keys: list[str]
+    parent_colony_keys: list[str]
+    sampling_windows_utc: list[str]
+    unit_status: Literal[
+        "candidate",
+        "missing_unit_declaration",
+        "technical_replicate_unit",
+        "mixed_units",
+        "incomplete_followup",
+        "sampling_window_mismatch",
+    ]
+    mean_absolute_change: float | None = Field(default=None, allow_inf_nan=False)
+    mean_percent_change: float | None = Field(default=None, allow_inf_nan=False)
+    evidence_level: Literal["linked_unverified"] = "linked_unverified"
+    review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+
 class EcologyMeasurementCandidatesResponse(BaseModel):
     schema_version: Literal["ecology-measurement-candidates-0001"] = (
         "ecology-measurement-candidates-0001"
@@ -99,6 +125,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
     candidate_count: int = 0
     sampling_date_qc: list[EcologySamplingDateQC] = Field(default_factory=list)
     projected_endpoint_changes: list[EcologyProjectedEndpointChange] = Field(default_factory=list)
+    projected_unit_summaries: list[EcologyProjectedUnitSummary] = Field(default_factory=list)
     exclusions: list[EcologyMeasurementExclusion] = Field(default_factory=list)
     input_sha256: str
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
