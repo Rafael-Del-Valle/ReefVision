@@ -241,6 +241,7 @@ def test_review_status_revocation_blocks_saved_workflow(
     assert "reviewed image status" in run["run"]["error_message"]
     assert not any(row["data_type"] == "ecology_identity_registry" for row in run["artifacts"])
 
+
 def test_out_of_image_box_rejected_before_linking(
     client: TestClient,
 ) -> None:
