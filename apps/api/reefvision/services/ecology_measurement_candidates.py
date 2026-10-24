@@ -268,6 +268,23 @@ def summarize_projected_population_summaries(
     declared unit types and UTC sampling windows remain separate strata.
     Parent-colony reuse across units is disclosed, not assumed independent.
     """
+    # One biological organism cannot contribute as an independent replicate
+    # in two declared experimental units, even across sampling strata.
+    organism_unit_owners: dict[tuple[str, str], tuple[str, str]] = {}
+    for row in unit_summaries:
+        if row.unit_status != "candidate":
+            continue
+        if not row.experimental_unit_type or not row.experimental_unit_id:
+            raise ValidationError("Eligible projected unit is missing its declaration")
+        owner = (row.experimental_unit_type, row.experimental_unit_id)
+        for organism_key in row.complete_organism_keys:
+            key = (row.metric, organism_key)
+            previous = organism_unit_owners.setdefault(key, owner)
+            if previous != owner:
+                raise ValidationError(
+                    "One organism cannot be pooled across declared experimental units"
+                )
+
     groups: dict[tuple[str, str, str, str], list[EcologyProjectedUnitSummary]] = {}
     for row in unit_summaries:
         if row.unit_status != "candidate":
@@ -306,6 +323,39 @@ def summarize_projected_population_summaries(
             raise ValidationError("Projected population summary is nonfinite") from exc
         if not math.isfinite(mean_absolute) or not math.isfinite(mean_percent):
             raise ValidationError("Projected population summary is nonfinite")
+        sample_sd_absolute: float | None = None
+        sample_sd_percent: float | None = None
+        if count >= 2:
+            try:
+                sample_sd_absolute = math.sqrt(
+                    math.fsum(
+                        (float(row.mean_absolute_change) - mean_absolute) ** 2
+                        for row in records
+                    )
+                    / (count - 1)
+                )
+                sample_sd_percent = math.sqrt(
+                    math.fsum(
+                        (float(row.mean_percent_change) - mean_percent) ** 2
+                        for row in records
+                    )
+                    / (count - 1)
+                )
+            except (OverflowError, ValueError) as exc:
+                raise ValidationError("Projected unit dispersion is nonfinite") from exc
+            if not math.isfinite(sample_sd_absolute) or not math.isfinite(sample_sd_percent):
+                raise ValidationError("Projected unit dispersion is nonfinite")
+        shared_parents = sorted(key for key, n in parent_counts.items() if n > 1)
+        missing_parents = sorted(
+            str(row.experimental_unit_id) for row in records if not row.parent_colony_keys
+        )
+        blockers = ["independence_not_authenticated"]
+        if count < 2:
+            blockers.append("single_declared_unit")
+        if shared_parents:
+            blockers.append("shared_parent_colonies")
+        if missing_parents:
+            blockers.append("missing_parent_colony")
         results.append(
             EcologyProjectedPopulationSummary(
                 experimental_unit_type=unit_type,
@@ -316,14 +366,13 @@ def summarize_projected_population_summaries(
                 declared_unit_count=count,
                 contributing_organism_count=sum(len(row.complete_organism_keys) for row in records),
                 parent_colony_keys=sorted(parent_counts),
-                shared_parent_colony_keys=sorted(key for key, n in parent_counts.items() if n > 1),
-                units_missing_parent_colony=sorted(
-                    str(row.experimental_unit_id)
-                    for row in records
-                    if not row.parent_colony_keys
-                ),
+                shared_parent_colony_keys=shared_parents,
+                units_missing_parent_colony=missing_parents,
                 mean_unit_absolute_change=mean_absolute,
                 mean_unit_percent_change=mean_percent,
+                sample_sd_unit_absolute_change=sample_sd_absolute,
+                sample_sd_unit_percent_change=sample_sd_percent,
+                design_review_blockers=blockers,
             )
         )
     return results
@@ -461,7 +510,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0005",
+                "algorithm_version": "ecology-measurement-candidates-0006",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
