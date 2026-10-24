@@ -722,6 +722,13 @@ def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
             frozen.manifest_json = changed_manifest
         session.commit()
 
+    # Manifest retrieval must fail closed, not expose corrupt frozen truth.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="manifest"),
+    ):
+        PoseTrainingDatasetService(session).manifest(dataset_id)
+
     # Export must reject the same corrupted frozen manifest as workflow execution.
     with (
         app.state.session_factory() as session,
