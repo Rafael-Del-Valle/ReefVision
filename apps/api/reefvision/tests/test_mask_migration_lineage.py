@@ -10,7 +10,10 @@ def test_mask_migrations_form_one_linear_head() -> None:
     scripts = ScriptDirectory.from_config(config)
 
     # Track B adds one branch-local descendant; do not introduce a second head.
-    assert scripts.get_heads() == ["b12_identity_0003"]
+    assert scripts.get_heads() == ["b12_identity_0004"]
+    calibration_evidence = scripts.get_revision("b12_identity_0004")
+    assert calibration_evidence is not None
+    assert calibration_evidence.down_revision == "b12_identity_0003"
     annotation_evidence = scripts.get_revision("b12_identity_0003")
     assert annotation_evidence is not None
     assert annotation_evidence.down_revision == "b12_identity_0002"
