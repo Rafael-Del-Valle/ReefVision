@@ -189,6 +189,7 @@ def test_revision_0039_requires_named_triage_check_without_writes(
             connection.scalar(text("SELECT id FROM review_queue_item_events")) == "preserve-event"
         )
 
+
 _VALID_EVENT_TYPES = (
     "'comment', 'assign', 'unassign', 'triage_start', "
     "'triage_skip', 'triage_return'"
@@ -229,10 +230,12 @@ def test_revision_0039_rejects_permissive_event_checks_without_writes(
                 "WHERE type='table' AND name='review_queue_item_events'"
             )
         )
-        with pytest.raises(RuntimeError, match="permits unsupported|still excludes"):
+        with pytest.raises(RuntimeError, match="still excludes"):
             assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0039"
-        assert connection.scalar(text("SELECT id FROM review_queue_item_events")) == "preserved-event"
+        assert (
+            connection.scalar(text("SELECT id FROM review_queue_item_events")) == "preserved-event"
+        )
         assert connection.scalar(
             text(
                 "SELECT sql FROM sqlite_master "
