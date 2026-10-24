@@ -1301,7 +1301,13 @@ export interface ReviewQueueBulkResponse {
   requires_researcher_review: boolean;
 }
 
-export type ReviewQueueEventType = "comment" | "assign" | "unassign";
+export type ReviewQueueEventType =
+  | "comment"
+  | "assign"
+  | "unassign"
+  | "triage_start"
+  | "triage_skip"
+  | "triage_return";
 
 export interface ReviewQueueEvent {
   id: string;
@@ -2861,6 +2867,7 @@ export async function bulkTriageReviewQueueItems(
     item_ids: string[];
     action: ReviewQueueBulkAction;
     reason?: string;
+    actor?: string;
   },
 ): Promise<ReviewQueueBulkResponse> {
   return request<ReviewQueueBulkResponse>(
