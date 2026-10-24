@@ -41,8 +41,8 @@ def test_closed_tetrahedron_volume_and_exact_cubic_scale_bounds() -> None:
     assert result["enclosed_volume_scale_interval_m3"] == pytest.approx(
         [volume * 0.9**3, volume * 1.1**3]
     )
-    assert result["edge_connected_patch_enclosed_volume_scale_intervals_m3"][0] == (
-        pytest.approx([volume * 0.9**3, volume * 1.1**3])
+    assert result["edge_connected_patch_enclosed_volume_scale_intervals_m3"][0] == pytest.approx(
+        [volume * 0.9**3, volume * 1.1**3]
     )
     assert result["enclosed_volume_is_provisional"] is True
     assert result["measurement_status"] == "caller_supplied_unverified"
