@@ -623,3 +623,28 @@ The exact-head CI mypy failure at
 distinct optional-ID variable for the observed row instead of assigning
 a `str | None` into the loop's inferred `str` calendar key. CI and
 Windows scientific acceptance must still be rechecked.
+
+
+## Identity registry executable workflow and Alembic acceptance repair (2026-10-23)
+
+Exact-head GitHub Actions for `7807566f71496955ad222699ee07aa62c21e961d`
+completed 17 of 19 workflows successfully. The CI backend and ReefVision 1.0
+acceptance backend jobs exposed six failing tests: five saved-workflow identity
+source tests failed before reaching registry integrity checks because the
+workflow executor injects internal `__workflow_run_id` and
+`__workflow_node_run_id` parameters; the source adapter incorrectly rejected
+all nonempty parameter dictionaries. The adapter now permits **only** those
+two executor-injected trace keys while rejecting any caller-configured
+parameters, including attempted `verified` promotion. A saved-workflow
+regression requires such an attempted promotion to fail without publishing
+an ecological registry artifact. Existing valid and corrupt-registry saved
+workflow regressions must now exercise the actual source and scientific gates.
+
+The sixth failure was a legacy migration test assuming the head remained
+`0037`. The Track B branch test now asserts exactly one Alembic head,
+`b12_identity_0001`, whose parent is `0037`. This does **not** reconcile
+the separate unmerged 1.1 `0038` migration; integration must explicitly
+resolve both lineages and rerun upgrade/downgrade and installed Windows
+acceptance before any merge. No biological identity, annotation, calibration
+or dataset is promoted to verified status by this correction. New-head CI
+and scientific acceptance remain required.
