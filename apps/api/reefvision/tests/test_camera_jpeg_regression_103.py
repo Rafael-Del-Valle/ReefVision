@@ -288,3 +288,55 @@ def test_real_camera_nested_exif_ifd_capture_time_and_provenance(
     assert exif_metadata["DateTimeOriginal"] == "2026:10:01 12:30:00"
     assert exif_metadata["OffsetTimeOriginal"] == offset
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+@pytest.mark.parametrize(
+    ("timestamp_tag", "offset_tag", "subsec_tag", "subsec_name"),
+    [
+        (36867, 36881, 37521, "SubsecTimeOriginal"),
+        (36868, 36882, 37522, "SubsecTimeDigitized"),
+        (306, 36880, 37520, "SubsecTime"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("subseconds", "expected_fraction"),
+    [
+        ("123", ".123000"),
+        ("000045", ".000045"),
+        ("123456789", ".123456"),
+        ("not-a-fraction", ""),
+    ],
+)
+def test_camera_exif_subseconds_preserve_acquisition_precision_and_original(
+    client: TestClient,
+    timestamp_tag: int,
+    offset_tag: int,
+    subsec_tag: int,
+    subsec_name: str,
+    subseconds: str,
+    expected_fraction: str,
+) -> None:
+    """Subsecond EXIF timestamps must not be lost or borrowed across camera fields."""
+    project = create_project(client, "Camera EXIF subsecond precision")
+    exif = Image.Exif()
+    tags = {
+        timestamp_tag: "2026:10:01 12:30:00",
+        offset_tag: "-04:00",
+        subsec_tag: subseconds,
+    }
+    if timestamp_tag == 306:
+        exif.update(tags)
+    else:
+        exif[34665] = tags
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_SUBSECOND.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"].startswith(f"2026-10-01T16:30:00{expected_fraction}")
+    assert metadata["capture_timestamp"].endswith(("Z", "+00:00"))
+    assert metadata["metadata_json"]["exif"][subsec_name] == subseconds
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload

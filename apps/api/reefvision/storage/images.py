@@ -115,20 +115,38 @@ def _json_safe(value: object) -> object | None:
 
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
-    # Camera-local EXIF timestamps may include explicit UTC offsets. Pair each
-    # date field with its own offset; never borrow an offset from another field.
-    for key, offset_key in ((36867, 36881), (36868, 36882), (306, 36880)):
+    # Camera-local EXIF timestamps may include explicit UTC offsets and
+    # subsecond tags. Pair each date with its own offset and fractional time;
+    # never borrow either from a different acquisition field.
+    for key, offset_key, subsec_key in (
+        (36867, 36881, 37521),
+        (36868, 36882, 37522),
+        (306, 36880, 37520),
+    ):
         raw = exif.get(key)
         if not isinstance(raw, str):
             continue
         offset = exif.get(offset_key)
         try:
             if isinstance(offset, str) and offset:
-                return datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
-            # Legacy offset-free camera imports retain their previous behavior.
-            return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
+                timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
+            else:
+                # Preserve the existing legacy behavior for offset-free images.
+                timestamp = datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
         except ValueError:
             continue
+
+        fraction = exif.get(subsec_key)
+        if isinstance(fraction, bytes):
+            try:
+                fraction = fraction.decode("ascii")
+            except UnicodeDecodeError:
+                fraction = None
+        if isinstance(fraction, str) and fraction.isascii() and fraction.isdigit():
+            # Datetimes represent microseconds; preserve the unmodified raw
+            # EXIF string in metadata when cameras record finer precision.
+            timestamp = timestamp.replace(microsecond=int(fraction[:6].ljust(6, "0")))
+        return timestamp
     return None
 
 
