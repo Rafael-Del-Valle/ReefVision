@@ -23,6 +23,7 @@ def snapshot():
             dataset_version_id=None,
             rank_position=1,
             score=80.0,
+            weights_json={"signal": 1.0},
             highest_qc_severity="warning",
             split="train",
             review_state="pending",
@@ -34,6 +35,7 @@ def snapshot():
             dataset_version_id=None,
             rank_position=2,
             score=20.0,
+            weights_json={"signal": 1.0},
             highest_qc_severity=None,
             split=None,
             review_state="pending",
@@ -54,13 +56,27 @@ def snapshot():
         source_quality_control_run_id=None,
         item_count=2,
         input_checksums_json={"item_count": 2, "queue_scope_sha256": digest},
-        configuration_json={"source_quality_control_run_id": None},
+        configuration_json={
+            "source_quality_control_run_id": None,
+            "weights": {"signal": 1.0},
+            "ruleset_version": "qc-v1",
+            "review_below_confidence": None,
+        },
+        formula_id="review_priority_v1",
+        formula_version="1.0.0",
         summary_json={
             "average_score": 50.0,
             "counts_by_severity": {"warning": 1},
             "counts_by_split": {"train": 1, "unspecified": 1},
             "top_image_ids": ["img-a", "img-b"],
         },
+    )
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+        }
     )
     return queue, items
 
@@ -93,6 +109,14 @@ def test_valid_saved_snapshot_and_mutable_reviewer_state():
         "boolean_count",
         "boolean_score",
         "missing_item",
+        "formula_id",
+        "formula_version",
+        "configuration_weights",
+        "item_weights",
+        "missing_formula",
+        "nonfinite_weight",
+        "boolean_weight",
+        "scoring_digest",
     ],
 )
 def test_rejects_corrupted_saved_snapshot(corruption):
@@ -144,6 +168,22 @@ def test_rejects_corrupted_saved_snapshot(corruption):
         items[0].score = True
     elif corruption == "missing_item":
         items.pop()
+    elif corruption == "formula_id":
+        queue.formula_id = "unreviewed_formula"
+    elif corruption == "formula_version":
+        queue.formula_version = "99.0.0"
+    elif corruption == "configuration_weights":
+        queue.configuration_json["weights"]["signal"] = 2.0
+    elif corruption == "item_weights":
+        items[0].weights_json["signal"] = 2.0
+    elif corruption == "missing_formula":
+        queue.formula_version = ""
+    elif corruption == "nonfinite_weight":
+        queue.configuration_json["weights"]["signal"] = float("nan")
+    elif corruption == "boolean_weight":
+        queue.configuration_json["weights"]["signal"] = True
+    elif corruption == "scoring_digest":
+        queue.input_checksums_json["scoring_provenance_sha256"] = "0" * 64
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
 
@@ -158,6 +198,16 @@ def test_rejects_modified_saved_source_configuration(corruption):
         queue.configuration_json.pop("source_quality_control_run_id")
     else:
         queue.configuration_json = None
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_historical_snapshot_without_scoring_digest_remains_readable():
+    """Older persisted workflow queues must remain retryable without rescoring."""
+    queue, items = snapshot()
+    queue.input_checksums_json.pop("scoring_provenance_sha256")
+    validate_saved_queue_snapshot(queue, items)
+    items[0].weights_json["signal"] = 2.0
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
 
