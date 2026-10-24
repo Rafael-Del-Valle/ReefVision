@@ -746,3 +746,19 @@ annotation revisions and calibration snapshots with scientist review and
 registered experimental design. The new migration is isolated from unmerged
 1.1 `0038` and requires explicit reconciliation, exact-head CI, scientific
 dataset validation, and Windows installed-GUI acceptance.
+
+## Image-source metadata QC (2026-10-24)
+
+The project-owned organism-to-image evidence service now rejects malformed
+source-image SHA-256 values (anything other than 64 hexadecimal characters)
+and nonpositive source width, height or file size. Checks run both when
+registering an image association and when reading a registry containing
+existing links. A corrupt source cannot enter a successful persisted
+`ecology_identity_registry_source` Workflow Builder artifact. Regression
+tests cover API rejection before linking and failed saved-workflow execution
+after source metadata corruption. This is a **database metadata QC gate**,
+not a rehash of physical image bytes or confirmation of capture time,
+reviewed annotation, calibration or biological identity. The evidence
+remains `linked_unverified`; no scientific observation is promoted.
+The migration lineage remains `b12_identity_0002` for this no-schema-change
+increment and still needs reviewed reconciliation with unmerged 1.1.
