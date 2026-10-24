@@ -200,6 +200,43 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         )
 
 
+    # A valid manifest checksum alone must not hide a changed database item
+    # count: the saved workflow and downstream training must reject drift.
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        frozen.status = "complete"
+        frozen.item_count += 1
+        session.commit()
+
+    count_plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert count_plan.status_code == 200, count_plan.text
+    assert count_plan.json()["valid"] is False
+    assert "pose_dataset_item_count_mismatch" in {
+        issue["code"] for issue in count_plan.json()["issues"]
+    }
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item count no longer matches frozen manifest"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item count no longer matches frozen manifest"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            app.state.settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={},
+        )
+
+
 def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
