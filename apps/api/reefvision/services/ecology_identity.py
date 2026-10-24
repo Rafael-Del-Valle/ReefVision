@@ -87,6 +87,7 @@ class EcologyIdentityService:
         """
         single_organism_units: dict[tuple[str, str], str] = {}
         colony_units: dict[tuple[str, str], str] = {}
+        lineage_units: dict[str, str] = {}
         for key, record in sorted(latest.items()):
             unit_type = record.experimental_unit_type
             unit_id = record.experimental_unit_id
@@ -123,6 +124,9 @@ class EcologyIdentityService:
                     raise ValidationError(
                         "A colony-level experimental unit cannot mix parent colonies"
                     )
+                prior_unit = lineage_units.setdefault(lineage, unit_id)
+                if prior_unit != unit_id:
+                    raise ValidationError("Parent colony split across colony-level units")
 
     def _append(
         self,
