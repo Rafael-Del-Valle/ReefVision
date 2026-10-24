@@ -250,6 +250,20 @@ def measure_mesh_preview(
     ]
     patch_boundary_loop_counts = [loops for loops, _ in patch_boundary_components]
     patch_noncycle_boundary_counts = [noncycles for _, noncycles in patch_boundary_components]
+    patch_boundary_component_lengths = [
+        spatial_mesh_boundary_v14.boundary_component_lengths(
+            patch_boundary_graph_edges.get(patch, []), points
+        )
+        for patch in ordered_patches
+    ]
+    patch_boundary_loop_perimeters_m = [
+        [length * scale for length in cycles]
+        for cycles, _ in patch_boundary_component_lengths
+    ]
+    patch_noncycle_boundary_component_lengths_m = [
+        [length * scale for length in noncycles]
+        for _, noncycles in patch_boundary_component_lengths
+    ]
     patch_nonmanifold_edge_counts = [patch_nonmanifold_edges[patch] for patch in ordered_patches]
     patch_winding_edge_counts = [patch_winding_edges[patch] for patch in ordered_patches]
     patch_boundary_lengths_m = [
@@ -459,6 +473,12 @@ def measure_mesh_preview(
         "boundary_edge_count": boundary,
         "boundary_loop_count": sum(patch_boundary_loop_counts),
         "noncycle_boundary_component_count": sum(patch_noncycle_boundary_counts),
+        "boundary_loop_perimeters_m": [
+            length for patch in patch_boundary_loop_perimeters_m for length in patch
+        ],
+        "noncycle_boundary_component_lengths_m": [
+            length for patch in patch_noncycle_boundary_component_lengths_m for length in patch
+        ],
         "boundary_edge_length_m": boundary_length_m,
         "boundary_edge_length_scale_interval_m": (
             [
@@ -492,8 +512,10 @@ def measure_mesh_preview(
         ],
         "edge_connected_patch_boundary_edge_counts": patch_boundary_edge_counts,
         "edge_connected_patch_boundary_loop_counts": patch_boundary_loop_counts,
-        "edge_connected_patch_noncycle_boundary_component_counts": (
-            patch_noncycle_boundary_counts
+        "edge_connected_patch_noncycle_boundary_component_counts": (patch_noncycle_boundary_counts),
+        "edge_connected_patch_boundary_loop_perimeters_m": patch_boundary_loop_perimeters_m,
+        "edge_connected_patch_noncycle_boundary_component_lengths_m": (
+            patch_noncycle_boundary_component_lengths_m
         ),
         "edge_connected_patch_boundary_edge_lengths_m": patch_boundary_lengths_m,
         "edge_connected_patch_boundary_length_scale_intervals_m": (
@@ -583,11 +605,7 @@ def measure_mesh_preview(
             sorted(volume_qc_warnings)
             + (["degenerate_triangles_present"] if degenerate else [])
             + (["open_mesh_surface_not_enclosed"] if boundary else [])
-            + (
-                ["noncycle_mesh_boundary_components"]
-                if any(patch_noncycle_boundary_counts)
-                else []
-            )
+            + (["noncycle_mesh_boundary_components"] if any(patch_noncycle_boundary_counts) else [])
             + (["nonmanifold_mesh_edges"] if nonmanifold else [])
             + (["disconnected_mesh_patches"] if edge_connected_patch_count > 1 else [])
             + (["vertex_touching_mesh_patches"] if vertex_touching_patch_vertices else [])
