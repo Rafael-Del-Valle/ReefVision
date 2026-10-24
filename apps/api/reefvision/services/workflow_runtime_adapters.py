@@ -804,7 +804,10 @@ def _ecology_identity_registry_source(
     from reefvision.services.ecology_identity import EcologyIdentityService
 
     del settings
-    if parameters:
+    # The workflow executor injects these two run-trace identifiers into every
+    # runtime adapter. They are not scientist-configurable node parameters.
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    if set(parameters) - runtime_keys:
         raise ValidationError("Ecological identity registry source accepts no parameters")
     project = _single_payload(inputs, "project")
     if project.get("project_id") != project_id:
