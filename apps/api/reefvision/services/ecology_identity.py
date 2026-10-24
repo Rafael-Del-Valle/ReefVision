@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
 from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
-from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.ecology_identity import (
     EcologyIdentityCreate,
     EcologyIdentityFields,
@@ -32,17 +32,30 @@ class EcologyIdentityService:
             raise NotFoundError("Project not found")
 
     def _latest(self, project_id: str) -> dict[str, EcologyIdentityRevision]:
+        """Reject missing or out-of-order imported identity revisions.
+
+        The registry is an append-only scientific audit trail. Selecting only
+        the highest revision would silently conceal missing earlier records.
+        Both API reads and saved Workflow Builder sources use this check.
+        """
         records = self.session.scalars(
             select(EcologyIdentityRevision)
             .where(EcologyIdentityRevision.project_id == project_id)
             .order_by(
                 EcologyIdentityRevision.organism_key,
-                EcologyIdentityRevision.revision.desc(),
+                EcologyIdentityRevision.revision,
             )
         )
         latest: dict[str, EcologyIdentityRevision] = {}
+        expected_revision: dict[str, int] = {}
         for record in records:
-            latest.setdefault(record.organism_key, record)
+            expected = expected_revision.get(record.organism_key, 1)
+            if record.revision != expected:
+                raise ValidationError(
+                    "Ecological identity revision history is not contiguous"
+                )
+            expected_revision[record.organism_key] = expected + 1
+            latest[record.organism_key] = record
         return latest
 
     @staticmethod
