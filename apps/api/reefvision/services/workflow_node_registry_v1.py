@@ -660,7 +660,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         execution_state="executable",
         executable=True,
         implementation_notes=[
-            "Persists deterministic identity, full-revision and linked-image fingerprints.",
+            "Persists typed identity, annotation and frozen calibration source evidence.",
+            "Calibration changes invalidate unverified saved-workflow registry artifacts.",
             "Registry metadata is not evidence of verified annotation or organism identity.",
             "Review gate prevents direct promotion into verified-dataset ports.",
         ],
