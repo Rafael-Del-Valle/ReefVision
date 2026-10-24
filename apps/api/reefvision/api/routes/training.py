@@ -230,9 +230,7 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # Show each update on a new line instead of allowing terminal rewrites.
     text = text.replace("\r", "\n")
     return "".join(
-        char
-        for char in text
-        if char in "\t\n" or (ord(char) >= 32 and not 127 <= ord(char) <= 159)
+        char for char in text if char in "\t\n" or (ord(char) >= 32 and not 127 <= ord(char) <= 159)
     )
 
 
