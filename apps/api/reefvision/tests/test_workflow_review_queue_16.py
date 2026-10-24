@@ -18,8 +18,8 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.workflow_runtime_adapters import execute_runtime_adapter
 from reefvision.services.workflow_review_queue_integrity import queue_item_evidence_sha256
+from reefvision.services.workflow_runtime_adapters import execute_runtime_adapter
 from reefvision.tests.test_annotations import create_project, import_one
 
 
