@@ -411,6 +411,7 @@ class ReviewQueueService:
                 }
             ),
             "item_count": len(items),
+            "integrity_schema_version": "qc-review-queue-v2",
             # Preserve immutable scientific explanations, not mutable reviewer
             # state, across saved Workflow Builder retries.
             "item_evidence_sha256": queue_item_evidence_sha256(items),
