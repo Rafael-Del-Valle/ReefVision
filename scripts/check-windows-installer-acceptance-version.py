@@ -141,6 +141,16 @@ def check_cab_artifact_partition(workflow: str) -> list[str]:
         or "merge-multiple: true" not in acceptance_job
     ):
         errors.append("Clean-install runner must download and merge all installer parts")
+    # Upload manifests alone are insufficient: independently compare the MSI
+    # Media table to the exact CAB set before running an installer.
+    media_checks = (
+        "$database.OpenView('SELECT `Cabinet` FROM `Media`')",
+        "$missing = @($requiredCabs | Where-Object { $_ -notin $actualCabs })",
+        "$unexpected = @($actualCabs | Where-Object { $_ -notin $requiredCabs })",
+        "if ($missing.Count -gt 0 -or $unexpected.Count -gt 0 -or $actualCabs.Count -ne $requiredCabs.Count)",
+    )
+    if any(marker not in acceptance_job for marker in media_checks):
+        errors.append("Clean-install runner must verify MSI Media table against all external CABs")
     return errors
 
 
