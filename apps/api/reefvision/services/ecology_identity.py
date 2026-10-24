@@ -215,6 +215,21 @@ class EcologyIdentityService:
         self._assert_experimental_units({**latest, organism_key: payload})
         return self._append(project_id, organism_key, current.revision + 1, payload)
 
+    @staticmethod
+    def _assert_image_source_metadata(image: ImageAsset) -> None:
+        """Reject malformed imported source metadata before publishing evidence.
+
+        This validates database metadata only; it does not read the managed
+        file or establish a reviewed biological observation.
+        """
+        digest = image.sha256
+        if len(digest) != 64 or any(
+            character not in "0123456789abcdefABCDEF" for character in digest
+        ):
+            raise ValidationError("Ecological image evidence has an invalid source SHA-256")
+        if image.width_px <= 0 or image.height_px <= 0 or image.file_size_bytes <= 0:
+            raise ValidationError("Ecological image evidence has invalid source dimensions or size")
+
     def link_image(
         self,
         project_id: str,
@@ -234,6 +249,7 @@ class EcologyIdentityService:
         image = self.session.get(ImageAsset, payload.image_id)
         if image is None or image.project_id != project_id:
             raise ValidationError("Image evidence must belong to the current project")
+        self._assert_image_source_metadata(image)
         existing = self.session.scalar(
             select(EcologyIdentityImageEvidence).where(
                 EcologyIdentityImageEvidence.project_id == project_id,
@@ -287,6 +303,7 @@ class EcologyIdentityService:
                 or image.sha256 != link.image_sha256
             ):
                 raise ValidationError("Ecological image evidence source is missing or changed")
+            self._assert_image_source_metadata(image)
         return links
 
     def registry(self, project_id: str) -> EcologyIdentityRegistryResponse:
