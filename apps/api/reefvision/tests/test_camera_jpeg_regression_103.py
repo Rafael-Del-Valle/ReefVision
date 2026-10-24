@@ -260,3 +260,30 @@ def test_invalid_camera_exif_offset_does_not_invent_utc_capture_time(
     metadata = client.get(f"/api/v1/images/{image_id}").json()
     assert metadata["capture_timestamp"] is None
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+@pytest.mark.parametrize(
+    ("offset", "expected_utc"),
+    [("-04:00", "2026-10-01T16:30:00"), ("+05:30", "2026-10-01T07:00:00")],
+)
+def test_real_camera_nested_exif_ifd_capture_time_and_provenance(
+    client: TestClient, offset: str, expected_utc: str
+) -> None:
+    """Real camera DateTimeOriginal lives in ExifIFD, not the top-level tags."""
+    project = create_project(client, "Camera nested EXIF IFD")
+    exif = Image.Exif()
+    # The top-level timestamp must not override the acquisition timestamp.
+    exif[306] = "2026:09:30 08:00:00"
+    exif[34665] = {36867: "2026:10:01 12:30:00", 36881: offset}
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_SUBIFD.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"].startswith(expected_utc)
+    assert metadata["metadata_json"]["exif"]["DateTimeOriginal"] == "2026:10:01 12:30:00"
+    assert metadata["metadata_json"]["exif"]["OffsetTimeOriginal"] == offset
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
