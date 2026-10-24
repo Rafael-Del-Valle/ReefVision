@@ -131,6 +131,20 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     assert comment.status_code == 201, comment.text
     assert client.get(event_url).json()["total"] == 1
 
+    # A manually triaged item produced by a saved executable workflow keeps
+    # its queue reference, scientific evidence and researcher-review gate.
+    triaged = client.post(
+        f"/api/v1/review-queues/{result['queue_id']}/items/bulk",
+        json={"item_ids": [item_id], "action": "start", "actor": "workflow reviewer"},
+    )
+    assert triaged.status_code == 200, triaged.text
+    assert triaged.json()["changed_count"] == 1
+    assert triaged.json()["requires_researcher_review"] is True
+    history = client.get(event_url).json()
+    assert history["total"] == 2
+    assert history["items"][1]["event_type"] == "triage_start"
+    assert history["items"][1]["actor"] == "workflow reviewer"
+
     with app.state.session_factory() as session:
         source = session.scalar(
             select(WorkflowArtifact).where(
