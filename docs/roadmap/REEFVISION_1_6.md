@@ -378,3 +378,22 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   the isolated 1.6 draft PR, but their exact-head CI was queued; native Windows
   installed-GUI, upgrade/rollback and scientific dataset acceptance remain
   **HOLD**.
+
+## 2026-10-24 — Complete configured-signal coverage on saved QC retries
+
+- Audited the existing 1.6 standalone QC scorer and executable, persisted
+  `qc_review_queue` Workflow Builder node. The scorer emits a value and
+  explanation for **every** configured weight; the v2 replay validator had
+  allowed a subset of those signals.
+- Versioned saved queues now require the exact configured signal set in both
+  raw and normalized evidence. A queue with re-signed digests, zeroed scores,
+  and omitted scientific signals cannot pass retry validation.
+- Added a regression that deliberately removes all scoring signals from a
+  saved snapshot and re-signs both the queue scope and item evidence; it must
+  fail closed. Legacy unversioned snapshots retain their historical path.
+- Fixed the exact Ruff I001 import-order error identified by CI at
+  `f81d925000ea452df5e2f8c8546a4d479331ee67` (17/20 passing; CI,
+  Pose, and 1.0 Acceptance blocked on that same error).
+- No model inference, reviewer approval, migration, or dataset changes.
+  Exact new-head CI, native Windows installed-GUI/upgrade/rollback, and
+  cross-version Alembic lineage acceptance remain required. **HOLD.**
