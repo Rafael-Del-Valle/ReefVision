@@ -37,7 +37,8 @@ def summarize_sampling_date_qc(
     """
     groups: dict[tuple[str, str], list[EcologyMeasurementCandidate]] = {}
     for candidate in candidates:
-        groups.setdefault((candidate.organism_key, candidate.metric), []).append(candidate)
+        key = (candidate.organism_key, candidate.metric)
+        groups.setdefault(key, []).append(candidate)
 
     rows: list[EcologySamplingDateQC] = []
     for (organism_key, metric), records in sorted(groups.items()):

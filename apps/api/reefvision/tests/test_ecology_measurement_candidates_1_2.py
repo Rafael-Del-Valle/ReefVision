@@ -9,8 +9,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import ImageAsset
-from reefvision.schemas.ecology_measurement_candidates import EcologyMeasurementCandidate
-from reefvision.services.ecology_measurement_candidates import summarize_sampling_date_qc
+from reefvision.schemas.ecology_measurement_candidates import (
+    EcologyMeasurementCandidate,
+)
+from reefvision.services.ecology_measurement_candidates import (
+    summarize_sampling_date_qc,
+)
 from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
     _link_calibration,
     _prepared_annotation,
@@ -164,10 +168,9 @@ def test_utc_date_qc_rejects_replicates_missing_dates_and_mixed_units(
     missing = second.model_copy(
         update={"capture_timestamp_utc": None, "capture_time_status": "missing"}
     )
-    assert summarize_sampling_date_qc([first, missing])[0].qc_status == "missing_timestamps"
-    assert summarize_sampling_date_qc([first, missing])[0].missing_timestamp_image_ids == [
-        "second-source-image"
-    ]
+    missing_qc = summarize_sampling_date_qc([first, missing])[0]
+    assert missing_qc.qc_status == "missing_timestamps"
+    assert missing_qc.missing_timestamp_image_ids == ["second-source-image"]
     mixed = second.model_copy(update={"unit": "cm"})
     assert summarize_sampling_date_qc([first, mixed])[0].qc_status == "mixed_units"
 
