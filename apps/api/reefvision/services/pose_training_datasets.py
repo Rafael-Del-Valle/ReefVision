@@ -653,7 +653,9 @@ class PoseTrainingDatasetService:
         if not isinstance(dataset.manifest_json, dict):
             raise ConflictError("Pose training dataset manifest must be a JSON object")
         if canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
-            raise ConflictError("Pose training dataset manifest checksum no longer matches frozen content")
+            raise ConflictError(
+                "Pose training dataset manifest checksum no longer matches frozen content"
+            )
         if not frozen_pose_item_fingerprints_match(self.session, dataset):
             raise ConflictError(
                 "Pose training dataset item lineage no longer matches persisted verified items"
