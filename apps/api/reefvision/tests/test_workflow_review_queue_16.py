@@ -56,6 +56,7 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     assert standalone.status_code == 201, standalone.text
     assert standalone.json()["item_count"] == 1
     assert len(standalone.json()["input_checksums_json"]["scoring_provenance_sha256"]) == 64
+    assert len(standalone.json()["input_checksums_json"]["item_evidence_sha256"]) == 64
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200, registry.text
@@ -106,6 +107,7 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     assert response.status_code == 200, response.text
     assert response.json()["created_by"].startswith("workflow:")
     assert len(response.json()["input_checksums_json"]["scoring_provenance_sha256"]) == 64
+    assert len(response.json()["input_checksums_json"]["item_evidence_sha256"]) == 64
 
     item_id = client.get(f"/api/v1/review-queues/{result['queue_id']}/items").json()["items"][0][
         "id"
@@ -172,6 +174,38 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             )
         saved_item.score = original_score
         session.flush()
+        # A score-only checksum cannot detect a rewritten scientific
+        # explanation. The full evidence digest must protect persisted signal
+        # contributions while leaving reviewer decisions editable.
+        original_breakdown = saved_item.score_breakdown_json
+        assert original_breakdown
+        saved_item.score_breakdown_json = [
+            {**original_breakdown[0], "contribution": 999.0},
+            *original_breakdown[1:],
+        ]
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        saved_item.score_breakdown_json = original_breakdown
+        session.flush()
+        assert (
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )[0]["payload"]["queue_id"]
+            == result["queue_id"]
+        )
         # The request may omit a QC run even when the service resolves one.
         # A changed stored configuration must never silently alter provenance.
         saved_queue = session.get(ReviewQueue, result["queue_id"])
