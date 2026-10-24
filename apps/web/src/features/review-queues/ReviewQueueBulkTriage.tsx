@@ -16,6 +16,7 @@ type BulkRequest = {
   item_ids: string[];
   action: ReviewQueueBulkAction;
   reason?: string;
+  actor: string;
 };
 
 function eligible(
@@ -36,6 +37,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
   const [action, setAction] = useState<ReviewQueueBulkAction>("start");
   const [selected, setSelected] = useState<string[]>([]);
   const [reason, setReason] = useState("");
+  const [actor, setActor] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [uncertainRequest, setUncertainRequest] = useState<BulkRequest | null>(
@@ -68,6 +70,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
   const ready =
     selectedIds.length > 0 &&
     selectedIds.length <= 100 &&
+    actor.trim().length > 0 &&
     confirmed &&
     (action !== "skip" || reason.trim().length > 0);
 
@@ -76,6 +79,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     mutation.mutate({
       item_ids: selectedIds,
       action,
+      actor: actor.trim(),
       ...(action === "skip" ? { reason: reason.trim() } : {}),
     });
   }
@@ -93,6 +97,19 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
         Only visible eligible items can be selected. These actions never approve
         model predictions or verify scientific observations.
       </p>
+      <label>
+        Local reviewer label (self-reported, not an authenticated account)
+        <input
+          aria-label="Bulk triage reviewer label"
+          maxLength={100}
+          disabled={locked}
+          value={actor}
+          onChange={(event) => {
+            setActor(event.target.value);
+            setConfirmed(false);
+          }}
+        />
+      </label>
       <label>
         Triage action
         <select
