@@ -47,6 +47,34 @@ PACKAGE_MANIFEST_FILENAME = "reefvision-pose-training-manifest.json"
 PACKAGE_ITEMS_FILENAME = "items.jsonl"
 
 
+def frozen_pose_item_fingerprints_match(
+    session: Session,
+    dataset: PoseTrainingDataset,
+) -> bool:
+    """Compare signed item summaries with independently persisted frozen items."""
+    manifest = dataset.manifest_json
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("items"), list):
+        return False
+
+    rows = session.scalars(
+        select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset.id)
+    ).all()
+    if len(rows) != dataset.item_count:
+        return False
+
+    expected = {row.id: (row.item_sha256, row.verified_pose_sha256) for row in rows}
+    observed: dict[str, tuple[str | None, str | None]] = {}
+    for summary in manifest["items"]:
+        if not isinstance(summary, dict) or not isinstance(summary.get("item_id"), str):
+            return False
+        item_id = summary["item_id"]
+        if item_id in observed:
+            return False
+        observed[item_id] = (summary.get("item_sha256"), summary.get("verified_pose_sha256"))
+    return observed == expected
+
+
+
 class PoseTrainingDatasetService:
     def __init__(self, session: Session) -> None:
         self.session = session
