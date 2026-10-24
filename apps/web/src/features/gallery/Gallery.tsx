@@ -56,6 +56,12 @@ function ImageCard({
     image.annotation_status,
   );
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const thumbnailVersion = image.thumbnail_path
+    ? encodeURIComponent(image.thumbnail_path)
+    : null;
+  const thumbnailUrl = thumbnailVersion
+    ? `${imageThumbnailUrl(image.id)}&rv_thumb=${thumbnailVersion}`
+    : null;
 
   useEffect(() => {
     setGroupKey(image.group_key ?? "");
@@ -96,9 +102,9 @@ function ImageCard({
       }}
     >
       <div className="thumbnail-frame">
-        {image.thumbnail_path && !thumbnailFailed ? (
+        {thumbnailUrl && !thumbnailFailed ? (
           <img
-            src={`${imageThumbnailUrl(image.id)}&rv_thumb=${encodeURIComponent(image.thumbnail_path)}`}
+            src={thumbnailUrl}
             alt={`Thumbnail of ${image.original_filename}`}
             loading="lazy"
             decoding="async"
