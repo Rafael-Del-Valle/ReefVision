@@ -191,6 +191,22 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             )
         saved_queue.configuration_json = original_config
         session.flush()
+        # The saved workflow must also reject altered scoring provenance,
+        # even when the original item scores and scope checksum are intact.
+        original_formula_version = saved_queue.formula_version
+        saved_queue.formula_version = "unverified-scoring-version"
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        saved_queue.formula_version = original_formula_version
+        session.flush()
         restored = execute_runtime_adapter(
             "qc_review_queue",
             session=session,
