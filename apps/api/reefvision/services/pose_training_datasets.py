@@ -62,6 +62,30 @@ def frozen_pose_item_fingerprints_match(
     if len(rows) != dataset.item_count:
         return False
 
+    # A matching manifest and item_sha256 column cannot prove that the
+    # persisted canonical landmarks are still the scientist-verified pose.
+    # Recompute the original verification fingerprint from frozen row data.
+    for row in rows:
+        canonical_pose = row.canonical_pose_json
+        if (
+            not isinstance(canonical_pose, dict)
+            or canonical_pose.get("schema_version") != "reefvision-canonical-pose-frame-0001"
+            or canonical_pose.get("frame_index") != row.frame_index
+        ):
+            return False
+        verified_payload = {
+            "schema_version": "pose-active-learning-verified-pose-0001",
+            "video_track_id": row.video_track_id,
+            "track_revision": row.verified_track_revision,
+            "focus_frame": row.frame_index,
+            "pose_schema_id": row.pose_schema_id,
+            "pose_schema_revision": row.pose_schema_revision,
+            "pose_observations": canonical_pose.get("pose_observations"),
+            "keypoints": canonical_pose.get("keypoints"),
+        }
+        if canonical_json_sha256(verified_payload) != row.verified_pose_sha256:
+            return False
+
     # Fingerprints alone do not bind the manifest's source identities to
     # persisted items: a re-signed summary could otherwise swap candidate,
     # video, track, frame, or schema lineage without changing item_sha256.
