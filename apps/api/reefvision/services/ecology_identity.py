@@ -113,14 +113,10 @@ class EcologyIdentityService:
                     else None
                 )
                 if lineage is None:
-                    raise ValidationError(
-                        "Colony-level units require a registered parent colony"
-                    )
+                    raise ValidationError("Colony-level units require a registered parent colony")
                 parent = latest.get(lineage)
                 if parent is None or parent.kind != "colony":
-                    raise ValidationError(
-                        "Colony-level units require a registered parent colony"
-                    )
+                    raise ValidationError("Colony-level units require a registered parent colony")
                 unit_key = (normalized_type, unit_id)
                 prior = colony_units.setdefault(unit_key, lineage)
                 if prior != lineage:
@@ -183,14 +179,9 @@ class EcologyIdentityService:
         if (
             current.kind == "colony"
             and payload.kind != "colony"
-            and any(
-                row.parent_colony_key == organism_key
-                for row in latest.values()
-            )
+            and any(row.parent_colony_key == organism_key for row in latest.values())
         ):
-            raise ValidationError(
-                "Cannot reclassify a parent colony while fragments reference it"
-            )
+            raise ValidationError("Cannot reclassify a parent colony while fragments reference it")
         self._parent_valid(organism_key, payload, latest)
         self._assert_experimental_units({**latest, organism_key: payload})
         return self._append(project_id, organism_key, current.revision + 1, payload)
@@ -201,8 +192,7 @@ class EcologyIdentityService:
         self._assert_parent_links(latest)
         self._assert_experimental_units(latest)
         identities = [
-            EcologyIdentityRow.model_validate(record)
-            for _, record in sorted(latest.items())
+            EcologyIdentityRow.model_validate(record) for _, record in sorted(latest.items())
         ]
         fingerprint_rows = [
             {
@@ -220,7 +210,10 @@ class EcologyIdentityService:
             project_id=project_id,
             identities=identities,
             snapshot_sha256=canonical_json_sha256(
-                {"schema_version": "ecology-identity-registry-0001",
-                 "project_id": project_id, "identities": fingerprint_rows}
+                {
+                    "schema_version": "ecology-identity-registry-0001",
+                    "project_id": project_id,
+                    "identities": fingerprint_rows,
+                }
             ),
         )
