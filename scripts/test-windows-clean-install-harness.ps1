@@ -159,6 +159,18 @@ Assert-True ($acceptanceScript.Contains('qcSkipRetry.changed_count -ne 0')) 'Ins
 Assert-True ($acceptanceScript.Contains('qcPersistedEvents.total -ne 5')) 'Installed QC audit history must be checked after desktop restart.'
 Assert-True ($acceptanceScript.Contains('qcPersistedAnnotations.annotations')) 'Installed QC acceptance must preserve the original annotation.'
 
+# Verify packaged class visibility is exercised against the installed API and
+# checked after the first restart (or real MSI upgrade), not only TestClient.
+Assert-True ($acceptanceScript.Contains('class_visibility_persistence = New-ReefVisionEvidenceResult')) 'Packaged class visibility acceptance evidence field is missing.'
+Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/class-visibility"')) 'Packaged class visibility must use the isolated project API.'
+Assert-True ($acceptanceScript.Contains('"$visibilityUrl/defaults/annotations"')) 'Packaged project class visibility default is not persisted.'
+Assert-True ($acceptanceScript.Contains('"$visibilityUrl/preferences/annotations"')) 'Packaged local-user visibility override is not persisted.'
+Assert-True ($acceptanceScript.Contains('hidden_class_ids = @()')) 'Packaged class visibility must test an explicit empty override.'
+Assert-True ($acceptanceScript.Contains('$persistedVisibility = Invoke-RestMethod $visibilityUrl')) 'Packaged class visibility is not reloaded after restart.'
+Assert-True ($acceptanceScript.Contains('$persistedVisibility.user_identity -ne $visibilityIdentity')) 'Packaged local-user identity stability is not checked.'
+Assert-True ($acceptanceScript.Contains('$persistedVisibility.project_defaults.annotations.hidden_class_ids[0] -ne $testClass.id')) 'Packaged project visibility default is not checked after restart.'
+Assert-True ($acceptanceScript.Contains('@($persistedVisibility.user_preferences.annotations.hidden_class_ids).Count -ne 0')) 'Packaged explicit empty preference is not checked after restart.'
+
 # Guard the packaged acceptance request against retired project templates and
 # legacy model catalog selectors. Production API supports blank projects only.
 Assert-True ($acceptanceScript.Contains("template='blank'")) 'Acceptance project must use the supported blank template.'
