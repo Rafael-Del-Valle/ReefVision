@@ -315,10 +315,7 @@ class EcologyIdentityService:
             if len(values) != 4 or not all(math.isfinite(value) for value in values):
                 raise ValidationError("Ecological annotation has nonfinite source-pixel bounds")
             x_min, y_min, x_max, y_max = values
-            if not (
-                0 <= x_min < x_max <= image.width_px
-                and 0 <= y_min < y_max <= image.height_px
-            ):
+            if not (0 <= x_min < x_max <= image.width_px and 0 <= y_min < y_max <= image.height_px):
                 raise ValidationError("Ecological annotation bounds extend outside source image")
 
         if isinstance(annotation, MaskAnnotation):
