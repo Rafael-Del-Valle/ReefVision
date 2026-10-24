@@ -106,6 +106,7 @@ def test_mixed_msi_versions_are_rejected() -> None:
 CAB_WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
 
 
+
 def test_windows_cab_guard_accepts_five_or_six_contiguous_cabinets() -> None:
     """CAB counts vary with payload size; the MSI Media table remains authoritative."""
     assert "$actual.Count -notin @(5, 6)" in CAB_WORKFLOW
