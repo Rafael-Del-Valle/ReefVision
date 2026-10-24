@@ -470,6 +470,28 @@ def test_v2_rejects_resigned_inconsistent_scientific_explanation(corruption):
         validate_saved_queue_snapshot(queue, items)
 
 
+
+def test_v2_rejects_resigned_omission_of_configured_scoring_signal():
+    """A re-signed snapshot cannot silently omit a configured QC signal."""
+    queue, items = snapshot()
+    for item in items:
+        item.signal_values_json = {}
+        item.normalized_signals_json = {}
+        item.score_breakdown_json = []
+        item.score = 0.0
+    queue.summary_json["average_score"] = 0.0
+    queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+        {
+            "image_ids": ["img-a", "img-b"],
+            "scores": {"img-a": 0.0, "img-b": 0.0},
+            "source_quality_control_run_id": None,
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
 def test_v2_rejects_resigned_score_with_updated_scope_and_summary():
     """All recorded digests and summary may agree while the score formula does not."""
     queue, items = snapshot()
