@@ -940,3 +940,26 @@ centerline growth, image annotation review is not biological identity review,
 and tank/colony independence is not proven. No survival, p-values or verified
 longitudinal records are claimed. Scientific datasets, calibrated real-image
 checks, complete CI and installed Windows acceptance remain outstanding.
+
+
+## Source-linked UTC sampling-date QC (2026-10-24; development only)
+
+The project-owned calibrated-measurement-candidates API and the executable,
+persisted `ecology_identity_registry_source` Workflow Builder output now include
+typed `sampling_date_qc` records for each organism/metric. The shared backend
+audit normalizes timezone-aware capture timestamps to **UTC calendar dates**,
+reports missing timestamps, mixed physical units, duplicate same-day technical
+replicates and insufficient follow-up dates. A `date_series_candidate` status
+requires at least two distinct UTC sampling dates, no missing timestamps,
+no duplicate date measurements and consistent declared units. This is only
+a date-series *screening result*, **not** a verified longitudinal observation
+or a biological growth calculation. All records remain `linked_unverified`
+with `scientist_review_required`; perspective exclusions remain explicit.
+The deterministic input fingerprint includes the typed QC rows and uses
+algorithm version `ecology-measurement-candidates-0002` while retaining the
+additive response schema for compatibility. Standalone API, saved-workflow
+artifact parity and scientific QC regressions cover the new output. Existing
+migration `b12_identity_0004` is unchanged. Authenticated observation dates,
+identity confirmation, experimental-unit registration, verified source datasets,
+independent scientific review, full exact-head CI and installed Windows
+acceptance remain outstanding.

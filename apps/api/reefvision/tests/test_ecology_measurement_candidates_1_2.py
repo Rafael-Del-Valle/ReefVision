@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta, timezone
 from typing import cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import ImageAsset
+from reefvision.schemas.ecology_measurement_candidates import EcologyMeasurementCandidate
+from reefvision.services.ecology_measurement_candidates import summarize_sampling_date_qc
 from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
     _link_calibration,
     _prepared_annotation,
@@ -42,6 +45,15 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     assert all(row["capture_time_status"] == "missing" for row in payload["candidates"])
     assert all(row["capture_timestamp_utc"] is None for row in payload["candidates"])
     assert len(payload["input_sha256"]) == 64
+    assert len(payload["sampling_date_qc"]) == 2
+    assert all(
+        row["qc_status"] == "missing_timestamps"
+        for row in payload["sampling_date_qc"]
+    )
+    assert all(
+        row["review_gate"] == "scientist_review_required"
+        for row in payload["sampling_date_qc"]
+    )
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200
@@ -112,3 +124,61 @@ def test_perspective_transform_is_explicitly_excluded_not_scaled(
     ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == payload
+
+
+def test_utc_date_qc_rejects_replicates_missing_dates_and_mixed_units(
+    client: TestClient,
+) -> None:
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    candidate = EcologyMeasurementCandidate.model_validate(
+        _get(client, project_id).json()["candidates"][0]
+    )
+    first = candidate.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    second = first.model_copy(
+        update={
+            "image_id": "second-source-image",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 9, tzinfo=UTC),
+        }
+    )
+    ready = summarize_sampling_date_qc([second, first])[0]
+    assert ready.qc_status == "date_series_candidate"
+    assert ready.sampling_dates_utc == ["2026-04-03", "2026-04-04"]
+    assert ready.candidate_count == 2
+    assert ready.review_gate == "scientist_review_required"
+    assert summarize_sampling_date_qc([first])[0].qc_status == "insufficient_dates"
+
+    same_day = second.model_copy(
+        update={"capture_timestamp_utc": datetime(2026, 4, 3, 11, tzinfo=UTC)}
+    )
+    duplicate = summarize_sampling_date_qc([first, same_day])[0]
+    assert duplicate.qc_status == "same_day_technical_replicates"
+    assert duplicate.duplicate_sampling_dates_utc == ["2026-04-03"]
+
+    missing = second.model_copy(
+        update={"capture_timestamp_utc": None, "capture_time_status": "missing"}
+    )
+    assert summarize_sampling_date_qc([first, missing])[0].qc_status == "missing_timestamps"
+    assert summarize_sampling_date_qc([first, missing])[0].missing_timestamp_image_ids == [
+        "second-source-image"
+    ]
+    mixed = second.model_copy(update={"unit": "cm"})
+    assert summarize_sampling_date_qc([first, mixed])[0].qc_status == "mixed_units"
+
+    # Local capture dates differ, but both must be normalized to UTC first.
+    local_time = second.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(
+                2026, 4, 3, 23, 30, tzinfo=timezone(-timedelta(hours=5))
+            )
+        }
+    )
+    assert summarize_sampling_date_qc([first, local_time])[0].qc_status == (
+        "date_series_candidate"
+    )

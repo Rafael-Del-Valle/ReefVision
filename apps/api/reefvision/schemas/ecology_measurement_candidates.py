@@ -37,6 +37,28 @@ class EcologyMeasurementExclusion(BaseModel):
     reason: Literal["perspective_transform_requires_review", "unsupported_geometry"]
 
 
+class EcologySamplingDateQC(BaseModel):
+    """Conservative per-organism/metric UTC-date audit of unverified sources."""
+
+    organism_key: str
+    metric: Literal["box_width", "box_height", "mask_projected_area"]
+    candidate_count: int = Field(ge=1)
+    source_image_ids: list[str]
+    units: list[str]
+    sampling_dates_utc: list[str]
+    duplicate_sampling_dates_utc: list[str]
+    missing_timestamp_image_ids: list[str]
+    qc_status: Literal[
+        "mixed_units",
+        "missing_timestamps",
+        "same_day_technical_replicates",
+        "insufficient_dates",
+        "date_series_candidate",
+    ]
+    evidence_level: Literal["linked_unverified"] = "linked_unverified"
+    review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+
 class EcologyMeasurementCandidatesResponse(BaseModel):
     schema_version: Literal["ecology-measurement-candidates-0001"] = (
         "ecology-measurement-candidates-0001"
@@ -46,6 +68,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
     source_calibration_evidence_sha256: str | None
     candidates: list[EcologyMeasurementCandidate] = Field(default_factory=list)
     candidate_count: int = 0
+    sampling_date_qc: list[EcologySamplingDateQC] = Field(default_factory=list)
     exclusions: list[EcologyMeasurementExclusion] = Field(default_factory=list)
     input_sha256: str
     evidence_level: Literal["linked_unverified"] = "linked_unverified"

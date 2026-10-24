@@ -8,7 +8,7 @@ to scientist review. No predictions or unreviewed source masks are accepted.
 from __future__ import annotations
 
 import math
-from datetime import timezone
+from datetime import UTC
 
 from sqlalchemy.orm import Session
 
@@ -21,9 +21,70 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
     EcologyMeasurementCandidatesResponse,
     EcologyMeasurementExclusion,
+    EcologySamplingDateQC,
 )
 from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.storage.datasets import canonical_json_sha256
+
+
+def summarize_sampling_date_qc(
+    candidates: list[EcologyMeasurementCandidate],
+) -> list[EcologySamplingDateQC]:
+    """Audit candidate dates without converting unverified evidence into growth.
+
+    Each organism/metric is evaluated separately. Multiple captures on the
+    same UTC day are technical replicates, not independent time points.
+    """
+    groups: dict[tuple[str, str], list[EcologyMeasurementCandidate]] = {}
+    for candidate in candidates:
+        groups.setdefault((candidate.organism_key, candidate.metric), []).append(candidate)
+
+    rows: list[EcologySamplingDateQC] = []
+    for (organism_key, metric), records in sorted(groups.items()):
+        date_counts: dict[str, int] = {}
+        missing_timestamp_image_ids: set[str] = set()
+        for record in records:
+            captured = record.capture_timestamp_utc
+            if (
+                record.capture_time_status != "timezone_aware"
+                or captured is None
+                or captured.tzinfo is None
+                or captured.utcoffset() is None
+            ):
+                missing_timestamp_image_ids.add(record.image_id)
+                continue
+            utc_date = captured.astimezone(UTC).date().isoformat()
+            date_counts[utc_date] = date_counts.get(utc_date, 0) + 1
+
+        units = sorted({record.unit for record in records})
+        duplicate_dates = sorted(
+            date for date, count in date_counts.items() if count > 1
+        )
+        if len(units) > 1:
+            qc_status = "mixed_units"
+        elif missing_timestamp_image_ids:
+            qc_status = "missing_timestamps"
+        elif duplicate_dates:
+            qc_status = "same_day_technical_replicates"
+        elif len(date_counts) < 2:
+            qc_status = "insufficient_dates"
+        else:
+            qc_status = "date_series_candidate"
+
+        rows.append(
+            EcologySamplingDateQC(
+                organism_key=organism_key,
+                metric=metric,
+                candidate_count=len(records),
+                source_image_ids=sorted({record.image_id for record in records}),
+                units=units,
+                sampling_dates_utc=sorted(date_counts),
+                duplicate_sampling_dates_utc=duplicate_dates,
+                missing_timestamp_image_ids=sorted(missing_timestamp_image_ids),
+                qc_status=qc_status,
+            )
+        )
+    return rows
 
 
 class EcologyMeasurementCandidateService:
@@ -108,7 +169,7 @@ class EcologyMeasurementCandidateService:
                 captured_utc = None
             else:
                 time_status = "timezone_aware"
-                captured_utc = captured.astimezone(timezone.utc)
+                captured_utc = captured.astimezone(UTC)
             for metric, value, metric_unit in values:
                 if not math.isfinite(value) or value <= 0:
                     raise ValidationError(
@@ -146,17 +207,20 @@ class EcologyMeasurementCandidateService:
                 row.metric,
             )
         )
+        sampling_date_qc = summarize_sampling_date_qc(candidates)
         rows = [row.model_dump(mode="json") for row in candidates]
+        qc_rows = [row.model_dump(mode="json") for row in sampling_date_qc]
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0001",
+                "algorithm_version": "ecology-measurement-candidates-0002",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
                 "registry_annotation_evidence_sha256": snapshot.annotation_evidence_sha256,
                 "registry_calibration_evidence_sha256": snapshot.calibration_evidence_sha256,
                 "candidates": rows,
+                "sampling_date_qc": qc_rows,
                 "exclusions": skipped,
             }
         )
@@ -166,6 +230,7 @@ class EcologyMeasurementCandidateService:
             source_calibration_evidence_sha256=snapshot.calibration_evidence_sha256,
             candidates=candidates,
             candidate_count=len(candidates),
+            sampling_date_qc=sampling_date_qc,
             exclusions=exclusions,
             input_sha256=fingerprint,
         )
