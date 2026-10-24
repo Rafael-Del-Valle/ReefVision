@@ -19,6 +19,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_runtime_adapters import execute_runtime_adapter
+from reefvision.services.workflow_review_queue_integrity import queue_item_evidence_sha256
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -212,6 +213,27 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
                 parameters=params,
                 inputs={"project": [source]},
             )
+        # Even if a saved checksum is re-signed to match the modified
+        # explanation, the persisted formula and scientific evidence must
+        # agree before a saved Workflow Builder retry can reuse the queue.
+        saved_queue = session.get(ReviewQueue, result["queue_id"])
+        assert saved_queue is not None
+        original_checksums = dict(saved_queue.input_checksums_json)
+        saved_queue.input_checksums_json = {
+            **original_checksums,
+            "item_evidence_sha256": queue_item_evidence_sha256([saved_item]),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        saved_queue.input_checksums_json = original_checksums
         saved_item.score_breakdown_json = original_breakdown
         session.flush()
         assert (
