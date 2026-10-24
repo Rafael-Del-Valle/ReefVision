@@ -241,7 +241,9 @@ def execute_mesh_longitudinal_comparison(
             or artifacts[0].data_type != "mesh_measurement_preview"
             or (artifacts[0].payload_json or {}).get("project_id") != project_id
         ):
-            raise ValidationError("Each longitudinal input must be one current-project mesh preview")
+            raise ValidationError(
+                "Each longitudinal input must be one current-project mesh preview"
+            )
         records.append(artifacts[0].payload_json)
     try:
         result = compare_mesh_observations(records[0], records[1])
