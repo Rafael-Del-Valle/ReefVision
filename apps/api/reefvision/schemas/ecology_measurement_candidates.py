@@ -129,6 +129,17 @@ class EcologyProjectedPopulationSummary(BaseModel):
     units_missing_parent_colony: list[str]
     mean_unit_absolute_change: float = Field(allow_inf_nan=False)
     mean_unit_percent_change: float = Field(allow_inf_nan=False)
+    sample_sd_unit_absolute_change: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    sample_sd_unit_percent_change: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    design_review_blockers: list[
+        Literal[
+            "independence_not_authenticated",
+            "single_declared_unit",
+            "shared_parent_colonies",
+            "missing_parent_colony",
+        ]
+    ] = Field(default_factory=list)
+    independent_unit_inference_allowed: Literal[False] = False
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
