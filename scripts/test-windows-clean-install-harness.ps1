@@ -15,6 +15,14 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     }
     $script:passed++
 }
+function Assert-ThrowsContaining([scriptblock]$Action, [string]$ExpectedText) {
+    $failure = $null
+    try { & $Action | Out-Null } catch { $failure = $_.Exception.Message }
+    if ($null -eq $failure -or -not $failure.Contains($ExpectedText)) {
+        throw "Expected failure containing '$ExpectedText'; received '$failure'"
+    }
+    $script:passed++
+}
 
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $OldConfig = $env:REEFVISION_CONFIG_DIR
@@ -42,6 +50,40 @@ Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $Root 'reef
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $Root -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Repository root must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $defaultData -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Normal app-data root must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Split-Path -Parent $defaultData) -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Parent of normal app-data root must be rejected.'
+
+# A junction that looks like a disposable directory must not redirect MSI
+# installation or later recursive cleanup into an unrelated research tree.
+$fixtureRoot = Join-Path $env:TEMP ('rv-acceptance-link-test-' + [guid]::NewGuid().ToString('N'))
+$externalRoot = Join-Path $fixtureRoot 'external'
+$linkedRoot = Join-Path $fixtureRoot 'linked'
+$nestedLink = Join-Path $externalRoot 'nested-link'
+$externalSentinel = Join-Path $externalRoot 'preserve.txt'
+try {
+    New-Item -ItemType Directory -Path $externalRoot -Force | Out-Null
+    Set-Content -LiteralPath $externalSentinel -Value 'research assets stay untouched'
+    $originalHash = (Get-FileHash -LiteralPath $externalSentinel -Algorithm SHA256).Hash
+    New-Item -ItemType Junction -Path $linkedRoot -Target $externalRoot | Out-Null
+    Assert-ThrowsContaining {
+        Assert-ReefVisionSafeAcceptanceRoot -Path $linkedRoot -RepositoryRoot $Root -DefaultDataRoot $defaultData
+    } 'symlink/junction'
+    Assert-ThrowsContaining {
+        Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $linkedRoot 'new-run') -RepositoryRoot $Root -DefaultDataRoot $defaultData
+    } 'symlink/junction'
+    New-Item -ItemType Junction -Path $nestedLink -Target $fixtureRoot | Out-Null
+    Assert-ThrowsContaining {
+        Assert-ReefVisionAcceptanceTreeNoReparsePoints -Path $externalRoot
+    } 'symlink/junction'
+    Assert-True ((Get-FileHash -LiteralPath $externalSentinel -Algorithm SHA256).Hash -eq $originalHash) 'Junction rejection changed external data.'
+}
+finally {
+    # Remove only our two junction entries before removing our disposable
+    # directories. Never recurse into a junction target.
+    if (Test-Path -LiteralPath $nestedLink) { Remove-Item -LiteralPath $nestedLink -Force }
+    if (Test-Path -LiteralPath $linkedRoot) { Remove-Item -LiteralPath $linkedRoot -Force }
+    if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force }
+}
+$acceptanceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'acceptance-windows-clean-install.ps1') -Raw
+Assert-True ($acceptanceSource.Contains('Assert-ReefVisionAcceptanceTreeNoReparsePoints -Path $RunRoot')) 'MSI acceptance cleanup must recheck linked descendants.'
 
 $arguments = New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -InstallRoot 'C:\rv-test\install' -LogPath 'C:\rv-test\install.log'
 Assert-True ($arguments[0] -eq '/i') 'Install command does not use /i.'
