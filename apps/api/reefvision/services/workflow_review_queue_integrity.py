@@ -21,6 +21,74 @@ def _finite_scientific_number(value: Any) -> bool:
     return type(value) in (int, float) and isfinite(value)
 
 
+def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
+    """Cross-check saved component explanations against the deterministic formula.
+
+    A checksum alone cannot establish that a re-signed saved explanation is
+    scientifically self-consistent. Compare against persisted signals only:
+    never rescore live annotations or change mutable reviewer decisions.
+    """
+    raw = item.signal_values_json
+    normalized = item.normalized_signals_json
+    breakdown = item.score_breakdown_json
+    if (
+        not isinstance(raw, dict)
+        or not isinstance(normalized, dict)
+        or not isinstance(breakdown, list)
+        or raw.keys() != normalized.keys()
+        or len(breakdown) != len(raw)
+        or not set(raw).issubset(weights)
+        or any(not _finite_scientific_number(value) for value in raw.values())
+        or any(
+            not _finite_scientific_number(value) or not 0 <= value <= 1
+            for value in normalized.values()
+        )
+    ):
+        return False
+
+    total_weight = float(sum(weights.values()) or 1.0)
+    if not isfinite(total_weight) or total_weight <= 0:
+        return False
+
+    seen: set[str] = set()
+    for part in breakdown:
+        if not isinstance(part, dict):
+            return False
+        signal_id = part.get("signal_id")
+        if (
+            not isinstance(signal_id, str)
+            or signal_id not in raw
+            or signal_id in seen
+            or any(
+                not _finite_scientific_number(part.get(field))
+                for field in ("raw_value", "normalized_value", "weight", "contribution")
+            )
+        ):
+            return False
+        seen.add(signal_id)
+        expected_contribution = round(
+            (normalized[signal_id] * weights[signal_id] / total_weight) * 100.0, 2
+        )
+        if (
+            part["raw_value"] != float(raw[signal_id])
+            or part["normalized_value"] != round(normalized[signal_id], 6)
+            or part["weight"] != float(weights[signal_id])
+            or part["contribution"] != expected_contribution
+        ):
+            return False
+
+    expected_score = round(
+        sum(normalized[signal] * weights[signal] / total_weight * 100.0 for signal in raw),
+        2,
+    )
+    return (
+        len(seen) == len(raw)
+        and item.score == expected_score
+        and breakdown
+        == sorted(breakdown, key=lambda part: (-part["contribution"], part["signal_id"]))
+    )
+
+
 def queue_item_evidence_sha256(items: Sequence[Any]) -> str:
     """Digest immutable scientific queue evidence, excluding mutable reviewer decisions.
 
@@ -154,33 +222,12 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             or not 0 <= item.score <= 100
         ):
             raise invalid
-        # v2 queues must contain finite, dimensionless scientific evidence.
-        # JSON can encode NaN/Infinity in Python, but those values cannot
-        # represent reproducible normalized scores on a saved workflow retry.
-        if integrity_version == "qc-review-queue-v2":
-            raw_signals = item.signal_values_json
-            normalized_signals = item.normalized_signals_json
-            breakdown = item.score_breakdown_json
-            if (
-                not isinstance(raw_signals, dict)
-                or not isinstance(normalized_signals, dict)
-                or not isinstance(breakdown, list)
-                or raw_signals.keys() != normalized_signals.keys()
-                or any(not _finite_scientific_number(v) for v in raw_signals.values())
-                or any(
-                    not _finite_scientific_number(v) or not 0 <= v <= 1
-                    for v in normalized_signals.values()
-                )
-                or any(
-                    not isinstance(part, dict)
-                    or any(
-                        not _finite_scientific_number(part.get(field))
-                        for field in ("raw_value", "normalized_value", "weight", "contribution")
-                    )
-                    for part in breakdown
-                )
-            ):
-                raise invalid
+        # Versioned snapshots must preserve both finite scientific evidence
+        # and its deterministic per-signal/aggregate score explanation.
+        if integrity_version == "qc-review-queue-v2" and not _valid_v2_score_explanation(
+            item, weights
+        ):
+            raise invalid
         scores[item.image_id] = item.score
         ranks.add(item.rank_position)
     if ranks != set(range(1, saved_count + 1)):
