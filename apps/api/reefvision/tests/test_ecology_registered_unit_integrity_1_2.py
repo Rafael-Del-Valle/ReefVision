@@ -242,3 +242,109 @@ def test_imported_unit_collision_blocks_registry_and_saved_workflow(
         artifact["data_type"] == "ecology_identity_registry"
         for artifact in detail.json()["artifacts"]
     )
+
+
+def test_colony_unit_split_rejected_in_api_and_workflow(client: TestClient) -> None:
+    project_id = str(create_project(client, "No split colony replicates")["id"])
+    registry_url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
+    assert _register(client, project_id, "parent-16").status_code == 201
+    for fragment in ("fragment-16a", "fragment-16b"):
+        created = _register(
+            client,
+            project_id,
+            fragment,
+            "fragment",
+            parent_colony_key="parent-16",
+            experimental_unit_type="colony",
+            experimental_unit_id="colony-unit-1",
+        )
+        assert created.status_code == 201, created.text
+    before = client.get(registry_url).json()
+    split = _register(
+        client,
+        project_id,
+        "fragment-16c",
+        "fragment",
+        parent_colony_key="parent-16",
+        experimental_unit_type="colony",
+        experimental_unit_id="colony-unit-2",
+    )
+    assert split.status_code == 400, split.text
+    assert "split across colony-level units" in split.json()["detail"]
+    revision = client.post(
+        f"/api/v1/projects/{project_id}/ecology/organisms/fragment-16b/revisions",
+        json={
+            "expected_revision": 1,
+            "kind": "fragment",
+            "parent_colony_key": "parent-16",
+            "experimental_unit_type": "colony",
+            "experimental_unit_id": "colony-unit-2",
+            "reason": "Proposed independent unit correction",
+        },
+    )
+    assert revision.status_code == 400, revision.text
+    assert client.get(registry_url).json() == before
+
+    # An imported revision can bypass the API; registry snapshots must fail.
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        session.add(
+            EcologyIdentityRevision(
+                project_id=project_id,
+                organism_key="fragment-16b",
+                revision=2,
+                kind="fragment",
+                parent_colony_key="parent-16",
+                experimental_unit_type="colony",
+                experimental_unit_id="colony-unit-2",
+                reason="Simulated invalid independent-unit import",
+            )
+        )
+        session.commit()
+    invalid = client.get(registry_url)
+    assert invalid.status_code == 400, invalid.text
+    assert "split across colony-level units" in invalid.json()["detail"]
+
+    graph: dict[str, Any] = {
+        "graph_id": "ecology-split-colony-1-2",
+        "name": "Reject duplicated colony replicates",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert "split across colony-level units" in detail.json()["run"]["error_message"]
+    assert not any(
+        artifact["data_type"] == "ecology_identity_registry"
+        for artifact in detail.json()["artifacts"]
+    )
