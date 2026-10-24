@@ -236,9 +236,18 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         )
 
 
+@pytest.mark.parametrize(
+    ("tamper_mode", "expected_error"),
+    [
+        ("changed_content", "manifest checksum"),
+        ("non_object", "manifest must be a JSON object"),
+    ],
+)
 def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    tamper_mode: str,
+    expected_error: str,
 ) -> None:
     project, dataset = _frozen_dataset(client, monkeypatch)
     project_id = str(project["id"])
@@ -273,9 +282,12 @@ def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
     with app.state.session_factory() as session:
         frozen = session.get(PoseTrainingDataset, dataset_id)
         assert frozen is not None
-        changed_manifest = dict(frozen.manifest_json)
-        changed_manifest["truth_policy"] = "tampered_after_queue"
-        frozen.manifest_json = changed_manifest
+        if tamper_mode == "non_object":
+            frozen.manifest_json = ["not-a-frozen-pose-manifest"]
+        else:
+            changed_manifest = dict(frozen.manifest_json)
+            changed_manifest["truth_policy"] = "tampered_after_queue"
+            frozen.manifest_json = changed_manifest
         session.commit()
 
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
@@ -284,6 +296,15 @@ def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
     assert plan.json()["executable"] is False
     issue_codes = {issue["code"] for issue in plan.json()["issues"]}
     assert "pose_dataset_manifest_corrupt" in issue_codes
+
+    # The independent runtime adapter must reject malformed frozen truth too.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match=expected_error),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
 
     assert (
         process_workflow_run_job(
@@ -298,5 +319,5 @@ def test_frozen_pose_manifest_tampering_fails_saved_workflow_execution(
     result = detail.json()
     assert result["run"]["status"] == "failed"
     assert "pose_dataset_manifest_corrupt" in result["run"]["error_message"]
-    assert "manifest checksum" in result["run"]["error_message"]
+    assert expected_error in result["run"]["error_message"]
     assert result["artifacts"] == []
