@@ -99,6 +99,29 @@ def test_log_tail_discards_unterminated_terminal_title(tmp_path: Path) -> None:
     assert log.read_bytes() == original
 
 
+def test_log_tail_strips_bidi_spoofing(tmp_path: Path) -> None:
+    """Invisible Unicode direction controls must not spoof scientific losses."""
+    log = tmp_path / "training.log"
+    original = (
+        "train/box_loss=\u202e0.25\u202c\n"
+        "train/cls_loss=\u20660.30\u2069\n"
+        "train/dfl_loss=\u200e0.10\u200f\n"
+        "sensor=24 °C; scale=10 µm\n"
+    ).encode("utf-8")
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "train/box_loss=0.25\n"
+            "train/cls_loss=0.30\n"
+            "train/dfl_loss=0.10\n"
+            "sensor=24 °C; scale=10 µm\n"
+        ),
+    }
+    assert log.read_bytes() == original
+
+
 def test_training_log_api_uses_persisted_run_path_only(
     client: TestClient,
     test_settings: Settings,
