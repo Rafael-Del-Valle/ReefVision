@@ -16,6 +16,37 @@ from reefvision.domain.errors import ValidationError
 from reefvision.storage.datasets import canonical_json_sha256
 
 
+
+def queue_item_evidence_sha256(items: Sequence[Any]) -> str:
+    """Digest immutable scientific queue evidence, excluding mutable reviewer decisions.
+
+    Sort by image identity, not query order, so database retrieval order cannot
+    change a valid digest. A changed score, priority, signal explanation, input
+    fingerprint, or biological/QC source reference invalidates saved replay.
+    """
+    return canonical_json_sha256(
+        [
+            {
+                "image_id": item.image_id,
+                "rank_position": item.rank_position,
+                "score": item.score,
+                "input_checksum": item.input_checksum,
+                "split": item.split,
+                "highest_qc_severity": item.highest_qc_severity,
+                "label_class_ids": item.label_class_ids_json,
+                "model_ids": item.model_ids_json,
+                "related_issue_ids": item.related_issue_ids_json,
+                "signal_values": item.signal_values_json,
+                "normalized_signals": item.normalized_signals_json,
+                "weights": item.weights_json,
+                "score_breakdown": item.score_breakdown_json,
+                "reason_summary": item.reason_summary,
+            }
+            for item in sorted(items, key=lambda row: row.image_id)
+        ]
+    )
+
+
 def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     """Reject modified snapshot scope/count/order before a workflow retry.
 
@@ -172,3 +203,16 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     )
     if actual != digest:
         raise invalid
+
+    # Legacy queues lack this field. New queues protect their full immutable
+    # scientific explanations as well as score/scope; mutable review state,
+    # assignments and comments are intentionally excluded.
+    item_evidence_digest = checksums.get("item_evidence_sha256")
+    if item_evidence_digest is not None:
+        if (
+            not isinstance(item_evidence_digest, str)
+            or len(item_evidence_digest) != 64
+            or any(char not in "0123456789abcdef" for char in item_evidence_digest)
+            or item_evidence_digest != queue_item_evidence_sha256(items)
+        ):
+            raise invalid
