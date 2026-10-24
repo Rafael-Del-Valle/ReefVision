@@ -220,7 +220,9 @@ def measure_mesh_preview(
             or patch_degenerate_faces[patch]
         ):
             patch_volumes_m3.append(None)
-            volume_qc_warnings.add("enclosed_volume_requires_closed_oriented_nondegenerate_patch")
+            volume_qc_warnings.add(
+                "enclosed_volume_requires_closed_oriented_nondegenerate_patch"
+            )
             continue
         try:
             raw_volume = abs(
