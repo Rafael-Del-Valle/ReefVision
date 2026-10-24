@@ -361,19 +361,14 @@ def test_projected_population_is_unit_weighted_and_stratified() -> None:
     assert len(eligible) == 1
     assert eligible[0].experimental_unit_ids == ["tank-A"]
 
-    later = tank_b.model_copy(
-        update={"sampling_windows_utc": ["2026-04-03/2026-04-05"]}
-    )
+    later = tank_b.model_copy(update={"sampling_windows_utc": ["2026-04-03/2026-04-05"]})
     assert len(summarize_projected_population_summaries([tank_a, later])) == 2
     other_unit = tank_b.model_copy(update={"units": ["cm"]})
     assert len(summarize_projected_population_summaries([tank_a, other_unit])) == 2
     other_design = tank_b.model_copy(update={"experimental_unit_type": "colony"})
     assert len(summarize_projected_population_summaries([tank_a, other_design])) == 2
     no_parent = tank_b.model_copy(update={"parent_colony_keys": []})
-    assert summarize_projected_population_summaries(
-        [tank_a, no_parent]
-    )[0].units_missing_parent_colony == ["tank-B"]
-    technical = tank_b.model_copy(
-        update={"unit_status": "technical_replicate_unit"}
-    )
+    parent_qc = summarize_projected_population_summaries([tank_a, no_parent])[0]
+    assert parent_qc.units_missing_parent_colony == ["tank-B"]
+    technical = tank_b.model_copy(update={"unit_status": "technical_replicate_unit"})
     assert summarize_projected_population_summaries([technical]) == []
