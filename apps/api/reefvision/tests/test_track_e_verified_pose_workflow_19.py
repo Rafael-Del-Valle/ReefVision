@@ -199,7 +199,6 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
         )
 
-
     # A valid manifest checksum alone must not hide a changed database item
     # count: the saved workflow and downstream training must reject drift.
     with app.state.session_factory() as session:
