@@ -143,6 +143,15 @@ def _pose_dataset(
             f"Pose {role} dataset manifest checksum no longer matches frozen truth"
         )
 
+    if (
+        not isinstance(dataset.manifest_json.get("items"), list)
+        or dataset.manifest_json.get("item_count") != dataset.item_count
+        or len(dataset.manifest_json["items"]) != dataset.item_count
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset item count no longer matches frozen manifest"
+        )
+
     # The planner validates frozen truth, but the execution adapter must also
     # reject schema drift after planning or when invoked independently.
     schema = session.get(PoseLandmarkSchema, dataset.pose_schema_id)
