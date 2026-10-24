@@ -91,6 +91,25 @@
   the existing executable saved-workflow test exercises this validator during
   retry. Exact-head CI and installed Windows validation remain outstanding.
 
+## 1.6 QC scoring-weight normalization contract (pending exact-head CI)
+
+- Audited the existing standalone `ReviewQueueCreateRequest`, deterministic scoring
+  service, v2 saved-snapshot validator and executable `qc_review_queue` node.
+- The standalone API now rejects NaN/infinite weights, all-zero weight vectors
+  and finite individual weights whose sum overflows. Positive finite vectors
+  with selected zero-weight signals remain supported. This prevents meaningless
+  or undefined dimensionless priority normalization before any queue is created.
+- Versioned saved Workflow Builder queue retries reject a re-signed all-zero
+  scoring configuration even if scores, scientific explanations, scope digest
+  and item-evidence digest have been made mutually consistent. Historical
+  unversioned snapshots retain their prior compatibility path.
+- Added schema/API regressions, a re-signed scientific snapshot corruption
+  regression and a persisted executable-workflow positive-weight assertion.
+  Repaired the Ruff blank-line failure reported on the previous HEAD.
+- These are **pushed development changes, not release acceptance**. Exact-head
+  CI, full backend/frontend/E2E, migration compatibility and installed Windows
+  acceptance remain outstanding.
+
 ## Outstanding acceptance
 
 Run Ruff, mypy, backend/frontend/E2E and migration/backwards-compatibility checks
