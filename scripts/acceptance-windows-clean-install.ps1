@@ -547,6 +547,7 @@ try {
     if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS') {
         $ExpectedRunRoot = [System.IO.Path]::GetFullPath((Join-Path $AcceptanceRoot "reefvision-clean-$Token"))
         if ([System.IO.Path]::GetFullPath($RunRoot) -ne $ExpectedRunRoot) { throw 'Refusing cleanup outside the generated acceptance run.' }
+        [void](Assert-ReefVisionAcceptanceTreeNoReparsePoints -Path $RunRoot)
         Remove-Item -LiteralPath $RunRoot -Recurse -Force
     }
 }
