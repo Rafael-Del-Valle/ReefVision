@@ -88,6 +88,7 @@ def snapshot():
             "top_image_ids": ["img-a", "img-b"],
         },
     )
+    queue.input_checksums_json["integrity_schema_version"] = "qc-review-queue-v2"
     queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
         {
             "formula_id": queue.formula_id,
@@ -105,7 +106,6 @@ def test_valid_saved_snapshot_and_mutable_reviewer_state():
     items[0].review_state = "completed"
     items[0].skip_reason = "Researcher requested a second look"
     validate_saved_queue_snapshot(queue, items)
-
 
 
 def test_saved_evidence_digest_is_independent_of_database_row_order():
@@ -263,6 +263,7 @@ def test_rejects_modified_saved_source_configuration(corruption):
 def test_historical_snapshot_without_item_evidence_digest_remains_readable():
     """Old queues retain their prior integrity checks without forced migration."""
     queue, items = snapshot()
+    queue.input_checksums_json.pop("integrity_schema_version")
     queue.input_checksums_json.pop("item_evidence_sha256")
     validate_saved_queue_snapshot(queue, items)
 
@@ -270,11 +271,37 @@ def test_historical_snapshot_without_item_evidence_digest_remains_readable():
 def test_historical_snapshot_without_scoring_digest_remains_readable():
     """Older persisted workflow queues must remain retryable without rescoring."""
     queue, items = snapshot()
+    queue.input_checksums_json.pop("integrity_schema_version")
     queue.input_checksums_json.pop("scoring_provenance_sha256")
     validate_saved_queue_snapshot(queue, items)
     items[0].weights_json["signal"] = 2.0
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize(
+    "missing_digest", ["scoring_provenance_sha256", "item_evidence_sha256"]
+)
+def test_versioned_queue_fails_closed_when_provenance_digest_is_missing(missing_digest):
+    queue, items = snapshot()
+    queue.input_checksums_json.pop(missing_digest)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_rejects_unknown_saved_queue_integrity_version():
+    queue, items = snapshot()
+    queue.input_checksums_json["integrity_schema_version"] = "unknown-version"
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_unversioned_legacy_queue_without_both_digests_remains_readable():
+    queue, items = snapshot()
+    queue.input_checksums_json.pop("integrity_schema_version")
+    queue.input_checksums_json.pop("scoring_provenance_sha256")
+    queue.input_checksums_json.pop("item_evidence_sha256")
+    validate_saved_queue_snapshot(queue, items)
 
 
 def test_automatic_source_run_id_is_not_required_to_be_none():
