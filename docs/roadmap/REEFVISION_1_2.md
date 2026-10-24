@@ -1017,3 +1017,37 @@ field defaults to an empty list for older persisted artifacts. Focused QC
 regressions and existing API/saved-workflow payload parity cover the new output.
 Exact-head CI, migration reconciliation, independent scientific acceptance
 and installed Windows GUI acceptance remain outstanding.
+
+## Equal-weight source-linked projected population strata (2026-10-24; development only)
+
+The project-owned calibrated-measurement API and existing executable,
+persisted `ecology_measurement_candidates` Workflow Builder artifact now
+include typed `projected_population_summaries`. Each descriptive row pools
+**only eligible** projected-unit QC records with identical declared unit
+type, physical metric and unit, and UTC first/final sampling dates.
+Each declared unit receives **one vote**, irrespective of the number of
+fragments, organisms, photographs or annotations within that unit.
+Incomplete, technical-replicate and otherwise QC-excluded units cannot
+contribute to a pooled mean. Separate strata are not silently combined.
+
+Outputs disclose declared-unit and organism denominators, unit IDs,
+parent-colony labels reused across units, and units missing parent-colony
+provenance. Shared parents are a blocking concern for any independence
+interpretation, not evidence of independent replication. The results remain
+`linked_unverified` and `scientist_review_required`; they do not establish
+independent experimental units, verified biological growth, inferential
+statistics or treatment effects. The typed additive response defaults to an
+empty list for older persisted artifacts; the deterministic source fingerprint
+advances to `ecology-measurement-candidates-0005`. Existing typed Workflow
+Builder output, saved-workflow persistence and standalone API share the same
+service result. Scientific regressions cover equal unit weighting, exclusion,
+stratification, parent-colony disclosure and API/saved-artifact parity.
+
+The preceding head `0d55e260` completed **16/19 Actions workflows**.
+Three backend gates (CI, Pose Workflow Validation and ReefVision 1.0
+Acceptance) stopped at the same Ruff formatting differences in the unit
+service and regression test. This iteration includes the exact formatter
+corrections. Current-head CI, migration lineage reconciliation with unmerged
+1.1, authenticated longitudinal review, representative scientific datasets,
+installed Windows GUI/installer acceptance and independent scientific review
+remain outstanding. This increment does not make 1.2 release-ready.
