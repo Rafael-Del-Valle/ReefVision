@@ -150,7 +150,9 @@ def check_cab_artifact_partition(workflow: str) -> list[str]:
         "if ($missing.Count -gt 0 -or $unexpected.Count -gt 0 -or $actualCabs.Count -ne $requiredCabs.Count)",
     )
     if any(marker not in acceptance_job for marker in media_checks):
-        errors.append("Clean-install runner must verify MSI Media table against all external CABs")
+        errors.append(
+            "Clean-install runner must verify MSI Media table against all external CABs"
+        )
     return errors
 
 
