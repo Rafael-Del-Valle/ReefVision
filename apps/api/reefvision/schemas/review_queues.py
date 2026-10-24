@@ -6,7 +6,7 @@ from datetime import datetime
 from math import isfinite
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from reefvision.domain.enums import ReviewQueueItemState
 
@@ -126,6 +126,16 @@ class ReviewQueueBulkRequest(BaseModel):
     item_ids: list[str] = Field(min_length=1, max_length=100)
     action: Literal["start", "skip", "return"]
     reason: str | None = Field(default=None, max_length=500)
+    # Self-reported local label, not authenticated account identity.
+    actor: str = Field(default="local_user", min_length=1, max_length=100)
+
+    @field_validator("actor")
+    @classmethod
+    def normalize_actor(cls, value: str) -> str:
+        actor = value.strip()
+        if not actor:
+            raise ValueError("Bulk triage actor label cannot be blank")
+        return actor
 
 
 class ReviewQueueBulkResponse(BaseModel):
