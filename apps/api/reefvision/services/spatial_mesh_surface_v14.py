@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from datetime import timezone
+from datetime import UTC
 from math import dist, fsum, isfinite
 from typing import Any
 
@@ -768,7 +768,7 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
     )
     result["provenance"]["source_format"] = source_format
     observed_at_utc = (
-        payload.observed_at_utc.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        payload.observed_at_utc.astimezone(UTC).isoformat().replace("+00:00", "Z")
         if payload.observed_at_utc is not None
         else None
     )
