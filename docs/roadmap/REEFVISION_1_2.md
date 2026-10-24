@@ -889,3 +889,32 @@ Acceptance stopped at the same three E501 Ruff errors in
 and adds the scientific checks above. Exact-head CI, complete migration
 roundtrip, scientific data acceptance and installed Windows GUI checks
 remain outstanding. No release-readiness claim is made.
+
+## Recognized physical calibration dimensions (2026-10-24; development only)
+
+The existing organism-to-annotation calibration evidence service now requires
+a recognized **length** unit (nanometres, micrometres, millimetres, centimetres,
+metres, kilometres, inches, feet or yards, including common abbreviations and
+US/UK spelling variants). Previously, arbitrary non-length strings such as
+`seconds` or `degrees` could pass the generic saved-image calibration schema
+and be mistaken for physical organism measurements. Pixel units and compound
+pixel-per-length expressions also fail closed. No automatic unit conversion
+or inferred calibration is performed: the source scale and unit are frozen
+exactly as supplied. A micro-symbol unit (`µm`) is explicitly supported.
+
+Both standalone calibration-evidence linking and the executable, persisted
+`ecology_identity_registry_source` Workflow Builder read use the same
+dimensionality gate. A later source-unit mutation invalidates the existing
+link and causes saved workflow execution to fail without a successful
+ecological registry artifact. Focused regressions cover invalid units before
+linking, accepted micro-symbol units, and post-link revocation.
+
+The previous head `8728a41a` finished **16/19 Actions workflows successfully**;
+CI, Pose Workflow Validation and ReefVision 1.0 Acceptance stopped at the
+same three Ruff-format differences in the identity service and annotation/
+calibration regression tests. This increment corrects those exact formatter
+differences. **New-head CI and real scientific acceptance are still required.**
+The linked records remain `linked_unverified`, with
+`scientist_review_required`; no longitudinal measurement is promoted to
+verified evidence. The 1.1 migration-lineage reconciliation, complete
+backend/frontend/E2E and installed Windows GUI/installer checks remain open.
