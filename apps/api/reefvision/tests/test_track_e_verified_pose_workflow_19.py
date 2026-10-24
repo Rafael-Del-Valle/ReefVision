@@ -215,9 +215,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             }
         ],
     }
-    item_plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=item_graph
-    )
+    item_plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=item_graph)
     assert item_plan.status_code == 200, item_plan.text
     assert item_plan.json()["valid"] is False
     assert "pose_dataset_item_lineage_mismatch" in {
