@@ -514,6 +514,76 @@ describe("AnnotationEditor", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("reveals a loaded image when WebView2 decode stalls and ignores late rejection", async () => {
+    let rejectDecode: (reason: Error) => void = () => undefined;
+    const decodePromise = new Promise<void>((_resolve, reject) => {
+      rejectDecode = reject;
+    });
+    const preloaders: FakeImage[] = [];
+    class FakeImage {
+      decoding = "";
+      onload: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      src = "";
+      decode = vi.fn(() => decodePromise);
+      constructor() {
+        preloaders.push(this);
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        return jsonResponse({
+          ...session,
+          image: { ...session.image, thumbnail_path: "thumb.png" },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const preloader = await waitFor(() => {
+      const item = preloaders.find((candidate) =>
+        candidate.src.includes("/display?retry=0"),
+      );
+      expect(item).toBeDefined();
+      return item;
+    });
+    const source = () =>
+      screen.getByTestId("annotation-canvas").querySelector("image");
+
+    vi.useFakeTimers();
+    try {
+      act(() => preloader?.onload?.(new Event("load")));
+      expect(preloader?.decode).toHaveBeenCalledOnce();
+      expect(source()).toHaveAttribute(
+        "href",
+        expect.stringContaining("/thumbnail"),
+      );
+      act(() => vi.advanceTimersByTime(3_000));
+      expect(source()).toHaveAttribute(
+        "href",
+        expect.stringContaining("/display?retry=0"),
+      );
+      await act(async () => {
+        rejectDecode(new Error("late WebView2 decode rejection"));
+        await decodePromise.catch(() => undefined);
+      });
+      expect(source()).toHaveAttribute(
+        "href",
+        expect.stringContaining("/display?retry=0"),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not apply a previous image preload to a newly opened image", async () => {
     const preloaders: FakeImage[] = [];
     class FakeImage {
