@@ -104,7 +104,9 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     compare_step = next(
-        step for step in plan.json()["steps"] if step["node_type"] == "mesh_longitudinal_comparison"
+        step
+        for step in plan.json()["steps"]
+        if step["node_type"] == "mesh_longitudinal_comparison"
     )
     assert "unverified 3D mesh observations" in compare_step["action"]
     assert compare_step["output_types"]["comparison"] == ["mesh_longitudinal_comparison"]
