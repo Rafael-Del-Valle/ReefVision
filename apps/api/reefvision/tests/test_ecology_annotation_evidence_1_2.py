@@ -177,6 +177,9 @@ def test_annotation_link_rejects_foreign_image_and_stale_revision(
         assert box is not None
         box.image_id = first_image
         box.revision = 2
+        source_image = session.get(ImageAsset, first_image)
+        assert source_image is not None
+        source_image.annotation_status = "reviewed"
         session.commit()
     stale = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
     assert stale.status_code == 409, stale.text
