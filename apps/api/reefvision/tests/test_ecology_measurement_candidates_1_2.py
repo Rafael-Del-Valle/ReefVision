@@ -11,9 +11,11 @@ from fastapi.testclient import TestClient
 from reefvision.db.models import ImageAsset
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
+    EcologyProjectedUnitSummary,
 )
 from reefvision.services.ecology_measurement_candidates import (
     summarize_projected_endpoint_changes,
+    summarize_projected_population_summaries,
     summarize_projected_unit_summaries,
     summarize_sampling_date_qc,
 )
@@ -56,6 +58,7 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     )
     assert payload["projected_endpoint_changes"] == []
     assert len(payload["projected_unit_summaries"]) == 2
+    assert payload["projected_population_summaries"] == []
     assert all(
         row["unit_status"] == "missing_unit_declaration"
         for row in payload["projected_unit_summaries"]
@@ -286,9 +289,7 @@ def test_projected_unit_qc_excludes_incomplete_and_technical_replicates(
     )
 
     def summarize(rows: list[EcologyMeasurementCandidate]):
-        changes = summarize_projected_endpoint_changes(
-            rows, summarize_sampling_date_qc(rows)
-        )
+        changes = summarize_projected_endpoint_changes(rows, summarize_sampling_date_qc(rows))
         return summarize_projected_unit_summaries(rows, changes)[0]
 
     full = [first, last, second_first, second_last]
@@ -307,13 +308,72 @@ def test_projected_unit_qc_excludes_incomplete_and_technical_replicates(
     delayed = second_last.model_copy(
         update={"capture_timestamp_utc": datetime(2026, 4, 5, 9, tzinfo=UTC)}
     )
-    assert (
-        summarize([first, last, second_first, delayed]).unit_status
-        == "sampling_window_mismatch"
-    )
-    technical = [
-        row.model_copy(update={"experimental_unit_type": "video_frame"})
-        for row in full
-    ]
+    assert summarize([first, last, second_first, delayed]).unit_status == "sampling_window_mismatch"
+    technical = [row.model_copy(update={"experimental_unit_type": "video_frame"}) for row in full]
     assert summarize(technical).unit_status == "technical_replicate_unit"
     assert summarize(technical).mean_absolute_change is None
+
+
+def test_projected_population_is_unit_weighted_and_stratified() -> None:
+    tank_a = EcologyProjectedUnitSummary(
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
+        metric="box_width",
+        units=["mm"],
+        organism_keys=["A1", "A2", "A3"],
+        complete_organism_keys=["A1", "A2", "A3"],
+        incomplete_organism_keys=[],
+        parent_colony_keys=["colony-1"],
+        sampling_windows_utc=["2026-04-03/2026-04-04"],
+        unit_status="candidate",
+        mean_absolute_change=1.0,
+        mean_percent_change=10.0,
+    )
+    tank_b = tank_a.model_copy(
+        update={
+            "experimental_unit_id": "tank-B",
+            "organism_keys": ["B1"],
+            "complete_organism_keys": ["B1"],
+            "mean_absolute_change": 9.0,
+            "mean_percent_change": 90.0,
+        }
+    )
+    summaries = summarize_projected_population_summaries([tank_b, tank_a])
+    assert len(summaries) == 1
+    summary = summaries[0]
+    assert summary.experimental_unit_ids == ["tank-A", "tank-B"]
+    assert summary.declared_unit_count == 2
+    assert summary.contributing_organism_count == 4
+    assert summary.mean_unit_absolute_change == 5.0
+    assert summary.mean_unit_percent_change == 50.0
+    assert summary.shared_parent_colony_keys == ["colony-1"]
+    assert summary.evidence_level == "linked_unverified"
+    assert summary.review_gate == "scientist_review_required"
+
+    incomplete = tank_b.model_copy(
+        update={
+            "unit_status": "incomplete_followup",
+            "mean_absolute_change": None,
+            "mean_percent_change": None,
+        }
+    )
+    eligible = summarize_projected_population_summaries([tank_a, incomplete])
+    assert len(eligible) == 1
+    assert eligible[0].experimental_unit_ids == ["tank-A"]
+
+    later = tank_b.model_copy(
+        update={"sampling_windows_utc": ["2026-04-03/2026-04-05"]}
+    )
+    assert len(summarize_projected_population_summaries([tank_a, later])) == 2
+    other_unit = tank_b.model_copy(update={"units": ["cm"]})
+    assert len(summarize_projected_population_summaries([tank_a, other_unit])) == 2
+    other_design = tank_b.model_copy(update={"experimental_unit_type": "colony"})
+    assert len(summarize_projected_population_summaries([tank_a, other_design])) == 2
+    no_parent = tank_b.model_copy(update={"parent_colony_keys": []})
+    assert summarize_projected_population_summaries(
+        [tank_a, no_parent]
+    )[0].units_missing_parent_colony == ["tank-B"]
+    technical = tank_b.model_copy(
+        update={"unit_status": "technical_replicate_unit"}
+    )
+    assert summarize_projected_population_summaries([technical]) == []
