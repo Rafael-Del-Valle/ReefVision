@@ -23,9 +23,11 @@ mesh is used for scientific surface-area and dimension calculations; the
 measurement or as evidence of specimen identity.
 
 Outstanding: persistent asset ingestion and versioning, registered
-coordinate frames, independent calibration review, direct point-cloud
-visualization, validated anatomical branch lengths, longitudinal identity
-linkage, and installed desktop/GPU/scientific acceptance.
+coordinate frames, independent calibration review, persistent point-cloud asset ingestion,
+validated anatomical branch lengths, longitudinal identity linkage, and
+installed desktop/GPU/scientific acceptance. A separate bounded ASCII PLY
+point-cloud preview and interactive viewer already exist, but their transient
+visualization and chord measurements do not establish verified anatomy.
 
 ## Scale-only surface-area bounds (provisional)
 
