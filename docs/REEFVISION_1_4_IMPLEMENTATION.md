@@ -45,3 +45,20 @@ segmentation, surface incompleteness, calibration verification, or
 registration uncertainty. All areas remain `caller_supplied_unverified`;
 an open or nonmanifold mesh must not be interpreted as a complete coral
 surface without independent human review.
+
+## Calibrated extent intervals (provisional)
+
+Mesh previews and saved executable `mesh_surface_preview` Workflow Builder
+artifacts now expose scale-only intervals for global and edge-connected-patch
+axis-aligned dimensions and bounding-box diagonals. For any nonnegative
+reported distance `L` and caller-supplied relative scale uncertainty `u`,
+the interval is `[L * (1 - u), L * (1 + u)]`. When `u` is omitted, interval
+fields are `null`; zero uncertainty produces equal bounds. The previous
+first-order scale uncertainty fields are preserved for existing consumers.
+
+These intervals use a **single shared multiplicative calibration error**,
+not independent axis errors. They do not quantify geometry reconstruction,
+surface incompleteness, registration, observer disagreement, or camera
+distortion. Imported axes are unregistered: a bounding-box diagonal is
+**not** a biological branch length, organism identity, or longitudinal
+growth measurement. Calibration and interpretation require human review.
