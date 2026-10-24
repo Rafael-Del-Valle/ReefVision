@@ -8,7 +8,8 @@ param(
     [switch]$KeepArtifacts,
     [switch]$SkipUpgrade,
     [switch]$SkipUninstall,
-    [switch]$LiveSam2Acceptance
+    [switch]$LiveSam2Acceptance,
+    [switch]$ApprovedCheckpointDownload
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,6 +21,13 @@ if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
 }
 if ($DisposableTest -and $PlanOnly) { throw '-DisposableTest and -PlanOnly are mutually exclusive.' }
+
+# Live SAM acceptance obtains pretrained checkpoint weights over the network.
+# Require a separate, explicit approval switch even on disposable machines;
+# unattended PR workflows must never silently fetch weights.
+if ($LiveSam2Acceptance -and -not $ApprovedCheckpointDownload) {
+    throw 'Live SAM acceptance requires explicit -ApprovedCheckpointDownload researcher approval before fetching pretrained weights.'
+}
 
 $InstallerPath = (Resolve-Path -LiteralPath $InstallerPath).Path
 if ([System.IO.Path]::GetExtension($InstallerPath) -ine '.msi') { throw 'InstallerPath must identify an MSI.' }
