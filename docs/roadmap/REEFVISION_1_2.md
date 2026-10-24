@@ -648,3 +648,23 @@ resolve both lineages and rerun upgrade/downgrade and installed Windows
 acceptance before any merge. No biological identity, annotation, calibration
 or dataset is promoted to verified status by this correction. New-head CI
 and scientific acceptance remain required.
+
+## Imported technical-unit replay guard (2026-10-24)
+
+The project-owned identity registry now revalidates the independent-unit type
+of every latest database revision before returning an API snapshot or an
+executable `ecology_identity_registry_source` Workflow Builder artifact.
+Ordinary API writes already reject image/frame/camera/annotation units through
+the Pydantic schema; an imported or externally altered revision could
+previously bypass that input validator. The service now fails closed rather
+than exposing the imported technical observation as a biological replicate.
+
+Standalone API and persisted saved-workflow regressions inject a malformed
+`video_frame` revision, require an explicit validation failure, and assert
+that no successful identity-registry workflow artifact is produced. The
+previous exact-head CI had 16 successes and three failures due to one Ruff
+format mismatch in the identity-registry test; that mismatch was also
+corrected in this increment. **New-head CI, full scientific verification,
+migration compatibility, and installed Windows GUI acceptance remain
+required.** This is a safeguard for registered-unverified identity metadata,
+not a claim that independent sampling units have been authenticated.
