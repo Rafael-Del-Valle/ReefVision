@@ -124,7 +124,10 @@ def test_multi_page_tiff_is_not_silently_imported_as_one_image(client: TestClien
         client, project["id"], filename="CAMERA_STACK.TIFF", content=stream.getvalue()
     )
     assert not report["successful"], report
-    assert len(report["failed"]) == 1, report
+    assert not report["failed"], report
+    assert len(report["unsupported"]) == 1, report
+    assert report["unsupported"][0]["status"] == "unsupported"
+    assert "Multi-page TIFF" in report["unsupported"][0]["detail"]
 
 
 @pytest.mark.parametrize(
