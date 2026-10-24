@@ -268,9 +268,7 @@ def summarize_projected_population_summaries(
     declared unit types and UTC sampling windows remain separate strata.
     Parent-colony reuse across units is disclosed, not assumed independent.
     """
-    groups: dict[
-        tuple[str, str, str, str], list[EcologyProjectedUnitSummary]
-    ] = {}
+    groups: dict[tuple[str, str, str, str], list[EcologyProjectedUnitSummary]] = {}
     for row in unit_summaries:
         if row.unit_status != "candidate":
             continue
@@ -302,12 +300,8 @@ def summarize_projected_population_summaries(
             for parent_key in record.parent_colony_keys:
                 parent_counts[parent_key] = parent_counts.get(parent_key, 0) + 1
         try:
-            mean_absolute = math.fsum(
-                float(row.mean_absolute_change) / count for row in records
-            )
-            mean_percent = math.fsum(
-                float(row.mean_percent_change) / count for row in records
-            )
+            mean_absolute = math.fsum(float(row.mean_absolute_change) / count for row in records)
+            mean_percent = math.fsum(float(row.mean_percent_change) / count for row in records)
         except OverflowError as exc:
             raise ValidationError("Projected population summary is nonfinite") from exc
         if not math.isfinite(mean_absolute) or not math.isfinite(mean_percent):
@@ -320,13 +314,9 @@ def summarize_projected_population_summaries(
                 sampling_window_utc=window,
                 experimental_unit_ids=unit_ids,
                 declared_unit_count=count,
-                contributing_organism_count=sum(
-                    len(row.complete_organism_keys) for row in records
-                ),
+                contributing_organism_count=sum(len(row.complete_organism_keys) for row in records),
                 parent_colony_keys=sorted(parent_counts),
-                shared_parent_colony_keys=sorted(
-                    key for key, n in parent_counts.items() if n > 1
-                ),
+                shared_parent_colony_keys=sorted(key for key, n in parent_counts.items() if n > 1),
                 units_missing_parent_colony=sorted(
                     str(row.experimental_unit_id)
                     for row in records
