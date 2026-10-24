@@ -246,6 +246,64 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen.manifest_sha256 = original_manifest_sha
         session.commit()
 
+    # A signed manifest must also bind human-review and source identities
+    # to the persisted frozen item, not just its item and pose fingerprints.
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        identity_items = [dict(item) for item in original_manifest["items"]]
+        identity_items[0]["candidate_id"] = "different-verified-candidate"
+        identity_manifest = {**original_manifest, "items": identity_items}
+        identity_sha = canonical_json_sha256(identity_manifest)
+        frozen.manifest_json = identity_manifest
+        frozen.manifest_sha256 = identity_sha
+        session.commit()
+
+    identity_graph = {
+        **graph,
+        "nodes": [
+            {
+                **graph["nodes"][0],
+                "parameters": {
+                    **graph["nodes"][0]["parameters"],
+                    "manifest_sha256": identity_sha,
+                },
+            }
+        ],
+    }
+    identity_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=identity_graph
+    )
+    assert identity_plan.status_code == 200, identity_plan.text
+    assert identity_plan.json()["valid"] is False
+    assert "pose_dataset_item_lineage_mismatch" in {
+        issue["code"] for issue in identity_plan.json()["issues"]
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, identity_graph["nodes"][0]["parameters"], {}
+        )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            app.state.settings,
+            project_id=project_id,
+            dataset_payload={**payload, "manifest_sha256": identity_sha},
+            parameters={},
+        )
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        frozen.manifest_json = original_manifest
+        frozen.manifest_sha256 = original_manifest_sha
+        session.commit()
+
     # Re-signing a modified provenance field must not make saved training
     # truth appear reproducible when its frozen source lineage has changed.
     with app.state.session_factory() as session:
