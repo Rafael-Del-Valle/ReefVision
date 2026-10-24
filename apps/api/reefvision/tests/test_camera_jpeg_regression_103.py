@@ -208,3 +208,63 @@ def test_non_rgb_camera_jpeg_import_and_oriented_renditions(
         assert rendered.size == (60, 80)
         assert rendered.getexif().get(274) is None
     assert source.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("timestamp_tag", "offset_tag"),
+    [(36867, 36881), (36868, 36882), (306, 36880)],
+)
+@pytest.mark.parametrize(
+    ("offset", "expected_utc"),
+    [("-04:00", "2026-10-01T16:30:00"), ("+05:30", "2026-10-01T07:00:00")],
+)
+def test_camera_exif_offset_normalizes_capture_time_without_mutating_original(
+    client: TestClient,
+    timestamp_tag: int,
+    offset_tag: int,
+    offset: str,
+    expected_utc: str,
+) -> None:
+    """Explicit camera-local EXIF offsets must yield correct UTC acquisition time."""
+    project = create_project(client, "Camera EXIF timezone")
+    exif = Image.Exif()
+    exif[timestamp_tag] = "2026:10:01 12:30:00"
+    exif[offset_tag] = offset
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(
+        stream, format="JPEG", exif=exif
+    )
+    payload = stream.getvalue()
+
+    report = import_one(
+        client, project["id"], filename="DSC_TIME.JPEG", content=payload
+    )
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"].startswith(expected_utc)
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+def test_invalid_camera_exif_offset_does_not_invent_utc_capture_time(
+    client: TestClient,
+) -> None:
+    """A malformed explicit offset must not silently be interpreted as UTC."""
+    project = create_project(client, "Invalid camera EXIF timezone")
+    exif = Image.Exif()
+    exif[36867] = "2026:10:01 12:30:00"
+    exif[36881] = "not-an-offset"
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(
+        stream, format="JPEG", exif=exif
+    )
+    payload = stream.getvalue()
+
+    report = import_one(
+        client, project["id"], filename="DSC_INVALID_TIME.JPEG", content=payload
+    )
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"] is None
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
