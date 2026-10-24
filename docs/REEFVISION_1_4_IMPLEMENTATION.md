@@ -153,3 +153,29 @@ coral branch circumference, skeleton centerline, or organism identity.
 These measurements remain `caller_supplied_unverified`, even when a
 numerical uncertainty interval is provided. Reconstruction defects,
 registration uncertainty, and observer error are not represented.
+
+## Longitudinal mesh surface-area change per elapsed day (provisional)
+
+The standalone `mesh-longitudinal-comparison` endpoint and the persisted,
+executable `mesh_longitudinal_comparison` Workflow Builder node now report
+`average_surface_area_change_m2_per_day` as the signed difference between
+two provisional mesh surface areas divided by the actual elapsed UTC days.
+The accompanying `average_surface_area_change_scale_interval_m2_per_day`
+is computed by dividing the conservative two-timepoint scale-only difference
+interval by the same positive elapsed duration. Missing scale intervals stay
+`null`; negative changes and uncertainty bounds retain their signs.
+
+This is a **descriptive two-observation average**, not a fitted growth rate,
+annualized biological growth, or a validated estimate of coral condition.
+A different camera angle, mesh reconstruction, visibility, occlusion, or
+registration may change measured area without biological change. Both
+observations require the same *provisional* specimen ID, distinct observation
+IDs, increasing timezone-aware timestamps, and the same project; none of
+these establishes verified reidentification. The result retains unverified
+identity, calibration, and coordinate-registration provenance and emits the
+`average_change_per_day_is_not_a_biological_growth_rate` QC warning.
+
+Regression tests in `test_spatial_mesh_longitudinal_v14.py` cover positive
+and negative signed rates, 48-hour intervals, missing uncertainty, and exact
+standalone-versus-executed-saved-workflow payload parity. CI, independent
+scientific validation, and installed Windows acceptance remain outstanding.
