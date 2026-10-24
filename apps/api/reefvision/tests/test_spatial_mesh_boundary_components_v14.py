@@ -147,9 +147,7 @@ def test_boundary_components_standalone_and_saved_workflow(
     if case == "open-square":
         assert direct["boundary_loop_perimeters_m"] == pytest.approx([0.04])
     if case == "disconnected-triangles":
-        assert direct["boundary_loop_perimeters_m"] == pytest.approx(
-            [0.01 * (2 + 2**0.5)] * 2
-        )
+        assert direct["boundary_loop_perimeters_m"] == pytest.approx([0.01 * (2 + 2**0.5)] * 2)
     if case == "closed-tetra":
         assert direct["boundary_loop_perimeters_m"] == []
     assert direct["measurement_status"] == "caller_supplied_unverified"
