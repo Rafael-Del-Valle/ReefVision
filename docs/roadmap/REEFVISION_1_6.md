@@ -581,3 +581,31 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Release remains **HOLD** pending CI, reconciliation of colliding 0038
   lineages, real Windows MSI upgrade/rollback, installed-GUI, and
   representative scientific acceptance.
+
+## 2026-10-24 — No implicit pretrained checkpoint acquisition in Windows CI
+
+- Audited the exact-head Windows installer/clean-install acceptance logs. The
+  earlier automatic PR job invoked `-LiveSam2Acceptance` and downloaded a
+  SAM 2.1 Tiny checkpoint on a disposable runner. That contradicts the
+  offline-first rule against downloading unapproved pretrained weights.
+- The standard Windows PR acceptance now runs without that switch, retaining
+  isolated MSI install, project/annotation persistence, model catalog policy,
+  migration, restart and uninstall checks. Real SAM checkpoint inference and
+  confidence-review evidence are explicitly reported as **SKIPPED**, not PASS.
+- An explicitly requested manual live-SAM acceptance now requires both
+  `-LiveSam2Acceptance` and `-ApprovedCheckpointDownload`. Missing approval
+  fails before resolving an MSI, creating acceptance data or fetching weights.
+- The native PowerShell harness regression asserts the default CI workflow
+  cannot request live SAM and exercises the missing-approval refusal without
+  an installer. The existing isolated-environment regression requires
+  `HF_HUB_OFFLINE=1` by default.
+- Source commits: `03d86cf`, `58903a3`, `cb95730` (all on isolated 1.6).
+  GitHub source read-back confirms the modified workflow, approval guard and
+  regression; **native PowerShell execution and new exact-head CI are still
+  required**. Earlier Windows acceptance at `ef6a1d0` passed, but that
+  run included an unapproved automatic live checkpoint download and is not
+  evidence for the new offline acceptance contract.
+- No checkpoint download, model deployment, cross-version merge, release or
+  user-data deletion was performed by this iteration. Windows interactive
+  GUI, actual MSI upgrade/rollback, cross-version Alembic reconciliation and
+  representative scientific data remain release blockers.
