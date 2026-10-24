@@ -106,7 +106,6 @@ def test_mixed_msi_versions_are_rejected() -> None:
 CAB_WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
 
 
-
 def test_windows_cab_guard_accepts_five_or_six_contiguous_cabinets() -> None:
     """CAB counts vary with payload size; the MSI Media table remains authoritative."""
     assert "$actual.Count -notin @(5, 6)" in CAB_WORKFLOW
@@ -144,3 +143,17 @@ def test_windows_cab_preflight_requires_missing_file_upload_failure() -> None:
         "must reject missing upload files" in error
         for error in MODULE.check_cab_artifact_partition(modified)
     )
+
+
+def test_windows_cab_preflight_rejects_removed_msi_media_verification() -> None:
+    for required in (
+        "$database.OpenView('SELECT `Cabinet` FROM `Media`')",
+        "$missing = @($requiredCabs | Where-Object { $_ -notin $actualCabs })",
+        "$unexpected = @($actualCabs | Where-Object { $_ -notin $requiredCabs })",
+    ):
+        assert required in CAB_WORKFLOW
+        modified = CAB_WORKFLOW.replace(required, "# removed", 1)
+        assert any(
+            "must verify MSI Media table" in error
+            for error in MODULE.check_cab_artifact_partition(modified)
+        )
