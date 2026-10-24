@@ -101,13 +101,25 @@ def test_bulk_review_rejects_partial_changes_and_foreign_queue_members(
         "review_state"
     ] in {"pending", "skipped"}
 
+    # Rejected mixed-state and foreign-queue batches must not leave orphan audit events.
+    first_history = client.get(
+        f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events"
+    )
+    second_history = client.get(
+        f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
+    )
+    assert first_history.status_code == 200, first_history.text
+    assert second_history.status_code == 200, second_history.text
+    assert first_history.json()["total"] == 0
+    assert [event["event_type"] for event in second_history.json()["items"]] == [
+        "triage_skip"
+    ]
+
 
 def test_bulk_triage_appends_atomic_actor_labeled_events(client: TestClient) -> None:
     queue_id, ids = _queue_with_two_images(client)
     url = f"/api/v1/review-queues/{queue_id}/items/bulk"
-    event_urls = [
-        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in ids
-    ]
+    event_urls = [f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in ids]
     payload = {
         "item_ids": ids,
         "action": "skip",
@@ -130,9 +142,7 @@ def test_bulk_triage_appends_atomic_actor_labeled_events(client: TestClient) -> 
     assert client.post(url, json=payload).json()["changed_count"] == 0
     assert all(client.get(event_url).json()["total"] == 1 for event_url in event_urls)
 
-    invalid = client.post(
-        url, json={"item_ids": ids, "action": "return", "actor": "   "}
-    )
+    invalid = client.post(url, json={"item_ids": ids, "action": "return", "actor": "   "})
     assert invalid.status_code == 422, invalid.text
     # Public coordination API must not permit a forged triage audit event.
     forged = client.post(
@@ -146,27 +156,27 @@ def test_bulk_triage_appends_atomic_actor_labeled_events(client: TestClient) -> 
     assert forged.status_code == 422, forged.text
     assert all(client.get(event_url).json()["total"] == 1 for event_url in event_urls)
 
-    returned = client.post(
-        url, json={"item_ids": ids, "action": "return", "actor": "lab reviewer"}
-    )
+    returned = client.post(url, json={"item_ids": ids, "action": "return", "actor": "lab reviewer"})
     assert returned.status_code == 200, returned.text
     assert returned.json()["changed_count"] == 2
     for event_url in event_urls:
         history = client.get(event_url).json()
         assert history["total"] == 2
         assert [entry["event_type"] for entry in history["items"]] == [
-            "triage_skip", "triage_return"
+            "triage_skip",
+            "triage_return",
         ]
         assert history["items"][1]["comment"] is None
 
-    started = client.post(
-        url, json={"item_ids": ids, "action": "start", "actor": "lab reviewer"}
-    )
+    started = client.post(url, json={"item_ids": ids, "action": "start", "actor": "lab reviewer"})
     assert started.status_code == 200, started.text
     assert started.json()["changed_count"] == 2
-    assert client.post(
-        url, json={"item_ids": ids, "action": "start", "actor": "lab reviewer"}
-    ).json()["changed_count"] == 0
+    assert (
+        client.post(url, json={"item_ids": ids, "action": "start", "actor": "lab reviewer"}).json()[
+            "changed_count"
+        ]
+        == 0
+    )
     for event_url in event_urls:
         history = client.get(event_url).json()
         assert history["total"] == 3
