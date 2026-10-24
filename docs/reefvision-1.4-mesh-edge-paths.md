@@ -19,7 +19,12 @@ pair list yields `surface_edge_paths: null`.
 
 Connected routes expose `path_qc_warnings` (an empty list when no listed
 defect is found). Topology flags include `nonmanifold_edge_on_path`,
-`open_boundary_edge_on_path`, and `zero_length_edge_on_path`. Numerical
+`open_boundary_edge_on_path`, `inconsistent_winding_edge_on_path`, and
+`zero_length_edge_on_path`. The winding flag is emitted when a traversed edge
+has exactly two incident faces that traverse their shared edge in the same
+direction. A mesh-wide winding warning alone cannot establish that a selected
+route crosses the defective edge; this route-specific flag makes that evidence
+reviewable in both standalone and saved workflow artifacts. Numerical
 flags include `geometric_detour_ratio_overflow`,
 `calibrated_path_length_underflow`, and
 `calibrated_endpoint_chord_underflow`. A disconnected or unreferenced route
