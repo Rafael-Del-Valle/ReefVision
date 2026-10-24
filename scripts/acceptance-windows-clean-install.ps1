@@ -47,8 +47,12 @@ $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
-$Version = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($InstallerPath, 0).OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
-$Version.Execute(); $VersionRecord = $Version.Fetch(); $ProductVersion = $VersionRecord.StringData(1)
+$ProductVersion = Get-ReefVisionMsiProductVersion -Path $InstallerPath
+$PreviousProductVersion = $null
+if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+    $PreviousProductVersion = Get-ReefVisionMsiProductVersion -Path $PreviousInstallerPath
+    [void](Assert-ReefVisionUpgradeVersion -PreviousVersion $PreviousProductVersion -TargetVersion $ProductVersion)
+}
 
 $report = [ordered]@{
     schema_version = 'reefvision-windows-clean-acceptance-1'
@@ -58,6 +62,7 @@ $report = [ordered]@{
     installer_path = $InstallerPath
     installer_sha256 = $InstallerHash
     previous_installer_path = if ($PreviousInstallerPath) { $PreviousInstallerPath } else { $null }
+    previous_installer_version = $PreviousProductVersion
     windows_version = [Environment]::OSVersion.VersionString
     architecture = $env:PROCESSOR_ARCHITECTURE
     acceptance_root = $AcceptanceRoot
@@ -475,7 +480,10 @@ try {
 
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Previous installer upgraded to current installer.'
+        # msiexec exit 0 alone does not prove the newer desktop was installed.
+        # Keep upgrade unaccepted until the restarted API, registry and
+        # preserved scientific project are checked below.
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'MSI returned success; post-upgrade checks pending.'
     }
 
     $desktop = Start-AcceptanceDesktop
@@ -490,6 +498,25 @@ try {
         if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
             throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
         }
+    }
+    if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        $upgradedVersion = Invoke-RestMethod "$api/system/version"
+        $upgradedMigration = Invoke-RestMethod "$api/system/migrations/status"
+        $registrations = @(Get-ReefVisionInstalledRegistrations)
+        $upgradedDatabase = if ($upgradedVersion.database_path) {
+            [System.IO.Path]::GetFullPath([string]$upgradedVersion.database_path)
+        } else { '' }
+        if ([string]$upgradedVersion.application_version -ne $ProductVersion -or
+            $registrations.Count -ne 1 -or
+            [string]$registrations[0].DisplayVersion -ne $ProductVersion) {
+            throw "MSI upgrade did not expose expected version $ProductVersion through both API and Windows registration."
+        }
+        if (-not [string]::Equals($upgradedDatabase, $expectedDatabase, [System.StringComparison]::OrdinalIgnoreCase) -or
+            $upgradedMigration.schema_status -ne 'up_to_date' -or
+            $upgradedMigration.current_schema_revision -ne $upgradedMigration.expected_schema_revision) {
+            throw 'MSI upgrade changed the isolated database boundary or left migrations incomplete.'
+        }
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified version $PreviousProductVersion -> $ProductVersion through MSI, registry and packaged API; project and annotation retained; isolated schema current."
     }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
