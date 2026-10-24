@@ -73,8 +73,10 @@ def test_saved_mesh_patch_areas_match_standalone_preview(
         "edge_connected_patch_degenerate_face_counts",
         "edge_connected_patch_boundary_edge_counts",
         "boundary_edge_length_m",
+        "boundary_edge_length_scale_interval_m",
         "boundary_edge_length_scale_uncertainty_m",
         "edge_connected_patch_boundary_edge_lengths_m",
+        "edge_connected_patch_boundary_length_scale_intervals_m",
         "edge_connected_patch_boundary_length_scale_uncertainties_m",
         "edge_connected_patch_nonmanifold_edge_counts",
         "edge_connected_patch_inconsistent_winding_edge_counts",
@@ -88,7 +90,9 @@ def test_saved_mesh_patch_areas_match_standalone_preview(
         "edge_connected_patch_centroid_scale_uncertainties_m",
     ):
         expected = standalone.json()[key]
-        if isinstance(expected, list) and expected and isinstance(expected[0], list):
+        if expected is None:
+            assert artifact[key] is None
+        elif isinstance(expected, list) and expected and isinstance(expected[0], list):
             assert len(artifact[key]) == len(expected)
             for actual_row, expected_row in zip(artifact[key], expected, strict=True):
                 assert actual_row == pytest.approx(expected_row)
@@ -97,6 +101,8 @@ def test_saved_mesh_patch_areas_match_standalone_preview(
     assert artifact["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0003, 0.001])
     assert artifact["edge_connected_patch_boundary_edge_counts"] == [3, 3]
     if relative_scale_uncertainty is None:
+        assert artifact["boundary_edge_length_scale_interval_m"] is None
+        assert artifact["edge_connected_patch_boundary_length_scale_intervals_m"] is None
         assert artifact["boundary_edge_length_scale_uncertainty_m"] is None
         assert artifact["edge_connected_patch_boundary_length_scale_uncertainties_m"] is None
         assert artifact["edge_connected_patch_area_scale_uncertainties_m2"] is None
@@ -104,6 +110,16 @@ def test_saved_mesh_patch_areas_match_standalone_preview(
         assert artifact["area_weighted_centroid_scale_uncertainty_m"] is None
         assert artifact["edge_connected_patch_centroid_scale_uncertainties_m"] is None
     else:
+        length = artifact["boundary_edge_length_m"]
+        assert artifact["boundary_edge_length_scale_interval_m"] == pytest.approx(
+            [length * 0.95, length * 1.05]
+        )
+        for patch_length, interval in zip(
+            artifact["edge_connected_patch_boundary_edge_lengths_m"],
+            artifact["edge_connected_patch_boundary_length_scale_intervals_m"],
+            strict=True,
+        ):
+            assert interval == pytest.approx([patch_length * 0.95, patch_length * 1.05])
         assert artifact["boundary_edge_length_scale_uncertainty_m"] > 0
         assert artifact["edge_connected_patch_area_scale_uncertainties_m2"][0] > 0
     assert artifact["boundary_edge_length_m"] == pytest.approx(
