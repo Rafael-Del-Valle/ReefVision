@@ -60,6 +60,9 @@ describe("ReviewQueueBulkTriage", () => {
 
   it("requires explicit confirmation and only sends eligible visible IDs", async () => {
     const invalidate = mount();
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "lab reviewer" },
+    });
     fireEvent.click(
       screen.getByRole("button", { name: /Select eligible on page/ }),
     );
@@ -73,6 +76,7 @@ describe("ReviewQueueBulkTriage", () => {
       expect(bulkTriageReviewQueueItems).toHaveBeenCalledWith("queue-1", {
         item_ids: ["pending-1"],
         action: "start",
+        actor: "lab reviewer",
       }),
     );
     await waitFor(() =>
@@ -90,6 +94,9 @@ describe("ReviewQueueBulkTriage", () => {
 
   it("requires a nonempty skip reason and excludes completed items", async () => {
     mount();
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "lab reviewer" },
+    });
     fireEvent.change(screen.getByLabelText("Triage action"), {
       target: { value: "skip" },
     });
@@ -108,6 +115,7 @@ describe("ReviewQueueBulkTriage", () => {
       expect(bulkTriageReviewQueueItems).toHaveBeenCalledWith("queue-1", {
         item_ids: ["pending-1", "active-2"],
         action: "skip",
+        actor: "lab reviewer",
         reason: "obscured specimen",
       }),
     );
@@ -124,6 +132,9 @@ describe("ReviewQueueBulkTriage", () => {
         requires_researcher_review: true,
       });
     mount();
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "lab reviewer" },
+    });
     fireEvent.change(screen.getByLabelText("Triage action"), {
       target: { value: "return" },
     });
