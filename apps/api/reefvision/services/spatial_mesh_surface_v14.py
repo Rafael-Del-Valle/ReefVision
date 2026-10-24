@@ -264,6 +264,12 @@ def measure_mesh_preview(
         [length * scale for length in noncycles]
         for _, noncycles in patch_boundary_component_lengths
     ]
+    boundary_loop_perimeters_m = [
+        length for patch in patch_boundary_loop_perimeters_m for length in patch
+    ]
+    noncycle_boundary_component_lengths_m = [
+        length for patch in patch_noncycle_boundary_component_lengths_m for length in patch
+    ]
     patch_nonmanifold_edge_counts = [patch_nonmanifold_edges[patch] for patch in ordered_patches]
     patch_winding_edge_counts = [patch_winding_edges[patch] for patch in ordered_patches]
     patch_boundary_lengths_m = [
@@ -473,12 +479,30 @@ def measure_mesh_preview(
         "boundary_edge_count": boundary,
         "boundary_loop_count": sum(patch_boundary_loop_counts),
         "noncycle_boundary_component_count": sum(patch_noncycle_boundary_counts),
-        "boundary_loop_perimeters_m": [
-            length for patch in patch_boundary_loop_perimeters_m for length in patch
-        ],
-        "noncycle_boundary_component_lengths_m": [
-            length for patch in patch_noncycle_boundary_component_lengths_m for length in patch
-        ],
+        "boundary_loop_perimeters_m": boundary_loop_perimeters_m,
+        "noncycle_boundary_component_lengths_m": noncycle_boundary_component_lengths_m,
+        "boundary_loop_perimeter_scale_intervals_m": (
+            [
+                [
+                    length * (1 - relative_scale_uncertainty),
+                    length * (1 + relative_scale_uncertainty),
+                ]
+                for length in boundary_loop_perimeters_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
+        "noncycle_boundary_component_length_scale_intervals_m": (
+            [
+                [
+                    length * (1 - relative_scale_uncertainty),
+                    length * (1 + relative_scale_uncertainty),
+                ]
+                for length in noncycle_boundary_component_lengths_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "boundary_edge_length_m": boundary_length_m,
         "boundary_edge_length_scale_interval_m": (
             [
@@ -516,6 +540,34 @@ def measure_mesh_preview(
         "edge_connected_patch_boundary_loop_perimeters_m": patch_boundary_loop_perimeters_m,
         "edge_connected_patch_noncycle_boundary_component_lengths_m": (
             patch_noncycle_boundary_component_lengths_m
+        ),
+        "edge_connected_patch_boundary_loop_perimeter_scale_intervals_m": (
+            [
+                [
+                    [
+                        length * (1 - relative_scale_uncertainty),
+                        length * (1 + relative_scale_uncertainty),
+                    ]
+                    for length in patch
+                ]
+                for patch in patch_boundary_loop_perimeters_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
+        "edge_connected_patch_noncycle_boundary_component_length_scale_intervals_m": (
+            [
+                [
+                    [
+                        length * (1 - relative_scale_uncertainty),
+                        length * (1 + relative_scale_uncertainty),
+                    ]
+                    for length in patch
+                ]
+                for patch in patch_noncycle_boundary_component_lengths_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
         ),
         "edge_connected_patch_boundary_edge_lengths_m": patch_boundary_lengths_m,
         "edge_connected_patch_boundary_length_scale_intervals_m": (
