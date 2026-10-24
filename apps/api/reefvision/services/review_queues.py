@@ -410,6 +410,16 @@ class ReviewQueueService:
                 }
             ),
             "item_count": len(items),
+            # Retain the scoring contract independently from the image/score
+            # checksum. A saved Workflow Builder retry must not silently
+            # re-label its formula, ruleset or weight provenance.
+            "scoring_provenance_sha256": canonical_json_sha256(
+                {
+                    "formula_id": queue.formula_id,
+                    "formula_version": queue.formula_version,
+                    "configuration": queue.configuration_json,
+                }
+            ),
         }
         queue.summary_json = {
             "average_score": round(mean(item.score for item in items), 2) if items else 0.0,
