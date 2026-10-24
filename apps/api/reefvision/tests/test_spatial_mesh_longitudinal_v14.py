@@ -245,6 +245,52 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("invalid_timepoint", "invalid_interval"),
+    [
+        ("before", [1.1, 1.2]),
+        ("before", [0.8, 0.9]),
+        ("after", [2.1, 2.2]),
+        ("after", [1.8, 1.9]),
+    ],
+)
+def test_mesh_comparison_withholds_scale_bounds_excluding_nominal_area(
+    invalid_timepoint: str, invalid_interval: list[float]
+) -> None:
+    """Unreviewed scale intervals must enclose their reported nominal areas."""
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "surface_area_scale_interval_m2": [0.8, 1.2],
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+        },
+    }
+    after = {
+        **before,
+        "surface_area_m2": 2.0,
+        "surface_area_scale_interval_m2": [1.8, 2.2],
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+        },
+    }
+    record = before if invalid_timepoint == "before" else after
+    record["surface_area_scale_interval_m2"] = invalid_interval
+    result = compare_mesh_observations(before, after)
+    assert result["delta_surface_area_m2"] == pytest.approx(1.0)
+    assert result["delta_surface_area_scale_interval_m2"] is None
+    assert result["relative_surface_area_scale_interval_percent"] is None
+    assert result["average_surface_area_change_scale_interval_m2_per_day"] is None
+    assert "scale_uncertainty_interval_unavailable" in result["qc_warnings"]
+
+
 def test_mesh_comparison_average_rate_preserves_negative_change(
     client: TestClient,
 ) -> None:
@@ -263,9 +309,7 @@ def test_mesh_comparison_average_rate_preserves_negative_change(
     assert comparison["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
         sqrt(2) - sqrt(5)
     )
-    daily_extent_change = comparison[
-        "average_axis_aligned_bounding_box_diagonal_change_m_per_day"
-    ]
+    daily_extent_change = comparison["average_axis_aligned_bounding_box_diagonal_change_m_per_day"]
     assert daily_extent_change == pytest.approx((sqrt(2) - sqrt(5)) / 2)
     assert comparison["relative_axis_aligned_bounding_box_diagonal_change_percent"] == (
         pytest.approx(100 * (sqrt(2) / sqrt(5) - 1))
