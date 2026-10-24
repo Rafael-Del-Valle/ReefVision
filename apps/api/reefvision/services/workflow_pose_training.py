@@ -146,6 +146,22 @@ def _pose_dataset(
             f"Pose {role} dataset manifest checksum no longer matches frozen truth"
         )
 
+    manifest = dataset.manifest_json
+    manifest_schema = manifest.get("pose_schema")
+    if (
+        manifest.get("dataset_id") != dataset.id
+        or manifest.get("project_id") != dataset.project_id
+        or manifest.get("source_round_id") != dataset.source_round_id
+        or manifest.get("source_selection_sha256") != dataset.source_selection_sha256
+        or manifest.get("source_retraining_manifest_sha256")
+        != dataset.source_retraining_manifest_sha256
+        or not isinstance(manifest_schema, dict)
+        or manifest_schema.get("schema_id") != dataset.pose_schema_id
+        or manifest_schema.get("schema_revision") != dataset.pose_schema_revision
+        or manifest_schema.get("content_hash") != dataset.pose_schema_content_hash
+    ):
+        raise ValidationError(f"Pose {role} dataset manifest lineage no longer matches frozen truth")
+
     if (
         dataset.manifest_json.get("truth_policy") != "scientist_verified_only"
         or dataset.manifest_json.get("skipped_candidates_included") is not False
