@@ -22,6 +22,9 @@ from reefvision.db.models.dataset_version_item import DatasetVersionItem
 from reefvision.db.models.ecology_identity_annotation_evidence import (
     EcologyIdentityAnnotationEvidence,
 )
+from reefvision.db.models.ecology_identity_calibration_evidence import (
+    EcologyIdentityCalibrationEvidence,
+)
 from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
 from reefvision.db.models.experiment_record import ExperimentRecord
@@ -94,6 +97,7 @@ __all__ = [
     "DatasetVersion",
     "DatasetVersionItem",
     "EcologyIdentityAnnotationEvidence",
+    "EcologyIdentityCalibrationEvidence",
     "EcologyIdentityImageEvidence",
     "EcologyIdentityRevision",
     "ExperimentRecord",
