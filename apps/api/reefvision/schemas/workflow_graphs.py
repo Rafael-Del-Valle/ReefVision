@@ -26,6 +26,7 @@ WorkflowDataType = Literal[
     "measurement_table",
     "longitudinal_analysis",
     "ecology_identity_registry",
+    "ecology_measurement_candidates",
     "paired_count_comparison",
     "relative_depth_maps",
     "training_result",

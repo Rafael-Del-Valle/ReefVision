@@ -918,3 +918,25 @@ The linked records remain `linked_unverified`, with
 `scientist_review_required`; no longitudinal measurement is promoted to
 verified evidence. The 1.1 migration-lineage reconciliation, complete
 backend/frontend/E2E and installed Windows GUI/installer checks remain open.
+
+## Source-linked projected measurement candidates (2026-10-24)
+
+The read-only `GET /api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates`
+endpoint derives conservative bounding-box width/height and mask projected area
+from current project-owned reviewed annotation revisions and frozen physical
+calibration evidence. The existing executable `ecology_identity_registry_source`
+Workflow Builder node now emits a second typed, persisted
+`ecology_measurement_candidates` output port. API and saved-workflow outputs
+share deterministic source fingerprints, parent-colony/experimental-unit labels,
+source-image SHA-256, annotation/calibration revision hashes and explicit
+scientist-review gates. No new migration is required: candidate results are
+derived from existing b12 identity evidence and saved as workflow artifacts.
+
+Perspective-homography cases are explicitly excluded pending proper per-point
+reprojection, rather than incorrectly multiplied by a scalar. Missing or naive
+capture timestamps are never fabricated into UTC biological observations.
+All projected values remain `linked_unverified`: a box extent is not coral
+centerline growth, image annotation review is not biological identity review,
+and tank/colony independence is not proven. No survival, p-values or verified
+longitudinal records are claimed. Scientific datasets, calibrated real-image
+checks, complete CI and installed Windows acceptance remain outstanding.

@@ -802,6 +802,9 @@ def _ecology_identity_registry_source(
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
     from reefvision.services.ecology_identity import EcologyIdentityService
+    from reefvision.services.ecology_measurement_candidates import (
+        EcologyMeasurementCandidateService,
+    )
 
     del settings
     # The workflow executor injects these two run-trace identifiers into every
@@ -820,7 +823,14 @@ def _ecology_identity_registry_source(
             "port_id": "registry",
             "data_type": "ecology_identity_registry",
             "payload": snapshot.model_dump(mode="json"),
-        }
+        },
+        {
+            "port_id": "measurement_candidates",
+            "data_type": "ecology_measurement_candidates",
+            "payload": EcologyMeasurementCandidateService(session).candidates(
+                project_id, registry=snapshot
+            ).model_dump(mode="json"),
+        },
     ]
 
 

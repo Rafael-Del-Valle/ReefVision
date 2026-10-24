@@ -653,7 +653,14 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 accepted_types=["ecology_identity_registry"],
                 required=False,
                 multiple=True,
-            )
+            ),
+            WorkflowPortDefinition(
+                port_id="measurement_candidates",
+                display_name="Source-linked projected measurement candidates (unverified)",
+                accepted_types=["ecology_measurement_candidates"],
+                required=False,
+                multiple=True,
+            ),
         ],
         required_parameters=[],
         optional_parameters={},
@@ -663,6 +670,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             "Persists typed identity, annotation and frozen calibration source evidence.",
             "Calibration changes invalidate unverified saved-workflow registry artifacts.",
             "Registry metadata is not evidence of verified annotation or organism identity.",
+            "Projected box/mask candidates remain unverified and require biological review.",
             "Review gate prevents direct promotion into verified-dataset ports.",
         ],
     )

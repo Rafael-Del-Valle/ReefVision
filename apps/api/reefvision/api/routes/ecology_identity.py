@@ -20,7 +20,11 @@ from reefvision.schemas.ecology_identity import (
     EcologyImageEvidenceCreate,
     EcologyImageEvidenceRow,
 )
+from reefvision.schemas.ecology_measurement_candidates import (
+    EcologyMeasurementCandidatesResponse,
+)
 from reefvision.services.ecology_identity import EcologyIdentityService
+from reefvision.services.ecology_measurement_candidates import EcologyMeasurementCandidateService
 
 router = APIRouter(tags=["ecological monitoring"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -32,6 +36,16 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 )
 def list_identity_registry(project_id: str, session: DbSession) -> EcologyIdentityRegistryResponse:
     return EcologyIdentityService(session).registry(project_id)
+
+
+@router.get(
+    "/projects/{project_id}/ecology/calibrated-measurement-candidates",
+    response_model=EcologyMeasurementCandidatesResponse,
+)
+def list_calibrated_measurement_candidates(
+    project_id: str, session: DbSession
+) -> EcologyMeasurementCandidatesResponse:
+    return EcologyMeasurementCandidateService(session).candidates(project_id)
 
 
 @router.post(
