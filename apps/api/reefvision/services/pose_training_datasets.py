@@ -78,6 +78,11 @@ def frozen_pose_item_fingerprints_match(
             "pose_schema_id": row.pose_schema_id,
             "pose_schema_revision": row.pose_schema_revision,
             "pose_schema_content_hash": row.pose_schema_content_hash,
+            # The source candidate hash must remain bound to the frozen
+            # acquisition provenance, even if the manifest is re-signed.
+            "candidate_provenance_sha256": canonical_json_sha256(
+                row.acquisition_provenance_json
+            ),
             "correction_id": (row.review_provenance_json or {}).get("correction_id"),
         }
         for row in rows
