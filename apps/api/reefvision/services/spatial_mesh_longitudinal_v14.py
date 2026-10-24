@@ -7,9 +7,7 @@ from math import isfinite
 from typing import Any
 
 
-def compare_mesh_observations(
-    before: dict[str, Any], after: dict[str, Any]
-) -> dict[str, Any]:
+def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     """Compare two explicitly identified timepoints without asserting coral growth."""
     first = before.get("provenance") or {}
     second = after.get("provenance") or {}
@@ -33,6 +31,7 @@ def compare_mesh_observations(
         or after_time <= before_time
     ):
         raise ValueError("Observations must have timezone-aware increasing timestamps")
+    elapsed_days = (after_time - before_time).total_seconds() / 86400
     project_before = before.get("project_id")
     project_after = after.get("project_id")
     if project_before != project_after:
@@ -52,8 +51,7 @@ def compare_mesh_observations(
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
     if any(
-        type(value) not in (int, float) or not isfinite(value) or value < 0
-        for value in (a0, a1)
+        type(value) not in (int, float) or not isfinite(value) or value < 0 for value in (a0, a1)
     ):
         raise ValueError("Both surface areas must be finite and nonnegative")
     difference = a1 - a0
@@ -76,9 +74,7 @@ def compare_mesh_observations(
             break
         bounds.append(pair)
     difference_bounds = (
-        [bounds[1][0] - bounds[0][1], bounds[1][1] - bounds[0][0]]
-        if len(bounds) == 2
-        else None
+        [bounds[1][0] - bounds[0][1], bounds[1][1] - bounds[0][0]] if len(bounds) == 2 else None
     )
     relative_bounds = (
         [
@@ -90,12 +86,22 @@ def compare_mesh_observations(
     )
     if relative_bounds is not None and not all(isfinite(v) for v in relative_bounds):
         relative_bounds = None
+    # Descriptive average change per elapsed day, not an estimated growth rate.
+    rate = difference / elapsed_days
+    rate_bounds = (
+        [value / elapsed_days for value in difference_bounds]
+        if difference_bounds is not None
+        else None
+    )
+    if not isfinite(rate) or (rate_bounds is not None and not all(isfinite(v) for v in rate_bounds)):
+        raise ValueError("Surface-area change rate exceeds finite numeric range")
     warnings = [
         "specimen_identity_not_verified",
         "observation_metadata_not_verified",
         "calibration_not_verified",
         "reconstruction_and_registration_uncertainty_not_estimated",
         "surface_area_change_is_not_verified_biological_growth",
+        "average_change_per_day_is_not_a_biological_growth_rate",
     ]
     if first.get("geometry_sha256") == second.get("geometry_sha256"):
         warnings.append("identical_geometry_fingerprint")
@@ -108,10 +114,12 @@ def compare_mesh_observations(
         "after_observation_id": second_id,
         "before_observed_at_utc": first["observed_at_utc"],
         "after_observed_at_utc": second["observed_at_utc"],
-        "elapsed_days": (after_time - before_time).total_seconds() / 86400,
+        "elapsed_days": elapsed_days,
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
         "delta_surface_area_m2": difference,
+        "average_surface_area_change_m2_per_day": rate,
+        "average_surface_area_change_scale_interval_m2_per_day": rate_bounds,
         "delta_surface_area_scale_interval_m2": difference_bounds,
         "relative_surface_area_change_percent": relative,
         "relative_surface_area_scale_interval_percent": relative_bounds,
