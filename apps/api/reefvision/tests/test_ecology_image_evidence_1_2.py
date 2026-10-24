@@ -157,3 +157,49 @@ def test_changed_source_image_hash_fails_closed_for_api_and_saved_workflow(
     assert not any(
         row["data_type"] == "ecology_identity_registry" for row in run["artifacts"]
     )
+
+
+def test_malformed_imported_image_metadata_fails_closed_before_linking(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Invalid imported image metadata")["id"])
+    _register(client, project_id, "colony-source-qc")
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        image.sha256 = "not-a-valid-sha256"
+        session.commit()
+
+    linked = _link(client, project_id, "colony-source-qc", image_id)
+    assert linked.status_code == 400, linked.text
+    assert "invalid source SHA-256" in linked.json()["detail"]
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 200, registry.text
+    assert registry.json()["image_evidence_count"] == 0
+
+
+def test_malformed_source_dimensions_fail_closed_in_api_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Image metadata QC after linking")["id"])
+    _register(client, project_id, "colony-image-qc")
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    assert _link(client, project_id, "colony-image-qc", image_id).status_code == 201
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        image.width_px = 0
+        session.commit()
+
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "invalid source dimensions or size" in registry.json()["detail"]
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "failed"
+    assert "invalid source dimensions or size" in run["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in run["artifacts"]
+    )
