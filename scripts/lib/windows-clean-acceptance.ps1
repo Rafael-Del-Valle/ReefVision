@@ -152,6 +152,88 @@ function Assert-ReefVisionSafeAcceptanceRoot {
     return $resolved
 }
 
+
+# An MSI reinstall of the same ProductVersion is not evidence of a version
+# upgrade. Windows Installer compares only the three numeric MSI fields.
+function Assert-ReefVisionUpgradeVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$PreviousVersion,
+        [Parameter(Mandatory = $true)][string]$TargetVersion
+    )
+    foreach ($candidate in @($PreviousVersion, $TargetVersion)) {
+        if ($candidate -notmatch '^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,5})
+    param(
+        [ValidateSet('Install', 'Uninstall')][string]$Action,
+        [Parameter(Mandatory = $true)][string]$PackageOrProduct,
+        [string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
+    $operation = if ($Action -eq 'Install') { '/i' } else { '/x' }
+    $arguments = @($operation, ('"{0}"' -f $PackageOrProduct), '/qn', '/norestart', '/L*v', ('"{0}"' -f $LogPath))
+    if ($Action -eq 'Install' -and $InstallRoot) {
+        $arguments += ('INSTALLDIR="{0}"' -f $InstallRoot)
+    }
+    return $arguments
+}
+
+function New-ReefVisionEvidenceResult {
+    param([string]$Status = 'NOT RUN', [string]$Detail = '')
+    return [ordered]@{ status = $Status; detail = $Detail; timestamp_utc = [DateTime]::UtcNow.ToString('o') }
+}
+
+function Write-ReefVisionEvidenceReport {
+    param([Parameter(Mandatory = $true)]$Report, [Parameter(Mandatory = $true)][string]$Path)
+    $parent = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+function Get-ReefVisionInstalledRegistrations {
+    $roots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    return @(Get-ItemProperty $roots -ErrorAction SilentlyContinue | Where-Object {
+        $displayName = $_.PSObject.Properties['DisplayName']
+        $null -ne $displayName -and $displayName.Value -like 'ReefVision*'
+    })
+}
+
+function Test-ReefVisionAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+) {
+            throw "Invalid MSI ProductVersion '$candidate'; expected major.minor.build."
+        }
+        $parts = @($candidate.Split('.') | ForEach-Object { [int]$_ })
+        if ($parts[0] -gt 255 -or $parts[1] -gt 255 -or $parts[2] -gt 65535) {
+            throw "Invalid MSI ProductVersion '$candidate'; numeric component exceeds Windows Installer limits."
+        }
+    }
+    if ([version]$TargetVersion -le [version]$PreviousVersion) {
+        throw "Refusing non-upgrade MSI acceptance: target $TargetVersion must exceed previous $PreviousVersion."
+    }
+    return $true
+}
+
+function Get-ReefVisionMsiProductVersion {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($Path, 0)
+    $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
+    try {
+        $view.Execute()
+        $record = $view.Fetch()
+        if ($null -eq $record) { throw "MSI has no ProductVersion: $Path" }
+        return [string]$record.StringData(1)
+    } finally {
+        $view.Close()
+    }
+}
+
 function New-ReefVisionMsiArguments {
     param(
         [ValidateSet('Install', 'Uninstall')][string]$Action,
