@@ -802,3 +802,20 @@ A verified calibration snapshot, independent reviewer decision, authenticated
 study design and real longitudinal dataset remain required before any
 calibrated measurement or inference can be labeled verified. The new migration
 also requires reviewed reconciliation with unmerged 1.1 migration `0038`.
+
+## Annotation geometry and class-ownership QC (2026-10-24)
+
+The existing append-only organism-to-annotation evidence service now checks
+source-pixel bounding boxes for finite, positive, in-image geometry, checks
+stored mask polygon coordinates and positive area when present, and verifies
+that any annotation label class belongs to the same project as its source
+image. The same service validates both initial API linking and subsequent
+identity-registry reads; saved executable Workflow Builder registry sources
+fail without a successful artifact when imported or subsequently altered
+annotation geometry is invalid. Focused regressions cover invalid box
+coordinates, mutated mask polygons, and foreign-project class assignments.
+The existing immutable annotation fingerprint and scientist-review-required
+gate are retained. This is **source geometry QC only**, not calibrated area,
+confirmed organism identity, an immutable calibration snapshot, or verified
+longitudinal biological evidence. Calibration linking remains the next
+scientific dependency. No new migration or model weights are involved.

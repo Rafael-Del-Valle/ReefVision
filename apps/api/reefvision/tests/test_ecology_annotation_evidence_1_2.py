@@ -242,3 +242,101 @@ def test_review_status_revocation_blocks_saved_workflow(
     assert run["run"]["status"] == "failed"
     assert "reviewed image status" in run["run"]["error_message"]
     assert not any(row["data_type"] == "ecology_identity_registry" for row in run["artifacts"])
+
+def test_out_of_image_box_rejected_before_linking(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Ecological box bounds validation")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201
+    box_id = _box(client, image_id, str(project["label_classes"][0]["id"]))
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        box = session.get(Annotation, box_id)
+        image = session.get(ImageAsset, image_id)
+        assert box is not None and image is not None
+        box.x_max = image.width_px + 1
+        session.commit()
+    linked = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
+    assert linked.status_code == 400, linked.text
+    assert "outside source image" in linked.json()["detail"]
+
+
+def test_changed_box_bounds_fail_registry_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Ecological box bounds revocation")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201
+    box_id = _box(client, image_id, str(project["label_classes"][0]["id"]))
+    linked = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
+    assert linked.status_code == 201, linked.text
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        box = session.get(Annotation, box_id)
+        assert box is not None
+        box.x_min = float("nan")
+        session.commit()
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "nonfinite source-pixel bounds" in registry.json()["detail"]
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "failed"
+    assert "nonfinite source-pixel bounds" in run["run"]["error_message"]
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in run["artifacts"])
+
+
+def test_mutated_mask_polygon_rejected_in_saved_workflow(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Ecological mask polygon bounds")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201
+    mask_id = _mask(client, image_id, str(project["label_classes"][0]["id"]))
+    linked = _annotation_link(client, project_id, image_link.json()["id"], "mask", mask_id)
+    assert linked.status_code == 201, linked.text
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        mask = session.get(MaskAnnotation, mask_id)
+        image = session.get(ImageAsset, image_id)
+        assert mask is not None and image is not None
+        mask.polygon_json = [[0, 0], [image.width_px + 1, 0], [0, 10]]
+        session.commit()
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "polygon extends outside source image" in registry.json()["detail"]
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "failed"
+    assert "polygon extends outside source image" in run["run"]["error_message"]
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in run["artifacts"])
+
+
+def test_foreign_label_class_rejected_before_linking(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Ecological class owner A")
+    other = create_project(client, "Ecological class owner B")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201
+    box_id = _box(client, image_id, str(project["label_classes"][0]["id"]))
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        box = session.get(Annotation, box_id)
+        assert box is not None
+        box.label_class_id = str(other["label_classes"][0]["id"])
+        session.commit()
+    linked = _annotation_link(client, project_id, image_link.json()["id"], "box", box_id)
+    assert linked.status_code == 400, linked.text
+    assert "class must belong to the source project" in linked.json()["detail"]

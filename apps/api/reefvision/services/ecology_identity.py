@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import math
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +16,7 @@ from reefvision.db.models.ecology_identity_annotation_evidence import (
 from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
 from reefvision.db.models.image import ImageAsset
+from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
@@ -284,6 +286,68 @@ class EcologyIdentityService:
         self.session.refresh(link)
         return EcologyImageEvidenceRow.model_validate(link)
 
+    def _assert_annotation_geometry(
+        self, annotation: Annotation | MaskAnnotation, image: ImageAsset
+    ) -> None:
+        """Fail closed on imported or mutated source geometry and class ownership.
+
+        A reviewed annotation is not automatically a scientifically usable
+        measurement. Source-pixel geometry must remain finite and within the
+        exact project image before its revision can enter ecological evidence.
+        """
+        if annotation.label_class_id is not None:
+            label = self.session.get(LabelClass, annotation.label_class_id)
+            if label is None or label.project_id != image.project_id:
+                raise ValidationError(
+                    "Ecological annotation class must belong to the source project"
+                )
+
+        bounds = (
+            annotation.x_min,
+            annotation.y_min,
+            annotation.x_max,
+            annotation.y_max,
+        )
+        if isinstance(annotation, Annotation) or any(value is not None for value in bounds):
+            if any(value is None for value in bounds):
+                raise ValidationError("Ecological annotation has incomplete source-pixel bounds")
+            values = [float(value) for value in bounds if value is not None]
+            if len(values) != 4 or not all(math.isfinite(value) for value in values):
+                raise ValidationError("Ecological annotation has nonfinite source-pixel bounds")
+            x_min, y_min, x_max, y_max = values
+            if not (
+                0 <= x_min < x_max <= image.width_px
+                and 0 <= y_min < y_max <= image.height_px
+            ):
+                raise ValidationError("Ecological annotation bounds extend outside source image")
+
+        if isinstance(annotation, MaskAnnotation):
+            if annotation.area_pixels is not None and annotation.area_pixels <= 0:
+                raise ValidationError("Ecological mask evidence requires positive pixel area")
+            polygon = annotation.polygon_json
+            if polygon is not None:
+                if not isinstance(polygon, list) or len(polygon) < 3:
+                    raise ValidationError("Ecological mask evidence has invalid polygon geometry")
+                for point in polygon:
+                    if (
+                        not isinstance(point, list)
+                        or len(point) != 2
+                        or any(
+                            isinstance(value, bool)
+                            or not isinstance(value, (int, float))
+                            or not math.isfinite(value)
+                            for value in point
+                        )
+                    ):
+                        raise ValidationError(
+                            "Ecological mask evidence has invalid polygon coordinates"
+                        )
+                    x, y = point
+                    if not (0 <= x <= image.width_px and 0 <= y <= image.height_px):
+                        raise ValidationError(
+                            "Ecological mask polygon extends outside source image"
+                        )
+
     def _annotation_source(self, kind: str, annotation_id: str, image_id: str) -> tuple[int, str]:
         """Resolve a current source revision, never a verified research observation."""
         annotation: Annotation | MaskAnnotation | None
@@ -307,9 +371,12 @@ class EcologyIdentityService:
         if image is None or image.annotation_status != "reviewed":
             raise ValidationError("Ecological annotation evidence requires reviewed image status")
         if annotation.source_type != "human":
-            raise ValidationError("Ecological annotation evidence requires reviewed human annotations")
+            raise ValidationError(
+                "Ecological annotation evidence requires reviewed human annotations"
+            )
         if isinstance(annotation, MaskAnnotation) and annotation.status != "verified":
             raise ValidationError("Ecological annotation evidence requires a verified mask status")
+        self._assert_annotation_geometry(annotation, image)
         return annotation.revision, canonical_json_sha256(
             {
                 "algorithm_version": "ecology-annotation-source-0001",
@@ -396,7 +463,10 @@ class EcologyIdentityService:
             revision, fingerprint = self._annotation_source(
                 evidence.annotation_kind, evidence.annotation_id, image_link.image_id
             )
-            if revision != evidence.annotation_revision or fingerprint != evidence.annotation_sha256:
+            if (
+                revision != evidence.annotation_revision
+                or fingerprint != evidence.annotation_sha256
+            ):
                 raise ValidationError("Ecological annotation source revision is missing or changed")
         return records
 
