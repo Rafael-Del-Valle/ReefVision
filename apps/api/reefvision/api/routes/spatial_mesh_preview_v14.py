@@ -49,3 +49,19 @@ def preview_point_cloud(
         raise ValidationError(str(exc)) from exc
     result["project_id"] = project_id
     return result
+
+
+@router.post("/projects/{project_id}/spatial/mesh-longitudinal-comparison")
+def preview_mesh_longitudinal_comparison(
+    project_id: str, payload: MeshLongitudinalComparisonRequest, session: DbSession
+) -> dict[str, Any]:
+    if session.get(Project, project_id) is None:
+        raise NotFoundError("Project not found")
+    try:
+        before = preview_from_request(payload.before)
+        after = preview_from_request(payload.after)
+        before["project_id"] = project_id
+        after["project_id"] = project_id
+        return compare_mesh_observations(before, after)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
