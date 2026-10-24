@@ -49,6 +49,18 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
         sqrt(5) - sqrt(2)
     )
+    assert expected["relative_axis_aligned_bounding_box_diagonal_change_percent"] == (
+        pytest.approx(100 * (sqrt(5) / sqrt(2) - 1))
+    )
+    relative_extent_bounds = expected[
+        "relative_axis_aligned_bounding_box_diagonal_scale_interval_percent"
+    ]
+    assert relative_extent_bounds == pytest.approx(
+        [
+            100 * (0.9 * sqrt(5) / (1.1 * sqrt(2)) - 1),
+            100 * (1.1 * sqrt(5) / (0.9 * sqrt(2)) - 1),
+        ]
+    )
     assert expected["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] == pytest.approx(
         [0.9 * sqrt(5) - 1.1 * sqrt(2), 1.1 * sqrt(5) - 0.9 * sqrt(2)]
     )
@@ -192,6 +204,8 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
     assert result["delta_surface_area_m2"] == 1
     assert result["delta_surface_area_scale_interval_m2"] is None
     assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
+    assert result["relative_axis_aligned_bounding_box_diagonal_change_percent"] is None
+    assert result["relative_axis_aligned_bounding_box_diagonal_scale_interval_percent"] is None
     assert "axis_aligned_extent_comparison_unavailable" in result["qc_warnings"]
     assert result["average_surface_area_change_m2_per_day"] == pytest.approx(1)
     assert result["average_surface_area_change_scale_interval_m2_per_day"] is None
@@ -209,6 +223,13 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
     }
     extent_result = compare_mesh_observations(early_extent, late_extent)
     assert extent_result["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(1)
+    assert extent_result["relative_axis_aligned_bounding_box_diagonal_change_percent"] == (
+        pytest.approx(100)
+    )
+    relative_bounds = extent_result[
+        "relative_axis_aligned_bounding_box_diagonal_scale_interval_percent"
+    ]
+    assert relative_bounds is None
     assert extent_result["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
     assert "extent_scale_uncertainty_interval_unavailable" in extent_result["qc_warnings"]
     malformed = {
@@ -242,8 +263,12 @@ def test_mesh_comparison_average_rate_preserves_negative_change(
     assert comparison["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
         sqrt(2) - sqrt(5)
     )
-    assert comparison["average_axis_aligned_bounding_box_diagonal_change_m_per_day"] == pytest.approx(
-        (sqrt(2) - sqrt(5)) / 2
+    daily_extent_change = comparison[
+        "average_axis_aligned_bounding_box_diagonal_change_m_per_day"
+    ]
+    assert daily_extent_change == pytest.approx((sqrt(2) - sqrt(5)) / 2)
+    assert comparison["relative_axis_aligned_bounding_box_diagonal_change_percent"] == (
+        pytest.approx(100 * (sqrt(2) / sqrt(5) - 1))
     )
     assert comparison["average_surface_area_change_m2_per_day"] == pytest.approx(-0.25)
     rate_bounds = comparison["average_surface_area_change_scale_interval_m2_per_day"]
@@ -284,3 +309,45 @@ def test_mesh_comparison_rejects_non_numeric_area(
     target["surface_area_m2"] = invalid_area
     with pytest.raises(ValueError, match="finite and nonnegative"):
         compare_mesh_observations(before, after)
+
+
+def test_mesh_comparison_zero_baseline_extent_withholds_relative_change() -> None:
+    """Zero baseline cannot define percent change, even with known scale intervals."""
+    base = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 0.0,
+        "surface_area_scale_interval_m2": [0.0, 0.0],
+        "axis_aligned_bounding_box_diagonal_m": 0.0,
+        "axis_aligned_bounding_box_diagonal_scale_interval_m": [0.0, 0.0],
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "geometry_sha256": "first-geometry",
+        },
+    }
+    later = {
+        **base,
+        "surface_area_m2": 1.0,
+        "surface_area_scale_interval_m2": [0.81, 1.21],
+        "axis_aligned_bounding_box_diagonal_m": 2.0,
+        "axis_aligned_bounding_box_diagonal_scale_interval_m": [1.8, 2.2],
+        "provenance": {
+            **base["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "geometry_sha256": "second-geometry",
+        },
+    }
+    comparison = compare_mesh_observations(base, later)
+    assert comparison["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(2)
+    assert comparison["relative_axis_aligned_bounding_box_diagonal_change_percent"] is None
+    relative_bounds = comparison[
+        "relative_axis_aligned_bounding_box_diagonal_scale_interval_percent"
+    ]
+    assert relative_bounds is None
+    assert "relative_axis_aligned_extent_change_unavailable" in comparison["qc_warnings"]
+    assert comparison["provenance"]["coordinate_registration_verified"] is False
