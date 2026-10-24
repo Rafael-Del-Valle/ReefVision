@@ -171,6 +171,11 @@ def test_standalone_and_persisted_workflow_volume_parity(
 ) -> None:
     project_id = str(create_project(client, "Mesh volume parity")["id"])
     params = _params(faces=faces)
+    params.update(
+        specimen_id="swiftia-001",
+        observation_id="survey-2026-10-24-001",
+        observed_at_utc="2026-10-24T10:00:00-04:00",
+    )
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
@@ -225,9 +230,28 @@ def test_standalone_and_persisted_workflow_volume_parity(
         assert artifact[key] == standalone.json()[key]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+    assert artifact["provenance"] == standalone.json()["provenance"]
+    assert artifact["provenance"]["specimen_id"] == "swiftia-001"
+    assert artifact["provenance"]["observation_id"] == "survey-2026-10-24-001"
+    assert artifact["provenance"]["observed_at_utc"] == "2026-10-24T14:00:00Z"
+    assert artifact["provenance"]["specimen_identity_verified"] is False
+    assert artifact["provenance"]["observation_metadata_verified"] is False
     if len(faces) == 3:
         assert artifact["enclosed_volume_m3"] is None
         assert (
             "enclosed_volume_requires_closed_oriented_nondegenerate_patch"
             in artifact["qc_warnings"]
         )
+
+
+def test_mesh_observation_metadata_rejects_naive_time_and_invalid_identity(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Mesh observation metadata")["id"])
+    endpoint = f"/api/v1/projects/{project_id}/spatial/mesh-preview"
+    for invalid in (
+        {"observed_at_utc": "2026-10-24T14:00:00"},
+        {"specimen_id": "   "},
+    ):
+        response = client.post(endpoint, json={**_params(), **invalid})
+        assert response.status_code == 422, response.text
