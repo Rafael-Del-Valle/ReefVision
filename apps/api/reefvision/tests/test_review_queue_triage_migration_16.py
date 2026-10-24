@@ -5,12 +5,11 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
-
 
 _MIGRATION_PATH = (
     Path(__file__).resolve().parents[2]
