@@ -38,7 +38,10 @@ def test_desktop_rejects_foreign_review_lineage_even_when_at_head(
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'lineage.sqlite'}")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
-        connection.execute(text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision})
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"),
+            {"revision": revision},
+        )
         connection.execute(text("CREATE TABLE scientific_records (id TEXT PRIMARY KEY)"))
         connection.execute(text("INSERT INTO scientific_records VALUES ('preserve-me')"))
     _prepare_desktop_migration(monkeypatch, engine, head=revision)
@@ -62,7 +65,10 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'lineage.sqlite'}")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
-        connection.execute(text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision})
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"),
+            {"revision": revision},
+        )
         connection.execute(
             text(
                 "CREATE TABLE review_queue_item_events ("
