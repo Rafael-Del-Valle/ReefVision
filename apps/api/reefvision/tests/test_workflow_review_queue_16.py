@@ -55,6 +55,7 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     standalone = client.post(f"/api/v1/projects/{project['id']}/review-queues", json={})
     assert standalone.status_code == 201, standalone.text
     assert standalone.json()["item_count"] == 1
+    assert len(standalone.json()["input_checksums_json"]["scoring_provenance_sha256"]) == 64
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200, registry.text
@@ -104,6 +105,7 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     response = client.get(f"/api/v1/review-queues/{result['queue_id']}")
     assert response.status_code == 200, response.text
     assert response.json()["created_by"].startswith("workflow:")
+    assert len(response.json()["input_checksums_json"]["scoring_provenance_sha256"]) == 64
 
     item_id = client.get(f"/api/v1/review-queues/{result['queue_id']}/items").json()["items"][0][
         "id"
