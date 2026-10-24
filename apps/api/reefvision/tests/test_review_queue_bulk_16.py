@@ -158,3 +158,17 @@ def test_bulk_triage_appends_atomic_actor_labeled_events(client: TestClient) -> 
             "triage_skip", "triage_return"
         ]
         assert history["items"][1]["comment"] is None
+
+    started = client.post(
+        url, json={"item_ids": ids, "action": "start", "actor": "lab reviewer"}
+    )
+    assert started.status_code == 200, started.text
+    assert started.json()["changed_count"] == 2
+    assert client.post(
+        url, json={"item_ids": ids, "action": "start", "actor": "lab reviewer"}
+    ).json()["changed_count"] == 0
+    for event_url in event_urls:
+        history = client.get(event_url).json()
+        assert history["total"] == 3
+        assert history["items"][2]["event_type"] == "triage_start"
+        assert history["current_assignee"] is None
