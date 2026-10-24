@@ -63,6 +63,45 @@ def test_log_tail_strips_terminal_control_sequences(tmp_path: Path) -> None:
     assert log.read_bytes() == original
 
 
+def test_log_tail_strips_hyperlinks_graphics_and_carriage_return_rewrites(
+    tmp_path: Path,
+) -> None:
+    """Terminal payloads cannot spoof or overwrite actual persisted loss values."""
+    log = tmp_path / "training.log"
+    original = (
+        b"epoch 3\rtrain/box_loss=0.20\n"
+        b"\x1b]8;;https://example.invalid\x1b\\"
+        b"train/cls_loss=0.30"
+        b"\x1b]8;;\x1b\\\n"
+        b"\x1bPgraphics payload\x1b\\"
+        b"\x1b_private APC payload\x1b\\"
+        b"\x1b^private PM payload\x1b\\"
+        b"\x1b[2Ktrain/dfl_loss=0.10\n"
+    )
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "epoch 3\ntrain/box_loss=0.20\n"
+            "train/cls_loss=0.30\ntrain/dfl_loss=0.10\n"
+        ),
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_discards_unterminated_terminal_title(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = b"train/box_loss=0.25\n\x1b]0;Spoofed terminal title"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "train/box_loss=0.25\n",
+    }
+    assert log.read_bytes() == original
+
+
 def test_training_log_api_uses_persisted_run_path_only(
     client: TestClient,
     test_settings: Settings,

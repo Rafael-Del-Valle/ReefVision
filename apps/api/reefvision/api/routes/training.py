@@ -219,14 +219,20 @@ def get_training_run(
 def _safe_terminal_log_text(payload: bytes) -> str:
     """Render training logs without terminal escape/control side effects."""
     text = payload.decode("utf-8", errors="replace")
-    # Training frameworks may emit ANSI colors or terminal-title sequences.
-    # Never forward those controls to the external PowerShell monitor.
-    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$)", "", text)
-    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+    # Strip entire OSC (title/hyperlink), DCS, SOS, PM, and APC strings.
+    # Removing just ESC would expose their printable payload as fake log data.
+    # A truncated terminal string is discarded through the end of the tail.
+    text = re.sub(r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\|$)", "", text)
+    text = re.sub(r"[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
+    text = re.sub(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", "", text)
+    text = re.sub(r"\x1b[ -/]*[@-_]", "", text)
+    # Progress bars use carriage returns to overwrite the current line.
+    # Show each update on a new line instead of allowing terminal rewrites.
+    text = text.replace("\r", "\n")
     return "".join(
         char
         for char in text
-        if char in "\t\n\r" or (ord(char) >= 32 and not 127 <= ord(char) <= 159)
+        if char in "\t\n" or (ord(char) >= 32 and not 127 <= ord(char) <= 159)
     )
 
 
