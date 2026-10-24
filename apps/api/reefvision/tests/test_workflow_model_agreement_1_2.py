@@ -1,0 +1,162 @@
+"""Saved Workflow Builder execution and unverified-data boundary for paired counts."""
+
+from __future__ import annotations
+
+from typing import cast
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.tests.test_annotations import create_project
+
+
+def _pairs() -> list[dict[str, object]]:
+    return [
+        {
+            "observation_id": "image-1",
+            "organism_id": "fragment-A",
+            "metric_name": "polyp_count",
+            "reference_source_record_id": "human-image-1",
+            "model_source_record_id": "model-image-1",
+            "reference_count": 10,
+            "model_count": 12,
+            "experimental_unit_id": "tank-A",
+            "experimental_unit_type": "tank",
+        },
+        {
+            "observation_id": "image-2",
+            "organism_id": "fragment-B",
+            "metric_name": "polyp_count",
+            "reference_source_record_id": "human-image-2",
+            "model_source_record_id": "model-image-2",
+            "reference_count": 20,
+            "model_count": 16,
+            "experimental_unit_id": "tank-A",
+            "experimental_unit_type": "tank",
+        },
+    ]
+
+
+def _graph() -> dict[str, object]:
+    return {
+        "graph_id": "paired-count-comparison-1-2",
+        "name": "Exploratory paired human-model count comparison",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "comparison",
+                "node_type": "ecology_paired_count_comparison",
+                "parameters": {"pairs": _pairs(), "reference_kind": "human_consensus"},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-comparison",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "comparison",
+                "target_port_id": "project",
+            }
+        ],
+    }
+
+
+def test_standalone_paired_comparison_returns_unverified_evidence(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/ecology/paired-count-comparison",
+        json={"pairs": _pairs(), "reference_kind": "human_consensus"},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["evidence_level"] == "caller_supplied_unverified"
+    assert payload["review_status"] == "requires_source_verification"
+    assert payload["paired_observation_count"] == 2
+    assert payload["declared_independent_unit_count"] == 1
+    assert payload["mean_signed_bias"] == -1
+    assert payload["mean_absolute_error"] == 3
+    assert payload["organism_and_unit_balanced_mean_signed_bias"] == -1
+    assert payload["unit_balanced_mean_absolute_percent_deviation"] == 20
+
+
+def test_saved_comparison_workflow_persists_typed_unverified_artifact(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Paired count agreement workflow")
+    project_id = str(project["id"])
+    registry_response = client.get("/api/v1/workflow-graphs/node-registry")
+    assert registry_response.status_code == 200
+    definitions = {item["node_type"]: item for item in registry_response.json()}
+    node = definitions["ecology_paired_count_comparison"]
+    assert node["executable"] is True
+    assert node["input_ports"][0]["accepted_types"] == ["project_reference"]
+    assert node["output_ports"][0]["accepted_types"] == ["paired_count_comparison"]
+    graph = _graph()
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is True
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        row for row in detail.json()["artifacts"] if row["data_type"] == "paired_count_comparison"
+    )
+    payload = artifact["payload_json"]
+    assert payload["project_id"] == project_id
+    assert payload["evidence_level"] == "caller_supplied_unverified"
+    assert payload["review_status"] == "requires_source_verification"
+    assert payload["mean_signed_bias"] == -1
+    assert payload["declared_independent_unit_count"] == 1
+    assert payload["organism_and_unit_balanced_mean_signed_bias"] == -1
+    assert payload["unit_balanced_mean_absolute_percent_deviation"] == 20
+    assert payload["percent_contributing_independent_unit_count"] == 1
+    assert payload["reference_source_record_ids"] == ["human-image-1", "human-image-2"]
+    assert payload["model_source_record_ids"] == ["model-image-1", "model-image-2"]
+    standalone = client.post(
+        "/api/v1/ecology/paired-count-comparison",
+        json={"pairs": _pairs(), "reference_kind": "human_consensus"},
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert payload["analysis_provenance"] == standalone.json()["analysis_provenance"]
+
+
+def test_unverified_comparison_cannot_enter_verified_dataset(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Paired count review boundary")
+    graph = _graph()
+    graph["nodes"].append({"node_id": "dataset", "node_type": "dataset_version_create"})
+    graph["edges"].append(
+        {
+            "edge_id": "unverified-comparison-into-dataset",
+            "source_node_id": "comparison",
+            "source_port_id": "comparison",
+            "target_node_id": "dataset",
+            "target_port_id": "reviewed",
+        }
+    )
+    response = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph)
+    assert response.status_code == 200, response.text
+    assert response.json()["valid"] is False
+    assert any(issue["code"] == "incompatible_port_types" for issue in response.json()["issues"])

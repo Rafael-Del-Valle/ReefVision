@@ -21,6 +21,8 @@ from reefvision.db.models import (
     WorkflowNodeRun,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.longitudinal_monitoring import analyze_longitudinal
+from reefvision.domain.model_agreement import compare_paired_counts
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
@@ -42,6 +44,9 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "relative_depth_estimation",
     "mask_measurements",
     "video_tracking",
+    "ecology_longitudinal_analysis",
+    "ecology_identity_registry_source",
+    "ecology_paired_count_comparison",
 }
 
 
@@ -789,6 +794,120 @@ def _video_tracking(
     ]
 
 
+def _ecology_identity_registry_source(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.services.ecology_identity import EcologyIdentityService
+    from reefvision.services.ecology_measurement_candidates import (
+        EcologyMeasurementCandidateService,
+    )
+
+    del settings
+    # The workflow executor injects these two run-trace identifiers into every
+    # runtime adapter. They are not scientist-configurable node parameters.
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    if set(parameters) - runtime_keys:
+        raise ValidationError("Ecological identity registry source accepts no parameters")
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Identity registry requires the current project source")
+    snapshot = EcologyIdentityService(session).registry(project_id)
+    if not snapshot.identities:
+        raise ValidationError("Register an organism before sourcing an identity registry")
+    return [
+        {
+            "port_id": "registry",
+            "data_type": "ecology_identity_registry",
+            "payload": snapshot.model_dump(mode="json"),
+        },
+        {
+            "port_id": "measurement_candidates",
+            "data_type": "ecology_measurement_candidates",
+            "payload": EcologyMeasurementCandidateService(session)
+            .candidates(project_id, registry=snapshot)
+            .model_dump(mode="json"),
+        },
+    ]
+
+
+def _ecology_longitudinal_analysis(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisRequest
+
+    del session, settings
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Longitudinal analysis requires the current project source")
+    request = LongitudinalAnalysisRequest.model_validate(
+        {
+            "observations": parameters.get("observations"),
+            "experimental_unit_type": parameters.get("experimental_unit_type"),
+            "expected_organism_ids_by_unit": parameters.get("expected_organism_ids_by_unit"),
+            "expected_sampling_dates_by_unit": parameters.get("expected_sampling_dates_by_unit"),
+        }
+    )
+    analysis = analyze_longitudinal(request)
+    return [
+        {
+            "port_id": "analysis",
+            "data_type": "longitudinal_analysis",
+            "payload": {
+                "schema_version": "longitudinal-analysis-0001",
+                "project_id": project_id,
+                "source_record_ids": [obs.source_record_id for obs in request.observations],
+                **analysis.model_dump(mode="json"),
+            },
+        }
+    ]
+
+
+def _ecology_paired_count_comparison(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.schemas.model_agreement import PairedCountComparisonRequest
+
+    del session, settings
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Paired count comparison requires the current project source")
+    request = PairedCountComparisonRequest.model_validate(
+        {
+            "pairs": parameters.get("pairs"),
+            "reference_kind": parameters.get("reference_kind"),
+            "experimental_unit_type": parameters.get("experimental_unit_type"),
+        }
+    )
+    comparison = compare_paired_counts(request)
+    return [
+        {
+            "port_id": "comparison",
+            "data_type": "paired_count_comparison",
+            "payload": {
+                "schema_version": "paired-count-comparison-0001",
+                "project_id": project_id,
+                "reference_source_record_ids": [
+                    pair.reference_source_record_id for pair in request.pairs
+                ],
+                "model_source_record_ids": [pair.model_source_record_id for pair in request.pairs],
+                **comparison.model_dump(mode="json"),
+            },
+        }
+    ]
+
+
 _ADAPTERS = {
     "segmentation_inference": _segmentation_inference,
     "classification_inference": _classification_inference,
@@ -800,6 +919,9 @@ _ADAPTERS = {
     "relative_depth_estimation": _relative_depth_estimation,
     "mask_measurements": _mask_measurements,
     "video_tracking": _video_tracking,
+    "ecology_longitudinal_analysis": _ecology_longitudinal_analysis,
+    "ecology_identity_registry_source": _ecology_identity_registry_source,
+    "ecology_paired_count_comparison": _ecology_paired_count_comparison,
 }
 
 

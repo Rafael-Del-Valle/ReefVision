@@ -1,0 +1,138 @@
+"""Contracts for exploratory paired human-model counts; sources are not authenticated."""
+
+from __future__ import annotations
+
+import math
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
+from reefvision.schemas.scientific_provenance import ScientificInputProvenance
+
+
+class PairedCountObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observation_id: str = Field(min_length=1, max_length=150)
+    organism_id: str = Field(min_length=1, max_length=150)
+    parent_colony_id: str | None = Field(default=None, max_length=150)
+    metric_name: str = Field(min_length=1, max_length=100)
+    reference_source_record_id: str = Field(min_length=1, max_length=150)
+    model_source_record_id: str = Field(min_length=1, max_length=150)
+    reference_count: float = Field(ge=0)
+    model_count: float = Field(ge=0)
+    experimental_unit_id: str | None = Field(default=None, max_length=150)
+    experimental_unit_type: str | None = Field(default=None, max_length=100)
+
+    @field_validator(
+        "observation_id",
+        "organism_id",
+        "parent_colony_id",
+        "metric_name",
+        "reference_source_record_id",
+        "model_source_record_id",
+        "experimental_unit_id",
+        "experimental_unit_type",
+    )
+    @classmethod
+    def nonempty(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Observation identifiers cannot be blank")
+        return stripped
+
+    @field_validator("experimental_unit_type")
+    @classmethod
+    def reject_technical_units(cls, value: str | None) -> str | None:
+        return require_ecological_unit_type(value)
+
+    @field_validator("reference_count", "model_count", mode="before")
+    @classmethod
+    def reject_boolean_counts(cls, value: object) -> object:
+        if isinstance(value, bool):
+            raise ValueError("Count values must be numeric, not Boolean")
+        if not isinstance(value, (int, float)):
+            raise ValueError("Count values must be JSON numbers, not coerced")
+        return value
+
+    @field_validator("reference_count", "model_count")
+    @classmethod
+    def finite_count(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("Counts must be finite")
+        return value
+
+
+class PairedCountComparisonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pairs: list[PairedCountObservation] = Field(min_length=2, max_length=10000)
+    reference_kind: Literal["human_observer", "human_consensus"]
+    experimental_unit_type: str | None = Field(default=None, max_length=100)
+
+    @field_validator("experimental_unit_type")
+    @classmethod
+    def nonempty_unit_type(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Experimental unit type cannot be blank")
+        return require_ecological_unit_type(stripped)
+
+
+class PairedCountDifference(BaseModel):
+    observation_id: str
+    organism_id: str
+    reference_source_record_id: str
+    model_source_record_id: str
+    reference_count: float
+    model_count: float
+    signed_difference: float
+    absolute_difference: float
+    absolute_percent_deviation: float | None
+
+
+class PairedCountUnitSummary(BaseModel):
+    experimental_unit_id: str
+    paired_observation_count: int
+    organism_count: int
+    mean_signed_bias: float
+    mean_absolute_error: float
+    organism_balanced_mean_signed_bias: float
+    organism_balanced_mean_absolute_error: float
+    nonzero_reference_count: int = 0
+    percent_contributing_organism_count: int = 0
+    mean_absolute_percent_deviation: float | None = None
+    organism_balanced_mean_absolute_percent_deviation: float | None = None
+
+
+class PairedCountComparisonResponse(BaseModel):
+    evidence_level: Literal["caller_supplied_unverified"] = "caller_supplied_unverified"
+    review_status: Literal["requires_source_verification"] = "requires_source_verification"
+    reference_kind: Literal["human_observer", "human_consensus"]
+    analysis_provenance: ScientificInputProvenance
+    metric_name: str
+    paired_observation_count: int
+    nonzero_reference_count: int
+    zero_reference_count: int
+    mean_signed_bias: float
+    mean_absolute_error: float
+    mean_absolute_percent_deviation: float | None
+    paired_differences: list[PairedCountDifference]
+    experimental_unit_type: str | None = None
+    declared_independent_unit_count: int | None = None
+    cross_unit_shared_parent_colony_ids: list[str] = Field(default_factory=list)
+    unit_summaries: list[PairedCountUnitSummary] = Field(default_factory=list)
+    unit_balanced_mean_signed_bias: float | None = None
+    unit_balanced_mean_absolute_error: float | None = None
+    organism_and_unit_balanced_mean_signed_bias: float | None = None
+    organism_and_unit_balanced_mean_absolute_error: float | None = None
+    unit_balanced_mean_absolute_percent_deviation: float | None = None
+    organism_and_unit_balanced_mean_absolute_percent_deviation: float | None = None
+    percent_contributing_independent_unit_count: int | None = None
+    percent_contributing_organism_count: int | None = None
+    limitations: list[str] = Field(default_factory=list)

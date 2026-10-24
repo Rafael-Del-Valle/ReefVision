@@ -126,6 +126,15 @@ _ACTIONS: dict[str, str] = {
         "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
+    "ecology_identity_registry_source": (
+        "Snapshot versioned project-owned organism identities; scientist review remains required."
+    ),
+    "ecology_longitudinal_analysis": (
+        "Analyze repeated organism observations; label source evidence unverified."
+    ),
+    "ecology_paired_count_comparison": (
+        "Compare human-model counts without claiming verified agreement."
+    ),
 }
 
 
