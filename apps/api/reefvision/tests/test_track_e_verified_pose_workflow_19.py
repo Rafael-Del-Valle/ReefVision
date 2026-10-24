@@ -134,9 +134,12 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["pose_schema_revision"] == dataset["pose_schema_revision"]
     assert payload["pose_schema_content_hash"] == dataset["pose_schema_content_hash"]
 
-    # The unmodified scientist-verified dataset remains exportable.
+    # The unmodified scientist-verified dataset remains retrievable and exportable.
     with app.state.session_factory() as session:
-        _, package_bytes, package_sha256 = PoseTrainingDatasetService(session).native_package(
+        service = PoseTrainingDatasetService(session)
+        retrieved = service.manifest(dataset_id)
+        assert retrieved.manifest_sha256 == dataset["manifest_sha256"]
+        _, package_bytes, package_sha256 = service.native_package(
             dataset_id
         )
     assert package_bytes
@@ -210,13 +213,20 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         }
         session.commit()
 
+    # Even with a valid manifest checksum, retrieval must not return a
+    # scientist-approved manifest backed by altered frozen landmarks.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).manifest(dataset_id)
     with (
         app.state.session_factory() as session,
         pytest.raises(ConflictError, match="item lineage no longer matches"),
     ):
         PoseTrainingDatasetService(session).native_package(dataset_id)
 
-    changed_pose_plan = client.post(
+    changed_pose_plan = client.post
         f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
     )
     assert changed_pose_plan.status_code == 200, changed_pose_plan.text
