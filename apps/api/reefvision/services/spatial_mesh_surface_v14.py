@@ -194,6 +194,22 @@ def measure_mesh_preview(
                 vertex_touching_patch_vertices.add(vertex_index)
             else:
                 vertex_patch_owners[vertex_index] = patch
+    # Importers may duplicate an identical coordinate under different vertex
+    # indices. Index-only topology then makes physically touching surfaces look
+    # disjoint. Compare exact source-frame positions without guessing a spatial
+    # tolerance or merging the scientific geometry.
+    coordinate_patches: dict[tuple[float, float, float], set[int]] = {}
+    coordinate_indices: dict[tuple[float, float, float], set[int]] = {}
+    for patch in ordered_patches:
+        for vertex_index in patch_vertex_indices[patch]:
+            coordinate = points[vertex_index]
+            coordinate_patches.setdefault(coordinate, set()).add(patch)
+            coordinate_indices.setdefault(coordinate, set()).add(vertex_index)
+    coincident_patch_coordinates = {
+        coordinate
+        for coordinate, patches in coordinate_patches.items()
+        if len(patches) > 1 and len(coordinate_indices[coordinate]) > 1
+    }
     # Edge incidents belong to one edge-connected patch. Report topology QC
     # per patch so a defective surface is not hidden by an aggregate count.
     patch_edge_counts: Counter[int] = Counter()
@@ -263,11 +279,17 @@ def measure_mesh_preview(
     all_patches_have_volume = all(volume is not None for volume in patch_volumes_m3)
     enclosed_volume_m3 = (
         fsum(volume for volume in patch_volumes_m3 if volume is not None)
-        if all_patches_have_volume and not vertex_touching_patch_vertices
+        if (
+            all_patches_have_volume
+            and not vertex_touching_patch_vertices
+            and not coincident_patch_coordinates
+        )
         else None
     )
     if vertex_touching_patch_vertices:
         volume_qc_warnings.add("enclosed_volume_vertex_touching_patches")
+    if coincident_patch_coordinates:
+        volume_qc_warnings.add("enclosed_volume_coincident_patch_coordinates")
     if enclosed_volume_m3 is not None and not isfinite(enclosed_volume_m3):
         enclosed_volume_m3 = None
         volume_qc_warnings.add("enclosed_volume_numeric_overflow")
@@ -434,6 +456,7 @@ def measure_mesh_preview(
         "nonmanifold_edge_count": nonmanifold,
         "edge_connected_patch_count": edge_connected_patch_count,
         "vertex_touching_patch_vertex_count": len(vertex_touching_patch_vertices),
+        "coincident_patch_coordinate_count": len(coincident_patch_coordinates),
         "edge_connected_patch_face_counts": [patch_face_counts[patch] for patch in ordered_patches],
         "edge_connected_patch_vertex_counts": [
             len(patch_vertex_indices[patch]) for patch in ordered_patches
@@ -525,6 +548,11 @@ def measure_mesh_preview(
             + (["nonmanifold_mesh_edges"] if nonmanifold else [])
             + (["disconnected_mesh_patches"] if edge_connected_patch_count > 1 else [])
             + (["vertex_touching_mesh_patches"] if vertex_touching_patch_vertices else [])
+            + (
+                ["coincident_mesh_patch_coordinates"]
+                if coincident_patch_coordinates
+                else []
+            )
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
             + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
             + (
