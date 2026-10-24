@@ -18,18 +18,20 @@ class EcologyIdentityRevision(Base):
     __tablename__ = "ecology_identity_revisions"
     __table_args__ = (
         UniqueConstraint(
-            "project_id", "organism_key", "revision",
+            "project_id",
+            "organism_key",
+            "revision",
             name="uq_ecology_identity_project_key_revision",
         ),
         Index(
             "ix_ecology_identity_project_key",
-            "project_id", "organism_key", "revision",
+            "project_id",
+            "organism_key",
+            "revision",
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
