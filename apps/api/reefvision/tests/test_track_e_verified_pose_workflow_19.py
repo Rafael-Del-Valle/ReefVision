@@ -139,6 +139,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         service = PoseTrainingDatasetService(session)
         retrieved = service.manifest(dataset_id)
         assert retrieved.manifest_sha256 == dataset["manifest_sha256"]
+        assert len(service.items(dataset_id)) == dataset["item_count"]
         _, package_bytes, package_sha256 = service.native_package(dataset_id)
     assert package_bytes
     assert len(package_sha256) == 64
@@ -211,8 +212,13 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         }
         session.commit()
 
-    # Even with a valid manifest checksum, retrieval must not return a
-    # scientist-approved manifest backed by altered frozen landmarks.
+    # Even with a valid manifest checksum, neither manifest nor item-list
+    # retrieval may expose altered scientist-verified frozen landmarks.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).items(dataset_id)
     with (
         app.state.session_factory() as session,
         pytest.raises(ConflictError, match="item lineage no longer matches"),
