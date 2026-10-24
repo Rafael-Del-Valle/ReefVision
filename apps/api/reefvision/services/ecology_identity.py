@@ -308,10 +308,10 @@ class EcologyIdentityService:
         image = self.session.get(ImageAsset, image_id)
         if image is None or image.annotation_status != "reviewed":
             raise ValidationError("Ecological annotation evidence requires reviewed image status")
-        if annotation.source_type != "human" or (
-            kind == "mask" and annotation.status != "verified"
-        ):
+        if annotation.source_type != "human":
             raise ValidationError("Ecological annotation evidence requires reviewed human annotations")
+        if isinstance(annotation, MaskAnnotation) and annotation.status != "verified":
+            raise ValidationError("Ecological annotation evidence requires a verified mask status")
         return annotation.revision, canonical_json_sha256(
             {
                 "algorithm_version": "ecology-annotation-source-0001",
