@@ -71,6 +71,20 @@ def frozen_pose_item_fingerprints_match(
     # persisted canonical landmarks are still the scientist-verified pose.
     # Recompute the original verification fingerprint from frozen row data.
     for row in rows:
+        # Frozen human-review evidence must remain a valid verification record.
+        # Otherwise a corrupted JSON value could raise an AttributeError
+        # instead of rejecting the dataset before export or workflow execution.
+        review = row.review_provenance_json
+        if (
+            not isinstance(row.acquisition_provenance_json, dict)
+            or not isinstance(review, dict)
+            or review.get("action") != "verify_active_learning_pose"
+            or review.get("target_type") != "pose_active_learning_candidate"
+            or review.get("target_id") != row.candidate_id
+            or not isinstance(review.get("correction_id"), str)
+        ):
+            return False
+
         canonical_pose = row.canonical_pose_json
         if (
             not isinstance(canonical_pose, dict)
