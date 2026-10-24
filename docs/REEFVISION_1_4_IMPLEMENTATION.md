@@ -64,3 +64,29 @@ surface incompleteness, registration, observer disagreement, or camera
 distortion. Imported axes are unregistered: a bounding-box diagonal is
 **not** a biological branch length, organism identity, or longitudinal
 growth measurement. Calibration and interpretation require human review.
+
+
+## Provisional enclosed mesh volume (scientific QC gated)
+
+The standalone mesh-preview API and persisted executable `mesh_surface_preview`
+Workflow Builder node now report `enclosed_volume_m3` and
+`edge_connected_patch_enclosed_volumes_m3` for triangular patches that
+have no open boundary edges, nonmanifold edges, inconsistent shared-edge
+winding, or degenerate faces. Oriented tetrahedron sums use a local
+reference point for translation stability. Either globally consistent
+winding direction yields the same unsigned enclosed volume.
+
+An invalid/open patch has `null` volume and an explicit QC warning.
+When some patches are valid and others invalid, the per-patch values are
+retained but **total enclosed volume is null**, not a misleading partial
+total. Missing relative scale uncertainty leaves the interval fields null.
+For supplied relative scale uncertainty `u`, scale-only bounds use the
+cubic law `[V(1-u)^3, V(1+u)^3]`.
+
+**Do not interpret this as coral biomass, tissue volume, or validated
+organism size.** Topological edge checks do not detect self-intersections,
+internal voids, surface reconstruction artifacts, overlapping components,
+or incomplete observations. Calibration, coordinate registration,
+organism identity, and biological completeness remain unverified.
+Human scientific review is required before interpreting these provisional
+geometric results. No confidence intervals are inferred.
