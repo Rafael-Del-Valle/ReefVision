@@ -198,3 +198,20 @@ reidentification. The new fields are descriptive geometric diagnostics only.
 Registration, independent calibration review, observation identity, and
 reconstruction uncertainty remain unverified. The same engine is exercised
 through the standalone endpoint and saved typed Workflow Builder execution.
+
+### Relative change in longitudinal 3D extent
+
+The same standalone and saved-workflow comparison artifacts now include
+`relative_axis_aligned_bounding_box_diagonal_change_percent` and
+`relative_axis_aligned_bounding_box_diagonal_scale_interval_percent`.
+The signed percentage is `100 * (later / earlier - 1)`, defined only
+for a positive baseline diagonal. When both scale-only intervals exist
+and the earlier lower bound is positive, the conservative interval is
+`[100 * (later_low / earlier_high - 1), 100 * (later_high / earlier_low - 1)]`.
+Zero baseline or an interval spanning zero yields `null` rather than
+infinity or fabricated certainty. Missing uncertainty also yields a
+`null` uncertainty interval. The QC flag
+`relative_axis_aligned_extent_change_unavailable` identifies undefined
+relative change. All measurements remain provisional, orientation-dependent,
+and **not** verified coral growth or reidentification. Saved Workflow Builder
+parity, negative changes, and zero-baseline regression cases are included.
