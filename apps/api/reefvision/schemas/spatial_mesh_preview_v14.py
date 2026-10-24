@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, StrictInt, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, StrictInt, model_validator
 
 
 class MeshPreviewRequest(BaseModel):
@@ -18,6 +18,13 @@ class MeshPreviewRequest(BaseModel):
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
     relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
     source_label: str | None = Field(default=None, max_length=200)
+    specimen_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    observation_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    observed_at_utc: AwareDatetime | None = None
 
     surface_path_vertex_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=16)
 
