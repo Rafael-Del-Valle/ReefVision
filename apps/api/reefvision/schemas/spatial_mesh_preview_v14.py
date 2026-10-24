@@ -43,3 +43,8 @@ class MeshPreviewRequest(BaseModel):
                 if len(pair) != 2 or pair[0] == pair[1] or any(index < 0 for index in pair):
                     raise ValueError("Surface paths require two distinct nonnegative indices")
         return self
+
+
+class MeshLongitudinalComparisonRequest(BaseModel):
+    before: MeshPreviewRequest
+    after: MeshPreviewRequest
