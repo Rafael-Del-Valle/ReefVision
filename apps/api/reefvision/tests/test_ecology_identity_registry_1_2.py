@@ -210,6 +210,61 @@ def test_saved_workflow_snapshots_registry_without_verification_promotion(
     assert any(issue["code"] == "incompatible_port_types" for issue in invalid.json()["issues"])
 
 
+def test_saved_identity_source_rejects_scientist_supplied_parameters(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Reject forged identity source parameters")["id"])
+    assert _register(client, project_id, "parent-verified-claim").status_code == 201
+    graph: dict[str, Any] = {
+        "graph_id": "ecology-identity-parameters-rejected-1-2",
+        "name": "Reject caller verification claims",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "identity",
+                "node_type": "ecology_identity_registry_source",
+                "parameters": {"verified": True},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert "accepts no parameters" in detail.json()["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry"
+        for row in detail.json()["artifacts"]
+    )
+
+
 def test_parent_colony_reclassification_requires_reassigning_fragments(
     client: TestClient,
 ) -> None:
