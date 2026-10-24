@@ -120,10 +120,7 @@ def test_live_log_tail_normalizes_windows_crlf_without_blank_records(
 ) -> None:
     """Windows CRLF logs and CR progress should produce one line per record."""
     log = tmp_path / "training.log"
-    original = (
-        b"epoch=5\r\ntrain/box_loss=0.20\r\n"
-        b"train/cls_loss=0.30\rtrain/dfl_loss=0.10\r\n"
-    )
+    original = b"epoch=5\r\ntrain/box_loss=0.20\r\ntrain/cls_loss=0.30\rtrain/dfl_loss=0.10\r\n"
     log.write_bytes(original)
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
