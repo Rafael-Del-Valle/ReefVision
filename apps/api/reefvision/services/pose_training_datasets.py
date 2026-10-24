@@ -62,15 +62,36 @@ def frozen_pose_item_fingerprints_match(
     if len(rows) != dataset.item_count:
         return False
 
-    expected = {row.id: (row.item_sha256, row.verified_pose_sha256) for row in rows}
-    observed: dict[str, tuple[str | None, str | None]] = {}
+    # Fingerprints alone do not bind the manifest's source identities to
+    # persisted items: a re-signed summary could otherwise swap candidate,
+    # video, track, frame, or schema lineage without changing item_sha256.
+    expected = {
+        row.id: {
+            "item_sha256": row.item_sha256,
+            "candidate_id": row.candidate_id,
+            "video_id": row.video_id,
+            "video_sha256": row.video_sha256,
+            "video_track_id": row.video_track_id,
+            "frame_index": row.frame_index,
+            "verified_track_revision": row.verified_track_revision,
+            "verified_pose_sha256": row.verified_pose_sha256,
+            "pose_schema_id": row.pose_schema_id,
+            "pose_schema_revision": row.pose_schema_revision,
+            "pose_schema_content_hash": row.pose_schema_content_hash,
+            "correction_id": (row.review_provenance_json or {}).get("correction_id"),
+        }
+        for row in rows
+    }
+    observed: dict[str, dict[str, Any]] = {}
     for summary in manifest["items"]:
         if not isinstance(summary, dict) or not isinstance(summary.get("item_id"), str):
             return False
         item_id = summary["item_id"]
         if item_id in observed:
             return False
-        observed[item_id] = (summary.get("item_sha256"), summary.get("verified_pose_sha256"))
+        observed[item_id] = {
+            field: summary.get(field) for field in expected.get(item_id, {})
+        }
     return observed == expected
 
 
