@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import Response
 
-from reefvision.db.models import Annotation, MaskAnnotation
+from reefvision.db.models import Annotation, ImageAsset, MaskAnnotation
 from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_ecology_image_evidence_1_2 import (
     _link,
@@ -192,3 +192,65 @@ def test_annotation_link_rejects_foreign_image_and_stale_revision(
     )
     assert stale.status_code == 409, stale.text
     assert "Stale annotation revision" in stale.json()["detail"]
+
+
+def test_unreviewed_annotation_cannot_be_linked_or_promoted(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Annotation review gate")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201
+    box_id = _box(client, image_id, str(project["label_classes"][0]["id"]))
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        box = session.get(Annotation, box_id)
+        assert box is not None
+        box.source_type = "model"
+        session.commit()
+    rejected = _annotation_link(
+        client, project_id, image_link.json()["id"], "box", box_id
+    )
+    assert rejected.status_code == 400, rejected.text
+    assert "reviewed human annotations" in rejected.json()["detail"]
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 200
+    assert registry.json()["annotation_evidence_count"] == 0
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    assert all(
+        row["payload_json"]["review_gate"] == "scientist_review_required"
+        for row in run["artifacts"]
+        if row["data_type"] == "ecology_identity_registry"
+    )
+
+
+def test_review_status_revocation_blocks_saved_workflow(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Review revocation")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201
+    box_id = _box(client, image_id, str(project["label_classes"][0]["id"]))
+    linked = _annotation_link(
+        client, project_id, image_link.json()["id"], "box", box_id
+    )
+    assert linked.status_code == 201
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        image.annotation_status = "in_progress"
+        session.commit()
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400
+    assert "reviewed image status" in registry.json()["detail"]
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "failed"
+    assert "reviewed image status" in run["run"]["error_message"]
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in run["artifacts"])
