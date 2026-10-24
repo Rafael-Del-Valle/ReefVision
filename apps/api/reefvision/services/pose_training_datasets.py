@@ -201,6 +201,43 @@ class PoseTrainingDatasetService:
             raise ConflictError(
                 "Pose training dataset manifest checksum no longer matches frozen content"
             )
+        # Retrieval must enforce the same frozen metadata and verification
+        # policy as native export and Workflow Builder execution. A re-signed
+        # checksum alone does not make changed source lineage trustworthy.
+        manifest = dataset.manifest_json
+        pose_schema = manifest.get("pose_schema")
+        if (
+            dataset.status != "complete"
+            or manifest.get("dataset_id") != dataset.id
+            or manifest.get("project_id") != dataset.project_id
+            or manifest.get("source_round_id") != dataset.source_round_id
+            or manifest.get("source_selection_sha256") != dataset.source_selection_sha256
+            or manifest.get("source_retraining_manifest_sha256")
+            != dataset.source_retraining_manifest_sha256
+            or not isinstance(pose_schema, dict)
+            or pose_schema.get("schema_id") != dataset.pose_schema_id
+            or pose_schema.get("schema_revision") != dataset.pose_schema_revision
+            or pose_schema.get("content_hash") != dataset.pose_schema_content_hash
+        ):
+            raise ConflictError(
+                "Pose training dataset manifest lineage no longer matches frozen truth"
+            )
+        if (
+            manifest.get("truth_policy") != "scientist_verified_only"
+            or manifest.get("skipped_candidates_included") is not False
+            or manifest.get("pending_candidates_included") is not False
+        ):
+            raise ConflictError(
+                "Pose training dataset manifest must contain only scientist-verified items"
+            )
+        if (
+            not isinstance(manifest.get("items"), list)
+            or manifest.get("item_count") != dataset.item_count
+            or len(manifest["items"]) != dataset.item_count
+        ):
+            raise ConflictError(
+                "Pose training dataset manifest item count no longer matches frozen truth"
+            )
         # A valid manifest checksum alone cannot authenticate the persisted
         # scientist-verified poses or their frozen source identities.
         if not frozen_pose_item_fingerprints_match(self.session, dataset):
