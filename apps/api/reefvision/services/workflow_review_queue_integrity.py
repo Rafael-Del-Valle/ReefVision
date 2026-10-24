@@ -37,7 +37,7 @@ def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
         or not isinstance(breakdown, list)
         or raw.keys() != normalized.keys()
         or len(breakdown) != len(raw)
-        or not set(raw).issubset(weights)
+        or raw.keys() != weights.keys()
         or any(not _finite_scientific_number(value) for value in raw.values())
         or any(
             not _finite_scientific_number(value) or not 0 <= value <= 1
