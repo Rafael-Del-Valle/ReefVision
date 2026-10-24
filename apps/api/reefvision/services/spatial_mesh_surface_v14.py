@@ -21,6 +21,24 @@ from reefvision.services import (
 MAX_PREVIEW_TRIANGLES = 512
 
 
+def _surface_volume_ratio_per_m(area_m2: float, volume_m3: float | None) -> float | None:
+    """Provisional A/V in inverse meters; undefined for rejected or zero volume."""
+    if volume_m3 is None or volume_m3 <= 0 or area_m2 <= 0:
+        return None
+    ratio = area_m2 / volume_m3
+    return ratio if isfinite(ratio) else None
+
+
+def _inverse_scale_interval_per_m(
+    ratio_per_m: float | None, uncertainty: float | None
+) -> list[float] | None:
+    """Exact scale-only A/V bounds; 100% uncertainty has no finite upper bound."""
+    if ratio_per_m is None or uncertainty is None or uncertainty >= 1:
+        return None
+    bounds = [ratio_per_m / (1 + uncertainty), ratio_per_m / (1 - uncertainty)]
+    return bounds if all(isfinite(bound) for bound in bounds) else None
+
+
 def _sample_mesh_display_geometry(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
@@ -257,8 +275,7 @@ def measure_mesh_preview(
         for patch in ordered_patches
     ]
     patch_boundary_loop_perimeters_m = [
-        [length * scale for length in cycles]
-        for cycles, _ in patch_boundary_component_lengths
+        [length * scale for length in cycles] for cycles, _ in patch_boundary_component_lengths
     ]
     patch_noncycle_boundary_component_lengths_m = [
         [length * scale for length in noncycles]
@@ -327,6 +344,14 @@ def measure_mesh_preview(
         enclosed_volume_m3 = None
         volume_qc_warnings.add("enclosed_volume_numeric_overflow")
     patch_areas_m2 = [patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches]
+    # A/V is a geometric inverse-length descriptor, not biomass or coral health.
+    # Withhold the aggregate ratio whenever aggregate enclosed volume is rejected;
+    # eligible per-patch ratios remain available as provisional evidence.
+    surface_volume_ratio_per_m = _surface_volume_ratio_per_m(area_m2, enclosed_volume_m3)
+    patch_surface_volume_ratios_per_m = [
+        _surface_volume_ratio_per_m(area, volume)
+        for area, volume in zip(patch_areas_m2, patch_volumes_m3, strict=True)
+    ]
     # Extents use only vertices belonging to each edge-connected patch.
     # These are global-axis bounds, not branch lengths or organism identities.
     patch_dimensions_m = [
@@ -432,6 +457,21 @@ def measure_mesh_preview(
             else None
         ),
         "enclosed_volume_is_provisional": True,
+        "surface_to_enclosed_volume_ratio_per_m": surface_volume_ratio_per_m,
+        "surface_to_enclosed_volume_ratio_scale_interval_per_m": _inverse_scale_interval_per_m(
+            surface_volume_ratio_per_m, relative_scale_uncertainty
+        ),
+        "edge_connected_patch_surface_to_enclosed_volume_ratios_per_m": (
+            patch_surface_volume_ratios_per_m
+        ),
+        "edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m": (
+            [
+                _inverse_scale_interval_per_m(ratio, relative_scale_uncertainty)
+                for ratio in patch_surface_volume_ratios_per_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_dimension_scale_intervals_m": (
             [
