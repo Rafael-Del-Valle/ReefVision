@@ -113,9 +113,7 @@ def test_annotation_link_persists_unverified_source_in_saved_workflow(
     assert snapshot["evidence_level"] == "registered_unverified"
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
-    artifacts = [
-        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
-    ]
+    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == snapshot
 
