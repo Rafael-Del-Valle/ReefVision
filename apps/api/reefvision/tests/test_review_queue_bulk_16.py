@@ -176,3 +176,73 @@ def test_bulk_triage_appends_atomic_actor_labeled_events(client: TestClient) -> 
         assert history["total"] == 3
         assert history["items"][2]["event_type"] == "triage_start"
         assert history["current_assignee"] is None
+
+
+
+def test_bulk_completion_requires_manual_confirmation_and_preserves_annotations(
+    client: TestClient,
+) -> None:
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    complete = {
+        "item_ids": ids,
+        "action": "complete",
+        "actor": "self-reported reviewer",
+        "review_confirmed": True,
+    }
+    assert client.post(url, json=complete).status_code == 409
+    assert client.post(url, json={**complete, "review_confirmed": False}).status_code == 422
+    assert client.post(url, json={**complete, "review_confirmed": "yes"}).status_code == 422
+    assert client.post(
+        url, json={"item_ids": ids, "action": "start", "review_confirmed": True}
+    ).status_code == 422
+    started = client.post(url, json={"item_ids": ids, "action": "start"})
+    assert started.status_code == 200, started.text
+    result = client.post(url, json=complete)
+    assert result.status_code == 200, result.text
+    assert result.json()["changed_count"] == 2
+    assert result.json()["requires_researcher_review"] is True
+    for item in result.json()["items"]:
+        assert item["review_state"] == "completed"
+        assert item["started_at"] is not None
+        assert item["completed_at"] is not None
+        history = client.get(
+            f"/api/v1/review-queues/{queue_id}/items/{item['id']}/events"
+        ).json()
+        assert [event["event_type"] for event in history["items"]] == [
+            "triage_start",
+            "triage_complete",
+        ]
+        assert history["items"][-1]["actor"] == "self-reported reviewer"
+        assert history["requires_researcher_review"] is True
+        annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
+        assert annotations.status_code == 200
+        assert annotations.json()["annotations"] == []
+    retry = client.post(url, json=complete)
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["changed_count"] == 0
+    for item_id in ids:
+        assert client.get(
+            f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+        ).json()["total"] == 2
+
+
+def test_bulk_completion_rejects_mixed_states_atomically(client: TestClient) -> None:
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    assert client.post(
+        url, json={"item_ids": [ids[0]], "action": "start"}
+    ).status_code == 200
+    rejected = client.post(
+        url,
+        json={"item_ids": ids, "action": "complete", "review_confirmed": True},
+    )
+    assert rejected.status_code == 409, rejected.text
+    listing = client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"]
+    assert {item["id"]: item["review_state"] for item in listing} == {
+        ids[0]: "in_progress",
+        ids[1]: "pending",
+    }
+    assert client.get(
+        f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events"
+    ).json()["total"] == 1

@@ -1291,7 +1291,7 @@ export interface ReviewQueueItemPage {
   pages: number;
 }
 
-export type ReviewQueueBulkAction = "start" | "skip" | "return";
+export type ReviewQueueBulkAction = "start" | "skip" | "return" | "complete";
 
 export interface ReviewQueueBulkResponse {
   queue_id: string;
@@ -1307,7 +1307,8 @@ export type ReviewQueueEventType =
   | "unassign"
   | "triage_start"
   | "triage_skip"
-  | "triage_return";
+  | "triage_return"
+  | "triage_complete";
 
 export interface ReviewQueueEvent {
   id: string;
@@ -2868,6 +2869,7 @@ export async function bulkTriageReviewQueueItems(
     action: ReviewQueueBulkAction;
     reason?: string;
     actor?: string;
+    review_confirmed?: boolean;
   },
 ): Promise<ReviewQueueBulkResponse> {
   return request<ReviewQueueBulkResponse>(

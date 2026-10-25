@@ -17,6 +17,7 @@ type BulkRequest = {
   action: ReviewQueueBulkAction;
   reason?: string;
   actor: string;
+  review_confirmed?: boolean;
 };
 
 function eligible(
@@ -24,6 +25,7 @@ function eligible(
   action: ReviewQueueBulkAction,
 ): boolean {
   if (action === "start") return item.review_state === "pending";
+  if (action === "complete") return item.review_state === "in_progress";
   if (action === "skip") {
     return (
       item.review_state === "pending" || item.review_state === "in_progress"
@@ -39,6 +41,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
   const [reason, setReason] = useState("");
   const [actor, setActor] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [reviewedConfirmed, setReviewedConfirmed] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [uncertainRequest, setUncertainRequest] = useState<BulkRequest | null>(
     null,
@@ -53,6 +56,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     onSuccess: async (result) => {
       setSelected([]);
       setConfirmed(false);
+      setReviewedConfirmed(false);
       setUncertainRequest(null);
       setLastResult(
         `${result.changed_count} items updated; scientific review remains required.`,
@@ -72,7 +76,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     selectedIds.length <= 100 &&
     actor.trim().length > 0 &&
     confirmed &&
-    (action !== "skip" || reason.trim().length > 0);
+    (action !== "skip" || reason.trim().length > 0) &&
+    (action !== "complete" || reviewedConfirmed);
 
   function submit() {
     if (!ready || locked) return;
@@ -81,6 +86,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
       action,
       actor: actor.trim(),
       ...(action === "skip" ? { reason: reason.trim() } : {}),
+      ...(action === "complete" ? { review_confirmed: true } : {}),
     });
   }
 
@@ -107,6 +113,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           onChange={(event) => {
             setActor(event.target.value);
             setConfirmed(false);
+            setReviewedConfirmed(false);
           }}
         />
       </label>
@@ -120,12 +127,14 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
             setAction(event.target.value as ReviewQueueBulkAction);
             setSelected([]);
             setConfirmed(false);
+            setReviewedConfirmed(false);
             setLastResult(null);
           }}
         >
           <option value="start">Start review</option>
           <option value="skip">Skip with reason</option>
           <option value="return">Return skipped items</option>
+          <option value="complete">Complete manually reviewed items</option>
         </select>
       </label>
       <div className="version-actions">
@@ -136,6 +145,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           onClick={() => {
             setSelected(available.slice(0, 100).map((item) => item.id));
             setConfirmed(false);
+            setReviewedConfirmed(false);
           }}
         >
           Select eligible on page ({available.length})
@@ -147,6 +157,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           onClick={() => {
             setSelected([]);
             setConfirmed(false);
+            setReviewedConfirmed(false);
           }}
         >
           Clear selection
@@ -166,6 +177,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
                     : current.filter((id) => id !== item.id),
                 );
                 setConfirmed(false);
+                setReviewedConfirmed(false);
               }}
             />
             Rank {item.rank_position} — image {item.image_id} (
@@ -186,6 +198,19 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
               setConfirmed(false);
             }}
           />
+        </label>
+      )}
+      {action === "complete" && (
+        <label>
+          <input
+            type="checkbox"
+            aria-label="Confirm each item was manually reviewed"
+            disabled={locked || selectedIds.length === 0}
+            checked={reviewedConfirmed}
+            onChange={(event) => setReviewedConfirmed(event.target.checked)}
+          />
+          I personally inspected every selected item. Completion is queue
+          bookkeeping, not acceptance of model predictions or annotations.
         </label>
       )}
       <label>
@@ -227,6 +252,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
               setUncertainRequest(null);
               setSelected([]);
               setConfirmed(false);
+              setReviewedConfirmed(false);
               mutation.reset();
               void queryClient.invalidateQueries({
                 queryKey: ["review_queue_items", queueId],

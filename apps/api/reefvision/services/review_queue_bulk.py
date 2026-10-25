@@ -60,6 +60,11 @@ def bulk_triage_review_queue(
             or (item.review_state == "skipped" and item.skip_reason != reason)
         ):
             raise ConflictError("Only active review items can be skipped with this reason")
+        if request.action == "complete" and item.review_state not in {
+            "in_progress",
+            "completed",
+        }:
+            raise ConflictError("Only started review items can be completed in bulk")
         if request.action == "return" and (
             item.review_state != "skipped"
             and not (item.review_state == "pending" and item.returned_at is not None)
@@ -85,6 +90,11 @@ def bulk_triage_review_queue(
         elif request.action == "return" and item.review_state == "skipped":
             item.review_state = "pending"
             item.returned_at = now
+            changed += 1
+            changed_ids.add(item.id)
+        elif request.action == "complete" and item.review_state == "in_progress":
+            item.review_state = "completed"
+            item.completed_at = now
             changed += 1
             changed_ids.add(item.id)
 

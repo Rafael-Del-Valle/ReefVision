@@ -791,3 +791,11 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Local isolated SQLite NOT NULL/CHECK smoke tests passed for both nullable
   and nonnullable variants. Full repository tests and exact-new-head CI remain
   pending; installed Windows GUI and MSI upgrade/rollback remain unverified.
+
+## 2026-10-25 — Explicit audited bulk QC completion (Track D)
+
+- Audited existing single-item `triage_complete` (migration 0040), atomic bulk start/skip/return and saved executable `qc_review_queue` graphs. No migration or duplicate workflow node.
+- Added bulk `complete` **only for already in-progress items**, requiring strict `review_confirmed=true` acknowledgement. The operation is queue bookkeeping only: it does not approve model predictions, verify biological annotations or change immutable scientific evidence. Actor labels remain self-reported.
+- Validate the entire batch before writing; append `triage_complete` events atomically with state changes. Identical retries are no-ops. UI requires general confirmation plus explicit confirmation that every selected item was inspected.
+- Standalone API/UI and saved-graph regression tests cover confirmation, mixed-state rejection, append-only events, unchanged annotations, replay and researcher-review gates.
+- Release HOLD: exact-head lint/type/backend/frontend/E2E/Windows CI, interactive installed GUI, MSI upgrade/rollback, representative scientific validation and independent 1.1/1.6 Alembic 0038 reconciliation remain required.

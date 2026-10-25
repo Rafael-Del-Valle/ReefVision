@@ -170,14 +170,27 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     # Completing a queue item is an audited triage transition, not acceptance
     # of a model prediction or an annotation. Saved workflow retries must
     # preserve this manual history and the researcher-review gate.
-    completed = client.post(f"/api/v1/review-queue-items/{item_id}/complete")
+    restarted = client.post(f"/api/v1/review-queue-items/{item_id}/start")
+    assert restarted.status_code == 200, restarted.text
+    completed = client.post(
+        f"/api/v1/review-queues/{result['queue_id']}/items/bulk",
+        json={
+            "item_ids": [item_id],
+            "action": "complete",
+            "actor": "workflow reviewer",
+            "review_confirmed": True,
+        },
+    )
     assert completed.status_code == 200, completed.text
-    assert completed.json()["review_state"] == "completed"
+    assert completed.json()["changed_count"] == 1
+    assert completed.json()["items"][0]["review_state"] == "completed"
+    assert completed.json()["requires_researcher_review"] is True
     assert client.post(f"/api/v1/review-queue-items/{item_id}/complete").status_code == 409
     history = client.get(event_url).json()
-    assert history["total"] == 5
+    assert history["total"] == 6
+    assert history["items"][-2]["event_type"] == "triage_start"
     assert history["items"][-1]["event_type"] == "triage_complete"
-    assert history["items"][-1]["actor"] == "local_user"
+    assert history["items"][-1]["actor"] == "workflow reviewer"
     assert history["requires_researcher_review"] is True
 
     with app.state.session_factory() as session:

@@ -6,7 +6,7 @@ from datetime import datetime
 from math import isfinite
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from reefvision.domain.enums import ReviewQueueItemState
 
@@ -124,10 +124,11 @@ class ReviewQueueBulkRequest(BaseModel):
     """Explicit local-operator action; cannot verify biological observations."""
 
     item_ids: list[str] = Field(min_length=1, max_length=100)
-    action: Literal["start", "skip", "return"]
+    action: Literal["start", "skip", "return", "complete"]
     reason: str | None = Field(default=None, max_length=500)
     # Self-reported local label, not authenticated account identity.
     actor: str = Field(default="local_user", min_length=1, max_length=100)
+    review_confirmed: StrictBool = False
 
     @field_validator("actor")
     @classmethod
@@ -137,10 +138,18 @@ class ReviewQueueBulkRequest(BaseModel):
             raise ValueError("Bulk triage actor label cannot be blank")
         return actor
 
+    @model_validator(mode="after")
+    def require_manual_review_confirmation(self) -> Self:
+        if self.action == "complete" and not self.review_confirmed:
+            raise ValueError("Bulk completion requires explicit manual-review confirmation")
+        if self.action != "complete" and self.review_confirmed:
+            raise ValueError("Review confirmation is only accepted for bulk completion")
+        return self
+
 
 class ReviewQueueBulkResponse(BaseModel):
     queue_id: str
-    action: Literal["start", "skip", "return"]
+    action: Literal["start", "skip", "return", "complete"]
     changed_count: int
     items: list[ReviewQueueItemResponse]
     requires_researcher_review: bool = True

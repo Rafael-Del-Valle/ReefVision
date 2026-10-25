@@ -157,4 +157,35 @@ describe("ReviewQueueBulkTriage", () => {
       vi.mocked(bulkTriageReviewQueueItems).mock.calls[1],
     );
   });
+
+  it("bulk-completes only started, manually inspected items with confirmation", async () => {
+    mount();
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "lab reviewer" },
+    });
+    fireEvent.change(screen.getByLabelText("Triage action"), {
+      target: { value: "complete" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select eligible on page/ }),
+    );
+    const apply = screen.getByRole("button", {
+      name: "Apply complete to 1 items",
+    });
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    expect((apply as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(
+      screen.getByLabelText("Confirm each item was manually reviewed"),
+    );
+    expect((apply as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(apply);
+    await waitFor(() =>
+      expect(bulkTriageReviewQueueItems).toHaveBeenCalledWith("queue-1", {
+        item_ids: ["active-2"],
+        action: "complete",
+        actor: "lab reviewer",
+        review_confirmed: true,
+      }),
+    );
+  });
 });
