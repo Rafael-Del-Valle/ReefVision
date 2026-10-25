@@ -135,7 +135,9 @@ describe("ProjectTrainingMonitor", () => {
       const open = vi
         .spyOn(runtime, "openDesktopTrainingConsole")
         .mockResolvedValue(undefined);
-      vi.mocked(api.getTrainingRuns).mockResolvedValue([{ ...completedRun, status }]);
+      vi.mocked(api.getTrainingRuns).mockResolvedValue([
+        { ...completedRun, status },
+      ]);
 
       renderMonitor();
       await screen.findByText("Swiftia detector completed");
