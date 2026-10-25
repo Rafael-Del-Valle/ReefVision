@@ -258,3 +258,21 @@ re-identification. These diagnostics do not independently verify registration,
 calibration, source files, or observation identity; all biological
 interpretation requires human review.
 
+### Cross-field topology integrity for persisted observations
+
+The shared longitudinal engine rejects impossible combinations of **present**
+reconstruction metadata: more edge-connected patches than faces, zero patches
+with a positive face count, more degenerate faces than total faces, or more
+boundary/nonmanifold edges than three times the face count. These are
+combinatorial bounds for indexed triangle meshes, not biological thresholds.
+Malformed observations fail rather than producing misleading longitudinal
+changes; the same comparison engine is used by the standalone API and the
+executable persisted Workflow Builder graph.
+
+Older observations with missing face counts or other topology fields remain
+readable. Missing metadata stays null and triggers
+`reconstruction_topology_comparison_incomplete`; it is not silently replaced
+with zero or marked scientifically verified. Regression cases cover impossible
+counts in either observation and partial legacy artifacts. These checks do
+not verify source geometry, coordinate registration, organism identity, or
+biological growth.
