@@ -118,8 +118,7 @@ def summarize_projected_endpoint_changes(
         for row in summarize_sampling_date_qc(candidates)
     }
     supplied_qc = {
-        (row.organism_key, row.metric): row.model_dump(mode="json")
-        for row in sampling_date_qc
+        (row.organism_key, row.metric): row.model_dump(mode="json") for row in sampling_date_qc
     }
     if len(supplied_qc) != len(sampling_date_qc) or supplied_qc != expected_qc:
         raise ValidationError("Projected endpoint sampling-date QC does not match sources")
@@ -203,6 +202,19 @@ def summarize_projected_unit_summaries(
     }
     if len(change_index) != len(changes):
         raise ValidationError("Duplicate projected organism endpoint changes")
+    # Revalidate the supplied endpoint changes against current source records.
+    # A stale or fabricated endpoint cannot become an experimental-unit mean.
+    recomputed = summarize_projected_endpoint_changes(
+        candidates, summarize_sampling_date_qc(candidates)
+    )
+    expected_changes = {
+        (row.organism_key, row.metric): row.model_dump(mode="json") for row in recomputed
+    }
+    provided_changes = {
+        key: row.model_dump(mode="json") for key, row in change_index.items()
+    }
+    if provided_changes != expected_changes:
+        raise ValidationError("Projected unit endpoint changes do not match source candidates")
 
     results: list[EcologyProjectedUnitSummary] = []
     for unit_type, unit_id, metric in sorted(
@@ -301,6 +313,7 @@ def summarize_projected_population_summaries(
                 )
 
     groups: dict[tuple[str, str, str, str], list[EcologyProjectedUnitSummary]] = {}
+    seen_unit_metrics: set[tuple[str, str, str]] = set()
     for row in unit_summaries:
         if row.unit_status != "candidate":
             continue
@@ -313,6 +326,21 @@ def summarize_projected_population_summaries(
             or row.mean_percent_change is None
         ):
             raise ValidationError("Incomplete projected unit cannot enter population summary")
+        if (
+            not row.organism_keys
+            or len(row.organism_keys) != len(set(row.organism_keys))
+            or set(row.complete_organism_keys) != set(row.organism_keys)
+            or row.incomplete_organism_keys
+        ):
+            raise ValidationError("Projected unit organism coverage is inconsistent")
+        unit_metric_key = (
+            row.experimental_unit_type,
+            row.experimental_unit_id,
+            row.metric,
+        )
+        if unit_metric_key in seen_unit_metrics:
+            raise ValidationError("Duplicate projected experimental-unit metric")
+        seen_unit_metrics.add(unit_metric_key)
         stratum_key = (
             row.experimental_unit_type,
             row.metric,
@@ -526,7 +554,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0006",
+                "algorithm_version": "ecology-measurement-candidates-0007",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
