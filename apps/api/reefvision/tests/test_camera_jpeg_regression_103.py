@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
+from threading import Barrier, Lock
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -434,3 +437,49 @@ def test_malformed_camera_exposure_does_not_become_digitized_time_in_api(
     assert metadata["capture_timestamp"] is None
     assert metadata["metadata_json"]["exif"]["DateTimeDigitized"] == "2026:10:02 13:00:00"
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+def test_parallel_camera_renditions_use_unique_temporary_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rendition: str
+) -> None:
+    """Concurrent thumbnail/display jobs must never delete or reuse another job's .part."""
+    source = tmp_path / "CAMERA.JPEG"
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumb.jpg")
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(source, format="JPEG")
+    original_bytes = source.read_bytes()
+    original_save = Image.Image.save
+    barrier = Barrier(2)
+    lock = Lock()
+    temporary_paths: list[Path] = []
+
+    def synchronized_save(
+        image: Image.Image, fp: str | Path, *args: Any, **kwargs: Any
+    ) -> None:
+        with lock:
+            temporary_paths.append(Path(fp))
+        # Both workers must have chosen their temporary file before either
+        # writes or atomically replaces the final destination.
+        barrier.wait(timeout=20)
+        original_save(image, fp, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", synchronized_save)
+
+    def render() -> None:
+        if rendition == "display":
+            create_browser_display(source, destination)
+        else:
+            create_thumbnail(source, destination, max_width=128, max_height=128)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = [executor.submit(render) for _ in range(2)]
+        for result in results:
+            result.result(timeout=30)
+
+    assert len(temporary_paths) == 2
+    assert temporary_paths[0] != temporary_paths[1]
+    assert all(path.parent == tmp_path and not path.exists() for path in temporary_paths)
+    with Image.open(destination) as rendered:
+        rendered.load()
+        assert rendered.size == (64, 48)
+    assert source.read_bytes() == original_bytes
