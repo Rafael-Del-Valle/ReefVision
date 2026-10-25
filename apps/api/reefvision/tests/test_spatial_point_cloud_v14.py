@@ -29,6 +29,7 @@ PARAMS = {
     "specimen_id": "coral-16",
     "observation_id": "survey:2026-10-24",
     "observed_at_utc": "2026-10-24T10:30:00-05:00",
+    "coordinate_frame_id": "transect-7",
 }
 
 
@@ -82,6 +83,8 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     assert expected["provenance"]["specimen_id"] == "coral-16"
     assert expected["provenance"]["observation_id"] == "survey:2026-10-24"
     assert expected["provenance"]["observed_at_utc"] == "2026-10-24T15:30:00Z"
+    assert expected["provenance"]["coordinate_frame_id"] == "transect-7"
+    assert expected["provenance"]["coordinate_registration_verified"] is False
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert expected["provenance"]["observation_metadata_verified"] is False
     assert (
@@ -98,6 +101,7 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     assert node["optional_parameters"]["specimen_id"] is None
     assert node["optional_parameters"]["observation_id"] is None
     assert node["optional_parameters"]["observed_at_utc"] is None
+    assert node["optional_parameters"]["coordinate_frame_id"] is None
     graph = {
         "graph_id": "point-cloud-v14",
         "name": "Point cloud extents",
@@ -157,6 +161,22 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     assert artifact["payload_json"]["surface_area_m2"] is None
     assert artifact["payload_json"]["project_id"] == project_id
     assert len(artifact["payload_sha256"]) == 64
+
+
+
+@pytest.mark.parametrize(
+    "invalid_frame",
+    ["", "transect with spaces", "survey/1", "x" * 129],
+)
+def test_point_cloud_rejects_invalid_coordinate_frame_id(
+    client: TestClient, invalid_frame: str
+) -> None:
+    project_id = str(create_project(client, "Reject invalid source frame")["id"])
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/point-cloud-preview",
+        json={**PARAMS, "coordinate_frame_id": invalid_frame},
+    )
+    assert response.status_code == 422, response.text
 
 
 def test_bounds_preserve_negative_source_coordinates() -> None:
