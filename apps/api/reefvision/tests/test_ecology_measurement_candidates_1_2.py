@@ -485,6 +485,16 @@ def test_undated_reimport_cannot_borrow_a_dated_photographs_provenance(
         row.unit_status != "candidate"
         for row in summarize_projected_unit_summaries(conflicting, [])
     )
+    # A naive timestamp is not evidence of the UTC acquisition instant.
+    naive = unknown.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8),
+            "capture_time_status": "timezone_missing",
+        }
+    )
+    naive_qc = summarize_sampling_date_qc([first, last, naive, other_last])
+    assert all(row.qc_status == "source_capture_conflict" for row in naive_qc)
+    assert summarize_projected_endpoint_changes([first, last, naive, other_last], naive_qc) == []
 
     # A matching, timezone-aware instant on the reimport is legitimate:
     # the same photograph may contain multiple organisms on one UTC date.
