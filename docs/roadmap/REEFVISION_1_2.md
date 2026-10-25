@@ -1490,3 +1490,25 @@ of the original project images or proof of reviewed growth. All outputs remain
 `linked_unverified` with `scientist_review_required`. Full exact-head CI,
 scientific acceptance, registered sampling designs and installed Windows GUI
 checks remain release blockers.
+
+
+## Full source-fingerprint reconciliation for detailed QC exports (2026-10-25)
+
+New calibrated-measurement candidate responses persist the image-evidence and
+annotation-evidence registry digests alongside their existing registry history
+and calibration digests. A typed optional `source_fingerprint_contract` marks
+records whose complete `ecology-measurement-candidates-0018` input SHA-256 can
+be recomputed from all linked candidates, date-QC decisions, projected
+coverage/changes, unit/population summaries and exclusions. The detailed
+`report-series.csv` exporter now **fails closed** on changed measurement values
+or stale linked source digests, even when aggregate QC denominators are unchanged.
+Its `source_fingerprint_rechecked` column distinguishes new rechecked exports
+(`true`) from older persisted Workflow Builder artifacts (`false`). Legacy
+artifacts remain readable and exportable but are not silently described as
+revalidated. Existing standalone API and saved-workflow outputs share the same
+typed contract; regression coverage checks tampering, compatibility and parity.
+
+This is an internal consistency and reproducibility check, **not** an
+authentication signature, independent scientific review, verified organism
+identity, or permission to promote unverified observations into a verified
+dataset. All research and Windows release acceptance gates remain outstanding.

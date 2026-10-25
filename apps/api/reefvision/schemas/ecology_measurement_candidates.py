@@ -207,6 +207,10 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
     project_id: str
     source_registry_history_sha256: str | None
     source_calibration_evidence_sha256: str | None
+    # Optional additions: older saved Workflow Builder artifacts remain readable.
+    source_image_evidence_sha256: str | None = None
+    source_annotation_evidence_sha256: str | None = None
+    source_fingerprint_contract: Literal["ecology-measurement-candidates-0018"] | None = None
     candidates: list[EcologyMeasurementCandidate] = Field(default_factory=list)
     candidate_count: int = 0
     sampling_date_qc: list[EcologySamplingDateQC] = Field(default_factory=list)

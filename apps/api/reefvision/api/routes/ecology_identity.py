@@ -92,7 +92,6 @@ def export_ecology_candidate_report(project_id: str, session: DbSession) -> Resp
     )
 
 
-
 @router.get(
     "/projects/{project_id}/ecology/calibrated-measurement-candidates/report-series.csv",
 )
@@ -102,9 +101,7 @@ def export_ecology_candidate_series_report(project_id: str, session: DbSession) 
     return Response(
         content=render_ecology_series_qc_csv(response),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": 'attachment; filename="reefvision-ecology-series-qc.csv"'
-        },
+        headers={"Content-Disposition": 'attachment; filename="reefvision-ecology-series-qc.csv"'},
     )
 
 

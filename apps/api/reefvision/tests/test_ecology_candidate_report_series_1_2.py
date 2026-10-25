@@ -18,7 +18,6 @@ from reefvision.services.ecology_candidate_report_export import (
     _json_array,
     render_ecology_series_qc_csv,
 )
-from reefvision.services.ecology_measurement_candidates import summarize_sampling_date_qc
 from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
 from reefvision.tests.test_ecology_projected_visit_coverage_1_2 import _source
 
@@ -42,12 +41,14 @@ def test_series_qc_csv_matches_typed_api_and_saved_workflow(client: TestClient) 
         assert row["project_id"] == project_id
         assert row["source_input_sha256"] == payload["input_sha256"]
         assert row["report_sha256"] == payload["candidate_report"]["report_sha256"]
+        assert row["source_fingerprint_rechecked"] == "true"
         assert row["qc_status"] == source_row["qc_status"] == "missing_timestamps"
         assert int(row["candidate_count"]) == source_row["candidate_count"]
         assert json.loads(row["source_image_ids_json"]) == source_row["source_image_ids"]
         assert source.image_id in json.loads(row["source_image_ids_json"])
-        assert json.loads(row["missing_timestamp_image_ids_json"]) == (
-            source_row["missing_timestamp_image_ids"]
+        assert (
+            json.loads(row["missing_timestamp_image_ids_json"])
+            == (source_row["missing_timestamp_image_ids"])
         )
         assert json.loads(row["sampling_dates_utc_json"]) == []
         assert row["evidence_level"] == "linked_unverified"
@@ -61,9 +62,7 @@ def test_series_qc_csv_matches_typed_api_and_saved_workflow(client: TestClient) 
         if item["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
-    persisted = EcologyMeasurementCandidatesResponse.model_validate(
-        artifacts[0]["payload_json"]
-    )
+    persisted = EcologyMeasurementCandidatesResponse.model_validate(artifacts[0]["payload_json"])
     assert render_ecology_series_qc_csv(persisted) == csv_response.text
     assert render_ecology_series_qc_csv(persisted) == render_ecology_series_qc_csv(
         persisted.model_copy(
@@ -107,21 +106,12 @@ def test_series_qc_csv_escapes_spreadsheet_formulas_and_preserves_delimiters(
     )
     assert response.status_code == 200
     payload = EcologyMeasurementCandidatesResponse.model_validate(response.json())
-    # Keep the source records and their QC rows mutually consistent; this is
-    # a synthetic renderer safety check, not an authenticated source rewrite.
-    altered_candidates = [
-        row.model_copy(update={"organism_key": "=SUM(1,2)", "image_id": "image;1"})
-        for row in payload.candidates
-    ]
-    altered = payload.model_copy(
-        update={
-            "candidates": altered_candidates,
-            "sampling_date_qc": summarize_sampling_date_qc(altered_candidates),
-        }
-    )
-    rows = list(csv.DictReader(StringIO(render_ecology_series_qc_csv(altered))))
-    assert rows[0]["organism_key"] == "'=SUM(1,2)"
-    assert json.loads(rows[0]["source_image_ids_json"]) == ["image;1"]
+    # Formula safety is tested on the serializer directly: modifying source
+    # records without updating their immutable input digest must now fail.
+    assert _csv_identifier("=SUM(1,2)") == "'=SUM(1,2)"
+    assert _csv_identifier("+2+3") == "'+2+3"
+    assert _csv_identifier("-2+3") == "'-2+3"
+    assert _csv_identifier("@SUM(1,2)") == "'@SUM(1,2)"
     assert _csv_identifier("  @SUM(1,2)") == "'  @SUM(1,2)"
     assert json.loads(_json_array(["image;1", "image,2"])) == ["image;1", "image,2"]
 
@@ -185,3 +175,53 @@ def test_series_qc_csv_rejects_stale_denominators_and_report_digest(
     )
     with pytest.raises(ValidationError, match="fingerprint"):
         render_ecology_series_qc_csv(wrong_digest)
+
+
+def test_series_qc_csv_rechecks_complete_source_fingerprint_and_marks_legacy(
+    client: TestClient,
+) -> None:
+    project_id, _ = _source(client)
+    response = client.get(
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    )
+    assert response.status_code == 200
+    payload = EcologyMeasurementCandidatesResponse.model_validate(response.json())
+    assert payload.source_fingerprint_contract == "ecology-measurement-candidates-0018"
+    assert payload.candidates
+    assert '"true"' not in render_ecology_series_qc_csv(payload)  # CSV booleans are plain text
+
+    # A value change leaves date QC and aggregate counts unchanged, but it
+    # must never retain the old source-evidence fingerprint.
+    candidate = payload.candidates[0]
+    altered = payload.model_copy(
+        update={
+            "candidates": [
+                candidate.model_copy(update={"value": candidate.value + 0.25}),
+                *payload.candidates[1:],
+            ]
+        }
+    )
+    with pytest.raises(ValidationError, match="source input fingerprint"):
+        render_ecology_series_qc_csv(altered)
+
+    altered = payload.model_copy(
+        update={"source_annotation_evidence_sha256": "0" * 64}
+    )
+    with pytest.raises(ValidationError, match="source input fingerprint"):
+        render_ecology_series_qc_csv(altered)
+
+    # Pre-contract persisted artifacts remain exportable, but their source
+    # digest is explicitly NOT represented as independently rechecked.
+    legacy = payload.model_copy(
+        update={
+            "source_fingerprint_contract": None,
+            "source_image_evidence_sha256": None,
+            "source_annotation_evidence_sha256": None,
+        }
+    )
+    rows = list(csv.DictReader(StringIO(render_ecology_series_qc_csv(legacy))))
+    assert rows and all(row["source_fingerprint_rechecked"] == "false" for row in rows)
+
+    downgraded = payload.model_copy(update={"source_fingerprint_contract": None})
+    with pytest.raises(ValidationError, match="contract is missing"):
+        render_ecology_series_qc_csv(downgraded)

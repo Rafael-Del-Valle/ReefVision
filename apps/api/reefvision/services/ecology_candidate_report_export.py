@@ -17,6 +17,7 @@ _SERIES_COLUMNS = (
     "project_id",
     "source_input_sha256",
     "report_sha256",
+    "source_fingerprint_rechecked",
     "organism_key",
     "metric",
     "qc_status",
@@ -132,6 +133,42 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
             "Ecological candidate report fingerprint does not match source totals"
         )
 
+    # Recompute the complete source digest for newly persisted artifacts.
+    # Older Workflow Builder artifacts lack the two registry evidence hashes:
+    # they remain readable but must be visibly marked as not rechecked.
+    source_fingerprint_rechecked = response.source_fingerprint_contract is not None
+    if source_fingerprint_rechecked:
+        source_values = {
+            "algorithm_version": response.source_fingerprint_contract,
+            "project_id": response.project_id,
+            "registry_history_sha256": response.source_registry_history_sha256,
+            "registry_image_evidence_sha256": response.source_image_evidence_sha256,
+            "registry_annotation_evidence_sha256": response.source_annotation_evidence_sha256,
+            "registry_calibration_evidence_sha256": response.source_calibration_evidence_sha256,
+            "candidates": [row.model_dump(mode="json") for row in response.candidates],
+            "sampling_date_qc": [row.model_dump(mode="json") for row in response.sampling_date_qc],
+            "projected_visit_coverage": [
+                row.model_dump(mode="json") for row in response.projected_visit_coverage
+            ],
+            "projected_endpoint_changes": [
+                row.model_dump(mode="json") for row in response.projected_endpoint_changes
+            ],
+            "projected_unit_summaries": [
+                row.model_dump(mode="json") for row in response.projected_unit_summaries
+            ],
+            "projected_population_summaries": [
+                row.model_dump(mode="json") for row in response.projected_population_summaries
+            ],
+            "exclusions": [row.model_dump(mode="json") for row in response.exclusions],
+        }
+        if canonical_json_sha256(source_values) != response.input_sha256:
+            raise ValidationError("Ecological source input fingerprint does not match evidence")
+    elif (
+        response.source_image_evidence_sha256 is not None
+        or response.source_annotation_evidence_sha256 is not None
+    ):
+        raise ValidationError("Ecological source fingerprint contract is missing")
+
     output = StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(_SERIES_COLUMNS)
@@ -141,6 +178,7 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
                 report.project_id,
                 report.source_input_sha256,
                 report.report_sha256,
+                str(source_fingerprint_rechecked).lower(),
                 _csv_identifier(row.organism_key),
                 row.metric,
                 row.qc_status,
