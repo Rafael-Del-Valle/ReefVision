@@ -321,6 +321,15 @@ def test_exif_oriented_jpeg_display_preserves_raw_pixel_geometry(
         assert rendition.size == (64, 48)
         assert rendition.getexif().get(274) in (None, 1)
 
+    # Thumbnails must use the same raw camera-pixel axes as the viewer, not
+    # the EXIF presentation orientation or a previously cached rotated JPEG.
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    with Image.open(BytesIO(thumbnail.content)) as rendition:
+        assert rendition.width * 48 == rendition.height * 64
+        assert rendition.getexif().get(274) in (None, 1)
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
 
 def test_cmyk_jpeg_import_has_browser_safe_display(client: TestClient) -> None:
     project = create_project(client, "CMYK JPEG")
