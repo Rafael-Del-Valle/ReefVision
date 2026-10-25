@@ -35,12 +35,12 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
         connection.execute(
             text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
         )
+        allowed = "'comment', 'assign', 'unassign'"
+        if revision == "0039":
+            allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
         check = (
             ", CONSTRAINT ck_review_queue_item_event_type "
-            "CHECK (event_type IN ('comment', 'assign', 'unassign', "
-            "'triage_start', 'triage_skip', 'triage_return'))"
-            if revision == "0039"
-            else ""
+            f"CHECK (event_type IN ({allowed}))"
         )
         connection.execute(text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})"))
         connection.execute(
@@ -153,7 +153,9 @@ def test_revision_0039_rejects_obsolete_event_check_without_writes(
 @pytest.mark.parametrize(
     ("revision", "constraint_name", "should_reject"),
     [
-        ("0038", None, False),
+        ("0038", None, True),
+        ("0038", "renamed_event_type_check", True),
+        ("0038", "ck_review_queue_item_event_type", False),
         ("0039", None, True),
         ("0039", "renamed_event_type_check", True),
         ("0039", "ck_review_queue_item_event_type", False),
@@ -169,10 +171,11 @@ def test_revision_0039_requires_named_triage_check_without_writes(
         connection.execute(
             text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
         )
+        allowed = "'comment', 'assign', 'unassign'"
+        if revision == "0039":
+            allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
         check = (
-            f", CONSTRAINT {constraint_name} CHECK (event_type IN "
-            "('comment', 'assign', 'unassign', 'triage_start', "
-            "'triage_skip', 'triage_return'))"
+            f", CONSTRAINT {constraint_name} CHECK (event_type IN ({allowed}))"
             if constraint_name is not None
             else ""
         )
