@@ -102,6 +102,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         item for item in registry.json() if item["node_type"] == "mesh_longitudinal_comparison"
     )
     assert node["executable"] is True
+    assert "coordinate_frame_id" in node["optional_parameters"]
+    assert node["optional_parameters"]["coordinate_frame_id"] is None
     assert [port["accepted_types"] for port in node["input_ports"]] == [
         ["mesh_measurement_preview"],
         ["mesh_measurement_preview"],
@@ -217,8 +219,7 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     )
     assert result["provenance"]["calibration_verified"] is False
     assert (
-        "identical_geometry_extent_inconsistent_with_calibration_scale"
-        not in result["qc_warnings"]
+        "identical_geometry_extent_inconsistent_with_calibration_scale" not in result["qc_warnings"]
     )
 
     # The same warning and calibration ratio must survive a persisted typed
@@ -1069,9 +1070,9 @@ def test_identical_mesh_extent_requires_calibration_consistency(
     result = compare_mesh_observations(before, after)
     warning = "identical_geometry_extent_inconsistent_with_calibration_scale"
     assert (warning in result["qc_warnings"]) is inconsistent
-    assert "identical_geometry_area_inconsistent_with_calibration_scale" not in result[
-        "qc_warnings"
-    ]
+    assert (
+        "identical_geometry_area_inconsistent_with_calibration_scale" not in result["qc_warnings"]
+    )
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["coordinate_registration_verified"] is False
 
