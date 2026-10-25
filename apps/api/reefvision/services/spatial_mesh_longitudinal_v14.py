@@ -121,7 +121,9 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     ):
         raise ValueError("Both surface areas must be finite and nonnegative")
     difference = a1 - a0
-    relative = (100 * difference / a0) if a0 > 0 else None
+    # Divide before multiplying: 100 * a finite large delta can overflow even
+    # when the actual percent change is representable (e.g. 1e307 / 1e307).
+    relative = ((difference / a0) * 100) if a0 > 0 else None
     if relative is not None and not isfinite(relative):
         relative = None
 
