@@ -190,12 +190,18 @@ def summarize_projected_visit_coverage(
         tuple[str | None, str | None, str, str], list[EcologyMeasurementCandidate]
     ] = {}
     for candidate in candidates:
-        key = (
-            candidate.experimental_unit_type,
-            candidate.experimental_unit_id,
-            candidate.metric,
-            candidate.unit,
-        )
+        unit_type = candidate.experimental_unit_type
+        unit_id = candidate.experimental_unit_id
+        # Without a declared biological unit, unrelated organisms must not
+        # be silently pooled into one synthetic "None" sampling group.
+        if not unit_type or not unit_id or not unit_id.strip():
+            continue
+        try:
+            require_ecological_unit_type(unit_type)
+        except ValueError:
+            # Image/frame/crop labels are technical replicates, not units.
+            continue
+        key = (unit_type, unit_id, candidate.metric, candidate.unit)
         groups.setdefault(key, []).append(candidate)
 
     coverage: list[EcologyProjectedVisitCoverage] = []
