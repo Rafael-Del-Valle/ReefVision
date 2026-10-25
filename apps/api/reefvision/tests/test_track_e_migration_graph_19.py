@@ -12,7 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 
 
-def _declarations(path: Path) -> tuple[str, tuple[str, ...]]:
+def _declarations(path: Path) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
     values: dict[str, object] = {}
     for statement in ast.parse(path.read_text(encoding="utf-8")).body:
         if isinstance(statement, ast.Assign):
@@ -23,7 +23,7 @@ def _declarations(path: Path) -> tuple[str, tuple[str, ...]]:
         else:
             continue
         for name in names:
-            if name in {"revision", "down_revision"} and value is not None:
+            if name in {"revision", "down_revision", "depends_on"} and value is not None:
                 values[name] = ast.literal_eval(value)
     revision = values.get("revision")
     parent = values.get("down_revision")
@@ -31,7 +31,11 @@ def _declarations(path: Path) -> tuple[str, tuple[str, ...]]:
     assert parent is None or isinstance(parent, (str, tuple)), path
     parents = (parent,) if isinstance(parent, str) else tuple(parent or ())
     assert all(isinstance(item, str) and item for item in parents), path
-    return revision, parents
+    dependency = values.get("depends_on")
+    assert dependency is None or isinstance(dependency, (str, tuple, list)), path
+    dependencies = (dependency,) if isinstance(dependency, str) else tuple(dependency or ())
+    assert all(isinstance(item, str) and item for item in dependencies), path
+    return revision, parents, dependencies
 
 
 def _graph_errors(paths: list[Path]) -> list[str]:
@@ -39,7 +43,9 @@ def _graph_errors(paths: list[Path]) -> list[str]:
     owners: dict[str, list[str]] = defaultdict(list)
     edges: dict[str, tuple[str, ...]] = {}
     for path in paths:
-        revision, parents = _declarations(path)
+        revision, parents, dependencies = _declarations(path)
+        if dependencies:
+            errors.append(f"nonlinear dependency for {revision}: {', '.join(dependencies)}")
         owners[revision].append(path.name)
         edges[revision] = parents
     for revision, names in owners.items():
@@ -99,6 +105,12 @@ def test_cross_track_0038_collision_and_missing_parent_are_rejected(
     )
     review.write_text('revision = "0039"\ndown_revision = "0038"\n')
     assert _graph_errors([baseline, science, review]) == []
+    # Alembic depends_on can conceal a cross-branch edge despite one down_revision.
+    review.write_text('revision = "0039"\ndown_revision = "0038"\ndepends_on = "0037"\n')
+    assert any(
+        "nonlinear dependency for 0039" in error
+        for error in _graph_errors([baseline, science, review])
+    )
     review.write_text('revision = "0039"\ndown_revision = "missing"\n')
     assert any("missing parent" in error for error in _graph_errors([baseline, science, review]))
 
