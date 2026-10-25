@@ -308,3 +308,26 @@ validated field observations. The existing standalone API and executable,
 persisted Workflow Builder share this comparison engine and retain their
 artifact-parity regression. Scientific identity, calibration, registration,
 and biological growth remain unverified.
+
+### Registration residual relative to reconstructed extent (Track C)
+
+When caller-supplied pairwise registration evidence is present and both mesh
+previews report positive axis-aligned bounding-box diagonals, the longitudinal
+comparison records `registration_residual_to_smaller_extent_ratio`: the
+claimed RMS registration residual in meters divided by the **smaller** of the
+two reconstructed diagonals in meters. This dimensionless value is a screening
+diagnostic, not an estimate of registration uncertainty or accuracy. Values at
+least 1 emit `registration_residual_at_least_smaller_mesh_extent` to prioritize
+independent inspection. No biological or registration acceptance threshold is
+implied by smaller values.
+
+Missing or zero diagonals yield `null` and
+`registration_residual_extent_ratio_unavailable`. A positive ratio outside
+finite floating-point range yields `null` and
+`registration_residual_extent_ratio_out_of_numeric_range`, never a false zero
+or infinity. The original RMS, correspondence count, method, frame IDs and
+evidence note remain in provenance. These measurements are **unverified**,
+axis-aligned diagonals are orientation-dependent, and residuals can hide
+registration bias or missing anatomy. The standalone endpoint and persisted
+typed Workflow Builder use the same calculation, with saved-workflow parity
+and direct numerical QC regression coverage.
