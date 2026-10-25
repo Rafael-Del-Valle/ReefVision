@@ -276,7 +276,9 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
           element.naturalWidth > 0 &&
           element.naturalHeight > 0
         ) {
-          return current === "thumbnail-loading" ? "thumbnail-loaded" : "loaded";
+          return current === "thumbnail-loading"
+            ? "thumbnail-loaded"
+            : "loaded";
         }
         if (current === "loading") {
           return image.thumbnail_path ? "thumbnail-loading" : "error";
