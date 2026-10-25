@@ -230,3 +230,31 @@ centroids or biological change. Malformed present labels are rejected by both
 request validation and the shared longitudinal calculation engine. Existing
 artifacts without labels remain readable and receive the missing-evidence QC
 warning. API and saved-workflow tests assert identical comparison artifacts.
+
+### Longitudinal reconstruction topology QC (Track C)
+
+The shared comparison engine now retains five integer diagnostics from each
+mesh preview: `face_count`, `edge_connected_patch_count`,
+`boundary_edge_count`, `nonmanifold_edge_count`, and
+`degenerate_face_count`. It reports
+`before_reconstruction_topology_counts`,
+`after_reconstruction_topology_counts`, and
+`reconstruction_topology_changed_fields` in both standalone and persisted
+Workflow Builder comparison artifacts.
+
+A change in any *available* count emits
+`reconstruction_topology_changed_requires_review`. Missing fields in older
+saved artifacts remain null and emit
+`reconstruction_topology_comparison_incomplete`; absent evidence is not
+interpreted as a zero count. Malformed present counts (including booleans,
+negative values, fractional numbers, and strings) are rejected rather than
+silently coerced. Regression tests cover API topology drift, malformed and
+legacy records, and saved-workflow output parity.
+
+Topology changes can arise from meshing, occlusion, reconstruction parameters,
+sampling, or segmentation. They **do not** establish colony fragmentation,
+new branch growth, tissue loss, mortality, biological condition, or organism
+re-identification. These diagnostics do not independently verify registration,
+calibration, source files, or observation identity; all biological
+interpretation requires human review.
+
