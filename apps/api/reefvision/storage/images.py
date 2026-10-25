@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import hashlib
 import os
@@ -272,10 +273,8 @@ def commit_staged_image(staged_path: Path, destination: Path) -> None:
     # The original has already been published. A transient failure to remove
     # its staging link must not turn a valid import into an orphaned original
     # with no database record. Retain the staging copy for later cleanup.
-    try:
+    with contextlib.suppress(OSError):
         staged_path.unlink()
-    except OSError:
-        pass
 
 
 def _unique_rendition_temporary(destination: Path) -> Path:
