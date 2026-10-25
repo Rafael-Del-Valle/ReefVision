@@ -5,6 +5,7 @@ from pathlib import Path
 from time import monotonic, sleep
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -289,16 +290,22 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         assert client.get(f"/api/v1/images/{image_id}").json()["media_type"] == media_type
 
 
+@pytest.mark.parametrize("orientation", range(2, 9))
 def test_exif_oriented_jpeg_display_preserves_raw_pixel_geometry(
-    client: TestClient,
+    client: TestClient, orientation: int
 ) -> None:
-    """WebView2 must not rotate pixels relative to stored source-pixel coordinates."""
-    project = create_project(client, "EXIF orientation geometry")
-    original_image = Image.new("RGB", (64, 48), (20, 90, 120))
+    """WebView2 and thumbnails must preserve original camera axes for every EXIF rotation."""
+    project = create_project(client, f"EXIF orientation {orientation} geometry")
+    original_image = Image.new("RGB", (64, 48))
+    colors = [(240, 20, 20), (20, 240, 20), (20, 20, 240), (240, 240, 20)]
+    for (x, y), color in zip(
+        [(0, 0), (32, 0), (0, 24), (32, 24)], colors, strict=True
+    ):
+        original_image.paste(color, (x, y, x + 32, y + 24))
     exif = Image.Exif()
-    exif[274] = 6  # Rotate 90 degrees clockwise for camera presentation.
+    exif[274] = orientation
     stream = BytesIO()
-    original_image.save(stream, format="JPEG", exif=exif)
+    original_image.save(stream, format="JPEG", quality=100, subsampling=0, exif=exif)
     original = stream.getvalue()
 
     report = import_one(
@@ -310,26 +317,29 @@ def test_exif_oriented_jpeg_display_preserves_raw_pixel_geometry(
     image_id = report["successful"][0]["image_id"]
     record = client.get(f"/api/v1/images/{image_id}").json()
     assert (record["width_px"], record["height_px"]) == (64, 48)
-    assert record["metadata_json"]["exif"]["Orientation"] == 6
+    assert record["metadata_json"]["exif"]["Orientation"] == orientation
 
     content = client.get(f"/api/v1/images/{image_id}/content")
     assert content.content == original
-    display = client.get(f"/api/v1/images/{image_id}/display")
-    assert display.status_code == 200
-    assert display.headers["content-type"].startswith("image/png")
-    with Image.open(BytesIO(display.content)) as rendition:
-        assert rendition.size == (64, 48)
-        assert rendition.getexif().get(274) in (None, 1)
-
-    # Thumbnails must use the same raw camera-pixel axes as the viewer, not
-    # the EXIF presentation orientation or a previously cached rotated JPEG.
-    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
-    assert thumbnail.status_code == 200
-    with Image.open(BytesIO(thumbnail.content)) as rendition:
-        assert rendition.width * 48 == rendition.height * 64
-        assert rendition.getexif().get(274) in (None, 1)
+    for route, expected_type in (("display", "image/png"), ("thumbnail", "image/jpeg")):
+        response = client.get(f"/api/v1/images/{image_id}/{route}")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith(expected_type)
+        with Image.open(BytesIO(response.content)) as rendition:
+            assert rendition.width * 48 == rendition.height * 64
+            assert rendition.getexif().get(274) in (None, 1)
+            rgb = rendition.convert("RGB")
+            for (fx, fy), expected in zip(
+                [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)],
+                colors,
+                strict=True,
+            ):
+                actual = rgb.getpixel((int(rgb.width * fx), int(rgb.height * fy)))
+                assert all(
+                    abs(channel - reference) < 45
+                    for channel, reference in zip(actual, expected, strict=True)
+                )
     assert client.get(f"/api/v1/images/{image_id}/content").content == original
-
 
 def test_cmyk_jpeg_import_has_browser_safe_display(client: TestClient) -> None:
     project = create_project(client, "CMYK JPEG")
