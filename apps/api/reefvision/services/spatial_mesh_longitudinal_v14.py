@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from math import isfinite
 from typing import Any
 
 
 def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     """Compare two explicitly identified timepoints without asserting coral growth."""
-    first = before.get("provenance") or {}
-    second = after.get("provenance") or {}
+    first = before.get("provenance")
+    second = after.get("provenance")
+    if not isinstance(first, dict) or not isinstance(second, dict):
+        raise ValueError("Both observations require provenance dictionaries")
     specimen = first.get("specimen_id")
     if not isinstance(specimen, str) or not specimen or specimen != second.get("specimen_id"):
         raise ValueError("Two observations require the same nonempty provisional specimen_id")
@@ -34,8 +36,12 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     elapsed_days = (after_time - before_time).total_seconds() / 86400
     project_before = before.get("project_id")
     project_after = after.get("project_id")
-    if project_before != project_after:
-        raise ValueError("Longitudinal observations must belong to the same project")
+    if (
+        not isinstance(project_before, str)
+        or not project_before
+        or project_before != project_after
+    ):
+        raise ValueError("Longitudinal observations require the same nonempty project_id")
     if before.get("schema_version") != "mesh-preview-0001" or (
         after.get("schema_version") != "mesh-preview-0001"
     ):
@@ -222,6 +228,12 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "after_observation_id": second_id,
         "before_observed_at_utc": first["observed_at_utc"],
         "after_observed_at_utc": second["observed_at_utc"],
+        "before_observed_at_utc_normalized": (
+            before_time.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        ),
+        "after_observed_at_utc_normalized": (
+            after_time.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        ),
         "elapsed_days": elapsed_days,
         "before_mesh_qc_warnings": observation_qc[0],
         "after_mesh_qc_warnings": observation_qc[1],
