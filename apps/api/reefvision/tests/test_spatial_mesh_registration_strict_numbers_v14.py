@@ -73,7 +73,7 @@ def test_registration_rejects_coerced_numbers_in_standalone_comparison(
         compare_mesh_observations(before, after, evidence)
 
 
-def test_registration_accepts_json_integer_matrix_without_claiming_verification() -> None:
+def test_registration_accepts_integer_matrix_as_unverified() -> None:
     evidence = _evidence()
     evidence["rms_residual_m"] = 0
     validated = MeshRegistrationEvidence.model_validate(evidence)
