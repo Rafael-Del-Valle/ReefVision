@@ -101,3 +101,29 @@ export function cullViewportItems<T extends ImageBounds>(
     (item) => item != null && intersectsViewport(item, viewportBounds),
   );
 }
+
+/**
+ * Display-only culling for imported raster-mask records. Missing, null or
+ * malformed bounds are *not* proof that a scientific mask is offscreen, so
+ * retain those records for inspection. A null record itself is not drawable.
+ *
+ * Preserve the original array when culling is unavailable; in particular,
+ * do not rewrite, sort or discard saved mask annotations during pan/zoom.
+ */
+export function cullViewportMasks<
+  T extends Partial<Record<keyof ImageBounds, number | null>>,
+>(items: T[], viewportBounds: ImageBounds | null): T[] {
+  if (!viewportBounds || !hasValidViewportBounds(viewportBounds)) {
+    return items.some((item) => item == null)
+      ? items.filter((item) => item != null)
+      : items;
+  }
+  return items.filter((mask) => {
+    if (mask == null) return false;
+    const { x_min, y_min, x_max, y_max } = mask;
+    if (x_min == null || y_min == null || x_max == null || y_max == null) {
+      return true;
+    }
+    return intersectsViewport({ x_min, y_min, x_max, y_max }, viewportBounds);
+  });
+}
