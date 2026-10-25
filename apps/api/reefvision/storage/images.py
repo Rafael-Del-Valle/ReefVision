@@ -167,9 +167,11 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
         fraction = exif.get(subsec_key)
         if isinstance(fraction, bytes):
             try:
-                fraction = fraction.decode("ascii")
+                fraction = fraction.decode("ascii").rstrip("\x00")
             except UnicodeDecodeError:
                 fraction = None
+        if isinstance(fraction, str):
+            fraction = fraction.rstrip("\x00")
         if isinstance(fraction, str) and fraction.isascii() and fraction.isdigit():
             # Datetimes represent microseconds; preserve the unmodified raw
             # EXIF string in metadata when cameras record finer precision.
