@@ -699,3 +699,31 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - **Workflow Builder boundary:** This is strictly a client-side display optimization, not an analysis, model, measurement or persisted scientific transformation. Saved records, executable QC workflow nodes, provenance and human-review gates are unchanged; no misleading workflow node is added for display culling.
 - **Validation:** GitHub source read-back verifies the three changed source/test files. The branch's prior exact HEAD `a4a6e899` passed 20/20 Actions workflows, including packaged saved-QC-graph replay. **The new mask-culling commits are not validated by those runs**; exact new-head frontend format/type/Vitest/E2E and Windows checks are required. Full local repository checkout remains blocked by GitHub DNS, and local Windows/PowerShell is unavailable.
 - **Release:** HOLD. Real MSI upgrade/rollback, interactive dense-scene GUI profiling, representative scientific image acceptance and independent cross-version Alembic 0038 reconciliation remain required. No merge, tag, release, pretrained-model acquisition, paid hosting or user-data deletion.
+
+## 2026-10-25 — Atomic single-item QC triage audit (Track D)
+
+- Audited existing project/user class visibility, single-item QC routes, the
+  bulk triage event implementation, and the executable persisted
+  `qc_review_queue` Workflow Builder node before editing. No duplicate
+  class-management or workflow subsystem was added.
+- Single-item `start`, `skip` and `return` API transitions now append
+  server-generated `triage_start`, `triage_skip` and `triage_return`
+  records in **the same transaction** as their state changes, reusing the
+  existing 0039 event schema. Skip reasons are preserved. Invalid repeated
+  actions create no new audit records. Existing comments and assignments
+  remain separate, and no scientific annotation is automatically verified.
+- The legacy single-item endpoints do not carry an authenticated reviewer
+  identity. These events explicitly use the **unverified** `local_user`
+  actor label; do not interpret it as an authenticated person.
+- Added standalone API regression for valid transitions, invalid requests,
+  durable ordered history, unique request identifiers and unchanged image
+  annotations. Extended the saved executable QC Workflow Builder regression
+  to triage a workflow-generated queue and then replay its persisted typed
+  review-required artifact without changing scientific scoring evidence.
+- This increment does **not** add completion audit events: single-item
+  `complete` currently has no matching event type in migration 0039.
+  Extending that contract requires a separate additive migration and
+  acceptance work, not a rewrite of applied 0039.
+- **Acceptance:** committed for exact-head CI validation; full installed
+  Windows GUI, migration lineage reconciliation, actual MSI upgrade/rollback,
+  and representative scientific-data review remain mandatory. HOLD.
