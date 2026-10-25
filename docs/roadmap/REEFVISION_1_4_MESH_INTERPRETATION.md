@@ -209,3 +209,24 @@ The metric is computed by the shared engine for the standalone endpoint
 and saved typed Workflow Builder graphs. Regression tests cover rescaling,
 changed geometry, absent evidence, zero baselines, numeric extremes, and
 saved-workflow artifact parity.
+
+
+### Source-frame provenance and registration QC (Track C)
+
+A mesh-preview request may now include an optional `coordinate_frame_id` source
+label (1–128 ASCII letters, digits, underscore, dot, colon or hyphen, starting
+with an alphanumeric character). The standalone endpoint and persisted
+`mesh_surface_preview` Workflow Builder node carry this label into the
+observation provenance. A longitudinal comparison records both labels and
+emits `coordinate_frame_metadata_unavailable` when either is absent,
+`coordinate_frames_differ_registration_required` when they differ, or
+`matching_coordinate_frame_id_not_registration_proof` when they match.
+
+These are **caller-provided labels**, not coordinate transforms, registration
+residuals, control-point evidence, or human approval. Matching names do not
+prove spatial alignment; `coordinate_registration_verified` remains false.
+Mismatches require registration review before comparing axis-aligned extents,
+centroids or biological change. Malformed present labels are rejected by both
+request validation and the shared longitudinal calculation engine. Existing
+artifacts without labels remain readable and receive the missing-evidence QC
+warning. API and saved-workflow tests assert identical comparison artifacts.
