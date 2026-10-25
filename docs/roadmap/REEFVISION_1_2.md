@@ -1600,3 +1600,25 @@ Ruff formatting in the polygon QC module and its tests. The exact reported
 formatter corrections are included in this change. New-head CI, migration
 reconciliation, representative ecological datasets and installed Windows GUI
 scientific acceptance remain mandatory.
+
+
+## Exact-head CI typing gate: projected visit coverage (2026-10-25)
+
+The 2026-10-25 exact-head check at `f74cb7664a9fdd7ca841b93833da3c0fec242dfc`
+completed 16 of 19 GitHub Actions workflows successfully. The three failures
+(`CI`, `Pose Workflow Validation`, and `ReefVision 1.0 Acceptance`)
+all stop at strict mypy typing in
+`apps/api/reefvision/services/ecology_measurement_candidates.py`. A
+`key` local bound to a four-part sampling-group tuple is rebound to an
+organism-ID string inside `summarize_projected_visit_coverage`, which mypy
+rejects as incompatible with the inferred tuple type. The planned repair
+uses distinct `group_key` and `organism_key` locals without changing
+coverage counts, UTC normalization, provenance, review gates, API schemas,
+or Workflow Builder artifact contracts. Existing focused API/workflow tests
+and the three failing CI typing gates are the regression checks. A code
+commit and green exact-head CI are required before this is considered fixed.
+
+This repair does **not** constitute 1.2 release acceptance. Authenticated,
+scientist-reviewed longitudinal observations, registered study design,
+real-dataset verification, Windows installed-GUI checks, and migration
+reconciliation remain outstanding.
