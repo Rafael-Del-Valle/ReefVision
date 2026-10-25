@@ -5,7 +5,7 @@ from __future__ import annotations
 from math import isclose, isfinite
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictFloat, StrictInt, model_validator
 
 
 class MeshPreviewRequest(BaseModel):
@@ -63,12 +63,12 @@ class MeshRegistrationEvidence(BaseModel):
         min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
     method: Literal["landmark", "icp", "survey_control", "other"]
-    rms_residual_m: float = Field(ge=0, le=1_000_000, allow_inf_nan=False)
+    rms_residual_m: StrictFloat = Field(ge=0, le=1_000_000, allow_inf_nan=False)
     correspondence_count: StrictInt = Field(ge=3, le=1_000_000)
     evidence_note: str = Field(min_length=1, max_length=2_000)
     # Optional caller-supplied rigid source-to-target transform in meters.
     # Structural validity does not establish correct alignment or review.
-    source_to_target_transform_m: list[list[float]] | None = None
+    source_to_target_transform_m: list[list[StrictFloat]] | None = None
 
     @model_validator(mode="after")
     def validate_rigid_transform(self) -> MeshRegistrationEvidence:
@@ -99,12 +99,9 @@ class MeshRegistrationEvidence(BaseModel):
                 ):
                     raise ValueError("Registration transform rotation axes must be orthogonal")
         determinant = (
-            rotation[0][0]
-            * (rotation[1][1] * rotation[2][2] - rotation[1][2] * rotation[2][1])
-            - rotation[0][1]
-            * (rotation[1][0] * rotation[2][2] - rotation[1][2] * rotation[2][0])
-            + rotation[0][2]
-            * (rotation[1][0] * rotation[2][1] - rotation[1][1] * rotation[2][0])
+            rotation[0][0] * (rotation[1][1] * rotation[2][2] - rotation[1][2] * rotation[2][1])
+            - rotation[0][1] * (rotation[1][0] * rotation[2][2] - rotation[1][2] * rotation[2][0])
+            + rotation[0][2] * (rotation[1][0] * rotation[2][1] - rotation[1][1] * rotation[2][0])
         )
         if not isclose(determinant, 1.0, rel_tol=0, abs_tol=1e-5):
             raise ValueError("Registration transform must be a right-handed rigid rotation")
