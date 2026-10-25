@@ -56,7 +56,7 @@ describe("LocalPointCloudPreview", () => {
     expect(screen.getByText(/Standalone preview only/)).toBeInTheDocument();
   });
 
-  it("invalidates an existing preview when the source-frame label changes", async () => {
+  it("clears a stale preview when the source frame changes", async () => {
     vi.mocked(previewLocalPointCloudFile).mockResolvedValue({
       measurement_status: "caller_supplied_unverified",
     });
