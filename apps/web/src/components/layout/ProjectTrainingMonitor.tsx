@@ -249,7 +249,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                   <p className="form-error">{run.error_message}</p>
                 )}
 
-                {active && showPowerShell && (
+                {showPowerShell && (
                   <button
                     type="button"
                     className="secondary"
