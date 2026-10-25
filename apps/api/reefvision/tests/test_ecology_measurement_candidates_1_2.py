@@ -425,6 +425,85 @@ def test_cross_series_source_replay_cannot_create_projected_growth(
 
 
 
+def test_undated_reimport_cannot_borrow_a_dated_photographs_provenance(
+    client: TestClient,
+) -> None:
+    """Identical bytes with unknown and known acquisition times need review."""
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    source = EcologyMeasurementCandidate.model_validate(
+        _get(client, project_id).json()["candidates"][0]
+    )
+    first = source.model_copy(
+        update={
+            "organism_key": "organism-A",
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    last = first.model_copy(
+        update={
+            "image_id": "A-followup",
+            "image_sha256": "a" * 64,
+            "annotation_evidence_id": "A-followup-annotation",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
+            "value": first.value + 1,
+        }
+    )
+    # Reimported source bytes under a new image ID, with the acquisition
+    # timestamp lost. They cannot silently borrow the dated copy's time.
+    unknown = first.model_copy(
+        update={
+            "organism_key": "organism-B",
+            "image_id": "B-baseline",
+            "annotation_evidence_id": "B-baseline-annotation",
+            "capture_timestamp_utc": None,
+            "capture_time_status": "missing",
+        }
+    )
+    other_last = unknown.model_copy(
+        update={
+            "image_id": "B-followup",
+            "image_sha256": "b" * 64,
+            "annotation_evidence_id": "B-followup-annotation",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 9, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    conflicting = [first, last, unknown, other_last]
+    qc = summarize_sampling_date_qc(conflicting)
+    assert [row.qc_status for row in qc] == [
+        "source_capture_conflict",
+        "source_capture_conflict",
+    ]
+    assert all(
+        row.conflicting_source_image_sha256 == [first.image_sha256] for row in qc
+    )
+    assert all(row.review_gate == "scientist_review_required" for row in qc)
+    assert summarize_sampling_date_qc(list(reversed(conflicting))) == qc
+    assert summarize_projected_endpoint_changes(conflicting, qc) == []
+    assert all(
+        row.unit_status != "candidate"
+        for row in summarize_projected_unit_summaries(conflicting, [])
+    )
+
+    # A matching, timezone-aware instant on the reimport is legitimate:
+    # the same photograph may contain multiple organisms on one UTC date.
+    restored = unknown.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(2026, 4, 3, 4, tzinfo=timezone(timedelta(hours=-4))),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    valid = [first, last, restored, other_last]
+    assert all(
+        row.qc_status == "date_series_candidate"
+        for row in summarize_sampling_date_qc(valid)
+    )
+    assert len(summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))) == 2
+
+
 def test_same_day_source_capture_conflicts_exclude_all_affected_series(
     client: TestClient,
 ) -> None:
@@ -508,26 +587,20 @@ def test_same_day_source_capture_conflicts_exclude_all_affected_series(
         "source_capture_conflict",
         "source_capture_conflict",
     ]
-    assert all(
-        row.conflicting_source_image_ids == [baseline.image_id] for row in id_qc
-    )
+    assert all(row.conflicting_source_image_ids == [baseline.image_id] for row in id_qc)
     assert summarize_projected_endpoint_changes(inconsistent, id_qc) == []
 
     # Different local offsets representing the SAME UTC instant are valid.
     offset_equivalent = other_baseline.model_copy(
         update={
-            "capture_timestamp_utc": datetime(
-                2026, 4, 3, 4, tzinfo=timezone(timedelta(hours=-4))
-            )
+            "capture_timestamp_utc": datetime(2026, 4, 3, 4, tzinfo=timezone(timedelta(hours=-4)))
         }
     )
     valid = [baseline, followup, offset_equivalent, other_followup]
     assert all(
         row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(valid)
     )
-    assert len(
-        summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))
-    ) == 2
+    assert len(summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))) == 2
 
 
 def test_source_linked_projected_endpoint_change_is_not_verified_growth(
