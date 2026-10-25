@@ -453,9 +453,7 @@ def test_parallel_camera_renditions_use_unique_temporary_files(
     lock = Lock()
     temporary_paths: list[Path] = []
 
-    def synchronized_save(
-        image: Image.Image, fp: str | Path, *args: Any, **kwargs: Any
-    ) -> None:
+    def synchronized_save(image: Image.Image, fp: str | Path, *args: Any, **kwargs: Any) -> None:
         with lock:
             temporary_paths.append(Path(fp))
         # Both workers must have chosen their temporary file before either
