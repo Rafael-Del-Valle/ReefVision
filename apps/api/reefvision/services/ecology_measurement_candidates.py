@@ -189,6 +189,24 @@ def summarize_projected_unit_summaries(
     Incomplete organisms or mismatched UTC windows exclude the whole unit.
     Image/frame/annotation records cannot be independent ecological units.
     """
+    # An organism's identity revision, parent colony and experimental-unit
+    # assignment must agree across *all* metrics, not only within each
+    # metric's time series. Otherwise one specimen can enter different
+    # unit-level analyses under contradictory design assignments.
+    organism_contexts: dict[str, tuple[int, str | None, str | None, str | None]] = {}
+    for candidate in candidates:
+        context = (
+            candidate.identity_revision,
+            candidate.parent_colony_key,
+            candidate.experimental_unit_type,
+            candidate.experimental_unit_id,
+        )
+        previous = organism_contexts.setdefault(candidate.organism_key, context)
+        if previous != context:
+            raise ValidationError(
+                "Projected organism identity or experimental unit changed across metrics"
+            )
+
     groups: dict[tuple[str | None, str | None, str], list[EcologyMeasurementCandidate]] = {}
     for candidate in candidates:
         key = (
@@ -210,9 +228,7 @@ def summarize_projected_unit_summaries(
     expected_changes = {
         (row.organism_key, row.metric): row.model_dump(mode="json") for row in recomputed
     }
-    provided_changes = {
-        key: row.model_dump(mode="json") for key, row in change_index.items()
-    }
+    provided_changes = {key: row.model_dump(mode="json") for key, row in change_index.items()}
     if provided_changes != expected_changes:
         raise ValidationError("Projected unit endpoint changes do not match source candidates")
 
