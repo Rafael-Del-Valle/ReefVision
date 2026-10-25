@@ -64,7 +64,7 @@ import {
 import { deleteMaskAnnotations } from "./maskDocumentOperations";
 import {
   cullViewportItems,
-  intersectsViewport,
+  cullViewportMasks,
   viewportImageBounds,
 } from "./viewportCulling";
 import { rasterMaskContentUrl } from "./rasterMaskApi";
@@ -925,27 +925,7 @@ export function AnnotationEditor({
     [visiblePredictions, viewportBounds],
   );
   const viewportMasks = useMemo(
-    () =>
-      state.document.maskAnnotations.filter((mask) => {
-        if (
-          mask.x_min === null ||
-          mask.y_min === null ||
-          mask.x_max === null ||
-          mask.y_max === null
-        ) {
-          // Old or partially annotated masks lack reliable bounds.
-          return true;
-        }
-        return intersectsViewport(
-          {
-            x_min: mask.x_min,
-            y_min: mask.y_min,
-            x_max: mask.x_max,
-            y_max: mask.y_max,
-          },
-          viewportBounds,
-        );
-      }),
+    () => cullViewportMasks(state.document.maskAnnotations, viewportBounds),
     [state.document.maskAnnotations, viewportBounds],
   );
 
