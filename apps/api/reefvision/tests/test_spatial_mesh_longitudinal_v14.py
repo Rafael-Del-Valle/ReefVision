@@ -108,6 +108,10 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "caller_supplied_unverified"
     )
     assert "registration_residual_requires_independent_review" in expected["qc_warnings"]
+    assert expected["registration_residual_to_smaller_extent_ratio"] == pytest.approx(
+        0.02 / sqrt(2)
+    )
+    assert "registration_residual_at_least_smaller_mesh_extent" not in expected["qc_warnings"]
     assert "matching_coordinate_frame_id_not_registration_proof" in expected["qc_warnings"]
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
     assert "open_mesh_surface_not_enclosed" in expected["before_mesh_qc_warnings"]
@@ -207,6 +211,64 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert len(artifact["payload_sha256"]) == 64
 
 
+
+@pytest.mark.parametrize(
+    ("rms", "extent", "expected_ratio", "warning"),
+    [
+        (0.02, 1.0, 0.02, None),
+        (2.0, 1.0, 2.0, "registration_residual_at_least_smaller_mesh_extent"),
+        (2.0, None, None, "registration_residual_extent_ratio_unavailable"),
+        (1_000_000.0, 1e-320, None, "registration_residual_extent_ratio_out_of_numeric_range"),
+    ],
+)
+def test_registration_residual_size_qc_is_provisional_and_finite(
+    rms: float, extent: float | None, expected_ratio: float | None, warning: str | None
+) -> None:
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "axis_aligned_bounding_box_diagonal_m": extent,
+        "project_id": "study-1",
+        "provenance": {
+            "specimen_id": "colony-1",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "coordinate_frame_id": "frame-a",
+        },
+    }
+    after = {
+        **before,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "coordinate_frame_id": "frame-b",
+        },
+    }
+    evidence = {
+        "source_frame_id": "frame-a",
+        "target_frame_id": "frame-b",
+        "method": "landmark",
+        "rms_residual_m": rms,
+        "correspondence_count": 5,
+        "evidence_note": "Unverified field registration",
+    }
+    result = compare_mesh_observations(before, after, evidence)
+    if expected_ratio is None:
+        assert result["registration_residual_to_smaller_extent_ratio"] is None
+    else:
+        assert result["registration_residual_to_smaller_extent_ratio"] == pytest.approx(
+            expected_ratio
+        )
+    if warning is not None:
+        assert warning in result["qc_warnings"]
+    assert result["provenance"]["registration_evidence"] == evidence
+    assert result["provenance"]["coordinate_registration_verified"] is False
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+
 @pytest.mark.parametrize(
     "override",
     [
@@ -218,9 +280,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         {"source_frame_id": "unrelated-survey"},
     ],
 )
-def test_pairwise_registration_evidence_is_validated(
-    client: TestClient, override: dict
-) -> None:
+def test_pairwise_registration_evidence_is_validated(client: TestClient, override: dict) -> None:
     project_id = str(create_project(client, "Reject invalid registration evidence")["id"])
     before = _mesh("scan-1", "2026-10-01T12:00:00Z", 1)
     after = _mesh("scan-2", "2026-10-02T12:00:00Z", 1)
