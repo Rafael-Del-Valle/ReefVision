@@ -304,7 +304,7 @@ def create_browser_display(source: Path, destination: Path) -> None:
             display: Image.Image = image.copy()
             display.info.pop("exif", None)
             display.info.pop("orientation", None)
-            if display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16"}:
+            if display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16", "I;16B"}:
                 display = display.convert("RGB")
             display.save(temporary, format="PNG", optimize=True)
         os.replace(temporary, destination)
@@ -324,6 +324,11 @@ def create_thumbnail(source: Path, destination: Path, *, max_width: int, max_hei
             oriented.info.pop("exif", None)
             oriented.info.pop("orientation", None)
             if oriented.mode in {"I;16", "I;16L", "I;16B"}:
+                # Pillow cannot apply point() directly to big-/little-endian
+                # 16-bit variants. Promote those pixels to integer mode first
+                # without losing their original scientific source values.
+                if oriented.mode != "I;16":
+                    oriented = oriented.convert("I")
                 oriented = oriented.point(lambda value: value / 257).convert("L")
             elif oriented.mode not in {"RGB", "L"}:
                 oriented = oriented.convert("RGB")
