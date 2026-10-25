@@ -799,6 +799,67 @@ describe("Gallery", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("retries full-resolution pixels after a thumbnail fallback without changing annotations", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [{ ...image, thumbnail_path: "managed/thumbnail.png" }],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+    const original = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.error(original);
+    const thumbnail = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.load(thumbnail);
+    expect(
+      screen.getByText(/Full-resolution image unavailable/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry full-resolution image" }),
+    );
+    const retried = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(retried.getAttribute("src")).toMatch(/display/);
+    expect(retried.getAttribute("src")).toContain("rv_retry=1");
+    expect(
+      screen.queryByText(/Full-resolution image unavailable/),
+    ).not.toBeInTheDocument();
+
+    // A second transient failure returns to the existing thumbnail rather
+    // than losing the preview or creating a new image/annotation record.
+    fireEvent.error(retried);
+    const fallbackAgain = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(fallbackAgain.getAttribute("src")).toMatch(/thumbnail/);
+    fireEvent.load(fallbackAgain);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry full-resolution image" }),
+    );
+    const recovered = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(recovered.getAttribute("src")).toMatch(/display/);
+    expect(recovered.getAttribute("src")).toContain("rv_retry=2");
+    fireEvent.load(recovered);
+    expect(
+      screen.queryByText(/Full-resolution image unavailable/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry full-resolution image" }),
+    ).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("bypasses a failed thumbnail cache when retrying the focused image", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
