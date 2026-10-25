@@ -505,7 +505,9 @@ def test_undated_reimport_cannot_borrow_a_dated_photographs_provenance(
         }
     )
     valid = [first, last, restored, other_last]
-    assert all(row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(valid))
+    assert all(
+        row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(valid)
+    )
     assert len(
         summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))
     ) == 2
