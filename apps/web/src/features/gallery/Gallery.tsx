@@ -224,9 +224,10 @@ function focusedImageUrl(
   const original = useThumbnail
     ? imageThumbnailUrl(imageId)
     : imageDisplayUrl(imageId);
-  const retried = retry === 0
-    ? original
-    : `${original}${original.includes("?") ? "&" : "?"}rv_retry=${retry}`;
+  const retried =
+    retry === 0
+      ? original
+      : `${original}${original.includes("?") ? "&" : "?"}rv_retry=${retry}`;
   // A background thumbnail job may replace a failed file at the same API
   // endpoint. Version the request by its persisted path to avoid a cached 404.
   return useThumbnail && thumbnailPath
@@ -330,7 +331,12 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
           )}
           <img
             key={`${retry}:${thumbnail ? "thumbnail" : "original"}`}
-            src={focusedImageUrl(image.id, thumbnail, retry, image.thumbnail_path)}
+            src={focusedImageUrl(
+              image.id,
+              thumbnail,
+              retry,
+              image.thumbnail_path,
+            )}
             alt={`Focused project image: ${image.original_filename}`}
             decoding="async"
             onLoad={handleLoad}
