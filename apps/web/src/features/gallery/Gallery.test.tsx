@@ -960,6 +960,69 @@ describe("Gallery", () => {
     ).toBeInTheDocument();
   });
 
+  it("reloads a replaced thumbnail and ignores its detached predecessor", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const response = (thumbnailPath: string) => ({
+      items: [{ ...image, thumbnail_path: thumbnailPath }],
+      total: 1,
+      page: 1,
+      page_size: 24,
+      pages: 1,
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(response("thumbnails/first.jpg")),
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Gallery project={project} />
+      </QueryClientProvider>,
+    );
+
+    const original = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.error(original);
+    const firstThumbnail = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.load(firstThumbnail);
+    expect(
+      screen.getByText(/Full-resolution image unavailable/),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response("thumbnails/second.jpg"),
+      );
+    });
+
+    const secondThumbnail = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(secondThumbnail).not.toBe(firstThumbnail);
+    expect(firstThumbnail.isConnected).toBe(false);
+    expect(secondThumbnail.getAttribute("src")).toContain(
+      "thumbnails%2Fsecond.jpg",
+    );
+    expect(screen.getByText("Loading thumbnail preview...")).toBeInTheDocument();
+
+    // An old request must never hide or mark the replacement as loaded.
+    fireEvent.error(firstThumbnail);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Loading thumbnail preview...")).toBeInTheDocument();
+
+    fireEvent.load(secondThumbnail);
+    expect(
+      screen.queryByText("Loading thumbnail preview..."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Full-resolution image unavailable/),
+    ).toBeInTheDocument();
+  });
+
   it("falls back to the first eligible image when the recent image was deleted", async () => {
     window.localStorage.setItem(
       `reefvision.gallery.${project.id}.v1`,
