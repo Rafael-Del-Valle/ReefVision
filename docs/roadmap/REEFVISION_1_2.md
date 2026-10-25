@@ -1300,3 +1300,37 @@ The separate pose-interop frontend Vitest failure on that head is outside
 Track B and is not claimed fixed here. Exact-head CI, real scientific
 acceptance, migration reconciliation, and installed Windows GUI acceptance
 remain outstanding. A committed regression is not a passed test.
+
+## Cross-series image replay audit (2026-10-25; development only)
+
+The projected UTC sampling-date QC now checks source-image IDs and SHA-256
+content **across the entire candidate batch**, not merely within a single
+organism/metric series. A reimported photograph cannot serve as an earlier
+measurement for one organism and a later measurement for another organism or
+metric without triggering exclusion of every affected series. Per-series
+`reused_image_ids` and `reused_image_sha256` list the affected sources;
+`reused_image_across_dates` retains precedence over the content-based status.
+A legitimate image shared by multiple organisms on the **same UTC date** is
+not rejected solely because its bytes or image ID appear more than once.
+
+No affected series contributes a projected endpoint change or an eligible
+experimental-unit/population mean. Previously calculated date-QC rows are
+revalidated against the complete current candidate batch; stale rows cannot
+authorize a projected change. The standalone source-linked measurement API
+and executable saved `ecology_identity_registry_source` Workflow Builder
+artifact use this shared kernel, typed diagnostics, persisted provenance and
+scientist-review gate. The fingerprint algorithm advances to
+`ecology-measurement-candidates-0013`. Regression coverage includes
+cross-organism ID/content replay, valid same-day multi-organism imaging,
+input-order invariance and stale-QC rejection. The existing saved-workflow
+payload-parity test exercises the common source service; a dedicated
+end-to-end replay fixture with multiple real imported images remains an
+acceptance follow-up.
+
+These are `linked_unverified` projected geometries, **not** verified
+longitudinal biological observations, growth rates or evidence of true
+experimental independence. Registered verified observation history,
+immutable reviewed calibration/source linkage, migration reconciliation,
+real scientific dataset acceptance and installed Windows GUI tests remain
+release blockers. No cross-version merge, environmental-context duplication,
+model acquisition or verified-dataset promotion occurs.
