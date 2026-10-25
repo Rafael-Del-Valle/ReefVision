@@ -186,3 +186,26 @@ zero. A genuinely zero later area can yield a descriptive ratio of zero.
 No uncertainty beyond nominal scale is estimated for this diagnostic.
 The standalone endpoint and persisted typed Workflow Builder node use
 the same engine and have matching regression assertions.
+
+### Scale-normalized bounding-box diagonal ratio (provisional)
+
+The longitudinal comparison also reports
+`scale_normalized_bounding_box_diagonal_ratio_after_to_before`:
+`(later_diagonal / earlier_diagonal) / (later_scale / earlier_scale)`.
+It uses log-space arithmetic for positive extents. For the same reconstruction
+rescaled from 1 to 2 meters per source unit, the physical diagonal doubles
+but the scale-normalized ratio is **1**. This is a geometric diagnostic,
+not a coral branch length, growth rate, or organism reidentification result.
+
+Missing scales or extents and a zero earlier diagonal yield `null` with
+`scale_normalized_extent_ratio_unavailable`. A truly zero later diagonal
+can yield zero; positive ratios that overflow or underflow the numeric
+range yield `null` with `scale_normalized_extent_ratio_out_of_numeric_range`.
+When available, the result carries
+`scale_normalized_extent_ratio_requires_common_units_and_registration`.
+No coordinate registration, common mesh-unit convention, biological identity,
+reconstruction uncertainty, or calibration verification is inferred.
+The metric is computed by the shared engine for the standalone endpoint
+and saved typed Workflow Builder graphs. Regression tests cover rescaling,
+changed geometry, absent evidence, zero baselines, numeric extremes, and
+saved-workflow artifact parity.
