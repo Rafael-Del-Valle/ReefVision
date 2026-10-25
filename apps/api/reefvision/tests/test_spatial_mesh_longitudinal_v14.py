@@ -35,6 +35,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     base = f"/api/v1/projects/{project_id}"
     before = _mesh("survey-1", "2026-10-01T12:00:00Z", 1)
     after = _mesh("survey-2", "2026-10-02T07:00:00-05:00", 2)
+    before["coordinate_frame_id"] = "survey-local"
+    after["coordinate_frame_id"] = "survey-local"
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after},
@@ -86,6 +88,10 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert "average_change_per_day_is_not_a_biological_growth_rate" in warnings
     assert expected["measurement_status"] == "provisional_unverified_longitudinal_comparison"
     assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["provenance"]["before_coordinate_frame_id"] == "survey-local"
+    assert expected["provenance"]["after_coordinate_frame_id"] == "survey-local"
+    assert expected["provenance"]["coordinate_registration_verified"] is False
+    assert "matching_coordinate_frame_id_not_registration_proof" in expected["qc_warnings"]
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
     assert "open_mesh_surface_not_enclosed" in expected["before_mesh_qc_warnings"]
     assert "open_mesh_surface_not_enclosed" in expected["after_mesh_qc_warnings"]
@@ -176,6 +182,8 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     project_id = str(create_project(client, "Rescaled mesh timepoints")["id"])
     before = _mesh("survey-1", "2026-10-01T12:00:00Z", 1)
     after = _mesh("survey-2", "2026-10-02T12:00:00Z", 1)
+    before["coordinate_frame_id"] = "survey-a"
+    after["coordinate_frame_id"] = "survey-b"
     after["meters_per_unit"] = 2
     response = client.post(
         f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
@@ -200,6 +208,10 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     assert "identical_geometry_fingerprint" in result["qc_warnings"]
     assert "calibration_scale_changed_between_observations" in result["qc_warnings"]
     assert "identical_geometry_rescaled_not_biological_growth" in result["qc_warnings"]
+    assert "coordinate_frames_differ_registration_required" in result["qc_warnings"]
+    assert result["provenance"]["before_coordinate_frame_id"] == "survey-a"
+    assert result["provenance"]["after_coordinate_frame_id"] == "survey-b"
+    assert result["provenance"]["coordinate_registration_verified"] is False
     assert (
         "identical_geometry_area_inconsistent_with_calibration_scale" not in result["qc_warnings"]
     )
@@ -1062,3 +1074,75 @@ def test_identical_mesh_extent_requires_calibration_consistency(
     ]
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("before_frame", "after_frame", "expected_warning"),
+    [
+        (None, None, "coordinate_frame_metadata_unavailable"),
+        ("survey-a", None, "coordinate_frame_metadata_unavailable"),
+        ("survey-a", "survey-b", "coordinate_frames_differ_registration_required"),
+        ("survey-a", "survey-a", "matching_coordinate_frame_id_not_registration_proof"),
+    ],
+)
+def test_mesh_comparison_coordinate_frame_evidence_is_provisional(
+    before_frame: str | None, after_frame: str | None, expected_warning: str
+) -> None:
+    """A shared label is not proof of a common registered coordinate system."""
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "coordinate_frame_id": before_frame,
+        },
+    }
+    after = {
+        **before,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "coordinate_frame_id": after_frame,
+        },
+    }
+    result = compare_mesh_observations(before, after)
+    assert expected_warning in result["qc_warnings"]
+    assert result["provenance"]["before_coordinate_frame_id"] == before_frame
+    assert result["provenance"]["after_coordinate_frame_id"] == after_frame
+    assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize("invalid_frame", ["", "two words", "bad/frame", "x" * 129, 1, True])
+def test_mesh_comparison_rejects_invalid_coordinate_frame_metadata(
+    invalid_frame: object,
+) -> None:
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "coordinate_frame_id": invalid_frame,
+        },
+    }
+    after = {
+        **before,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "coordinate_frame_id": "valid",
+        },
+    }
+    with pytest.raises(ValueError, match="Coordinate frame IDs"):
+        compare_mesh_observations(before, after)
