@@ -304,9 +304,7 @@ def test_bulk_completion_partial_retry_preserves_original_reviewer_audit(
     )
     assert again.status_code == 200, again.text
     assert again.json()["changed_count"] == 0
-    assert client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events").json()[
-        "total"
-    ] == 2
-    assert client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events").json()[
-        "total"
-    ] == 2
+    for item_id in ids:
+        events = client.get(f"/api/v1/review-queues/{queue_id}/items/{item_id}/events")
+        assert events.status_code == 200, events.text
+        assert events.json()["total"] == 2
