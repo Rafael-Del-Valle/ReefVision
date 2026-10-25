@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, Field, StrictInt, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 
 class MeshPreviewRequest(BaseModel):
@@ -50,6 +50,24 @@ class MeshPreviewRequest(BaseModel):
         return self
 
 
+class MeshRegistrationEvidence(BaseModel):
+    """Caller-supplied pairwise registration diagnostics; never verified."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_frame_id: str = Field(
+        min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    target_frame_id: str = Field(
+        min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    method: Literal["landmark", "icp", "survey_control", "other"]
+    rms_residual_m: float = Field(ge=0, le=1_000_000, allow_inf_nan=False)
+    correspondence_count: StrictInt = Field(ge=3, le=1_000_000)
+    evidence_note: str = Field(min_length=1, max_length=2_000)
+
+
 class MeshLongitudinalComparisonRequest(BaseModel):
     before: MeshPreviewRequest
     after: MeshPreviewRequest
+    registration_evidence: MeshRegistrationEvidence | None = None
