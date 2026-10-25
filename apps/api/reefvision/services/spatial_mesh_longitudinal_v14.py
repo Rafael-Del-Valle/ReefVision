@@ -235,6 +235,32 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
                 # A positive geometric ratio underflowed to zero.
                 scale_normalized_area_ratio = None
                 normalized_ratio_out_of_range = True
+    # Remove nominal scale from axis-aligned diagonal ratios as a separate
+    # reconstruction diagnostic. This is not a branch-length or growth metric.
+    scale_normalized_extent_ratio = None
+    extent_ratio_out_of_range = False
+    if (
+        before_scale is not None
+        and after_scale is not None
+        and early_extent is not None
+        and early_extent > 0
+        and late_extent is not None
+    ):
+        if late_extent == 0:
+            scale_normalized_extent_ratio = 0.0
+        else:
+            try:
+                scale_normalized_extent_ratio = exp(
+                    log(late_extent)
+                    - log(early_extent)
+                    - (log(after_scale) - log(before_scale))
+                )
+            except OverflowError:
+                extent_ratio_out_of_range = True
+            if scale_normalized_extent_ratio == 0:
+                # Positive ratios below float range must not masquerade as zero.
+                scale_normalized_extent_ratio = None
+                extent_ratio_out_of_range = True
     warnings = [
         "specimen_identity_not_verified",
         "observation_metadata_not_verified",
@@ -249,6 +275,12 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         warnings.append("scale_normalized_area_ratio_out_of_numeric_range")
     else:
         warnings.append("scale_normalized_area_ratio_unavailable")
+    if scale_normalized_extent_ratio is not None:
+        warnings.append("scale_normalized_extent_ratio_requires_common_units_and_registration")
+    elif extent_ratio_out_of_range:
+        warnings.append("scale_normalized_extent_ratio_out_of_numeric_range")
+    else:
+        warnings.append("scale_normalized_extent_ratio_unavailable")
     if before_scale is None or after_scale is None:
         warnings.append("calibration_scale_metadata_unavailable")
     elif before_scale != after_scale:
@@ -277,11 +309,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     second_hash_valid = _is_sha256_fingerprint(second_geometry_hash)
     if not (first_hash_valid and second_hash_valid):
         warnings.append("geometry_fingerprint_missing_or_invalid")
-    if (
-        first_hash_valid
-        and second_hash_valid
-        and first_geometry_hash == second_geometry_hash
-    ):
+    if first_hash_valid and second_hash_valid and first_geometry_hash == second_geometry_hash:
         warnings.append("identical_geometry_fingerprint")
         if before_scale is not None and after_scale is not None:
             if before_scale != after_scale:
@@ -320,6 +348,9 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "after_meters_per_mesh_unit": after_scale,
         "calibration_scale_ratio_after_to_before": scale_ratio,
         "scale_normalized_surface_area_ratio_after_to_before": (scale_normalized_area_ratio),
+        "scale_normalized_bounding_box_diagonal_ratio_after_to_before": (
+            scale_normalized_extent_ratio
+        ),
         "before_mesh_qc_warnings": observation_qc[0],
         "after_mesh_qc_warnings": observation_qc[1],
         "before_surface_area_m2": a0,
