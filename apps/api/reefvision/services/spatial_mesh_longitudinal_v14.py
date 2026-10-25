@@ -235,7 +235,9 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "average_change_per_day_is_not_a_biological_growth_rate",
     ]
     if scale_normalized_area_ratio is not None:
-        warnings.append("scale_normalized_area_ratio_requires_common_units_and_registration")
+        warnings.append(
+            "scale_normalized_area_ratio_requires_common_units_and_registration"
+        )
     elif normalized_ratio_out_of_range:
         warnings.append("scale_normalized_area_ratio_out_of_numeric_range")
     else:
@@ -301,7 +303,9 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "before_meters_per_mesh_unit": before_scale,
         "after_meters_per_mesh_unit": after_scale,
         "calibration_scale_ratio_after_to_before": scale_ratio,
-        "scale_normalized_surface_area_ratio_after_to_before": scale_normalized_area_ratio,
+        "scale_normalized_surface_area_ratio_after_to_before": (
+            scale_normalized_area_ratio
+        ),
         "before_mesh_qc_warnings": observation_qc[0],
         "after_mesh_qc_warnings": observation_qc[1],
         "before_surface_area_m2": a0,
