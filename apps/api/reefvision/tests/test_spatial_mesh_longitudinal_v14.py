@@ -98,12 +98,15 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert "source_mesh_qc_requires_review" in expected["qc_warnings"]
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
+    mesh_node = next(
+        item for item in registry.json() if item["node_type"] == "mesh_surface_preview"
+    )
+    assert "coordinate_frame_id" in mesh_node["optional_parameters"]
+    assert mesh_node["optional_parameters"]["coordinate_frame_id"] is None
     node = next(
         item for item in registry.json() if item["node_type"] == "mesh_longitudinal_comparison"
     )
     assert node["executable"] is True
-    assert "coordinate_frame_id" in node["optional_parameters"]
-    assert node["optional_parameters"]["coordinate_frame_id"] is None
     assert [port["accepted_types"] for port in node["input_ports"]] == [
         ["mesh_measurement_preview"],
         ["mesh_measurement_preview"],
