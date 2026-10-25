@@ -1512,3 +1512,29 @@ This is an internal consistency and reproducibility check, **not** an
 authentication signature, independent scientific review, verified organism
 identity, or permission to promote unverified observations into a verified
 dataset. All research and Windows release acceptance gates remain outstanding.
+
+
+## Source-reference scale consistency for ecological measurements (2026-10-25)
+
+The project-owned ecological identity/calibration evidence service now checks
+that a saved physical reference segment agrees with the
+`distance_per_pixel` scale used to derive source-linked coral measurements.
+When both `reference_length` and `reference_pixel_length` are present, their
+ratio must be finite, positive and within 1% relative tolerance of the saved
+scale (allowing modest rounding of manually entered scales). A contradictory
+reference blocks creation of ecological calibration evidence. If the source
+calibration changes after linking, registry reads, calibrated-measurement
+candidate API results and the executable saved `ecology_identity_registry_source`
+Workflow Builder fail closed rather than exposing physically inconsistent
+length/area evidence. The generic calibration editor is unchanged; this
+is a stricter scientific evidence boundary, not a silent data rewrite.
+
+Regression coverage includes rejecting a 5 mm / 20 px reference paired with
+0.5 mm/px, accepting a rounded 0.2501 mm/px scale, standalone/saved-workflow
+artifact parity and revocation after a conflicting source edit. No new database
+schema, model weights, cloud services or verified-dataset promotion. All
+ecological results remain `linked_unverified` and require scientist review.
+The exact-head Ruff-format failure in
+`test_ecology_candidate_report_series_1_2.py` was also corrected. Exact-head
+CI, verified longitudinal observation histories, registered study designs,
+independent scientific review and installed Windows acceptance remain required.
