@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+import csv
+from io import StringIO
+
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
@@ -46,6 +49,38 @@ def list_calibrated_measurement_candidates(
     project_id: str, session: DbSession
 ) -> EcologyMeasurementCandidatesResponse:
     return EcologyMeasurementCandidateService(session).candidates(project_id)
+
+
+
+@router.get(
+    "/projects/{project_id}/ecology/calibrated-measurement-candidates/report.csv",
+)
+def export_ecology_candidate_report(project_id: str, session: DbSession) -> Response:
+    """Deterministic QC/effort CSV; linked geometry remains unverified."""
+    response = EcologyMeasurementCandidateService(session).candidates(project_id)
+    report = response.candidate_report
+    if report is None:
+        raise RuntimeError("Ecological candidate report was not generated")
+    output = StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\\n")
+    writer.writerow(
+        (
+            "project_id", "source_input_sha256", "report_sha256",
+            "qc_status", "series_count", "evidence_level", "review_gate",
+        )
+    )
+    for status, count in sorted(report.qc_status_counts.items()):
+        writer.writerow(
+            (
+                report.project_id, report.source_input_sha256, report.report_sha256,
+                status, count, report.evidence_level, report.review_gate,
+            )
+        )
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="reefvision-ecology-qc.csv"'},
+    )
 
 
 @router.post(

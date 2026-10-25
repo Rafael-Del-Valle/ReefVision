@@ -818,6 +818,11 @@ def _ecology_identity_registry_source(
     snapshot = EcologyIdentityService(session).registry(project_id)
     if not snapshot.identities:
         raise ValidationError("Register an organism before sourcing an identity registry")
+    measurement = EcologyMeasurementCandidateService(session).candidates(
+        project_id, registry=snapshot
+    )
+    if measurement.candidate_report is None:
+        raise ValidationError("Ecological candidate report was not generated")
     return [
         {
             "port_id": "registry",
@@ -827,9 +832,12 @@ def _ecology_identity_registry_source(
         {
             "port_id": "measurement_candidates",
             "data_type": "ecology_measurement_candidates",
-            "payload": EcologyMeasurementCandidateService(session)
-            .candidates(project_id, registry=snapshot)
-            .model_dump(mode="json"),
+            "payload": measurement.model_dump(mode="json"),
+        },
+        {
+            "port_id": "candidate_report",
+            "data_type": "ecology_candidate_report",
+            "payload": measurement.candidate_report.model_dump(mode="json"),
         },
     ]
 

@@ -19,6 +19,7 @@ from reefvision.domain.errors import ValidationError
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
 from reefvision.schemas.ecology_measurement_candidates import (
+    EcologyCandidateReport,
     EcologyMeasurementCandidate,
     EcologyMeasurementCandidatesResponse,
     EcologyMeasurementExclusion,
@@ -186,9 +187,7 @@ def summarize_projected_visit_coverage(
     this unit/metric/physical-unit series. It is not a planned study roster;
     missing links are not evidence of absence, mortality or zero abundance.
     """
-    groups: dict[
-        tuple[str | None, str | None, str, str], list[EcologyMeasurementCandidate]
-    ] = {}
+    groups: dict[tuple[str | None, str | None, str, str], list[EcologyMeasurementCandidate]] = {}
     for candidate in candidates:
         unit_type = candidate.experimental_unit_type
         unit_id = candidate.experimental_unit_id
@@ -752,7 +751,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0017",
+                "algorithm_version": "ecology-measurement-candidates-0018",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
@@ -767,7 +766,7 @@ class EcologyMeasurementCandidateService:
                 "exclusions": skipped,
             }
         )
-        return EcologyMeasurementCandidatesResponse(
+        response = EcologyMeasurementCandidatesResponse(
             project_id=project_id,
             source_registry_history_sha256=snapshot.history_sha256,
             source_calibration_evidence_sha256=snapshot.calibration_evidence_sha256,
@@ -781,3 +780,34 @@ class EcologyMeasurementCandidateService:
             exclusions=exclusions,
             input_sha256=fingerprint,
         )
+        qc_counts: dict[str, int] = {}
+        for audit in sampling_date_qc:
+            qc_counts[audit.qc_status] = qc_counts.get(audit.qc_status, 0) + 1
+        report_values = {
+            "algorithm_version": "ecology-candidate-report-0001",
+            "project_id": project_id,
+            "source_input_sha256": fingerprint,
+            "candidate_count": len(candidates),
+            "source_image_count": len({row.image_id for row in candidates}),
+            "source_organism_count": len({row.organism_key for row in candidates}),
+            "declared_experimental_unit_count": len(
+                {
+                    (row.experimental_unit_type, row.experimental_unit_id)
+                    for row in candidates
+                    if row.experimental_unit_type and row.experimental_unit_id
+                }
+            ),
+            "eligible_longitudinal_series_count": sum(
+                row.qc_status == "date_series_candidate" for row in sampling_date_qc
+            ),
+            "excluded_series_count": sum(
+                row.qc_status != "date_series_candidate" for row in sampling_date_qc
+            ),
+            "excluded_source_count": len(exclusions),
+            "qc_status_counts": dict(sorted(qc_counts.items())),
+        }
+        response.candidate_report = EcologyCandidateReport(
+            **{key: value for key, value in report_values.items() if key != "algorithm_version"},
+            report_sha256=canonical_json_sha256(report_values),
+        )
+        return response

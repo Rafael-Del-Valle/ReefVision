@@ -32,9 +32,7 @@ def _source(client: TestClient) -> tuple[str, EcologyMeasurementCandidate]:
         f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
     )
     assert response.status_code == 200, response.text
-    return project_id, EcologyMeasurementCandidate.model_validate(
-        response.json()["candidates"][0]
-    )
+    return project_id, EcologyMeasurementCandidate.model_validate(response.json()["candidates"][0])
 
 
 def test_visit_coverage_is_typed_in_api_and_persisted_saved_workflow(
@@ -52,9 +50,7 @@ def test_visit_coverage_is_typed_in_api_and_persisted_saved_workflow(
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200
     source_node = next(
-        node
-        for node in registry.json()
-        if node["node_type"] == "ecology_identity_registry_source"
+        node for node in registry.json() if node["node_type"] == "ecology_identity_registry_source"
     )
     assert any(
         port["port_id"] == "measurement_candidates"
@@ -64,9 +60,7 @@ def test_visit_coverage_is_typed_in_api_and_persisted_saved_workflow(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in workflow["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == payload
@@ -101,9 +95,7 @@ def test_visit_coverage_reports_linked_gaps_without_inferring_absence(
         update={
             "image_id": "A-repeat",
             "image_sha256": "b" * 64,
-            "capture_timestamp_utc": datetime(
-                2026, 4, 3, 4, tzinfo=timezone(-timedelta(hours=4))
-            ),
+            "capture_timestamp_utc": datetime(2026, 4, 3, 4, tzinfo=timezone(-timedelta(hours=4))),
         }
     )
     other = first.model_copy(
@@ -136,9 +128,7 @@ def test_visit_coverage_reports_linked_gaps_without_inferring_absence(
     assert all(row.evidence_level == "linked_unverified" for row in coverage)
     assert all(row.review_gate == "scientist_review_required" for row in coverage)
     # Missing links never become zero-valued measurements or biological growth.
-    assert summarize_projected_endpoint_changes(
-        rows, summarize_sampling_date_qc(rows)
-    ) == []
+    assert summarize_projected_endpoint_changes(rows, summarize_sampling_date_qc(rows)) == []
 
 
 def test_visit_coverage_never_invents_an_independent_sampling_unit(

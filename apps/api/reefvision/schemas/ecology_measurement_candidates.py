@@ -181,6 +181,25 @@ class EcologyProjectedPopulationSummary(BaseModel):
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
 
+class EcologyCandidateReport(BaseModel):
+    """Deterministic ecological source/effort summary; never verified growth."""
+
+    schema_version: Literal["ecology-candidate-report-0001"] = "ecology-candidate-report-0001"
+    project_id: str
+    source_input_sha256: str
+    candidate_count: int = Field(ge=0)
+    source_image_count: int = Field(ge=0)
+    source_organism_count: int = Field(ge=0)
+    declared_experimental_unit_count: int = Field(ge=0)
+    eligible_longitudinal_series_count: int = Field(ge=0)
+    excluded_series_count: int = Field(ge=0)
+    excluded_source_count: int = Field(ge=0)
+    qc_status_counts: dict[str, int]
+    report_sha256: str
+    evidence_level: Literal["linked_unverified"] = "linked_unverified"
+    review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+
 class EcologyMeasurementCandidatesResponse(BaseModel):
     schema_version: Literal["ecology-measurement-candidates-0001"] = (
         "ecology-measurement-candidates-0001"
@@ -198,6 +217,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         default_factory=list
     )
     exclusions: list[EcologyMeasurementExclusion] = Field(default_factory=list)
+    candidate_report: EcologyCandidateReport | None = None
     input_sha256: str
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"

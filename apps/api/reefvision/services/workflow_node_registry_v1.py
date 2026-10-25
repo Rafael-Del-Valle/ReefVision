@@ -661,6 +661,13 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 required=False,
                 multiple=True,
             ),
+            WorkflowPortDefinition(
+                port_id="candidate_report",
+                display_name="Unverified ecological QC and effort report",
+                accepted_types=["ecology_candidate_report"],
+                required=False,
+                multiple=True,
+            ),
         ],
         required_parameters=[],
         optional_parameters={},

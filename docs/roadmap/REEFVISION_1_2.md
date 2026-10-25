@@ -1445,3 +1445,25 @@ The next high-priority work remains authenticated, scientist-reviewed
 longitudinal observation histories and registered study sampling schedules.
 Migration reconciliation with unmerged 1.1, full exact-head CI, independent
 scientific review and installed Windows GUI/installer validation are required.
+
+## Source-linked ecological QC and effort report (2026-10-25; development)
+
+The project-owned calibrated measurement candidates endpoint now includes
+an additive typed `candidate_report` with candidate, source-image, organism,
+declared-unit, eligible-longitudinal-series, excluded-series and excluded-source
+denominators, and per-status UTC sampling-date QC counts. Its deterministic
+SHA-256 binds the summary to the original source input fingerprint. The new
+`GET /api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates/report.csv`
+exports the QC-status counts with provenance and review-gate labels.
+
+The executable `ecology_identity_registry_source` Workflow Builder node
+now persists the same report on its dedicated typed `candidate_report` port
+(`ecology_candidate_report`), while preserving the existing measurement
+artifact with an additive optional report field. Old saved artifacts remain
+readable. Source algorithm version advances to
+`ecology-measurement-candidates-0018`. Regression tests cover standalone
+API, CSV and saved-workflow parity, typed port registration and legacy
+decoding. This is descriptive linked-evidence reporting only: no authenticated
+biological independence, verified growth, mortality, or inferential statistics.
+Full CI, migration reconciliation and installed Windows/scientific acceptance
+remain outstanding; no merge, tag, release or deployment.
