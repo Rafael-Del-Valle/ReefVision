@@ -332,6 +332,20 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
                 )
             ):
                 warnings.append("identical_geometry_area_inconsistent_with_calibration_scale")
+            # An unchanged source mesh must also retain its uncalibrated
+            # bounding-box diagonal. Missing extents cannot be validated.
+            if early_extent is not None and late_extent is not None:
+                if (early_extent == 0) != (late_extent == 0) or (
+                    early_extent > 0
+                    and late_extent > 0
+                    and not isclose(
+                        log(late_extent) - log(early_extent),
+                        log(after_scale) - log(before_scale),
+                        rel_tol=0,
+                        abs_tol=1e-8,
+                    )
+                ):
+                    warnings.append("identical_geometry_extent_inconsistent_with_calibration_scale")
     if difference_bounds is None:
         warnings.append("scale_uncertainty_interval_unavailable")
     return {
