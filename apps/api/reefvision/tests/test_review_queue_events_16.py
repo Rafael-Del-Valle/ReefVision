@@ -49,7 +49,7 @@ def test_comment_and_assignment_persist(client: TestClient) -> None:
     assert client.get(url).json()["current_assignee"] is None
 
 
-def test_single_item_triage_persists_atomic_server_generated_history(client: TestClient) -> None:
+def test_single_item_triage_persists_atomic_events(client: TestClient) -> None:
     project = create_project(client, "Single item triage audit")
     import_one(client, project["id"])
     queue = client.post(f"/api/v1/projects/{project['id']}/review-queues", json={}).json()
@@ -71,7 +71,8 @@ def test_single_item_triage_persists_atomic_server_generated_history(client: Tes
     skipped = client.post(f"{state_url}/skip", json={"reason": "Review polyp boundary"})
     assert skipped.status_code == 200, skipped.text
     assert skipped.json()["review_state"] == "skipped"
-    assert client.post(f"{state_url}/skip", json={"reason": "Review polyp boundary"}).status_code == 409
+    repeated_skip = client.post(f"{state_url}/skip", json={"reason": "Review polyp boundary"})
+    assert repeated_skip.status_code == 409
 
     returned = client.post(f"{state_url}/return")
     assert returned.status_code == 200, returned.text
@@ -95,4 +96,6 @@ def test_single_item_triage_persists_atomic_server_generated_history(client: Tes
     ]
     assert len({event["client_request_id"] for event in history.json()["items"]}) == 3
     assert history.json()["current_assignee"] is None
-    assert client.get(f"/api/v1/images/{item['image_id']}/annotations").json()["annotations"] == []
+    annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
+    assert annotations.status_code == 200, annotations.text
+    assert annotations.json()["annotations"] == []
