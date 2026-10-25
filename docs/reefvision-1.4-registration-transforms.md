@@ -13,7 +13,11 @@ block is a right-handed orthonormal rotation; its rightmost three entries
 are translations in meters. The last row is `[0, 0, 0, 1]`. Input must be
 finite, 4 × 4, approximately rigid (1e-5 tolerance), and bounded to at most
 1,000,000 meters translation per axis. Reflections, scale, shear, perspective
-transforms, and malformed matrices are rejected.
+transforms, and malformed matrices are rejected. The registration RMS residual
+and each transform entry must be JSON numbers (integers or decimals); strings
+such as `"0.02"` and booleans such as `true` are rejected rather than silently
+converted into scientific measurements. Existing JSON integer matrices remain
+compatible.
 
 Example (identity rotation with a provisional 0.1 m x translation):
 
