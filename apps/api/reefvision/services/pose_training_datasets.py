@@ -129,12 +129,22 @@ def frozen_pose_item_fingerprints_match(
         for row in rows
     }
     observed: dict[str, dict[str, Any]] = {}
+    rows_by_id = {row.id: row for row in rows}
     for summary in manifest["items"]:
         if not isinstance(summary, dict) or not isinstance(summary.get("item_id"), str):
             return False
         item_id = summary["item_id"]
         if item_id in observed:
             return False
+        # New frozen manifests bind the *entire* canonical frame, including
+        # crop bbox and confidence omitted from the verified-landmark digest.
+        # Legacy manifests without this additive field remain readable.
+        if "canonical_pose_sha256" in summary:
+            row = rows_by_id.get(item_id)
+            if row is None or summary["canonical_pose_sha256"] != canonical_json_sha256(
+                row.canonical_pose_json
+            ):
+                return False
         observed[item_id] = {field: summary.get(field) for field in expected.get(item_id, {})}
     return observed == expected
 
@@ -556,6 +566,7 @@ class PoseTrainingDatasetService:
             "frame_index": candidate.focus_frame,
             "verified_track_revision": track.revision,
             "verified_pose_sha256": (candidate.verified_pose_sha256),
+            "canonical_pose_sha256": canonical_json_sha256(canonical_pose),
             "pose_schema_id": candidate.pose_schema_id,
             "pose_schema_revision": (candidate.pose_schema_revision),
             "pose_schema_content_hash": (schema["content_hash"]),
