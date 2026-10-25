@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -242,12 +243,21 @@ def commit_staged_image(staged_path: Path, destination: Path) -> None:
     os.replace(staged_path, destination)
 
 
+
+def _unique_rendition_temporary(destination: Path) -> Path:
+    """Reserve a unique sibling path for concurrent atomic rendition writes."""
+    descriptor, name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".part", dir=destination.parent
+    )
+    os.close(descriptor)
+    return Path(name)
+
+
 def create_browser_display(source: Path, destination: Path) -> None:
     """Create a browser-safe, full-resolution PNG rendition without changing the source."""
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(destination.suffix + ".part")
-    temporary.unlink(missing_ok=True)
+    temporary = _unique_rendition_temporary(destination)
     try:
         with Image.open(source) as image:
             # Annotation coordinates and stored dimensions refer to raw camera
@@ -267,8 +277,7 @@ def create_browser_display(source: Path, destination: Path) -> None:
 
 def create_thumbnail(source: Path, destination: Path, *, max_width: int, max_height: int) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(destination.suffix + ".part")
-    temporary.unlink(missing_ok=True)
+    temporary = _unique_rendition_temporary(destination)
     try:
         with Image.open(source) as image:
             # Thumbnails and scientific overlays must share the original camera
