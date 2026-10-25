@@ -585,6 +585,8 @@ class PoseTrainingDatasetService:
             select(PoseTrainingDataset).where(PoseTrainingDataset.source_round_id == round_id)
         )
         if existing is not None:
+            # An idempotent freeze must not return corrupted persisted training truth.
+            self.manifest(existing.id)
             return PoseTrainingDatasetResponse.model_validate(existing)
 
         round_record = self._round(round_id)
