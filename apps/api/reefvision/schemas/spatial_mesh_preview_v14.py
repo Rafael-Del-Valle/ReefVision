@@ -25,6 +25,11 @@ class MeshPreviewRequest(BaseModel):
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
     observed_at_utc: AwareDatetime | None = None
+    # A caller-provided label for the reconstruction coordinate system, not proof
+    # that two surveys are registered or share a verified physical origin.
+    coordinate_frame_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
 
     surface_path_vertex_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=16)
 
