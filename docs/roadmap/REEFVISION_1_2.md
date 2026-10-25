@@ -1473,3 +1473,20 @@ remain outstanding; no merge, tag, release or deployment.
 A second read-only standalone export, `GET /api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates/report-series.csv`, emits one deterministic row per organism/metric UTC-date QC decision. Unlike the existing aggregate `report.csv`, it includes source image IDs, units, observed and duplicate UTC dates, missing capture timestamps, replay/conflicting source identifiers, and explicit review/evidence status. Arrays are encoded as JSON within CSV cells to preserve identifiers containing delimiters. Input/report SHA-256 references bind the export to the already persisted typed `ecology_measurement_candidates` and `ecology_candidate_report` Workflow Builder artifacts; no separate untyped workflow path is introduced. CSV generation fails closed on inconsistent report/QC totals, duplicate series, or a mismatched source fingerprint, and escapes user-controlled organism identifiers that could be interpreted as spreadsheet formulas. The aggregate CSV endpoint is unchanged.
 
 This is a reproducible **unverified candidate-QC export**, not an authenticated longitudinal observation, verified growth result, statistical inference, or independent-unit confirmation. Tests cover standalone/typed saved-workflow equality, stable ordering, corruption rejection and spreadsheet safety. Full CI, scientific review, and installed Windows acceptance remain release blockers.
+
+## Per-series CSV source reconciliation (2026-10-25)
+
+The source-linked QC CSV renderer now checks every persisted per-organism/metric
+sampling-date decision against the candidate measurement records, not just the
+aggregate status histogram. It rejects forged or stale image IDs, timestamp/QC
+decisions, candidate denominators, experimental-unit/source counts and report
+SHA-256 totals. The same typed evidence is used by the standalone endpoint and
+the executable saved Workflow Builder source node; no new node or data store
+is introduced. Regression tests cover source tampering, stale reports,
+saved-workflow parity and spreadsheet-safe CSV identifiers.
+
+This is **fail-closed internal consistency**, not cryptographic authentication
+of the original project images or proof of reviewed growth. All outputs remain
+`linked_unverified` with `scientist_review_required`. Full exact-head CI,
+scientific acceptance, registered sampling designs and installed Windows GUI
+checks remain release blockers.

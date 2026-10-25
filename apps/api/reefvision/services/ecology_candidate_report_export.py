@@ -7,8 +7,11 @@ import json
 from io import StringIO
 
 from reefvision.domain.errors import ValidationError
-from reefvision.schemas.ecology_measurement_candidates import EcologyMeasurementCandidatesResponse
-
+from reefvision.schemas.ecology_measurement_candidates import (
+    EcologyMeasurementCandidatesResponse,
+)
+from reefvision.services.ecology_measurement_candidates import summarize_sampling_date_qc
+from reefvision.storage.datasets import canonical_json_sha256
 
 _SERIES_COLUMNS = (
     "project_id",
@@ -73,6 +76,61 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
         or report.candidate_count != response.candidate_count
     ):
         raise ValidationError("Ecological candidate report QC totals do not match source series")
+
+    # The status histogram alone cannot detect a forged per-series source ID,
+    # timestamp or QC decision. Reconcile every row with the actual candidate
+    # records, including cross-organism image-replay checks, before exporting.
+    if response.candidate_count != len(response.candidates):
+        raise ValidationError("Ecological candidate count does not match source records")
+    expected_qc = {
+        (row.organism_key, row.metric): row.model_dump(mode="json")
+        for row in summarize_sampling_date_qc(response.candidates)
+    }
+    actual_qc = {
+        (row.organism_key, row.metric): row.model_dump(mode="json")
+        for row in response.sampling_date_qc
+    }
+    if actual_qc != expected_qc:
+        raise ValidationError(
+            "Ecological sampling-date QC evidence does not match source candidates"
+        )
+
+    # A report digest is meaningful only when the complete report is checked
+    # against the candidate/series denominators that produced it. This is an
+    # internal consistency check, not proof of scientist review or ownership.
+    source_image_count = len({row.image_id for row in response.candidates})
+    source_organism_count = len({row.organism_key for row in response.candidates})
+    declared_unit_count = len(
+        {
+            (row.experimental_unit_type, row.experimental_unit_id)
+            for row in response.candidates
+            if row.experimental_unit_type and row.experimental_unit_id
+        }
+    )
+    if (
+        report.source_image_count != source_image_count
+        or report.source_organism_count != source_organism_count
+        or report.declared_experimental_unit_count != declared_unit_count
+        or report.excluded_source_count != len(response.exclusions)
+    ):
+        raise ValidationError("Ecological candidate report denominators do not match sources")
+    report_values = {
+        "algorithm_version": "ecology-candidate-report-0001",
+        "project_id": response.project_id,
+        "source_input_sha256": response.input_sha256,
+        "candidate_count": len(response.candidates),
+        "source_image_count": source_image_count,
+        "source_organism_count": source_organism_count,
+        "declared_experimental_unit_count": declared_unit_count,
+        "date_qc_pass_series_count": report.date_qc_pass_series_count,
+        "excluded_series_count": report.excluded_series_count,
+        "excluded_source_count": len(response.exclusions),
+        "qc_status_counts": dict(sorted(statuses.items())),
+    }
+    if report.report_sha256 != canonical_json_sha256(report_values):
+        raise ValidationError(
+            "Ecological candidate report fingerprint does not match source totals"
+        )
 
     output = StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")

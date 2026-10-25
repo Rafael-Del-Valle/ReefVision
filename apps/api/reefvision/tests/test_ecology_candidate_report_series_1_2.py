@@ -13,7 +13,12 @@ from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
-from reefvision.services.ecology_candidate_report_export import render_ecology_series_qc_csv
+from reefvision.services.ecology_candidate_report_export import (
+    _csv_identifier,
+    _json_array,
+    render_ecology_series_qc_csv,
+)
+from reefvision.services.ecology_measurement_candidates import summarize_sampling_date_qc
 from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
 from reefvision.tests.test_ecology_projected_visit_coverage_1_2 import _source
 
@@ -102,12 +107,81 @@ def test_series_qc_csv_escapes_spreadsheet_formulas_and_preserves_delimiters(
     )
     assert response.status_code == 200
     payload = EcologyMeasurementCandidatesResponse.model_validate(response.json())
-    first = payload.sampling_date_qc[0].model_copy(
-        update={"organism_key": "=SUM(1,2)", "source_image_ids": ["image;1", "image,2"]}
-    )
+    # Keep the source records and their QC rows mutually consistent; this is
+    # a synthetic renderer safety check, not an authenticated source rewrite.
+    altered_candidates = [
+        row.model_copy(update={"organism_key": "=SUM(1,2)", "image_id": "image;1"})
+        for row in payload.candidates
+    ]
     altered = payload.model_copy(
-        update={"sampling_date_qc": [first, *payload.sampling_date_qc[1:]]}
+        update={
+            "candidates": altered_candidates,
+            "sampling_date_qc": summarize_sampling_date_qc(altered_candidates),
+        }
     )
     rows = list(csv.DictReader(StringIO(render_ecology_series_qc_csv(altered))))
     assert rows[0]["organism_key"] == "'=SUM(1,2)"
-    assert json.loads(rows[0]["source_image_ids_json"]) == ["image;1", "image,2"]
+    assert json.loads(rows[0]["source_image_ids_json"]) == ["image;1"]
+    assert _csv_identifier("  @SUM(1,2)") == "'  @SUM(1,2)"
+    assert json.loads(_json_array(["image;1", "image,2"])) == ["image;1", "image,2"]
+
+
+def test_series_qc_csv_rejects_forged_per_series_sources_and_candidate_counts(
+    client: TestClient,
+) -> None:
+    project_id, _ = _source(client)
+    response = client.get(
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    )
+    assert response.status_code == 200
+    payload = EcologyMeasurementCandidatesResponse.model_validate(response.json())
+    forged_qc = payload.sampling_date_qc[0].model_copy(
+        update={"source_image_ids": ["forged-image"]}
+    )
+    altered = payload.model_copy(
+        update={"sampling_date_qc": [forged_qc, *payload.sampling_date_qc[1:]]}
+    )
+    with pytest.raises(ValidationError, match="QC evidence"):
+        render_ecology_series_qc_csv(altered)
+
+    altered_candidate = payload.candidates[0].model_copy(update={"image_id": "forged-image"})
+    altered = payload.model_copy(
+        update={"candidates": [altered_candidate, *payload.candidates[1:]]}
+    )
+    with pytest.raises(ValidationError, match="QC evidence"):
+        render_ecology_series_qc_csv(altered)
+
+    altered = payload.model_copy(update={"candidate_count": payload.candidate_count + 1})
+    with pytest.raises(ValidationError, match="candidate count"):
+        render_ecology_series_qc_csv(altered)
+
+
+def test_series_qc_csv_rejects_stale_denominators_and_report_digest(
+    client: TestClient,
+) -> None:
+    project_id, _ = _source(client)
+    response = client.get(
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    )
+    assert response.status_code == 200
+    payload = EcologyMeasurementCandidatesResponse.model_validate(response.json())
+    assert payload.candidate_report is not None
+    wrong_denominator = payload.model_copy(
+        update={
+            "candidate_report": payload.candidate_report.model_copy(
+                update={"source_image_count": payload.candidate_report.source_image_count + 1}
+            )
+        }
+    )
+    with pytest.raises(ValidationError, match="denominators"):
+        render_ecology_series_qc_csv(wrong_denominator)
+
+    wrong_digest = payload.model_copy(
+        update={
+            "candidate_report": payload.candidate_report.model_copy(
+                update={"report_sha256": "0" * 64}
+            )
+        }
+    )
+    with pytest.raises(ValidationError, match="fingerprint"):
+        render_ecology_series_qc_csv(wrong_digest)
