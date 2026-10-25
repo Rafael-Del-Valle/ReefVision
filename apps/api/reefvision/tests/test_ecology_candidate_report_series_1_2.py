@@ -206,9 +206,7 @@ def test_series_qc_csv_rechecks_complete_source_fingerprint_and_marks_legacy(
     with pytest.raises(ValidationError, match="source input fingerprint"):
         render_ecology_series_qc_csv(altered)
 
-    altered = payload.model_copy(
-        update={"source_annotation_evidence_sha256": "0" * 64}
-    )
+    altered = payload.model_copy(update={"source_annotation_evidence_sha256": "0" * 64})
     with pytest.raises(ValidationError, match="source input fingerprint"):
         render_ecology_series_qc_csv(altered)
 
