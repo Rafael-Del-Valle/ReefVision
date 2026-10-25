@@ -1110,7 +1110,9 @@ def test_resigned_empty_dataset_cannot_be_exported_or_planned(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Start with an API-frozen scientist-verified dataset, then simulate
-    # deletion of its only verified item and re-signing every dataset summary.
+    # deletion of its only verified item and re-signing the empty manifest.
+    # The database CHECK requires item_count >= 1, so keep the persisted
+    # count intact and verify that the signed manifest cannot hide missing rows.
     project, dataset = _frozen_dataset(client, monkeypatch)
     project_id = str(project["id"])
     dataset_id = str(dataset["id"])
@@ -1128,7 +1130,6 @@ def test_resigned_empty_dataset_cannot_be_exported_or_planned(
         assert frozen is not None and len(items) == 1
         session.delete(items[0])
         empty_manifest = {**frozen.manifest_json, "items": [], "item_count": 0}
-        frozen.item_count = 0
         frozen.manifest_json = empty_manifest
         frozen.manifest_sha256 = canonical_json_sha256(empty_manifest)
         resigned_sha = frozen.manifest_sha256
@@ -1136,7 +1137,7 @@ def test_resigned_empty_dataset_cannot_be_exported_or_planned(
 
     with (
         app.state.session_factory() as session,
-        pytest.raises(ConflictError, match="item lineage no longer matches"),
+        pytest.raises(ConflictError, match="manifest item count no longer matches"),
     ):
         PoseTrainingDatasetService(session).manifest(dataset_id)
 
@@ -1162,11 +1163,13 @@ def test_resigned_empty_dataset_cannot_be_exported_or_planned(
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is False
-    assert "pose_dataset_incomplete" in {issue["code"] for issue in plan.json()["issues"]}
+    assert "pose_dataset_item_count_mismatch" in {
+        issue["code"] for issue in plan.json()["issues"]
+    }
 
     with (
         app.state.session_factory() as session,
-        pytest.raises(ValidationError, match="must be complete and contain verified items"),
+        pytest.raises(ValidationError, match="item count no longer matches frozen manifest"),
     ):
         execute_pose_training_dataset_adapter(
             session, app.state.settings, project_id, parameters, {}
