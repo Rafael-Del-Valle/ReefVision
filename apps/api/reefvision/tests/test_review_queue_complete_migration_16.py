@@ -71,7 +71,10 @@ def test_completion_upgrade_preserves_history_and_downgrade_refuses_loss(
             _assert_indexes(connection)
             assert (
                 connection.scalar(
-                    text("SELECT event_type FROM review_queue_item_events WHERE id='existing-triage'")
+                    text(
+                        "SELECT event_type FROM review_queue_item_events "
+                        "WHERE id='existing-triage'"
+                    )
                 )
                 == "triage_skip"
             )
