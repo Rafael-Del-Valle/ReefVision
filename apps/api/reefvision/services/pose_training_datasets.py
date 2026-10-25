@@ -763,6 +763,9 @@ class PoseTrainingDatasetService:
             date_time=(1980, 1, 1, 0, 0, 0),
         )
         info.compress_type = zipfile.ZIP_DEFLATED
+        # ZipInfo defaults to a host-specific OS marker. Pin it so the same
+        # frozen scientific package has identical bytes on Windows and Linux.
+        info.create_system = 3
         archive.writestr(info, content)
 
     def native_package(
