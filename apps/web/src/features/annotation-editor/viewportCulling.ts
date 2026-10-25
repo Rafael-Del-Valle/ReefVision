@@ -102,6 +102,36 @@ export function cullViewportItems<T extends ImageBounds>(
   );
 }
 
+interface MaskDisplayGeometry {
+  geometry_kind?: string;
+  mask_path?: string | null;
+  points?: ReadonlyArray<{ x: number; y: number }> | null;
+}
+
+/**
+ * The SVG polygon is drawn from vertices, not stored bounding-box metadata.
+ * Recompute its display extents so stale imported metadata cannot hide it.
+ * Invalid vertices disable culling rather than silently dropping observations.
+ */
+function polygonDisplayBounds(mask: MaskDisplayGeometry): ImageBounds | null {
+  const points = mask.points;
+  if (!Array.isArray(points) || points.length < 3) return null;
+  let xMin = Infinity;
+  let yMin = Infinity;
+  let xMax = -Infinity;
+  let yMax = -Infinity;
+  for (const point of points) {
+    if (point == null || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      return null;
+    }
+    xMin = Math.min(xMin, point.x);
+    yMin = Math.min(yMin, point.y);
+    xMax = Math.max(xMax, point.x);
+    yMax = Math.max(yMax, point.y);
+  }
+  return { x_min: xMin, y_min: yMin, x_max: xMax, y_max: yMax };
+}
+
 /**
  * Display-only culling for imported raster-mask records. Missing, null or
  * malformed bounds are *not* proof that a scientific mask is offscreen, so
@@ -111,7 +141,7 @@ export function cullViewportItems<T extends ImageBounds>(
  * do not rewrite, sort or discard saved mask annotations during pan/zoom.
  */
 export function cullViewportMasks<
-  T extends Partial<Record<keyof ImageBounds, number | null>>,
+  T extends Partial<Record<keyof ImageBounds, number | null>> & MaskDisplayGeometry,
 >(items: T[], viewportBounds: ImageBounds | null): T[] {
   if (!viewportBounds || !hasValidViewportBounds(viewportBounds)) {
     return items.some((item) => item == null)
@@ -120,6 +150,17 @@ export function cullViewportMasks<
   }
   return items.filter((mask) => {
     if (mask == null) return false;
+    // A polygon is rendered from points. Use their actual extents instead of
+    // potentially stale bounds; a malformed polygon remains inspectable.
+    // Raster masks use pixel masks, so never infer their extent from points.
+    if (mask.geometry_kind !== "raster_mask" || mask.mask_path == null) {
+      if (mask.points != null) {
+        const polygonBounds = polygonDisplayBounds(mask);
+        return polygonBounds
+          ? intersectsViewport(polygonBounds, viewportBounds)
+          : true;
+      }
+    }
     const { x_min, y_min, x_max, y_max } = mask;
     if (x_min == null || y_min == null || x_max == null || y_max == null) {
       return true;
