@@ -73,6 +73,24 @@ class EcologySamplingDateQC(BaseModel):
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
 
+class EcologyProjectedVisitCoverage(BaseModel):
+    """Observed linked measurements by UTC date; not a registered visit roster."""
+
+    experimental_unit_type: str | None
+    experimental_unit_id: str | None
+    metric: Literal["box_width", "box_height", "mask_projected_area"]
+    unit: str
+    sampling_date_utc: str
+    series_organism_keys: list[str]
+    measured_organism_keys: list[str]
+    no_linked_measurement_organism_keys: list[str]
+    undated_organism_keys: list[str]
+    same_day_repeat_organism_keys: list[str]
+    linked_measurement_count: int = Field(ge=1)
+    evidence_level: Literal["linked_unverified"] = "linked_unverified"
+    review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+
 class EcologyProjectedEndpointChange(BaseModel):
     """Descriptive projected-geometry endpoint change; not verified growth."""
 
@@ -173,6 +191,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
     candidates: list[EcologyMeasurementCandidate] = Field(default_factory=list)
     candidate_count: int = 0
     sampling_date_qc: list[EcologySamplingDateQC] = Field(default_factory=list)
+    projected_visit_coverage: list[EcologyProjectedVisitCoverage] = Field(default_factory=list)
     projected_endpoint_changes: list[EcologyProjectedEndpointChange] = Field(default_factory=list)
     projected_unit_summaries: list[EcologyProjectedUnitSummary] = Field(default_factory=list)
     projected_population_summaries: list[EcologyProjectedPopulationSummary] = Field(
