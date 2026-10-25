@@ -135,9 +135,7 @@ describe("ProjectTrainingMonitor", () => {
       const open = vi
         .spyOn(runtime, "openDesktopTrainingConsole")
         .mockResolvedValue(undefined);
-      vi.mocked(api.getTrainingRuns).mockResolvedValue([
-        { ...completedRun, status },
-      ]);
+      vi.mocked(api.getTrainingRuns).mockResolvedValue([{ ...completedRun, status }]);
 
       renderMonitor();
       await screen.findByText("Swiftia detector completed");
@@ -147,9 +145,7 @@ describe("ProjectTrainingMonitor", () => {
       await userEvent.click(
         screen.getByRole("button", { name: "Open PowerShell monitor" }),
       );
-      await waitFor(() =>
-        expect(open).toHaveBeenCalledWith("run-completed"),
-      );
+      await waitFor(() => expect(open).toHaveBeenCalledWith("run-completed"));
     },
   );
 
