@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from statistics import mean
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from reefvision.db.models import (
     ReviewQueue,
     ReviewQueueItem,
 )
+from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.repositories.review_queues import ReviewQueueRepository
 from reefvision.schemas.review_queues import (
@@ -508,12 +510,33 @@ class ReviewQueueService:
             pages=pages,
         )
 
+    def _record_single_item_triage(
+        self, item: ReviewQueueItem, *, action: str, reason: str | None = None
+    ) -> None:
+        """Append server-generated state-transition evidence in the same transaction.
+
+        The existing single-item API has no authenticated actor field. Its
+        local_user label is not proof of reviewer identity or biological review.
+        """
+        self.session.add(
+            ReviewQueueItemEvent(
+                review_queue_id=item.review_queue_id,
+                review_queue_item_id=item.id,
+                project_id=item.project_id,
+                client_request_id=str(uuid4()),
+                event_type=f"triage_{action}",
+                actor="local_user",
+                comment=reason,
+            )
+        )
+
     def start_item(self, item_id: str) -> ReviewQueueItemResponse:
         item = self._item(item_id)
         if item.review_state != "pending":
             raise ConflictError("Only pending queue items can be started")
         item.review_state = "in_progress"
         item.started_at = _utc_now()
+        self._record_single_item_triage(item, action="start")
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
@@ -541,6 +564,7 @@ class ReviewQueueService:
         item.review_state = "skipped"
         item.skip_reason = request.reason
         item.completed_at = None
+        self._record_single_item_triage(item, action="skip", reason=request.reason)
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
@@ -551,6 +575,7 @@ class ReviewQueueService:
             raise ConflictError("Only skipped queue items can be returned to the queue")
         item.review_state = "pending"
         item.returned_at = _utc_now()
+        self._record_single_item_triage(item, action="return")
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
