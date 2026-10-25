@@ -113,9 +113,7 @@ def test_nullable_audit_event_type_rejected_without_mutating_research_data(
         if revision == "0040":
             allowed += ", 'triage_complete'"
         # The allowlist is correct but a nullable column makes it ineffective.
-        schema = REVIEW_SCHEMA.replace(
-            "event_type TEXT NOT NULL", "event_type TEXT"
-        )
+        schema = REVIEW_SCHEMA.replace("event_type TEXT NOT NULL", "event_type TEXT")
         connection.execute(
             text(
                 f"CREATE TABLE review_queue_item_events ({schema}, "
@@ -133,10 +131,7 @@ def test_nullable_audit_event_type_rejected_without_mutating_research_data(
             assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT value FROM preserved")) == "original observations"
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
-        assert (
-            connection.scalar(text("SELECT event_type FROM review_queue_item_events"))
-            is None
-        )
+        assert connection.scalar(text("SELECT event_type FROM review_queue_item_events")) is None
     engine.dispose()
 
 
@@ -178,9 +173,9 @@ def test_defaulted_audit_event_type_rejected_without_rewriting_history(
             assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT value FROM preserved")) == "original observation"
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
-        assert connection.scalar(
-            text("SELECT event_type FROM review_queue_item_events")
-        ) == "comment"
+        assert (
+            connection.scalar(text("SELECT event_type FROM review_queue_item_events")) == "comment"
+        )
     engine.dispose()
 
 
