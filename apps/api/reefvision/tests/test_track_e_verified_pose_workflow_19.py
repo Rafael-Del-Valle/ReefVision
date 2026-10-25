@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import zipfile
@@ -16,6 +17,7 @@ from reefvision.db.models import PoseTrainingDataset, PoseTrainingDatasetItem
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.pose_training_datasets import (
+    PACKAGE_CHECKSUMS_FILENAME,
     PACKAGE_ITEMS_FILENAME,
     PACKAGE_MANIFEST_FILENAME,
     PoseTrainingDatasetService,
@@ -158,6 +160,13 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     # repeated exports on one operating system.
     with zipfile.ZipFile(io.BytesIO(package_bytes)) as archive:
         assert all(member.create_system == 3 for member in archive.infolist())
+        # The saved-workflow export must carry a portable integrity index
+        # for the exact bytes researchers receive after extracting the ZIP.
+        expected_checksums = "".join(
+            f"{hashlib.sha256(archive.read(name)).hexdigest()}  {name}\n"
+            for name in (PACKAGE_MANIFEST_FILENAME, PACKAGE_ITEMS_FILENAME, "README.txt")
+        ).encode("ascii")
+        assert archive.read(PACKAGE_CHECKSUMS_FILENAME) == expected_checksums
         exported_manifest = json.loads(archive.read(PACKAGE_MANIFEST_FILENAME))
         exported_items = [
             json.loads(line)
