@@ -299,7 +299,9 @@ def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     )[0]
     assert delayed_change.elapsed_days == 3.0
     assert delayed_change.projected_absolute_change_per_day == pytest.approx(2.5 / 3)
-    assert delayed_change.projected_baseline_percent_change_per_day == pytest.approx(50 / 3)
+    assert delayed_change.projected_baseline_percent_change_per_day == pytest.approx(
+        50 / 3
+    )
     assert delayed_change.review_gate == "scientist_review_required"
 
     # Previously persisted typed workflow artifacts remain readable.
@@ -313,7 +315,9 @@ def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     huge_start = baseline.model_copy(
         update={
             "value": 1e300,
-            "capture_timestamp_utc": datetime(2026, 4, 3, 23, 59, 59, 999999, tzinfo=UTC),
+            "capture_timestamp_utc": datetime(
+                2026, 4, 3, 23, 59, 59, 999999, tzinfo=UTC
+            ),
         }
     )
     huge_end = final.model_copy(
