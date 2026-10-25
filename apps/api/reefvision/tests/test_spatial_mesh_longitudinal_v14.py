@@ -9,8 +9,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
+from reefvision.services.workflow_mesh_v14 import execute_mesh_longitudinal_comparison
 from reefvision.tests.test_annotations import create_project
 
 
@@ -138,9 +140,10 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
+    completed = process_workflow_run_job(
         app.state.settings, app.state.session_factory, str(run.json()["job_id"])
     )
+    assert completed, client.get(f"/api/v1/workflow-runs/{run.json()['id']}").json()
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
@@ -151,6 +154,32 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
+
+
+def test_mesh_comparison_runtime_context_is_not_a_user_parameter(
+    client: TestClient,
+) -> None:
+    """Saved workflows inject execution IDs, not scientific node parameters."""
+    app = cast(FastAPI, client.app)
+    runtime_context = {
+        "__workflow_run_id": "run-1",
+        "__workflow_node_run_id": "node-1",
+    }
+    with app.state.session_factory() as session:
+        # With no artifacts, the adapter must proceed past parameter validation.
+        with pytest.raises(ValidationError, match="Each longitudinal input"):
+            execute_mesh_longitudinal_comparison(
+                session, app.state.settings, "project-1", runtime_context, {}
+            )
+        # Genuine user-supplied parameters remain disallowed.
+        with pytest.raises(ValidationError, match="takes no node parameters"):
+            execute_mesh_longitudinal_comparison(
+                session,
+                app.state.settings,
+                "project-1",
+                {**runtime_context, "unrecognized": "value"},
+                {},
+            )
 
 
 @pytest.mark.parametrize(
