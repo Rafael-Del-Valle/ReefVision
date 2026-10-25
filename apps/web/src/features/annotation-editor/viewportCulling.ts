@@ -145,7 +145,8 @@ function polygonDisplayBounds(mask: MaskDisplayGeometry): ImageBounds | null {
  * do not rewrite, sort or discard saved mask annotations during pan/zoom.
  */
 export function cullViewportMasks<
-  T extends Partial<Record<keyof ImageBounds, number | null>> & MaskDisplayGeometry,
+  T extends Partial<Record<keyof ImageBounds, number | null>> &
+    MaskDisplayGeometry,
 >(items: T[], viewportBounds: ImageBounds | null): T[] {
   if (!viewportBounds || !hasValidViewportBounds(viewportBounds)) {
     return items.some((item) => item == null)
