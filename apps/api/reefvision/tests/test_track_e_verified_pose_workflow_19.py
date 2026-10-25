@@ -887,6 +887,7 @@ def test_frozen_pose_review_evidence_corruption_fails_closed(
     with app.state.session_factory() as session:
         service = PoseTrainingDatasetService(session)
         assert service.manifest(dataset_id).manifest_sha256 == dataset["manifest_sha256"]
+        assert service.get_dataset(dataset_id).id == dataset_id
         item = session.scalar(
             select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
         )
@@ -928,6 +929,12 @@ def test_frozen_pose_review_evidence_corruption_fails_closed(
             setattr(item, field, invalid_value)
             session.commit()
 
+        # Direct dataset lookups must enforce the same frozen-truth contract.
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ConflictError, match="item lineage no longer matches"),
+        ):
+            PoseTrainingDatasetService(session).get_dataset(dataset_id)
         with (
             app.state.session_factory() as session,
             pytest.raises(ConflictError, match="item lineage no longer matches"),
