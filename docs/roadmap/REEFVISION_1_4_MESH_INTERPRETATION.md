@@ -293,3 +293,18 @@ Regression coverage exercises both overflow and positive underflow with
 saved-workflow artifact parity. The new QC does not verify the calibration,
 common source units, spatial registration, specimen identity, or biological
 change; all observations remain provisional and subject to human review.
+
+### Large finite longitudinal area changes (Track C)
+
+The provisional longitudinal comparison computes relative surface-area change by
+**dividing the finite area difference by the positive baseline before
+multiplying by 100**. This avoids an intermediate floating-point overflow
+when the percentage is representable even though `100 * area_difference`
+is not. For example, a change from `1e307` to `2e307` square meters in a
+synthetic legacy comparison is reported as `100%`, not withheld as null.
+Regression tests cover positive and negative finite percentages. Such values
+are numeric stress tests, not biologically plausible coral measurements or
+validated field observations. The existing standalone API and executable,
+persisted Workflow Builder share this comparison engine and retain their
+artifact-parity regression. Scientific identity, calibration, registration,
+and biological growth remain unverified.
