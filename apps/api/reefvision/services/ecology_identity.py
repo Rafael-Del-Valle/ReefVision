@@ -544,6 +544,25 @@ class EcologyIdentityService:
             value = getattr(calibration, field)
             if value is not None and not math.isfinite(value):
                 raise ValidationError("Ecological calibration evidence contains nonfinite values")
+        # A saved reference segment and its pixel span must agree with the
+        # physical scale used to derive projected ecological measurements.
+        # A stale reference would otherwise produce reproducible but wrong
+        # lengths/areas. Allow 1% relative rounding of manually entered scales.
+        if (
+            calibration.reference_length is not None
+            and calibration.reference_pixel_length is not None
+        ):
+            reference_scale = calibration.reference_length / calibration.reference_pixel_length
+            if (
+                not math.isfinite(reference_scale)
+                or reference_scale <= 0
+                or not math.isclose(
+                    calibration.distance_per_pixel, reference_scale, rel_tol=0.01
+                )
+            ):
+                raise ValidationError(
+                    "Ecological calibration scale conflicts with its reference length"
+                )
         signature = calibration.camera_signature
         if signature is not None:
             for field in ("focal_length_mm", "capture_distance"):
