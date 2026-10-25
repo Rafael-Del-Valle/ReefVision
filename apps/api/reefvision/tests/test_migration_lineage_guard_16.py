@@ -245,3 +245,49 @@ def test_revision_0039_rejects_permissive_event_checks_without_writes(
             )
             == schema_before
         )
+
+
+@pytest.mark.parametrize(
+    ("allowed", "should_reject"),
+    [
+        (
+            "'comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return', 'triage_complete'",
+            False,
+        ),
+        (
+            "'comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return'",
+            True,
+        ),
+        (
+            "'comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return', 'triage_complete', 'triage_approve'",
+            True,
+        ),
+    ],
+)
+def test_revision_0040_requires_exact_completion_check_without_writes(
+    allowed: str, should_reject: bool
+) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0040')"))
+        connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO preserved VALUES ('research assets')"))
+        connection.execute(
+            text(
+                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
+                "CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed})))"
+            )
+        )
+        if should_reject:
+            with pytest.raises(RuntimeError, match="still excludes"):
+                assert_compatible_revision_0038(connection)
+        else:
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT value FROM preserved")) == "research assets"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0040"
+    engine.dispose()

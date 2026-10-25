@@ -549,6 +549,7 @@ class ReviewQueueService:
         if item.started_at is None:
             item.started_at = _utc_now()
         item.completed_at = _utc_now()
+        self._record_single_item_triage(item, action="complete")
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)

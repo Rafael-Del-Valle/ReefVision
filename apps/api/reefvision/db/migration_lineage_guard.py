@@ -1,4 +1,4 @@
-"""Fail closed on incompatible QC audit schemas at Alembic revisions 0038/0039.
+"""Fail closed on incompatible QC audit schemas at Alembic revisions 0038–0040.
 
 ReefVision 1.6's 0038 adds review_queue_item_events; 1.1's 0038 instead
 adds scientific_records and environmental_cache_entries. Alembic records only
@@ -29,7 +29,7 @@ _SCIENCE_TABLES = frozenset({"scientific_records", "environmental_cache_entries"
 
 
 def assert_compatible_revision_0038(connection: Connection) -> None:
-    """Reject incompatible 0038/0039 schemas before any desktop write.
+    """Reject incompatible 0038–0040 schemas before any desktop write.
 
     Older databases (including unversioned fresh installations) are unaffected.
     A deliberate, data-preserving migration reconciliation must supersede this
@@ -41,10 +41,10 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     revisions: set[str] = set(
         connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
     )
-    review_revisions = revisions & {"0038", "0039"}
+    review_revisions = revisions & {"0038", "0039", "0040"}
     if not review_revisions:
         return
-    revision = "0039" if "0039" in review_revisions else "0038"
+    revision = next(rev for rev in ("0040", "0039", "0038") if rev in review_revisions)
 
     tables = set(inspector.get_table_names())
     unexpected_science = sorted(tables & _SCIENCE_TABLES)
@@ -66,10 +66,10 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "migration; do not stamp, downgrade, or delete tables."
         )
 
-    # A 0039 stamp requires the exact named audit-event CHECK from its
-    # migration. A missing/renamed constraint or an unrevised 0038 CHECK
-    # is unsafe even if the revision marker says 0039. Read-only inspection.
-    if revision == "0039":
+    # A 0039/0040 stamp requires the exact named audit-event CHECK from its
+    # migration. A missing/renamed or obsolete CHECK is unsafe even when the
+    # revision marker claims otherwise. Read-only inspection.
+    if revision in {"0039", "0040"}:
         event_checks = inspector.get_check_constraints(_REVIEW_TABLE)
         named_check = next(
             (
@@ -81,23 +81,31 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         )
         if named_check is None:
             raise RuntimeError(
-                "Unsafe ReefVision Alembic revision 0039 collision: the "
+                f"Unsafe ReefVision Alembic revision {revision} collision: the "
                 "review-event CHECK constraint is missing or renamed. "
                 "Preserve the database; do not stamp or rewrite audit history."
             )
-        # The 0039 migration specifies exactly six allowed values. A mere
-        # substring search would accept a weakened CHECK (for example OR 1=1),
-        # extra unreviewed event types, or missing coordination types.
-        # Compare the full reflected expression, without executing it.
+        # Match the exact migration-specific allowlist. Reject weakened
+        # CHECK expressions, missing values and unreviewed extra event types.
+        allowed = [
+            "comment",
+            "assign",
+            "unassign",
+            "triage_start",
+            "triage_skip",
+            "triage_return",
+        ]
+        if revision == "0040":
+            allowed.append("triage_complete")
         expected_check = (
-            r"\s*event_type\s+IN\s*\(\s*'comment'\s*,\s*'assign'\s*,"
-            r"\s*'unassign'\s*,\s*'triage_start'\s*,"
-            r"\s*'triage_skip'\s*,\s*'triage_return'\s*\)\s*"
+            r"\s*event_type\s+IN\s*\(\s*"
+            + r"\s*,\s*".join(f"'{event_type}'" for event_type in allowed)
+            + r"\s*\)\s*"
         )
         expression = str(named_check.get("sqltext") or "")
         if re.fullmatch(expected_check, expression, flags=re.IGNORECASE) is None:
             raise RuntimeError(
-                "Unsafe ReefVision Alembic revision 0039 collision: the "
+                f"Unsafe ReefVision Alembic revision {revision} collision: the "
                 "review-event CHECK constraint still excludes required event "
                 "types or permits unsupported event types. Preserve the "
                 "database and reconcile the migration lineage without "

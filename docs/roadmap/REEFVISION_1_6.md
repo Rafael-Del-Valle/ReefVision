@@ -727,3 +727,25 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - **Acceptance:** committed for exact-head CI validation; full installed
   Windows GUI, migration lineage reconciliation, actual MSI upgrade/rollback,
   and representative scientific-data review remain mandatory. HOLD.
+
+
+## 2026-10-25 — Audited single-item completion (development; release HOLD)
+
+- Existing standalone and saved-workflow QC queues already supported manual
+  completion, but unlike start/skip/return it left no append-only transition
+  event. This increment adds server-generated `triage_complete` evidence in
+  the same transaction as the successful state change.
+- Additive Alembic 0040 expands the existing 0039 event CHECK without changing
+  scientific annotation or reviewer approval. A downgrade refuses to erase
+  completion history. The revision collision guard now verifies the exact 0040
+  event allowlist and rejects tampered or mismatched 0038/0039/0040 stamps.
+- Standalone API and executable saved-graph tests assert the completion event,
+  rejected repeated transitions, unmodified annotations and preserved
+  researcher-review gates. Migration tests cover SQLite data preservation,
+  foreign keys, invalid event types and downgrade refusal.
+- `local_user` remains an unauthenticated fallback actor label, not verified
+  researcher identity. A completed QC queue item is **not** a validated
+  biological observation, model acceptance, or authorization to publish.
+- Full exact-head CI, native Windows installed-GUI, MSI upgrade/rollback,
+  cross-version 1.1 migration reconciliation and representative scientific
+  acceptance remain outstanding. No merge, release or deployment authorized.

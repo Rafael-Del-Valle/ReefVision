@@ -96,6 +96,26 @@ def test_single_item_triage_persists_atomic_events(client: TestClient) -> None:
     ]
     assert len({event["client_request_id"] for event in history.json()["items"]}) == 3
     assert history.json()["current_assignee"] is None
+
+    completed = client.post(f"{state_url}/complete")
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["review_state"] == "completed"
+    assert completed.json()["completed_at"] is not None
+    assert client.post(f"{state_url}/complete").status_code == 409
+    assert client.post(f"{state_url}/start").status_code == 409
+    final_history = client.get(history_url).json()
+    assert final_history["total"] == 4
+    assert [event["event_type"] for event in final_history["items"]] == [
+        "triage_start",
+        "triage_skip",
+        "triage_return",
+        "triage_complete",
+    ]
+    assert final_history["items"][-1]["actor"] == "local_user"
+    assert final_history["items"][-1]["comment"] is None
+    assert len({event["client_request_id"] for event in final_history["items"]}) == 4
+    assert final_history["requires_researcher_review"] is True
+
     annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []

@@ -9,7 +9,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ReviewEventType = Literal[
-    "comment", "assign", "unassign", "triage_start", "triage_skip", "triage_return"
+    "comment",
+    "assign",
+    "unassign",
+    "triage_start",
+    "triage_skip",
+    "triage_return",
+    "triage_complete",
 ]
 
 

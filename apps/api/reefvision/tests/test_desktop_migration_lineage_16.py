@@ -29,7 +29,7 @@ def _prepare_desktop_migration(
     )
 
 
-@pytest.mark.parametrize("revision", ["0038", "0039"])
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040"])
 def test_desktop_rejects_foreign_review_lineage_even_when_at_head(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -56,7 +56,7 @@ def test_desktop_rejects_foreign_review_lineage_even_when_at_head(
         assert connection.scalar(text("SELECT id FROM scientific_records")) == "preserve-me"
 
 
-@pytest.mark.parametrize("revision", ["0038", "0039"])
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040"])
 def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -69,13 +69,18 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
             text("INSERT INTO alembic_version VALUES (:revision)"),
             {"revision": revision},
         )
-        event_type_check = (
-            ", CONSTRAINT ck_review_queue_item_event_type "
-            "CHECK (event_type IN ('comment', 'assign', 'unassign', "
-            "'triage_start', 'triage_skip', 'triage_return'))"
-            if revision == "0039"
-            else ""
-        )
+        event_type_check = ""
+        if revision in {"0039", "0040"}:
+            allowed = (
+                "'comment', 'assign', 'unassign', "
+                "'triage_start', 'triage_skip', 'triage_return'"
+            )
+            if revision == "0040":
+                allowed += ", 'triage_complete'"
+            event_type_check = (
+                ", CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed}))"
+            )
         connection.execute(
             text(
                 "CREATE TABLE review_queue_item_events ("
