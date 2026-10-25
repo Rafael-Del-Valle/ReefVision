@@ -726,6 +726,72 @@ describe("Gallery", () => {
     expect(nextFallback.getAttribute("src")).toMatch(/renderer=2&rv_retry=1/);
   });
 
+  it("recovers a focused image when a background thumbnail is published", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const response = (thumbnailPath: string | null) => ({
+      items: [{ ...image, thumbnail_path: thumbnailPath }],
+      total: 1,
+      page: 1,
+      page_size: 24,
+      pages: 1,
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(response(null)));
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Gallery project={project} />
+      </QueryClientProvider>,
+    );
+
+    const original = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.error(original);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Image could not be displayed",
+    );
+
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response("projects/project-1/images/thumbnails/first.jpg"),
+      );
+    });
+    const firstFallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    const firstUrl = firstFallback.getAttribute("src");
+    expect(firstUrl).toContain("rv_thumb=");
+    fireEvent.error(firstFallback);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    // A refresh with the same failed path must not cause an endless retry.
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response("projects/project-1/images/thumbnails/first.jpg"),
+      );
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response("projects/project-1/images/thumbnails/second.jpg"),
+      );
+    });
+    const recovered = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(recovered.getAttribute("src")).not.toBe(firstUrl);
+    expect(recovered.getAttribute("src")).toContain("rv_thumb=");
+    fireEvent.load(recovered);
+    expect(
+      screen.getByText(/Full-resolution image unavailable/),
+    ).toBeInTheDocument();
+  });
+
   it("falls back to the first eligible image when the recent image was deleted", async () => {
     window.localStorage.setItem(
       `reefvision.gallery.${project.id}.v1`,
