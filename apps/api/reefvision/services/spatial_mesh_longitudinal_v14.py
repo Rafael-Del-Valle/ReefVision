@@ -373,8 +373,11 @@ def compare_mesh_observations(
         warnings.append("coordinate_frames_differ_registration_required")
     else:
         warnings.append("matching_coordinate_frame_id_not_registration_proof")
-    # Registration residuals are audit metadata, not verified transforms or accuracy.
+    # Compare the claimed alignment RMS with a conservative organism-size
+    # reference. This is a QC diagnostic only: axis-aligned extents depend on
+    # reconstruction orientation and cannot certify registration accuracy.
     registration_record = None
+    registration_residual_to_smaller_extent_ratio = None
     if registration_evidence is None:
         warnings.append("registration_evidence_unavailable")
     else:
@@ -392,6 +395,16 @@ def compare_mesh_observations(
         registration_record = registration.model_dump(mode="json")
         warnings.append("registration_residual_requires_independent_review")
         warnings.append("registration_transform_and_accuracy_not_verified")
+        if early_extent is not None and early_extent > 0 and late_extent is not None and late_extent > 0:
+            ratio = registration.rms_residual_m / min(early_extent, late_extent)
+            if isfinite(ratio):
+                registration_residual_to_smaller_extent_ratio = ratio
+                if ratio >= 1:
+                    warnings.append("registration_residual_at_least_smaller_mesh_extent")
+            else:
+                warnings.append("registration_residual_extent_ratio_out_of_numeric_range")
+        else:
+            warnings.append("registration_residual_extent_ratio_unavailable")
     for field, warning in (
         ("source_format", "mesh_source_formats_differ_between_observations"),
         ("calibration_method", "calibration_methods_differ_between_observations"),
@@ -484,6 +497,9 @@ def compare_mesh_observations(
         "before_reconstruction_topology_counts": before_topology,
         "after_reconstruction_topology_counts": after_topology,
         "reconstruction_topology_changed_fields": topology_changed_fields,
+        "registration_residual_to_smaller_extent_ratio": (
+            registration_residual_to_smaller_extent_ratio
+        ),
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
         "delta_surface_area_m2": difference,
