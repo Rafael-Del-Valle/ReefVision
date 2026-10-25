@@ -45,6 +45,9 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
     assert expected["scale_normalized_surface_area_ratio_after_to_before"] == (pytest.approx(2))
+    assert expected["scale_normalized_bounding_box_diagonal_ratio_after_to_before"] == (
+        pytest.approx(sqrt(5) / sqrt(2))
+    )
     assert (
         "scale_normalized_area_ratio_requires_common_units_and_registration"
         in expected["qc_warnings"]
@@ -187,6 +190,9 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     assert result["after_meters_per_mesh_unit"] == 2
     assert result["calibration_scale_ratio_after_to_before"] == pytest.approx(2)
     assert result["scale_normalized_surface_area_ratio_after_to_before"] == (pytest.approx(1))
+    assert result["scale_normalized_bounding_box_diagonal_ratio_after_to_before"] == (
+        pytest.approx(1)
+    )
     assert (
         result["provenance"]["before_geometry_sha256"]
         == (result["provenance"]["after_geometry_sha256"])
@@ -791,7 +797,99 @@ def test_malformed_or_missing_geometry_hash_cannot_assert_identical_source(
     assert "geometry_fingerprint_missing_or_invalid" in result["qc_warnings"]
     assert "identical_geometry_fingerprint" not in result["qc_warnings"]
     assert (
-        "identical_geometry_area_inconsistent_with_calibration_scale"
-        not in result["qc_warnings"]
+        "identical_geometry_area_inconsistent_with_calibration_scale" not in result["qc_warnings"]
     )
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("first_extent", "second_extent", "first_scale", "second_scale", "expected"),
+    [
+        (1.0, 2.0, 1.0, 2.0, 1.0),
+        (1.0, 3.0, 1.0, 2.0, 1.5),
+        (1.0, 0.0, 1.0, 2.0, 0.0),
+        (0.0, 2.0, 1.0, 2.0, None),
+        (1.0, 2.0, None, 2.0, None),
+        (None, 2.0, 1.0, 2.0, None),
+    ],
+)
+def test_scale_normalized_extent_is_provisional_and_never_invents_missing_data(
+    first_extent: float | None,
+    second_extent: float,
+    first_scale: float | None,
+    second_scale: float,
+    expected: float | None,
+) -> None:
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "axis_aligned_bounding_box_diagonal_m": first_extent,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "meters_per_mesh_unit": first_scale,
+        },
+    }
+    after = {
+        **before,
+        "axis_aligned_bounding_box_diagonal_m": second_extent,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "meters_per_mesh_unit": second_scale,
+        },
+    }
+    result = compare_mesh_observations(before, after)
+    value = result["scale_normalized_bounding_box_diagonal_ratio_after_to_before"]
+    if expected is None:
+        assert value is None
+        assert "scale_normalized_extent_ratio_unavailable" in result["qc_warnings"]
+    else:
+        assert value == pytest.approx(expected)
+        assert (
+            "scale_normalized_extent_ratio_requires_common_units_and_registration"
+            in result["qc_warnings"]
+        )
+    assert result["provenance"]["coordinate_registration_verified"] is False
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("first_extent", "second_extent"),
+    [(1e-300, 1e300), (1e300, 1e-300)],
+)
+def test_scale_normalized_extent_rejects_overflow_and_positive_underflow(
+    first_extent: float, second_extent: float
+) -> None:
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "axis_aligned_bounding_box_diagonal_m": first_extent,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "meters_per_mesh_unit": 1.0,
+        },
+    }
+    after = {
+        **before,
+        "axis_aligned_bounding_box_diagonal_m": second_extent,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+        },
+    }
+    result = compare_mesh_observations(before, after)
+    assert result["scale_normalized_bounding_box_diagonal_ratio_after_to_before"] is None
+    assert "scale_normalized_extent_ratio_out_of_numeric_range" in result["qc_warnings"]
     assert result["provenance"]["specimen_identity_verified"] is False
