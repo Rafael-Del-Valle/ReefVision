@@ -40,7 +40,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         return
     # Preserve row multiplicity: two identical stamps are still an invalid
     # Alembic state and must not be hidden by set deduplication.
-    revision_rows = tuple(
+    revision_rows: tuple[str, ...] = tuple(
         connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
     )
     revisions = set(revision_rows)
@@ -78,10 +78,10 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "migration; do not stamp, downgrade, or delete tables."
         )
 
-    # A 0039/0040 stamp requires the exact named audit-event CHECK from its
+    # Every 0038-0040 stamp requires the exact named audit-event CHECK from its
     # migration. A missing/renamed or obsolete CHECK is unsafe even when the
     # revision marker claims otherwise. Read-only inspection.
-    if revision in {"0039", "0040"}:
+    if revision in {"0038", "0039", "0040"}:
         event_checks = inspector.get_check_constraints(_REVIEW_TABLE)
         named_check = next(
             (
@@ -99,14 +99,9 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             )
         # Match the exact migration-specific allowlist. Reject weakened
         # CHECK expressions, missing values and unreviewed extra event types.
-        allowed = [
-            "comment",
-            "assign",
-            "unassign",
-            "triage_start",
-            "triage_skip",
-            "triage_return",
-        ]
+        allowed = ["comment", "assign", "unassign"]
+        if revision in {"0039", "0040"}:
+            allowed.extend(["triage_start", "triage_skip", "triage_return"])
         if revision == "0040":
             allowed.append("triage_complete")
         expected_check = (
