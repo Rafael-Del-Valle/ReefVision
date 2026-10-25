@@ -507,7 +507,8 @@ def test_superseded_ecological_identity_history_in_saved_workflow(client: TestCl
     assert [row["revision"] for row in prior_and_current] == [1, 2]
     assert [row["experimental_unit_id"] for row in prior_and_current] == ["tank-A", "tank-B"]
     assert all(row["reason"] and row["created_at"] for row in prior_and_current)
-    assert body["identities"][-1]["experimental_unit_id"] == "tank-B"
+    fragment = next(row for row in body["identities"] if row["organism_key"] == "fragment-16a")
+    assert fragment["experimental_unit_id"] == "tank-B"
     assert body["history_sha256"] != before.json()["history_sha256"]
     assert body["evidence_level"] == "registered_unverified"
     assert body["review_gate"] == "scientist_review_required"
@@ -531,7 +532,9 @@ def test_superseded_ecological_identity_history_in_saved_workflow(client: TestCl
     }
     nodes = client.get("/api/v1/workflow-graphs/node-registry")
     assert nodes.status_code == 200, nodes.text
-    source = next(row for row in nodes.json() if row["node_type"] == "ecology_identity_registry_source")
+    source = next(
+        row for row in nodes.json() if row["node_type"] == "ecology_identity_registry_source"
+    )
     assert source["output_ports"][0]["accepted_types"] == ["ecology_identity_registry"]
     saved = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
@@ -546,7 +549,9 @@ def test_superseded_ecological_identity_history_in_saved_workflow(client: TestCl
     app = cast(FastAPI, client.app)
     assert (
         process_workflow_run_job(
-            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
         )
         is True
     )
