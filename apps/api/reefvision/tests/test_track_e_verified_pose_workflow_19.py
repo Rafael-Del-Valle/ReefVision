@@ -272,15 +272,11 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         frozen_manifest = service.manifest(dataset_id).manifest_json
         assert "canonical_pose_sha256" in frozen_manifest["items"][0]
         item = session.scalar(
-            select(PoseTrainingDatasetItem).where(
-                PoseTrainingDatasetItem.dataset_id == dataset_id
-            )
+            select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
         )
         assert item is not None
         original_pose = dict(item.canonical_pose_json)
-        changed_confidence = (
-            0.123456 if original_pose.get("confidence") != 0.123456 else 0.654321
-        )
+        changed_confidence = 0.123456 if original_pose.get("confidence") != 0.123456 else 0.654321
         item.canonical_pose_json = {
             **original_pose,
             "confidence": changed_confidence,
@@ -293,9 +289,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     ):
         PoseTrainingDatasetService(session).manifest(dataset_id)
 
-    confidence_plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    confidence_plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert confidence_plan.status_code == 200, confidence_plan.text
     assert confidence_plan.json()["valid"] is False
     assert "pose_dataset_item_lineage_mismatch" in {
@@ -311,9 +305,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
 
     with app.state.session_factory() as session:
         item = session.scalar(
-            select(PoseTrainingDatasetItem).where(
-                PoseTrainingDatasetItem.dataset_id == dataset_id
-            )
+            select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
         )
         assert item is not None
         item.canonical_pose_json = original_pose
