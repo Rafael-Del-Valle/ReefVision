@@ -45,6 +45,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
     assert expected["elapsed_days"] == pytest.approx(1)
+    assert expected["before_observed_at_utc_normalized"] == "2026-10-01T12:00:00Z"
+    assert expected["after_observed_at_utc_normalized"] == "2026-10-02T12:00:00Z"
     assert expected["average_surface_area_change_m2_per_day"] == pytest.approx(0.5)
     assert expected["before_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(sqrt(2))
     assert expected["after_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(sqrt(5))
@@ -230,6 +232,70 @@ def test_mesh_comparison_rejects_invalid_pairing(
     )
     assert response.status_code == 400
     assert error in response.text
+
+
+
+@pytest.mark.parametrize(
+    ("first_project", "second_project"),
+    [(None, None), ("", ""), ("project-1", "project-2"), (7, 7)],
+)
+def test_mesh_comparison_rejects_unscoped_or_cross_project_artifacts(
+    first_project: object, second_project: object
+) -> None:
+    """Direct and persisted comparison engines must not accept unscoped artifacts."""
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "project_id": first_project,
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+        },
+    }
+    after = {
+        **before,
+        "project_id": second_project,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+        },
+    }
+    with pytest.raises(ValueError, match="same nonempty project_id"):
+        compare_mesh_observations(before, after)
+
+
+@pytest.mark.parametrize("invalid_provenance", [None, [], "unreviewed"])
+def test_mesh_comparison_rejects_malformed_provenance(
+    invalid_provenance: object,
+) -> None:
+    """Malformed metadata must fail as a validation error, not an AttributeError."""
+    record = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+        },
+    }
+    later = {
+        **record,
+        "provenance": {
+            **record["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+        },
+    }
+    with pytest.raises(ValueError, match="provenance dictionaries"):
+        compare_mesh_observations({**record, "provenance": invalid_provenance}, later)
+
 
 
 def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
