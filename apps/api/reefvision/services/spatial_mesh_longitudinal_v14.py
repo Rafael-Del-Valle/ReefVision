@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from math import isclose, isfinite, log
+from math import exp, isclose, isfinite, log
 from typing import Any
 
 
@@ -206,6 +206,26 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     )
     if scale_ratio is not None and not isfinite(scale_ratio):
         raise ValueError("Calibration scale ratio exceeds finite numeric range")
+    # Remove the *nominal* calibration-scale contribution to the area ratio.
+    # This describes reconstruction geometry only when both scans use a common
+    # source-unit convention; it does not establish registration or coral growth.
+    # Work in log space to avoid intermediate squared-scale overflow.
+    scale_normalized_area_ratio = None
+    normalized_ratio_out_of_range = False
+    if before_scale is not None and after_scale is not None and a0 > 0:
+        if a1 == 0:
+            scale_normalized_area_ratio = 0.0
+        else:
+            try:
+                scale_normalized_area_ratio = exp(
+                    log(a1) - log(a0) - 2 * (log(after_scale) - log(before_scale))
+                )
+            except OverflowError:
+                normalized_ratio_out_of_range = True
+            if scale_normalized_area_ratio == 0:
+                # A positive geometric ratio underflowed to zero.
+                scale_normalized_area_ratio = None
+                normalized_ratio_out_of_range = True
     warnings = [
         "specimen_identity_not_verified",
         "observation_metadata_not_verified",
@@ -214,6 +234,12 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "surface_area_change_is_not_verified_biological_growth",
         "average_change_per_day_is_not_a_biological_growth_rate",
     ]
+    if scale_normalized_area_ratio is not None:
+        warnings.append("scale_normalized_area_ratio_requires_common_units_and_registration")
+    elif normalized_ratio_out_of_range:
+        warnings.append("scale_normalized_area_ratio_out_of_numeric_range")
+    else:
+        warnings.append("scale_normalized_area_ratio_unavailable")
     if before_scale is None or after_scale is None:
         warnings.append("calibration_scale_metadata_unavailable")
     elif before_scale != after_scale:
@@ -275,6 +301,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "before_meters_per_mesh_unit": before_scale,
         "after_meters_per_mesh_unit": after_scale,
         "calibration_scale_ratio_after_to_before": scale_ratio,
+        "scale_normalized_surface_area_ratio_after_to_before": scale_normalized_area_ratio,
         "before_mesh_qc_warnings": observation_qc[0],
         "after_mesh_qc_warnings": observation_qc[1],
         "before_surface_area_m2": a0,
