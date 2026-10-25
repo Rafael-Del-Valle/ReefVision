@@ -395,7 +395,12 @@ def compare_mesh_observations(
         registration_record = registration.model_dump(mode="json")
         warnings.append("registration_residual_requires_independent_review")
         warnings.append("registration_transform_and_accuracy_not_verified")
-        if early_extent is not None and early_extent > 0 and late_extent is not None and late_extent > 0:
+        if (
+            early_extent is not None
+            and early_extent > 0
+            and late_extent is not None
+            and late_extent > 0
+        ):
             ratio = registration.rms_residual_m / min(early_extent, late_extent)
             if isfinite(ratio):
                 registration_residual_to_smaller_extent_ratio = ratio
