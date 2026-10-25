@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from math import isfinite
+from math import isclose, isfinite, log
 from typing import Any
 
 
@@ -202,9 +202,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
             raise ValueError("Calibration scale metadata must be finite and positive")
     before_scale, after_scale = calibration_scales
     scale_ratio = (
-        after_scale / before_scale
-        if before_scale is not None and after_scale is not None
-        else None
+        after_scale / before_scale if before_scale is not None and after_scale is not None else None
     )
     if scale_ratio is not None and not isfinite(scale_ratio):
         raise ValueError("Calibration scale ratio exceeds finite numeric range")
@@ -241,8 +239,23 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     first_geometry_hash = first.get("geometry_sha256")
     if first_geometry_hash and first_geometry_hash == second.get("geometry_sha256"):
         warnings.append("identical_geometry_fingerprint")
-        if before_scale is not None and after_scale is not None and before_scale != after_scale:
-            warnings.append("identical_geometry_rescaled_not_biological_growth")
+        if before_scale is not None and after_scale is not None:
+            if before_scale != after_scale:
+                warnings.append("identical_geometry_rescaled_not_biological_growth")
+            # Same source geometry must retain its uncalibrated area. Compare
+            # logarithms to avoid overflow when scales span many orders of magnitude.
+            # This is a QC check, not a verification of biological identity.
+            if (a0 == 0) != (a1 == 0) or (
+                a0 > 0
+                and a1 > 0
+                and not isclose(
+                    log(a1) - log(a0),
+                    2 * (log(after_scale) - log(before_scale)),
+                    rel_tol=0,
+                    abs_tol=1e-8,
+                )
+            ):
+                warnings.append("identical_geometry_area_inconsistent_with_calibration_scale")
     if difference_bounds is None:
         warnings.append("scale_uncertainty_interval_unavailable")
     return {
