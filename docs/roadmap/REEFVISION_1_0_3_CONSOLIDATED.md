@@ -38,6 +38,10 @@ The automated CI suite is necessary but cannot establish the following installed
 
 RTX 3090 GPU acceptance is **DEFERRED** until hardware is operational; it is not implied by CPU testing or CI. Do not mark the release ready while any required acceptance gate is unverified.
 
+### Training console acceptance details
+
+For each CPU run, capture the immutable training run ID, start/end UTC timestamps, model configuration and locally registered checkpoint identity. Confirm the external PowerShell process only polls a loopback read-only endpoint, rejects malformed run IDs, and does not spawn a second training process. Compare epoch and box/classification/distribution-focal loss values against the original job log at matching steps; distinguish absent metrics from zero values. Close the console during an active epoch and verify the training PID, status transitions, checkpoints and final metrics remain unchanged. Repeat for completed, failed, and unavailable-terminal cases. Do not claim GPU acceptance from this CPU exercise.
+
 ## First development slice
 
 - Candidate first-open viewport effect fix inherited from PR #72.
