@@ -135,6 +135,66 @@ def test_perspective_transform_is_explicitly_excluded_not_scaled(
     assert artifacts[0]["payload_json"] == payload
 
 
+def test_identity_revision_invalidates_old_measurement_evidence_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    """An identity correction must not silently reassign old source geometry."""
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    before = _get(client, project_id)
+    assert before.status_code == 200, before.text
+    assert before.json()["candidate_count"] == 2
+
+    # Historical image evidence is bound to revision 1. Assigning the colony
+    # to a tank in revision 2 cannot retroactively label that image as a
+    # tank-A measurement without a new scientist-reviewed evidence decision.
+    revised = client.post(
+        f"/api/v1/projects/{project_id}/ecology/organisms/colony-a/revisions",
+        json={
+            "expected_revision": 1,
+            "kind": "colony",
+            "parent_colony_key": None,
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-A",
+            "reason": "Corrected experimental unit after specimen review",
+        },
+    )
+    assert revised.status_code == 201, revised.text
+    assert revised.json()["revision"] == 2
+
+    response = _get(client, project_id)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["candidate_count"] == 0
+    assert payload["candidates"] == []
+    assert payload["sampling_date_qc"] == []
+    assert payload["projected_endpoint_changes"] == []
+    assert payload["projected_unit_summaries"] == []
+    assert payload["projected_population_summaries"] == []
+    assert len(payload["exclusions"]) == 1
+    assert payload["exclusions"][0]["reason"] == "identity_revision_requires_review"
+    assert payload["input_sha256"] != before.json()["input_sha256"]
+    assert payload["evidence_level"] == "linked_unverified"
+    assert payload["review_gate"] == "scientist_review_required"
+
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 200, registry.text
+    snapshot = registry.json()
+    assert snapshot["identities"][0]["revision"] == 2
+    assert snapshot["image_evidence_links"][0]["identity_revision"] == 1
+
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "succeeded"
+    artifacts = [
+        row
+        for row in workflow["artifacts"]
+        if row["data_type"] == "ecology_measurement_candidates"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == payload
+
+
 def test_utc_date_qc_rejects_replicates_missing_dates_and_mixed_units(
     client: TestClient,
 ) -> None:
@@ -427,8 +487,7 @@ def test_projected_unit_rejects_cross_metric_identity_and_unit_conflicts(
         {"identity_revision": baseline.identity_revision + 1},
     ):
         changed_height = [
-            row.model_copy(update={"metric": "box_height", **changed_context})
-            for row in width
+            row.model_copy(update={"metric": "box_height", **changed_context}) for row in width
         ]
         # Each metric independently passes date QC; the conflict is visible
         # only when the same organism is reconciled across metric types.

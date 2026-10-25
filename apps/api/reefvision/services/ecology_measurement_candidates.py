@@ -462,6 +462,18 @@ class EcologyMeasurementCandidateService:
             annotation = annotations[calibration.annotation_evidence_id]
             image_link = image_links[annotation.image_evidence_id]
             identity = identities[image_link.organism_key]
+            # Historical image links retain their original identity revision.
+            # A later correction to parentage or experimental-unit assignment
+            # must not silently reattribute those measurements to the new
+            # biological identity. Require explicit scientist re-review.
+            if image_link.identity_revision != identity.revision:
+                exclusions.append(
+                    EcologyMeasurementExclusion(
+                        calibration_evidence_id=calibration.id,
+                        reason="identity_revision_requires_review",
+                    )
+                )
+                continue
             image = self.session.get(ImageAsset, calibration.image_id)
             if image is None or image.project_id != project_id:
                 raise ValidationError("Ecological measurement source image is missing")
@@ -570,7 +582,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0008",
+                "algorithm_version": "ecology-measurement-candidates-0009",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,

@@ -34,7 +34,11 @@ class EcologyMeasurementCandidate(BaseModel):
 
 class EcologyMeasurementExclusion(BaseModel):
     calibration_evidence_id: str
-    reason: Literal["perspective_transform_requires_review", "unsupported_geometry"]
+    reason: Literal[
+        "perspective_transform_requires_review",
+        "unsupported_geometry",
+        "identity_revision_requires_review",
+    ]
 
 
 class EcologySamplingDateQC(BaseModel):

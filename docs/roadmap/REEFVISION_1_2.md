@@ -1176,3 +1176,26 @@ biological growth, Windows installed-GUI acceptance or release readiness is
 claimed until those checks are actually observed. Human verification of
 identity/design assignments and immutable longitudinal observation records
 remain outstanding.
+
+## Historical identity-revision measurement gate (2026-10-24)
+
+The project-owned calibrated measurement candidate service now **excludes**
+previously linked annotation/calibration evidence when its source-image
+identity revision no longer equals the organism's latest registered revision.
+An append-only correction to parent-colony or experimental-unit assignment
+must not silently relabel older projected measurements with the new identity
+context. Exclusions report `identity_revision_requires_review` with the
+calibration-evidence ID, preserving auditability without deleting source links.
+The source registry remains readable; a scientist must explicitly re-review
+the historical association before it can enter future analyses.
+
+The existing standalone calibrated-measurement endpoint and executable,
+persisted `ecology_identity_registry_source` Workflow Builder path share this
+gate. A regression covers API results, historical revision retention,
+provenance fingerprint change and saved-workflow artifact parity. The
+fingerprint algorithm advances to `ecology-measurement-candidates-0009`.
+The prior exact-head CI had 16/19 successful workflows; the three failures
+were all Ruff formatting of a cross-metric test list comprehension, corrected
+in this increment. New-head CI, migration reconciliation, true reviewed
+longitudinal observations, scientific acceptance and Windows installed-GUI
+validation remain required. This gate does **not** promote unverified data.
