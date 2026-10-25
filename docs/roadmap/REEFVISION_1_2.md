@@ -1380,3 +1380,32 @@ additive fields. These are **unverified projected measurements**, not
 confirmed organism growth or independently authenticated sampling units.
 Full CI, real-data scientific review and installed Windows acceptance remain
 required.
+
+
+## Undated reimported photograph provenance QC (2026-10-25)
+
+The existing source-linked calibrated measurement candidate kernel now
+recognizes a SHA-256-identical photograph imported under another image ID
+when one copy has a timezone-aware acquisition instant and the other has
+missing or timezone-unaware capture metadata. Both affected organism/metric
+series receive `source_capture_conflict` and the existing
+`conflicting_source_image_sha256` audit field; neither can contribute a
+projected endpoint or an eligible experimental-unit/population summary.
+Identical bytes with the same UTC instant remain usable across multiple
+organisms in one photograph. Reuse across distinct dates retains the stronger
+`reused_image_content_across_dates` classification. This avoids promoting
+unknown-time reimports into false longitudinal observations without adding a
+new evidence store, model weights or review bypass.
+
+The same source-linked kernel serves the standalone calibrated-measurement
+endpoint and the existing executable, persisted `ecology_identity_registry_source`
+Workflow Builder output. Scientific regression tests cover known/unknown
+capture metadata, order independence, exclusion from unit summaries and
+legitimate equivalent timezone offsets. The existing saved-workflow test
+continues to require typed artifact parity with the standalone endpoint.
+Scientific input fingerprint version advances to
+`ecology-measurement-candidates-0016`. All evidence remains
+`linked_unverified` and `scientist_review_required`; no biological growth,
+true independence, or source verification is asserted. This branch is still
+blocked on exact-head CI, migration reconciliation with 1.1, independent
+scientific acceptance and installed Windows GUI/installer tests.
