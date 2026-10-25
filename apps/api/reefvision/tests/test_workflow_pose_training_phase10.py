@@ -4,7 +4,7 @@ import hashlib
 import io
 import zipfile
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
+from reefvision.domain.errors import ValidationError
 from reefvision.db.models import (
     Job,
     ModelRegistration,
@@ -410,6 +411,55 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         "no separate frozen validation dataset" in warning.casefold()
         for warning in result["warnings"]
     )
+
+    # The real persisted run must pin its model bytes, not just calculate a
+    # new digest each time Workflow Builder retries a completed node.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        assert (
+            persisted.artifact_manifest_json["result_checkpoint_sha256"]
+            == result["result_checkpoint_sha256"]
+        )
+        assert (
+            persisted.artifact_manifest_json["result_checkpoint_path"]
+            == result["result_checkpoint_path"]
+        )
+
+    def retry_completed_node() -> dict[str, Any]:
+        with app.state.session_factory() as session:
+            return create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                initial_model_payload={"model_id": model_id},
+                parameters={
+                    "run_name": "phase10-pose-retrain",
+                    "device": "cpu",
+                    "precision": "fp32",
+                    "random_seed": 31,
+                    "training_config": {"epochs": 1},
+                },
+                workflow_run_id="phase10-workflow",
+                workflow_node_run_id="phase10-pose-training-node",
+                processor=_fake_pose_processor,
+            )
+
+    reused = retry_completed_node()
+    assert reused["training_run_id"] == result["training_run_id"]
+    assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
+
+    checkpoint = resolve_managed_project_path(
+        test_settings, result["result_checkpoint_path"]
+    )
+    checkpoint.write_bytes(b"changed-after-scientist-verified-pose-training")
+    with pytest.raises(ValidationError, match="checkpoint checksum changed"):
+        retry_completed_node()
 
 
 def test_pose_training_can_require_separate_validation_truth(
