@@ -44,6 +44,10 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["delta_surface_area_m2"] == pytest.approx(0.5)
     assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
+    assert expected["scale_normalized_surface_area_ratio_after_to_before"] == pytest.approx(2)
+    assert "scale_normalized_area_ratio_requires_common_units_and_registration" in expected[
+        "qc_warnings"
+    ]
     assert expected["elapsed_days"] == pytest.approx(1)
     assert expected["before_observed_at_utc_normalized"] == "2026-10-01T12:00:00Z"
     assert expected["after_observed_at_utc_normalized"] == "2026-10-02T12:00:00Z"
@@ -181,6 +185,7 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     assert result["before_meters_per_mesh_unit"] == 1
     assert result["after_meters_per_mesh_unit"] == 2
     assert result["calibration_scale_ratio_after_to_before"] == pytest.approx(2)
+    assert result["scale_normalized_surface_area_ratio_after_to_before"] == pytest.approx(1)
     assert (
         result["provenance"]["before_geometry_sha256"]
         == (result["provenance"]["after_geometry_sha256"])
@@ -426,6 +431,8 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
     assert result["average_surface_area_change_m2_per_day"] == pytest.approx(1)
     assert result["average_surface_area_change_scale_interval_m2_per_day"] is None
     assert result["relative_surface_area_scale_interval_percent"] is None
+    assert result["scale_normalized_surface_area_ratio_after_to_before"] is None
+    assert "scale_normalized_area_ratio_unavailable" in result["qc_warnings"]
     assert "scale_uncertainty_interval_unavailable" in result["qc_warnings"]
     with pytest.raises(ValueError, match="QC warnings"):
         compare_mesh_observations({**base, "qc_warnings": ["open_mesh", None]}, later)
@@ -617,6 +624,7 @@ def test_mesh_comparison_zero_baseline_extent_withholds_relative_change() -> Non
     comparison = compare_mesh_observations(base, later)
     assert comparison["relative_surface_area_change_percent"] is None
     assert comparison["relative_surface_area_scale_interval_percent"] is None
+    assert comparison["scale_normalized_surface_area_ratio_after_to_before"] is None
     assert "relative_surface_area_change_unavailable_zero_baseline" in comparison["qc_warnings"]
     assert comparison["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(2)
     assert comparison["relative_axis_aligned_bounding_box_diagonal_change_percent"] is None
@@ -730,4 +738,9 @@ def test_identical_geometry_requires_area_consistent_with_scale(
     result = compare_mesh_observations(before, after)
     warning = "identical_geometry_area_inconsistent_with_calibration_scale"
     assert (warning in result["qc_warnings"]) is inconsistent
+    normalized = result["scale_normalized_surface_area_ratio_after_to_before"]
+    if first_area > 0:
+        assert normalized == pytest.approx(second_area / (4 * first_area))
+    else:
+        assert normalized is None
     assert result["provenance"]["specimen_identity_verified"] is False
