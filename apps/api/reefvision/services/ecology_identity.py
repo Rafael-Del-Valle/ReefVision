@@ -22,8 +22,8 @@ from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.project import Project
-from reefvision.domain.ecology_polygon_qc import validate_ecological_polygon_topology
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
+from reefvision.domain.ecology_polygon_qc import validate_ecological_polygon_topology
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.ecology_identity import (
@@ -357,6 +357,27 @@ class EcologyIdentityService:
                     validate_ecological_polygon_topology(polygon)
                 except ValueError as exc:
                     raise ValidationError(str(exc)) from exc
+                # A mask's saved bounding box must enclose its polygon.
+                # Allow one source pixel for raster-to-polygon rounding; do
+                # not silently trust contradictory imported geometry.
+                if all(value is not None for value in bounds):
+                    assert annotation.x_min is not None
+                    assert annotation.y_min is not None
+                    assert annotation.x_max is not None
+                    assert annotation.y_max is not None
+                    tolerance_px = 1.0
+                    if any(
+                        not (
+                            annotation.x_min - tolerance_px <= x <= annotation.x_max + tolerance_px
+                            and annotation.y_min - tolerance_px
+                            <= y
+                            <= annotation.y_max + tolerance_px
+                        )
+                        for x, y in polygon
+                    ):
+                        raise ValidationError(
+                            "Ecological mask polygon extends outside its source-pixel bounds"
+                        )
 
     def _annotation_source(self, kind: str, annotation_id: str, image_id: str) -> tuple[int, str]:
         """Resolve a current source revision, never a verified research observation."""

@@ -115,3 +115,81 @@ def test_valid_polygon_topology_keeps_workflow_parity(
 
 def test_polygon_topology_helper_does_not_promote_review_status() -> None:
     validate_ecological_polygon_topology([[0, 0], [5, 0], [5, 5], [0, 5]])
+
+
+def test_polygon_bbox_inconsistency_rejected_before_link(client: TestClient) -> None:
+    project = create_project(client, "Ecological mask bbox mismatch")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201, image_link.text
+    mask_id = _mask(client, image_id, str(project["label_classes"][0]["id"]))
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        mask = session.get(MaskAnnotation, mask_id)
+        assert mask is not None
+        # A valid polygon inside the photograph but outside its saved bbox.
+        mask.polygon_json = [[5, 5], [35, 5], [35, 20], [5, 20]]
+        session.commit()
+    rejected = _annotation_link(client, project_id, image_link.json()["id"], "mask", mask_id)
+    assert rejected.status_code == 400, rejected.text
+    assert "outside its source-pixel bounds" in rejected.json()["detail"]
+
+
+def test_polygon_bbox_change_revokes_registry_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Ecological mask bbox revocation")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201, image_link.text
+    mask_id = _mask(client, image_id, str(project["label_classes"][0]["id"]))
+    linked = _annotation_link(client, project_id, image_link.json()["id"], "mask", mask_id)
+    assert linked.status_code == 201, linked.text
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        mask = session.get(MaskAnnotation, mask_id)
+        assert mask is not None
+        mask.x_max = 10
+        session.commit()
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "outside its source-pixel bounds" in registry.json()["detail"]
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "failed"
+    assert "outside its source-pixel bounds" in workflow["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
+    )
+
+
+def test_polygon_bbox_one_pixel_rounding_keeps_saved_workflow_parity(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Ecological mask bbox rounding")
+    project_id = str(project["id"])
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    _register(client, project_id, "colony-a")
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201, image_link.text
+    mask_id = _mask(client, image_id, str(project["label_classes"][0]["id"]))
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        mask = session.get(MaskAnnotation, mask_id)
+        assert mask is not None
+        mask.x_max = 24.5
+        session.commit()
+    linked = _annotation_link(client, project_id, image_link.json()["id"], "mask", mask_id)
+    assert linked.status_code == 201, linked.text
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 200, registry.text
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == registry.json()

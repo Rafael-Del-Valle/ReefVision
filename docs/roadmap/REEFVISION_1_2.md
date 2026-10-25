@@ -1554,3 +1554,26 @@ gate, **not** a substitute for independent mask-area verification or
 biological review. Linked evidence remains `linked_unverified` and requires
 scientist review. No new migration, model weights or 1.1 environmental
 dependency is introduced.
+
+## Polygon/bounding-box evidence consistency (2026-10-25; development)
+
+The existing ecological mask evidence gate now also rejects a valid
+source-pixel polygon when any vertex lies outside the same annotation's
+saved bounding box (allowing one pixel for raster/vector rounding).
+This catches contradictory imported or subsequently edited geometry
+that previously passed image-bound and polygon-topology validation.
+Missing mask bounding boxes retain the existing polygon-only validation
+path; non-polygon raster masks are unaffected. Standalone identity
+registry reads and the existing executable, persisted
+`ecology_identity_registry_source` Workflow Builder node both use the
+same fail-closed source validation. API and saved-workflow regressions
+cover pre-link rejection, post-link revocation, and tolerated rounding.
+The same iteration corrects the `I001` import-order failure in
+`services/ecology_identity.py` observed in all three failed exact-head
+workflows at commit `2d5e4f5568a17e35dab71f84ec50bacee42cadef`.
+
+These checks validate **internal source geometry consistency only**.
+They do not establish raster-mask area accuracy, verified biological
+identity, longitudinal growth, or independent experimental units.
+All linked records remain unverified and scientist review is required.
+Exact-head CI and Windows/scientific release acceptance must still pass.
