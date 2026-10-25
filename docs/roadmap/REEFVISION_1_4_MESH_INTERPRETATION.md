@@ -276,3 +276,20 @@ with zero or marked scientifically verified. Regression cases cover impossible
 counts in either observation and partial legacy artifacts. These checks do
 not verify source geometry, coordinate registration, organism identity, or
 biological growth.
+
+### Extreme positive calibration-scale ratio QC
+
+A calibration-scale ratio is meaningful only when both source scales are
+strictly positive and their quotient is representable as a finite, positive
+floating-point number. Very different positive scales can overflow to infinity
+or underflow to zero. Neither result is a measured zero calibration ratio.
+The shared longitudinal engine now withholds these unrepresentable quotients
+as `null` and emits `calibration_scale_ratio_out_of_numeric_range`.
+The original per-observation scales remain in the comparison artifact for
+audit; normalized geometric ratios retain their separate log-space QC.
+
+The standalone API and persisted typed Workflow Builder use the same engine.
+Regression coverage exercises both overflow and positive underflow with
+saved-workflow artifact parity. The new QC does not verify the calibration,
+common source units, spatial registration, specimen identity, or biological
+change; all observations remain provisional and subject to human review.
