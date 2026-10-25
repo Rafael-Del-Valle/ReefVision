@@ -210,9 +210,8 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
             warnings.append("extent_scale_uncertainty_interval_unavailable")
     else:
         warnings.append("axis_aligned_extent_comparison_unavailable")
-    if first.get("geometry_sha256") and (
-        first.get("geometry_sha256") == second.get("geometry_sha256")
-    ):
+    first_geometry_hash = first.get("geometry_sha256")
+    if first_geometry_hash and first_geometry_hash == second.get("geometry_sha256"):
         warnings.append("identical_geometry_fingerprint")
     if difference_bounds is None:
         warnings.append("scale_uncertainty_interval_unavailable")
