@@ -1290,3 +1290,82 @@ def test_mesh_comparison_preserves_partial_legacy_topology_without_face_count() 
     assert result["before_reconstruction_topology_counts"]["face_count"] is None
     assert "reconstruction_topology_comparison_incomplete" in result["qc_warnings"]
     assert result["provenance"]["specimen_identity_verified"] is False
+
+@pytest.mark.parametrize(
+    ("early_scale", "late_scale"),
+    [(1e-320, 1e6), (1e6, 1e-320)],
+)
+def test_extreme_positive_calibration_ratio_is_withheld_in_saved_workflow(
+    client: TestClient, early_scale: float, late_scale: float
+) -> None:
+    """Positive calibration ratios cannot be silently rounded to zero or infinity."""
+    project_id = str(create_project(client, "Extreme calibration ratio QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    before = _mesh("first", "2026-10-01T12:00:00Z", 1)
+    after = _mesh("second", "2026-10-02T12:00:00Z", 1)
+    for record, scale in ((before, early_scale), (after, late_scale)):
+        record["vertices"] = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        record["meters_per_unit"] = scale
+    response = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after},
+    )
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["calibration_scale_ratio_after_to_before"] is None
+    assert "calibration_scale_ratio_out_of_numeric_range" in expected["qc_warnings"]
+    assert expected["before_surface_area_m2"] == 0
+    assert expected["after_surface_area_m2"] == 0
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["coordinate_registration_verified"] is False
+
+    graph = {
+        "graph_id": "extreme-scale-ratio-v14",
+        "name": "Withhold unrepresentable positive calibration ratio",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
+            {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": after},
+            {"node_id": "compare", "node_type": "mesh_longitudinal_comparison"},
+        ],
+        "edges": [
+            {
+                "edge_id": f"project-{node}",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": node,
+                "target_port_id": "project",
+            }
+            for node in ("early", "late")
+        ]
+        + [
+            {
+                "edge_id": f"{node}-compare",
+                "source_node_id": node,
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": port,
+            }
+            for node, port in (("early", "before"), ("late", "after"))
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    artifact = next(
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert artifact["payload_json"] == expected
+    assert len(artifact["payload_sha256"]) == 64
