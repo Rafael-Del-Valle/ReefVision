@@ -1163,9 +1163,7 @@ def test_resigned_empty_dataset_cannot_be_exported_or_planned(
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is False
-    assert "pose_dataset_item_count_mismatch" in {
-        issue["code"] for issue in plan.json()["issues"]
-    }
+    assert "pose_dataset_item_count_mismatch" in {issue["code"] for issue in plan.json()["issues"]}
 
     with (
         app.state.session_factory() as session,
