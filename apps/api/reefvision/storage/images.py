@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from PIL import ExifTags, Image, ImageOps, UnidentifiedImageError
+from PIL import ExifTags, Image, UnidentifiedImageError
 
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
@@ -271,7 +271,11 @@ def create_thumbnail(source: Path, destination: Path, *, max_width: int, max_hei
     temporary.unlink(missing_ok=True)
     try:
         with Image.open(source) as image:
-            oriented: Image.Image = ImageOps.exif_transpose(image)
+            # Thumbnails and scientific overlays must share the original camera
+            # pixel frame, regardless of EXIF display-orientation hints.
+            oriented: Image.Image = image.copy()
+            oriented.info.pop("exif", None)
+            oriented.info.pop("orientation", None)
             if oriented.mode in {"I;16", "I;16L", "I;16B"}:
                 oriented = oriented.point(lambda value: value / 257).convert("L")
             elif oriented.mode not in {"RGB", "L"}:
