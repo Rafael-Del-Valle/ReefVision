@@ -161,6 +161,35 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert len(artifact["payload_sha256"]) == 64
 
 
+def test_identical_mesh_rescaling_warns_without_claiming_growth(
+    client: TestClient,
+) -> None:
+    """An unchanged scan with a revised calibration is not a growing colony."""
+    project_id = str(create_project(client, "Rescaled mesh timepoints")["id"])
+    before = _mesh("survey-1", "2026-10-01T12:00:00Z", 1)
+    after = _mesh("survey-2", "2026-10-02T12:00:00Z", 1)
+    after["meters_per_unit"] = 2
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after},
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["before_surface_area_m2"] == pytest.approx(0.5)
+    assert result["after_surface_area_m2"] == pytest.approx(2)
+    assert result["delta_surface_area_m2"] == pytest.approx(1.5)
+    assert result["before_meters_per_mesh_unit"] == 1
+    assert result["after_meters_per_mesh_unit"] == 2
+    assert result["calibration_scale_ratio_after_to_before"] == pytest.approx(2)
+    assert result["provenance"]["before_geometry_sha256"] == (
+        result["provenance"]["after_geometry_sha256"]
+    )
+    assert "identical_geometry_fingerprint" in result["qc_warnings"]
+    assert "calibration_scale_changed_between_observations" in result["qc_warnings"]
+    assert "identical_geometry_rescaled_not_biological_growth" in result["qc_warnings"]
+    assert result["provenance"]["calibration_verified"] is False
+
+
 def test_mesh_comparison_retains_source_qc_and_calibration_differences(
     client: TestClient,
 ) -> None:
@@ -234,7 +263,6 @@ def test_mesh_comparison_rejects_invalid_pairing(
     assert error in response.text
 
 
-
 @pytest.mark.parametrize(
     ("first_project", "second_project"),
     [(None, None), ("", ""), ("project-1", "project-2"), (7, 7)],
@@ -295,7 +323,6 @@ def test_mesh_comparison_rejects_malformed_provenance(
     }
     with pytest.raises(ValueError, match="provenance dictionaries"):
         compare_mesh_observations({**record, "provenance": invalid_provenance}, later)
-
 
 
 def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
@@ -524,10 +551,7 @@ def test_mesh_comparison_zero_baseline_extent_withholds_relative_change() -> Non
     comparison = compare_mesh_observations(base, later)
     assert comparison["relative_surface_area_change_percent"] is None
     assert comparison["relative_surface_area_scale_interval_percent"] is None
-    assert (
-        "relative_surface_area_change_unavailable_zero_baseline"
-        in comparison["qc_warnings"]
-    )
+    assert "relative_surface_area_change_unavailable_zero_baseline" in comparison["qc_warnings"]
     assert comparison["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(2)
     assert comparison["relative_axis_aligned_bounding_box_diagonal_change_percent"] is None
     relative_bounds = comparison[
@@ -568,3 +592,31 @@ def test_mesh_comparison_rejects_same_instant_in_different_timezones(
     }
     with pytest.raises(ValueError, match="increasing timestamps"):
         compare_mesh_observations(first, later)
+
+@pytest.mark.parametrize("invalid_scale", [True, 0, -1, "1", float("nan"), float("inf")])
+def test_mesh_comparison_rejects_invalid_calibration_metadata(invalid_scale: object) -> None:
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "meters_per_mesh_unit": invalid_scale,
+        },
+    }
+    after = {
+        **before,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "meters_per_mesh_unit": 1.0,
+        },
+    }
+    with pytest.raises(ValueError, match="Calibration scale metadata"):
+        compare_mesh_observations(before, after)
+
