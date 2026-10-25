@@ -323,6 +323,20 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
                 : "Loading full-resolution image..."}
             </p>
           )}
+          {waiting && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                // WebView2 can stall without an error event. Allow the user
+                // to bypass the watchdog without mutating image data.
+                setRetry((current) => current + 1);
+                setPhase("loading");
+              }}
+            >
+              Retry loading image
+            </button>
+          )}
           {phase === "thumbnail-loaded" && (
             <p role="status" className="rv-media-load-warning">
               Full-resolution image unavailable. Showing a thumbnail preview;
