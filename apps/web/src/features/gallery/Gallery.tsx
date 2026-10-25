@@ -530,21 +530,23 @@ export function Gallery({
     // A non-passive native listener is needed to suppress WebView2's default
     // document scrolling; React wheel listeners can be passive at the root.
     const handleWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || filmstrip.scrollWidth <= filmstrip.clientWidth)
-        return;
+      if (event.ctrlKey) return;
       const delta =
         Math.abs(event.deltaX) > Math.abs(event.deltaY)
           ? event.deltaX
           : event.deltaY;
       if (!Number.isFinite(delta) || delta === 0) return;
+      // Even when all thumbnails fit, wheel input must not scroll the
+      // surrounding document and partially displace the focused image.
+      event.preventDefault();
+      event.stopPropagation();
+      if (filmstrip.scrollWidth <= filmstrip.clientWidth) return;
       const multiplier =
         event.deltaMode === 1
           ? 16
           : event.deltaMode === 2
             ? filmstrip.clientWidth
             : 1;
-      event.preventDefault();
-      event.stopPropagation();
       filmstrip.scrollLeft = Math.max(
         0,
         Math.min(
