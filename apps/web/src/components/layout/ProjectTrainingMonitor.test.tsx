@@ -216,6 +216,33 @@ describe("ProjectTrainingMonitor", () => {
     expect(screen.getByText("0.902")).toBeInTheDocument();
   });
 
+  it("keeps the last finite box, cls and dfl losses during partial epochs", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        metrics: { "train/box_loss": Number.NaN },
+        metrics_history: {
+          "train/box_loss": [0.4, 0.25, Number.NaN],
+          "train/cls_loss": [0.7, 0, Number.POSITIVE_INFINITY],
+          "train/dfl_loss": [0.3, 0.12, Number.NaN],
+          "train/seg_loss": [Number.NaN],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    expect(screen.getByText("train box loss")).toBeInTheDocument();
+    expect(screen.getByText("train cls loss")).toBeInTheDocument();
+    expect(screen.getByText("train dfl loss")).toBeInTheDocument();
+    expect(screen.getByText("0.25")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText("0.12")).toBeInTheDocument();
+    expect(screen.queryByText("train seg loss")).not.toBeInTheDocument();
+    expect(screen.queryByText("NaN")).not.toBeInTheDocument();
+  });
+
   it("cancels through the existing training-run API and updates the shared cache", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
     vi.mocked(api.cancelTrainingRun).mockResolvedValue({
