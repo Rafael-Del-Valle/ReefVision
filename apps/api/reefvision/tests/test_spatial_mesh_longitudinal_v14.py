@@ -100,6 +100,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["after_reconstruction_topology_counts"]["face_count"] == 1
     assert expected["reconstruction_topology_changed_fields"] == []
     assert "reconstruction_topology_changed_requires_review" not in expected["qc_warnings"]
+    assert "identical_geometry_topology_metadata_inconsistent" not in expected["qc_warnings"]
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     mesh_node = next(
@@ -1155,6 +1156,7 @@ def test_mesh_comparison_rejects_invalid_coordinate_frame_metadata(
     with pytest.raises(ValueError, match="Coordinate frame IDs"):
         compare_mesh_observations(before, after)
 
+
 def test_mesh_comparison_flags_changed_reconstruction_topology(
     client: TestClient,
 ) -> None:
@@ -1226,3 +1228,30 @@ def test_mesh_comparison_rejects_malformed_topology_counts(
     with pytest.raises(ValueError, match="face_count must be a nonnegative integer"):
         compare_mesh_observations(before, after)
 
+@pytest.mark.parametrize(
+    ("first_hash", "second_hash", "topology_changed", "inconsistent"),
+    [
+        ("a" * 64, "a" * 64, True, True),
+        ("a" * 64, "b" * 64, True, False),
+        ("placeholder", "placeholder", True, False),
+        ("a" * 64, "a" * 64, False, False),
+    ],
+)
+def test_matching_geometry_fingerprint_requires_consistent_topology_metadata(
+    first_hash: str, second_hash: str, topology_changed: bool, inconsistent: bool
+) -> None:
+    """An identical source geometry cannot change its reconstructed face count."""
+    before, after = _minimal_topology_pair()
+    before["provenance"]["geometry_sha256"] = first_hash
+    after["provenance"]["geometry_sha256"] = second_hash
+    if topology_changed:
+        after["face_count"] = 2
+    result = compare_mesh_observations(before, after)
+    assert (
+        "identical_geometry_topology_metadata_inconsistent" in result["qc_warnings"]
+    ) is inconsistent
+    assert (
+        "reconstruction_topology_changed_requires_review" in result["qc_warnings"]
+    ) is topology_changed
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["coordinate_registration_verified"] is False
