@@ -51,7 +51,9 @@ def export_ecology_identity_history(project_id: str, session: DbSession) -> Resp
     return Response(
         content=render_ecology_identity_history_csv(registry),
         media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="reefvision-ecology-identity-history.csv"'},
+        headers={
+            "Content-Disposition": 'attachment; filename="reefvision-ecology-identity-history.csv"'
+        },
     )
 
 
