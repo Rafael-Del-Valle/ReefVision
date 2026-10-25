@@ -145,6 +145,7 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
                 return None
         if not isinstance(raw, str):
             return None
+        raw = raw.rstrip("\x00")
         offset = exif.get(offset_key)
         if isinstance(offset, bytes):
             try:
@@ -153,6 +154,8 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
                 return None
         if offset is not None and not isinstance(offset, str):
             return None
+        if isinstance(offset, str):
+            offset = offset.rstrip("\x00")
         try:
             if isinstance(offset, str) and offset:
                 timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
