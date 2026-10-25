@@ -1256,3 +1256,37 @@ def test_matching_geometry_fingerprint_requires_consistent_topology_metadata(
     ) is topology_changed
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("field_values", "error"),
+    [
+        ({"face_count": 1, "edge_connected_patch_count": 2}, "patch count"),
+        ({"face_count": 1, "edge_connected_patch_count": 0}, "patch count"),
+        ({"face_count": 1, "degenerate_face_count": 2}, "degenerate count"),
+        ({"face_count": 1, "boundary_edge_count": 4}, "boundary_edge_count"),
+        ({"face_count": 1, "nonmanifold_edge_count": 4}, "nonmanifold_edge_count"),
+        ({"face_count": 0, "boundary_edge_count": 1}, "boundary_edge_count"),
+    ],
+)
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+def test_mesh_comparison_rejects_impossible_topology_relationships(
+    field_values: dict[str, int], error: str, timepoint: str
+) -> None:
+    """Corrupt persisted reconstruction counts must not enter scientific comparisons."""
+    before, after = _minimal_topology_pair()
+    target = before if timepoint == "before" else after
+    target.update(field_values)
+    with pytest.raises(ValueError, match=f"inconsistent with face_count|{error}"):
+        compare_mesh_observations(before, after)
+
+
+def test_mesh_comparison_preserves_partial_legacy_topology_without_face_count() -> None:
+    """Do not fabricate a face count to validate an older partial artifact."""
+    before, after = _minimal_topology_pair()
+    before.pop("face_count")
+    before["boundary_edge_count"] = 3
+    result = compare_mesh_observations(before, after)
+    assert result["before_reconstruction_topology_counts"]["face_count"] is None
+    assert "reconstruction_topology_comparison_incomplete" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
