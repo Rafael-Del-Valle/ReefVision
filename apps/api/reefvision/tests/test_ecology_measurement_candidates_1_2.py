@@ -382,6 +382,61 @@ def test_projected_unit_qc_excludes_incomplete_and_technical_replicates(
             summarize_projected_unit_summaries(full, altered)
 
 
+def test_projected_unit_rejects_cross_metric_identity_and_unit_conflicts(
+    client: TestClient,
+) -> None:
+    """A specimen cannot silently change colony, revision or tank by metric."""
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    source = EcologyMeasurementCandidate.model_validate(
+        _get(client, project_id).json()["candidates"][0]
+    )
+    baseline = source.model_copy(
+        update={
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-A",
+            "parent_colony_key": "parent-A",
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    final = baseline.model_copy(
+        update={
+            "image_id": "followup",
+            "annotation_evidence_id": "followup-annotation",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
+            "value": baseline.value + 1,
+        }
+    )
+    width = [baseline, final]
+
+    def unit_summaries(rows: list[EcologyMeasurementCandidate]):
+        qc = summarize_sampling_date_qc(rows)
+        changes = summarize_projected_endpoint_changes(rows, qc)
+        return summarize_projected_unit_summaries(rows, changes)
+
+    height = [row.model_copy(update={"metric": "box_height"}) for row in width]
+    assert len(unit_summaries(width + height)) == 2
+    for changed_context in (
+        {"experimental_unit_id": "tank-B"},
+        {"parent_colony_key": "parent-B"},
+        {"identity_revision": baseline.identity_revision + 1},
+    ):
+        changed_height = [
+            row.model_copy(update={"metric": "box_height", **changed_context})
+            for row in width
+        ]
+        # Each metric independently passes date QC; the conflict is visible
+        # only when the same organism is reconciled across metric types.
+        assert all(
+            row.qc_status == "date_series_candidate"
+            for row in summarize_sampling_date_qc(width + changed_height)
+        )
+        with pytest.raises(ValidationError, match="changed across metrics"):
+            unit_summaries(width + changed_height)
+
+
 def test_projected_population_is_unit_weighted_and_stratified() -> None:
     tank_a = EcologyProjectedUnitSummary(
         experimental_unit_type="tank",
@@ -456,9 +511,7 @@ def test_projected_population_is_unit_weighted_and_stratified() -> None:
 
     # A single tank/metric must not masquerade as two independent records
     # merely because its reported sampling window or physical unit differs.
-    repeated_window = tank_a.model_copy(
-        update={"sampling_windows_utc": ["2026-04-03/2026-04-05"]}
-    )
+    repeated_window = tank_a.model_copy(update={"sampling_windows_utc": ["2026-04-03/2026-04-05"]})
     repeated_unit = tank_a.model_copy(update={"units": ["cm"]})
     for duplicated in (repeated_window, repeated_unit, tank_a):
         with pytest.raises(ValidationError, match="Duplicate projected experimental-unit"):
