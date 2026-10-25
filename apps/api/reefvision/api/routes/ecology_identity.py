@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated
-
 import csv
 from io import StringIO
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
@@ -26,6 +25,7 @@ from reefvision.schemas.ecology_identity import (
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
+from reefvision.services.ecology_candidate_report_export import render_ecology_series_qc_csv
 from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.services.ecology_measurement_candidates import EcologyMeasurementCandidateService
 
@@ -73,13 +73,13 @@ def export_ecology_candidate_report(project_id: str, session: DbSession) -> Resp
             "review_gate",
         )
     )
-    for status, count in sorted(report.qc_status_counts.items()):
+    for qc_status, count in sorted(report.qc_status_counts.items()):
         writer.writerow(
             (
                 report.project_id,
                 report.source_input_sha256,
                 report.report_sha256,
-                status,
+                qc_status,
                 count,
                 report.evidence_level,
                 report.review_gate,
@@ -89,6 +89,22 @@ def export_ecology_candidate_report(project_id: str, session: DbSession) -> Resp
         content=output.getvalue(),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="reefvision-ecology-qc.csv"'},
+    )
+
+
+
+@router.get(
+    "/projects/{project_id}/ecology/calibrated-measurement-candidates/report-series.csv",
+)
+def export_ecology_candidate_series_report(project_id: str, session: DbSession) -> Response:
+    """Source-linked UTC date-QC decisions; never verified biological growth."""
+    response = EcologyMeasurementCandidateService(session).candidates(project_id)
+    return Response(
+        content=render_ecology_series_qc_csv(response),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="reefvision-ecology-series-qc.csv"'
+        },
     )
 
 

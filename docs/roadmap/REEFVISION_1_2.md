@@ -1467,3 +1467,9 @@ decoding. This is descriptive linked-evidence reporting only: no authenticated
 biological independence, verified growth, mortality, or inferential statistics.
 Full CI, migration reconciliation and installed Windows/scientific acceptance
 remain outstanding; no merge, tag, release or deployment.
+
+## Traceable per-series ecological QC CSV (2026-10-25)
+
+A second read-only standalone export, `GET /api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates/report-series.csv`, emits one deterministic row per organism/metric UTC-date QC decision. Unlike the existing aggregate `report.csv`, it includes source image IDs, units, observed and duplicate UTC dates, missing capture timestamps, replay/conflicting source identifiers, and explicit review/evidence status. Arrays are encoded as JSON within CSV cells to preserve identifiers containing delimiters. Input/report SHA-256 references bind the export to the already persisted typed `ecology_measurement_candidates` and `ecology_candidate_report` Workflow Builder artifacts; no separate untyped workflow path is introduced. CSV generation fails closed on inconsistent report/QC totals, duplicate series, or a mismatched source fingerprint, and escapes user-controlled organism identifiers that could be interpreted as spreadsheet formulas. The aggregate CSV endpoint is unchanged.
+
+This is a reproducible **unverified candidate-QC export**, not an authenticated longitudinal observation, verified growth result, statistical inference, or independent-unit confirmation. Tests cover standalone/typed saved-workflow equality, stable ordering, corruption rejection and spreadsheet safety. Full CI, scientific review, and installed Windows acceptance remain release blockers.
