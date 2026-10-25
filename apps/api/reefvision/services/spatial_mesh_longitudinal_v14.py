@@ -250,8 +250,12 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     scale_ratio = (
         after_scale / before_scale if before_scale is not None and after_scale is not None else None
     )
-    if scale_ratio is not None and not isfinite(scale_ratio):
-        raise ValueError("Calibration scale ratio exceeds finite numeric range")
+    # Both scales are strictly positive. Floating-point overflow or a zero
+    # quotient from positive underflow must not masquerade as a measured ratio.
+    scale_ratio_out_of_range = False
+    if scale_ratio is not None and (not isfinite(scale_ratio) or scale_ratio == 0):
+        scale_ratio = None
+        scale_ratio_out_of_range = True
     # Remove the *nominal* calibration-scale contribution to the area ratio.
     # This describes reconstruction geometry only when both scans use a common
     # source-unit convention; it does not establish registration or coral growth.
@@ -318,6 +322,8 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         warnings.append("scale_normalized_extent_ratio_out_of_numeric_range")
     else:
         warnings.append("scale_normalized_extent_ratio_unavailable")
+    if scale_ratio_out_of_range:
+        warnings.append("calibration_scale_ratio_out_of_numeric_range")
     if before_scale is None or after_scale is None:
         warnings.append("calibration_scale_metadata_unavailable")
     elif before_scale != after_scale:
