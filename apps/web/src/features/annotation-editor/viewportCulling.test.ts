@@ -149,4 +149,95 @@ describe("dense-object viewport culling", () => {
     expect(cullViewportMasks(items, bounds)).toEqual([touching, incomplete]);
     expect(cullViewportMasks(items, { ...bounds, x_max: 10 })).toBe(items);
   });
+  it("culls dense polygon overlays using vertices when saved bounds are absent", () => {
+    const polygons = Array.from({ length: 10_000 }, (_, index) => ({
+      id: `polygon-${index}`,
+      geometry_kind: "polygon",
+      points: [
+        { x: index * 10, y: 10 },
+        { x: index * 10 + 4, y: 10 },
+        { x: index * 10 + 4, y: 14 },
+      ],
+      x_min: null,
+      y_min: null,
+      x_max: null,
+      y_max: null,
+    }));
+    const bounds = { x_min: 0, y_min: 0, x_max: 100, y_max: 100 };
+    const visible = cullViewportMasks(polygons, bounds);
+    expect(visible).toHaveLength(11);
+    expect(visible[10]).toBe(polygons[10]);
+    expect(polygons).toHaveLength(10_000);
+    expect(polygons[999].x_min).toBeNull();
+    expect(cullViewportMasks(polygons, null)).toBe(polygons);
+  });
+
+  it("trusts drawn polygon vertices over stale bounds and keeps invalid geometry", () => {
+    const bounds = { x_min: 0, y_min: 0, x_max: 100, y_max: 100 };
+    const pointsInside = [
+      { x: 5, y: 5 },
+      { x: 15, y: 5 },
+      { x: 15, y: 15 },
+    ];
+    const pointsOutside = [
+      { x: 200, y: 5 },
+      { x: 215, y: 5 },
+      { x: 215, y: 15 },
+    ];
+    const visibleDespiteStaleBounds = {
+      geometry_kind: "polygon",
+      points: pointsInside,
+      x_min: 200,
+      y_min: 200,
+      x_max: 215,
+      y_max: 215,
+    };
+    const hiddenDespiteStaleBounds = {
+      geometry_kind: "polygon",
+      points: pointsOutside,
+      x_min: 0,
+      y_min: 0,
+      x_max: 15,
+      y_max: 15,
+    };
+    const malformed = {
+      geometry_kind: "polygon",
+      points: [{ x: NaN, y: 0 }, ...pointsOutside.slice(1)],
+      x_min: 200,
+      y_min: 0,
+      x_max: 215,
+      y_max: 15,
+    };
+    const rasterWithUnreliableBounds = {
+      geometry_kind: "raster_mask",
+      mask_path: "mask.png",
+      points: pointsOutside,
+      x_min: null,
+      y_min: null,
+      x_max: null,
+      y_max: null,
+    };
+    const rasterOutside = {
+      ...rasterWithUnreliableBounds,
+      x_min: 200,
+      y_min: 0,
+      x_max: 215,
+      y_max: 15,
+    };
+    const masks = [
+      visibleDespiteStaleBounds,
+      hiddenDespiteStaleBounds,
+      malformed,
+      rasterWithUnreliableBounds,
+      rasterOutside,
+    ];
+    expect(cullViewportMasks(masks, bounds)).toEqual([
+      visibleDespiteStaleBounds,
+      malformed,
+      rasterWithUnreliableBounds,
+    ]);
+    expect(masks[0]).toBe(visibleDespiteStaleBounds);
+    expect(masks[1]).toBe(hiddenDespiteStaleBounds);
+  });
+
 });
