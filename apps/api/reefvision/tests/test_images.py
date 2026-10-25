@@ -514,7 +514,8 @@ def test_endian_16_bit_tiff_preserves_source_and_raw_pixel_display(
     assert thumbnail.status_code == 200
     with Image.open(BytesIO(thumbnail.content)) as rendition:
         assert rendition.size == (64, 48)
-        assert all(10 <= channel <= 20 for channel in rendition.convert("RGB").getpixel((32, 24)))
+        pixel = rendition.convert("RGB").getpixel((32, 24))
+        assert all(10 <= channel <= 20 for channel in pixel)
     assert client.get(f"/api/v1/images/{image_id}/content").content == original
 
 
