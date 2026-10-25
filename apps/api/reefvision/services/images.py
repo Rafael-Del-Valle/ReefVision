@@ -294,10 +294,20 @@ class ImageService:
         return display_path, "image/png"
 
     def thumbnail_path_for_image(self, image: ImageAsset) -> Path:
-        mode = str((image.metadata_json or {}).get("mode", ""))
-        if image.media_type == "image/tiff" and mode in {"I;16", "I;16L", "I;16B"}:
+        metadata = image.metadata_json or {}
+        mode = str(metadata.get("mode", ""))
+        exif = metadata.get("exif")
+        orientation = exif.get("Orientation") if isinstance(exif, dict) else None
+        # Earlier thumbnails used EXIF presentation orientation, which can
+        # disagree with stored source-pixel masks. Regenerate those JPEGs in a
+        # new cache namespace rather than reusing misaligned legacy thumbnails.
+        needs_raw_thumbnail = (
+            (image.media_type == "image/tiff" and mode in {"I;16", "I;16L", "I;16B"})
+            or orientation not in (None, 1)
+        )
+        if needs_raw_thumbnail:
             source = self.content_path_for_image(image)
-            corrected = source.parent.parent / "thumbnails-v2" / f"{image.id}.jpg"
+            corrected = source.parent.parent / "thumbnails-v3" / f"{image.id}.jpg"
             if not corrected.is_file():
                 create_thumbnail(
                     source,
