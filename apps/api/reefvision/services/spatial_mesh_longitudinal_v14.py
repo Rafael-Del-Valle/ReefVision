@@ -323,8 +323,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     if topology_changed_fields:
         warnings.append("reconstruction_topology_changed_requires_review")
     if any(
-        before_topology[field] is None or after_topology[field] is None
-        for field in topology_fields
+        before_topology[field] is None or after_topology[field] is None for field in topology_fields
     ):
         warnings.append("reconstruction_topology_comparison_incomplete")
     # Source-frame labels are audit metadata, not registration transforms.
@@ -364,6 +363,11 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         warnings.append("geometry_fingerprint_missing_or_invalid")
     if first_hash_valid and second_hash_valid and first_geometry_hash == second_geometry_hash:
         warnings.append("identical_geometry_fingerprint")
+        # A fingerprint covers the original triangles; calibration cannot alter
+        # triangle counts or mesh connectivity. Conflicting topology metadata
+        # indicates a provenance/serialization discrepancy, not biological change.
+        if topology_changed_fields:
+            warnings.append("identical_geometry_topology_metadata_inconsistent")
         if before_scale is not None and after_scale is not None:
             if before_scale != after_scale:
                 warnings.append("identical_geometry_rescaled_not_biological_growth")
