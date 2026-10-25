@@ -181,12 +181,16 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     assert result["before_meters_per_mesh_unit"] == 1
     assert result["after_meters_per_mesh_unit"] == 2
     assert result["calibration_scale_ratio_after_to_before"] == pytest.approx(2)
-    assert result["provenance"]["before_geometry_sha256"] == (
-        result["provenance"]["after_geometry_sha256"]
+    assert (
+        result["provenance"]["before_geometry_sha256"]
+        == (result["provenance"]["after_geometry_sha256"])
     )
     assert "identical_geometry_fingerprint" in result["qc_warnings"]
     assert "calibration_scale_changed_between_observations" in result["qc_warnings"]
     assert "identical_geometry_rescaled_not_biological_growth" in result["qc_warnings"]
+    assert (
+        "identical_geometry_area_inconsistent_with_calibration_scale" not in result["qc_warnings"]
+    )
     assert result["provenance"]["calibration_verified"] is False
 
     # The same warning and calibration ratio must survive a persisted typed
@@ -655,6 +659,7 @@ def test_mesh_comparison_rejects_same_instant_in_different_timezones(
     with pytest.raises(ValueError, match="increasing timestamps"):
         compare_mesh_observations(first, later)
 
+
 @pytest.mark.parametrize("invalid_scale", [True, 0, -1, "1", float("nan"), float("inf")])
 def test_mesh_comparison_rejects_invalid_calibration_metadata(invalid_scale: object) -> None:
     before = {
@@ -682,3 +687,47 @@ def test_mesh_comparison_rejects_invalid_calibration_metadata(invalid_scale: obj
     with pytest.raises(ValueError, match="Calibration scale metadata"):
         compare_mesh_observations(before, after)
 
+
+@pytest.mark.parametrize(
+    ("first_area", "second_area", "inconsistent"),
+    [
+        (1.0, 4.0, False),
+        (1.0, 5.0, True),
+        (0.0, 1.0, True),
+        (0.0, 0.0, False),
+        (1e-250, 4e-250, False),
+        (1e-250, 5e-250, True),
+    ],
+)
+def test_identical_geometry_requires_area_consistent_with_scale(
+    first_area: float, second_area: float, inconsistent: bool
+) -> None:
+    """An identical source hash cannot explain a non-quadratic area change."""
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": first_area,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "geometry_sha256": "same-source",
+            "meters_per_mesh_unit": 1.0,
+        },
+    }
+    after = {
+        **before,
+        "surface_area_m2": second_area,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "meters_per_mesh_unit": 2.0,
+        },
+    }
+    result = compare_mesh_observations(before, after)
+    warning = "identical_geometry_area_inconsistent_with_calibration_scale"
+    assert (warning in result["qc_warnings"]) is inconsistent
+    assert result["provenance"]["specimen_identity_verified"] is False
