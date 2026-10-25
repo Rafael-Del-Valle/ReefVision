@@ -245,3 +245,68 @@ def test_bulk_completion_rejects_mixed_states_atomically(client: TestClient) -> 
     assert (
         client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events").json()["total"] == 1
     )
+
+def test_bulk_completion_partial_retry_preserves_original_reviewer_audit(
+    client: TestClient,
+) -> None:
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    started = client.post(url, json={"item_ids": ids, "action": "start"})
+    assert started.status_code == 200, started.text
+
+    first = client.post(
+        url,
+        json={
+            "item_ids": [ids[0]],
+            "action": "complete",
+            "review_confirmed": True,
+            "actor": "first reviewer",
+        },
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["changed_count"] == 1
+    original_completion = first.json()["items"][0]["completed_at"]
+
+    retry = client.post(
+        url,
+        json={
+            "item_ids": ids,
+            "action": "complete",
+            "review_confirmed": True,
+            "actor": "second reviewer",
+        },
+    )
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["changed_count"] == 1
+    assert {item["review_state"] for item in retry.json()["items"]} == {"completed"}
+    assert retry.json()["items"][0]["completed_at"] == original_completion
+
+    first_events = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events")
+    second_events = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events")
+    assert first_events.status_code == 200, first_events.text
+    assert second_events.status_code == 200, second_events.text
+    assert [event["event_type"] for event in first_events.json()["items"]] == [
+        "triage_start",
+        "triage_complete",
+    ]
+    assert [event["event_type"] for event in second_events.json()["items"]] == [
+        "triage_start",
+        "triage_complete",
+    ]
+    assert first_events.json()["items"][-1]["actor"] == "first reviewer"
+    assert second_events.json()["items"][-1]["actor"] == "second reviewer"
+    assert first_events.json()["requires_researcher_review"] is True
+    assert second_events.json()["requires_researcher_review"] is True
+
+    again = client.post(
+        url,
+        json={"item_ids": ids, "action": "complete", "review_confirmed": True},
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["changed_count"] == 0
+    assert client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events").json()[
+        "total"
+    ] == 2
+    assert client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events").json()[
+        "total"
+    ] == 2
