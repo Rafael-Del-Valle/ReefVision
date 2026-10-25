@@ -145,11 +145,17 @@ def summarize_projected_endpoint_changes(
         if start is None or end is None:
             raise ValidationError("Projected endpoint series requires dated source images")
         elapsed_days = (end - start).total_seconds() / 86400
+        if not math.isfinite(elapsed_days) or elapsed_days <= 0:
+            raise ValidationError("Projected endpoint change is nonfinite or unordered")
         difference = last.value - first.value
         percent_change = 100 * (difference / first.value)
-        if (
-            not all(math.isfinite(value) for value in (elapsed_days, difference, percent_change))
-            or elapsed_days <= 0
+        # Normalize by actual elapsed UTC time, not the number of sampling
+        # dates. These slopes describe projected geometry, never growth.
+        absolute_per_day = difference / elapsed_days
+        baseline_percent_per_day = percent_change / elapsed_days
+        if not all(
+            math.isfinite(value)
+            for value in (difference, percent_change, absolute_per_day, baseline_percent_per_day)
         ):
             raise ValidationError("Projected endpoint change is nonfinite or unordered")
         changes.append(
@@ -174,6 +180,8 @@ def summarize_projected_endpoint_changes(
                 absolute_change=difference,
                 percent_change=percent_change,
                 elapsed_days=elapsed_days,
+                projected_absolute_change_per_day=absolute_per_day,
+                projected_baseline_percent_change_per_day=baseline_percent_per_day,
                 observed_timepoint_count=len(records),
             )
         )
@@ -582,7 +590,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0009",
+                "algorithm_version": "ecology-measurement-candidates-0010",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
