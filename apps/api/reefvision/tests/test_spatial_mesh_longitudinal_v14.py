@@ -77,6 +77,9 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["measurement_status"] == "provisional_unverified_longitudinal_comparison"
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
+    assert "open_mesh_surface_not_enclosed" in expected["before_mesh_qc_warnings"]
+    assert "open_mesh_surface_not_enclosed" in expected["after_mesh_qc_warnings"]
+    assert "source_mesh_qc_requires_review" in expected["qc_warnings"]
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     node = next(
@@ -154,6 +157,33 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
+
+
+def test_mesh_comparison_retains_source_qc_and_calibration_differences(
+    client: TestClient,
+) -> None:
+    """Do not erase reconstruction defects when scan formats or methods differ."""
+    project_id = str(create_project(client, "Cross-format mesh QC")["id"])
+    before = _mesh("scan-1", "2026-10-01T12:00:00Z", 1)
+    after = _mesh("scan-2", "2026-10-02T12:00:00Z", 2)
+    after.pop("vertices")
+    after.pop("faces")
+    after["obj_text"] = "\n".join(
+        ["v 0 0 0", "v 1 0 0", "v 0 2 0", "f 1 2 3"]
+    )
+    after["calibration_method"] = "instrument"
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after},
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert "open_mesh_surface_not_enclosed" in result["before_mesh_qc_warnings"]
+    assert "open_mesh_surface_not_enclosed" in result["after_mesh_qc_warnings"]
+    assert "source_mesh_qc_requires_review" in result["qc_warnings"]
+    assert "mesh_source_formats_differ_between_observations" in result["qc_warnings"]
+    assert "calibration_methods_differ_between_observations" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
 
 
 def test_mesh_comparison_runtime_context_is_not_a_user_parameter(
