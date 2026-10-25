@@ -140,9 +140,9 @@ def frozen_pose_item_fingerprints_match(
         # crop bbox and confidence omitted from the verified-landmark digest.
         # Legacy manifests without this additive field remain readable.
         if "canonical_pose_sha256" in summary:
-            row = rows_by_id.get(item_id)
-            if row is None or summary["canonical_pose_sha256"] != canonical_json_sha256(
-                row.canonical_pose_json
+            manifest_row = rows_by_id.get(item_id)
+            if manifest_row is None or summary["canonical_pose_sha256"] != canonical_json_sha256(
+                manifest_row.canonical_pose_json
             ):
                 return False
         observed[item_id] = {field: summary.get(field) for field in expected.get(item_id, {})}
