@@ -144,3 +144,58 @@ def test_fallback_original_placement_rejects_existing_destination(
 
     assert destination.read_bytes() == b"original"
     assert staged.read_bytes() == b"new"
+
+@pytest.mark.parametrize("force_copy_fallback", [False, True])
+def test_published_camera_original_survives_staging_cleanup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, force_copy_fallback: bool
+) -> None:
+    """A failed staging unlink must not orphan an already-published original."""
+    staged = tmp_path / "staging.part"
+    destination = tmp_path / "original.jpeg"
+    original = b"immutable camera exposure"
+    staged.write_bytes(original)
+
+    if force_copy_fallback:
+        def unsupported_hardlink(_source: Path, _target: Path) -> None:
+            raise OSError(errno.EOPNOTSUPP, "Hard links are unsupported")
+
+        monkeypatch.setattr(image_storage.os, "link", unsupported_hardlink)
+
+    real_unlink = Path.unlink
+
+    def denied_staging_unlink(path: Path, *args: object, **kwargs: object) -> None:
+        if path == staged:
+            raise PermissionError("staging cleanup temporarily denied")
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", denied_staging_unlink)
+    image_storage.commit_staged_image(staged, destination)
+
+    assert destination.read_bytes() == original
+    assert staged.read_bytes() == original
+
+
+def test_import_remains_recorded_when_staging_cleanup_is_denied(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An original placed on disk must not be reported as a failed import."""
+    project = create_project(client, "Staging cleanup failure")
+    original = image_bytes(size=(41, 31))
+    real_unlink = Path.unlink
+
+    def denied_staging_unlink(path: Path, *args: object, **kwargs: object) -> None:
+        if ".imports" in path.parts and path.suffix == ".part":
+            raise PermissionError("staging cleanup temporarily denied")
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", denied_staging_unlink)
+    report = import_one(
+        client, project["id"], filename="CAMERA_0103.PNG", content=original
+    )
+
+    assert len(report["successful"]) == 1, report
+    assert not report["failed"], report
+    image_id = report["successful"][0]["image_id"]
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+    assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 1
