@@ -507,9 +507,7 @@ def test_endian_16_bit_tiff_preserves_source_and_raw_pixel_display(
         assert rendition.getpixel((32, 24)) == 4096
 
     app = cast(FastAPI, client.app)
-    assert process_thumbnail_job(
-        test_settings, app.state.session_factory, item["thumbnail_job_id"]
-    )
+    assert process_thumbnail_job(test_settings, app.state.session_factory, item["thumbnail_job_id"])
     thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
     assert thumbnail.status_code == 200
     with Image.open(BytesIO(thumbnail.content)) as rendition:
@@ -527,9 +525,7 @@ def test_truncated_camera_jpeg_is_rejected_without_persisting_an_image(
     stream = BytesIO()
     Image.new("RGB", (128, 96), (20, 90, 120)).save(stream, format="JPEG")
     truncated = stream.getvalue()[:-32]
-    report = import_one(
-        client, project["id"], filename="camera-capture.JPEG", content=truncated
-    )
+    report = import_one(client, project["id"], filename="camera-capture.JPEG", content=truncated)
 
     assert not report["successful"]
     assert len(report["failed"]) == 1
