@@ -799,3 +799,23 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Validate the entire batch before writing; append `triage_complete` events atomically with state changes. Identical retries are no-ops. UI requires general confirmation plus explicit confirmation that every selected item was inspected.
 - Standalone API/UI and saved-graph regression tests cover confirmation, mixed-state rejection, append-only events, unchanged annotations, replay and researcher-review gates.
 - Release HOLD: exact-head lint/type/backend/frontend/E2E/Windows CI, interactive installed GUI, MSI upgrade/rollback, representative scientific validation and independent 1.1/1.6 Alembic 0038 reconciliation remain required.
+
+## 2026-10-25 — Partial bulk QC completion retry regression (Track D)
+
+- Previous exact head `1983f68b` completed 17/20 Actions workflows. The
+  three failures share one Ruff formatter diagnostic: a surplus blank line
+  before the bulk-completion regression at `test_review_queue_bulk_16.py:181`.
+  Corrected the exact line without changing API or scientific behavior.
+- Added a standalone API regression for a partially completed batch: the first
+  researcher completes one started item, and a later confirmed bulk retry
+  completes only the unfinished item. The original completion timestamp and
+  actor-labeled append-only audit event must remain unchanged. Further exact
+  retries must create no new events. Both items remain marked as requiring
+  researcher review; completion never verifies biological annotations.
+- This extends existing standalone and saved executable `qc_review_queue`
+  Workflow Builder coverage; it does not introduce a second QC engine or
+  change the persisted typed graph/artifact contract.
+- **Validation:** GitHub source read-back and draft-PR branch HEAD verification
+  completed; exact-head CI for the new test is pending. No local full checkout
+  is available (GitHub DNS resolution fails), so no local Ruff/pytest or
+  installed-Windows GUI/upgrade test is claimed. 1.6 remains **HOLD**.
