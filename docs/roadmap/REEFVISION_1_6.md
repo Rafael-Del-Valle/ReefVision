@@ -772,3 +772,22 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Audited original 0038 audit-event migration: `event_type` is NOT NULL **without a server default**. A foreign already-at-head schema that adds a default such as `'comment'` can silently misclassify omitted QC triage actions as reviewer comments. The read-only 0038–0040 guard now rejects such defaults without stamping or modifying scientific records.
 - Added three standalone SQLite regressions and three desktop startup regressions for forged defaults at 0038/0039/0040, including preserved research sentinels, existing event records and revision stamps. Corrected positive fixtures to explicitly supply event types, matching the original migration.
 - Local isolated SQLAlchemy/SQLite inspector confirmed `default=None` for native columns and `default="'comment'"` for forged columns. Full exact-head Ruff/backend/frontend/E2E and native Windows MSI/installed-GUI acceptance are **not yet verified**. 1.1/1.6 Alembic revision collision remains unresolved. **HOLD**; no merge, release, paid hosting, model download or asset deletion.
+
+## 2026-10-25 — Desktop migration fixture matches 0040 NOT NULL audit contract
+
+- At previous exact head `0cc0b10`, 18/20 Actions workflows succeeded. The two
+  failing backend workflows ran the same full test suite: 1,346 passed,
+  3 failed and 32 skipped. All three failures were in
+  `test_desktop_runtime_paths.py`: its synthetic review-event table still
+  declared nullable `event_type`, although migration 0038 requires NOT NULL.
+- The shared test fixture now uses `event_type TEXT NOT NULL` by default,
+  matching the actual 1.6 schema and allowing the stale 0039 CHECK regression
+  to exercise its intended rejection at stamp 0040.
+- A separate explicit nullable-fixture regression asserts fail-closed desktop
+  startup and unchanged database bytes. SQLite's CHECK alone permits NULL;
+  this must remain a distinct negative-path test.
+- The fixture fix is test-only. No production guard, schema, migration, user
+  data, saved workflow or review approval state was changed.
+- Local isolated SQLite NOT NULL/CHECK smoke tests passed for both nullable
+  and nonnullable variants. Full repository tests and exact-new-head CI remain
+  pending; installed Windows GUI and MSI upgrade/rollback remain unverified.
