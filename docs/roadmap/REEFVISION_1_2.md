@@ -1334,3 +1334,27 @@ immutable reviewed calibration/source linkage, migration reconciliation,
 real scientific dataset acceptance and installed Windows GUI tests remain
 release blockers. No cross-version merge, environmental-context duplication,
 model acquisition or verified-dataset promotion occurs.
+
+## Cross-metric organism assignment integrity (2026-10-25)
+
+The projected-population aggregation boundary now checks each organism's
+experimental-unit identity **across metrics and sampling strata**, not merely
+within the same metric. An organism reported in tank A for width cannot be
+reported in tank B (or as a colony-level independent unit) for height; the
+analysis fails closed rather than treating these as distinct biological
+replicates. Multiple metrics from the same organism and unchanged unit remain
+valid as separate descriptive outcomes. This closes a direct-aggregator
+pseudoreplication loophole; upstream source-linked unit aggregation already
+rejects contradictory identity assignments across metrics. The shared
+standalone/project source service and persisted Workflow Builder output retain
+their typed provenance and scientist-review gate. Reproducibility fingerprint
+algorithm advances to `ecology-measurement-candidates-0014`. A focused
+regression checks both input orders, changed unit IDs/types and the valid
+same-unit control. The previously failing Ruff-format line in the ecological
+regression file was corrected as reported by exact-head Actions logs.
+
+**Acceptance limits:** No new verified biological records, reviewed identity
+reconciliation, inference, migration, physical Windows installed-GUI check or
+release authorization is claimed. CI must validate the new exact head before
+this increment can be considered tested; source data remain
+`linked_unverified` and require scientist review.
