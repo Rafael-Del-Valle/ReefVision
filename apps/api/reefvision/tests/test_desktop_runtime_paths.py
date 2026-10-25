@@ -43,7 +43,9 @@ def _stamp_database(settings: Settings, revision: str) -> Path:
     return database
 
 
-def _add_native_review_table(database: Path, *, revision: str | None = None) -> None:
+def _add_native_review_table(
+    database: Path, *, revision: str | None = None, nullable_event_type: bool = False
+) -> None:
     """Make a synthetic revision stamp satisfy the 1.6 lineage guard.
 
     The separate real-migration regression exercises actual Alembic DDL.
@@ -64,10 +66,12 @@ def _add_native_review_table(database: Path, *, revision: str | None = None) -> 
             if stamped_revision in {"0039", "0040"}
             else ""
         )
+        event_type_decl = "event_type TEXT" if nullable_event_type else "event_type TEXT NOT NULL"
         connection.execute(
             "CREATE TABLE review_queue_item_events ("
             "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
-            "project_id TEXT, client_request_id TEXT, event_type TEXT, actor TEXT, "
+            "project_id TEXT, client_request_id TEXT, "
+            f"{event_type_decl}, actor TEXT, "
             f"comment TEXT, assignee TEXT, created_at TEXT{event_type_check})"
         )
         if revision is not None:
@@ -187,4 +191,19 @@ def test_current_0040_stamp_with_0039_event_check_fails_closed(
     before = database.read_bytes()
     with pytest.raises(RuntimeError, match="CHECK constraint still excludes"):
         desktop.run_pending_migrations(settings)
+    assert database.read_bytes() == before
+
+
+def test_current_0040_stamp_with_nullable_event_type_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """A CHECK allowlist cannot protect SQLite audit rows with NULL event types."""
+    settings = _desktop_settings(tmp_path / "nullable-event")
+    database = _stamp_database(settings, "0040")
+    _add_native_review_table(database, nullable_event_type=True)
+    before = database.read_bytes()
+
+    with pytest.raises(RuntimeError, match="event_type is nullable"):
+        desktop.run_pending_migrations(settings)
+
     assert database.read_bytes() == before
