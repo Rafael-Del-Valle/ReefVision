@@ -106,6 +106,17 @@ def frozen_pose_item_fingerprints_match(
             or canonical_pose.get("frame_index") != row.frame_index
         ):
             return False
+        # A matching recomputed hash cannot make an empty, re-signed pose
+        # scientifically valid. Freezing requires at least one verified
+        # landmark; enforce that invariant on every later read and export.
+        observations = canonical_pose.get("pose_observations")
+        keypoints = canonical_pose.get("keypoints")
+        if (
+            not isinstance(observations, list)
+            or not isinstance(keypoints, list)
+            or (not observations and not keypoints)
+        ):
+            return False
         verified_payload = {
             "schema_version": "pose-active-learning-verified-pose-0001",
             "video_track_id": row.video_track_id,
