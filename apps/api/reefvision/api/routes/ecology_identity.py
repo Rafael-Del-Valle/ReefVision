@@ -27,6 +27,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
 )
 from reefvision.services.ecology_candidate_report_export import render_ecology_series_qc_csv
 from reefvision.services.ecology_identity import EcologyIdentityService
+from reefvision.services.ecology_identity_history_export import render_ecology_identity_history_csv
 from reefvision.services.ecology_measurement_candidates import EcologyMeasurementCandidateService
 
 router = APIRouter(tags=["ecological monitoring"])
@@ -39,6 +40,19 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 )
 def list_identity_registry(project_id: str, session: DbSession) -> EcologyIdentityRegistryResponse:
     return EcologyIdentityService(session).registry(project_id)
+
+
+@router.get(
+    "/projects/{project_id}/ecology/identity-registry/history.csv",
+)
+def export_ecology_identity_history(project_id: str, session: DbSession) -> Response:
+    """Auditable unverified identity revisions, shared with typed workflow artifacts."""
+    registry = EcologyIdentityService(session).registry(project_id)
+    return Response(
+        content=render_ecology_identity_history_csv(registry),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="reefvision-ecology-identity-history.csv"'},
+    )
 
 
 @router.get(
