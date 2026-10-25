@@ -141,14 +141,14 @@ def summarize_sampling_date_qc(
             qc_status = "identity_context_changed"
         elif len(units) > 1:
             qc_status = "mixed_units"
-        elif conflicting_source_image_ids or conflicting_source_image_sha256:
-            qc_status = "source_capture_conflict"
-        elif missing_timestamp_image_ids:
-            qc_status = "missing_timestamps"
         elif reused_image_ids:
             qc_status = "reused_image_across_dates"
         elif reused_image_sha256:
             qc_status = "reused_image_content_across_dates"
+        elif conflicting_source_image_ids or conflicting_source_image_sha256:
+            qc_status = "source_capture_conflict"
+        elif missing_timestamp_image_ids:
+            qc_status = "missing_timestamps"
         elif duplicate_dates:
             qc_status = "same_day_technical_replicates"
         elif len(date_counts) < 2:
