@@ -187,9 +187,7 @@ def test_identity_revision_invalidates_old_measurement_evidence_and_saved_workfl
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in workflow["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == payload
@@ -283,11 +281,51 @@ def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     assert change.baseline_value == 5.0
     assert change.percent_change == pytest.approx(50.0)
     assert change.elapsed_days == 1.0
+    assert change.projected_absolute_change_per_day == pytest.approx(2.5)
+    assert change.projected_baseline_percent_change_per_day == pytest.approx(50.0)
     assert change.observed_timepoint_count == 2
     assert change.baseline_image_id == baseline.image_id
     assert change.final_image_id == "different-image"
     assert change.evidence_level == "linked_unverified"
     assert change.review_gate == "scientist_review_required"
+
+    # Slopes divide by actual elapsed UTC hours, not the number of calendar
+    # dates or an assumed one-day interval; this is not biological growth.
+    delayed = final.model_copy(
+        update={"capture_timestamp_utc": datetime(2026, 4, 6, 8, tzinfo=UTC)}
+    )
+    delayed_change = summarize_projected_endpoint_changes(
+        [baseline, delayed], summarize_sampling_date_qc([baseline, delayed])
+    )[0]
+    assert delayed_change.elapsed_days == 3.0
+    assert delayed_change.projected_absolute_change_per_day == pytest.approx(2.5 / 3)
+    assert delayed_change.projected_baseline_percent_change_per_day == pytest.approx(50 / 3)
+    assert delayed_change.review_gate == "scientist_review_required"
+
+    # Previously persisted typed workflow artifacts remain readable.
+    legacy = change.model_dump(mode="json")
+    legacy.pop("projected_absolute_change_per_day")
+    legacy.pop("projected_baseline_percent_change_per_day")
+    assert type(change).model_validate(legacy).projected_absolute_change_per_day is None
+
+    # A near-zero positive elapsed interval can overflow an otherwise finite
+    # geometric difference. It must fail closed, never persist Infinity.
+    huge_start = baseline.model_copy(
+        update={
+            "value": 1e300,
+            "capture_timestamp_utc": datetime(2026, 4, 3, 23, 59, 59, 999999, tzinfo=UTC),
+        }
+    )
+    huge_end = final.model_copy(
+        update={
+            "value": 1.1e300,
+            "capture_timestamp_utc": datetime(2026, 4, 4, 0, 0, tzinfo=UTC),
+        }
+    )
+    with pytest.raises(ValidationError, match="nonfinite or unordered"):
+        summarize_projected_endpoint_changes(
+            [huge_start, huge_end], summarize_sampling_date_qc([huge_start, huge_end])
+        )
 
     # A revision or declared independent-unit change cannot become growth.
     revised = final.model_copy(update={"identity_revision": 2})
