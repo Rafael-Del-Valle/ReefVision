@@ -31,6 +31,12 @@ describe("LocalPointCloudPreview", () => {
       screen.getByLabelText("Point-cloud calibration evidence (unverified)"),
       { target: { value: "Unreviewed ruler in image" } },
     );
+    fireEvent.change(
+      screen.getByLabelText(
+        "Point-cloud source coordinate frame ID (unverified, optional)",
+      ),
+      { target: { value: "transect-7" } },
+    );
     fireEvent.click(button);
     expect(
       await screen.findByText("Provisional point-cloud viewer"),
@@ -42,11 +48,37 @@ describe("LocalPointCloudPreview", () => {
         meters_per_unit: 0.01,
         calibration_method: "ruler",
         calibration_evidence: "Unreviewed ruler in image",
+        coordinate_frame_id: "transect-7",
         relative_scale_uncertainty: null,
       }),
       undefined,
     );
     expect(screen.getByText(/Standalone preview only/)).toBeInTheDocument();
+  });
+
+  it("invalidates an existing preview when the source-frame label changes", async () => {
+    vi.mocked(previewLocalPointCloudFile).mockResolvedValue({
+      measurement_status: "caller_supplied_unverified",
+    });
+    render(<LocalPointCloudPreview projectId="reef-project" />);
+    fireEvent.change(screen.getByLabelText("Point-cloud file"), {
+      target: { files: [new File(["ply"], "reef.ply")] },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview point cloud" }),
+    );
+    expect(
+      await screen.findByText("Provisional point-cloud viewer"),
+    ).toBeInTheDocument();
+    fireEvent.change(
+      screen.getByLabelText(
+        "Point-cloud source coordinate frame ID (unverified, optional)",
+      ),
+      { target: { value: "survey-2" } },
+    );
+    expect(
+      screen.queryByText("Provisional point-cloud viewer"),
+    ).not.toBeInTheDocument();
   });
 
   it("passes original source indices for provisional straight-line chords", async () => {
