@@ -51,7 +51,6 @@ def list_calibrated_measurement_candidates(
     return EcologyMeasurementCandidateService(session).candidates(project_id)
 
 
-
 @router.get(
     "/projects/{project_id}/ecology/calibrated-measurement-candidates/report.csv",
 )
@@ -62,18 +61,28 @@ def export_ecology_candidate_report(project_id: str, session: DbSession) -> Resp
     if report is None:
         raise RuntimeError("Ecological candidate report was not generated")
     output = StringIO(newline="")
-    writer = csv.writer(output, lineterminator="\\n")
+    writer = csv.writer(output, lineterminator="\n")
     writer.writerow(
         (
-            "project_id", "source_input_sha256", "report_sha256",
-            "qc_status", "series_count", "evidence_level", "review_gate",
+            "project_id",
+            "source_input_sha256",
+            "report_sha256",
+            "qc_status",
+            "series_count",
+            "evidence_level",
+            "review_gate",
         )
     )
     for status, count in sorted(report.qc_status_counts.items()):
         writer.writerow(
             (
-                report.project_id, report.source_input_sha256, report.report_sha256,
-                status, count, report.evidence_level, report.review_gate,
+                report.project_id,
+                report.source_input_sha256,
+                report.report_sha256,
+                status,
+                count,
+                report.evidence_level,
+                report.review_gate,
             )
         )
     return Response(
