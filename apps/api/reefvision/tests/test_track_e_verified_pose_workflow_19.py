@@ -331,6 +331,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     ):
         PoseTrainingDatasetService(session).manifest(dataset_id)
 
+    # Re-freezing the same round must not silently return corrupted persisted
+    # training truth just because an immutable dataset already exists.
+    repeated_freeze = client.post(
+        f"/api/v1/pose-active-learning-rounds/{dataset['source_round_id']}/training-dataset",
+        json={"created_by": "scientist"},
+    )
+    assert repeated_freeze.status_code == 409, repeated_freeze.text
+
     # Native exports must enforce the same verified-only policy as saved workflows,
     # even when a modified manifest has been assigned a matching new checksum.
     with (
