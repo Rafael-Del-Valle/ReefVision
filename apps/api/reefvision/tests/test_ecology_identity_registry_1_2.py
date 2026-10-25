@@ -466,6 +466,7 @@ def test_corrupt_latest_lineage_fails_closed_in_api_and_saved_workflow(
         row["data_type"] == "ecology_identity_registry" for row in detail.json()["artifacts"]
     )
 
+
 def test_superseded_ecological_identity_history_in_saved_workflow(client: TestClient) -> None:
     """Reviewers can inspect every earlier tank assignment, not only its digest."""
     project_id = str(create_project(client, "Superseded ecological identity audit")["id"])
