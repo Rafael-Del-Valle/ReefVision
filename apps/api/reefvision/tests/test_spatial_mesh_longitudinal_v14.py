@@ -893,3 +893,116 @@ def test_scale_normalized_extent_rejects_overflow_and_positive_underflow(
     assert result["scale_normalized_bounding_box_diagonal_ratio_after_to_before"] is None
     assert "scale_normalized_extent_ratio_out_of_numeric_range" in result["qc_warnings"]
     assert result["provenance"]["specimen_identity_verified"] is False
+
+def test_exact_zero_followup_is_preserved_in_saved_workflow(client: TestClient) -> None:
+    """Zero-area/extent reconstruction is provisional, not numeric underflow."""
+    project_id = str(create_project(client, "Zero followup mesh QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    before = _mesh("first", "2026-10-01T12:00:00Z", 1)
+    after = _mesh("second", "2026-10-02T12:00:00Z", 1)
+    after["vertices"] = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+    response = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after},
+    )
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["after_surface_area_m2"] == 0
+    assert expected["after_axis_aligned_bounding_box_diagonal_m"] == 0
+    assert expected["scale_normalized_surface_area_ratio_after_to_before"] == 0
+    assert expected["scale_normalized_bounding_box_diagonal_ratio_after_to_before"] == 0
+    warnings = expected["qc_warnings"]
+    assert "zero_followup_surface_area_requires_reconstruction_review" in warnings
+    assert "zero_followup_extent_requires_reconstruction_review" in warnings
+    assert "source_mesh_qc_requires_review" in warnings
+    assert "scale_normalized_area_ratio_out_of_numeric_range" not in warnings
+    assert "scale_normalized_extent_ratio_out_of_numeric_range" not in warnings
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["provenance"]["coordinate_registration_verified"] is False
+
+    graph = {
+        "graph_id": "zero-followup-v14",
+        "name": "Provisional zero followup reconstruction",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
+            {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": after},
+            {"node_id": "compare", "node_type": "mesh_longitudinal_comparison"},
+        ],
+        "edges": [
+            {
+                "edge_id": f"project-{node}",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": node,
+                "target_port_id": "project",
+            }
+            for node in ("early", "late")
+        ]
+        + [
+            {
+                "edge_id": f"{node}-compare",
+                "source_node_id": node,
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": port,
+            }
+            for node, port in (("early", "before"), ("late", "after"))
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    completed = process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    assert completed, client.get(f"/api/v1/workflow-runs/{run.json()['id']}").json()
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    artifact = next(
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert artifact["payload_json"] == expected
+    assert len(artifact["payload_sha256"]) == 64
+
+
+def test_positive_underflow_is_not_reported_as_true_zero_area() -> None:
+    """Tiny positive geometry ratios must be withheld rather than rounded to zero."""
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1e300,
+        "axis_aligned_bounding_box_diagonal_m": 1e300,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "meters_per_mesh_unit": 1.0,
+        },
+    }
+    after = {
+        **before,
+        "surface_area_m2": 1e-300,
+        "axis_aligned_bounding_box_diagonal_m": 1e-300,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+        },
+    }
+    result = compare_mesh_observations(before, after)
+    assert result["scale_normalized_surface_area_ratio_after_to_before"] is None
+    assert result["scale_normalized_bounding_box_diagonal_ratio_after_to_before"] is None
+    assert "scale_normalized_area_ratio_out_of_numeric_range" in result["qc_warnings"]
+    assert "scale_normalized_extent_ratio_out_of_numeric_range" in result["qc_warnings"]
+    assert "zero_followup_surface_area_requires_reconstruction_review" not in result["qc_warnings"]
+    assert "zero_followup_extent_requires_reconstruction_review" not in result["qc_warnings"]
