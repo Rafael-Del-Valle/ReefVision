@@ -412,7 +412,9 @@ def test_projected_unit_rejects_cross_metric_identity_and_unit_conflicts(
     )
     width = [baseline, final]
 
-    def unit_summaries(rows: list[EcologyMeasurementCandidate]):
+    def unit_summaries(
+        rows: list[EcologyMeasurementCandidate],
+    ) -> list[EcologyProjectedUnitSummary]:
         qc = summarize_sampling_date_qc(rows)
         changes = summarize_projected_endpoint_changes(rows, qc)
         return summarize_projected_unit_summaries(rows, changes)
