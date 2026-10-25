@@ -7,6 +7,8 @@ from math import exp, isclose, isfinite, log
 from re import fullmatch
 from typing import Any
 
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshRegistrationEvidence
+
 
 def _is_sha256_fingerprint(value: Any) -> bool:
     """Check format only; caller-supplied hashes remain unverified evidence."""
@@ -17,7 +19,11 @@ def _is_sha256_fingerprint(value: Any) -> bool:
     )
 
 
-def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+def compare_mesh_observations(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    registration_evidence: MeshRegistrationEvidence | dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Compare two explicitly identified timepoints without asserting coral growth."""
     first = before.get("provenance")
     second = after.get("provenance")
@@ -367,6 +373,25 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         warnings.append("coordinate_frames_differ_registration_required")
     else:
         warnings.append("matching_coordinate_frame_id_not_registration_proof")
+    # Registration residuals are audit metadata, not verified transforms or accuracy.
+    registration_record = None
+    if registration_evidence is None:
+        warnings.append("registration_evidence_unavailable")
+    else:
+        try:
+            registration = MeshRegistrationEvidence.model_validate(registration_evidence)
+        except ValueError as exc:
+            raise ValueError("Invalid pairwise registration evidence") from exc
+        if (
+            frames[0] is None
+            or frames[1] is None
+            or registration.source_frame_id != frames[0]
+            or registration.target_frame_id != frames[1]
+        ):
+            raise ValueError("Registration evidence frame IDs must match observation source frames")
+        registration_record = registration.model_dump(mode="json")
+        warnings.append("registration_residual_requires_independent_review")
+        warnings.append("registration_transform_and_accuracy_not_verified")
     for field, warning in (
         ("source_format", "mesh_source_formats_differ_between_observations"),
         ("calibration_method", "calibration_methods_differ_between_observations"),
@@ -486,6 +511,10 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
             "after_geometry_sha256": second.get("geometry_sha256"),
             "before_coordinate_frame_id": frames[0],
             "after_coordinate_frame_id": frames[1],
+            "registration_evidence": registration_record,
+            "registration_evidence_review_status": (
+                "caller_supplied_unverified" if registration_record is not None else "unavailable"
+            ),
             "before_calibration_evidence": first.get("calibration_evidence"),
             "after_calibration_evidence": second.get("calibration_evidence"),
             "specimen_identity_verified": False,
