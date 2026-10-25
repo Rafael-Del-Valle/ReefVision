@@ -1019,3 +1019,87 @@ def test_frozen_pose_review_evidence_corruption_fails_closed(
             PoseTrainingDatasetService(session).manifest(dataset_id).manifest_sha256
             == dataset["manifest_sha256"]
         )
+
+
+def test_resigned_empty_pose_is_not_scientist_verified(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise a real API-frozen, scientist-verified item, not a fabricated
+    # training manifest. Re-signing both digests must not validate zero landmarks.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    dataset_id = str(dataset["id"])
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
+        )
+        assert frozen is not None and item is not None
+        assert item.canonical_pose_json.get("pose_observations") or item.canonical_pose_json.get(
+            "keypoints"
+        )
+        empty_pose = {
+            **item.canonical_pose_json,
+            "pose_observations": [],
+            "keypoints": [],
+        }
+        item.canonical_pose_json = empty_pose
+        verified_payload = {
+            "schema_version": "pose-active-learning-verified-pose-0001",
+            "video_track_id": item.video_track_id,
+            "track_revision": item.verified_track_revision,
+            "focus_frame": item.frame_index,
+            "pose_schema_id": item.pose_schema_id,
+            "pose_schema_revision": item.pose_schema_revision,
+            "pose_observations": [],
+            "keypoints": [],
+        }
+        item.verified_pose_sha256 = canonical_json_sha256(verified_payload)
+        summaries = [dict(summary) for summary in frozen.manifest_json["items"]]
+        matching = [summary for summary in summaries if summary["item_id"] == item.id]
+        assert len(matching) == 1
+        matching[0]["verified_pose_sha256"] = item.verified_pose_sha256
+        matching[0]["canonical_pose_sha256"] = canonical_json_sha256(empty_pose)
+        resigned_manifest = {**frozen.manifest_json, "items": summaries}
+        frozen.manifest_json = resigned_manifest
+        frozen.manifest_sha256 = canonical_json_sha256(resigned_manifest)
+        resigned_sha = frozen.manifest_sha256
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).native_package(dataset_id)
+
+    graph = {
+        "graph_id": "track-e-empty-resigned-pose",
+        "name": "Reject re-signed empty scientist pose",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": {
+                    "dataset_id": dataset_id,
+                    "manifest_sha256": resigned_sha,
+                },
+            }
+        ],
+        "edges": [],
+    }
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] is False
+    assert "pose_dataset_item_lineage_mismatch" in {
+        issue["code"] for issue in plan.json()["issues"]
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
