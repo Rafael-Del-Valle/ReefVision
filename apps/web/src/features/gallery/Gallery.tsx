@@ -219,12 +219,19 @@ function focusedImageUrl(
   imageId: string,
   useThumbnail: boolean,
   retry: number,
+  thumbnailPath?: string | null,
 ): string {
   const original = useThumbnail
     ? imageThumbnailUrl(imageId)
     : imageDisplayUrl(imageId);
-  if (retry === 0) return original;
-  return `${original}${original.includes("?") ? "&" : "?"}rv_retry=${retry}`;
+  const retried = retry === 0
+    ? original
+    : `${original}${original.includes("?") ? "&" : "?"}rv_retry=${retry}`;
+  // A background thumbnail job may replace a failed file at the same API
+  // endpoint. Version the request by its persisted path to avoid a cached 404.
+  return useThumbnail && thumbnailPath
+    ? `${retried}${retried.includes("?") ? "&" : "?"}rv_thumb=${encodeURIComponent(thumbnailPath)}`
+    : retried;
 }
 
 /**
@@ -234,6 +241,7 @@ function focusedImageUrl(
 function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   const [phase, setPhase] = useState<PreviewLoadPhase>("loading");
   const [retry, setRetry] = useState(0);
+  const attemptedThumbnailPath = useRef<string | null>(null);
   const thumbnail =
     phase === "thumbnail-loading" || phase === "thumbnail-loaded";
   const waiting = phase === "loading" || phase === "thumbnail-loading";
@@ -252,6 +260,22 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     }, 30_000);
     return () => window.clearTimeout(timer);
   }, [image.thumbnail_path, phase, waiting]);
+
+  useEffect(() => {
+    if (phase === "thumbnail-loading" && image.thumbnail_path) {
+      attemptedThumbnailPath.current = image.thumbnail_path;
+    }
+    // A thumbnail can finish asynchronously after the original image has
+    // failed. Recover automatically, but never retry a failed path in a loop.
+    if (
+      phase === "error" &&
+      image.thumbnail_path &&
+      attemptedThumbnailPath.current !== image.thumbnail_path
+    ) {
+      attemptedThumbnailPath.current = image.thumbnail_path;
+      setPhase("thumbnail-loading");
+    }
+  }, [image.thumbnail_path, phase]);
 
   function handleLoad(event: { currentTarget: HTMLImageElement }) {
     // The load event is sufficient to reveal the image. In some WebView2
@@ -306,7 +330,7 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
           )}
           <img
             key={`${retry}:${thumbnail ? "thumbnail" : "original"}`}
-            src={focusedImageUrl(image.id, thumbnail, retry)}
+            src={focusedImageUrl(image.id, thumbnail, retry, image.thumbnail_path)}
             alt={`Focused project image: ${image.original_filename}`}
             decoding="async"
             onLoad={handleLoad}
