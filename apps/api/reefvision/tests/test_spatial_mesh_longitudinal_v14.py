@@ -204,6 +204,10 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
         "identical_geometry_area_inconsistent_with_calibration_scale" not in result["qc_warnings"]
     )
     assert result["provenance"]["calibration_verified"] is False
+    assert (
+        "identical_geometry_extent_inconsistent_with_calibration_scale"
+        not in result["qc_warnings"]
+    )
 
     # The same warning and calibration ratio must survive a persisted typed
     # Workflow Builder execution, not only the standalone API request.
@@ -894,6 +898,7 @@ def test_scale_normalized_extent_rejects_overflow_and_positive_underflow(
     assert "scale_normalized_extent_ratio_out_of_numeric_range" in result["qc_warnings"]
     assert result["provenance"]["specimen_identity_verified"] is False
 
+
 def test_exact_zero_followup_is_preserved_in_saved_workflow(client: TestClient) -> None:
     """Zero-area/extent reconstruction is provisional, not numeric underflow."""
     project_id = str(create_project(client, "Zero followup mesh QC")["id"])
@@ -1006,3 +1011,54 @@ def test_positive_underflow_is_not_reported_as_true_zero_area() -> None:
     assert "scale_normalized_extent_ratio_out_of_numeric_range" in result["qc_warnings"]
     assert "zero_followup_surface_area_requires_reconstruction_review" not in result["qc_warnings"]
     assert "zero_followup_extent_requires_reconstruction_review" not in result["qc_warnings"]
+
+
+@pytest.mark.parametrize(
+    ("early_extent", "late_extent", "inconsistent"),
+    [
+        (1.0, 2.0, False),
+        (1.0, 3.0, True),
+        (0.0, 0.0, False),
+        (0.0, 2.0, True),
+        (1.0, 0.0, True),
+        (None, 2.0, False),
+    ],
+)
+def test_identical_mesh_extent_requires_calibration_consistency(
+    early_extent: float | None, late_extent: float, inconsistent: bool
+) -> None:
+    """Identical geometry cannot acquire a different raw extent after rescaling."""
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "axis_aligned_bounding_box_diagonal_m": early_extent,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "geometry_sha256": "a" * 64,
+            "meters_per_mesh_unit": 1.0,
+        },
+    }
+    after = {
+        **before,
+        "surface_area_m2": 4.0,
+        "axis_aligned_bounding_box_diagonal_m": late_extent,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "meters_per_mesh_unit": 2.0,
+        },
+    }
+    result = compare_mesh_observations(before, after)
+    warning = "identical_geometry_extent_inconsistent_with_calibration_scale"
+    assert (warning in result["qc_warnings"]) is inconsistent
+    assert "identical_geometry_area_inconsistent_with_calibration_scale" not in result[
+        "qc_warnings"
+    ]
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["coordinate_registration_verified"] is False
