@@ -242,8 +242,10 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     )
 
 
-def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool | str]:
-    """Read only a bounded tail of a run's persisted log, never an arbitrary path."""
+def _training_log_tail(
+    log_path: str | None, data_dir: Path, *, finalized: bool = False
+) -> dict[str, bool | str]:
+    """Read a bounded persisted log tail; include EOF only after run termination."""
     empty: dict[str, bool | str] = {"available": False, "text": ""}
     if not log_path:
         return empty
@@ -280,7 +282,7 @@ def _training_log_tail(log_path: str | None, data_dir: Path) -> dict[str, bool |
             # Training workers may still be appending the final epoch/loss
             # record. Never display a partially written value as complete.
             # CR-terminated progress updates are complete records too.
-            if payload and payload[-1] not in (10, 13):
+            if payload and payload[-1] not in (10, 13) and not finalized:
                 boundary = max(payload.rfind(b"\n"), payload.rfind(b"\r"))
                 payload = payload[: boundary + 1] if boundary >= 0 else b""
     except OSError:
@@ -299,7 +301,11 @@ def get_training_log_tail(
     response.headers["Cache-Control"] = "no-store"
     run = service(request, session).get_run(run_id)
     settings: Settings = request.app.state.settings
-    return _training_log_tail(run.logs_path, settings.resolved_data_dir)
+    return _training_log_tail(
+        run.logs_path,
+        settings.resolved_data_dir,
+        finalized=getattr(run, "status", None) in {"completed", "failed", "cancelled"},
+    )
 
 
 @router.get("/training-runs/{run_id}/artifacts/{artifact_index}", response_class=FileResponse)
