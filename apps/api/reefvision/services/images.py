@@ -286,7 +286,9 @@ class ImageService:
         if not needs_png:
             return source, image.media_type
 
-        display_path = source.parent.parent / "display" / f"{image.id}.png"
+        # Version the derived cache: older PNGs were EXIF-transposed and must
+        # not be reused against raw-pixel scientific annotations.
+        display_path = source.parent.parent / "display-v2" / f"{image.id}.png"
         if not display_path.is_file():
             create_browser_display(source, display_path)
         return display_path, "image/png"
