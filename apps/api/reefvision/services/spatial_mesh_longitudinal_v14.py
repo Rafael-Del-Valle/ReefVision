@@ -223,6 +223,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     normalized_ratio_out_of_range = False
     if before_scale is not None and after_scale is not None and a0 > 0:
         if a1 == 0:
+            # An exact zero observation is not positive floating-point underflow.
             scale_normalized_area_ratio = 0.0
         else:
             try:
@@ -231,10 +232,10 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
                 )
             except OverflowError:
                 normalized_ratio_out_of_range = True
-            if scale_normalized_area_ratio == 0:
-                # A positive geometric ratio underflowed to zero.
-                scale_normalized_area_ratio = None
-                normalized_ratio_out_of_range = True
+                if scale_normalized_area_ratio == 0:
+                    # Only a positive ratio can underflow to floating-point zero.
+                    scale_normalized_area_ratio = None
+                    normalized_ratio_out_of_range = True
     # Remove nominal scale from axis-aligned diagonal ratios as a separate
     # reconstruction diagnostic. This is not a branch-length or growth metric.
     scale_normalized_extent_ratio = None
@@ -247,20 +248,19 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         and late_extent is not None
     ):
         if late_extent == 0:
+            # An exact zero observation is not positive floating-point underflow.
             scale_normalized_extent_ratio = 0.0
         else:
             try:
                 scale_normalized_extent_ratio = exp(
-                    log(late_extent)
-                    - log(early_extent)
-                    - (log(after_scale) - log(before_scale))
+                    log(late_extent) - log(early_extent) - (log(after_scale) - log(before_scale))
                 )
             except OverflowError:
                 extent_ratio_out_of_range = True
-            if scale_normalized_extent_ratio == 0:
-                # Positive ratios below float range must not masquerade as zero.
-                scale_normalized_extent_ratio = None
-                extent_ratio_out_of_range = True
+                if scale_normalized_extent_ratio == 0:
+                    # Positive ratios below float range must not masquerade as zero.
+                    scale_normalized_extent_ratio = None
+                    extent_ratio_out_of_range = True
     warnings = [
         "specimen_identity_not_verified",
         "observation_metadata_not_verified",
@@ -287,6 +287,10 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         warnings.append("calibration_scale_changed_between_observations")
     if a0 == 0:
         warnings.append("relative_surface_area_change_unavailable_zero_baseline")
+    if a0 > 0 and a1 == 0:
+        warnings.append("zero_followup_surface_area_requires_reconstruction_review")
+    if early_extent is not None and early_extent > 0 and late_extent == 0:
+        warnings.append("zero_followup_extent_requires_reconstruction_review")
     if any(observation_qc):
         warnings.append("source_mesh_qc_requires_review")
     for field, warning in (
