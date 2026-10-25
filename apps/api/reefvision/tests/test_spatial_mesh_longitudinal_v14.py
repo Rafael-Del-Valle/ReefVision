@@ -44,9 +44,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["delta_surface_area_m2"] == pytest.approx(0.5)
     assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
-    assert expected["scale_normalized_surface_area_ratio_after_to_before"] == (
-        pytest.approx(2)
-    )
+    assert expected["scale_normalized_surface_area_ratio_after_to_before"] == (pytest.approx(2))
     assert (
         "scale_normalized_area_ratio_requires_common_units_and_registration"
         in expected["qc_warnings"]
@@ -188,9 +186,7 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     assert result["before_meters_per_mesh_unit"] == 1
     assert result["after_meters_per_mesh_unit"] == 2
     assert result["calibration_scale_ratio_after_to_before"] == pytest.approx(2)
-    assert result["scale_normalized_surface_area_ratio_after_to_before"] == (
-        pytest.approx(1)
-    )
+    assert result["scale_normalized_surface_area_ratio_after_to_before"] == (pytest.approx(1))
     assert (
         result["provenance"]["before_geometry_sha256"]
         == (result["provenance"]["after_geometry_sha256"])
@@ -726,7 +722,7 @@ def test_identical_geometry_requires_area_consistent_with_scale(
             "observation_id": "first",
             "observed_at_utc": "2026-10-01T12:00:00Z",
             "calibration_verified": False,
-            "geometry_sha256": "same-source",
+            "geometry_sha256": "a" * 64,
             "meters_per_mesh_unit": 1.0,
         },
     }
@@ -748,4 +744,54 @@ def test_identical_geometry_requires_area_consistent_with_scale(
         assert normalized == pytest.approx(second_area / (4 * first_area))
     else:
         assert normalized is None
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("first_hash", "second_hash"),
+    [
+        ("placeholder", "placeholder"),
+        ("A" * 64, "A" * 64),
+        ("g" * 64, "g" * 64),
+        ("", ""),
+        (None, None),
+        ("a" * 64, None),
+    ],
+)
+def test_malformed_or_missing_geometry_hash_cannot_assert_identical_source(
+    first_hash: object, second_hash: object
+) -> None:
+    """A matching label is not a valid SHA-256 source fingerprint."""
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "geometry_sha256": first_hash,
+            "meters_per_mesh_unit": 1.0,
+        },
+    }
+    after = {
+        **before,
+        "surface_area_m2": 5.0,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "geometry_sha256": second_hash,
+            "meters_per_mesh_unit": 2.0,
+        },
+    }
+    result = compare_mesh_observations(before, after)
+    assert "geometry_fingerprint_missing_or_invalid" in result["qc_warnings"]
+    assert "identical_geometry_fingerprint" not in result["qc_warnings"]
+    assert (
+        "identical_geometry_area_inconsistent_with_calibration_scale"
+        not in result["qc_warnings"]
+    )
     assert result["provenance"]["specimen_identity_verified"] is False
