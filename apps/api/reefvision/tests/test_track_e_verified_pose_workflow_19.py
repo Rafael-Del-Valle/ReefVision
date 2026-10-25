@@ -264,6 +264,61 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         item.canonical_pose_json = original_pose
         session.commit()
 
+    # The verified-landmark digest intentionally omits the frame's confidence
+    # and crop bbox. The new frozen-manifest digest must also protect these
+    # persisted frame fields against post-freeze changes.
+    with app.state.session_factory() as session:
+        service = PoseTrainingDatasetService(session)
+        frozen_manifest = service.manifest(dataset_id).manifest_json
+        assert "canonical_pose_sha256" in frozen_manifest["items"][0]
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(
+                PoseTrainingDatasetItem.dataset_id == dataset_id
+            )
+        )
+        assert item is not None
+        original_pose = dict(item.canonical_pose_json)
+        changed_confidence = (
+            0.123456 if original_pose.get("confidence") != 0.123456 else 0.654321
+        )
+        item.canonical_pose_json = {
+            **original_pose,
+            "confidence": changed_confidence,
+        }
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).manifest(dataset_id)
+
+    confidence_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
+    )
+    assert confidence_plan.status_code == 200, confidence_plan.text
+    assert confidence_plan.json()["valid"] is False
+    assert "pose_dataset_item_lineage_mismatch" in {
+        issue["code"] for issue in confidence_plan.json()["issues"]
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
+
+    with app.state.session_factory() as session:
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(
+                PoseTrainingDatasetItem.dataset_id == dataset_id
+            )
+        )
+        assert item is not None
+        item.canonical_pose_json = original_pose
+        session.commit()
+
     # A recomputed checksum must not legitimize a frozen manifest that no
     # longer guarantees scientist-verified-only training truth.
     with app.state.session_factory() as session:
