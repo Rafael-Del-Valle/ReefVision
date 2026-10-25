@@ -329,3 +329,23 @@ missing values. Invalid or different fingerprints cannot trigger the
 identical-source-specific warning. The same comparison engine is used by the
 standalone endpoint and executable persisted Workflow Builder node; neither
 verifies the authenticity of caller-provided fingerprints.
+
+## Pairwise coordinate-registration diagnostics (provisional)
+
+The standalone longitudinal mesh comparison API accepts optional
+`registration_evidence` with source/target frame identifiers, alignment method,
+RMS residual in meters, matched correspondence count (at least three), and an
+evidence note. The frame IDs must match the observations. Non-finite/negative
+residuals, malformed counts, and unrecognized fields (including any caller
+`verified` flag) are rejected. The executable, saved Workflow Builder
+`mesh_longitudinal_comparison` node accepts the same typed evidence and
+persists it in the comparison artifact.
+
+**This is an audit record, not a registration algorithm or approval.** A low
+RMS residual does not demonstrate independent accuracy, valid transformations,
+adequate coverage, or coral identity. The service does not compute or verify
+a transform: `coordinate_registration_verified` remains false and the
+comparison remains provisional with explicit review warnings. Missing
+registration evidence stays null rather than being inferred from matching
+frame labels. Full transform/landmark storage and independent human review
+remain future work.
