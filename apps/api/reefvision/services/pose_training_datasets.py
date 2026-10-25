@@ -78,7 +78,10 @@ def frozen_pose_item_fingerprints_match(
     rows = session.scalars(
         select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset.id)
     ).all()
-    if len(rows) != dataset.item_count:
+    # A re-signed, emptied dataset is not scientist-verified training truth.
+    # Freezing requires at least one verified item, even if the row count,
+    # manifest, and checksum have all been changed to agree on zero.
+    if dataset.item_count < 1 or len(rows) != dataset.item_count:
         return False
 
     # A matching manifest and item_sha256 column cannot prove that the
