@@ -291,3 +291,25 @@ truncated, or placeholder fingerprint produces
 caller-supplied fingerprints are not authenticated or evidence of the same
 biological organism. The original fingerprint values remain in provenance for
 audit. Standalone and saved Workflow Builder comparisons use the same rule.
+
+## Exact-zero followup versus numerical underflow
+
+The standalone longitudinal comparison and saved, typed
+`mesh_longitudinal_comparison` Workflow Builder node distinguish a **reported
+zero** followup area or axis-aligned extent from a strictly positive geometric
+ratio that underflows floating-point precision. With a positive baseline and
+valid calibration scales, an exact zero followup produces a normalized ratio
+of `0.0`. A positive ratio too small to represent produces `null` and the
+existing `scale_normalized_area_ratio_out_of_numeric_range` or
+`scale_normalized_extent_ratio_out_of_numeric_range` QC warning instead.
+The latter must not be interpreted as complete disappearance.
+
+A zero followup after a positive baseline also raises
+`zero_followup_surface_area_requires_reconstruction_review` or
+`zero_followup_extent_requires_reconstruction_review`, respectively.
+A zero area or extent may arise from degenerate, incomplete, or failed
+reconstruction rather than biological loss. No organism mortality, tissue
+loss, verified reidentification, or growth conclusion is inferred. A
+standalone-versus-saved-workflow regression uses an explicitly degenerate
+followup mesh and compares the persisted artifact byte-for-byte at the
+JSON-payload level; a separate regression retains positive-underflow QC.
