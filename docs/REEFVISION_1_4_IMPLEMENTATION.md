@@ -313,3 +313,19 @@ loss, verified reidentification, or growth conclusion is inferred. A
 standalone-versus-saved-workflow regression uses an explicitly degenerate
 followup mesh and compares the persisted artifact byte-for-byte at the
 JSON-payload level; a separate regression retains positive-underflow QC.
+
+## Identical-source topology metadata consistency (provisional)
+
+When two timepoints claim the **same syntactically valid SHA-256 geometry
+fingerprint**, calibration changes cannot alter the original triangle count,
+connected-patch count, boundary-edge count, nonmanifold-edge count, or
+number of degenerate faces. If any available topology counts disagree, the
+comparison emits `identical_geometry_topology_metadata_inconsistent` in
+addition to `reconstruction_topology_changed_requires_review`. This is a
+provenance and reconstruction-integrity warning, **not** a biological change
+or organism reidentification. Missing legacy topology fields retain the
+`reconstruction_topology_comparison_incomplete` warning rather than inventing
+missing values. Invalid or different fingerprints cannot trigger the
+identical-source-specific warning. The same comparison engine is used by the
+standalone endpoint and executable persisted Workflow Builder node; neither
+verifies the authenticity of caller-provided fingerprints.
