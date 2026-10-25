@@ -263,12 +263,17 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         "sample.JPG": ("JPEG", "image/jpeg"),
         "sample.JPEG": ("JPEG", "image/jpeg"),
         "sample.jpe": ("JPEG", "image/jpeg"),
+        "sample.JPE": ("JPEG", "image/jpeg"),
         "sample.JFIF": ("JPEG", "image/jpeg"),
+        "sample.jfif": ("JPEG", "image/jpeg"),
         "sample.jfi": ("JPEG", "image/jpeg"),
+        "sample.JFI": ("JPEG", "image/jpeg"),
         "sample.jif": ("JPEG", "image/jpeg"),
+        "sample.JIF": ("JPEG", "image/jpeg"),
         "sample.png": ("PNG", "image/png"),
         "sample.tif": ("TIFF", "image/tiff"),
         "sample.tiff": ("TIFF", "image/tiff"),
+        "sample.TIFF": ("TIFF", "image/tiff"),
         "sample.webp": ("WEBP", "image/webp"),
         "sample.bmp": ("BMP", "image/bmp"),
         "sample.DIB": ("BMP", "image/bmp"),
@@ -279,15 +284,20 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         Image.new("RGB", (30 + index, 20), ((index * 17) % 256, 80, 120)).save(
             stream, format=format_name
         )
+        original_bytes = stream.getvalue()
         report = import_one(
             client,
             project["id"],
             filename=filename,
-            content=stream.getvalue(),
+            content=original_bytes,
             relative_path=f"formats/{filename}",
         )
         image_id = report["successful"][0]["image_id"]
-        assert client.get(f"/api/v1/images/{image_id}").json()["media_type"] == media_type
+        record = client.get(f"/api/v1/images/{image_id}").json()
+        assert record["media_type"] == media_type
+        assert (record["width_px"], record["height_px"]) == (30 + index, 20)
+        assert record["original_filename"] == filename
+        assert client.get(f"/api/v1/images/{image_id}/content").content == original_bytes
 
 
 @pytest.mark.parametrize("orientation", range(2, 9))
@@ -298,9 +308,7 @@ def test_exif_oriented_jpeg_display_preserves_raw_pixel_geometry(
     project = create_project(client, f"EXIF orientation {orientation} geometry")
     original_image = Image.new("RGB", (64, 48))
     colors = [(240, 20, 20), (20, 240, 20), (20, 20, 240), (240, 240, 20)]
-    for (x, y), color in zip(
-        [(0, 0), (32, 0), (0, 24), (32, 24)], colors, strict=True
-    ):
+    for (x, y), color in zip([(0, 0), (32, 0), (0, 24), (32, 24)], colors, strict=True):
         original_image.paste(color, (x, y, x + 32, y + 24))
     exif = Image.Exif()
     exif[274] = orientation
@@ -340,6 +348,7 @@ def test_exif_oriented_jpeg_display_preserves_raw_pixel_geometry(
                     for channel, reference in zip(actual, expected, strict=True)
                 )
     assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
 
 def test_cmyk_jpeg_import_has_browser_safe_display(client: TestClient) -> None:
     project = create_project(client, "CMYK JPEG")
