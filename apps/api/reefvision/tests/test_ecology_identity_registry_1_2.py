@@ -465,3 +465,108 @@ def test_corrupt_latest_lineage_fails_closed_in_api_and_saved_workflow(
     assert not any(
         row["data_type"] == "ecology_identity_registry" for row in detail.json()["artifacts"]
     )
+
+def test_superseded_ecological_identity_history_in_saved_workflow(client: TestClient) -> None:
+    """Reviewers can inspect every earlier tank assignment, not only its digest."""
+    project_id = str(create_project(client, "Superseded ecological identity audit")["id"])
+    assert _register(client, project_id, "parent-16").status_code == 201
+    created = _register(
+        client,
+        project_id,
+        "fragment-16a",
+        "fragment",
+        parent_colony_key="parent-16",
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
+    )
+    assert created.status_code == 201, created.text
+    url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
+    before = client.get(url)
+    assert before.status_code == 200, before.text
+    assert before.json()["history_revision_count"] == len(before.json()["identity_history"]) == 2
+
+    corrected = client.post(
+        f"/api/v1/projects/{project_id}/ecology/organisms/fragment-16a/revisions",
+        json={
+            "expected_revision": 1,
+            "kind": "fragment",
+            "parent_colony_key": "parent-16",
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-B",
+            "reason": "Correct tank assignment after inspecting laboratory records",
+        },
+    )
+    assert corrected.status_code == 201, corrected.text
+    response = client.get(url)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["history_revision_count"] == len(body["identity_history"]) == 3
+    prior_and_current = [
+        row for row in body["identity_history"] if row["organism_key"] == "fragment-16a"
+    ]
+    assert [row["revision"] for row in prior_and_current] == [1, 2]
+    assert [row["experimental_unit_id"] for row in prior_and_current] == ["tank-A", "tank-B"]
+    assert all(row["reason"] and row["created_at"] for row in prior_and_current)
+    assert body["identities"][-1]["experimental_unit_id"] == "tank-B"
+    assert body["history_sha256"] != before.json()["history_sha256"]
+    assert body["evidence_level"] == "registered_unverified"
+    assert body["review_gate"] == "scientist_review_required"
+
+    graph: dict[str, Any] = {
+        "graph_id": "ecology-superseded-identity-audit",
+        "name": "Audit full organism revision history",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    nodes = client.get("/api/v1/workflow-graphs/node-registry")
+    assert nodes.status_code == 200, nodes.text
+    source = next(row for row in nodes.json() if row["node_type"] == "ecology_identity_registry_source")
+    assert source["output_ports"][0]["accepted_types"] == ["ecology_identity_registry"]
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in detail.json()["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == body
+
+
+def test_legacy_ecological_registry_artifact_defaults_to_empty_history() -> None:
+    from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
+
+    old = EcologyIdentityRegistryResponse.model_validate(
+        {"project_id": "legacy", "identities": [], "snapshot_sha256": "legacy-hash"}
+    )
+    assert old.identity_history == []
+    assert old.history_revision_count == 0
+    assert old.evidence_level == "registered_unverified"
+    assert old.review_gate == "scientist_review_required"

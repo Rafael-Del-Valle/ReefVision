@@ -1648,3 +1648,24 @@ The separate frontend CI failure is in an external pose-import UI test; it is
 not ecological code and is left untouched for its owning track. Exact-head
 CI, independent scientific review and installed Windows acceptance are still
 required; **1.2 is not release-ready**.
+
+## Full append-only organism identity chronology (2026-10-25; development)
+
+The project-scoped `identity-registry` standalone API and existing executable,
+typed, persisted `ecology_identity_registry_source` Workflow Builder node now
+return `identity_history`: the full, deterministic append-only revision
+sequence, including superseded tank/colony assignments, correction reasons
+and timestamps. Previously only latest identities plus a revision count and
+SHA-256 history fingerprint were visible. The additive typed field defaults
+to an empty list when older saved workflow artifacts are decoded. Existing
+fingerprints, linked annotation/calibration evidence, typed workflow ports,
+and project ownership remain unchanged. No migration is needed because
+the append-only records already exist. Regression tests cover revised
+fragment identity, earlier tank assignment retention, saved-workflow parity,
+and legacy deserialization.
+
+These are **registered, unverified identity claims**, not authenticated
+scientist approval or a verified experimental design. All outputs retain
+`registered_unverified` and `scientist_review_required`. Verified observation
+histories, design registration, real-dataset acceptance, 1.1 migration
+reconciliation and installed Windows scientific/GUI acceptance remain pending.

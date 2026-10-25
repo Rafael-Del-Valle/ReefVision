@@ -827,6 +827,7 @@ class EcologyIdentityService:
                 )
             )
         )
+        identity_history = [EcologyIdentityRow.model_validate(row) for row in history]
         history_rows = [
             {
                 "id": row.id,
@@ -884,6 +885,7 @@ class EcologyIdentityService:
                 }
             ),
             history_revision_count=len(history_rows),
+            identity_history=identity_history,
             history_sha256=canonical_json_sha256(
                 {
                     "algorithm_version": "ecology-identity-history-0001",

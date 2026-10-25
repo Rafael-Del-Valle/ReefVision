@@ -152,6 +152,9 @@ class EcologyIdentityRegistryResponse(BaseModel):
     calibration_evidence_links: list[EcologyCalibrationEvidenceRow] = Field(default_factory=list)
     calibration_evidence_count: int = 0
     calibration_evidence_sha256: str | None = None
+    # The complete append-only revision trail is reviewable, including superseded
+    # experimental-unit assignments. Older workflow artifacts decode as [].
+    identity_history: list[EcologyIdentityRow] = Field(default_factory=list)
     # Optional defaults preserve deserialization of earlier persisted artifacts.
     history_sha256: str | None = None
     history_revision_count: int = 0
