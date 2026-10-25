@@ -44,10 +44,13 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["delta_surface_area_m2"] == pytest.approx(0.5)
     assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
-    assert expected["scale_normalized_surface_area_ratio_after_to_before"] == pytest.approx(2)
-    assert "scale_normalized_area_ratio_requires_common_units_and_registration" in expected[
-        "qc_warnings"
-    ]
+    assert expected["scale_normalized_surface_area_ratio_after_to_before"] == (
+        pytest.approx(2)
+    )
+    assert (
+        "scale_normalized_area_ratio_requires_common_units_and_registration"
+        in expected["qc_warnings"]
+    )
     assert expected["elapsed_days"] == pytest.approx(1)
     assert expected["before_observed_at_utc_normalized"] == "2026-10-01T12:00:00Z"
     assert expected["after_observed_at_utc_normalized"] == "2026-10-02T12:00:00Z"
@@ -185,7 +188,9 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     assert result["before_meters_per_mesh_unit"] == 1
     assert result["after_meters_per_mesh_unit"] == 2
     assert result["calibration_scale_ratio_after_to_before"] == pytest.approx(2)
-    assert result["scale_normalized_surface_area_ratio_after_to_before"] == pytest.approx(1)
+    assert result["scale_normalized_surface_area_ratio_after_to_before"] == (
+        pytest.approx(1)
+    )
     assert (
         result["provenance"]["before_geometry_sha256"]
         == (result["provenance"]["after_geometry_sha256"])
