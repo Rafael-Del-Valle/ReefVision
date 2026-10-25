@@ -13,8 +13,8 @@ from reefvision.db.models import ImageAsset
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
-    EcologySamplingDateQC,
     EcologyProjectedUnitSummary,
+    EcologySamplingDateQC,
 )
 from reefvision.services.ecology_measurement_candidates import (
     summarize_projected_endpoint_changes,
@@ -57,6 +57,7 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     assert len(payload["sampling_date_qc"]) == 2
     assert all(row["qc_status"] == "missing_timestamps" for row in payload["sampling_date_qc"])
     assert all(row["reused_image_ids"] == [] for row in payload["sampling_date_qc"])
+    assert all(row["reused_image_sha256"] == [] for row in payload["sampling_date_qc"])
     assert all(
         row["review_gate"] == "scientist_review_required" for row in payload["sampling_date_qc"]
     )
@@ -213,6 +214,7 @@ def test_utc_date_qc_rejects_replicates_missing_dates_and_mixed_units(
     second = first.model_copy(
         update={
             "image_id": "second-source-image",
+            "image_sha256": "1" * 64,
             "capture_timestamp_utc": datetime(2026, 4, 4, 9, tzinfo=UTC),
         }
     )
@@ -280,16 +282,32 @@ def test_reused_image_across_dates_cannot_become_projected_growth(
     assert qc[0].review_gate == "scientist_review_required"
     assert summarize_projected_endpoint_changes([baseline, replayed], qc) == []
 
+    # A reimported copy has a different database ID but identical image bytes.
+    # It must not create a second biological observation date.
+    reimported = replayed.model_copy(update={"image_id": "reimported-photo"})
+    content_qc = summarize_sampling_date_qc([baseline, reimported])
+    assert content_qc[0].qc_status == "reused_image_content_across_dates"
+    assert content_qc[0].reused_image_ids == []
+    assert content_qc[0].reused_image_sha256 == [baseline.image_sha256]
+    assert content_qc[0].review_gate == "scientist_review_required"
+    assert summarize_projected_endpoint_changes([baseline, reimported], content_qc) == []
+
     # Legacy persisted QC records deserialize without the newly added field.
     legacy = qc[0].model_dump(mode="json")
     legacy.pop("reused_image_ids")
-    assert EcologySamplingDateQC.model_validate(legacy).reused_image_ids == []
+    legacy.pop("reused_image_sha256")
+    legacy_qc = EcologySamplingDateQC.model_validate(legacy)
+    assert legacy_qc.reused_image_ids == []
+    assert legacy_qc.reused_image_sha256 == []
 
     # A distinct photographed image can still enter a provisional date series.
-    distinct = replayed.model_copy(update={"image_id": "distinct-followup-image"})
+    distinct = replayed.model_copy(
+        update={"image_id": "distinct-followup-image", "image_sha256": "2" * 64}
+    )
     distinct_qc = summarize_sampling_date_qc([baseline, distinct])
     assert distinct_qc[0].qc_status == "date_series_candidate"
     assert distinct_qc[0].reused_image_ids == []
+    assert distinct_qc[0].reused_image_sha256 == []
     changes = summarize_projected_endpoint_changes([baseline, distinct], distinct_qc)
     assert len(changes) == 1
     assert changes[0].review_gate == "scientist_review_required"
@@ -313,6 +331,7 @@ def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     final = baseline.model_copy(
         update={
             "image_id": "different-image",
+            "image_sha256": "3" * 64,
             "annotation_evidence_id": "different-annotation-evidence",
             "calibration_evidence_id": "different-calibration-evidence",
             "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
@@ -413,6 +432,7 @@ def test_projected_endpoint_rechecks_qc_against_current_sources(
     final = baseline.model_copy(
         update={
             "image_id": "later-width-image",
+            "image_sha256": "4" * 64,
             "annotation_evidence_id": "later-width-annotation",
             "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
             "value": baseline.value + 2.5,
@@ -430,6 +450,7 @@ def test_projected_endpoint_rechecks_qc_against_current_sources(
         final.model_copy(update={"capture_timestamp_utc": datetime(2026, 4, 3, 12, tzinfo=UTC)}),
         final.model_copy(update={"identity_revision": baseline.identity_revision + 1}),
         final.model_copy(update={"unit": "cm"}),
+        final.model_copy(update={"image_sha256": baseline.image_sha256}),
     ]
     for changed in changed_sources:
         with pytest.raises(ValidationError, match="sampling-date QC does not match"):
@@ -463,6 +484,7 @@ def test_projected_unit_qc_excludes_incomplete_and_technical_replicates(
     last = first.model_copy(
         update={
             "image_id": "A-later",
+            "image_sha256": "5" * 64,
             "annotation_evidence_id": "annotation-A-later",
             "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
             "value": first.value + 2.5,
@@ -473,6 +495,7 @@ def test_projected_unit_qc_excludes_incomplete_and_technical_replicates(
             "organism_key": "organism-B",
             "parent_colony_key": "parent-B",
             "image_id": "B-earlier",
+            "image_sha256": "6" * 64,
             "annotation_evidence_id": "annotation-B-earlier",
             "value": 4.0,
         }
@@ -480,6 +503,7 @@ def test_projected_unit_qc_excludes_incomplete_and_technical_replicates(
     second_last = second_first.model_copy(
         update={
             "image_id": "B-later",
+            "image_sha256": "7" * 64,
             "annotation_evidence_id": "annotation-B-later",
             "capture_timestamp_utc": datetime(2026, 4, 4, 9, tzinfo=UTC),
             "value": 5.0,
@@ -550,6 +574,7 @@ def test_projected_unit_rejects_cross_metric_identity_and_unit_conflicts(
     final = baseline.model_copy(
         update={
             "image_id": "followup",
+            "image_sha256": "8" * 64,
             "annotation_evidence_id": "followup-annotation",
             "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
             "value": baseline.value + 1,

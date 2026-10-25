@@ -1251,3 +1251,30 @@ integrity guard, not verified specimen re-identification or an independent
 sampling-unit attestation. No migration, model acquisition, or environmental
 provider was added. Full CI and Windows/scientific acceptance are still
 required before any release claim.
+
+## Content-addressed replay guard for projected observations (2026-10-25)
+
+The source-linked sampling-date QC now also detects the **same SHA-256 image
+content** assigned to multiple UTC observation dates for an organism/metric,
+even when an imported copy has a different database image ID. This closes the
+image-ID-only replay loophole: reimporting a photograph cannot manufacture a
+longitudinal change or eligible experimental-unit/population summary. The
+deterministic `reused_image_sha256` diagnostic and
+`reused_image_content_across_dates` status remain explicitly unverified and
+require scientist review; the previous `reused_image_across_dates` status takes
+precedence when the exact image ID itself is reused. The new QC list defaults
+to empty when deserializing historical persisted artifacts. Real distinct
+image content remains eligible for provisional QC, subject to all existing
+identity, calibration, UTC, and experimental-design guards.
+
+The same service powers the standalone calibrated-measurement endpoint and the
+executable saved `ecology_identity_registry_source` Workflow Builder node with
+typed outputs, persisted provenance and review gates. The fingerprint algorithm
+advances to `ecology-measurement-candidates-0012`. Regression coverage includes
+reimported identical content, valid distinct-content controls, stale-QC
+rejection, backward-compatible deserialization, and standalone/saved-workflow
+payload parity. The preceding exact-head CI had **16/19 successful workflows**;
+all three failures were the same Ruff import-order error, corrected alongside
+this change. Exact-new-head CI, authenticated longitudinal observations,
+scientific acceptance and Windows installed-GUI testing remain outstanding.
+No migrations, cloud services, new model weights, or verified-dataset promotion.

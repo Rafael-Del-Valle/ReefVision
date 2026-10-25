@@ -48,6 +48,7 @@ def summarize_sampling_date_qc(
     for (organism_key, metric), records in sorted(groups.items()):
         date_counts: dict[str, int] = {}
         image_dates: dict[str, set[str]] = {}
+        image_content_dates: dict[str, set[str]] = {}
         missing_timestamp_image_ids: set[str] = set()
         for record in records:
             captured = record.capture_timestamp_utc
@@ -62,11 +63,15 @@ def summarize_sampling_date_qc(
             utc_date = captured.astimezone(UTC).date().isoformat()
             date_counts[utc_date] = date_counts.get(utc_date, 0) + 1
             image_dates.setdefault(record.image_id, set()).add(utc_date)
+            image_content_dates.setdefault(record.image_sha256, set()).add(utc_date)
 
         units = sorted({record.unit for record in records})
         duplicate_dates = sorted(date for date, count in date_counts.items() if count > 1)
         reused_image_ids = sorted(
             image_id for image_id, dates in image_dates.items() if len(dates) > 1
+        )
+        reused_image_sha256 = sorted(
+            digest for digest, dates in image_content_dates.items() if len(dates) > 1
         )
         contexts = {
             (
@@ -85,6 +90,8 @@ def summarize_sampling_date_qc(
             qc_status = "missing_timestamps"
         elif reused_image_ids:
             qc_status = "reused_image_across_dates"
+        elif reused_image_sha256:
+            qc_status = "reused_image_content_across_dates"
         elif duplicate_dates:
             qc_status = "same_day_technical_replicates"
         elif len(date_counts) < 2:
@@ -103,6 +110,7 @@ def summarize_sampling_date_qc(
                 duplicate_sampling_dates_utc=duplicate_dates,
                 missing_timestamp_image_ids=sorted(missing_timestamp_image_ids),
                 reused_image_ids=reused_image_ids,
+                reused_image_sha256=reused_image_sha256,
                 qc_status=qc_status,
             )
         )
@@ -601,7 +609,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0011",
+                "algorithm_version": "ecology-measurement-candidates-0012",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
