@@ -96,6 +96,10 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert "open_mesh_surface_not_enclosed" in expected["before_mesh_qc_warnings"]
     assert "open_mesh_surface_not_enclosed" in expected["after_mesh_qc_warnings"]
     assert "source_mesh_qc_requires_review" in expected["qc_warnings"]
+    assert expected["before_reconstruction_topology_counts"]["face_count"] == 1
+    assert expected["after_reconstruction_topology_counts"]["face_count"] == 1
+    assert expected["reconstruction_topology_changed_fields"] == []
+    assert "reconstruction_topology_changed_requires_review" not in expected["qc_warnings"]
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     mesh_node = next(
@@ -1150,3 +1154,75 @@ def test_mesh_comparison_rejects_invalid_coordinate_frame_metadata(
     }
     with pytest.raises(ValueError, match="Coordinate frame IDs"):
         compare_mesh_observations(before, after)
+
+def test_mesh_comparison_flags_changed_reconstruction_topology(
+    client: TestClient,
+) -> None:
+    """New reconstructed faces are not automatically new biological tissue."""
+    project_id = str(create_project(client, "Topology change QC")["id"])
+    before = _mesh("first", "2026-10-01T12:00:00Z", 1)
+    after = _mesh("second", "2026-10-02T12:00:00Z", 1)
+    after["vertices"] = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]]
+    after["faces"] = [[0, 1, 2], [1, 3, 2]]
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after},
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["before_reconstruction_topology_counts"]["face_count"] == 1
+    assert result["after_reconstruction_topology_counts"]["face_count"] == 2
+    assert result["before_reconstruction_topology_counts"]["boundary_edge_count"] == 3
+    assert result["after_reconstruction_topology_counts"]["boundary_edge_count"] == 4
+    assert result["reconstruction_topology_changed_fields"] == [
+        "face_count",
+        "boundary_edge_count",
+    ]
+    assert "reconstruction_topology_changed_requires_review" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+def _minimal_topology_pair() -> tuple[dict, dict]:
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "project_id": "project-1",
+        "face_count": 1,
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+        },
+    }
+    after = {
+        **before,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+        },
+    }
+    return before, after
+
+
+def test_mesh_comparison_keeps_legacy_missing_topology_unknown() -> None:
+    before, after = _minimal_topology_pair()
+    result = compare_mesh_observations(before, after)
+    assert result["reconstruction_topology_changed_fields"] == []
+    assert result["before_reconstruction_topology_counts"]["boundary_edge_count"] is None
+    assert "reconstruction_topology_comparison_incomplete" in result["qc_warnings"]
+    assert "reconstruction_topology_changed_requires_review" not in result["qc_warnings"]
+
+
+@pytest.mark.parametrize("invalid_count", [True, -1, 1.25, "2"])
+def test_mesh_comparison_rejects_malformed_topology_counts(
+    invalid_count: object,
+) -> None:
+    before, after = _minimal_topology_pair()
+    after["face_count"] = invalid_count
+    with pytest.raises(ValueError, match="face_count must be a nonnegative integer"):
+        compare_mesh_observations(before, after)
+
