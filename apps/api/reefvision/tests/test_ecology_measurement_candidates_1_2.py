@@ -470,7 +470,9 @@ def test_same_day_source_capture_conflicts_exclude_all_affected_series(
         }
     )
     clean = [baseline, followup, other_baseline, other_followup]
-    assert all(row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(clean))
+    assert all(
+        row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(clean)
+    )
 
     # Identical bytes with two *different* acquisition instants on the same
     # UTC date must invalidate both organisms, even with different image IDs.
@@ -520,7 +522,9 @@ def test_same_day_source_capture_conflicts_exclude_all_affected_series(
         }
     )
     valid = [baseline, followup, offset_equivalent, other_followup]
-    assert all(row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(valid))
+    assert all(
+        row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(valid)
+    )
     assert len(
         summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))
     ) == 2
