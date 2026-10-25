@@ -25,6 +25,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyProjectedEndpointChange,
     EcologyProjectedPopulationSummary,
     EcologyProjectedUnitSummary,
+    EcologyProjectedVisitCoverage,
     EcologySamplingDateQC,
 )
 from reefvision.services.ecology_identity import EcologyIdentityService
@@ -174,6 +175,75 @@ def summarize_sampling_date_qc(
             )
         )
     return rows
+
+
+def summarize_projected_visit_coverage(
+    candidates: list[EcologyMeasurementCandidate],
+) -> list[EcologyProjectedVisitCoverage]:
+    """Audit linked measurements per observed UTC date, never organism presence.
+
+    The comparison set contains only organisms with linked measurements in
+    this unit/metric/physical-unit series. It is not a planned study roster;
+    missing links are not evidence of absence, mortality or zero abundance.
+    """
+    groups: dict[
+        tuple[str | None, str | None, str, str], list[EcologyMeasurementCandidate]
+    ] = {}
+    for candidate in candidates:
+        key = (
+            candidate.experimental_unit_type,
+            candidate.experimental_unit_id,
+            candidate.metric,
+            candidate.unit,
+        )
+        groups.setdefault(key, []).append(candidate)
+
+    coverage: list[EcologyProjectedVisitCoverage] = []
+    for unit_type, unit_id, metric, unit in sorted(
+        groups, key=lambda key: tuple(part or "" for part in key)
+    ):
+        records = groups[(unit_type, unit_id, metric, unit)]
+        series_keys = sorted({record.organism_key for record in records})
+        undated_keys: set[str] = set()
+        by_date: dict[str, list[str]] = {}
+        for record in records:
+            captured = record.capture_timestamp_utc
+            if (
+                record.capture_time_status != "timezone_aware"
+                or captured is None
+                or captured.tzinfo is None
+                or captured.utcoffset() is None
+            ):
+                undated_keys.add(record.organism_key)
+                continue
+            date = captured.astimezone(UTC).date().isoformat()
+            by_date.setdefault(date, []).append(record.organism_key)
+
+        for date, measured in sorted(by_date.items()):
+            counts: dict[str, int] = {}
+            for key in measured:
+                counts[key] = counts.get(key, 0) + 1
+            measured_keys = sorted(counts)
+            coverage.append(
+                EcologyProjectedVisitCoverage(
+                    experimental_unit_type=unit_type,
+                    experimental_unit_id=unit_id,
+                    metric=metric,
+                    unit=unit,
+                    sampling_date_utc=date,
+                    series_organism_keys=series_keys,
+                    measured_organism_keys=measured_keys,
+                    no_linked_measurement_organism_keys=sorted(
+                        set(series_keys) - set(measured_keys)
+                    ),
+                    undated_organism_keys=sorted(undated_keys),
+                    same_day_repeat_organism_keys=sorted(
+                        key for key, count in counts.items() if count > 1
+                    ),
+                    linked_measurement_count=len(measured),
+                )
+            )
+    return coverage
 
 
 def summarize_projected_endpoint_changes(
@@ -663,18 +733,20 @@ class EcologyMeasurementCandidateService:
             )
         )
         sampling_date_qc = summarize_sampling_date_qc(candidates)
+        visit_coverage = summarize_projected_visit_coverage(candidates)
         projected_changes = summarize_projected_endpoint_changes(candidates, sampling_date_qc)
         unit_summaries = summarize_projected_unit_summaries(candidates, projected_changes)
         population_summaries = summarize_projected_population_summaries(unit_summaries)
         rows = [row.model_dump(mode="json") for row in candidates]
         qc_rows = [row.model_dump(mode="json") for row in sampling_date_qc]
+        coverage_rows = [row.model_dump(mode="json") for row in visit_coverage]
         change_rows = [row.model_dump(mode="json") for row in projected_changes]
         unit_rows = [row.model_dump(mode="json") for row in unit_summaries]
         population_rows = [row.model_dump(mode="json") for row in population_summaries]
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0016",
+                "algorithm_version": "ecology-measurement-candidates-0017",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
@@ -682,6 +754,7 @@ class EcologyMeasurementCandidateService:
                 "registry_calibration_evidence_sha256": snapshot.calibration_evidence_sha256,
                 "candidates": rows,
                 "sampling_date_qc": qc_rows,
+                "projected_visit_coverage": coverage_rows,
                 "projected_endpoint_changes": change_rows,
                 "projected_unit_summaries": unit_rows,
                 "projected_population_summaries": population_rows,
@@ -695,6 +768,7 @@ class EcologyMeasurementCandidateService:
             candidates=candidates,
             candidate_count=len(candidates),
             sampling_date_qc=sampling_date_qc,
+            projected_visit_coverage=visit_coverage,
             projected_endpoint_changes=projected_changes,
             projected_unit_summaries=unit_summaries,
             projected_population_summaries=population_summaries,
