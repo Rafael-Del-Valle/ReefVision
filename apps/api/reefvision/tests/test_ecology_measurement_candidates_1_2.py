@@ -313,6 +313,113 @@ def test_reused_image_across_dates_cannot_become_projected_growth(
     assert changes[0].review_gate == "scientist_review_required"
 
 
+def test_cross_series_source_replay_cannot_create_projected_growth(
+    client: TestClient,
+) -> None:
+    """Reimported photographs must not migrate between biological date series."""
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    source = EcologyMeasurementCandidate.model_validate(
+        _get(client, project_id).json()["candidates"][0]
+    )
+    first = source.model_copy(
+        update={
+            "organism_key": "organism-A",
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-A",
+            "parent_colony_key": "parent-A",
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    last = first.model_copy(
+        update={
+            "image_id": "A-followup",
+            "image_sha256": "a" * 64,
+            "annotation_evidence_id": "A-followup-annotation",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
+            "value": first.value + 1,
+        }
+    )
+    other_first = first.model_copy(
+        update={
+            "organism_key": "organism-B",
+            "image_id": "B-baseline",
+            "image_sha256": "b" * 64,
+            "annotation_evidence_id": "B-baseline-annotation",
+        }
+    )
+    other_last = other_first.model_copy(
+        update={
+            "image_id": "B-followup",
+            "image_sha256": "c" * 64,
+            "annotation_evidence_id": "B-followup-annotation",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 9, tzinfo=UTC),
+            "value": other_first.value + 2,
+        }
+    )
+    clean = [first, last, other_first, other_last]
+    clean_qc = summarize_sampling_date_qc(clean)
+    assert [row.qc_status for row in clean_qc] == [
+        "date_series_candidate",
+        "date_series_candidate",
+    ]
+    clean_changes = summarize_projected_endpoint_changes(clean, clean_qc)
+    assert len(clean_changes) == 2
+    assert summarize_projected_unit_summaries(clean, clean_changes)[0].unit_status == (
+        "candidate"
+    )
+
+    # Reimported bytes in a different organism's later observation bypass
+    # per-organism checks, but must invalidate *both* affected date series.
+    replayed = [
+        first,
+        last,
+        other_first,
+        other_last.model_copy(update={"image_sha256": first.image_sha256}),
+    ]
+    replay_qc = summarize_sampling_date_qc(replayed)
+    assert [row.qc_status for row in replay_qc] == [
+        "reused_image_content_across_dates",
+        "reused_image_content_across_dates",
+    ]
+    assert all(row.reused_image_sha256 == [first.image_sha256] for row in replay_qc)
+    assert all(row.review_gate == "scientist_review_required" for row in replay_qc)
+    assert summarize_sampling_date_qc(list(reversed(replayed))) == replay_qc
+    assert summarize_projected_endpoint_changes(replayed, replay_qc) == []
+    assert summarize_projected_unit_summaries(replayed, [])[0].unit_status == (
+        "incomplete_followup"
+    )
+    with pytest.raises(ValidationError, match="sampling-date QC does not match"):
+        summarize_projected_endpoint_changes(replayed, clean_qc)
+
+    # The same source image ID assigned to two dates is likewise blocked,
+    # even when its records belong to different organisms.
+    reused_id = [
+        first,
+        last,
+        other_first,
+        other_last.model_copy(update={"image_id": first.image_id}),
+    ]
+    assert all(
+        row.qc_status == "reused_image_across_dates"
+        for row in summarize_sampling_date_qc(reused_id)
+    )
+
+    # One legitimate photograph can contain two organisms on the SAME date.
+    same_day_shared = [
+        first,
+        last,
+        other_first.model_copy(update={"image_sha256": first.image_sha256}),
+        other_last,
+    ]
+    assert all(
+        row.qc_status == "date_series_candidate"
+        for row in summarize_sampling_date_qc(same_day_shared)
+    )
+
+
 def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     client: TestClient,
 ) -> None:
@@ -697,9 +804,7 @@ def test_projected_population_is_unit_weighted_and_stratified() -> None:
 
     # Repeating a parent within one unit must not manufacture a shared
     # parent-colony finding or corrupt the lineage audit.
-    repeated_parent = tank_a.model_copy(
-        update={"parent_colony_keys": ["colony-1", "colony-1"]}
-    )
+    repeated_parent = tank_a.model_copy(update={"parent_colony_keys": ["colony-1", "colony-1"]})
     with pytest.raises(ValidationError, match="parent-colony provenance is inconsistent"):
         summarize_projected_population_summaries([repeated_parent])
 
