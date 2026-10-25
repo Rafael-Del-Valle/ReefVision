@@ -749,3 +749,10 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Full exact-head CI, native Windows installed-GUI, MSI upgrade/rollback,
   cross-version 1.1 migration reconciliation and representative scientific
   acceptance remain outstanding. No merge, release or deployment authorized.
+
+### 2026-10-25 — Fail-fast Python syntax / migration guard CI recovery
+
+- Exact prior head `7c61c1de8dfba8eeb9611565675f8c7061e07db7` failed all but the Prettier diagnostic workflow. Backend Ruff reported an unterminated f-string in `db/migration_lineage_guard.py:53`; Windows packaging aborted during bootstrap import of the same module, before MSI creation. These are CI failures, not evidence of installed-GUI validation.
+- Restored the migration guard's error-message string without weakening its fail-closed handling of concurrent or foreign Alembic heads. Extended the existing SQLite regression to require the exception to identify the exact conflicting revisions and preserve research sentinel data.
+- Windows installer CI now runs standard-library `python -m compileall -q apps/api/reefvision` immediately after Python setup, before Node/Rust/provider bootstrap and the multi-GB installer build. Syntax regressions fail quickly and do not trigger model acquisition.
+- Full lint/type/backend/frontend/E2E, exact-head Windows CI, installed-GUI, MSI upgrade/rollback and 1.1/1.6 migration reconciliation remain release blockers. Do not merge, stamp, tag, publish or auto-approve.
