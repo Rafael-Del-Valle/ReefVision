@@ -301,6 +301,12 @@ export async function previewLocalMeshFile(
   ) {
     throw new Error("Relative scale uncertainty must be between 0 and 1.");
   }
+  if (
+    calibration.coordinate_frame_id !== undefined &&
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(calibration.coordinate_frame_id)
+  ) {
+    throw new Error("Mesh source frame ID must be a bounded label.");
+  }
   let geometry: Record<string, string>;
   if (extension === "glb") {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -383,9 +389,7 @@ export async function previewLocalPointCloudFile(
   }
   if (
     calibration.coordinate_frame_id !== undefined &&
-    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(
-      calibration.coordinate_frame_id,
-    )
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(calibration.coordinate_frame_id)
   ) {
     throw new Error("Point-cloud source frame ID must be a bounded label.");
   }
