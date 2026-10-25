@@ -52,7 +52,8 @@ def test_visit_coverage_is_typed_in_api_and_persisted_saved_workflow(
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200
     source_node = next(
-        node for node in registry.json()
+        node
+        for node in registry.json()
         if node["node_type"] == "ecology_identity_registry_source"
     )
     assert any(
@@ -63,7 +64,8 @@ def test_visit_coverage_is_typed_in_api_and_persisted_saved_workflow(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        row for row in workflow["artifacts"]
+        row
+        for row in workflow["artifacts"]
         if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
