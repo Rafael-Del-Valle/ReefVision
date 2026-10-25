@@ -81,6 +81,7 @@ $report = [ordered]@{
     class_visibility_persistence = New-ReefVisionEvidenceResult
     qc_review_coordination = New-ReefVisionEvidenceResult
     qc_workflow_persistence = New-ReefVisionEvidenceResult
+    qc_workflow_replay = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
     upgrade = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
@@ -760,6 +761,54 @@ try {
         throw 'Installed saved QC Workflow Builder graph, typed artifact, or review queue changed across restart.'
     }
     $report.qc_workflow_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed saved typed project -> QC graph, background execution, dimensionless scored queue and SHA-256 provenance persisted across restart; run $($qcWorkflowQueued.id), human review required."
+
+    # Re-execute the persisted graph from a new installed-desktop process.
+    # This is a new scientific run (never an implicit retry/approval of the
+    # original queue); unchanged source evidence must yield the same scoring
+    # digests, while run and queue identities remain distinct.
+    $qcReplayQueued = Invoke-RestMethod "$api/projects/$projectId/workflow-runs" -Method Post -ContentType 'application/json' -Body (@{ graph_record_id = $qcWorkflowSaved.id } | ConvertTo-Json)
+    if (-not $qcReplayQueued.id -or -not $qcReplayQueued.job_id -or
+        $qcReplayQueued.id -eq $qcWorkflowQueued.id) {
+        throw 'Installed saved QC workflow replay did not create a distinct persisted run.'
+    }
+    $qcReplayDeadline = [DateTime]::UtcNow.AddSeconds(120)
+    do {
+        Start-Sleep -Milliseconds 500
+        $qcReplayJob = Invoke-RestMethod "$api/jobs/$($qcReplayQueued.job_id)"
+    } while ($qcReplayJob.status -in @('queued', 'running') -and [DateTime]::UtcNow -lt $qcReplayDeadline)
+    if ($qcReplayJob.status -ne 'succeeded') {
+        throw "Installed saved QC workflow replay failed or timed out: $($qcReplayJob.status); $($qcReplayJob.error_message)"
+    }
+    $qcReplayDetail = Invoke-RestMethod "$api/workflow-runs/$($qcReplayQueued.id)"
+    $qcReplayArtifacts = @($qcReplayDetail.artifacts | Where-Object { $_.data_type -eq 'review_queue_reference' })
+    if ($qcReplayDetail.run.status -ne 'succeeded' -or $qcReplayArtifacts.Count -ne 1) {
+        throw 'Installed saved QC workflow replay did not persist exactly one typed queue artifact.'
+    }
+    $qcReplayPayload = $qcReplayArtifacts[0].payload_json
+    if ($qcReplayPayload.workflow_run_id -ne $qcReplayQueued.id -or
+        $qcReplayPayload.project_id -ne $projectId -or
+        $qcReplayPayload.queue_id -eq $qcWorkflowPayload.queue_id -or
+        $qcReplayPayload.review_status -ne 'requires_researcher_review' -or
+        $qcReplayPayload.priority_score_unit -ne 'dimensionless' -or
+        $qcReplayPayload.item_count -ne $qcWorkflowPayload.item_count -or
+        $qcReplayPayload.input_checksums.queue_scope_sha256 -ne $qcWorkflowPayload.input_checksums.queue_scope_sha256 -or
+        $qcReplayPayload.input_checksums.item_evidence_sha256 -ne $qcWorkflowPayload.input_checksums.item_evidence_sha256 -or
+        $qcReplayPayload.input_checksums.scoring_provenance_sha256 -ne $qcWorkflowPayload.input_checksums.scoring_provenance_sha256) {
+        throw 'Installed saved QC replay changed source evidence, scoring provenance, or researcher approval gate.'
+    }
+    $qcReplayQueue = Invoke-RestMethod "$api/review-queues/$($qcReplayPayload.queue_id)"
+    $qcReplayItems = Invoke-RestMethod "$api/review-queues/$($qcReplayPayload.queue_id)/items"
+    $qcOriginalAfterReplay = Invoke-RestMethod "$api/review-queues/$($qcWorkflowPayload.queue_id)"
+    $qcReviewEventsAfterReplay = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items/$qcItemId/events"
+    if ($qcReplayQueue.project_id -ne $projectId -or
+        $qcReplayQueue.created_by -notlike 'workflow:*' -or
+        $qcReplayQueue.item_count -ne @($qcReplayItems.items).Count -or
+        $qcOriginalAfterReplay.item_count -ne $qcWorkflowQueue.item_count -or
+        $qcReviewEventsAfterReplay.total -ne 5) {
+        throw 'Installed saved QC replay changed the original queue, manual audit history, or project scope.'
+    }
+    $report.qc_workflow_replay = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed saved graph re-executed after restart as distinct run $($qcReplayQueued.id), preserving immutable QC evidence digests, review gate, and original reviewer audit."
+
 
 
 
