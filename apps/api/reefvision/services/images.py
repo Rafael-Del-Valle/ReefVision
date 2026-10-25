@@ -74,9 +74,12 @@ class ImageService:
             relative_path = paths[index] if index < len(paths) and paths[index] else None
             staging = directories["staging"] / f"{uuid4()}.part"
             managed_destination: Path | None = None
+            staging_owned = False
+            uncommitted_original = False
             try:
                 ensure_supported_extension(filename)
                 sha256, size = stream_to_staging(source, staging)
+                staging_owned = True
                 inspected = inspect_staged_image(staging, sha256, size)
                 duplicate = self.images.find_duplicate(project_id, sha256)
                 if duplicate is not None:
@@ -99,6 +102,8 @@ class ImageService:
                 relative_thumbnail = f"{project.storage_root}/images/thumbnails/{image_id}.jpg"
                 managed_destination = resolve_managed_project_path(self.settings, relative_managed)
                 commit_staged_image(staging, managed_destination)
+                staging_owned = False
+                uncommitted_original = True
                 image = ImageAsset(
                     id=image_id,
                     project_id=project_id,
@@ -127,6 +132,9 @@ class ImageService:
                 self.images.add(image)
                 self.jobs.add(job)
                 self.session.commit()
+                # A successful database commit makes the managed original
+                # durable, even if a subsequent response refresh fails.
+                uncommitted_original = False
                 self.session.refresh(image)
                 self.session.refresh(job)
                 report["successful"].append(
@@ -140,7 +148,8 @@ class ImageService:
                 )
             except UnsupportedImageError as exc:
                 self.session.rollback()
-                staging.unlink(missing_ok=True)
+                if staging_owned:
+                    staging.unlink(missing_ok=True)
                 report["unsupported"].append(
                     ImportItemResponse(
                         filename=filename,
@@ -151,8 +160,11 @@ class ImageService:
                 )
             except (InvalidImageError, OSError, IntegrityError, ValidationError) as exc:
                 self.session.rollback()
-                staging.unlink(missing_ok=True)
-                if managed_destination is not None:
+                if staging_owned:
+                    staging.unlink(missing_ok=True)
+                # Do not delete an existing original when exclusive placement
+                # failed, or a committed original after a response error.
+                if uncommitted_original and managed_destination is not None:
                     managed_destination.unlink(missing_ok=True)
                 report["failed"].append(
                     ImportItemResponse(
@@ -164,8 +176,11 @@ class ImageService:
                 )
             except Exception as exc:
                 self.session.rollback()
-                staging.unlink(missing_ok=True)
-                if managed_destination is not None:
+                if staging_owned:
+                    staging.unlink(missing_ok=True)
+                # Do not delete an existing original when exclusive placement
+                # failed, or a committed original after a response error.
+                if uncommitted_original and managed_destination is not None:
                     managed_destination.unlink(missing_ok=True)
                 report["failed"].append(
                     ImportItemResponse(
