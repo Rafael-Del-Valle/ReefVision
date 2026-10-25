@@ -1409,3 +1409,37 @@ Scientific input fingerprint version advances to
 true independence, or source verification is asserted. This branch is still
 blocked on exact-head CI, migration reconciliation with 1.1, independent
 scientific acceptance and installed Windows GUI/installer tests.
+
+
+## Source-linked UTC visit coverage (2026-10-25; development only)
+
+The existing project-scoped `GET /api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates`
+endpoint now includes additive typed `projected_visit_coverage` records, also
+persisted by the existing executable `ecology_identity_registry_source` Workflow
+Builder output port (`ecology_measurement_candidates`). For each observed UTC
+sampling date, declared unit, metric and physical unit, the records list
+organisms with linked calibrated measurements, organisms measured elsewhere in
+that series but without a link on that date, undated source organisms and
+same-day repeated measurements. Source measurement counts are distinct from
+the organism denominators. Date normalization accepts equivalent timezone
+offsets and never treats naive or missing timestamps as dated observations.
+Rows and lists are deterministic under input reordering. The source-linked
+reproducibility fingerprint advances to `ecology-measurement-candidates-0017`;
+older persisted typed artifacts deserialize with an empty coverage list.
+
+**Scientific limits:** the comparison set is *only organisms with any linked
+measurement in the same declared unit/metric/physical-unit series*, not a
+registered expected-specimen roster or sampling calendar. A missing linked
+measurement does not imply organism absence, mortality, zero abundance or
+a failed planned visit. Same-day repeats are diagnostic technical replicates,
+not additional biological samples. Every row remains `linked_unverified`
+with `scientist_review_required`; this does not authenticate capture-time
+metadata, certify source geometry or convert projected changes to biological
+growth. Tests cover UTC normalization, per-organism denominators, duplicate
+captures, undated sources, stable order, legacy typed artifacts and standalone
+API versus saved-workflow artifact parity.
+
+The next high-priority work remains authenticated, scientist-reviewed
+longitudinal observation histories and registered study sampling schedules.
+Migration reconciliation with unmerged 1.1, full exact-head CI, independent
+scientific review and installed Windows GUI/installer validation are required.
