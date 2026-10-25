@@ -806,8 +806,7 @@ class EcologyMeasurementCandidateService:
             "excluded_source_count": len(exclusions),
             "qc_status_counts": dict(sorted(qc_counts.items())),
         }
-        response.candidate_report = EcologyCandidateReport(
-            **{key: value for key, value in report_values.items() if key != "algorithm_version"},
-            report_sha256=canonical_json_sha256(report_values),
+        response.candidate_report = EcologyCandidateReport.model_validate(
+            {**report_values, "report_sha256": canonical_json_sha256(report_values)}
         )
         return response
