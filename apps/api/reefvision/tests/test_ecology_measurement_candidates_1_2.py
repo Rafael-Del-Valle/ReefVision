@@ -367,9 +367,7 @@ def test_cross_series_source_replay_cannot_create_projected_growth(
     ]
     clean_changes = summarize_projected_endpoint_changes(clean, clean_qc)
     assert len(clean_changes) == 2
-    assert summarize_projected_unit_summaries(clean, clean_changes)[0].unit_status == (
-        "candidate"
-    )
+    assert summarize_projected_unit_summaries(clean, clean_changes)[0].unit_status == ("candidate")
 
     # Reimported bytes in a different organism's later observation bypass
     # per-organism checks, but must invalidate *both* affected date series.
@@ -840,10 +838,25 @@ def test_population_rejects_one_organism_reused_across_declared_units() -> None:
     )
     with pytest.raises(ValidationError, match="pooled across declared experimental units"):
         summarize_projected_population_summaries([base, moved])
-    # Different metrics on the same organism are distinct measurements,
-    # not duplicate organism replicates of the same response.
+    # A metric change must not hide an experimental-unit reassignment.
+    # The organism is the same biological specimen for width and height.
     different_metric = moved.model_copy(update={"metric": "box_height"})
-    assert len(summarize_projected_population_summaries([base, different_metric])) == 2
+    with pytest.raises(ValidationError, match="pooled across declared experimental units"):
+        summarize_projected_population_summaries([base, different_metric])
+    with pytest.raises(ValidationError, match="pooled across declared experimental units"):
+        summarize_projected_population_summaries([different_metric, base])
+
+    # Distinct metrics remain valid when the organism stays in the same tank.
+    same_unit_metric = different_metric.model_copy(update={"experimental_unit_id": "tank-A"})
+    assert len(summarize_projected_population_summaries([base, same_unit_metric])) == 2
+
+    # Re-labeling the unit *type* is also a reassignment, not an independent
+    # replicate; do not silently pool the organism into a new design level.
+    changed_design = different_metric.model_copy(
+        update={"experimental_unit_type": "colony", "experimental_unit_id": "colony-A"}
+    )
+    with pytest.raises(ValidationError, match="pooled across declared experimental units"):
+        summarize_projected_population_summaries([base, changed_design])
 
 
 def test_projected_population_sd_is_stable_for_large_finite_unit_changes() -> None:
