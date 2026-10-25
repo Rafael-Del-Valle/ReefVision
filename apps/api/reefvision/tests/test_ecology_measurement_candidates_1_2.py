@@ -13,6 +13,7 @@ from reefvision.db.models import ImageAsset
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
+    EcologySamplingDateQC,
     EcologyProjectedUnitSummary,
 )
 from reefvision.services.ecology_measurement_candidates import (
@@ -248,6 +249,51 @@ def test_utc_date_qc_rejects_replicates_missing_dates_and_mixed_units(
     assert summarize_sampling_date_qc([first, local_time])[0].qc_status == ("date_series_candidate")
 
 
+def test_reused_image_across_dates_cannot_become_projected_growth(
+    client: TestClient,
+) -> None:
+    """The same photograph cannot represent two biological observation days."""
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    source = EcologyMeasurementCandidate.model_validate(
+        _get(client, project_id).json()["candidates"][0]
+    )
+    baseline = source.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    # A forged timestamp cannot turn a reused image into longitudinal evidence.
+    replayed = baseline.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
+            "value": baseline.value + 1,
+        }
+    )
+    qc = summarize_sampling_date_qc([baseline, replayed])
+    assert len(qc) == 1
+    assert qc[0].qc_status == "reused_image_across_dates"
+    assert qc[0].reused_image_ids == [baseline.image_id]
+    assert qc[0].review_gate == "scientist_review_required"
+    assert summarize_projected_endpoint_changes([baseline, replayed], qc) == []
+
+    # Legacy persisted QC records deserialize without the newly added field.
+    legacy = qc[0].model_dump(mode="json")
+    legacy.pop("reused_image_ids")
+    assert EcologySamplingDateQC.model_validate(legacy).reused_image_ids == []
+
+    # A distinct photographed image can still enter a provisional date series.
+    distinct = replayed.model_copy(update={"image_id": "distinct-followup-image"})
+    distinct_qc = summarize_sampling_date_qc([baseline, distinct])
+    assert distinct_qc[0].qc_status == "date_series_candidate"
+    assert distinct_qc[0].reused_image_ids == []
+    changes = summarize_projected_endpoint_changes([baseline, distinct], distinct_qc)
+    assert len(changes) == 1
+    assert changes[0].review_gate == "scientist_review_required"
+
+
 def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     client: TestClient,
 ) -> None:
@@ -299,9 +345,7 @@ def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     )[0]
     assert delayed_change.elapsed_days == 3.0
     assert delayed_change.projected_absolute_change_per_day == pytest.approx(2.5 / 3)
-    assert delayed_change.projected_baseline_percent_change_per_day == pytest.approx(
-        50 / 3
-    )
+    assert delayed_change.projected_baseline_percent_change_per_day == pytest.approx(50 / 3)
     assert delayed_change.review_gate == "scientist_review_required"
 
     # Previously persisted typed workflow artifacts remain readable.
@@ -315,9 +359,7 @@ def test_source_linked_projected_endpoint_change_is_not_verified_growth(
     huge_start = baseline.model_copy(
         update={
             "value": 1e300,
-            "capture_timestamp_utc": datetime(
-                2026, 4, 3, 23, 59, 59, 999999, tzinfo=UTC
-            ),
+            "capture_timestamp_utc": datetime(2026, 4, 3, 23, 59, 59, 999999, tzinfo=UTC),
         }
     )
     huge_end = final.model_copy(
