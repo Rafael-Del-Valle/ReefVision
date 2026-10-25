@@ -163,7 +163,12 @@ describe("previewLocalPointCloudFile", () => {
         }),
       ).rejects.toThrow("Relative scale uncertainty");
     }
-    for (const invalidFrame of ["", "survey with spaces", "survey/1", "x".repeat(129)]) {
+    for (const invalidFrame of [
+      "",
+      "survey with spaces",
+      "survey/1",
+      "x".repeat(129),
+    ]) {
       await expect(
         previewLocalPointCloudFile("p", valid, {
           ...calibration,
