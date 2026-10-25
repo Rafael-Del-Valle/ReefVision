@@ -522,6 +522,12 @@ def test_mesh_comparison_zero_baseline_extent_withholds_relative_change() -> Non
         },
     }
     comparison = compare_mesh_observations(base, later)
+    assert comparison["relative_surface_area_change_percent"] is None
+    assert comparison["relative_surface_area_scale_interval_percent"] is None
+    assert (
+        "relative_surface_area_change_unavailable_zero_baseline"
+        in comparison["qc_warnings"]
+    )
     assert comparison["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(2)
     assert comparison["relative_axis_aligned_bounding_box_diagonal_change_percent"] is None
     relative_bounds = comparison[
@@ -530,3 +536,35 @@ def test_mesh_comparison_zero_baseline_extent_withholds_relative_change() -> Non
     assert relative_bounds is None
     assert "relative_axis_aligned_extent_change_unavailable" in comparison["qc_warnings"]
     assert comparison["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "later_timestamp",
+    ["2026-10-01T07:00:00-05:00", "2026-10-01T13:00:00+01:00"],
+)
+def test_mesh_comparison_rejects_same_instant_in_different_timezones(
+    later_timestamp: str,
+) -> None:
+    """Different offset representations cannot create a false elapsed interval."""
+    first = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "surface_area_m2": 1.0,
+        "project_id": "project-1",
+        "provenance": {
+            "specimen_id": "colony-16",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+        },
+    }
+    later = {
+        **first,
+        "provenance": {
+            **first["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": later_timestamp,
+        },
+    }
+    with pytest.raises(ValueError, match="increasing timestamps"):
+        compare_mesh_observations(first, later)
