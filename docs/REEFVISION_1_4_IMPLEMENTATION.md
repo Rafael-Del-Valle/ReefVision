@@ -261,3 +261,19 @@ timezone-aware instants, not naive wall-clock subtraction.
 These checks establish neither specimen reidentification nor spatial
 registration. Geometric changes remain provisional, with human scientific
 verification required before any biological growth claim.
+
+## Identical-geometry calibration consistency QC (provisional)
+
+When both observations carry the same nonempty geometry fingerprint and valid
+meters-per-mesh-unit scales, the longitudinal engine checks whether their
+surface-area ratio matches the **square** of the calibration-scale ratio.
+It compares logarithms for positive areas to avoid floating-point overflow;
+a zero/nonzero mismatch is also flagged. The
+`identical_geometry_area_inconsistent_with_calibration_scale` warning means
+that identical recorded source geometry and calibration alone do not explain
+the two reported areas. This may indicate stale or corrupted previews,
+different processing, or incorrect metadata; it is **not** evidence of
+biological growth. Missing scale metadata does not generate a fabricated
+consistency conclusion. The warning is preserved in standalone results and
+persisted typed Workflow Builder comparison artifacts; scientific identity,
+calibration, and coordinate registration remain unverified.
