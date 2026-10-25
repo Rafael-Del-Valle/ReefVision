@@ -106,9 +106,7 @@ def test_cross_track_0038_collision_and_missing_parent_are_rejected(
     review.write_text('revision = "0039"\ndown_revision = "0038"\n')
     assert _graph_errors([baseline, science, review]) == []
     # Alembic depends_on can conceal a cross-branch edge despite one down_revision.
-    review.write_text(
-        'revision = "0039"\ndown_revision = "0038"\ndepends_on = "0037"\n'
-    )
+    review.write_text('revision = "0039"\ndown_revision = "0038"\ndepends_on = "0037"\n')
     assert any(
         "nonlinear dependency for 0039" in error
         for error in _graph_errors([baseline, science, review])
