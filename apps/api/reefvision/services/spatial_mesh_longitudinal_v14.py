@@ -232,10 +232,10 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
                 )
             except OverflowError:
                 normalized_ratio_out_of_range = True
-                if scale_normalized_area_ratio == 0:
-                    # Only a positive ratio can underflow to floating-point zero.
-                    scale_normalized_area_ratio = None
-                    normalized_ratio_out_of_range = True
+            if scale_normalized_area_ratio == 0:
+                # Only a positive ratio can underflow to floating-point zero.
+                scale_normalized_area_ratio = None
+                normalized_ratio_out_of_range = True
     # Remove nominal scale from axis-aligned diagonal ratios as a separate
     # reconstruction diagnostic. This is not a branch-length or growth metric.
     scale_normalized_extent_ratio = None
@@ -257,10 +257,10 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
                 )
             except OverflowError:
                 extent_ratio_out_of_range = True
-                if scale_normalized_extent_ratio == 0:
-                    # Positive ratios below float range must not masquerade as zero.
-                    scale_normalized_extent_ratio = None
-                    extent_ratio_out_of_range = True
+            if scale_normalized_extent_ratio == 0:
+                # Positive ratios below float range must not masquerade as zero.
+                scale_normalized_extent_ratio = None
+                extent_ratio_out_of_range = True
     warnings = [
         "specimen_identity_not_verified",
         "observation_metadata_not_verified",
