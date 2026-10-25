@@ -358,6 +358,7 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         specimen_id=payload.specimen_id,
         observation_id=payload.observation_id,
         observed_at_utc=observed_at_utc,
+        coordinate_frame_id=payload.coordinate_frame_id,
         specimen_identity_verified=False,
         observation_metadata_verified=False,
     )
