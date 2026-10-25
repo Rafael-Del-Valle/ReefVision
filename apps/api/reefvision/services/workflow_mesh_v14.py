@@ -229,7 +229,10 @@ def execute_mesh_longitudinal_comparison(
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
     del session, settings
-    if parameters:
+    # The workflow engine injects these reserved execution identifiers into every
+    # runtime adapter. They are not user-configurable analysis parameters.
+    unexpected = set(parameters) - {"__workflow_run_id", "__workflow_node_run_id"}
+    if unexpected:
         raise ValidationError("Longitudinal comparison takes no node parameters")
     records: list[dict[str, Any]] = []
     for port in ("before", "after"):
