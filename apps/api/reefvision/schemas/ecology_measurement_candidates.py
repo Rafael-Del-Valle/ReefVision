@@ -191,7 +191,7 @@ class EcologyCandidateReport(BaseModel):
     source_image_count: int = Field(ge=0)
     source_organism_count: int = Field(ge=0)
     declared_experimental_unit_count: int = Field(ge=0)
-    eligible_longitudinal_series_count: int = Field(ge=0)
+    date_qc_pass_series_count: int = Field(ge=0)
     excluded_series_count: int = Field(ge=0)
     excluded_source_count: int = Field(ge=0)
     qc_status_counts: dict[str, int]
