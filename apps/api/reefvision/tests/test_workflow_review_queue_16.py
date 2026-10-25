@@ -145,6 +145,28 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     assert history["items"][1]["event_type"] == "triage_start"
     assert history["items"][1]["actor"] == "workflow reviewer"
 
+    # A saved executable QC graph and its typed review-required artifact must
+    # tolerate manual single-item state transitions without losing audit history
+    # or changing immutable scientific evidence on a retry.
+    skipped = client.post(
+        f"/api/v1/review-queue-items/{item_id}/skip",
+        json={"reason": "Verify uncertain octocoral boundary"},
+    )
+    assert skipped.status_code == 200, skipped.text
+    returned = client.post(f"/api/v1/review-queue-items/{item_id}/return")
+    assert returned.status_code == 200, returned.text
+    history = client.get(event_url).json()
+    assert history["total"] == 4
+    assert [event["event_type"] for event in history["items"]] == [
+        "comment",
+        "triage_start",
+        "triage_skip",
+        "triage_return",
+    ]
+    assert history["items"][2]["comment"] == "Verify uncertain octocoral boundary"
+    assert history["items"][2]["actor"] == "local_user"
+    assert history["items"][3]["actor"] == "local_user"
+
     with app.state.session_factory() as session:
         source = session.scalar(
             select(WorkflowArtifact).where(
