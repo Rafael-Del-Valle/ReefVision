@@ -1103,3 +1103,71 @@ def test_resigned_empty_pose_is_not_scientist_verified(
         execute_pose_training_dataset_adapter(
             session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
         )
+
+
+def test_resigned_empty_dataset_cannot_be_exported_or_planned(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Start with an API-frozen scientist-verified dataset, then simulate
+    # deletion of its only verified item and re-signing every dataset summary.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    dataset_id = str(dataset["id"])
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        items = list(
+            session.scalars(
+                select(PoseTrainingDatasetItem).where(
+                    PoseTrainingDatasetItem.dataset_id == dataset_id
+                )
+            )
+        )
+        assert frozen is not None and len(items) == 1
+        session.delete(items[0])
+        empty_manifest = {**frozen.manifest_json, "items": [], "item_count": 0}
+        frozen.item_count = 0
+        frozen.manifest_json = empty_manifest
+        frozen.manifest_sha256 = canonical_json_sha256(empty_manifest)
+        resigned_sha = frozen.manifest_sha256
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).manifest(dataset_id)
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).native_package(dataset_id)
+
+    parameters = {"dataset_id": dataset_id, "manifest_sha256": resigned_sha}
+    graph = {
+        "graph_id": "track-e-resigned-empty-dataset",
+        "name": "Reject emptied frozen pose training dataset",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": parameters,
+            }
+        ],
+        "edges": [],
+    }
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] is False
+    assert "pose_dataset_incomplete" in {issue["code"] for issue in plan.json()["issues"]}
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="must be complete and contain verified items"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, parameters, {}
+        )
