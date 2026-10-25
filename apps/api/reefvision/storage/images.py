@@ -269,7 +269,13 @@ def commit_staged_image(staged_path: Path, destination: Path) -> None:
             if created:
                 destination.unlink(missing_ok=True)
             raise
-    staged_path.unlink()
+    # The original has already been published. A transient failure to remove
+    # its staging link must not turn a valid import into an orphaned original
+    # with no database record. Retain the staging copy for later cleanup.
+    try:
+        staged_path.unlink()
+    except OSError:
+        pass
 
 
 def _unique_rendition_temporary(destination: Path) -> Path:
