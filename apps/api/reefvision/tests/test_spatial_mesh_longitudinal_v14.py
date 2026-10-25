@@ -1277,7 +1277,7 @@ def test_mesh_comparison_rejects_impossible_topology_relationships(
     before, after = _minimal_topology_pair()
     target = before if timepoint == "before" else after
     target.update(field_values)
-    with pytest.raises(ValueError, match=f"inconsistent with face_count|{error}"):
+    with pytest.raises(ValueError, match=error):
         compare_mesh_observations(before, after)
 
 
