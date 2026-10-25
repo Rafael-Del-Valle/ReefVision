@@ -241,3 +241,18 @@ def test_camera_exif_nul_terminated_subseconds_are_preserved(
     assert timestamp is not None
     assert timestamp.microsecond == 123400
     assert timestamp.isoformat() == "2026-10-25T10:11:12.123400+00:00"
+
+
+@pytest.mark.parametrize("as_bytes", [False, True])
+def test_camera_exif_nul_terminated_timestamp_and_offset(as_bytes: bool) -> None:
+    """NUL-padded camera ASCII fields must retain their UTC offset."""
+    raw: str | bytes = "2026:10:25 10:11:12\x00"
+    offset: str | bytes = "-04:00\x00"
+    if as_bytes:
+        raw = b"2026:10:25 10:11:12\x00"
+        offset = b"-04:00\x00"
+    timestamp = image_storage._capture_timestamp(
+        {36867: raw, 36881: offset, 37521: "123456\x00"}
+    )
+    assert timestamp is not None
+    assert timestamp.isoformat() == "2026-10-25T14:11:12.123456+00:00"
