@@ -210,7 +210,12 @@ class PoseTrainingDatasetService:
                 PoseTrainingDataset.id,
             )
         )
-        return [PoseTrainingDatasetResponse.model_validate(row) for row in rows]
+        # Listing is also a scientific-data read path: never advertise a
+        # corrupted frozen dataset as complete when direct retrieval rejects it.
+        datasets = list(rows)
+        for dataset in datasets:
+            self.manifest(dataset.id)
+        return [PoseTrainingDatasetResponse.model_validate(row) for row in datasets]
 
     def get_dataset(
         self,
