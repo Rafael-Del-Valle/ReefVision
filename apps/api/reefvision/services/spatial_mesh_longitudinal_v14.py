@@ -392,9 +392,13 @@ def compare_mesh_observations(
             or registration.target_frame_id != frames[1]
         ):
             raise ValueError("Registration evidence frame IDs must match observation source frames")
-        registration_record = registration.model_dump(mode="json")
+        registration_record = registration.model_dump(mode="json", exclude_none=True)
         warnings.append("registration_residual_requires_independent_review")
         warnings.append("registration_transform_and_accuracy_not_verified")
+        if registration.source_to_target_transform_m is None:
+            warnings.append("registration_transform_unavailable")
+        else:
+            warnings.append("registration_transform_requires_independent_review")
         if (
             early_extent is not None
             and early_extent > 0
