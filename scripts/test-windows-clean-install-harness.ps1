@@ -182,7 +182,7 @@ Assert-True ($acceptanceScript.Contains('hidden_class_ids = @()')) 'Packaged cla
 $visibilityReload = '$persistedVisibility = Invoke-RestMethod "$api/projects/$projectId/class-visibility"'
 Assert-True ($acceptanceScript.Contains($visibilityReload)) 'Packaged class visibility must use the current API port after restart.'
 Assert-True (-not $acceptanceScript.Contains('$persistedVisibility = Invoke-RestMethod $visibilityUrl')) 'Packaged visibility reloaded through the first launch stale port.'
-$apiReadinessCalls = [regex]::Matches($acceptanceScript, 'Wait-BackendApiReady -ApiBaseUrl \\$api -DesktopProcess \\$desktop -BackendLogPath')
+$apiReadinessCalls = [regex]::Matches($acceptanceScript, 'Wait-BackendApiReady -ApiBaseUrl \$api -DesktopProcess \$desktop -BackendLogPath')
 Assert-True ($apiReadinessCalls.Count -eq 3) 'Expected three independently ready desktop launches.'
 Assert-True ($acceptanceScript.IndexOf($visibilityReload, [System.StringComparison]::Ordinal) -gt $apiReadinessCalls[1].Index) 'Visibility reload must follow readiness of the restarted API.'
 Assert-True ($acceptanceScript.Contains('$persistedVisibility.user_identity -ne $visibilityIdentity')) 'Packaged local-user identity stability is not checked.'
