@@ -73,9 +73,8 @@ def test_visit_coverage_is_typed_in_api_and_persisted_saved_workflow(
     # Backward-compatible decoding of previously persisted typed artifacts.
     legacy = dict(payload)
     legacy.pop("projected_visit_coverage")
-    assert EcologyMeasurementCandidatesResponse.model_validate(
-        legacy
-    ).projected_visit_coverage == []
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(legacy)
+    assert parsed.projected_visit_coverage == []
 
 
 def test_visit_coverage_reports_linked_gaps_without_inferring_absence(
