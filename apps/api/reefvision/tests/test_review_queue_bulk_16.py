@@ -178,7 +178,6 @@ def test_bulk_triage_appends_atomic_actor_labeled_events(client: TestClient) -> 
         assert history["current_assignee"] is None
 
 
-
 def test_bulk_completion_requires_manual_confirmation_and_preserves_annotations(
     client: TestClient,
 ) -> None:
