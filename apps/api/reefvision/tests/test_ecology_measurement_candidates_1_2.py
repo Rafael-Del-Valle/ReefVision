@@ -366,6 +366,21 @@ def test_projected_unit_qc_excludes_incomplete_and_technical_replicates(
     assert summarize(technical).unit_status == "technical_replicate_unit"
     assert summarize(technical).mean_absolute_change is None
 
+    # The unit-level aggregator must not accept stale, missing or edited
+    # endpoint results as if they were derived from the current source rows.
+    changes = summarize_projected_endpoint_changes(full, summarize_sampling_date_qc(full))
+    invalid_change_sets = [
+        changes[:-1],
+        [changes[0].model_copy(update={"absolute_change": 999.0}), *changes[1:]],
+        [
+            changes[0].model_copy(update={"baseline_image_id": "stale-image"}),
+            *changes[1:],
+        ],
+    ]
+    for altered in invalid_change_sets:
+        with pytest.raises(ValidationError, match="do not match source candidates"):
+            summarize_projected_unit_summaries(full, altered)
+
 
 def test_projected_population_is_unit_weighted_and_stratified() -> None:
     tank_a = EcologyProjectedUnitSummary(
@@ -438,6 +453,22 @@ def test_projected_population_is_unit_weighted_and_stratified() -> None:
     assert parent_qc.units_missing_parent_colony == ["tank-B"]
     technical = tank_b.model_copy(update={"unit_status": "technical_replicate_unit"})
     assert summarize_projected_population_summaries([technical]) == []
+
+    # A single tank/metric must not masquerade as two independent records
+    # merely because its reported sampling window or physical unit differs.
+    repeated_window = tank_a.model_copy(
+        update={"sampling_windows_utc": ["2026-04-03/2026-04-05"]}
+    )
+    repeated_unit = tank_a.model_copy(update={"units": ["cm"]})
+    for duplicated in (repeated_window, repeated_unit, tank_a):
+        with pytest.raises(ValidationError, match="Duplicate projected experimental-unit"):
+            summarize_projected_population_summaries([tank_a, duplicated])
+
+    # Invalid organism coverage must never inflate the biological denominator.
+    for coverage in (["A1", "A2"], ["A1", "A2", "A2", "A3"]):
+        inflated = tank_a.model_copy(update={"complete_organism_keys": coverage})
+        with pytest.raises(ValidationError, match="organism coverage is inconsistent"):
+            summarize_projected_population_summaries([inflated])
 
     # A row marked eligible must not slip into population statistics with
     # missing means, even when an unchecked model_copy supplies the values.
