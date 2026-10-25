@@ -138,3 +138,25 @@ unverified flags, and explicit QC warnings. A researcher must independently
 review identity, geometry quality, scale, and comparable survey methods before
 interpreting area differences biologically. No model weights, assets, or
 research data are transmitted to a cloud service.
+
+### Calibration-only changes across timepoints
+
+The provisional comparison now reports `before_meters_per_mesh_unit`,
+`after_meters_per_mesh_unit`, and
+`calibration_scale_ratio_after_to_before` from the original preview
+provenance. If both observations have different calibration scales, the
+comparison emits `calibration_scale_changed_between_observations`. If their
+**source geometry SHA-256 fingerprints are identical** despite a scale
+change, it additionally emits
+`identical_geometry_rescaled_not_biological_growth`. A change in the
+reported calibrated surface area can therefore arise entirely from
+recalibration of an unchanged reconstruction, not biological growth.
+
+Malformed present scales (including booleans, nonpositive values, and
+nonfinite values) are rejected. Missing legacy scale metadata remains null,
+with `calibration_scale_metadata_unavailable` rather than a fabricated
+ratio. Fingerprint equality only detects byte-equivalent source geometry;
+it does not establish coral identity or geometric registration. Scale-only
+uncertainty bounds are not statistical confidence intervals, and a shared
+calibration error may correlate measurements across surveys. Standalone and
+persisted Workflow Builder comparisons use the same validation and warnings.
