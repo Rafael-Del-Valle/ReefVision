@@ -140,3 +140,41 @@ def test_visit_coverage_reports_linked_gaps_without_inferring_absence(
     assert summarize_projected_endpoint_changes(
         rows, summarize_sampling_date_qc(rows)
     ) == []
+
+
+def test_visit_coverage_never_invents_an_independent_sampling_unit(
+    client: TestClient,
+) -> None:
+    _, source = _source(client)
+    dated = source.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    # Unassigned specimens cannot be pooled as if "None" were a real tank.
+    assert summarize_projected_visit_coverage([dated]) == []
+    technical = dated.model_copy(
+        update={"experimental_unit_type": "video_frame", "experimental_unit_id": "frame-1"}
+    )
+    assert summarize_projected_visit_coverage([technical]) == []
+
+    tank_a = dated.model_copy(
+        update={
+            "organism_key": "A",
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-A",
+        }
+    )
+    tank_b = tank_a.model_copy(
+        update={
+            "organism_key": "B",
+            "experimental_unit_id": "tank-B",
+            "image_id": "tank-B-image",
+            "image_sha256": "f" * 64,
+        }
+    )
+    coverage = summarize_projected_visit_coverage([tank_b, tank_a])
+    assert [row.experimental_unit_id for row in coverage] == ["tank-A", "tank-B"]
+    assert [row.series_organism_keys for row in coverage] == [["A"], ["B"]]
+    assert all(row.no_linked_measurement_organism_keys == [] for row in coverage)
