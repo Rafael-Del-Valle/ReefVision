@@ -1450,7 +1450,7 @@ scientific review and installed Windows GUI/installer validation are required.
 
 The project-owned calibrated measurement candidates endpoint now includes
 an additive typed `candidate_report` with candidate, source-image, organism,
-declared-unit, eligible-longitudinal-series, excluded-series and excluded-source
+declared-unit, date-QC-passing-series, excluded-series and excluded-source
 denominators, and per-status UTC sampling-date QC counts. Its deterministic
 SHA-256 binds the summary to the original source input fingerprint. The new
 `GET /api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates/report.csv`
