@@ -159,6 +159,17 @@ Assert-True ($acceptanceScript.Contains('qcSkipRetry.changed_count -ne 0')) 'Ins
 Assert-True ($acceptanceScript.Contains('qcPersistedEvents.total -ne 5')) 'Installed QC audit history must be checked after desktop restart.'
 Assert-True ($acceptanceScript.Contains('qcPersistedAnnotations.annotations')) 'Installed QC acceptance must preserve the original annotation.'
 
+# Regression: a port file may exist before Uvicorn binds. Every installed
+# desktop launch (initial, post-upgrade/restart, and QC persistence restart)
+# must wait for real loopback HTTP version + migrated schema readiness.
+Assert-True ($acceptanceScript.Contains('function Wait-BackendApiReady(')) 'Packaged API readiness helper is missing.'
+Assert-True (([regex]::Matches($acceptanceScript, 'Wait-BackendApiReady -ApiBaseUrl \$api -DesktopProcess \$desktop -BackendLogPath')).Count -eq 3) 'All three desktop launches must wait for packaged HTTP readiness.'
+Assert-True ($acceptanceScript.Contains('Invoke-RestMethod -Uri "$ApiBaseUrl/system/version" -TimeoutSec 3')) 'Readiness must probe the packaged version endpoint with a bounded timeout.'
+Assert-True ($acceptanceScript.Contains('Invoke-RestMethod -Uri "$ApiBaseUrl/system/migrations/status" -TimeoutSec 3')) 'Readiness must probe migrated schema status.'
+Assert-True ($acceptanceScript.Contains('$migration.current_schema_revision -eq $migration.expected_schema_revision')) 'Readiness must not accept an out-of-date schema.'
+Assert-True ($acceptanceScript.Contains('$DesktopProcess.HasExited')) 'Readiness must fail if the desktop exits.'
+Assert-True ($acceptanceScript.Contains('Packaged API was not ready after $Seconds seconds')) 'Readiness timeout must report a bounded failure.'
+
 # Verify packaged class visibility is exercised against the installed API and
 # checked after the first restart (or real MSI upgrade), not only TestClient.
 Assert-True ($acceptanceScript.Contains('class_visibility_persistence = New-ReefVisionEvidenceResult')) 'Packaged class visibility acceptance evidence field is missing.'
