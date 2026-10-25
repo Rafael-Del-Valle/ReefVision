@@ -756,3 +756,11 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Restored the migration guard's error-message string without weakening its fail-closed handling of concurrent or foreign Alembic heads. Extended the existing SQLite regression to require the exception to identify the exact conflicting revisions and preserve research sentinel data.
 - Windows installer CI now runs standard-library `python -m compileall -q apps/api/reefvision` immediately after Python setup, before Node/Rust/provider bootstrap and the multi-GB installer build. Syntax regressions fail quickly and do not trigger model acquisition.
 - Full lint/type/backend/frontend/E2E, exact-head Windows CI, installed-GUI, MSI upgrade/rollback and 1.1/1.6 migration reconciliation remain release blockers. Do not merge, stamp, tag, publish or auto-approve.
+
+
+### 2026-10-25 — Nullable audit-event bypass prevention (Track D)
+
+- Inspected the 0038 review-events migration: `event_type` is explicitly NOT NULL, because SQLite CHECK constraints accept NULL values. A tampered already-at-head 0038/0039/0040 schema with a nullable event type could previously pass the named allowlist guard and store untyped reviewer events.
+- The read-only desktop migration lineage guard now rejects nullable `event_type` before startup/migration, without stamping or altering scientific data. Added three isolated SQLite regressions preserving an untyped event and scientific sentinel on rejection, and corrected the desktop native-lineage fixtures to reflect the actual NOT NULL migration contract.
+- Repaired the exact Ruff formatter difference from three previous CI failures in `test_migration_lineage_guard_16.py`.
+- **Validation boundary:** SQLAlchemy inspector NULLability behavior checked in an isolated local SQLite smoke test; exact-head Ruff/backend/desktop/Windows CI still required. Cross-version 1.1/1.6 revision reconciliation and real MSI upgrade/installed interactive GUI remain blocked. Release HOLD.
