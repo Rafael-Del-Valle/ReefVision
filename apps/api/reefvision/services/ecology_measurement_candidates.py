@@ -47,6 +47,7 @@ def summarize_sampling_date_qc(
     rows: list[EcologySamplingDateQC] = []
     for (organism_key, metric), records in sorted(groups.items()):
         date_counts: dict[str, int] = {}
+        image_dates: dict[str, set[str]] = {}
         missing_timestamp_image_ids: set[str] = set()
         for record in records:
             captured = record.capture_timestamp_utc
@@ -60,9 +61,13 @@ def summarize_sampling_date_qc(
                 continue
             utc_date = captured.astimezone(UTC).date().isoformat()
             date_counts[utc_date] = date_counts.get(utc_date, 0) + 1
+            image_dates.setdefault(record.image_id, set()).add(utc_date)
 
         units = sorted({record.unit for record in records})
         duplicate_dates = sorted(date for date, count in date_counts.items() if count > 1)
+        reused_image_ids = sorted(
+            image_id for image_id, dates in image_dates.items() if len(dates) > 1
+        )
         contexts = {
             (
                 record.identity_revision,
@@ -78,6 +83,8 @@ def summarize_sampling_date_qc(
             qc_status = "mixed_units"
         elif missing_timestamp_image_ids:
             qc_status = "missing_timestamps"
+        elif reused_image_ids:
+            qc_status = "reused_image_across_dates"
         elif duplicate_dates:
             qc_status = "same_day_technical_replicates"
         elif len(date_counts) < 2:
@@ -95,6 +102,7 @@ def summarize_sampling_date_qc(
                 sampling_dates_utc=sorted(date_counts),
                 duplicate_sampling_dates_utc=duplicate_dates,
                 missing_timestamp_image_ids=sorted(missing_timestamp_image_ids),
+                reused_image_ids=reused_image_ids,
                 qc_status=qc_status,
             )
         )
@@ -593,7 +601,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0010",
+                "algorithm_version": "ecology-measurement-candidates-0011",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
