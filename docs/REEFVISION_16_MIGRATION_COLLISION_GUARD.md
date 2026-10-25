@@ -36,3 +36,24 @@ Run `pytest apps/api/reefvision/tests/test_migration_lineage_guard_16.py` and a 
 ## 2026-10-25 — Duplicate Alembic marker hardening
 
 The 1.6 read-only guard now checks the **number of stored Alembic revision rows**, not only the number of distinct revision strings. Two identical `0038`, `0039` or `0040` rows previously collapsed into a one-element set, potentially allowing an ambiguous database state to pass the preflight. Duplicate rows now fail closed with both original marker values in the diagnostic; no revision rows, QC events, or research assets are rewritten. SQLite regressions cover all three duplicate pairs and assert preservation. The same increment corrects the exact Ruff formatting failure in `test_desktop_runtime_paths.py` from the preceding 17/20 CI run. Full exact-head CI and Windows migration/installer acceptance remain pending; this is not a migration reconciliation or release authorization.
+
+## 2026-10-25 — Revision 0038 event-CHECK integrity and mypy gate
+
+The prior exact-head CI (`e10d65ad`) finished 17/20 workflows successfully;
+the three backend-dependent failures all reported one strict mypy error:
+`migration_lineage_guard.py:43: Need type annotation for "revision_rows"`.
+The revision tuple now has an explicit `tuple[str, ...]` type.
+
+A second audit identified that revision `0038` checked for audit-event
+columns but did not require its original named event-type CHECK constraint.
+The guard now verifies `ck_review_queue_item_event_type` and the exact
+three-event allowlist (`comment`, `assign`, `unassign`) for `0038`,
+alongside the existing six-event `0039` and seven-event `0040` checks.
+This prevents a stamped but weakened 0038 database from being accepted as a
+valid review lineage. Desktop and standalone SQLite regression fixtures now
+exercise valid native 0038 schemas and missing/renamed constraints, preserving
+original revision rows and event data when rejecting an invalid schema.
+
+These are read-only checks. They do **not** reconcile 1.1's colliding 0038,
+upgrade an installed database, or authorize a release. Full exact-head CI,
+Windows installed-GUI and installer migration/rollback acceptance remain required.
