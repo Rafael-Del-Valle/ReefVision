@@ -564,6 +564,41 @@ describe("Gallery", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("reveals an already decoded first image when WebView2 misses load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    vi.spyOn(HTMLImageElement.prototype, "complete", "get").mockImplementation(
+      function (this: HTMLImageElement) {
+        return this.alt.startsWith("Focused project image:");
+      },
+    );
+    vi.spyOn(HTMLImageElement.prototype, "naturalWidth", "get").mockReturnValue(
+      1600,
+    );
+    vi.spyOn(HTMLImageElement.prototype, "naturalHeight", "get").mockReturnValue(
+      1200,
+    );
+
+    renderGallery();
+    expect(
+      await screen.findByAltText("Focused project image: swiftia-01.png"),
+    ).toBeInTheDocument();
+    // No load event is dispatched: cached pixels must still become visible.
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Loading full-resolution image..."),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("reveals the first image even if WebView2 decode never resolves", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
