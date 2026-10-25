@@ -48,6 +48,16 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         second.get("calibration_verified") is not False
     ):
         raise ValueError("Unexpected calibration verification state")
+    # Preserve the actual reconstruction QC at each timepoint. A longitudinal
+    # difference must not hide an open, degenerate, or nonmanifold source mesh.
+    observation_qc: list[list[str]] = []
+    for record in (before, after):
+        source_warnings = record.get("qc_warnings", [])
+        if not isinstance(source_warnings, list) or any(
+            not isinstance(warning, str) for warning in source_warnings
+        ):
+            raise ValueError("Mesh preview QC warnings must be lists of strings")
+        observation_qc.append(list(source_warnings))
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
     # Narrow each value before arithmetic; a missing area must not reach isfinite.
@@ -184,6 +194,14 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "surface_area_change_is_not_verified_biological_growth",
         "average_change_per_day_is_not_a_biological_growth_rate",
     ]
+    if any(observation_qc):
+        warnings.append("source_mesh_qc_requires_review")
+    for field, warning in (
+        ("source_format", "mesh_source_formats_differ_between_observations"),
+        ("calibration_method", "calibration_methods_differ_between_observations"),
+    ):
+        if first.get(field) and second.get(field) and first[field] != second[field]:
+            warnings.append(warning)
     if extent_delta is not None:
         warnings.append("axis_aligned_extent_change_is_not_verified_branch_growth")
         if extent_relative is None:
@@ -192,7 +210,9 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
             warnings.append("extent_scale_uncertainty_interval_unavailable")
     else:
         warnings.append("axis_aligned_extent_comparison_unavailable")
-    if first.get("geometry_sha256") == second.get("geometry_sha256"):
+    if first.get("geometry_sha256") and (
+        first.get("geometry_sha256") == second.get("geometry_sha256")
+    ):
         warnings.append("identical_geometry_fingerprint")
     if difference_bounds is None:
         warnings.append("scale_uncertainty_interval_unavailable")
@@ -204,6 +224,8 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "before_observed_at_utc": first["observed_at_utc"],
         "after_observed_at_utc": second["observed_at_utc"],
         "elapsed_days": elapsed_days,
+        "before_mesh_qc_warnings": observation_qc[0],
+        "after_mesh_qc_warnings": observation_qc[1],
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
         "delta_surface_area_m2": difference,
