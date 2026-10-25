@@ -1228,6 +1228,7 @@ def test_mesh_comparison_rejects_malformed_topology_counts(
     with pytest.raises(ValueError, match="face_count must be a nonnegative integer"):
         compare_mesh_observations(before, after)
 
+
 @pytest.mark.parametrize(
     ("first_hash", "second_hash", "topology_changed", "inconsistent"),
     [
