@@ -153,10 +153,13 @@ def summarize_projected_endpoint_changes(
         # dates. These slopes describe projected geometry, never growth.
         absolute_per_day = difference / elapsed_days
         baseline_percent_per_day = percent_change / elapsed_days
-        if not all(
-            math.isfinite(value)
-            for value in (difference, percent_change, absolute_per_day, baseline_percent_per_day)
-        ):
+        finite_values = [
+            difference,
+            percent_change,
+            absolute_per_day,
+            baseline_percent_per_day,
+        ]
+        if not all(math.isfinite(value) for value in finite_values):
             raise ValidationError("Projected endpoint change is nonfinite or unordered")
         changes.append(
             EcologyProjectedEndpointChange(
