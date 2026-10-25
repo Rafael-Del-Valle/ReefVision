@@ -797,7 +797,7 @@ class EcologyMeasurementCandidateService:
                     if row.experimental_unit_type and row.experimental_unit_id
                 }
             ),
-            "eligible_longitudinal_series_count": sum(
+            "date_qc_pass_series_count": sum(
                 row.qc_status == "date_series_candidate" for row in sampling_date_qc
             ),
             "excluded_series_count": sum(
