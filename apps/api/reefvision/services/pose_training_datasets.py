@@ -216,6 +216,9 @@ class PoseTrainingDatasetService:
         self,
         dataset_id: str,
     ) -> PoseTrainingDatasetResponse:
+        # A direct dataset lookup must not advertise altered frozen science
+        # as complete when item retrieval and native export reject it.
+        self.manifest(dataset_id)
         return PoseTrainingDatasetResponse.model_validate(self._dataset(dataset_id))
 
     def items(
