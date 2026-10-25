@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 from pathlib import Path
+from typing import BinaryIO
 from uuid import UUID
 
 import pytest
@@ -138,9 +139,9 @@ def test_interrupted_fallback_copy_does_not_publish_partial_camera_original(
     def unsupported_hardlink(_source: Path, _target: Path) -> None:
         raise OSError(errno.EOPNOTSUPP, "Hard links are unsupported")
 
-    def interrupted_copy(_source: object, output: object, *, length: int) -> None:
+    def interrupted_copy(_source: BinaryIO, output: BinaryIO, *, length: int) -> None:
         assert length == 1024 * 1024
-        output.write(b"incomplete")  # type: ignore[attr-defined]
+        output.write(b"incomplete")
         raise OSError(errno.EIO, "Removable drive disconnected mid-copy")
 
     monkeypatch.setattr(image_storage.os, "link", unsupported_hardlink)
