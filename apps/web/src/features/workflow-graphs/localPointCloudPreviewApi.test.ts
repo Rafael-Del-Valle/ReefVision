@@ -56,7 +56,7 @@ describe("previewLocalPointCloudFile", () => {
     const result = await previewLocalPointCloudFile(
       "project 1",
       localFile("coral.PLY", new TextEncoder().encode(ply)),
-      calibration,
+      { ...calibration, coordinate_frame_id: "transect-7" },
     );
     expect(result.surface_area_m2).toBeNull();
     expect(result.branch_length_m).toBeNull();
@@ -69,6 +69,7 @@ describe("previewLocalPointCloudFile", () => {
     expect(body.source_label).toBe("coral.PLY");
     expect(body.calibration_evidence).toBe(calibration.calibration_evidence);
     expect(body.relative_scale_uncertainty).toBe(0.1);
+    expect(body.coordinate_frame_id).toBe("transect-7");
     expect(body.points).toBeUndefined();
   });
 
@@ -161,6 +162,14 @@ describe("previewLocalPointCloudFile", () => {
           relative_scale_uncertainty: uncertainty,
         }),
       ).rejects.toThrow("Relative scale uncertainty");
+    }
+    for (const invalidFrame of ["", "survey with spaces", "survey/1", "x".repeat(129)]) {
+      await expect(
+        previewLocalPointCloudFile("p", valid, {
+          ...calibration,
+          coordinate_frame_id: invalidFrame,
+        }),
+      ).rejects.toThrow("Point-cloud source frame ID");
     }
     await expect(
       previewLocalPointCloudFile(
