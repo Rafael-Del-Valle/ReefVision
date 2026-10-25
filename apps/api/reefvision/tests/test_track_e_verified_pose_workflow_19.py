@@ -899,6 +899,7 @@ def test_frozen_pose_review_evidence_corruption_fails_closed(
             session.commit()
 
     with app.state.session_factory() as session:
-        assert PoseTrainingDatasetService(session).manifest(dataset_id).manifest_sha256 == (
-            dataset["manifest_sha256"]
+        assert (
+            PoseTrainingDatasetService(session).manifest(dataset_id).manifest_sha256
+            == dataset["manifest_sha256"]
         )
