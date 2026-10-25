@@ -168,9 +168,7 @@ def test_mesh_comparison_retains_source_qc_and_calibration_differences(
     after = _mesh("scan-2", "2026-10-02T12:00:00Z", 2)
     after.pop("vertices")
     after.pop("faces")
-    after["obj_text"] = "\n".join(
-        ["v 0 0 0", "v 1 0 0", "v 0 2 0", "f 1 2 3"]
-    )
+    after["obj_text"] = "v 0 0 0\\nv 1 0 0\\nv 0 2 0\\nf 1 2 3"
     after["calibration_method"] = "instrument"
     response = client.post(
         f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
