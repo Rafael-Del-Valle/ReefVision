@@ -288,9 +288,7 @@ def test_reference_scale_conflict_blocks_ecological_sources_and_saved_workflow(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in workflow["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == standalone.json()
@@ -305,6 +303,5 @@ def test_reference_scale_conflict_blocks_ecological_sources_and_saved_workflow(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "failed"
     assert not any(
-        row["data_type"] == "ecology_measurement_candidates"
-        for row in workflow["artifacts"]
+        row["data_type"] == "ecology_measurement_candidates" for row in workflow["artifacts"]
     )

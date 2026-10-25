@@ -1538,3 +1538,19 @@ The exact-head Ruff-format failure in
 `test_ecology_candidate_report_series_1_2.py` was also corrected. Exact-head
 CI, verified longitudinal observation histories, registered study designs,
 independent scientific review and installed Windows acceptance remain required.
+
+## Scientific mask polygon topology gate (2026-10-25)
+
+Ecological annotation evidence now checks a polygon ring for zero projected
+area, repeated non-closure vertices, overlapping/backtracking edges and
+self-intersections. A conventional repeated closing vertex, concave outlines
+and forward collinear vertices remain valid. For bounded offline execution,
+the scientific evidence gate limits rings to 4096 vertices; simplify longer
+rings before linking. This check applies when creating a source link and
+when re-reading it for standalone registry and saved executable Workflow
+Builder sources, so changed/invalid source geometry fails closed rather than
+creating an apparently usable ecological artifact. This is a topology QC
+gate, **not** a substitute for independent mask-area verification or
+biological review. Linked evidence remains `linked_unverified` and requires
+scientist review. No new migration, model weights or 1.1 environmental
+dependency is introduced.

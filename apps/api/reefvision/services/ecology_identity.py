@@ -22,6 +22,7 @@ from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.project import Project
+from reefvision.domain.ecology_polygon_qc import validate_ecological_polygon_topology
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
@@ -350,6 +351,12 @@ class EcologyIdentityService:
                         raise ValidationError(
                             "Ecological mask polygon extends outside source image"
                         )
+                # A reviewed mask with a self-crossing or degenerate source
+                # ring is not reliable evidence for projected-area research.
+                try:
+                    validate_ecological_polygon_topology(polygon)
+                except ValueError as exc:
+                    raise ValidationError(str(exc)) from exc
 
     def _annotation_source(self, kind: str, annotation_id: str, image_id: str) -> tuple[int, str]:
         """Resolve a current source revision, never a verified research observation."""
@@ -556,9 +563,7 @@ class EcologyIdentityService:
             if (
                 not math.isfinite(reference_scale)
                 or reference_scale <= 0
-                or not math.isclose(
-                    calibration.distance_per_pixel, reference_scale, rel_tol=0.01
-                )
+                or not math.isclose(calibration.distance_per_pixel, reference_scale, rel_tol=0.01)
             ):
                 raise ValidationError(
                     "Ecological calibration scale conflicts with its reference length"
