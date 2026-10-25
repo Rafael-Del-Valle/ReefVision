@@ -1423,6 +1423,8 @@ that series but without a link on that date, undated source organisms and
 same-day repeated measurements. Source measurement counts are distinct from
 the organism denominators. Date normalization accepts equivalent timezone
 offsets and never treats naive or missing timestamps as dated observations.
+Rows with missing unit declarations or technical-replicate unit labels
+are omitted rather than pooling unrelated organisms as a fictitious unit.
 Rows and lists are deterministic under input reordering. The source-linked
 reproducibility fingerprint advances to `ecology-measurement-candidates-0017`;
 older persisted typed artifacts deserialize with an empty coverage list.
