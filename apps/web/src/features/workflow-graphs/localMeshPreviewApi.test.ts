@@ -32,7 +32,10 @@ describe("previewLocalMeshFile", () => {
       size: 32,
       text: async () => "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
     } as File;
-    const result = await previewLocalMeshFile("project 1", file, calibration);
+    const result = await previewLocalMeshFile("project 1", file, {
+      ...calibration,
+      coordinate_frame_id: "transect-7",
+    });
     expect(result.measurement_status).toBe("caller_supplied_unverified");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/projects/project%201/spatial/mesh-preview");
@@ -41,6 +44,7 @@ describe("previewLocalMeshFile", () => {
     expect(body.source_label).toBe("coral.obj");
     expect(body.calibration_evidence).toBe("Unreviewed physical ruler");
     expect(body.relative_scale_uncertainty).toBe(0.1);
+    expect(body.coordinate_frame_id).toBe("transect-7");
   });
 
   it("encodes GLB bytes exactly without uploading or persisting an asset", async () => {
@@ -102,6 +106,19 @@ describe("previewLocalMeshFile", () => {
         calibration_evidence: "   ",
       }),
     ).rejects.toThrow("calibration evidence");
+    for (const invalidFrame of [
+      "",
+      "survey with spaces",
+      "survey/1",
+      "x".repeat(129),
+    ]) {
+      await expect(
+        previewLocalMeshFile("p", { name: "coral.obj", size: 1 } as File, {
+          ...calibration,
+          coordinate_frame_id: invalidFrame,
+        }),
+      ).rejects.toThrow("Mesh source frame ID");
+    }
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
