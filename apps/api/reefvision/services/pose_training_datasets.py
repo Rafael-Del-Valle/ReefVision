@@ -853,6 +853,12 @@ class PoseTrainingDatasetService:
             b"SLEAP/COCO/DLC/Ultralytics/NWB rendering are "
             b"performed in the next Phase 9 interoperability "
             b"layer.\n"
+            b"\n"
+            b"Verify extracted files before scientific reuse:\n"
+            b"  Linux/macOS: sha256sum -c SHA256SUMS\n"
+            b"  Windows: compare Get-FileHash -Algorithm SHA256 results\n"
+            b"           with the SHA256SUMS entries for each file.\n"
+            b"Run these checks from the extracted package directory.\n"
         )
 
         # A portable checksum index lets researchers validate extracted files
