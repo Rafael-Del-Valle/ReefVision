@@ -300,12 +300,15 @@ def test_revision_0040_requires_exact_completion_check_without_writes(
         ("0039", "0040"),
         ("0038", "0037"),
         ("0040", "science_v11"),
+        ("0038", "0038"),
+        ("0039", "0039"),
+        ("0040", "0040"),
     ],
 )
 def test_concurrent_review_heads_fail_closed_without_modifying_research_assets(
     revisions: tuple[str, str],
 ) -> None:
-    """A review revision plus any other head must fail before touching research data."""
+    """Reject foreign, distinct or duplicate review stamps without touching data."""
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))

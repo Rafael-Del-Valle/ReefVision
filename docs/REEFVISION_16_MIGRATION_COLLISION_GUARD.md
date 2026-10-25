@@ -32,3 +32,7 @@ pass before any release decision.
 ## Acceptance remaining
 
 Run `pytest apps/api/reefvision/tests/test_migration_lineage_guard_16.py` and a real SQLite upgrade/downgrade/upgrade with representative data for **both** lineages on isolated backups. Confirm Windows packaged sidecar startup and error messaging. This guard alone does not make 1.6 release-ready.
+
+## 2026-10-25 — Duplicate Alembic marker hardening
+
+The 1.6 read-only guard now checks the **number of stored Alembic revision rows**, not only the number of distinct revision strings. Two identical `0038`, `0039` or `0040` rows previously collapsed into a one-element set, potentially allowing an ambiguous database state to pass the preflight. Duplicate rows now fail closed with both original marker values in the diagnostic; no revision rows, QC events, or research assets are rewritten. SQLite regressions cover all three duplicate pairs and assert preservation. The same increment corrects the exact Ruff formatting failure in `test_desktop_runtime_paths.py` from the preceding 17/20 CI run. Full exact-head CI and Windows migration/installer acceptance remain pending; this is not a migration reconciliation or release authorization.

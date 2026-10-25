@@ -38,19 +38,22 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     inspector = inspect(connection)
     if not inspector.has_table("alembic_version"):
         return
-    revisions: set[str] = set(
+    # Preserve row multiplicity: two identical stamps are still an invalid
+    # Alembic state and must not be hidden by set deduplication.
+    revision_rows = tuple(
         connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
     )
+    revisions = set(revision_rows)
     review_revisions = revisions & {"0038", "0039", "0040"}
     if not review_revisions:
         return
     # Alembic can record unrelated branch heads in the same version table.
     # A review lineage combined with any other head is not an accepted
     # migration graph here; reject it before desktop startup or schema writes.
-    if len(revisions) != 1:
+    if len(revision_rows) != 1:
         raise RuntimeError(
             "Unsafe ReefVision Alembic concurrent review revisions or foreign heads: "
-            f"{sorted(revisions)}. Preserve the database and reconcile "
+            f"{sorted(revision_rows)}. Preserve the database and reconcile "
             "the migration heads without stamping or deleting records."
         )
     revision = next(iter(review_revisions))

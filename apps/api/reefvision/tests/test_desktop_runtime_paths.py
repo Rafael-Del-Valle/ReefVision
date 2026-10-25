@@ -60,8 +60,7 @@ def _add_native_review_table(database: Path, *, revision: str | None = None) -> 
         if stamped_revision == "0040":
             allowed_events += ", 'triage_complete'"
         event_type_check = (
-            ", CONSTRAINT ck_review_queue_item_event_type "
-            f"CHECK (event_type IN ({allowed_events}))"
+            f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed_events}))"
             if stamped_revision in {"0039", "0040"}
             else ""
         )
