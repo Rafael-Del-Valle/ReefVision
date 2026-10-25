@@ -394,6 +394,7 @@ def test_projected_unit_rejects_cross_metric_identity_and_unit_conflicts(
     )
     baseline = source.model_copy(
         update={
+            "metric": "box_width",
             "experimental_unit_type": "tank",
             "experimental_unit_id": "tank-A",
             "parent_colony_key": "parent-A",
