@@ -22,6 +22,7 @@ function LocalPointCloudPreviewSession({
   const [file, setFile] = useState<File | null>(null);
   const [scale, setScale] = useState("0.01");
   const [evidence, setEvidence] = useState("");
+  const [coordinateFrame, setCoordinateFrame] = useState("");
   const [uncertainty, setUncertainty] = useState("");
   const [firstPointIndex, setFirstPointIndex] = useState("");
   const [secondPointIndex, setSecondPointIndex] = useState("");
@@ -61,6 +62,7 @@ function LocalPointCloudPreviewSession({
           meters_per_unit: Number(scale),
           calibration_method: "ruler",
           calibration_evidence: evidence,
+          coordinate_frame_id: coordinateFrame || undefined,
           relative_scale_uncertainty:
             uncertainty.trim() === "" ? null : Number(uncertainty),
         },
@@ -141,6 +143,18 @@ function LocalPointCloudPreviewSession({
           />
         </label>
         <label>
+          Point-cloud source coordinate frame ID (unverified, optional)
+          <input
+            type="text"
+            maxLength={128}
+            value={coordinateFrame}
+            onChange={(event) => {
+              setCoordinateFrame(event.target.value);
+              invalidatePreview();
+            }}
+          />
+        </label>
+        <label>
           Chord start source point index (optional)
           <input
             aria-label="Chord start source point index"
@@ -174,7 +188,8 @@ function LocalPointCloudPreviewSession({
       <p className="muted-copy">
         Optional point-pair chord is straight-line distance between original
         zero-based source indices, not anatomical branch length. The backend
-        checks indices against the full imported cloud.
+        checks indices against the full imported cloud. A source-frame label
+        does not establish verified spatial registration.
       </p>
       <button
         type="button"
