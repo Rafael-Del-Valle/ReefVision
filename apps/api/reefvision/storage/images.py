@@ -250,8 +250,12 @@ def create_browser_display(source: Path, destination: Path) -> None:
     temporary.unlink(missing_ok=True)
     try:
         with Image.open(source) as image:
-            # Match EXIF-oriented thumbnails without altering the camera original.
-            display: Image.Image = ImageOps.exif_transpose(image)
+            # Annotation coordinates and stored dimensions refer to raw camera
+            # pixels. Do not EXIF-transpose the scientific display rendition.
+            # Remove orientation metadata so WebView2 cannot rotate it again.
+            display: Image.Image = image.copy()
+            display.info.pop("exif", None)
+            display.info.pop("orientation", None)
             if display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16"}:
                 display = display.convert("RGB")
             display.save(temporary, format="PNG", optimize=True)
