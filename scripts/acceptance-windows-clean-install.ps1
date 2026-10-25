@@ -80,6 +80,7 @@ $report = [ordered]@{
     project_persistence = New-ReefVisionEvidenceResult
     class_visibility_persistence = New-ReefVisionEvidenceResult
     qc_review_coordination = New-ReefVisionEvidenceResult
+    qc_workflow_persistence = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
     upgrade = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
@@ -741,6 +742,25 @@ try {
         throw 'Packaged QC review changed the researcher annotation across restart.'
     }
     $report.qc_review_coordination = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Installed API: scoped queue, idempotent comment and bulk skip, assignment, return/start, five durable audit events and unchanged annotation across desktop restart.'
+
+    # Verify saved graph, executed typed artifact, provenance digest and queue
+    # survive a full installed-desktop restart, not merely the in-process job.
+    $qcPersistedGraphs = @(Invoke-RestMethod "$api/projects/$projectId/workflow-graphs" | Where-Object { $_.id -eq $qcWorkflowSaved.id })
+    $qcPersistedWorkflow = Invoke-RestMethod "$api/workflow-runs/$($qcWorkflowQueued.id)"
+    $qcPersistedWorkflowArtifacts = @($qcPersistedWorkflow.artifacts | Where-Object { $_.data_type -eq 'review_queue_reference' })
+    $qcPersistedWorkflowQueue = Invoke-RestMethod "$api/review-queues/$($qcWorkflowPayload.queue_id)"
+    if ($qcPersistedGraphs.Count -ne 1 -or
+        $qcPersistedWorkflow.run.status -ne 'succeeded' -or
+        $qcPersistedWorkflowArtifacts.Count -ne 1 -or
+        $qcPersistedWorkflowArtifacts[0].payload_sha256 -ne $qcWorkflowArtifactSha -or
+        $qcPersistedWorkflowArtifacts[0].payload_json.queue_id -ne $qcWorkflowPayload.queue_id -or
+        $qcPersistedWorkflowArtifacts[0].payload_json.review_status -ne 'requires_researcher_review' -or
+        $qcPersistedWorkflowQueue.project_id -ne $projectId -or
+        $qcPersistedWorkflowQueue.item_count -ne $qcWorkflowQueue.item_count) {
+        throw 'Installed saved QC Workflow Builder graph, typed artifact, or review queue changed across restart.'
+    }
+    $report.qc_workflow_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed saved typed project -> QC graph, background execution, dimensionless scored queue and SHA-256 provenance persisted across restart; run $($qcWorkflowQueued.id), human review required."
+
 
 
     $exchange = Invoke-RestMethod "$api/projects/$projectId/exchange-packages" -Method Post -ContentType 'application/json' -Body (@{include_media=$true;include_model_weights=$false;include_generated_artifacts=$true;notes='clean install acceptance'} | ConvertTo-Json)
