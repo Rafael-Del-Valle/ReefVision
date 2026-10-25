@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
-from reefvision.domain.errors import ValidationError
 from reefvision.db.models import (
     Job,
     ModelRegistration,
@@ -21,6 +20,7 @@ from reefvision.db.models import (
     Project,
     TrainingRun,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
     materialize_pose_training_exports,
 )
