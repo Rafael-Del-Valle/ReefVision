@@ -48,3 +48,34 @@ def test_import_destination_collision_preserves_existing_original(
     assert original.read_bytes() == sentinel
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 0
     assert not (original.parent.parent.parent / ".imports" / f"{staging_id}.part").exists()
+
+
+def test_staging_name_collision_preserves_existing_partial_import(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Immutable staged camera upload collision")
+    staging_id = UUID("00000000-0000-4000-8000-000000000105")
+    staging = (
+        Path(test_settings.resolved_data_dir)
+        / project["storage_root"]
+        / ".imports"
+        / f"{staging_id}.part"
+    )
+    staging.parent.mkdir(parents=True, exist_ok=True)
+    sentinel = b"an existing staged upload must survive a UUID collision"
+    staging.write_bytes(sentinel)
+    monkeypatch.setattr(image_services, "uuid4", lambda: staging_id)
+
+    report = import_one(
+        client,
+        project["id"],
+        filename="second-camera-exposure.PNG",
+        content=image_bytes(size=(42, 31)),
+    )
+
+    assert not report["successful"]
+    assert len(report["failed"]) == 1
+    assert staging.read_bytes() == sentinel
+    assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 0
