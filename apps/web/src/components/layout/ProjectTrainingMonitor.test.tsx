@@ -124,6 +124,50 @@ describe("ProjectTrainingMonitor", () => {
     await waitFor(() => expect(open).toHaveBeenCalledWith("run-active"));
   });
 
+  it.each(["completed", "failed"] as const)(
+    "opens the read-only PowerShell monitor for %s runs",
+    async (status) => {
+      vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+        apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+        dataDir: "C:/ReefVision",
+        desktopMode: true,
+      });
+      const open = vi
+        .spyOn(runtime, "openDesktopTrainingConsole")
+        .mockResolvedValue(undefined);
+      vi.mocked(api.getTrainingRuns).mockResolvedValue([
+        { ...completedRun, status },
+      ]);
+
+      renderMonitor();
+      await screen.findByText("Swiftia detector completed");
+      expect(
+        screen.queryByRole("button", { name: "Cancel run" }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Open PowerShell monitor" }),
+      );
+      await waitFor(() =>
+        expect(open).toHaveBeenCalledWith("run-completed"),
+      );
+    },
+  );
+
+  it("does not offer a PowerShell launcher in browser mode", async () => {
+    vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+      apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+      dataDir: "C:/ReefVision",
+      desktopMode: false,
+    });
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([completedRun]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector completed");
+    expect(
+      screen.queryByRole("button", { name: "Open PowerShell monitor" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows active canonical training progress, metrics, and provenance", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
 
