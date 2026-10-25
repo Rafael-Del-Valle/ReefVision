@@ -1577,3 +1577,26 @@ They do not establish raster-mask area accuracy, verified biological
 identity, longitudinal growth, or independent experimental units.
 All linked records remain unverified and scientist review is required.
 Exact-head CI and Windows/scientific release acceptance must still pass.
+
+
+## Tight polygon-to-bounding-box QC (2026-10-25; development only)
+
+Source-linked polygon masks now require their saved source-pixel bounding box
+to agree with **all four polygon extrema** within one pixel of raster/rounding
+tolerance. The previous enclosure-only rule allowed a stale or oversized
+bounding box to pass when every vertex remained inside it. Imported or
+externally mutated mask evidence fails closed on both initial annotation
+linkage and registry read-back. The same existing typed, persisted
+`ecology_identity_registry_source` Workflow Builder node refuses to publish
+a successful registry artifact when linked geometry becomes inconsistent.
+Regression tests cover each bound, post-link changes, and standalone versus
+saved-workflow behavior. Previously supported one-pixel rounding remains valid.
+
+This check is geometric QC, **not** proof of reviewed biological identity,
+accurate raster area, calibrated growth, or independent replication. Evidence
+remains `linked_unverified` with scientist review required. The preceding
+exact-head CI had 16/19 successful workflows; three backend gates failed on
+Ruff formatting in the polygon QC module and its tests. The exact reported
+formatter corrections are included in this change. New-head CI, migration
+reconciliation, representative ecological datasets and installed Windows GUI
+scientific acceptance remain mandatory.

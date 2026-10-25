@@ -378,6 +378,22 @@ class EcologyIdentityService:
                         raise ValidationError(
                             "Ecological mask polygon extends outside its source-pixel bounds"
                         )
+                    # The stored bounds must also be tight around the polygon.
+                    # An oversized box can represent a stale source revision
+                    # even when every vertex remains within its envelope.
+                    polygon_bounds = (
+                        min(point[0] for point in polygon),
+                        min(point[1] for point in polygon),
+                        max(point[0] for point in polygon),
+                        max(point[1] for point in polygon),
+                    )
+                    if any(
+                        abs(saved - derived) > tolerance_px
+                        for saved, derived in zip(values, polygon_bounds, strict=True)
+                    ):
+                        raise ValidationError(
+                            "Ecological mask polygon does not match its source-pixel bounds"
+                        )
 
     def _annotation_source(self, kind: str, annotation_id: str, image_id: str) -> tuple[int, str]:
         """Resolve a current source revision, never a verified research observation."""

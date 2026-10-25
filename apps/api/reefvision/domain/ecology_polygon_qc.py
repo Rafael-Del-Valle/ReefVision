@@ -15,13 +15,8 @@ def _cross(a: tuple[float, float], b: tuple[float, float], c: tuple[float, float
     return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
 
-def _on_segment(
-    a: tuple[float, float], b: tuple[float, float], p: tuple[float, float]
-) -> bool:
-    return (
-        min(a[0], b[0]) <= p[0] <= max(a[0], b[0])
-        and min(a[1], b[1]) <= p[1] <= max(a[1], b[1])
-    )
+def _on_segment(a: tuple[float, float], b: tuple[float, float], p: tuple[float, float]) -> bool:
+    return min(a[0], b[0]) <= p[0] <= max(a[0], b[0]) and min(a[1], b[1]) <= p[1] <= max(a[1], b[1])
 
 
 def _segments_intersect(
@@ -34,9 +29,7 @@ def _segments_intersect(
     ab_d = _cross(a, b, d)
     cd_a = _cross(c, d, a)
     cd_b = _cross(c, d, b)
-    if ((ab_c > 0 > ab_d) or (ab_c < 0 < ab_d)) and (
-        (cd_a > 0 > cd_b) or (cd_a < 0 < cd_b)
-    ):
+    if ((ab_c > 0 > ab_d) or (ab_c < 0 < ab_d)) and ((cd_a > 0 > cd_b) or (cd_a < 0 < cd_b)):
         return True
     return any(
         (cross == 0 and _on_segment(start, end, point))
@@ -67,17 +60,19 @@ def validate_ecological_polygon_topology(points: list[list[int | float]]) -> Non
     if not all(math.isfinite(x) and math.isfinite(y) for x, y in ring):
         raise ValueError("Ecological mask polygon has nonfinite coordinates")
     origin = ring[0]
-    twice_area = math.fsum(
-        _cross(origin, ring[i], ring[(i + 1) % n]) for i in range(n)
-    )
+    twice_area = math.fsum(_cross(origin, ring[i], ring[(i + 1) % n]) for i in range(n))
     if not math.isfinite(twice_area) or abs(twice_area) <= 1e-9:
         raise ValueError("Ecological mask polygon has zero or nonfinite projected area")
     for i in range(n):
         previous, vertex, following = ring[i - 1], ring[i], ring[(i + 1) % n]
-        if _cross(previous, vertex, following) == 0 and (
-            (vertex[0] - previous[0]) * (following[0] - vertex[0])
-            + (vertex[1] - previous[1]) * (following[1] - vertex[1])
-        ) < 0:
+        if (
+            _cross(previous, vertex, following) == 0
+            and (
+                (vertex[0] - previous[0]) * (following[0] - vertex[0])
+                + (vertex[1] - previous[1]) * (following[1] - vertex[1])
+            )
+            < 0
+        ):
             raise ValueError("Ecological mask polygon contains a backtracking edge")
         a, b = vertex, following
         for j in range(i + 1, n):
