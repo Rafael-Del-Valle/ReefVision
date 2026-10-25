@@ -70,6 +70,24 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         ):
             raise ValueError("Mesh preview QC warnings must be lists of strings")
         observation_qc.append(list(source_warnings))
+    # Geometry topology is an acquisition/reconstruction QC diagnostic, not
+    # evidence of colony fragmentation, growth, or biological condition.
+    topology_fields = (
+        "face_count",
+        "edge_connected_patch_count",
+        "boundary_edge_count",
+        "nonmanifold_edge_count",
+        "degenerate_face_count",
+    )
+    topology_counts: list[dict[str, int | None]] = []
+    for record in (before, after):
+        counts: dict[str, int | None] = {}
+        for field in topology_fields:
+            value = record.get(field)
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError(f"{field} must be a nonnegative integer when present")
+            counts[field] = value
+        topology_counts.append(counts)
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
     # Narrow each value before arithmetic; a missing area must not reach isfinite.
@@ -294,6 +312,21 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         warnings.append("zero_followup_extent_requires_reconstruction_review")
     if any(observation_qc):
         warnings.append("source_mesh_qc_requires_review")
+    before_topology, after_topology = topology_counts
+    topology_changed_fields = [
+        field
+        for field in topology_fields
+        if before_topology[field] is not None
+        and after_topology[field] is not None
+        and before_topology[field] != after_topology[field]
+    ]
+    if topology_changed_fields:
+        warnings.append("reconstruction_topology_changed_requires_review")
+    if any(
+        before_topology[field] is None or after_topology[field] is None
+        for field in topology_fields
+    ):
+        warnings.append("reconstruction_topology_comparison_incomplete")
     # Source-frame labels are audit metadata, not registration transforms.
     frames = [first.get("coordinate_frame_id"), second.get("coordinate_frame_id")]
     for frame in frames:
@@ -393,6 +426,9 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         ),
         "before_mesh_qc_warnings": observation_qc[0],
         "after_mesh_qc_warnings": observation_qc[1],
+        "before_reconstruction_topology_counts": before_topology,
+        "after_reconstruction_topology_counts": after_topology,
+        "reconstruction_topology_changed_fields": topology_changed_fields,
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
         "delta_surface_area_m2": difference,
