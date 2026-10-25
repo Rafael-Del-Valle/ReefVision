@@ -47,6 +47,19 @@ PACKAGE_MANIFEST_FILENAME = "reefvision-pose-training-manifest.json"
 PACKAGE_ITEMS_FILENAME = "items.jsonl"
 
 
+def frozen_pose_item_evidence_sha256(item: PoseTrainingDatasetItem) -> str:
+    """Fingerprint frozen review and model provenance beyond landmark geometry."""
+    return canonical_json_sha256(
+        {
+            "video_revision": item.video_revision,
+            "label_class_id": item.label_class_id,
+            "source_models": item.source_models_json,
+            "source_job_ids": item.source_job_ids_json,
+            "review_provenance": item.review_provenance_json,
+        }
+    )
+
+
 def frozen_pose_item_fingerprints_match(
     session: Session,
     dataset: PoseTrainingDataset,
@@ -143,6 +156,16 @@ def frozen_pose_item_fingerprints_match(
             manifest_row = rows_by_id.get(item_id)
             if manifest_row is None or summary["canonical_pose_sha256"] != canonical_json_sha256(
                 manifest_row.canonical_pose_json
+            ):
+                return False
+        # Newly frozen manifests also bind model provenance, review actor,
+        # and source job identities. Legacy manifests remain readable.
+        if "frozen_evidence_sha256" in summary:
+            manifest_row = rows_by_id.get(item_id)
+            if (
+                manifest_row is None
+                or summary["frozen_evidence_sha256"]
+                != frozen_pose_item_evidence_sha256(manifest_row)
             ):
                 return False
         observed[item_id] = {field: summary.get(field) for field in expected.get(item_id, {})}
@@ -567,6 +590,7 @@ class PoseTrainingDatasetService:
             "verified_track_revision": track.revision,
             "verified_pose_sha256": (candidate.verified_pose_sha256),
             "canonical_pose_sha256": canonical_json_sha256(canonical_pose),
+            "frozen_evidence_sha256": frozen_pose_item_evidence_sha256(item),
             "pose_schema_id": candidate.pose_schema_id,
             "pose_schema_revision": (candidate.pose_schema_revision),
             "pose_schema_content_hash": (schema["content_hash"]),

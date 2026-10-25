@@ -893,6 +893,9 @@ def test_frozen_pose_review_evidence_corruption_fails_closed(
         assert item is not None
         original_review = dict(item.review_provenance_json)
         original_acquisition = dict(item.acquisition_provenance_json)
+        original_models = list(item.source_models_json or [])
+        original_jobs = list(item.source_job_ids_json or [])
+        assert "frozen_evidence_sha256" in service.manifest(dataset_id).manifest_json["items"][0]
 
     cases = (
         ("review_provenance_json", ["not-a-review-record"]),
@@ -904,6 +907,14 @@ def test_frozen_pose_review_evidence_corruption_fails_closed(
             "review_provenance_json",
             {**original_review, "target_id": "unrelated-candidate"},
         ),
+        # These remain structurally valid but must not silently change
+        # frozen scientist attribution or source model/job lineage.
+        (
+            "review_provenance_json",
+            {**original_review, "actor": "tampered-reviewer"},
+        ),
+        ("source_models_json", [{"model_id": "tampered-source-model"}]),
+        ("source_job_ids_json", ["tampered-source-job"]),
         ("acquisition_provenance_json", ["not-an-acquisition-record"]),
     )
     for field, invalid_value in cases:
@@ -951,6 +962,8 @@ def test_frozen_pose_review_evidence_corruption_fails_closed(
             assert item is not None
             item.review_provenance_json = original_review
             item.acquisition_provenance_json = original_acquisition
+            item.source_models_json = original_models
+            item.source_job_ids_json = original_jobs
             session.commit()
 
     with app.state.session_factory() as session:
