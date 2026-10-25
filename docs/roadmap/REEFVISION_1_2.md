@@ -1154,3 +1154,25 @@ is introduced. Source-linked projected geometry is **still unverified** and
 cannot be interpreted as confirmed growth or independent replication; it
 requires scientist review. CI, installed Windows GUI, and independent
 scientific acceptance remain required.
+
+## Cross-metric organism design consistency (2026-10-24)
+
+The source-linked projected experimental-unit summarizer now checks each
+organism's identity revision, parent colony, experimental-unit type and unit ID
+**across all metric types**, in addition to the existing per-metric date QC.
+Contradictory assignments fail closed before unit/population summaries are
+calculated, preventing one specimen from silently contributing to different
+experimental units through width, height or area measurements. Focused tests
+cover valid paired metrics and conflicts in tank, parent colony and identity
+revision. The shared service continues to power the standalone API and
+persisted, typed Workflow Builder artifact; existing saved-workflow parity
+regressions remain in scope. The deterministic provenance algorithm advances
+to `ecology-measurement-candidates-0008`.
+
+The same iteration corrects two exact Ruff formatting violations identified
+in the previous GitHub Actions backend checks. The code and tests were pushed
+for new exact-head CI; no CI success, authenticated independence, verified
+biological growth, Windows installed-GUI acceptance or release readiness is
+claimed until those checks are actually observed. Human verification of
+identity/design assignments and immutable longitudinal observation records
+remain outstanding.
