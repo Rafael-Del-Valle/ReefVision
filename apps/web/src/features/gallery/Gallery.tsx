@@ -315,10 +315,16 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     }
   }
 
-  function handleError() {
-    setPhase(
-      thumbnail || !image.thumbnail_path ? "error" : "thumbnail-loading",
-    );
+  function handleError(event: { currentTarget: HTMLImageElement }) {
+    // A stale request can report an error after Retry replaced its <img>.
+    // Never let that event obscure newer, successfully decoded pixels.
+    if (!event.currentTarget.isConnected) return;
+    setPhase((current) => {
+      if (current === "loading") {
+        return image.thumbnail_path ? "thumbnail-loading" : "error";
+      }
+      return current === "thumbnail-loading" ? "error" : current;
+    });
   }
 
   return (
