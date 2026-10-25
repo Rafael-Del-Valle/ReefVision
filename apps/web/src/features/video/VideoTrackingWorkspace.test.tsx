@@ -673,7 +673,16 @@ describe("VideoTrackingWorkspace", () => {
         name: /I confirm external frame indices correspond to this video/,
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Import pose" }));
+    // Initial video hydration must not clear an already selected pose file
+    // or the scientist's explicit frame-mapping confirmation.
+    const importButton = screen.getByRole("button", { name: "Import pose" });
+    await waitFor(() => expect(importButton).toBeEnabled());
+    expect(
+      screen.getByRole("checkbox", {
+        name: /I confirm external frame indices correspond to this video/,
+      }),
+    ).toBeChecked();
+    fireEvent.click(importButton);
 
     await waitFor(() =>
       expect(poseInteropApi.importPoseInteroperability).toHaveBeenCalledWith(
@@ -688,6 +697,50 @@ describe("VideoTrackingWorkspace", () => {
       await screen.findByText(/Imported 1 track with 2 pose keyframes/),
     ).toBeInTheDocument();
     expect(screen.getByText("Frame mapping confirmed.")).toBeInTheDocument();
+  });
+
+  it("clears unsubmitted pose import and frame confirmation when switching videos", async () => {
+    const existingVideos = await api.getVideos(project.id);
+    vi.mocked(api.getVideos).mockResolvedValue([
+      ...existingVideos,
+      {
+        ...existingVideos[0],
+        id: "video-2",
+        original_filename: "second-video.mp4",
+      },
+    ]);
+    renderWorkspace();
+    expect(
+      await screen.findByRole("heading", { name: "Pose interoperability" }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByLabelText("Pose interoperability import file"),
+      {
+        target: {
+          files: [
+            new File(["pose"], "unsubmitted.slp", {
+              type: "application/octet-stream",
+            }),
+          ],
+        },
+      },
+    );
+    const confirmation = screen.getByRole("checkbox", {
+      name: /I confirm external frame indices correspond to this video/,
+    });
+    fireEvent.click(confirmation);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Import pose" })).toBeEnabled(),
+    );
+    expect(confirmation).toBeChecked();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Video" }), {
+      target: { value: "video-2" },
+    });
+    await waitFor(() => expect(confirmation).not.toBeChecked());
+    expect(screen.getByRole("button", { name: "Import pose" })).toBeDisabled();
+    expect(poseInteropApi.importPoseInteroperability).not.toHaveBeenCalled();
   });
 
   it("connects geographic segment seeking to video and map without refetching analytics", async () => {
