@@ -289,6 +289,39 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         assert client.get(f"/api/v1/images/{image_id}").json()["media_type"] == media_type
 
 
+def test_exif_oriented_jpeg_display_preserves_raw_pixel_geometry(
+    client: TestClient,
+) -> None:
+    """WebView2 must not rotate pixels relative to stored source-pixel coordinates."""
+    project = create_project(client, "EXIF orientation geometry")
+    original_image = Image.new("RGB", (64, 48), (20, 90, 120))
+    exif = Image.Exif()
+    exif[274] = 6  # Rotate 90 degrees clockwise for camera presentation.
+    stream = BytesIO()
+    original_image.save(stream, format="JPEG", exif=exif)
+    original = stream.getvalue()
+
+    report = import_one(
+        client,
+        project["id"],
+        filename="camera-orientation.JPG",
+        content=original,
+    )
+    image_id = report["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    assert (record["width_px"], record["height_px"]) == (64, 48)
+    assert record["metadata_json"]["exif"]["Orientation"] == 6
+
+    content = client.get(f"/api/v1/images/{image_id}/content")
+    assert content.content == original
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getexif().get(274) in (None, 1)
+
+
 def test_cmyk_jpeg_import_has_browser_safe_display(client: TestClient) -> None:
     project = create_project(client, "CMYK JPEG")
     stream = BytesIO()
