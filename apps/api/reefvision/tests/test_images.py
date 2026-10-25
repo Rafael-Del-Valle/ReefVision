@@ -435,7 +435,6 @@ def test_imports_16_bit_grayscale_tiff(client: TestClient, test_settings: Settin
         assert extrema != ((255, 255), (255, 255), (255, 255))
 
 
-
 def test_big_endian_16_bit_tiff_renditions_preserve_original_pixel_values(
     client: TestClient, test_settings: Settings
 ) -> None:
