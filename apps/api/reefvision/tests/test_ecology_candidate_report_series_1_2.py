@@ -106,6 +106,8 @@ def test_series_qc_csv_escapes_spreadsheet_formulas_and_preserves_delimiters(
     )
     assert response.status_code == 200
     payload = EcologyMeasurementCandidatesResponse.model_validate(response.json())
+    rows = list(csv.DictReader(StringIO(render_ecology_series_qc_csv(payload))))
+    assert rows and rows[0]["source_fingerprint_rechecked"] == "true"
     # Formula safety is tested on the serializer directly: modifying source
     # records without updating their immutable input digest must now fail.
     assert _csv_identifier("=SUM(1,2)") == "'=SUM(1,2)"
