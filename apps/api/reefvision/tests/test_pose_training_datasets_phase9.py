@@ -425,6 +425,7 @@ def test_native_pose_training_package_is_deterministic_and_verified_only(
             "reefvision-pose-training-manifest.json",
             "items.jsonl",
             "README.txt",
+            "SHA256SUMS",
         }
 
         manifest = json.loads(archive.read("reefvision-pose-training-manifest.json"))
