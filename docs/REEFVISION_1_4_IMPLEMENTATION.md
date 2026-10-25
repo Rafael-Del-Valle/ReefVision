@@ -264,8 +264,9 @@ verification required before any biological growth claim.
 
 ## Identical-geometry calibration consistency QC (provisional)
 
-When both observations carry the same nonempty geometry fingerprint and valid
-meters-per-mesh-unit scales, the longitudinal engine checks whether their
+When both observations carry the same syntactically valid lowercase 64-character
+SHA-256 geometry fingerprint and valid meters-per-mesh-unit scales, the
+longitudinal engine checks whether their
 surface-area ratio matches the **square** of the calibration-scale ratio.
 It compares logarithms for positive areas to avoid floating-point overflow;
 a zero/nonzero mismatch is also flagged. The
@@ -277,3 +278,16 @@ biological growth. Missing scale metadata does not generate a fabricated
 consistency conclusion. The warning is preserved in standalone results and
 persisted typed Workflow Builder comparison artifacts; scientific identity,
 calibration, and coordinate registration remain unverified.
+
+
+### Geometry fingerprint input QC
+
+Longitudinal comparisons only apply identical-source and recalibration
+consistency warnings when both recorded geometry fingerprints are valid
+lowercase 64-character hexadecimal SHA-256 strings. A missing, uppercase,
+truncated, or placeholder fingerprint produces
+`geometry_fingerprint_missing_or_invalid` and cannot trigger the
+`identical_geometry_fingerprint` assertion. This is a **format check only**:
+caller-supplied fingerprints are not authenticated or evidence of the same
+biological organism. The original fingerprint values remain in provenance for
+audit. Standalone and saved Workflow Builder comparisons use the same rule.
