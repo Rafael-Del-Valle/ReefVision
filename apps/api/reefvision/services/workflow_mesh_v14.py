@@ -156,7 +156,7 @@ def extend_mesh_registry(
                 )
             ],
             required_parameters=[],
-            optional_parameters={},
+            optional_parameters={"registration_evidence": None},
             execution_state="executable_analysis",
             executable=True,
             implementation_notes=[
@@ -164,6 +164,7 @@ def extend_mesh_registry(
                 "Observation IDs must differ and timestamps must increase.",
                 "No identity, calibration, registration or biological growth is verified.",
                 "Conservative area-difference bounds reflect scale uncertainty only.",
+                "Optional registration residual evidence is provisional and frame-bound.",
             ],
         )
         return nodes
@@ -233,9 +234,13 @@ def execute_mesh_longitudinal_comparison(
     del session, settings
     # The workflow engine injects these reserved execution identifiers into every
     # runtime adapter. They are not user-configurable analysis parameters.
-    unexpected = set(parameters) - {"__workflow_run_id", "__workflow_node_run_id"}
+    unexpected = set(parameters) - {
+        "__workflow_run_id",
+        "__workflow_node_run_id",
+        "registration_evidence",
+    }
     if unexpected:
-        raise ValidationError("Longitudinal comparison takes no node parameters")
+        raise ValidationError("Longitudinal comparison accepts only registration_evidence")
     records: list[dict[str, Any]] = []
     for port in ("before", "after"):
         artifacts = inputs.get(port, [])
@@ -249,7 +254,9 @@ def execute_mesh_longitudinal_comparison(
             )
         records.append(artifacts[0].payload_json)
     try:
-        result = compare_mesh_observations(records[0], records[1])
+        result = compare_mesh_observations(
+            records[0], records[1], parameters.get("registration_evidence")
+        )
     except ValueError as exc:
         raise ValidationError(f"Invalid longitudinal comparison: {exc}") from exc
     return [
