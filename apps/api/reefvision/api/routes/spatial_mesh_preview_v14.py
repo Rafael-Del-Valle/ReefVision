@@ -62,6 +62,6 @@ def preview_mesh_longitudinal_comparison(
         after = preview_from_request(payload.after)
         before["project_id"] = project_id
         after["project_id"] = project_id
-        return compare_mesh_observations(before, after)
+        return compare_mesh_observations(before, after, payload.registration_evidence)
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
