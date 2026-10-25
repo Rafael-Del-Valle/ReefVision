@@ -1199,3 +1199,30 @@ were all Ruff formatting of a cross-metric test list comprehension, corrected
 in this increment. New-head CI, migration reconciliation, true reviewed
 longitudinal observations, scientific acceptance and Windows installed-GUI
 validation remain required. This gate does **not** promote unverified data.
+
+## UTC elapsed-time normalized projected slopes (2026-10-24)
+
+The source-linked longitudinal candidate kernel now returns two optional,
+typed endpoint fields: `projected_absolute_change_per_day` in the existing
+metric unit per elapsed UTC day, and
+`projected_baseline_percent_change_per_day` in baseline-relative percentage
+points per elapsed UTC day. The denominator is the exact elapsed acquisition
+time (including fractional days), **not** the number of photographed dates.
+The calculations are descriptive endpoint slopes, **not** estimated biological
+growth rates, survival, causal effects, or evidence of independent replication.
+The existing `linked_unverified` level and mandatory scientist-review gate
+remain unchanged. Nonfinite/zero-duration rates fail closed; older persisted
+typed results lacking the optional fields remain deserializable as null.
+
+The same typed response is used by the standalone calibrated-measurement API
+and the persisted executable `ecology_identity_registry_source` Workflow
+Builder artifact, with deterministic provenance advanced to
+`ecology-measurement-candidates-0010`. Focused regressions cover 1-day and
+3-day elapsed intervals, overflow, legacy typed artifact compatibility, and
+review requirements; existing API/saved-workflow payload parity remains the
+integration gate. The preceding head had 16/19 passing GitHub workflows, with
+three Ruff-format failures; the exact offending comprehension is normalized
+in this iteration. **Exact-head CI, real longitudinal scientific acceptance,
+Windows installed-GUI testing, and authenticated observation records remain
+outstanding.** No schema migration, environmental duplication, model weights,
+or verified-dataset promotion are introduced.
