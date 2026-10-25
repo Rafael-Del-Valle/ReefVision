@@ -46,6 +46,10 @@ def _graph_errors(paths: list[Path]) -> list[str]:
         if len(names) != 1:
             errors.append(f"duplicate revision {revision}: {', '.join(names)}")
     for revision, parents in edges.items():
+        # Cross-track migration collisions must be resolved by a reviewed
+        # linear revision chain, not hidden behind a merge migration.
+        if len(parents) > 1:
+            errors.append(f"nonlinear merge revision {revision}: {', '.join(parents)}")
         for parent in parents:
             if parent not in owners:
                 errors.append(f"missing parent {parent} for {revision}")
@@ -107,7 +111,7 @@ def test_cycle_is_rejected_without_loading_migration_code(tmp_path: Path) -> Non
     assert any("cycle" in error for error in _graph_errors([a, b]))
 
 
-def test_valid_merge_dependencies_are_not_false_cycles(tmp_path: Path) -> None:
+def test_cross_track_merge_requires_linear_reconciliation(tmp_path: Path) -> None:
     declarations = {
         "root": None,
         "left": "root",
@@ -119,4 +123,4 @@ def test_valid_merge_dependencies_are_not_false_cycles(tmp_path: Path) -> None:
         path = tmp_path / f"{revision}.py"
         path.write_text(f"revision = {revision!r}\ndown_revision = {parent!r}\n")
         paths.append(path)
-    assert _graph_errors(paths) == []
+    assert any("nonlinear merge revision merged" in error for error in _graph_errors(paths))
