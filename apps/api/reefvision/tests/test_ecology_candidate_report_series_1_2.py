@@ -61,7 +61,9 @@ def test_series_qc_csv_matches_typed_api_and_saved_workflow(client: TestClient) 
     )
     assert render_ecology_series_qc_csv(persisted) == csv_response.text
     assert render_ecology_series_qc_csv(persisted) == render_ecology_series_qc_csv(
-        persisted.model_copy(update={"sampling_date_qc": list(reversed(persisted.sampling_date_qc))})
+        persisted.model_copy(
+            update={"sampling_date_qc": list(reversed(persisted.sampling_date_qc))}
+        )
     )
 
 
