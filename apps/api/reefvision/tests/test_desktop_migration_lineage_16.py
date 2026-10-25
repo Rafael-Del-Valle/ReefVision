@@ -81,7 +81,7 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
             text(
                 "CREATE TABLE review_queue_item_events ("
                 "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
-                "project_id TEXT, client_request_id TEXT, event_type TEXT, actor TEXT, "
+                "project_id TEXT, client_request_id TEXT, event_type TEXT NOT NULL, actor TEXT, "
                 f"comment TEXT, assignee TEXT, created_at TEXT{event_type_check})"
             )
         )
@@ -165,7 +165,7 @@ def test_desktop_verifies_successful_native_review_migration(
                 text(
                     "CREATE TABLE review_queue_item_events ("
                     "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
-                    "project_id TEXT, client_request_id TEXT, event_type TEXT, actor TEXT, "
+                    "project_id TEXT, client_request_id TEXT, event_type TEXT NOT NULL, actor TEXT, "
                     "comment TEXT, assignee TEXT, created_at TEXT, "
                     "CONSTRAINT ck_review_queue_item_event_type "
                     "CHECK (event_type IN ('comment', 'assign', 'unassign')))"
