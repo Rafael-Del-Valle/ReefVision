@@ -1226,3 +1226,28 @@ in this iteration. **Exact-head CI, real longitudinal scientific acceptance,
 Windows installed-GUI testing, and authenticated observation records remain
 outstanding.** No schema migration, environmental duplication, model weights,
 or verified-dataset promotion are introduced.
+
+## Source-image replay guard for projected longitudinal candidates (2026-10-25)
+
+A single photograph cannot represent two independent biological sampling dates.
+The source-linked UTC sampling-date audit now records `reused_image_ids` and
+sets `qc_status=reused_image_across_dates` when one source image ID is assigned
+to multiple UTC dates for the same organism and measurement metric. Such a
+series produces **no projected endpoint change**, unit-level eligible mean, or
+population-level contribution. The diagnostic list is deterministic and the
+new optional field defaults to an empty list when older persisted workflow
+artifacts are deserialized. Same-day technical replicate handling and valid
+multi-image date series are unchanged.
+
+The existing standalone calibrated-measurement API and executable persisted
+`ecology_identity_registry_source` Workflow Builder node both use the same
+QC/endpoint implementation. The source fingerprint algorithm is advanced to
+`ecology-measurement-candidates-0011` so a change in scientific exclusion
+rules is visible in provenance. Regression coverage includes replayed-image
+exclusion, a distinct-image control, backward-compatible QC deserialization,
+and existing standalone/saved-workflow parity. **All outputs remain
+`linked_unverified` with `scientist_review_required`.** This is a source
+integrity guard, not verified specimen re-identification or an independent
+sampling-unit attestation. No migration, model acquisition, or environmental
+provider was added. Full CI and Windows/scientific acceptance are still
+required before any release claim.
