@@ -267,6 +267,7 @@ export interface MeshPreviewCalibration {
     "ruler" | "photogrammetry_control" | "instrument" | "other";
   calibration_evidence: string;
   relative_scale_uncertainty?: number | null;
+  coordinate_frame_id?: string;
 }
 
 export async function previewLocalMeshFile(
@@ -379,6 +380,14 @@ export async function previewLocalPointCloudFile(
     throw new Error(
       "Point chord indices must be distinct integers from 0 to 1999.",
     );
+  }
+  if (
+    calibration.coordinate_frame_id !== undefined &&
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(
+      calibration.coordinate_frame_id,
+    )
+  ) {
+    throw new Error("Point-cloud source frame ID must be a bounded label.");
   }
   const bytes = await file.arrayBuffer();
   if (!bytes.byteLength || bytes.byteLength > 256_000) {
