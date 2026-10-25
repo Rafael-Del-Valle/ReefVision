@@ -316,8 +316,9 @@ def test_concurrent_review_heads_fail_closed_without_modifying_research_assets(
             )
         connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
         connection.execute(text("INSERT INTO preserved VALUES ('original research assets')"))
-        with pytest.raises(RuntimeError, match="concurrent review revisions"):
+        with pytest.raises(RuntimeError, match="concurrent review revisions") as exc_info:
             assert_compatible_revision_0038(connection)
+        assert str(sorted(revisions)) in str(exc_info.value)
         assert connection.scalar(text("SELECT value FROM preserved")) == "original research assets"
         assert (
             tuple(connection.execute(text("SELECT version_num FROM alembic_version")).scalars())
