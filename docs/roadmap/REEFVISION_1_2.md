@@ -1669,3 +1669,36 @@ scientist approval or a verified experimental design. All outputs retain
 `registered_unverified` and `scientist_review_required`. Verified observation
 histories, design registration, real-dataset acceptance, 1.1 migration
 reconciliation and installed Windows scientific/GUI acceptance remain pending.
+
+
+## Auditable ecological identity-history CSV (2026-10-25; development)
+
+The project-owned registry now exposes a read-only
+`GET /api/v1/projects/{project_id}/ecology/identity-registry/history.csv`
+export of **every append-only organism revision**, including superseded
+experimental-unit assignments, parent-colony links, revision reasons and
+timestamps. Unlike the latest-only identity view, this preserves the full
+correction chronology for scientific review. The exporter recomputes the
+existing `ecology-identity-history-0001` revision SHA-256 and latest-identity
+snapshot SHA-256, verifies project scope, contiguous revisions, counts and
+latest-record parity, and fails closed on corrupted or incomplete legacy
+workflow artifacts. Formula-like user-supplied study labels and reasons are
+spreadsheet-escaped. The export is deterministic and has no cloud dependency.
+
+The **same typed `ecology_identity_registry` payload** (including
+`identity_history`, `history_sha256` and review gates) is already persisted
+by the executable `ecology_identity_registry_source` Workflow Builder node;
+no parallel workflow engine, new node or migration is introduced. New
+regressions compare standalone CSV to the CSV rendered from a persisted
+saved-workflow artifact, verify historical tank reassignment, tampering and
+legacy rejection, and check spreadsheet safety. The prior head's three
+failed GitHub Actions workflows were all blocked at one Ruff formatting
+discrepancy in the identity-history test; the exact extra blank line was
+corrected in this iteration.
+
+**Limitations:** identity assignments and correction reasons are still
+`registered_unverified`, require `scientist_review_required`, and do not
+authenticate a human reviewer, certify true experimental independence or
+promote observations to verified growth. Full exact-head CI, independently
+reviewed study design/longitudinal measurements, 1.1 migration reconciliation,
+and installed Windows GUI/installer scientific acceptance remain mandatory.
