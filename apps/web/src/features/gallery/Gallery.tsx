@@ -371,10 +371,25 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
             </button>
           )}
           {phase === "thumbnail-loaded" && (
-            <p role="status" className="rv-media-load-warning">
-              Full-resolution image unavailable. Showing a thumbnail preview;
-              source annotations are unchanged.
-            </p>
+            <>
+              <p role="status" className="rv-media-load-warning">
+                Full-resolution image unavailable. Showing a thumbnail preview;
+                source annotations are unchanged.
+              </p>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  // A transient WebView2/source failure should not strand the
+                  // gallery on a low-resolution preview. Retry only the media
+                  // request; never modify the original or annotations.
+                  setRetry((current) => current + 1);
+                  setPhase("loading");
+                }}
+              >
+                Retry full-resolution image
+              </button>
+            </>
           )}
           <img
             ref={imageElement}
