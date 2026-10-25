@@ -87,6 +87,14 @@ class EcologyProjectedEndpointChange(BaseModel):
     absolute_change: float = Field(allow_inf_nan=False)
     percent_change: float = Field(allow_inf_nan=False)
     elapsed_days: float = Field(gt=0, allow_inf_nan=False)
+    # Optional defaults preserve deserialization of previously saved artifacts.
+    # These are arithmetic slopes of projected geometry, NOT verified growth.
+    projected_absolute_change_per_day: float | None = Field(
+        default=None, allow_inf_nan=False
+    )
+    projected_baseline_percent_change_per_day: float | None = Field(
+        default=None, allow_inf_nan=False
+    )
     observed_timepoint_count: int = Field(ge=2)
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
