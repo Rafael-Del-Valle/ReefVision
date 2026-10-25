@@ -271,9 +271,17 @@ class ImageService:
         # Browser/WebView rendering of TIFF, BMP, GIF and CMYK JPEG is not
         # consistently supported. Keep original source and source-pixel geometry;
         # a separate PNG rendition is used for the display only.
-        source_mode = str((image.metadata_json or {}).get("mode", ""))
-        needs_png = image.media_type in {"image/tiff", "image/bmp", "image/gif"} or (
-            image.media_type == "image/jpeg" and source_mode not in {"RGB", "L"}
+        metadata = image.metadata_json or {}
+        source_mode = str(metadata.get("mode", ""))
+        exif = metadata.get("exif")
+        orientation = exif.get("Orientation") if isinstance(exif, dict) else None
+        # WebView2 can auto-rotate an EXIF-oriented JPEG even though persisted
+        # masks, dimensions and calibration are in the camera's raw pixel frame.
+        # Serve a PNG with unrotated pixels and no orientation tag instead.
+        needs_png = (
+            image.media_type in {"image/tiff", "image/bmp", "image/gif"}
+            or (image.media_type == "image/jpeg" and source_mode not in {"RGB", "L"})
+            or orientation not in (None, 1)
         )
         if not needs_png:
             return source, image.media_type
