@@ -253,11 +253,7 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     // A cached WebView2 image can already be decoded before its load handler
     // runs. Reveal those pixels instead of leaving a false loading overlay.
     const element = imageElement.current;
-    if (
-      element?.complete &&
-      element.naturalWidth > 0 &&
-      element.naturalHeight > 0
-    ) {
+    if (element?.complete && element.naturalWidth > 0 && element.naturalHeight > 0) {
       setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
     }
   }, [image.id, retry, thumbnail, waiting]);
@@ -271,11 +267,7 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
         // A decoded image may have missed the load event after the first
         // effect. Check again before treating the media request as failed.
         const element = imageElement.current;
-        if (
-          element?.complete &&
-          element.naturalWidth > 0 &&
-          element.naturalHeight > 0
-        ) {
+        if (element?.complete && element.naturalWidth > 0 && element.naturalHeight > 0) {
           return current === "thumbnail-loading" ? "thumbnail-loaded" : "loaded";
         }
         if (current === "loading") {
