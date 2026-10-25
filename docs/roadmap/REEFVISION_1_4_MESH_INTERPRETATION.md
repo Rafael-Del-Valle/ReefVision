@@ -160,3 +160,29 @@ it does not establish coral identity or geometric registration. Scale-only
 uncertainty bounds are not statistical confidence intervals, and a shared
 calibration error may correlate measurements across surveys. Standalone and
 persisted Workflow Builder comparisons use the same validation and warnings.
+
+### Scale-normalized reconstruction area ratio (provisional)
+
+The comparison additionally reports
+`scale_normalized_surface_area_ratio_after_to_before`, calculated as
+`(after_area / before_area) / (after_meters_per_unit / before_meters_per_unit)^2`.
+The engine evaluates this in log space to avoid overflowing intermediate
+squared-scale terms. An identical mesh recalibrated from 1 to 2 meters per
+source unit has four times the reported physical area but a normalized ratio
+of **1**, not evidence of growth. The same-scale example with twice the
+reconstructed area has a normalized ratio of **2**.
+
+This is a descriptive **reconstruction-geometry diagnostic**, not an
+independently validated biological change. Ratios between different scans
+are not scientifically comparable unless their source-unit conventions,
+reconstruction methods, organism identities, and coordinate registration
+are independently reviewed. The output therefore emits
+`scale_normalized_area_ratio_requires_common_units_and_registration`
+when available. Missing calibration or a zero baseline produces `null`
+and `scale_normalized_area_ratio_unavailable`; unrepresentably extreme
+positive ratios remain `null` with
+`scale_normalized_area_ratio_out_of_numeric_range`, never an invented
+zero. A genuinely zero later area can yield a descriptive ratio of zero.
+No uncertainty beyond nominal scale is estimated for this diagnostic.
+The standalone endpoint and persisted typed Workflow Builder node use
+the same engine and have matching regression assertions.
