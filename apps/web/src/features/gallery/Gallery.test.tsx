@@ -526,6 +526,40 @@ describe("Gallery", () => {
     expect(retryImage.getAttribute("src")).toContain("rv_retry=1");
   });
 
+  it("allows an immediate retry while the first image is still loading", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery();
+    const original = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    const originalUrl = original.getAttribute("src");
+    expect(screen.getByText("Loading full-resolution image...")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry loading image" }),
+    );
+    const retried = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(retried.getAttribute("src")).not.toBe(originalUrl);
+    expect(retried.getAttribute("src")).toContain("rv_retry=1");
+    expect(screen.getByText("Loading full-resolution image...")).toBeInTheDocument();
+
+    fireEvent.load(retried);
+    expect(
+      screen.queryByRole("button", { name: "Retry loading image" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("reveals the first image even if WebView2 decode never resolves", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
