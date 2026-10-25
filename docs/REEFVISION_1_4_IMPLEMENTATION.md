@@ -215,3 +215,27 @@ infinity or fabricated certainty. Missing uncertainty also yields a
 relative change. All measurements remain provisional, orientation-dependent,
 and **not** verified coral growth or reidentification. Saved Workflow Builder
 parity, negative changes, and zero-baseline regression cases are included.
+
+## Longitudinal reconstruction QC propagation
+
+The standalone `mesh-longitudinal-comparison` endpoint and persisted,
+executable `mesh_longitudinal_comparison` Workflow Builder node now retain
+`before_mesh_qc_warnings` and `after_mesh_qc_warnings` from the original
+timepoint previews. When either source reports mesh QC, the comparison adds
+`source_mesh_qc_requires_review`. A change in recorded mesh import format or
+calibration method adds `mesh_source_formats_differ_between_observations`
+or `calibration_methods_differ_between_observations`, respectively.
+
+These warnings do not invalidate the numerical difference or establish
+verified biological change: open meshes, reconstruction artifacts, and
+different measurement protocols can confound apparent coral surface-area
+change. The comparison preserves both observations' original QC rather than
+silently replacing it with a single clean-looking longitudinal result.
+Missing geometry fingerprints do not count as identical scans. Malformed
+source QC lists fail validation rather than being silently discarded.
+
+The existing saved-workflow parity regression asserts propagation of open
+mesh QC, and a separate API regression exercises mixed OBJ/indexed-triangle
+inputs and differing calibration methods. Neither scan identity nor
+calibration is automatically verified; physical/scientific acceptance remains
+required.
