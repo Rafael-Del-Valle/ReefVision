@@ -506,7 +506,9 @@ def test_undated_reimport_cannot_borrow_a_dated_photographs_provenance(
     )
     valid = [first, last, restored, other_last]
     assert all(row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(valid))
-    assert len(summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))) == 2
+    assert len(
+        summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))
+    ) == 2
 
 
 def test_same_day_source_capture_conflicts_exclude_all_affected_series(
@@ -605,7 +607,9 @@ def test_same_day_source_capture_conflicts_exclude_all_affected_series(
     assert all(
         row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(valid)
     )
-    assert len(summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))) == 2
+    assert len(
+        summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))
+    ) == 2
 
 
 def test_source_linked_projected_endpoint_change_is_not_verified_growth(
