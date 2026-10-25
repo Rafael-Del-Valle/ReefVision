@@ -36,11 +36,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     elapsed_days = (after_time - before_time).total_seconds() / 86400
     project_before = before.get("project_id")
     project_after = after.get("project_id")
-    if (
-        not isinstance(project_before, str)
-        or not project_before
-        or project_before != project_after
-    ):
+    if not isinstance(project_before, str) or not project_before or project_before != project_after:
         raise ValueError("Longitudinal observations require the same nonempty project_id")
     if before.get("schema_version") != "mesh-preview-0001" or (
         after.get("schema_version") != "mesh-preview-0001"
@@ -192,6 +188,26 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         extent_rate_bounds is not None and not all(isfinite(value) for value in extent_rate_bounds)
     ):
         raise ValueError("Bounding-box extent change exceeds finite numeric range")
+    # A geometry fingerprint describes source triangles, not calibrated size.
+    # The same imported geometry can appear to grow solely because its scale
+    # changed. Surface-area changes are still reported, but never certified.
+    calibration_scales: list[float | None] = []
+    for metadata in (first, second):
+        raw_scale = metadata.get("meters_per_mesh_unit")
+        if raw_scale is None:
+            calibration_scales.append(None)
+        elif type(raw_scale) in (int, float) and isfinite(raw_scale) and raw_scale > 0:
+            calibration_scales.append(float(raw_scale))
+        else:
+            raise ValueError("Calibration scale metadata must be finite and positive")
+    before_scale, after_scale = calibration_scales
+    scale_ratio = (
+        after_scale / before_scale
+        if before_scale is not None and after_scale is not None
+        else None
+    )
+    if scale_ratio is not None and not isfinite(scale_ratio):
+        raise ValueError("Calibration scale ratio exceeds finite numeric range")
     warnings = [
         "specimen_identity_not_verified",
         "observation_metadata_not_verified",
@@ -200,6 +216,10 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "surface_area_change_is_not_verified_biological_growth",
         "average_change_per_day_is_not_a_biological_growth_rate",
     ]
+    if before_scale is None or after_scale is None:
+        warnings.append("calibration_scale_metadata_unavailable")
+    elif before_scale != after_scale:
+        warnings.append("calibration_scale_changed_between_observations")
     if a0 == 0:
         warnings.append("relative_surface_area_change_unavailable_zero_baseline")
     if any(observation_qc):
@@ -221,6 +241,8 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     first_geometry_hash = first.get("geometry_sha256")
     if first_geometry_hash and first_geometry_hash == second.get("geometry_sha256"):
         warnings.append("identical_geometry_fingerprint")
+        if before_scale is not None and after_scale is not None and before_scale != after_scale:
+            warnings.append("identical_geometry_rescaled_not_biological_growth")
     if difference_bounds is None:
         warnings.append("scale_uncertainty_interval_unavailable")
     return {
@@ -237,6 +259,9 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
             after_time.astimezone(UTC).isoformat().replace("+00:00", "Z")
         ),
         "elapsed_days": elapsed_days,
+        "before_meters_per_mesh_unit": before_scale,
+        "after_meters_per_mesh_unit": after_scale,
+        "calibration_scale_ratio_after_to_before": scale_ratio,
         "before_mesh_qc_warnings": observation_qc[0],
         "after_mesh_qc_warnings": observation_qc[1],
         "before_surface_area_m2": a0,
