@@ -80,7 +80,7 @@ describe("dense-object viewport culling", () => {
     expect(cullViewportItems(items, null)).toBe(items);
   });
 
-  it("culls 10,000 raster masks but preserves unknown scientific bounds and source identity", () => {
+  it("culls dense masks without dropping uncertain geometry", () => {
     const masks = Array.from({ length: 10_000 }, (_, index) => ({
       id: `mask-${index}`,
       x_min: index * 10,
@@ -125,7 +125,7 @@ describe("dense-object viewport culling", () => {
     expect(cullViewportMasks(withNull, bounds)).toEqual(visible);
   });
 
-  it("keeps raster masks touching the viewport and those with incomplete bounds", () => {
+  it("keeps touching and incomplete raster masks", () => {
     const bounds = { x_min: 10, y_min: 20, x_max: 30, y_max: 40 };
     const touching = {
       x_min: 30,
