@@ -56,6 +56,7 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     assert len(payload["input_sha256"]) == 64
     assert len(payload["sampling_date_qc"]) == 2
     assert all(row["qc_status"] == "missing_timestamps" for row in payload["sampling_date_qc"])
+    assert all(row["reused_image_ids"] == [] for row in payload["sampling_date_qc"])
     assert all(
         row["review_gate"] == "scientist_review_required" for row in payload["sampling_date_qc"]
     )
