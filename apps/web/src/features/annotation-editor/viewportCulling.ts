@@ -121,7 +121,11 @@ function polygonDisplayBounds(mask: MaskDisplayGeometry): ImageBounds | null {
   let xMax = -Infinity;
   let yMax = -Infinity;
   for (const point of points) {
-    if (point == null || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    if (
+      point == null ||
+      !Number.isFinite(point.x) ||
+      !Number.isFinite(point.y)
+    ) {
       return null;
     }
     xMin = Math.min(xMin, point.x);
