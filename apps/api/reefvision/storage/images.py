@@ -90,8 +90,10 @@ def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
     digest = hashlib.sha256()
     total = 0
     destination.parent.mkdir(parents=True, exist_ok=True)
+    created = False
     try:
         with destination.open("xb") as output:
+            created = True
             while chunk := source.read(1024 * 1024):
                 output.write(chunk)
                 digest.update(chunk)
@@ -99,7 +101,10 @@ def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
             output.flush()
             os.fsync(output.fileno())
     except Exception:
-        destination.unlink(missing_ok=True)
+        # Exclusive creation may fail because another upload already owns
+        # this UUID path. Never delete a file that this call did not create.
+        if created:
+            destination.unlink(missing_ok=True)
         raise
     return digest.hexdigest(), total
 
