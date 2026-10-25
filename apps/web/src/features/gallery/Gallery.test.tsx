@@ -867,6 +867,84 @@ describe("Gallery", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("contains wheel input when thumbnails fit without scrolling the page", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    // jsdom has no layout, so the filmstrip has no horizontal overflow.
+    const wheel = new WheelEvent("wheel", {
+      deltaY: 120,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(0);
+
+    // Browser zoom remains available with the standard modifier.
+    const zoom = new WheelEvent("wheel", {
+      deltaY: 120,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, zoom);
+    expect(zoom.defaultPrevented).toBe(false);
+  });
+
+  it("bounds horizontal filmstrip wheel scrolling at both ends", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    Object.defineProperty(filmstrip, "scrollWidth", {
+      configurable: true,
+      value: 500,
+    });
+    Object.defineProperty(filmstrip, "clientWidth", {
+      configurable: true,
+      value: 200,
+    });
+    const forward = new WheelEvent("wheel", {
+      deltaY: 1000,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, forward);
+    expect(forward.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(300);
+
+    const backward = new WheelEvent("wheel", {
+      deltaY: -1000,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, backward);
+    expect(backward.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(0);
+  });
+
   it("keeps focus navigation inside the horizontal filmstrip", async () => {
     const secondImage: ProjectImage = {
       ...image,
