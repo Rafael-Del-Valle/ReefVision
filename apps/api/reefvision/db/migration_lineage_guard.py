@@ -60,11 +60,10 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
 
     tables = set(inspector.get_table_names())
     unexpected_science = sorted(tables & _SCIENCE_TABLES)
-    actual_columns = (
-        {column["name"] for column in inspector.get_columns(_REVIEW_TABLE)}
-        if _REVIEW_TABLE in tables
-        else set()
+    review_columns = (
+        inspector.get_columns(_REVIEW_TABLE) if _REVIEW_TABLE in tables else []
     )
+    actual_columns = {column["name"] for column in review_columns}
     missing_columns = sorted(_REVIEW_COLUMNS - actual_columns)
     if missing_columns or unexpected_science:
         raise RuntimeError(
@@ -76,6 +75,21 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "records. Stop migration, preserve the original database and "
             "resolve the two lineages with a reviewed data-preserving "
             "migration; do not stamp, downgrade, or delete tables."
+        )
+
+    # SQL CHECK constraints do not reject NULL in SQLite. An event_type
+    # column that became nullable would allow untyped audit events despite
+    # an otherwise correct named allowlist. The original 0038 migration
+    # requires NOT NULL; fail closed without changing any stored records.
+    event_type_column = next(
+        column for column in review_columns if column["name"] == "event_type"
+    )
+    if event_type_column.get("nullable", True):
+        raise RuntimeError(
+            f"Unsafe ReefVision Alembic revision {revision} collision: "
+            "review-event event_type is nullable, allowing NULL to bypass "
+            "the audit CHECK constraint. Preserve the database and repair "
+            "the schema through a reviewed, data-preserving migration."
         )
 
     # Every 0038-0040 stamp requires the exact named audit-event CHECK from its
