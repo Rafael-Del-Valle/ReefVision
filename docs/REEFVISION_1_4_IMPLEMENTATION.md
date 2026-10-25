@@ -239,3 +239,25 @@ mesh QC, and a separate API regression exercises mixed OBJ/indexed-triangle
 inputs and differing calibration methods. Neither scan identity nor
 calibration is automatically verified; physical/scientific acceptance remains
 required.
+
+## Longitudinal project scope and canonical observation times
+
+The standalone longitudinal comparison and persisted executable
+`mesh_longitudinal_comparison` Workflow Builder node use the same comparison
+engine. Each source measurement must contain a nonempty string `project_id`,
+and both projects must match. Missing, malformed, or cross-project provenance
+cannot silently become a scientific comparison. Source `provenance` must be a
+mapping, and the existing specimen, observation, calibration, and chronology
+checks still apply.
+
+The comparison retains the original source timestamp strings in
+`before_observed_at_utc` and `after_observed_at_utc`, and additionally
+records `before_observed_at_utc_normalized` and
+`after_observed_at_utc_normalized` as canonical UTC ISO-8601 strings ending
+in `Z`. This makes offset-equivalent timepoints directly comparable without
+overwriting original field evidence. The elapsed duration already uses
+timezone-aware instants, not naive wall-clock subtraction.
+
+These checks establish neither specimen reidentification nor spatial
+registration. Geometric changes remain provisional, with human scientific
+verification required before any biological growth claim.
