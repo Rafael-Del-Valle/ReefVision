@@ -49,6 +49,9 @@ def summarize_sampling_date_qc(
     # Normalize offsets first so equivalent instants remain valid.
     source_image_metadata: dict[str, set[tuple[str, str, str | None]]] = {}
     source_content_instants: dict[str, set[str]] = {}
+    # A reimported photograph with missing acquisition metadata must not
+    # inherit a dated copy's timepoint without scientist review.
+    source_content_missing_times: set[str] = set()
     for candidate in candidates:
         captured = candidate.capture_timestamp_utc
         aware = (
@@ -62,6 +65,7 @@ def summarize_sampling_date_qc(
             (candidate.image_sha256, candidate.capture_time_status, utc_instant)
         )
         if utc_instant is None:
+            source_content_missing_times.add(candidate.image_sha256)
             continue
         utc_date = utc_instant[:10]
         source_image_dates.setdefault(candidate.image_id, set()).add(utc_date)
@@ -118,6 +122,10 @@ def summarize_sampling_date_qc(
                 record.image_sha256
                 for record in records
                 if len(source_content_instants.get(record.image_sha256, set())) > 1
+                or (
+                    record.image_sha256 in source_content_missing_times
+                    and bool(source_content_instants.get(record.image_sha256))
+                )
             }
         )
         contexts = {
@@ -133,14 +141,14 @@ def summarize_sampling_date_qc(
             qc_status = "identity_context_changed"
         elif len(units) > 1:
             qc_status = "mixed_units"
+        elif conflicting_source_image_ids or conflicting_source_image_sha256:
+            qc_status = "source_capture_conflict"
         elif missing_timestamp_image_ids:
             qc_status = "missing_timestamps"
         elif reused_image_ids:
             qc_status = "reused_image_across_dates"
         elif reused_image_sha256:
             qc_status = "reused_image_content_across_dates"
-        elif conflicting_source_image_ids or conflicting_source_image_sha256:
-            qc_status = "source_capture_conflict"
         elif duplicate_dates:
             qc_status = "same_day_technical_replicates"
         elif len(date_counts) < 2:
@@ -666,7 +674,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0015",
+                "algorithm_version": "ecology-measurement-candidates-0016",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
