@@ -1622,3 +1622,29 @@ This repair does **not** constitute 1.2 release acceptance. Authenticated,
 scientist-reviewed longitudinal observations, registered study design,
 real-dataset verification, Windows installed-GUI checks, and migration
 reconciliation remain outstanding.
+
+## Track B exact-head CI regression repair (2026-10-25)
+
+GitHub Actions at `bf82d0aaa0307b5a7f998172b0f7745d5d6524ef` completed
+**17/19 workflows successfully**. The CI and ReefVision 1.0 Acceptance
+workflows failed three ecological backend cases (1458 passed, 32 skipped):
+(1) calibration source mutation now correctly fails earlier with a specific
+reference-scale conflict, but the older test expected only the generic stale
+snapshot error; (2) the detailed QC CSV exporter rehashed caller-reordered
+sampling-date QC rows without restoring the producer's deterministic
+organism/metric order; (3) a forged top-level candidate count raised an
+aggregate-report error instead of the dedicated candidate-count error.
+
+The repair keeps the strict calibration validator unchanged, updates the two
+API/saved-workflow test expectations to the more specific scientific failure,
+checks candidate-count integrity before report totals, and canonicalizes only
+the **unique** sampling-date QC row order for the complete source digest.
+Source values, linked evidence, other digest fields, mandatory review gates,
+experimental-unit denominators and the typed persisted Workflow Builder
+contract remain unchanged. Existing tests exercise deterministic reordered
+CSV output, tampering rejection and standalone/saved-workflow parity.
+
+The separate frontend CI failure is in an external pose-import UI test; it is
+not ecological code and is left untouched for its owning track. Exact-head
+CI, independent scientific review and installed Windows acceptance are still
+required; **1.2 is not release-ready**.

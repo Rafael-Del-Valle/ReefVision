@@ -62,6 +62,10 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
         or report.source_input_sha256 != response.input_sha256
     ):
         raise ValidationError("Ecological candidate report source fingerprint mismatch")
+    # Reject a forged top-level candidate count before aggregate report checks,
+    # so the failure is specific and independent of the stored QC histogram.
+    if response.candidate_count != len(response.candidates):
+        raise ValidationError("Ecological candidate count does not match source records")
     statuses: dict[str, int] = {}
     seen: set[tuple[str, str]] = set()
     for row in response.sampling_date_qc:
@@ -81,8 +85,6 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
     # The status histogram alone cannot detect a forged per-series source ID,
     # timestamp or QC decision. Reconcile every row with the actual candidate
     # records, including cross-organism image-replay checks, before exporting.
-    if response.candidate_count != len(response.candidates):
-        raise ValidationError("Ecological candidate count does not match source records")
     expected_qc = {
         (row.organism_key, row.metric): row.model_dump(mode="json")
         for row in summarize_sampling_date_qc(response.candidates)
@@ -146,7 +148,16 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
             "registry_annotation_evidence_sha256": response.source_annotation_evidence_sha256,
             "registry_calibration_evidence_sha256": response.source_calibration_evidence_sha256,
             "candidates": [row.model_dump(mode="json") for row in response.candidates],
-            "sampling_date_qc": [row.model_dump(mode="json") for row in response.sampling_date_qc],
+            # The producer hashes QC series in organism/metric order. Export
+            # is order-independent for those same unique typed QC decisions;
+            # never relax validation of the records or their contents.
+            "sampling_date_qc": [
+                row.model_dump(mode="json")
+                for row in sorted(
+                    response.sampling_date_qc,
+                    key=lambda item: (item.organism_key, item.metric),
+                )
+            ],
             "projected_visit_coverage": [
                 row.model_dump(mode="json") for row in response.projected_visit_coverage
             ],

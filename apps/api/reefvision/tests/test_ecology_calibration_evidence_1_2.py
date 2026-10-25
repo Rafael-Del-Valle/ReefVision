@@ -105,10 +105,10 @@ def test_source_calibration_change_revokes_api_and_workflow(
     _save_calibration(client, image_id, scale=0.5)
     registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
     assert registry.status_code == 400, registry.text
-    assert "source or frozen snapshot changed" in registry.json()["detail"]
+    assert "scale conflicts with its reference length" in registry.json()["detail"]
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "failed"
-    assert "source or frozen snapshot changed" in workflow["run"]["error_message"]
+    assert "scale conflicts with its reference length" in workflow["run"]["error_message"]
     assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
 
 
