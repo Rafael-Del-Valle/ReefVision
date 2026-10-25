@@ -1143,7 +1143,7 @@ def test_resigned_empty_dataset_cannot_be_exported_or_planned(
 
     with (
         app.state.session_factory() as session,
-        pytest.raises(ConflictError, match="item lineage no longer matches"),
+        pytest.raises(ConflictError, match="manifest item count no longer matches"),
     ):
         PoseTrainingDatasetService(session).native_package(dataset_id)
 
