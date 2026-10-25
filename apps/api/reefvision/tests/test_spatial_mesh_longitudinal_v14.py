@@ -268,6 +268,18 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
     assert result["average_surface_area_change_scale_interval_m2_per_day"] is None
     assert result["relative_surface_area_scale_interval_percent"] is None
     assert "scale_uncertainty_interval_unavailable" in result["qc_warnings"]
+    with pytest.raises(ValueError, match="QC warnings"):
+        compare_mesh_observations({**base, "qc_warnings": ["open_mesh", None]}, later)
+    missing_hash_before = {
+        **base,
+        "provenance": {**base["provenance"], "geometry_sha256": None},
+    }
+    missing_hash_after = {
+        **later,
+        "provenance": {**later["provenance"], "geometry_sha256": None},
+    }
+    missing_hash_result = compare_mesh_observations(missing_hash_before, missing_hash_after)
+    assert "identical_geometry_fingerprint" not in missing_hash_result["qc_warnings"]
     early_extent = {
         **base,
         "axis_aligned_bounding_box_diagonal_m": 1.0,
