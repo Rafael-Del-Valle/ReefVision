@@ -136,9 +136,9 @@ def test_desktop_rejects_defaulted_audit_event_type_at_head(
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
         assert connection.scalar(text("SELECT id FROM preserved")) == "original-research"
-        assert connection.scalar(
-            text("SELECT event_type FROM review_queue_item_events")
-        ) == "comment"
+        assert (
+            connection.scalar(text("SELECT event_type FROM review_queue_item_events")) == "comment"
+        )
     engine.dispose()
 
 
