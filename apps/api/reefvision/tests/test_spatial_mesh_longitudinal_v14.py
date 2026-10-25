@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshRegistrationEvidence
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.workflow_mesh_v14 import execute_mesh_longitudinal_comparison
 from reefvision.tests.test_annotations import create_project
@@ -30,6 +31,16 @@ def _mesh(observation: str, date: str, height: float) -> dict:
     }
 
 
+def _rigid_transform() -> list[list[float]]:
+    """A provisional 10 cm translation, with no implied verified alignment."""
+    return [
+        [1.0, 0.0, 0.0, 0.1],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+
+
 def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -> None:
     project_id = str(create_project(client, "Mesh timepoints")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -44,6 +55,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "rms_residual_m": 0.02,
         "correspondence_count": 6,
         "evidence_note": "Provisional landmark alignment; independent review pending",
+        "source_to_target_transform_m": _rigid_transform(),
     }
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
@@ -108,6 +120,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "caller_supplied_unverified"
     )
     assert "registration_residual_requires_independent_review" in expected["qc_warnings"]
+    assert "registration_transform_requires_independent_review" in expected["qc_warnings"]
+    assert "registration_transform_unavailable" not in expected["qc_warnings"]
     assert expected["registration_residual_to_smaller_extent_ratio"] == pytest.approx(
         0.02 / sqrt(2)
     )
@@ -282,6 +296,7 @@ def test_registration_residual_size_qc_is_provisional_and_finite(
         {"correspondence_count": True},
         {"verified": True},
         {"source_frame_id": "unrelated-survey"},
+        {"source_to_target_transform_m": [[1.0]]},
     ],
 )
 def test_pairwise_registration_evidence_is_validated(client: TestClient, override: dict) -> None:
@@ -1514,3 +1529,71 @@ def test_longitudinal_area_percent_remains_finite_for_large_finite_values(
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("row", "column", "invalid"),
+    [
+        (0, 0, 2.0),  # scale is not rigid
+        (0, 1, 0.1),  # shear is not rigid
+        (2, 2, -1.0),  # reflection reverses handedness
+        (3, 3, 0.0),  # non-affine homogeneous row
+        (0, 3, float("inf")),  # nonfinite translation
+        (0, 3, 1_000_001.0),  # unbounded translation
+    ],
+)
+def test_registration_transform_rejects_nonrigid_or_nonfinite_values(
+    row: int, column: int, invalid: float
+) -> None:
+    transform = _rigid_transform()
+    transform[row][column] = invalid
+    with pytest.raises(ValueError):
+        MeshRegistrationEvidence.model_validate(
+            {
+                "source_frame_id": "frame-a",
+                "target_frame_id": "frame-b",
+                "method": "landmark",
+                "rms_residual_m": 0.01,
+                "correspondence_count": 6,
+                "evidence_note": "Provisional registration awaiting review",
+                "source_to_target_transform_m": transform,
+            }
+        )
+
+
+def test_registration_transform_rejects_invalid_matrix_shape() -> None:
+    transform = _rigid_transform()[:3]
+    with pytest.raises(ValueError, match="4x4"):
+        MeshRegistrationEvidence.model_validate(
+            {
+                "source_frame_id": "frame-a",
+                "target_frame_id": "frame-b",
+                "method": "landmark",
+                "rms_residual_m": 0.01,
+                "correspondence_count": 6,
+                "evidence_note": "Provisional registration awaiting review",
+                "source_to_target_transform_m": transform,
+            }
+        )
+
+
+def test_registration_transform_accepts_proper_rotation_without_verification() -> None:
+    transform = [
+        [0.0, -1.0, 0.0, 0.1],
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+    evidence = MeshRegistrationEvidence.model_validate(
+        {
+            "source_frame_id": "frame-a",
+            "target_frame_id": "frame-b",
+            "method": "landmark",
+            "rms_residual_m": 0.01,
+            "correspondence_count": 6,
+            "evidence_note": "Provisional registration awaiting review",
+            "source_to_target_transform_m": transform,
+        }
+    )
+    assert evidence.source_to_target_transform_m == transform
+    assert "verified" not in evidence.model_dump(mode="json")
