@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import io
+import json
+import zipfile
 from typing import cast
 
 import pytest
@@ -12,7 +15,11 @@ from sqlalchemy import select
 from reefvision.db.models import PoseTrainingDataset, PoseTrainingDatasetItem
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
+from reefvision.services.pose_training_datasets import (
+    PACKAGE_ITEMS_FILENAME,
+    PACKAGE_MANIFEST_FILENAME,
+    PoseTrainingDatasetService,
+)
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
     execute_pose_training_dataset_adapter,
@@ -141,8 +148,26 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         assert retrieved.manifest_sha256 == dataset["manifest_sha256"]
         assert len(service.items(dataset_id)) == dataset["item_count"]
         _, package_bytes, package_sha256 = service.native_package(dataset_id)
-    assert package_bytes
+        _, repeated_package_bytes, repeated_package_sha256 = service.native_package(dataset_id)
+    assert package_bytes == repeated_package_bytes
+    assert package_sha256 == repeated_package_sha256
     assert len(package_sha256) == 64
+
+    # Audit the actual frozen dataset exported from the saved workflow. ZIP
+    # host metadata must be stable across Windows and Linux, not merely within
+    # repeated exports on one operating system.
+    with zipfile.ZipFile(io.BytesIO(package_bytes)) as archive:
+        assert all(member.create_system == 3 for member in archive.infolist())
+        exported_manifest = json.loads(archive.read(PACKAGE_MANIFEST_FILENAME))
+        exported_items = [
+            json.loads(line)
+            for line in archive.read(PACKAGE_ITEMS_FILENAME).decode("utf-8").splitlines()
+        ]
+    assert canonical_json_sha256(exported_manifest) == dataset["manifest_sha256"]
+    assert len(exported_items) == dataset["item_count"]
+    assert {item["item_id"] for item in exported_items} == {
+        summary["item_id"] for summary in exported_manifest["items"]
+    }
 
     # A valid checksum cannot authorize an unsupported frozen dataset or
     # manifest schema version. Verify the existing saved workflow, native
