@@ -1,0 +1,56 @@
+# ReefVision 1.4 — provisional pairwise 3D registration transforms
+
+The standalone mesh-longitudinal comparison endpoint and the executable,
+persisted `mesh_longitudinal_comparison` Workflow Builder node accept optional
+`registration_evidence`. The existing source/target coordinate-frame labels,
+method, RMS residual (meters), correspondence count, and evidence note remain
+required when evidence is supplied.
+
+The optional `source_to_target_transform_m` field stores a **caller-supplied**
+4 × 4 rigid transform mapping coordinates from the before observation's
+source frame to the after observation's target frame. Its upper-left 3 × 3
+block is a right-handed orthonormal rotation; its rightmost three entries
+are translations in meters. The last row is `[0, 0, 0, 1]`. Input must be
+finite, 4 × 4, approximately rigid (1e-5 tolerance), and bounded to at most
+1,000,000 meters translation per axis. Reflections, scale, shear, perspective
+transforms, and malformed matrices are rejected.
+
+Example (identity rotation with a provisional 0.1 m x translation):
+
+```json
+{
+  "source_frame_id": "survey-before",
+  "target_frame_id": "survey-after",
+  "method": "landmark",
+  "rms_residual_m": 0.02,
+  "correspondence_count": 6,
+  "evidence_note": "Six manually selected landmarks; review pending",
+  "source_to_target_transform_m": [
+    [1, 0, 0, 0.1],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]
+  ]
+}
+```
+
+The transform is **preserved in provenance, not applied** to mesh coordinates
+or used to certify spatial registration, organism identity, branch length,
+growth, or measurement accuracy. The result retains
+`coordinate_registration_verified: false`, and a supplied transform adds
+`registration_transform_requires_independent_review` to scientific QC.
+Registration evidence without a transform remains valid for backward
+compatibility and adds `registration_transform_unavailable`. Existing
+`registration_transform_and_accuracy_not_verified` and residual warnings
+continue to apply. Missing evidence stays explicitly unavailable.
+
+This first slice establishes a typed, audited data contract. Subsequent
+work must implement reviewed registration workflows, transform application,
+control-point residual checks, uncertainty propagation, and scientific
+acceptance before any longitudinal biological inference. All data and
+model checkpoints remain local; no pretrained weights or cloud services
+are involved.
+
+Regression coverage exercises malformed transforms, proper rotations,
+standalone API output, and exact artifact parity after saving and executing
+a typed Workflow Builder graph.
