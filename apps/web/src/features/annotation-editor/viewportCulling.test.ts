@@ -239,5 +239,4 @@ describe("dense-object viewport culling", () => {
     expect(masks[0]).toBe(visibleDespiteStaleBounds);
     expect(masks[1]).toBe(hiddenDespiteStaleBounds);
   });
-
 });
