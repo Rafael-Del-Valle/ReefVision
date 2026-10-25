@@ -372,10 +372,14 @@ def summarize_projected_population_summaries(
         if (
             not row.organism_keys
             or len(row.organism_keys) != len(set(row.organism_keys))
+            or len(row.complete_organism_keys) != len(set(row.complete_organism_keys))
+            or len(row.incomplete_organism_keys) != len(set(row.incomplete_organism_keys))
             or set(row.complete_organism_keys) != set(row.organism_keys)
             or row.incomplete_organism_keys
         ):
             raise ValidationError("Projected unit organism coverage is inconsistent")
+        if len(row.parent_colony_keys) != len(set(row.parent_colony_keys)):
+            raise ValidationError("Projected unit parent-colony provenance is inconsistent")
         unit_metric_key = (
             row.experimental_unit_type,
             row.experimental_unit_id,

@@ -690,10 +690,18 @@ def test_projected_population_is_unit_weighted_and_stratified() -> None:
             summarize_projected_population_summaries([tank_a, duplicated])
 
     # Invalid organism coverage must never inflate the biological denominator.
-    for coverage in (["A1", "A2"], ["A1", "A2", "A2", "A3"]):
+    for coverage in (["A1", "A2"], ["A1", "A2", "A2", "A3"], ["A1", "A2", "A3", "A3"]):
         inflated = tank_a.model_copy(update={"complete_organism_keys": coverage})
         with pytest.raises(ValidationError, match="organism coverage is inconsistent"):
             summarize_projected_population_summaries([inflated])
+
+    # Repeating a parent within one unit must not manufacture a shared
+    # parent-colony finding or corrupt the lineage audit.
+    repeated_parent = tank_a.model_copy(
+        update={"parent_colony_keys": ["colony-1", "colony-1"]}
+    )
+    with pytest.raises(ValidationError, match="parent-colony provenance is inconsistent"):
+        summarize_projected_population_summaries([repeated_parent])
 
     # A row marked eligible must not slip into population statistics with
     # missing means, even when an unchecked model_copy supplies the values.

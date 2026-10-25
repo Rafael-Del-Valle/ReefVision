@@ -1278,3 +1278,25 @@ all three failures were the same Ruff import-order error, corrected alongside
 this change. Exact-new-head CI, authenticated longitudinal observations,
 scientific acceptance and Windows installed-GUI testing remain outstanding.
 No migrations, cloud services, new model weights, or verified-dataset promotion.
+
+## Projected population denominator and lineage-integrity repair (2026-10-25)
+
+Exact-head CI on `fa84aaf7c0505a1391c2a7ccf9141593ac0a68b8`
+completed 16/19 workflows successfully. The backend and ReefVision 1.0
+acceptance jobs both identified the same scientific regression:
+`test_projected_population_is_unit_weighted_and_stratified` accepted
+duplicate `complete_organism_keys` because set equality alone concealed
+repeated identifiers. The shared projected-population kernel now rejects
+duplicate complete/incomplete organism keys before calculating biological
+denominators. It also rejects duplicate parent-colony keys within a declared
+unit, preventing a repeated label from masquerading as cross-unit parent
+reuse. Focused regressions cover both failure modes. Existing standalone
+candidate API and executable persisted `ecology_identity_registry_source`
+Workflow Builder results use this shared kernel; no new node or migration
+is required. All results remain `linked_unverified`, with mandatory scientist
+review and no independent-unit inference.
+
+The separate pose-interop frontend Vitest failure on that head is outside
+Track B and is not claimed fixed here. Exact-head CI, real scientific
+acceptance, migration reconciliation, and installed Windows GUI acceptance
+remain outstanding. A committed regression is not a passed test.
