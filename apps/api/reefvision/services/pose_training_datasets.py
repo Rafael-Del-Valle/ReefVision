@@ -858,7 +858,7 @@ class PoseTrainingDatasetService:
         # A portable checksum index lets researchers validate extracted files
         # independently of ZIP metadata or the original download response.
         checksum_bytes = "".join(
-            f"{hashlib.sha256(payload).hexdigest()}  {name}\\n"
+            f"{hashlib.sha256(payload).hexdigest()}  {name}\n"
             for name, payload in (
                 (PACKAGE_MANIFEST_FILENAME, manifest_bytes),
                 (PACKAGE_ITEMS_FILENAME, item_bytes),
