@@ -7,6 +7,15 @@ from math import exp, isclose, isfinite, log
 from typing import Any
 
 
+def _is_sha256_fingerprint(value: Any) -> bool:
+    """Check format only; caller-supplied hashes remain unverified evidence."""
+    return (
+        type(value) is str
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     """Compare two explicitly identified timepoints without asserting coral growth."""
     first = before.get("provenance")
@@ -235,9 +244,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "average_change_per_day_is_not_a_biological_growth_rate",
     ]
     if scale_normalized_area_ratio is not None:
-        warnings.append(
-            "scale_normalized_area_ratio_requires_common_units_and_registration"
-        )
+        warnings.append("scale_normalized_area_ratio_requires_common_units_and_registration")
     elif normalized_ratio_out_of_range:
         warnings.append("scale_normalized_area_ratio_out_of_numeric_range")
     else:
@@ -265,7 +272,16 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
     else:
         warnings.append("axis_aligned_extent_comparison_unavailable")
     first_geometry_hash = first.get("geometry_sha256")
-    if first_geometry_hash and first_geometry_hash == second.get("geometry_sha256"):
+    second_geometry_hash = second.get("geometry_sha256")
+    first_hash_valid = _is_sha256_fingerprint(first_geometry_hash)
+    second_hash_valid = _is_sha256_fingerprint(second_geometry_hash)
+    if not (first_hash_valid and second_hash_valid):
+        warnings.append("geometry_fingerprint_missing_or_invalid")
+    if (
+        first_hash_valid
+        and second_hash_valid
+        and first_geometry_hash == second_geometry_hash
+    ):
         warnings.append("identical_geometry_fingerprint")
         if before_scale is not None and after_scale is not None:
             if before_scale != after_scale:
@@ -303,9 +319,7 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "before_meters_per_mesh_unit": before_scale,
         "after_meters_per_mesh_unit": after_scale,
         "calibration_scale_ratio_after_to_before": scale_ratio,
-        "scale_normalized_surface_area_ratio_after_to_before": (
-            scale_normalized_area_ratio
-        ),
+        "scale_normalized_surface_area_ratio_after_to_before": (scale_normalized_area_ratio),
         "before_mesh_qc_warnings": observation_qc[0],
         "after_mesh_qc_warnings": observation_qc[1],
         "before_surface_area_m2": a0,
