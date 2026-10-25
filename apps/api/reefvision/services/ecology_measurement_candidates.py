@@ -362,7 +362,7 @@ def summarize_projected_population_summaries(
     """
     # One biological organism cannot contribute as an independent replicate
     # in two declared experimental units, even across sampling strata.
-    organism_unit_owners: dict[tuple[str, str], tuple[str, str]] = {}
+    organism_unit_owners: dict[str, tuple[str, str]] = {}
     for row in unit_summaries:
         if row.unit_status != "candidate":
             continue
@@ -370,8 +370,10 @@ def summarize_projected_population_summaries(
             raise ValidationError("Eligible projected unit is missing its declaration")
         owner = (row.experimental_unit_type, row.experimental_unit_id)
         for organism_key in row.complete_organism_keys:
-            organism_metric_key = (row.metric, organism_key)
-            previous = organism_unit_owners.setdefault(organism_metric_key, owner)
+            # Experimental-unit membership is an organism property, not a
+            # measurement-metric property. Width and height cannot assign the
+            # same organism to different tanks, even in different strata.
+            previous = organism_unit_owners.setdefault(organism_key, owner)
             if previous != owner:
                 raise ValidationError(
                     "One organism cannot be pooled across declared experimental units"
@@ -635,7 +637,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0013",
+                "algorithm_version": "ecology-measurement-candidates-0014",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
