@@ -162,11 +162,9 @@ def frozen_pose_item_fingerprints_match(
         # and source job identities. Legacy manifests remain readable.
         if "frozen_evidence_sha256" in summary:
             manifest_row = rows_by_id.get(item_id)
-            if (
-                manifest_row is None
-                or summary["frozen_evidence_sha256"]
-                != frozen_pose_item_evidence_sha256(manifest_row)
-            ):
+            if manifest_row is None or summary[
+                "frozen_evidence_sha256"
+            ] != frozen_pose_item_evidence_sha256(manifest_row):
                 return False
         observed[item_id] = {field: summary.get(field) for field in expected.get(item_id, {})}
     return observed == expected
