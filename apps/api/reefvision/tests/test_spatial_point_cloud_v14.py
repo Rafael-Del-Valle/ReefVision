@@ -163,7 +163,6 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     assert len(artifact["payload_sha256"]) == 64
 
 
-
 @pytest.mark.parametrize(
     "invalid_frame",
     ["", "transect with spaces", "survey/1", "x" * 129],
