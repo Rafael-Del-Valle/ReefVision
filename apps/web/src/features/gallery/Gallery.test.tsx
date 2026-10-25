@@ -760,7 +760,7 @@ describe("Gallery", () => {
         response("projects/project-1/images/thumbnails/first.jpg"),
       );
     });
-    const firstFallback = screen.getByAltText(
+    const firstFallback = await screen.findByAltText(
       "Focused project image: swiftia-01.png",
     );
     const firstUrl = firstFallback.getAttribute("src");
@@ -783,7 +783,7 @@ describe("Gallery", () => {
         response("projects/project-1/images/thumbnails/second.jpg"),
       );
     });
-    const recovered = screen.getByAltText(
+    const recovered = await screen.findByAltText(
       "Focused project image: swiftia-01.png",
     );
     expect(recovered.getAttribute("src")).not.toBe(firstUrl);
