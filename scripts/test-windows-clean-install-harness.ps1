@@ -189,6 +189,25 @@ Assert-True ($acceptanceScript.Contains('$persistedVisibility.user_identity -ne 
 Assert-True ($acceptanceScript.Contains('$persistedVisibility.project_defaults.annotations.hidden_class_ids[0] -ne $testClass.id')) 'Packaged project visibility default is not checked after restart.'
 Assert-True ($acceptanceScript.Contains('@($persistedVisibility.user_preferences.annotations.hidden_class_ids).Count -ne 0')) 'Packaged explicit empty preference is not checked after restart.'
 
+# The installed Windows MSI must execute and persist the real typed 1.6 QC
+# Workflow Builder graph, not just its standalone review-queue endpoint.
+Assert-True ($acceptanceScript.Contains('qc_workflow_persistence = New-ReefVisionEvidenceResult')) 'Installed saved-QC-workflow evidence field is missing.'
+Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/workflow-graphs/plan"')) 'Installed QC workflow must validate and plan its graph.'
+Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/workflow-graphs" -Method Post')) 'Installed QC workflow must save a graph revision.'
+Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/workflow-runs" -Method Post')) 'Installed QC workflow must enqueue a real run.'
+Assert-True ($acceptanceScript.Contains('"$api/jobs/$($qcWorkflowQueued.job_id)"')) 'Installed QC workflow must wait for its actual background job.'
+Assert-True ($acceptanceScript.Contains("data_type -eq 'review_queue_reference'")) 'Installed QC workflow must inspect typed persisted artifacts.'
+Assert-True ($acceptanceScript.Contains("priority_score_unit -ne 'dimensionless'")) 'Installed QC workflow must check dimensionless priority scores.'
+Assert-True ($acceptanceScript.Contains("review_status -ne 'requires_researcher_review'")) 'Installed QC workflow must preserve human review gates.'
+Assert-True ($acceptanceScript.Contains('input_checksums.scoring_provenance_sha256')) 'Installed QC workflow must verify scientific scoring provenance.'
+Assert-True ($acceptanceScript.Contains('input_checksums.item_evidence_sha256')) 'Installed QC workflow must verify saved item evidence.'
+Assert-True ($acceptanceScript.Contains('$qcPersistedWorkflowArtifacts[0].payload_sha256 -ne $qcWorkflowArtifactSha')) 'Installed QC workflow must verify identical artifact digest after restart.'
+$qcGraphOffset = $acceptanceScript.IndexOf('$qcWorkflowGraph = @{', [System.StringComparison]::Ordinal)
+$qcReloadOffset = $acceptanceScript.IndexOf('$qcPersistedGraphs = @(', [System.StringComparison]::Ordinal)
+Assert-True ($qcGraphOffset -gt 0 -and $qcGraphOffset -lt $apiReadinessCalls[2].Index) 'Installed QC workflow must execute before the third desktop restart.'
+Assert-True ($qcReloadOffset -gt $apiReadinessCalls[2].Index) 'Installed QC workflow must verify persistence using the third launch API.'
+Assert-True ($acceptanceScript.Contains('$report.qc_workflow_persistence = New-ReefVisionEvidenceResult -Status ''PASS''')) 'Installed QC workflow must report PASS only after persisted read-back.'
+
 # Guard the packaged acceptance request against retired project templates and
 # legacy model catalog selectors. Production API supports blank projects only.
 Assert-True ($acceptanceScript.Contains("template='blank'")) 'Acceptance project must use the supported blank template.'
