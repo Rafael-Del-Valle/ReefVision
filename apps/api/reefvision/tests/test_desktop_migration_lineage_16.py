@@ -69,16 +69,14 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
             text("INSERT INTO alembic_version VALUES (:revision)"),
             {"revision": revision},
         )
-        event_type_check = ""
+        allowed = "'comment', 'assign', 'unassign'"
         if revision in {"0039", "0040"}:
-            allowed = (
-                "'comment', 'assign', 'unassign', 'triage_start', 'triage_skip', 'triage_return'"
-            )
-            if revision == "0040":
-                allowed += ", 'triage_complete'"
-            event_type_check = (
-                f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed}))"
-            )
+            allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
+        if revision == "0040":
+            allowed += ", 'triage_complete'"
+        event_type_check = (
+            f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed}))"
+        )
         connection.execute(
             text(
                 "CREATE TABLE review_queue_item_events ("
@@ -168,7 +166,9 @@ def test_desktop_verifies_successful_native_review_migration(
                     "CREATE TABLE review_queue_item_events ("
                     "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
                     "project_id TEXT, client_request_id TEXT, event_type TEXT, actor TEXT, "
-                    "comment TEXT, assignee TEXT, created_at TEXT)"
+                    "comment TEXT, assignee TEXT, created_at TEXT, "
+                    "CONSTRAINT ck_review_queue_item_event_type "
+                    "CHECK (event_type IN ('comment', 'assign', 'unassign')))"
                 )
             )
 
