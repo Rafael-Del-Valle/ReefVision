@@ -200,12 +200,12 @@ def summarize_projected_visit_coverage(
         except ValueError:
             # Image/frame/crop labels are technical replicates, not units.
             continue
-        key = (unit_type, unit_id, candidate.metric, candidate.unit)
-        groups.setdefault(key, []).append(candidate)
+        group_key = (unit_type, unit_id, candidate.metric, candidate.unit)
+        groups.setdefault(group_key, []).append(candidate)
 
     coverage: list[EcologyProjectedVisitCoverage] = []
     for unit_type, unit_id, metric, unit in sorted(
-        groups, key=lambda key: tuple(part or "" for part in key)
+        groups, key=lambda group_key: tuple(part or "" for part in group_key)
     ):
         records = groups[(unit_type, unit_id, metric, unit)]
         series_keys = sorted({record.organism_key for record in records})
@@ -226,8 +226,8 @@ def summarize_projected_visit_coverage(
 
         for date, measured in sorted(by_date.items()):
             counts: dict[str, int] = {}
-            for key in measured:
-                counts[key] = counts.get(key, 0) + 1
+            for organism_key in measured:
+                counts[organism_key] = counts.get(organism_key, 0) + 1
             measured_keys = sorted(counts)
             coverage.append(
                 EcologyProjectedVisitCoverage(
@@ -243,7 +243,7 @@ def summarize_projected_visit_coverage(
                     ),
                     undated_organism_keys=sorted(undated_keys),
                     same_day_repeat_organism_keys=sorted(
-                        key for key, count in counts.items() if count > 1
+                        organism_key for organism_key, count in counts.items() if count > 1
                     ),
                     linked_measurement_count=len(measured),
                 )
