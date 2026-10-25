@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 from uuid import UUID
 
@@ -9,7 +10,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
+from reefvision.domain.errors import ValidationError
 from reefvision.services import images as image_services
+from reefvision.storage import images as image_storage
 from reefvision.tests.test_images import create_project, image_bytes, import_one
 
 
@@ -80,3 +83,64 @@ def test_staging_name_collision_preserves_existing_partial_import(
     assert len(report["failed"]) == 1
     assert staging.read_bytes() == sentinel
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 0
+
+
+def test_concurrent_original_placement_never_overwrites_an_existing_image(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Another writer winning after the old exists() check must be protected."""
+    staged = tmp_path / "staging.part"
+    destination = tmp_path / "original.png"
+    staged.write_bytes(b"new camera pixels")
+    sentinel = b"already persisted scientific original"
+    original_link = image_storage.os.link
+
+    def competing_writer(source: Path, target: Path) -> None:
+        destination.write_bytes(sentinel)
+        original_link(source, target)
+
+    monkeypatch.setattr(image_storage.os, "link", competing_writer)
+    with pytest.raises(ValidationError, match="already exists"):
+        image_storage.commit_staged_image(staged, destination)
+
+    assert destination.read_bytes() == sentinel
+    assert staged.read_bytes() == b"new camera pixels"
+
+
+def test_camera_original_placement_supports_filesystems_without_hardlinks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Removable FAT/exFAT storage must remain usable without an unsafe rename."""
+    staged = tmp_path / "staging.part"
+    destination = tmp_path / "original.jpeg"
+    original = b"camera original bytes, not a rendered preview"
+    staged.write_bytes(original)
+
+    def unsupported_hardlink(_source: Path, _target: Path) -> None:
+        raise OSError(errno.EOPNOTSUPP, "Hard links are unsupported")
+
+    monkeypatch.setattr(image_storage.os, "link", unsupported_hardlink)
+    image_storage.commit_staged_image(staged, destination)
+
+    assert destination.read_bytes() == original
+    assert not staged.exists()
+
+
+def test_fallback_original_placement_rejects_existing_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even the removable-volume fallback must never truncate an original."""
+    staged = tmp_path / "staging.part"
+    destination = tmp_path / "original.jpeg"
+    staged.write_bytes(b"new")
+    destination.write_bytes(b"original")
+
+    def unsupported_hardlink(_source: Path, _target: Path) -> None:
+        raise OSError(errno.EOPNOTSUPP, "Hard links are unsupported")
+
+    monkeypatch.setattr(image_storage.os, "link", unsupported_hardlink)
+    with pytest.raises(ValidationError, match="already exists"):
+        image_storage.commit_staged_image(staged, destination)
+
+    assert destination.read_bytes() == b"original"
+    assert staged.read_bytes() == b"new"
