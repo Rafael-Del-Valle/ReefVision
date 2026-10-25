@@ -202,6 +202,22 @@ Assert-True ($acceptanceScript.Contains("review_status -ne 'requires_researcher_
 Assert-True ($acceptanceScript.Contains('input_checksums.scoring_provenance_sha256')) 'Installed QC workflow must verify scientific scoring provenance.'
 Assert-True ($acceptanceScript.Contains('input_checksums.item_evidence_sha256')) 'Installed QC workflow must verify saved item evidence.'
 Assert-True ($acceptanceScript.Contains('$qcPersistedWorkflowArtifacts[0].payload_sha256 -ne $qcWorkflowArtifactSha')) 'Installed QC workflow must verify identical artifact digest after restart.'
+
+# Replaying a saved graph on a newly launched packaged backend must be a new
+# workflow run, not a silent reuse of the first queue or a reviewer approval.
+Assert-True ($acceptanceScript.Contains('qc_workflow_replay = New-ReefVisionEvidenceResult')) 'Installed saved-QC replay evidence field is missing.'
+Assert-True ($acceptanceScript.Contains('$qcReplayQueued = Invoke-RestMethod "$api/projects/$projectId/workflow-runs"')) 'Installed saved graph is not re-executed after restart.'
+Assert-True ($acceptanceScript.Contains('graph_record_id = $qcWorkflowSaved.id')) 'Installed replay must execute the persisted graph revision.'
+Assert-True ($acceptanceScript.Contains('$qcReplayQueued.id -eq $qcWorkflowQueued.id')) 'Installed replay must reject reused workflow run identities.'
+Assert-True ($acceptanceScript.Contains('$qcReplayPayload.queue_id -eq $qcWorkflowPayload.queue_id')) 'Installed replay must reject reused QC queue identities.'
+Assert-True ($acceptanceScript.Contains('$qcReplayPayload.input_checksums.queue_scope_sha256 -ne $qcWorkflowPayload.input_checksums.queue_scope_sha256')) 'Installed replay must compare source scope digests.'
+Assert-True ($acceptanceScript.Contains('$qcReplayPayload.input_checksums.item_evidence_sha256 -ne $qcWorkflowPayload.input_checksums.item_evidence_sha256')) 'Installed replay must compare immutable scientific item evidence.'
+Assert-True ($acceptanceScript.Contains('$qcReplayPayload.input_checksums.scoring_provenance_sha256 -ne $qcWorkflowPayload.input_checksums.scoring_provenance_sha256')) 'Installed replay must compare scoring provenance.'
+Assert-True ($acceptanceScript.Contains('$qcReplayPayload.review_status -ne ''requires_researcher_review''')) 'Installed replay must retain researcher approval gates.'
+Assert-True ($acceptanceScript.Contains('$qcReviewEventsAfterReplay.total -ne 5')) 'Installed replay must not mutate prior manual QC audit history.'
+$qcReplayOffset = $acceptanceScript.IndexOf('$qcReplayQueued = Invoke-RestMethod', [System.StringComparison]::Ordinal)
+Assert-True ($qcReplayOffset -gt $apiReadinessCalls[2].Index) 'Installed saved graph replay must occur after the third packaged API readiness barrier.'
+
 $qcGraphOffset = $acceptanceScript.IndexOf('$qcWorkflowGraph = @{', [System.StringComparison]::Ordinal)
 $qcReloadOffset = $acceptanceScript.IndexOf('$qcPersistedGraphs = @(', [System.StringComparison]::Ordinal)
 Assert-True ($qcGraphOffset -gt 0 -and $qcGraphOffset -lt $apiReadinessCalls[2].Index) 'Installed QC workflow must execute before the third desktop restart.'
