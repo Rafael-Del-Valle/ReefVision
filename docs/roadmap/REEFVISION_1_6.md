@@ -764,3 +764,11 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - The read-only desktop migration lineage guard now rejects nullable `event_type` before startup/migration, without stamping or altering scientific data. Added three isolated SQLite regressions preserving an untyped event and scientific sentinel on rejection, and corrected the desktop native-lineage fixtures to reflect the actual NOT NULL migration contract.
 - Repaired the exact Ruff formatter difference from three previous CI failures in `test_migration_lineage_guard_16.py`.
 - **Validation boundary:** SQLAlchemy inspector NULLability behavior checked in an isolated local SQLite smoke test; exact-head Ruff/backend/desktop/Windows CI still required. Cross-version 1.1/1.6 revision reconciliation and real MSI upgrade/installed interactive GUI remain blocked. Release HOLD.
+
+
+### 2026-10-25 — Explicit QC audit-event type and CI repair (Track D)
+
+- Verified exact previous head `ae1eb202`: 17/20 GitHub Actions workflows passed; three backend gates failed at the same Ruff E501 (101-character SQL fixture line in `test_desktop_migration_lineage_16.py:168`). Corrected that line without changing the generated SQL.
+- Audited original 0038 audit-event migration: `event_type` is NOT NULL **without a server default**. A foreign already-at-head schema that adds a default such as `'comment'` can silently misclassify omitted QC triage actions as reviewer comments. The read-only 0038–0040 guard now rejects such defaults without stamping or modifying scientific records.
+- Added three standalone SQLite regressions and three desktop startup regressions for forged defaults at 0038/0039/0040, including preserved research sentinels, existing event records and revision stamps. Corrected positive fixtures to explicitly supply event types, matching the original migration.
+- Local isolated SQLAlchemy/SQLite inspector confirmed `default=None` for native columns and `default="'comment'"` for forged columns. Full exact-head Ruff/backend/frontend/E2E and native Windows MSI/installed-GUI acceptance are **not yet verified**. 1.1/1.6 Alembic revision collision remains unresolved. **HOLD**; no merge, release, paid hosting, model download or asset deletion.

@@ -88,6 +88,17 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "the schema through a reviewed, data-preserving migration."
         )
 
+    # The original audit migration requires an explicit event type on every
+    # write. A server default can silently mislabel omitted triage transitions
+    # as comments, destroying the reliability of reviewer provenance.
+    if event_type_column.get("default") is not None:
+        raise RuntimeError(
+            f"Unsafe ReefVision Alembic revision {revision} collision: "
+            "review-event event_type has an unexpected server default, "
+            "allowing omitted event types to be misclassified. Preserve "
+            "the database and reconcile through a reviewed migration."
+        )
+
     # Every 0038-0040 stamp requires the exact named audit-event CHECK from its
     # migration. A missing/renamed or obsolete CHECK is unsafe even when the
     # revision marker claims otherwise. Read-only inspection.

@@ -8,7 +8,7 @@ from reefvision.db.migration_lineage_guard import assert_compatible_revision_003
 REVIEW_SCHEMA = (
     "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
     "project_id TEXT, client_request_id TEXT, "
-    "event_type TEXT NOT NULL DEFAULT 'comment', actor TEXT, "
+    "event_type TEXT NOT NULL, actor TEXT, "
     "comment TEXT, assignee TEXT, created_at TEXT"
 )
 
@@ -42,7 +42,10 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
         check = f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed}))"
         connection.execute(text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})"))
         connection.execute(
-            text("INSERT INTO review_queue_item_events (id) VALUES ('event-preserved')")
+            text(
+                "INSERT INTO review_queue_item_events (id, event_type) "
+                "VALUES ('event-preserved', 'comment')"
+            )
         )
         assert_compatible_revision_0038(connection)
         assert (
@@ -111,7 +114,7 @@ def test_nullable_audit_event_type_rejected_without_mutating_research_data(
             allowed += ", 'triage_complete'"
         # The allowlist is correct but a nullable column makes it ineffective.
         schema = REVIEW_SCHEMA.replace(
-            "event_type TEXT NOT NULL DEFAULT 'comment'", "event_type TEXT"
+            "event_type TEXT NOT NULL", "event_type TEXT"
         )
         connection.execute(
             text(
@@ -134,6 +137,50 @@ def test_nullable_audit_event_type_rejected_without_mutating_research_data(
             connection.scalar(text("SELECT event_type FROM review_queue_item_events"))
             is None
         )
+    engine.dispose()
+
+
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040"])
+def test_defaulted_audit_event_type_rejected_without_rewriting_history(
+    revision: str,
+) -> None:
+    """An omitted event type must never be silently recorded as a comment."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"),
+            {"revision": revision},
+        )
+        connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO preserved VALUES ('original observation')"))
+        allowed = "'comment', 'assign', 'unassign'"
+        if revision in {"0039", "0040"}:
+            allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
+        if revision == "0040":
+            allowed += ", 'triage_complete'"
+        schema = REVIEW_SCHEMA.replace(
+            "event_type TEXT NOT NULL",
+            "event_type TEXT NOT NULL DEFAULT 'comment'",
+        )
+        connection.execute(
+            text(
+                f"CREATE TABLE review_queue_item_events ({schema}, "
+                "CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed})))"
+            )
+        )
+        # SQLite accepts an omitted event type because of the forged default.
+        connection.execute(
+            text("INSERT INTO review_queue_item_events (id) VALUES ('forged-comment')")
+        )
+        with pytest.raises(RuntimeError, match="unexpected server default"):
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT value FROM preserved")) == "original observation"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        assert connection.scalar(
+            text("SELECT event_type FROM review_queue_item_events")
+        ) == "comment"
     engine.dispose()
 
 
@@ -226,7 +273,10 @@ def test_revision_0039_requires_named_triage_check_without_writes(
         )
         connection.execute(text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})"))
         connection.execute(
-            text("INSERT INTO review_queue_item_events (id) VALUES ('preserve-event')")
+            text(
+                "INSERT INTO review_queue_item_events (id, event_type) "
+                "VALUES ('preserve-event', 'comment')"
+            )
         )
         if should_reject:
             with pytest.raises(RuntimeError, match="missing or renamed"):

@@ -94,6 +94,54 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
 
 
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040"])
+def test_desktop_rejects_defaulted_audit_event_type_at_head(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    revision: str,
+) -> None:
+    """An already-at-head stamp cannot bypass the explicit-event contract."""
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'lineage.sqlite'}")
+    allowed = "'comment', 'assign', 'unassign'"
+    if revision in {"0039", "0040"}:
+        allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
+    if revision == "0040":
+        allowed += ", 'triage_complete'"
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"),
+            {"revision": revision},
+        )
+        connection.execute(text("CREATE TABLE preserved (id TEXT PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO preserved VALUES ('original-research')"))
+        connection.execute(
+            text(
+                "CREATE TABLE review_queue_item_events ("
+                "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
+                "project_id TEXT, client_request_id TEXT, "
+                "event_type TEXT NOT NULL DEFAULT 'comment', actor TEXT, "
+                "comment TEXT, assignee TEXT, created_at TEXT, "
+                "CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed})))"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO review_queue_item_events (id) VALUES ('forged-comment')")
+        )
+    _prepare_desktop_migration(monkeypatch, engine, head=revision)
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    with pytest.raises(RuntimeError, match="unexpected server default"):
+        desktop.run_pending_migrations(settings)
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        assert connection.scalar(text("SELECT id FROM preserved")) == "original-research"
+        assert connection.scalar(
+            text("SELECT event_type FROM review_queue_item_events")
+        ) == "comment"
+    engine.dispose()
+
+
 def _prepare_fresh_desktop_migration(
     monkeypatch: pytest.MonkeyPatch,
     engine: object,
@@ -165,7 +213,8 @@ def test_desktop_verifies_successful_native_review_migration(
                 text(
                     "CREATE TABLE review_queue_item_events ("
                     "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
-                    "project_id TEXT, client_request_id TEXT, event_type TEXT NOT NULL, actor TEXT, "
+                    "project_id TEXT, client_request_id TEXT, "
+                    "event_type TEXT NOT NULL, actor TEXT, "
                     "comment TEXT, assignee TEXT, created_at TEXT, "
                     "CONSTRAINT ck_review_queue_item_event_type "
                     "CHECK (event_type IN ('comment', 'assign', 'unassign')))"
