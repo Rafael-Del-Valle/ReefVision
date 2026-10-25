@@ -60,9 +60,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
 
     tables = set(inspector.get_table_names())
     unexpected_science = sorted(tables & _SCIENCE_TABLES)
-    review_columns = (
-        inspector.get_columns(_REVIEW_TABLE) if _REVIEW_TABLE in tables else []
-    )
+    review_columns = inspector.get_columns(_REVIEW_TABLE) if _REVIEW_TABLE in tables else []
     actual_columns = {column["name"] for column in review_columns}
     missing_columns = sorted(_REVIEW_COLUMNS - actual_columns)
     if missing_columns or unexpected_science:
@@ -81,9 +79,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     # column that became nullable would allow untyped audit events despite
     # an otherwise correct named allowlist. The original 0038 migration
     # requires NOT NULL; fail closed without changing any stored records.
-    event_type_column = next(
-        column for column in review_columns if column["name"] == "event_type"
-    )
+    event_type_column = next(column for column in review_columns if column["name"] == "event_type")
     if event_type_column.get("nullable", True):
         raise RuntimeError(
             f"Unsafe ReefVision Alembic revision {revision} collision: "
