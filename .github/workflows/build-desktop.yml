@@ -44,6 +44,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Catch syntax regressions before installing large provider dependencies.
+      # compileall is standard-library-only and does not download model weights.
+      - name: Fail fast on backend Python syntax before packaging
+        shell: pwsh
+        run: |
+          python -m compileall -q apps/api/reefvision
+          if ($LASTEXITCODE -ne 0) {
+            throw "Backend Python syntax preflight failed; refusing installer bootstrap."
+          }
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
