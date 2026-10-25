@@ -103,11 +103,11 @@ def test_live_log_tail_waits_for_complete_loss_record(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
-        ("training", "epoch=3\\n"),
-        ("cancel_requested", "epoch=3\\n"),
-        ("completed", "epoch=3\\ntrain/dfl_loss=0.10"),
-        ("failed", "epoch=3\\ntrain/dfl_loss=0.10"),
-        ("cancelled", "epoch=3\\ntrain/dfl_loss=0.10"),
+        ("training", "epoch=3\n"),
+        ("cancel_requested", "epoch=3\n"),
+        ("completed", "epoch=3\ntrain/dfl_loss=0.10"),
+        ("failed", "epoch=3\ntrain/dfl_loss=0.10"),
+        ("cancelled", "epoch=3\ntrain/dfl_loss=0.10"),
     ],
 )
 def test_training_log_api_preserves_final_loss_only_after_run_ends(
@@ -120,7 +120,7 @@ def test_training_log_api_preserves_final_loss_only_after_run_ends(
     """A terminal run's last loss is complete even without a final newline."""
     log = test_settings.resolved_data_dir / "training.log"
     log.parent.mkdir(parents=True, exist_ok=True)
-    original = b"epoch=3\\ntrain/dfl_loss=0.10"
+    original = b"epoch=3\ntrain/dfl_loss=0.10"
     log.write_bytes(original)
 
     def fake_service(_request: object, _session: object) -> SimpleNamespace:
