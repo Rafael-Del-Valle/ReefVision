@@ -48,9 +48,7 @@ def test_completion_upgrade_preserves_history_and_downgrade_refuses_loss(
             old.upgrade()
             _insert(connection, "existing-triage", "triage_skip")
             migration = _completion_migration()
-            monkeypatch.setattr(
-                migration, "op", Operations(MigrationContext.configure(connection))
-            )
+            monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
             migration.upgrade()
             _assert_indexes(connection)
             _insert(connection, "completed", "triage_complete")
@@ -72,8 +70,7 @@ def test_completion_upgrade_preserves_history_and_downgrade_refuses_loss(
             assert (
                 connection.scalar(
                     text(
-                        "SELECT event_type FROM review_queue_item_events "
-                        "WHERE id='existing-triage'"
+                        "SELECT event_type FROM review_queue_item_events WHERE id='existing-triage'"
                     )
                 )
                 == "triage_skip"
@@ -84,7 +81,7 @@ def test_completion_upgrade_preserves_history_and_downgrade_refuses_loss(
 
 
 def test_completion_upgrade_rejects_cross_scoped_history_without_rewrite(
-    monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:

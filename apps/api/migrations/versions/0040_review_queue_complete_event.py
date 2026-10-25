@@ -57,8 +57,7 @@ def downgrade() -> None:
     connection = op.get_bind()
     count = connection.scalar(
         sa.text(
-            "SELECT COUNT(*) FROM review_queue_item_events "
-            "WHERE event_type = 'triage_complete'"
+            "SELECT COUNT(*) FROM review_queue_item_events WHERE event_type = 'triage_complete'"
         )
     )
     if count:

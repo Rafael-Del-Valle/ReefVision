@@ -15,11 +15,14 @@ This is a **temporary fail-closed guard**, not a resolution. Do not renumber an 
 ## 2026-10-25 hardening: concurrent review revision heads
 
 The read-only guard also rejects databases that simultaneously report two or
-more of the incompatible review-lineage revisions `0038`, `0039`, `0040`.
+more Alembic heads when any head is a review-lineage revision `0038`, `0039`, or `0040`.
 Previously, selecting the highest marker could conceal an additional
 incompatible head. Rejection preserves the revision rows, scientific tables,
 and original research assets; it does not attempt a repair or rewrite.
-Parameterized SQLite regressions cover all three two-head combinations.
+Parameterized SQLite regressions cover all three two-review-head combinations,
+plus a review revision paired with an older or foreign scientific branch head.
+The guard is read-only and intentionally rejects unrecognized multi-head states
+until an explicit, backed-up migration reconciliation is approved.
 
 The 0040 completion-event CHECK is still verified independently. This is a
 narrow compatibility safeguard, **not** a reconciliation with the separate

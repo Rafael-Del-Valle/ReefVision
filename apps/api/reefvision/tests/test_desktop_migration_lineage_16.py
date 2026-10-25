@@ -72,14 +72,12 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
         event_type_check = ""
         if revision in {"0039", "0040"}:
             allowed = (
-                "'comment', 'assign', 'unassign', "
-                "'triage_start', 'triage_skip', 'triage_return'"
+                "'comment', 'assign', 'unassign', 'triage_start', 'triage_skip', 'triage_return'"
             )
             if revision == "0040":
                 allowed += ", 'triage_complete'"
             event_type_check = (
-                ", CONSTRAINT ck_review_queue_item_event_type "
-                f"CHECK (event_type IN ({allowed}))"
+                f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed}))"
             )
         connection.execute(
             text(

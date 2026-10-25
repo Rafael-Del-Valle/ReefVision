@@ -44,10 +44,13 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     review_revisions = revisions & {"0038", "0039", "0040"}
     if not review_revisions:
         return
-    if len(review_revisions) != 1:
+    # Alembic can record unrelated branch heads in the same version table.
+    # A review lineage combined with any other head is not an accepted
+    # migration graph here; reject it before desktop startup or schema writes.
+    if len(revisions) != 1:
         raise RuntimeError(
-            "Unsafe ReefVision Alembic concurrent review revisions: "
-            f"{sorted(review_revisions)}. Preserve the database and reconcile "
+            "Unsafe ReefVision Alembic concurrent review revisions or foreign heads: "
+            f"{sorted(revisions)}. Preserve the database and reconcile 
             "the migration heads without stamping or deleting records."
         )
     revision = next(iter(review_revisions))

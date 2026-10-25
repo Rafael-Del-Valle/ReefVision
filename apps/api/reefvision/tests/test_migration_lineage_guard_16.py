@@ -256,8 +256,7 @@ def test_revision_0039_rejects_permissive_event_checks_without_writes(
             False,
         ),
         (
-            "'comment', 'assign', 'unassign', 'triage_start', "
-            "'triage_skip', 'triage_return'",
+            "'comment', 'assign', 'unassign', 'triage_start', 'triage_skip', 'triage_return'",
             True,
         ),
         (
@@ -295,12 +294,18 @@ def test_revision_0040_requires_exact_completion_check_without_writes(
 
 @pytest.mark.parametrize(
     "revisions",
-    [("0038", "0039"), ("0038", "0040"), ("0039", "0040")],
+    [
+        ("0038", "0039"),
+        ("0038", "0040"),
+        ("0039", "0040"),
+        ("0038", "0037"),
+        ("0040", "science_v11"),
+    ],
 )
 def test_concurrent_review_heads_fail_closed_without_modifying_research_assets(
     revisions: tuple[str, str],
 ) -> None:
-    """Two incompatible review-lineage heads must never be silently accepted."""
+    """A review revision plus any other head must fail before touching research data."""
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
@@ -314,7 +319,8 @@ def test_concurrent_review_heads_fail_closed_without_modifying_research_assets(
         with pytest.raises(RuntimeError, match="concurrent review revisions"):
             assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT value FROM preserved")) == "original research assets"
-        assert tuple(
-            connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
-        ) == revisions
+        assert (
+            tuple(connection.execute(text("SELECT version_num FROM alembic_version")).scalars())
+            == revisions
+        )
     engine.dispose()
