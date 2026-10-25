@@ -542,7 +542,9 @@ describe("Gallery", () => {
       "Focused project image: swiftia-01.png",
     );
     const originalUrl = original.getAttribute("src");
-    expect(screen.getByText("Loading full-resolution image...")).toBeInTheDocument();
+    expect(
+      screen.getByText("Loading full-resolution image..."),
+    ).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Retry loading image" }),
@@ -552,7 +554,9 @@ describe("Gallery", () => {
     );
     expect(retried.getAttribute("src")).not.toBe(originalUrl);
     expect(retried.getAttribute("src")).toContain("rv_retry=1");
-    expect(screen.getByText("Loading full-resolution image...")).toBeInTheDocument();
+    expect(
+      screen.getByText("Loading full-resolution image..."),
+    ).toBeInTheDocument();
 
     fireEvent.load(retried);
     expect(
