@@ -435,6 +435,49 @@ def test_imports_16_bit_grayscale_tiff(client: TestClient, test_settings: Settin
         assert extrema != ((255, 255), (255, 255), (255, 255))
 
 
+
+def test_big_endian_16_bit_tiff_renditions_preserve_original_pixel_values(
+    client: TestClient, test_settings: Settings
+) -> None:
+    """A big-endian TIFF stays 16-bit in display and yields a readable JPEG thumbnail."""
+    project = create_project(client, "Big-endian TIFF camera import")
+    stream = BytesIO()
+    Image.new("I;16B", (64, 48), 2048).save(stream, format="TIFF")
+    original = stream.getvalue()
+    report = import_one(
+        client,
+        project["id"],
+        filename="camera-big-endian.TIF",
+        content=original,
+    )
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    assert record["metadata_json"]["mode"] == "I;16B"
+    assert (record["width_px"], record["height_px"]) == (64, 48)
+
+    response = client.get(f"/api/v1/images/{image_id}/display")
+    assert response.status_code == 200
+    with Image.open(BytesIO(response.content)) as display:
+        assert display.mode == "I;16"
+        assert display.size == (64, 48)
+        assert display.getpixel((0, 0)) == 2048
+
+    app = cast(FastAPI, client.app)
+    factory = app.state.session_factory
+    assert process_thumbnail_job(
+        test_settings, factory, report["successful"][0]["thumbnail_job_id"]
+    )
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    with Image.open(BytesIO(thumbnail.content)) as preview:
+        assert preview.mode == "RGB"
+        assert all(2 <= channel <= 20 for channel in preview.getpixel((0, 0)))
+
+    # Neither browser-safe rendition modifies the original camera bytes.
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+
 def test_batch_imports_ten_images(client: TestClient) -> None:
     project = create_project(client, "Batch import")
     files = []
