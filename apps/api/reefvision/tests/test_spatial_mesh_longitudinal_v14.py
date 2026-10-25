@@ -211,14 +211,18 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert len(artifact["payload_sha256"]) == 64
 
 
-
 @pytest.mark.parametrize(
     ("rms", "extent", "expected_ratio", "warning"),
     [
         (0.02, 1.0, 0.02, None),
         (2.0, 1.0, 2.0, "registration_residual_at_least_smaller_mesh_extent"),
         (2.0, None, None, "registration_residual_extent_ratio_unavailable"),
-        (1_000_000.0, 1e-320, None, "registration_residual_extent_ratio_out_of_numeric_range"),
+        (
+            1_000_000.0,
+            1e-320,
+            None,
+            "registration_residual_extent_ratio_out_of_numeric_range",
+        ),
     ],
 )
 def test_registration_residual_size_qc_is_provisional_and_finite(
