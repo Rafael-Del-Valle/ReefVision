@@ -556,7 +556,9 @@ try {
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
-    $persistedVisibility = Invoke-RestMethod $visibilityUrl
+    # The desktop chooses a fresh ephemeral loopback port on each launch.
+    # Never reuse the first launch's cached visibility URL after restart.
+    $persistedVisibility = Invoke-RestMethod "$api/projects/$projectId/class-visibility"
     if ($persistedVisibility.project_id -ne $projectId -or
         [string]$persistedVisibility.user_identity -ne $visibilityIdentity -or
         -not $persistedVisibility.project_defaults.annotations.saved -or
