@@ -227,3 +227,17 @@ def test_import_remains_recorded_when_staging_cleanup_is_denied(
     image_id = report["successful"][0]["image_id"]
     assert client.get(f"/api/v1/images/{image_id}/content").content == original
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 1
+
+
+@pytest.mark.parametrize("subseconds", [b"123400\x00", "123400\x00"])
+def test_camera_exif_nul_terminated_subseconds_are_preserved(
+    subseconds: bytes | str,
+) -> None:
+    """Camera EXIF ASCII fields may include a terminating NUL byte."""
+    timestamp = image_storage._capture_timestamp(
+        {36867: "2026:10:25 10:11:12", 37521: subseconds}
+    )
+
+    assert timestamp is not None
+    assert timestamp.microsecond == 123400
+    assert timestamp.isoformat() == "2026-10-25T10:11:12.123400+00:00"
