@@ -477,6 +477,66 @@ def test_big_endian_16_bit_tiff_renditions_preserve_original_pixel_values(
     assert client.get(f"/api/v1/images/{image_id}/content").content == original
 
 
+@pytest.mark.parametrize("mode", ["I;16B", "I;16L"])
+def test_endian_16_bit_tiff_preserves_source_and_raw_pixel_display(
+    client: TestClient, test_settings: Settings, mode: str
+) -> None:
+    """Scientific TIFF import must not silently downsample 16-bit source pixels."""
+    project = create_project(client, f"Endian TIFF {mode}")
+    stream = BytesIO()
+    Image.new(mode, (64, 48), 4096).save(stream, format="TIFF")
+    original = stream.getvalue()
+
+    report = import_one(
+        client,
+        project["id"],
+        filename=f"depth-{mode.replace(';', '-')}.tiff",
+        content=original,
+    )
+    assert len(report["successful"]) == 1
+    assert not report["failed"]
+    item = report["successful"][0]
+    image_id = item["image_id"]
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getpixel((32, 24)) == 4096
+
+    app = cast(FastAPI, client.app)
+    assert process_thumbnail_job(
+        test_settings, app.state.session_factory, item["thumbnail_job_id"]
+    )
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    with Image.open(BytesIO(thumbnail.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert all(10 <= channel <= 20 for channel in rendition.convert("RGB").getpixel((32, 24)))
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+
+def test_truncated_camera_jpeg_is_rejected_without_persisting_an_image(
+    client: TestClient,
+) -> None:
+    """A valid JPEG header is not proof that all scientific pixels decode."""
+    project = create_project(client, "Truncated camera JPEG")
+    stream = BytesIO()
+    Image.new("RGB", (128, 96), (20, 90, 120)).save(stream, format="JPEG")
+    truncated = stream.getvalue()[:-32]
+    report = import_one(
+        client, project["id"], filename="camera-capture.JPEG", content=truncated
+    )
+
+    assert not report["successful"]
+    assert len(report["failed"]) == 1
+    assert report["failed"][0]["status"] == "failed"
+    page = client.get(f"/api/v1/projects/{project['id']}/images").json()
+    assert page["total"] == 0
+
+
 def test_batch_imports_ten_images(client: TestClient) -> None:
     project = create_project(client, "Batch import")
     files = []
