@@ -247,6 +247,11 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   const thumbnail =
     phase === "thumbnail-loading" || phase === "thumbnail-loaded";
   const waiting = phase === "loading" || phase === "thumbnail-loading";
+  // A changed thumbnail path is a new image request. Give it its own DOM
+  // element so late events from the previous rendition cannot affect it.
+  const requestKind = thumbnail
+    ? `thumbnail:${image.thumbnail_path ?? ""}`
+    : "original";
 
   useEffect(() => {
     if (!waiting) return;
@@ -293,10 +298,11 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     if (phase === "thumbnail-loading" && image.thumbnail_path) {
       attemptedThumbnailPath.current = image.thumbnail_path;
     }
-    // A thumbnail can finish asynchronously after the original image has
-    // failed. Recover automatically, but never retry a failed path in a loop.
+    // A background thumbnail can replace a failed or already displayed
+    // rendition. Reset its loading state only when the path actually changes:
+    // refreshing the same path must never create an endless retry loop.
     if (
-      phase === "error" &&
+      (phase === "error" || phase === "thumbnail-loaded") &&
       image.thumbnail_path &&
       attemptedThumbnailPath.current !== image.thumbnail_path
     ) {
@@ -393,7 +399,7 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
           )}
           <img
             ref={imageElement}
-            key={`${retry}:${thumbnail ? "thumbnail" : "original"}`}
+            key={`${retry}:${requestKind}`}
             src={focusedImageUrl(
               image.id,
               thumbnail,
