@@ -126,6 +126,33 @@ def test_camera_original_placement_supports_filesystems_without_hardlinks(
     assert not staged.exists()
 
 
+def test_interrupted_fallback_copy_does_not_publish_partial_camera_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An interrupted exFAT copy must retain staging and remove partial output."""
+    staged = tmp_path / "staging.part"
+    destination = tmp_path / "original.jpeg"
+    original = b"immutable scientific camera pixels"
+    staged.write_bytes(original)
+
+    def unsupported_hardlink(_source: Path, _target: Path) -> None:
+        raise OSError(errno.EOPNOTSUPP, "Hard links are unsupported")
+
+    def interrupted_copy(_source: object, output: object, *, length: int) -> None:
+        assert length == 1024 * 1024
+        output.write(b"incomplete")  # type: ignore[attr-defined]
+        raise OSError(errno.EIO, "Removable drive disconnected mid-copy")
+
+    monkeypatch.setattr(image_storage.os, "link", unsupported_hardlink)
+    monkeypatch.setattr(image_storage.shutil, "copyfileobj", interrupted_copy)
+
+    with pytest.raises(OSError, match="disconnected mid-copy"):
+        image_storage.commit_staged_image(staged, destination)
+
+    assert not destination.exists()
+    assert staged.read_bytes() == original
+
+
 def test_fallback_original_placement_rejects_existing_destination(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
