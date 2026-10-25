@@ -7,7 +7,8 @@ from reefvision.db.migration_lineage_guard import assert_compatible_revision_003
 
 REVIEW_SCHEMA = (
     "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
-    "project_id TEXT, client_request_id TEXT, event_type TEXT, actor TEXT, "
+    "project_id TEXT, client_request_id TEXT, "
+    "event_type TEXT NOT NULL DEFAULT 'comment', actor TEXT, "
     "comment TEXT, assignee TEXT, created_at TEXT"
 )
 
@@ -38,10 +39,7 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
         allowed = "'comment', 'assign', 'unassign'"
         if revision == "0039":
             allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
-        check = (
-            ", CONSTRAINT ck_review_queue_item_event_type "
-            f"CHECK (event_type IN ({allowed}))"
-        )
+        check = f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed}))"
         connection.execute(text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})"))
         connection.execute(
             text("INSERT INTO review_queue_item_events (id) VALUES ('event-preserved')")
@@ -90,6 +88,53 @@ def test_colliding_review_revision_rejected_without_mutating_assets(
                 ).scalar()
                 == table
             )
+
+
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040"])
+def test_nullable_audit_event_type_rejected_without_mutating_research_data(
+    revision: str,
+) -> None:
+    """SQLite CHECK accepts NULL; a forged revision must not bypass audit typing."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"),
+            {"revision": revision},
+        )
+        connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO preserved VALUES ('original observations')"))
+        allowed = "'comment', 'assign', 'unassign'"
+        if revision in {"0039", "0040"}:
+            allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
+        if revision == "0040":
+            allowed += ", 'triage_complete'"
+        # The allowlist is correct but a nullable column makes it ineffective.
+        schema = REVIEW_SCHEMA.replace(
+            "event_type TEXT NOT NULL DEFAULT 'comment'", "event_type TEXT"
+        )
+        connection.execute(
+            text(
+                f"CREATE TABLE review_queue_item_events ({schema}, "
+                "CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed})))"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO review_queue_item_events (id, event_type) "
+                "VALUES ('untyped-event', NULL)"
+            )
+        )
+        with pytest.raises(RuntimeError, match="event_type is nullable"):
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT value FROM preserved")) == "original observations"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        assert (
+            connection.scalar(text("SELECT event_type FROM review_queue_item_events"))
+            is None
+        )
+    engine.dispose()
 
 
 @pytest.mark.parametrize("revision", ["0038", "0039"])
