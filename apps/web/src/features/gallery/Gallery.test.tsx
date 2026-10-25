@@ -737,7 +737,9 @@ describe("Gallery", () => {
       page_size: 24,
       pages: 1,
     });
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(response(null)));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(response(null)),
+    );
     render(
       <QueryClientProvider client={queryClient}>
         <Gallery project={project} />
