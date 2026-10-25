@@ -87,6 +87,24 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
             if value is not None and (type(value) is not int or value < 0):
                 raise ValueError(f"{field} must be a nonnegative integer when present")
             counts[field] = value
+        # Each edge-connected patch contains at least one face. Every face
+        # contributes at most three distinct edges, and a degenerate face
+        # cannot exceed the total number of faces. Validate only when the
+        # necessary fields are present so older artifacts remain readable.
+        face_count = counts["face_count"]
+        if face_count is not None:
+            patch_count = counts["edge_connected_patch_count"]
+            if patch_count is not None and (
+                patch_count > face_count or (face_count > 0 and patch_count == 0)
+            ):
+                raise ValueError("Mesh topology patch count inconsistent with face_count")
+            degenerate_count = counts["degenerate_face_count"]
+            if degenerate_count is not None and degenerate_count > face_count:
+                raise ValueError("Mesh topology degenerate count inconsistent with face_count")
+            for edge_field in ("boundary_edge_count", "nonmanifold_edge_count"):
+                edge_count = counts[edge_field]
+                if edge_count is not None and edge_count > 3 * face_count:
+                    raise ValueError(f"Mesh topology {edge_field} inconsistent with face_count")
         topology_counts.append(counts)
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
