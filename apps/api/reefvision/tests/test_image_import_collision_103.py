@@ -47,7 +47,8 @@ def test_import_destination_collision_preserves_existing_original(
     assert "already exists" in report["failed"][0]["detail"]
     assert original.read_bytes() == sentinel
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 0
-    assert not (original.parent.parent.parent / ".imports" / f"{staging_id}.part").exists()
+    staged_path = original.parent.parent.parent / ".imports" / f"{staging_id}.part"
+    assert not staged_path.exists()
 
 
 def test_staging_name_collision_preserves_existing_partial_import(
