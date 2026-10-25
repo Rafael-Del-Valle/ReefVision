@@ -767,7 +767,20 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   const allAnnotations = page
     .getByTestId("annotation-canvas")
     .locator("[data-testid^='annotation-']");
-  await expect(allAnnotations).toHaveCount(1500, { timeout: 15000 });
+  // 1.6 viewport culling intentionally renders only in-view SVG boxes.
+  // The complete 1,500-observation dataset must still be available for
+  // selection, review and saving; never treat rendered SVG count as total.
+  await expect
+    .poll(() => allAnnotations.count(), { timeout: 15000 })
+    .toBeGreaterThan(0);
+  await expect
+    .poll(() => allAnnotations.count(), { timeout: 15000 })
+    .toBeLessThan(annotations.length);
+  const objectOptions = page
+    .getByRole("listbox", { name: "Objects" })
+    .getByRole("option");
+  await expect(objectOptions).toHaveCount(annotations.length);
+
   await allAnnotations.first().dispatchEvent("pointerdown", {
     button: 0,
     buttons: 1,
@@ -776,6 +789,11 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
     pointerId: 1,
     pointerType: "mouse",
   });
+  await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
+  // A box omitted from the viewport SVG remains selectable from the full
+  // object list. Display culling must never discard the source annotation.
+  await objectOptions.last().click();
+  await expect(objectOptions.last()).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
 });
 
