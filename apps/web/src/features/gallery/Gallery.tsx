@@ -243,9 +243,20 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   const [phase, setPhase] = useState<PreviewLoadPhase>("loading");
   const [retry, setRetry] = useState(0);
   const attemptedThumbnailPath = useRef<string | null>(null);
+  const imageElement = useRef<HTMLImageElement | null>(null);
   const thumbnail =
     phase === "thumbnail-loading" || phase === "thumbnail-loaded";
   const waiting = phase === "loading" || phase === "thumbnail-loading";
+
+  useEffect(() => {
+    if (!waiting) return;
+    // A cached WebView2 image can already be decoded before its load handler
+    // runs. Reveal those pixels instead of leaving a false loading overlay.
+    const element = imageElement.current;
+    if (element?.complete && element.naturalWidth > 0 && element.naturalHeight > 0) {
+      setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+    }
+  }, [image.id, retry, thumbnail, waiting]);
 
   useEffect(() => {
     if (!waiting) return;
@@ -253,6 +264,12 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     // error event. Never leave the first image obscured indefinitely.
     const timer = window.setTimeout(() => {
       setPhase((current) => {
+        // A decoded image may have missed the load event after the first
+        // effect. Check again before treating the media request as failed.
+        const element = imageElement.current;
+        if (element?.complete && element.naturalWidth > 0 && element.naturalHeight > 0) {
+          return current === "thumbnail-loading" ? "thumbnail-loaded" : "loaded";
+        }
         if (current === "loading") {
           return image.thumbnail_path ? "thumbnail-loading" : "error";
         }
@@ -344,6 +361,7 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
             </p>
           )}
           <img
+            ref={imageElement}
             key={`${retry}:${thumbnail ? "thumbnail" : "original"}`}
             src={focusedImageUrl(
               image.id,
