@@ -658,6 +658,67 @@ try {
         throw 'QC triage modified the original researcher annotation.'
     }
 
+    # 1.6 Workflow Builder installed-package acceptance. The standalone QC API
+    # above is not evidence that saved typed graphs actually execute in the MSI.
+    # This uses the same project and a separate queue; it never approves a
+    # machine prediction or changes the original annotation.
+    $qcWorkflowGraph = @{
+        graph_id = "qc-review-queue-installed-$Token"
+        name = 'Installed QC review queue'
+        nodes = @(
+            @{ node_id = 'project'; node_type = 'project_source' },
+            @{ node_id = 'qc'; node_type = 'qc_review_queue' }
+        )
+        edges = @(
+            @{
+                edge_id = 'project-qc'
+                source_node_id = 'project'
+                source_port_id = 'project'
+                target_node_id = 'qc'
+                target_port_id = 'project'
+            }
+        )
+    }
+    $qcWorkflowPlan = Invoke-RestMethod "$api/projects/$projectId/workflow-graphs/plan" -Method Post -ContentType 'application/json' -Body ($qcWorkflowGraph | ConvertTo-Json -Depth 12)
+    if (-not $qcWorkflowPlan.valid -or -not $qcWorkflowPlan.executable) {
+        throw 'Installed Workflow Builder did not accept the typed project -> QC review graph.'
+    }
+    $qcWorkflowSaved = Invoke-RestMethod "$api/projects/$projectId/workflow-graphs" -Method Post -ContentType 'application/json' -Body (@{ graph = $qcWorkflowGraph } | ConvertTo-Json -Depth 12)
+    $qcWorkflowQueued = Invoke-RestMethod "$api/projects/$projectId/workflow-runs" -Method Post -ContentType 'application/json' -Body (@{ graph_record_id = $qcWorkflowSaved.id } | ConvertTo-Json)
+    if (-not $qcWorkflowQueued.id -or -not $qcWorkflowQueued.job_id) {
+        throw 'Installed Workflow Builder did not persist a queued QC graph run.'
+    }
+    $qcWorkflowDeadline = [DateTime]::UtcNow.AddSeconds(120)
+    do {
+        Start-Sleep -Milliseconds 500
+        $qcWorkflowJob = Invoke-RestMethod "$api/jobs/$($qcWorkflowQueued.job_id)"
+    } while ($qcWorkflowJob.status -in @('queued', 'running') -and [DateTime]::UtcNow -lt $qcWorkflowDeadline)
+    if ($qcWorkflowJob.status -ne 'succeeded') {
+        throw "Installed QC Workflow Builder job failed or timed out: $($qcWorkflowJob.status); $($qcWorkflowJob.error_message)"
+    }
+    $qcWorkflowDetail = Invoke-RestMethod "$api/workflow-runs/$($qcWorkflowQueued.id)"
+    $qcWorkflowArtifacts = @($qcWorkflowDetail.artifacts | Where-Object { $_.data_type -eq 'review_queue_reference' })
+    $qcWorkflowNodes = @($qcWorkflowDetail.nodes | Where-Object { $_.node_type -eq 'qc_review_queue' })
+    if ($qcWorkflowDetail.run.status -ne 'succeeded' -or $qcWorkflowArtifacts.Count -ne 1 -or
+        $qcWorkflowNodes.Count -ne 1 -or $qcWorkflowNodes[0].status -ne 'succeeded' -or
+        ([string]$qcWorkflowArtifacts[0].payload_sha256).Length -ne 64) {
+        throw 'Installed saved QC workflow did not persist a successful typed node and hashed output.'
+    }
+    $qcWorkflowPayload = $qcWorkflowArtifacts[0].payload_json
+    $qcWorkflowQueue = Invoke-RestMethod "$api/review-queues/$($qcWorkflowPayload.queue_id)"
+    if ($qcWorkflowPayload.project_id -ne $projectId -or
+        $qcWorkflowPayload.workflow_run_id -ne $qcWorkflowQueued.id -or
+        $qcWorkflowPayload.review_status -ne 'requires_researcher_review' -or
+        $qcWorkflowPayload.priority_score_unit -ne 'dimensionless' -or
+        $qcWorkflowQueue.project_id -ne $projectId -or
+        $qcWorkflowQueue.created_by -notlike 'workflow:*' -or
+        $qcWorkflowQueue.item_count -lt 1 -or
+        ([string]$qcWorkflowPayload.input_checksums.scoring_provenance_sha256).Length -ne 64 -or
+        ([string]$qcWorkflowPayload.input_checksums.item_evidence_sha256).Length -ne 64) {
+        throw 'Installed QC Workflow Builder lost project scope, scientific evidence or researcher-review gating.'
+    }
+    $qcWorkflowArtifactSha = [string]$qcWorkflowArtifacts[0].payload_sha256
+
     # A second packaged-desktop restart proves QC coordination survives SQLite
     # closure/reopen; the prior test already covered ordinary image persistence.
     Stop-AcceptanceDesktop $desktop
