@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from math import exp, isclose, isfinite, log
+from re import fullmatch
 from typing import Any
 
 
@@ -293,6 +294,21 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         warnings.append("zero_followup_extent_requires_reconstruction_review")
     if any(observation_qc):
         warnings.append("source_mesh_qc_requires_review")
+    # Source-frame labels are audit metadata, not registration transforms.
+    frames = [first.get("coordinate_frame_id"), second.get("coordinate_frame_id")]
+    for frame in frames:
+        if frame is not None and (
+            not isinstance(frame, str)
+            or len(frame) > 128
+            or fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]*", frame) is None
+        ):
+            raise ValueError("Coordinate frame IDs must be valid bounded source labels")
+    if any(frame is None for frame in frames):
+        warnings.append("coordinate_frame_metadata_unavailable")
+    elif frames[0] != frames[1]:
+        warnings.append("coordinate_frames_differ_registration_required")
+    else:
+        warnings.append("matching_coordinate_frame_id_not_registration_proof")
     for field, warning in (
         ("source_format", "mesh_source_formats_differ_between_observations"),
         ("calibration_method", "calibration_methods_differ_between_observations"),
@@ -334,18 +350,24 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
                 warnings.append("identical_geometry_area_inconsistent_with_calibration_scale")
             # An unchanged source mesh must also retain its uncalibrated
             # bounding-box diagonal. Missing extents cannot be validated.
-            if early_extent is not None and late_extent is not None:
-                if (early_extent == 0) != (late_extent == 0) or (
-                    early_extent > 0
-                    and late_extent > 0
-                    and not isclose(
-                        log(late_extent) - log(early_extent),
-                        log(after_scale) - log(before_scale),
-                        rel_tol=0,
-                        abs_tol=1e-8,
+            if (
+                early_extent is not None
+                and late_extent is not None
+                and (
+                    (early_extent == 0) != (late_extent == 0)
+                    or (
+                        early_extent > 0
+                        and late_extent > 0
+                        and not isclose(
+                            log(late_extent) - log(early_extent),
+                            log(after_scale) - log(before_scale),
+                            rel_tol=0,
+                            abs_tol=1e-8,
+                        )
                     )
-                ):
-                    warnings.append("identical_geometry_extent_inconsistent_with_calibration_scale")
+                )
+            ):
+                warnings.append("identical_geometry_extent_inconsistent_with_calibration_scale")
     if difference_bounds is None:
         warnings.append("scale_uncertainty_interval_unavailable")
     return {
@@ -396,6 +418,8 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "provenance": {
             "before_geometry_sha256": first.get("geometry_sha256"),
             "after_geometry_sha256": second.get("geometry_sha256"),
+            "before_coordinate_frame_id": frames[0],
+            "after_coordinate_frame_id": frames[1],
             "before_calibration_evidence": first.get("calibration_evidence"),
             "after_calibration_evidence": second.get("calibration_evidence"),
             "specimen_identity_verified": False,
