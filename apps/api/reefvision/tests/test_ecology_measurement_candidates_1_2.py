@@ -477,9 +477,7 @@ def test_undated_reimport_cannot_borrow_a_dated_photographs_provenance(
         "source_capture_conflict",
         "source_capture_conflict",
     ]
-    assert all(
-        row.conflicting_source_image_sha256 == [first.image_sha256] for row in qc
-    )
+    assert all(row.conflicting_source_image_sha256 == [first.image_sha256] for row in qc)
     assert all(row.review_gate == "scientist_review_required" for row in qc)
     assert summarize_sampling_date_qc(list(reversed(conflicting))) == qc
     assert summarize_projected_endpoint_changes(conflicting, qc) == []
@@ -497,10 +495,7 @@ def test_undated_reimport_cannot_borrow_a_dated_photographs_provenance(
         }
     )
     valid = [first, last, restored, other_last]
-    assert all(
-        row.qc_status == "date_series_candidate"
-        for row in summarize_sampling_date_qc(valid)
-    )
+    assert all(row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(valid))
     assert len(summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))) == 2
 
 
