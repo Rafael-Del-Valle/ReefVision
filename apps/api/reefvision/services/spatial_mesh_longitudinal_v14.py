@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from math import isfinite
 from typing import Any
 
@@ -200,6 +200,8 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "surface_area_change_is_not_verified_biological_growth",
         "average_change_per_day_is_not_a_biological_growth_rate",
     ]
+    if a0 == 0:
+        warnings.append("relative_surface_area_change_unavailable_zero_baseline")
     if any(observation_qc):
         warnings.append("source_mesh_qc_requires_review")
     for field, warning in (
@@ -229,10 +231,10 @@ def compare_mesh_observations(before: dict[str, Any], after: dict[str, Any]) -> 
         "before_observed_at_utc": first["observed_at_utc"],
         "after_observed_at_utc": second["observed_at_utc"],
         "before_observed_at_utc_normalized": (
-            before_time.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            before_time.astimezone(UTC).isoformat().replace("+00:00", "Z")
         ),
         "after_observed_at_utc_normalized": (
-            after_time.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            after_time.astimezone(UTC).isoformat().replace("+00:00", "Z")
         ),
         "elapsed_days": elapsed_days,
         "before_mesh_qc_warnings": observation_qc[0],
