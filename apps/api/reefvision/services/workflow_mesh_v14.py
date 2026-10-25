@@ -69,6 +69,7 @@ def extend_mesh_registry(
                 "specimen_id": None,
                 "observation_id": None,
                 "observed_at_utc": None,
+                "coordinate_frame_id": None,
                 "surface_path_vertex_pairs": None,
             },
             execution_state="executable_analysis",
