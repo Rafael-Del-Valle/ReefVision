@@ -54,11 +54,15 @@ def _add_native_review_table(database: Path, *, revision: str | None = None) -> 
             stamped_revision = connection.execute(
                 "SELECT version_num FROM alembic_version"
             ).fetchone()[0]
+        allowed_events = (
+            "'comment', 'assign', 'unassign', 'triage_start', 'triage_skip', 'triage_return'"
+        )
+        if stamped_revision == "0040":
+            allowed_events += ", 'triage_complete'"
         event_type_check = (
             ", CONSTRAINT ck_review_queue_item_event_type "
-            "CHECK (event_type IN ('comment', 'assign', 'unassign', "
-            "'triage_start', 'triage_skip', 'triage_return'))"
-            if stamped_revision == "0039"
+            f"CHECK (event_type IN ({allowed_events}))"
+            if stamped_revision in {"0039", "0040"}
             else ""
         )
         connection.execute(
@@ -123,9 +127,9 @@ def test_current_database_revision_skips_alembic_upgrade(
         settings,
         current_head,
     )
-    # A bare 0038/0039 stamp is not a valid review-events database.
+    # A bare 0038-0040 stamp is not a valid review-events database.
     # The desktop must validate schema identity even on its fast path.
-    if current_head in {"0038", "0039"}:
+    if current_head in {"0038", "0039", "0040"}:
         _add_native_review_table(database)
     before = database.read_bytes()
 
@@ -157,7 +161,7 @@ def test_older_database_revision_still_invokes_alembic_upgrade(
         calls.append(target)
         # The desktop now checks the post-upgrade revision and lineage.
         # Model a successful migration rather than a no-op mock.
-        _add_native_review_table(settings.resolved_data_dir / "reefvision.db", revision="0039")
+        _add_native_review_table(settings.resolved_data_dir / "reefvision.db", revision="0040")
 
     monkeypatch.setattr(
         command,
@@ -168,3 +172,20 @@ def test_older_database_revision_still_invokes_alembic_upgrade(
     desktop.run_pending_migrations(settings)
 
     assert calls == ["head"]
+
+
+def test_current_0040_stamp_with_0039_event_check_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """A stale audit CHECK must not pass desktop startup at revision 0040."""
+    settings = _desktop_settings(tmp_path / "stale-check")
+    database = _stamp_database(settings, "0039")
+    _add_native_review_table(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE alembic_version SET version_num = '0040'")
+        connection.commit()
+
+    before = database.read_bytes()
+    with pytest.raises(RuntimeError, match="CHECK constraint still excludes"):
+        desktop.run_pending_migrations(settings)
+    assert database.read_bytes() == before
