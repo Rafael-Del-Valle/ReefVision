@@ -50,7 +50,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     if len(revisions) != 1:
         raise RuntimeError(
             "Unsafe ReefVision Alembic concurrent review revisions or foreign heads: "
-            f"{sorted(revisions)}. Preserve the database and reconcile 
+            f"{sorted(revisions)}. Preserve the database and reconcile "
             "the migration heads without stamping or deleting records."
         )
     revision = next(iter(review_revisions))
