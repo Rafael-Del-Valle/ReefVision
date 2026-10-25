@@ -37,9 +37,21 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     after = _mesh("survey-2", "2026-10-02T07:00:00-05:00", 2)
     before["coordinate_frame_id"] = "survey-local"
     after["coordinate_frame_id"] = "survey-local"
+    registration_evidence = {
+        "source_frame_id": "survey-local",
+        "target_frame_id": "survey-local",
+        "method": "landmark",
+        "rms_residual_m": 0.02,
+        "correspondence_count": 6,
+        "evidence_note": "Provisional landmark alignment; independent review pending",
+    }
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
-        json={"before": before, "after": after},
+        json={
+            "before": before,
+            "after": after,
+            "registration_evidence": registration_evidence,
+        },
     )
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
@@ -91,6 +103,11 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["provenance"]["before_coordinate_frame_id"] == "survey-local"
     assert expected["provenance"]["after_coordinate_frame_id"] == "survey-local"
     assert expected["provenance"]["coordinate_registration_verified"] is False
+    assert expected["provenance"]["registration_evidence"] == registration_evidence
+    assert expected["provenance"]["registration_evidence_review_status"] == (
+        "caller_supplied_unverified"
+    )
+    assert "registration_residual_requires_independent_review" in expected["qc_warnings"]
     assert "matching_coordinate_frame_id_not_registration_proof" in expected["qc_warnings"]
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
     assert "open_mesh_surface_not_enclosed" in expected["before_mesh_qc_warnings"]
@@ -112,6 +129,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         item for item in registry.json() if item["node_type"] == "mesh_longitudinal_comparison"
     )
     assert node["executable"] is True
+    assert "registration_evidence" in node["optional_parameters"]
     assert [port["accepted_types"] for port in node["input_ports"]] == [
         ["mesh_measurement_preview"],
         ["mesh_measurement_preview"],
@@ -123,7 +141,11 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
             {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": after},
-            {"node_id": "compare", "node_type": "mesh_longitudinal_comparison"},
+            {
+                "node_id": "compare",
+                "node_type": "mesh_longitudinal_comparison",
+                "parameters": {"registration_evidence": registration_evidence},
+            },
         ],
         "edges": [
             {
@@ -185,6 +207,41 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert len(artifact["payload_sha256"]) == 64
 
 
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"rms_residual_m": -1},
+        {"rms_residual_m": "NaN"},
+        {"correspondence_count": 2},
+        {"correspondence_count": True},
+        {"verified": True},
+        {"source_frame_id": "unrelated-survey"},
+    ],
+)
+def test_pairwise_registration_evidence_is_validated(
+    client: TestClient, override: dict
+) -> None:
+    project_id = str(create_project(client, "Reject invalid registration evidence")["id"])
+    before = _mesh("scan-1", "2026-10-01T12:00:00Z", 1)
+    after = _mesh("scan-2", "2026-10-02T12:00:00Z", 1)
+    before["coordinate_frame_id"] = "frame-a"
+    after["coordinate_frame_id"] = "frame-b"
+    evidence = {
+        "source_frame_id": "frame-a",
+        "target_frame_id": "frame-b",
+        "method": "icp",
+        "rms_residual_m": 0.03,
+        "correspondence_count": 12,
+        "evidence_note": "Unverified alignment",
+        **override,
+    }
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after, "registration_evidence": evidence},
+    )
+    assert response.status_code in (400, 422), response.text
+
+
 def test_identical_mesh_rescaling_warns_without_claiming_growth(
     client: TestClient,
 ) -> None:
@@ -222,6 +279,8 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     assert result["provenance"]["before_coordinate_frame_id"] == "survey-a"
     assert result["provenance"]["after_coordinate_frame_id"] == "survey-b"
     assert result["provenance"]["coordinate_registration_verified"] is False
+    assert result["provenance"]["registration_evidence"] is None
+    assert "registration_evidence_unavailable" in result["qc_warnings"]
     assert (
         "identical_geometry_area_inconsistent_with_calibration_scale" not in result["qc_warnings"]
     )
@@ -334,7 +393,7 @@ def test_mesh_comparison_runtime_context_is_not_a_user_parameter(
                 session, app.state.settings, "project-1", runtime_context, {}
             )
         # Genuine user-supplied parameters remain disallowed.
-        with pytest.raises(ValidationError, match="takes no node parameters"):
+        with pytest.raises(ValidationError, match="accepts only registration_evidence"):
             execute_mesh_longitudinal_comparison(
                 session,
                 app.state.settings,
