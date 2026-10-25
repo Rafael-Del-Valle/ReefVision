@@ -1134,3 +1134,23 @@ use this same kernel, retain deterministic provenance and mandatory scientist
 review, and do **not** promote projected geometry to verified growth. No new
 migration or node is introduced. Exact-new-head CI, real biological review,
 installed Windows GUI and complete release acceptance remain pending.
+
+## Projected ecological unit source integrity (2026-10-24)
+
+The source-linked projected-measurement service now recalculates endpoint
+changes from current source candidates and sampling-date QC before accepting
+them for experimental-unit aggregation. Missing, stale, edited, or duplicated
+endpoint changes cannot silently become unit-level descriptive means.
+Population aggregation also rejects repeated experimental-unit/metric records
+across differing sampling windows or physical units, and rejects eligible rows
+whose complete-organism denominator does not match their organism roster.
+These checks apply to the existing standalone calibrated-candidate API and
+the persisted, typed `ecology_identity_registry_source` Workflow Builder output;
+focused regressions cover forged changes, duplicate unit records and inflated
+organism counts. The provenance algorithm identifier advances to
+`ecology-measurement-candidates-0007` so new artifacts cannot be confused
+with earlier calculation contracts. No migration or new environmental store
+is introduced. Source-linked projected geometry is **still unverified** and
+cannot be interpreted as confirmed growth or independent replication; it
+requires scientist review. CI, installed Windows GUI, and independent
+scientific acceptance remain required.
