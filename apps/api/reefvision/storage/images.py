@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
+import shutil
 import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -237,10 +239,37 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
 
 
 def commit_staged_image(staged_path: Path, destination: Path) -> None:
+    """Publish an immutable original without a check-then-replace overwrite race."""
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        raise ValidationError("Managed image destination already exists")
-    os.replace(staged_path, destination)
+    try:
+        # Both paths are within the managed project on the same volume.
+        # Creating a hard link is atomic and fails if another import already
+        # owns this name; os.replace() could silently overwrite that original.
+        os.link(staged_path, destination)
+    except FileExistsError as exc:
+        raise ValidationError("Managed image destination already exists") from exc
+    except OSError as exc:
+        # Some Windows removable filesystems (notably exFAT/FAT) do not
+        # support hard links. Exclusively create and fsync the destination
+        # instead; never fall back to an overwriting rename.
+        unsupported = {errno.EPERM, errno.EACCES, errno.EXDEV, errno.ENOTSUP}
+        if exc.errno not in unsupported and getattr(exc, "winerror", None) not in {1, 50}:
+            raise
+        created = False
+        try:
+            with destination.open("xb") as output:
+                created = True
+                with staged_path.open("rb") as source:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
+                output.flush()
+                os.fsync(output.fileno())
+        except FileExistsError as collision:
+            raise ValidationError("Managed image destination already exists") from collision
+        except Exception:
+            if created:
+                destination.unlink(missing_ok=True)
+            raise
+    staged_path.unlink()
 
 
 def _unique_rendition_temporary(destination: Path) -> Path:
