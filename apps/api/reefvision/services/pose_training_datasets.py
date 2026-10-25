@@ -45,6 +45,7 @@ MANIFEST_SCHEMA_VERSION = "pose-training-dataset-manifest-0001"
 ITEM_SCHEMA_VERSION = "pose-training-dataset-item-0001"
 PACKAGE_MANIFEST_FILENAME = "reefvision-pose-training-manifest.json"
 PACKAGE_ITEMS_FILENAME = "items.jsonl"
+PACKAGE_CHECKSUMS_FILENAME = "SHA256SUMS"
 
 
 def frozen_pose_item_evidence_sha256(item: PoseTrainingDatasetItem) -> str:
@@ -854,6 +855,17 @@ class PoseTrainingDatasetService:
             b"layer.\n"
         )
 
+        # A portable checksum index lets researchers validate extracted files
+        # independently of ZIP metadata or the original download response.
+        checksum_bytes = "".join(
+            f"{hashlib.sha256(payload).hexdigest()}  {name}\\n"
+            for name, payload in (
+                (PACKAGE_MANIFEST_FILENAME, manifest_bytes),
+                (PACKAGE_ITEMS_FILENAME, item_bytes),
+                ("README.txt", readme),
+            )
+        ).encode("ascii")
+
         stream = io.BytesIO()
 
         with zipfile.ZipFile(
@@ -875,6 +887,11 @@ class PoseTrainingDatasetService:
                 archive,
                 "README.txt",
                 readme,
+            )
+            self._zip_member(
+                archive,
+                PACKAGE_CHECKSUMS_FILENAME,
+                checksum_bytes,
             )
 
         content = stream.getvalue()
