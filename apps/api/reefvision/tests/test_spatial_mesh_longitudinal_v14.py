@@ -189,6 +189,68 @@ def test_identical_mesh_rescaling_warns_without_claiming_growth(
     assert "identical_geometry_rescaled_not_biological_growth" in result["qc_warnings"]
     assert result["provenance"]["calibration_verified"] is False
 
+    # The same warning and calibration ratio must survive a persisted typed
+    # Workflow Builder execution, not only the standalone API request.
+    base = f"/api/v1/projects/{project_id}"
+    graph = {
+        "graph_id": "mesh-rescaling-v14",
+        "name": "Rescaling is not coral growth",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
+            {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": after},
+            {"node_id": "compare", "node_type": "mesh_longitudinal_comparison"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-early",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "early",
+                "target_port_id": "project",
+            },
+            {
+                "edge_id": "project-late",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "late",
+                "target_port_id": "project",
+            },
+            {
+                "edge_id": "early-compare",
+                "source_node_id": "early",
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": "before",
+            },
+            {
+                "edge_id": "late-compare",
+                "source_node_id": "late",
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": "after",
+            },
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    completed = process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    assert completed, client.get(f"/api/v1/workflow-runs/{run.json()['id']}").json()
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    artifact = next(
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert artifact["payload_json"] == result
+    assert len(artifact["payload_sha256"]) == 64
+
 
 def test_mesh_comparison_retains_source_qc_and_calibration_differences(
     client: TestClient,
