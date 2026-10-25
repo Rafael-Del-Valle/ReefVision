@@ -52,10 +52,13 @@ class EcologySamplingDateQC(BaseModel):
     sampling_dates_utc: list[str]
     duplicate_sampling_dates_utc: list[str]
     missing_timestamp_image_ids: list[str]
+    # Optional for backward compatibility with previously persisted artifacts.
+    reused_image_ids: list[str] = Field(default_factory=list)
     qc_status: Literal[
         "mixed_units",
         "missing_timestamps",
         "same_day_technical_replicates",
+        "reused_image_across_dates",
         "insufficient_dates",
         "date_series_candidate",
         "identity_context_changed",
@@ -89,9 +92,7 @@ class EcologyProjectedEndpointChange(BaseModel):
     elapsed_days: float = Field(gt=0, allow_inf_nan=False)
     # Optional defaults preserve deserialization of previously saved artifacts.
     # These are arithmetic slopes of projected geometry, NOT verified growth.
-    projected_absolute_change_per_day: float | None = Field(
-        default=None, allow_inf_nan=False
-    )
+    projected_absolute_change_per_day: float | None = Field(default=None, allow_inf_nan=False)
     projected_baseline_percent_change_per_day: float | None = Field(
         default=None, allow_inf_nan=False
     )
