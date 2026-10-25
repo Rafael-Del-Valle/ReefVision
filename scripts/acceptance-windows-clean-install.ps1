@@ -122,6 +122,44 @@ function Wait-BackendPort(
     }
     throw "Backend did not publish its port within $Seconds seconds: $Path"
 }
+# backend-port.txt is written before the packaged Uvicorn API is ready.
+# A successful port-file read is not sufficient after desktop restarts.
+function Wait-BackendApiReady(
+    [string]$ApiBaseUrl,
+    [System.Diagnostics.Process]$DesktopProcess,
+    [string]$BackendLogPath,
+    [int]$Seconds = 120
+) {
+    if ($ApiBaseUrl -notmatch '^http://127\.0\.0\.1:\d{1,5}/api/v1$') {
+        throw 'Backend readiness must use the installed loopback API.'
+    }
+    $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
+    $lastFailure = 'API did not respond'
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $DesktopProcess.Refresh()
+        if ($DesktopProcess.HasExited) {
+            $exitCode = try { $DesktopProcess.ExitCode } catch { 'unavailable' }
+            throw "Desktop exited before packaged API became ready (exit code: $exitCode)."
+        }
+        try {
+            $version = Invoke-RestMethod -Uri "$ApiBaseUrl/system/version" -TimeoutSec 3 -ErrorAction Stop
+            $migration = Invoke-RestMethod -Uri "$ApiBaseUrl/system/migrations/status" -TimeoutSec 3 -ErrorAction Stop
+            if ($version.application_version -and $migration.schema_status -eq 'up_to_date' -and
+                $migration.current_schema_revision -eq $migration.expected_schema_revision) {
+                return
+            }
+            $lastFailure = "API returned incomplete version or migration readiness: $($migration.schema_status)"
+        } catch {
+            $lastFailure = $_.Exception.Message
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    $logTail = if (Test-Path -LiteralPath $BackendLogPath -PathType Leaf) {
+        (Get-Content -LiteralPath $BackendLogPath -Tail 20 | Out-String).TrimEnd()
+    } else { '(backend log unavailable)' }
+    throw ("Packaged API was not ready after $Seconds seconds ($lastFailure). Backend log tail:" + [Environment]::NewLine + $logTail)
+}
+
 function Start-AcceptanceDesktop {
     $BackendPortPath = Join-Path $DataRoot 'runtime\backend-port.txt'
     Remove-Item -LiteralPath $BackendPortPath -Force -ErrorAction SilentlyContinue
@@ -266,6 +304,7 @@ try {
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    Wait-BackendApiReady -ApiBaseUrl $api -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $versionPayload = Invoke-RestMethod "$api/system/version"
     $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
     # A healthy HTTP endpoint is not proof that the installed SQLite schema
@@ -512,6 +551,7 @@ try {
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    Wait-BackendApiReady -ApiBaseUrl $api -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
@@ -622,6 +662,7 @@ try {
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    Wait-BackendApiReady -ApiBaseUrl $api -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $qcPersistedQueue = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)"
     $qcPersistedItems = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items"
     $qcPersistedEvents = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items/$qcItemId/events"
