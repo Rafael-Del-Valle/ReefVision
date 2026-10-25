@@ -145,6 +145,7 @@ def test_fallback_original_placement_rejects_existing_destination(
     assert destination.read_bytes() == b"original"
     assert staged.read_bytes() == b"new"
 
+
 @pytest.mark.parametrize("force_copy_fallback", [False, True])
 def test_published_camera_original_survives_staging_cleanup_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, force_copy_fallback: bool
@@ -156,6 +157,7 @@ def test_published_camera_original_survives_staging_cleanup_failure(
     staged.write_bytes(original)
 
     if force_copy_fallback:
+
         def unsupported_hardlink(_source: Path, _target: Path) -> None:
             raise OSError(errno.EOPNOTSUPP, "Hard links are unsupported")
 
@@ -190,9 +192,7 @@ def test_import_remains_recorded_when_staging_cleanup_is_denied(
         real_unlink(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "unlink", denied_staging_unlink)
-    report = import_one(
-        client, project["id"], filename="CAMERA_0103.PNG", content=original
-    )
+    report = import_one(client, project["id"], filename="CAMERA_0103.PNG", content=original)
 
     assert len(report["successful"]) == 1, report
     assert not report["failed"], report
