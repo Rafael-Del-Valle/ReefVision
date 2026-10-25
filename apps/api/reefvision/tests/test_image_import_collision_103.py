@@ -234,9 +234,7 @@ def test_camera_exif_nul_terminated_subseconds_are_preserved(
     subseconds: bytes | str,
 ) -> None:
     """Camera EXIF ASCII fields may include a terminating NUL byte."""
-    timestamp = image_storage._capture_timestamp(
-        {36867: "2026:10:25 10:11:12", 37521: subseconds}
-    )
+    timestamp = image_storage._capture_timestamp({36867: "2026:10:25 10:11:12", 37521: subseconds})
 
     assert timestamp is not None
     assert timestamp.microsecond == 123400
@@ -251,8 +249,6 @@ def test_camera_exif_nul_terminated_timestamp_and_offset(as_bytes: bool) -> None
     if as_bytes:
         raw = b"2026:10:25 10:11:12\x00"
         offset = b"-04:00\x00"
-    timestamp = image_storage._capture_timestamp(
-        {36867: raw, 36881: offset, 37521: "123456\x00"}
-    )
+    timestamp = image_storage._capture_timestamp({36867: raw, 36881: offset, 37521: "123456\x00"})
     assert timestamp is not None
     assert timestamp.isoformat() == "2026-10-25T14:11:12.123456+00:00"
