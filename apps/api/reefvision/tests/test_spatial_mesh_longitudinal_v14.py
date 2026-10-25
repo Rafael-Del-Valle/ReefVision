@@ -1291,6 +1291,7 @@ def test_mesh_comparison_preserves_partial_legacy_topology_without_face_count() 
     assert "reconstruction_topology_comparison_incomplete" in result["qc_warnings"]
     assert result["provenance"]["specimen_identity_verified"] is False
 
+
 @pytest.mark.parametrize(
     ("early_scale", "late_scale"),
     [(1e-320, 1e6), (1e6, 1e-320)],
@@ -1369,3 +1370,24 @@ def test_extreme_positive_calibration_ratio_is_withheld_in_saved_workflow(
     )
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
+
+
+@pytest.mark.parametrize(
+    ("before_area", "after_area", "expected_percent"),
+    [(1e307, 2e307, 100.0), (2e307, 1e307, -50.0)],
+)
+def test_longitudinal_area_percent_remains_finite_for_large_finite_values(
+    before_area: float, after_area: float, expected_percent: float
+) -> None:
+    """A finite percent must not be lost to overflow in 100 * area delta."""
+    before, after = _minimal_topology_pair()
+    before["surface_area_m2"] = before_area
+    after["surface_area_m2"] = after_area
+
+    result = compare_mesh_observations(before, after)
+
+    assert result["relative_surface_area_change_percent"] == pytest.approx(expected_percent)
+    assert result["delta_surface_area_m2"] == pytest.approx(after_area - before_area)
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["coordinate_registration_verified"] is False
