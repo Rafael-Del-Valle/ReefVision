@@ -137,10 +137,10 @@ def test_multi_page_tiff_is_not_silently_imported_as_one_image(client: TestClien
         (2, (64, 48)),
         (3, (64, 48)),
         (4, (64, 48)),
-        (5, (48, 64)),
-        (6, (48, 64)),
-        (7, (48, 64)),
-        (8, (48, 64)),
+        (5, (64, 48)),
+        (6, (64, 48)),
+        (7, (64, 48)),
+        (8, (64, 48)),
     ],
 )
 def test_camera_display_exif_orientation_preserves_original(
@@ -163,21 +163,9 @@ def test_camera_display_exif_orientation_preserves_original(
         assert camera.getexif().get(274) == orientation
 
 
-@pytest.mark.parametrize(
-    ("orientation", "quadrant_order"),
-    [
-        (1, (0, 1, 2, 3)),
-        (2, (1, 0, 3, 2)),
-        (3, (3, 2, 1, 0)),
-        (4, (2, 3, 0, 1)),
-        (5, (0, 2, 1, 3)),
-        (6, (2, 0, 3, 1)),
-        (7, (3, 1, 2, 0)),
-        (8, (1, 3, 0, 2)),
-    ],
-)
+@pytest.mark.parametrize("orientation", range(1, 9))
 def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
-    tmp_path: Path, orientation: int, quadrant_order: tuple[int, int, int, int]
+    tmp_path: Path, orientation: int
 ) -> None:
     """Detect incorrect mirrored/rotated camera pixels, not just swapped dimensions."""
 
@@ -196,13 +184,14 @@ def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
     create_browser_display(source, display)
     create_thumbnail(source, thumbnail, max_width=160, max_height=160)
 
-    expected_size = (80, 60) if orientation <= 4 else (60, 80)
+    # The scientific coordinate frame is the original, unrotated camera raster.
+    expected_size = (80, 60)
     sample_points = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)]
     for rendition in (display, thumbnail):
         with Image.open(rendition) as rendered:
             assert rendered.size == expected_size
             assert rendered.getexif().get(274) is None
-            for (fx, fy), color_index in zip(sample_points, quadrant_order, strict=True):
+            for (fx, fy), color_index in zip(sample_points, (0, 1, 2, 3), strict=True):
                 actual = rendered.convert("RGB").getpixel(
                     (int(rendered.width * fx), int(rendered.height * fy))
                 )
@@ -248,11 +237,11 @@ def test_non_rgb_camera_jpeg_import_and_oriented_renditions(
     create_thumbnail(source, thumbnail, max_width=160, max_height=160)
     with Image.open(display) as rendered:
         assert rendered.mode == expected_display_mode
-        assert rendered.size == (60, 80)
+        assert rendered.size == (80, 60)
         assert rendered.getexif().get(274) is None
     with Image.open(thumbnail) as rendered:
         assert rendered.mode == "RGB"
-        assert rendered.size == (60, 80)
+        assert rendered.size == (80, 60)
         assert rendered.getexif().get(274) is None
     assert source.read_bytes() == original
 
