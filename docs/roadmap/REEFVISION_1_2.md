@@ -1358,3 +1358,25 @@ reconciliation, inference, migration, physical Windows installed-GUI check or
 release authorization is claimed. CI must validate the new exact head before
 this increment can be considered tested; source data remain
 `linked_unverified` and require scientist review.
+
+## Same-day photograph provenance integrity (2026-10-25)
+
+Source-linked projected measurements now reject a photograph that has
+inconsistent acquisition instants under the same SHA-256 content, even when
+all observations fall on the same UTC sampling date. They also reject one
+image ID mapped to different source content or capture metadata. These checks
+run across organism and metric series before endpoint changes and declared
+experimental-unit summaries, so affected sources cannot create artificial
+longitudinal changes. Equivalent timezone offsets describing the same UTC
+instant remain valid; one photograph can still legitimately contain multiple
+organisms. The sampling-date QC response exposes
+`source_capture_conflict`, `conflicting_source_image_ids`, and
+`conflicting_source_image_sha256`. The new arrays default to empty for
+previously persisted typed Workflow Builder artifacts. Provenance advances to
+`ecology-measurement-candidates-0015`. Standalone and saved executable
+Workflow Builder paths use the same source-linked service and fail-closed
+review gates; the existing saved-workflow artifact parity test covers the
+additive fields. These are **unverified projected measurements**, not
+confirmed organism growth or independently authenticated sampling units.
+Full CI, real-data scientific review and installed Windows acceptance remain
+required.

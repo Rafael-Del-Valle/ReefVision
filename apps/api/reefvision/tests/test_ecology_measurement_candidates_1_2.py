@@ -58,6 +58,8 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     assert all(row["qc_status"] == "missing_timestamps" for row in payload["sampling_date_qc"])
     assert all(row["reused_image_ids"] == [] for row in payload["sampling_date_qc"])
     assert all(row["reused_image_sha256"] == [] for row in payload["sampling_date_qc"])
+    assert all(row["conflicting_source_image_ids"] == [] for row in payload["sampling_date_qc"])
+    assert all(row["conflicting_source_image_sha256"] == [] for row in payload["sampling_date_qc"])
     assert all(
         row["review_gate"] == "scientist_review_required" for row in payload["sampling_date_qc"]
     )
@@ -296,9 +298,13 @@ def test_reused_image_across_dates_cannot_become_projected_growth(
     legacy = qc[0].model_dump(mode="json")
     legacy.pop("reused_image_ids")
     legacy.pop("reused_image_sha256")
+    legacy.pop("conflicting_source_image_ids")
+    legacy.pop("conflicting_source_image_sha256")
     legacy_qc = EcologySamplingDateQC.model_validate(legacy)
     assert legacy_qc.reused_image_ids == []
     assert legacy_qc.reused_image_sha256 == []
+    assert legacy_qc.conflicting_source_image_ids == []
+    assert legacy_qc.conflicting_source_image_sha256 == []
 
     # A distinct photographed image can still enter a provisional date series.
     distinct = replayed.model_copy(
@@ -416,6 +422,108 @@ def test_cross_series_source_replay_cannot_create_projected_growth(
         row.qc_status == "date_series_candidate"
         for row in summarize_sampling_date_qc(same_day_shared)
     )
+
+
+
+def test_same_day_source_capture_conflicts_exclude_all_affected_series(
+    client: TestClient,
+) -> None:
+    """One photograph cannot carry inconsistent timestamps or bytes."""
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    source = EcologyMeasurementCandidate.model_validate(
+        _get(client, project_id).json()["candidates"][0]
+    )
+    baseline = source.model_copy(
+        update={
+            "organism_key": "organism-A",
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-A",
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    followup = baseline.model_copy(
+        update={
+            "image_id": "A-followup",
+            "image_sha256": "a" * 64,
+            "annotation_evidence_id": "A-followup-evidence",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 8, tzinfo=UTC),
+            "value": baseline.value + 1,
+        }
+    )
+    other_baseline = baseline.model_copy(
+        update={
+            "organism_key": "organism-B",
+            "image_id": "B-baseline",
+            "annotation_evidence_id": "B-baseline-evidence",
+        }
+    )
+    other_followup = other_baseline.model_copy(
+        update={
+            "image_id": "B-followup",
+            "image_sha256": "b" * 64,
+            "annotation_evidence_id": "B-followup-evidence",
+            "capture_timestamp_utc": datetime(2026, 4, 4, 9, tzinfo=UTC),
+            "value": other_baseline.value + 2,
+        }
+    )
+    clean = [baseline, followup, other_baseline, other_followup]
+    assert all(row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(clean))
+
+    # Identical bytes with two *different* acquisition instants on the same
+    # UTC date must invalidate both organisms, even with different image IDs.
+    shifted = other_baseline.model_copy(
+        update={"capture_timestamp_utc": datetime(2026, 4, 3, 9, tzinfo=UTC)}
+    )
+    conflicting = [baseline, followup, shifted, other_followup]
+    qc = summarize_sampling_date_qc(conflicting)
+    assert [row.qc_status for row in qc] == [
+        "source_capture_conflict",
+        "source_capture_conflict",
+    ]
+    assert all(
+        row.conflicting_source_image_sha256 == [baseline.image_sha256] for row in qc
+    )
+    assert summarize_sampling_date_qc(list(reversed(conflicting))) == qc
+    assert summarize_projected_endpoint_changes(conflicting, qc) == []
+    assert all(
+        row.unit_status == "incomplete_followup"
+        for row in summarize_projected_unit_summaries(conflicting, [])
+    )
+    with pytest.raises(ValidationError, match="sampling-date QC does not match"):
+        summarize_projected_endpoint_changes(conflicting, summarize_sampling_date_qc(clean))
+
+    # An image ID cannot point to different bytes, even with an identical
+    # timestamp. No duplicate biological sampling date is required to fail.
+    altered_id = other_baseline.model_copy(
+        update={"image_id": baseline.image_id, "image_sha256": "c" * 64}
+    )
+    inconsistent = [baseline, followup, altered_id, other_followup]
+    id_qc = summarize_sampling_date_qc(inconsistent)
+    assert [row.qc_status for row in id_qc] == [
+        "source_capture_conflict",
+        "source_capture_conflict",
+    ]
+    assert all(
+        row.conflicting_source_image_ids == [baseline.image_id] for row in id_qc
+    )
+    assert summarize_projected_endpoint_changes(inconsistent, id_qc) == []
+
+    # Different local offsets representing the SAME UTC instant are valid.
+    offset_equivalent = other_baseline.model_copy(
+        update={
+            "capture_timestamp_utc": datetime(
+                2026, 4, 3, 4, tzinfo=timezone(timedelta(hours=-4))
+            )
+        }
+    )
+    valid = [baseline, followup, offset_equivalent, other_followup]
+    assert all(row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(valid))
+    assert len(
+        summarize_projected_endpoint_changes(valid, summarize_sampling_date_qc(valid))
+    ) == 2
 
 
 def test_source_linked_projected_endpoint_change_is_not_verified_growth(

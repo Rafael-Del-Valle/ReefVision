@@ -44,18 +44,29 @@ def summarize_sampling_date_qc(
     # batch: per-organism/metric checks alone miss cross-series date forgery.
     source_image_dates: dict[str, set[str]] = {}
     source_content_dates: dict[str, set[str]] = {}
+    # The same physical photograph cannot have two acquisition instants or
+    # different content under one image ID, even within one UTC sampling day.
+    # Normalize offsets first so equivalent instants remain valid.
+    source_image_metadata: dict[str, set[tuple[str, str, str | None]]] = {}
+    source_content_instants: dict[str, set[str]] = {}
     for candidate in candidates:
         captured = candidate.capture_timestamp_utc
-        if (
-            candidate.capture_time_status != "timezone_aware"
-            or captured is None
-            or captured.tzinfo is None
-            or captured.utcoffset() is None
-        ):
+        aware = (
+            candidate.capture_time_status == "timezone_aware"
+            and captured is not None
+            and captured.tzinfo is not None
+            and captured.utcoffset() is not None
+        )
+        utc_instant = captured.astimezone(UTC).isoformat() if aware and captured else None
+        source_image_metadata.setdefault(candidate.image_id, set()).add(
+            (candidate.image_sha256, candidate.capture_time_status, utc_instant)
+        )
+        if utc_instant is None:
             continue
-        utc_date = captured.astimezone(UTC).date().isoformat()
+        utc_date = utc_instant[:10]
         source_image_dates.setdefault(candidate.image_id, set()).add(utc_date)
         source_content_dates.setdefault(candidate.image_sha256, set()).add(utc_date)
+        source_content_instants.setdefault(candidate.image_sha256, set()).add(utc_instant)
 
     groups: dict[tuple[str, str], list[EcologyMeasurementCandidate]] = {}
     for candidate in candidates:
@@ -95,6 +106,20 @@ def summarize_sampling_date_qc(
                 if len(source_content_dates.get(record.image_sha256, set())) > 1
             }
         )
+        conflicting_source_image_ids = sorted(
+            {
+                record.image_id
+                for record in records
+                if len(source_image_metadata[record.image_id]) > 1
+            }
+        )
+        conflicting_source_image_sha256 = sorted(
+            {
+                record.image_sha256
+                for record in records
+                if len(source_content_instants.get(record.image_sha256, set())) > 1
+            }
+        )
         contexts = {
             (
                 record.identity_revision,
@@ -114,6 +139,8 @@ def summarize_sampling_date_qc(
             qc_status = "reused_image_across_dates"
         elif reused_image_sha256:
             qc_status = "reused_image_content_across_dates"
+        elif conflicting_source_image_ids or conflicting_source_image_sha256:
+            qc_status = "source_capture_conflict"
         elif duplicate_dates:
             qc_status = "same_day_technical_replicates"
         elif len(date_counts) < 2:
@@ -133,6 +160,8 @@ def summarize_sampling_date_qc(
                 missing_timestamp_image_ids=sorted(missing_timestamp_image_ids),
                 reused_image_ids=reused_image_ids,
                 reused_image_sha256=reused_image_sha256,
+                conflicting_source_image_ids=conflicting_source_image_ids,
+                conflicting_source_image_sha256=conflicting_source_image_sha256,
                 qc_status=qc_status,
             )
         )
@@ -637,7 +666,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0014",
+                "algorithm_version": "ecology-measurement-candidates-0015",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,

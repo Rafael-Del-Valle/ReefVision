@@ -55,12 +55,16 @@ class EcologySamplingDateQC(BaseModel):
     # Optional for backward compatibility with previously persisted artifacts.
     reused_image_ids: list[str] = Field(default_factory=list)
     reused_image_sha256: list[str] = Field(default_factory=list)
+    # Optional: old persisted Workflow Builder artifacts remain readable.
+    conflicting_source_image_ids: list[str] = Field(default_factory=list)
+    conflicting_source_image_sha256: list[str] = Field(default_factory=list)
     qc_status: Literal[
         "mixed_units",
         "missing_timestamps",
         "same_day_technical_replicates",
         "reused_image_across_dates",
         "reused_image_content_across_dates",
+        "source_capture_conflict",
         "insufficient_dates",
         "date_series_candidate",
         "identity_context_changed",
