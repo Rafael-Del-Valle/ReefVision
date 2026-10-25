@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import isclose, isfinite
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, model_validator
@@ -65,6 +66,49 @@ class MeshRegistrationEvidence(BaseModel):
     rms_residual_m: float = Field(ge=0, le=1_000_000, allow_inf_nan=False)
     correspondence_count: StrictInt = Field(ge=3, le=1_000_000)
     evidence_note: str = Field(min_length=1, max_length=2_000)
+    # Optional caller-supplied rigid source-to-target transform in meters.
+    # Structural validity does not establish correct alignment or review.
+    source_to_target_transform_m: list[list[float]] | None = None
+
+    @model_validator(mode="after")
+    def validate_rigid_transform(self) -> MeshRegistrationEvidence:
+        transform = self.source_to_target_transform_m
+        if transform is None:
+            return self
+        if len(transform) != 4 or any(len(row) != 4 for row in transform):
+            raise ValueError("Registration transform must be a 4x4 matrix")
+        if any(not isfinite(value) for row in transform for value in row):
+            raise ValueError("Registration transform entries must be finite")
+        if any(
+            not isclose(transform[3][column], expected, rel_tol=0, abs_tol=1e-9)
+            for column, expected in enumerate((0.0, 0.0, 0.0, 1.0))
+        ):
+            raise ValueError("Registration transform must have an affine last row")
+        if any(abs(transform[row][3]) > 1_000_000 for row in range(3)):
+            raise ValueError("Registration translation must be bounded in meters")
+        rotation = [row[:3] for row in transform[:3]]
+        for index, row in enumerate(rotation):
+            if not isclose(sum(value * value for value in row), 1.0, rel_tol=0, abs_tol=1e-5):
+                raise ValueError("Registration transform must have unit rotation axes")
+            for other in rotation[index + 1 :]:
+                if not isclose(
+                    sum(a * b for a, b in zip(row, other, strict=True)),
+                    0.0,
+                    rel_tol=0,
+                    abs_tol=1e-5,
+                ):
+                    raise ValueError("Registration transform rotation axes must be orthogonal")
+        determinant = (
+            rotation[0][0]
+            * (rotation[1][1] * rotation[2][2] - rotation[1][2] * rotation[2][1])
+            - rotation[0][1]
+            * (rotation[1][0] * rotation[2][2] - rotation[1][2] * rotation[2][0])
+            + rotation[0][2]
+            * (rotation[1][0] * rotation[2][1] - rotation[1][1] * rotation[2][0])
+        )
+        if not isclose(determinant, 1.0, rel_tol=0, abs_tol=1e-5):
+            raise ValueError("Registration transform must be a right-handed rigid rotation")
+        return self
 
 
 class MeshLongitudinalComparisonRequest(BaseModel):
