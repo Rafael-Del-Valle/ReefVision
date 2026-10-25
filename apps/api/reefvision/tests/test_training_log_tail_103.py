@@ -100,7 +100,6 @@ def test_live_log_tail_waits_for_complete_loss_record(tmp_path: Path) -> None:
     }
 
 
-
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
