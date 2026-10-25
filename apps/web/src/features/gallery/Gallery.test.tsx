@@ -564,6 +564,36 @@ describe("Gallery", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("does not hide a successfully loaded first image on a late error event", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery();
+    const focused = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.load(focused);
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+
+    // A late failure from a superseded WebView2 request must not replace
+    // already rendered scientific pixels with an error placeholder.
+    fireEvent.error(focused);
+    expect(focused).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+  });
+
   it("reveals an already decoded first image when WebView2 misses load", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
