@@ -243,7 +243,6 @@ def commit_staged_image(staged_path: Path, destination: Path) -> None:
     os.replace(staged_path, destination)
 
 
-
 def _unique_rendition_temporary(destination: Path) -> Path:
     """Reserve a unique sibling path for concurrent atomic rendition writes."""
     descriptor, name = tempfile.mkstemp(
