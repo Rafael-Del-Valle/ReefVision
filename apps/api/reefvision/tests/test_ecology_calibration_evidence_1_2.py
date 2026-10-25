@@ -261,3 +261,50 @@ def test_non_length_calibration_units_fail_closed_before_and_after_link(
     assert workflow["run"]["status"] == "failed"
     assert "physical length unit" in workflow["run"]["error_message"]
     assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
+
+
+def test_reference_scale_conflict_blocks_ecological_sources_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    project_id, image_id, annotation = _prepared_annotation(client)
+
+    # 5 mm over 20 pixels implies 0.25 mm/px, not 0.5 mm/px.
+    # The generic calibration editor may store a provisional scale, but the
+    # scientific evidence registry must reject contradictory reference data.
+    _save_calibration(client, image_id, scale=0.5)
+    rejected = _link_calibration(client, project_id, annotation)
+    assert rejected.status_code == 400, rejected.text
+    assert "scale conflicts with its reference length" in rejected.json()["detail"]
+
+    # Small rounding in the user-entered physical scale remains acceptable.
+    _save_calibration(client, image_id, scale=0.2501)
+    linked = _link_calibration(client, project_id, annotation)
+    assert linked.status_code == 201, linked.text
+    path = f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    standalone = client.get(path)
+    assert standalone.status_code == 200, standalone.text
+    assert standalone.json()["candidate_count"] == 2
+    assert standalone.json()["evidence_level"] == "linked_unverified"
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "succeeded"
+    artifacts = [
+        row
+        for row in workflow["artifacts"]
+        if row["data_type"] == "ecology_measurement_candidates"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == standalone.json()
+
+    # If the saved scale subsequently conflicts with its reference, neither
+    # standalone nor saved workflows may emit a successful scientific result.
+    _save_calibration(client, image_id, scale=0.5)
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "scale conflicts with its reference length" in registry.json()["detail"]
+    assert client.get(path).status_code == 400
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "failed"
+    assert not any(
+        row["data_type"] == "ecology_measurement_candidates"
+        for row in workflow["artifacts"]
+    )
