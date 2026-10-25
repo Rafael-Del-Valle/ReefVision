@@ -579,12 +579,8 @@ describe("Gallery", () => {
         return this.alt.startsWith("Focused project image:");
       },
     );
-    vi.spyOn(HTMLImageElement.prototype, "naturalWidth", "get").mockReturnValue(
-      1600,
-    );
-    vi.spyOn(HTMLImageElement.prototype, "naturalHeight", "get").mockReturnValue(
-      1200,
-    );
+    vi.spyOn(HTMLImageElement.prototype, "naturalWidth", "get").mockReturnValue(1600);
+    vi.spyOn(HTMLImageElement.prototype, "naturalHeight", "get").mockReturnValue(1200);
 
     renderGallery();
     expect(
