@@ -177,7 +177,14 @@ Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/class-visibil
 Assert-True ($acceptanceScript.Contains('"$visibilityUrl/defaults/annotations"')) 'Packaged project class visibility default is not persisted.'
 Assert-True ($acceptanceScript.Contains('"$visibilityUrl/preferences/annotations"')) 'Packaged local-user visibility override is not persisted.'
 Assert-True ($acceptanceScript.Contains('hidden_class_ids = @()')) 'Packaged class visibility must test an explicit empty override.'
-Assert-True ($acceptanceScript.Contains('$persistedVisibility = Invoke-RestMethod $visibilityUrl')) 'Packaged class visibility is not reloaded after restart.'
+# Regression from Windows acceptance run 40147705506: the desktop restarts
+# on a new ephemeral port. The old cached visibility URL targets a dead API.
+$visibilityReload = '$persistedVisibility = Invoke-RestMethod "$api/projects/$projectId/class-visibility"'
+Assert-True ($acceptanceScript.Contains($visibilityReload)) 'Packaged class visibility must use the current API port after restart.'
+Assert-True (-not $acceptanceScript.Contains('$persistedVisibility = Invoke-RestMethod $visibilityUrl')) 'Packaged visibility reloaded through the first launch stale port.'
+$apiReadinessCalls = [regex]::Matches($acceptanceScript, 'Wait-BackendApiReady -ApiBaseUrl \\$api -DesktopProcess \\$desktop -BackendLogPath')
+Assert-True ($apiReadinessCalls.Count -eq 3) 'Expected three independently ready desktop launches.'
+Assert-True ($acceptanceScript.IndexOf($visibilityReload, [System.StringComparison]::Ordinal) -gt $apiReadinessCalls[1].Index) 'Visibility reload must follow readiness of the restarted API.'
 Assert-True ($acceptanceScript.Contains('$persistedVisibility.user_identity -ne $visibilityIdentity')) 'Packaged local-user identity stability is not checked.'
 Assert-True ($acceptanceScript.Contains('$persistedVisibility.project_defaults.annotations.hidden_class_ids[0] -ne $testClass.id')) 'Packaged project visibility default is not checked after restart.'
 Assert-True ($acceptanceScript.Contains('@($persistedVisibility.user_preferences.annotations.hidden_class_ids).Count -ne 0')) 'Packaged explicit empty preference is not checked after restart.'
