@@ -398,6 +398,17 @@ def _reused_pose_training_result(
 
     checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
 
+    # Completed workflow retries must not silently relabel changed model bytes
+    # as the original scientific result. Legacy runs without a recorded digest
+    # remain readable; newly completed runs always persist one below.
+    frozen_checkpoint = dict(run.artifact_manifest_json or {})
+    expected_sha256 = frozen_checkpoint.get("result_checkpoint_sha256")
+    expected_path = frozen_checkpoint.get("result_checkpoint_path")
+    if expected_sha256 is not None and expected_sha256 != checkpoint_sha256:
+        raise ValidationError("Recovered pose-training checkpoint checksum changed")
+    if expected_path is not None and expected_path != run.result_checkpoint_path:
+        raise ValidationError("Recovered pose-training checkpoint path changed")
+
     experiment = session.scalar(
         select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
     )
@@ -827,6 +838,15 @@ def create_pose_workflow_training_result(
         raise ValidationError("Completed pose training checkpoint is missing")
 
     checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
+
+    # Bind the completed training result to its on-disk checkpoint so a
+    # retried Workflow Builder node cannot reuse different model weights.
+    run.artifact_manifest_json = {
+        **dict(run.artifact_manifest_json or {}),
+        "result_checkpoint_path": run.result_checkpoint_path,
+        "result_checkpoint_sha256": checkpoint_sha256,
+    }
+    session.commit()
 
     experiment = session.scalar(
         select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
