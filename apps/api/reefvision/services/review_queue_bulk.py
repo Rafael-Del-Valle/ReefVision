@@ -56,9 +56,10 @@ def bulk_triage_review_queue(
     # Optional request-key replay is checked before state validation: a
     # previously committed "start" must not restart an item that was later
     # skipped by another researcher. IDs are deterministic per item and batch.
+    request_id = request.client_request_id
     keyed_ids = (
-        {item.id: str(uuid5(request.client_request_id, item.id)) for item in ordered}
-        if request.client_request_id is not None
+        {item.id: str(uuid5(request_id, item.id)) for item in ordered}
+        if request_id is not None
         else {}
     )
 
