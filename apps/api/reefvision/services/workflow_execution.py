@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 from uuid import uuid4
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -209,7 +210,10 @@ class WorkflowExecutionService:
         record = self._graph_record(request.graph_record_id)
         if record.project_id != project_id:
             raise ValidationError("Workflow graph revision does not belong to this project")
-        graph = WorkflowGraphRequest.model_validate(record.graph_json)
+        try:
+            graph = WorkflowGraphRequest.model_validate(record.graph_json)
+        except PydanticValidationError as exc:
+            raise ValidationError("Saved workflow graph revision is invalid") from exc
         # A saved revision may have been altered since it was persisted. Reject
         # structurally valid but modified graphs before queueing a run whose
         # pinned provenance would otherwise fail only after dequeue.
