@@ -513,3 +513,24 @@ A supporting decision never sets `coordinate_registration_verified` to true
 and does not certify calibration, alignment, uncertainty or coral movement.
 Standalone and persisted typed Workflow Builder comparisons use the same
 validation engine and preserve review provenance in their artifacts.
+
+### Withholding longitudinal organism changes after a disputed match
+
+When an independently attributed reidentification reviewer explicitly
+records `disputes_match`, ReefVision now withholds paired specimen-change
+estimates, including surface-area and extent differences, relative changes,
+daily rates, scale-only change intervals, and registered surface-centroid
+offset/separation measurements. These fields are `null`, not zero. A
+`longitudinal_change_withheld_disputed_specimen_identity` QC warning and
+`provenance.longitudinal_change_withheld_due_to_identity_dispute: true`
+explain the decision. This is a conservative scientific guard against
+interpreting two potentially different colonies as a growth time series.
+
+Original per-observation measurements, timestamps, mesh reconstruction QC,
+registration diagnostics, and reviewer notes remain available for audit.
+Missing or inconclusive identity review still leaves results **provisional**,
+not verified; the new suppression is specifically for an explicit dispute.
+The standalone API and saved, executable typed Workflow Builder node share
+the comparison engine, with dedicated disputed-match and saved-artifact
+parity regressions. This does not constitute biological identity verification,
+validated growth, or Windows desktop acceptance.
