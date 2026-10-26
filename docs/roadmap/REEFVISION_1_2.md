@@ -2109,3 +2109,27 @@ line). The new head's CI and installed Windows/scientific acceptance
 remain to be verified. All outputs remain `linked_unverified` and gated
 for scientist review; this does **not** authenticate experimental design
 or make ReefVision 1.2 release-ready.
+
+
+## Cross-metric overlapping-roster parent feasibility guard (2026-10-26)
+
+The projected population aggregation boundary now checks an additional necessary
+condition for **overlapping but non-identical** organism rosters. Where a unit
+summary reports as many distinct known parent colonies as complete organisms,
+each organism's parent must belong to that summary's parent set. The feasible
+parent sets for an organism are intersected across measurement metrics; an empty
+intersection rejects the candidate before any population mean is exported.
+This is order-independent and recognizes tank/aquarium aliases without counting
+an organism twice. The calculation **does not** assign individual parentage
+from aggregate sets or claim independence. A partially reported parent list
+cannot establish complete organism-parent mappings, so it does not constrain
+this intersection. Scientist review and linked-unverified provenance remain.
+
+Three focused regression scenarios were committed: disjoint overlapping
+parent candidates must fail, compatible overlapping candidates must remain
+reviewable, and incomplete parent rosters must not imply invented mappings.
+The prior exact-head CI at `6d718e62` finished 16/19 workflows successfully;
+three failed solely on a Ruff formatting discrepancy in the existing alias
+population regression. That exact formatting change was committed alongside
+the new tests. Current-head CI and installed Windows/scientific acceptance
+must still pass; **1.2 remains NOT RELEASE-READY**.
