@@ -378,3 +378,20 @@ organism identity. A supporting review still leaves
 persisted Workflow Builder graphs use the same comparison engine; regression
 coverage checks dated review provenance, invalid chronology, legacy QC,
 and saved-workflow artifact parity.
+
+### Project-scoped provisional reidentification evidence (Track C)
+
+Optional `project_id` in `MeshReidentificationEvidence` binds a provisional
+specimen match to the project containing both reconstructed observations.
+Even matching observation labels, specimen IDs, source geometry fingerprints,
+and timestamps cannot justify importing a match from another project.
+The shared longitudinal engine rejects mismatched project bindings.
+Older records without `project_id` remain readable but emit
+`reidentification_project_binding_unavailable` for scientific review.
+
+This is a caller-supplied project-scope check, not cryptographic evidence of
+identity, a verified specimen match, or a substitute for independent review.
+The standalone endpoint and persisted typed Workflow Builder graphs share
+the same validation and provisional provenance; regression coverage checks
+cross-project rejection, legacy QC, mutated evidence, and saved artifact parity.
+
