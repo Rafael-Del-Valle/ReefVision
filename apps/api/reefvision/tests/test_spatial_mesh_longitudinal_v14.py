@@ -448,6 +448,56 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert identity_artifact["payload_json"] == identity_result
     assert len(identity_artifact["payload_sha256"]) == 64
 
+    # A reviewer who cannot establish specimen identity must not produce
+    # apparent growth estimates in either API or persisted graph execution.
+    inconclusive_identity = {
+        **reidentification_evidence,
+        "independent_review_decision": "inconclusive",
+        "independent_review_note": "Survey photographs are insufficient",
+    }
+    inconclusive_response = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={
+            "before": before,
+            "after": after,
+            "registration_evidence": registration_evidence,
+            "reidentification_evidence": inconclusive_identity,
+        },
+    )
+    assert inconclusive_response.status_code == 200, inconclusive_response.text
+    inconclusive_result = inconclusive_response.json()
+    assert inconclusive_result["delta_surface_area_m2"] is None
+    assert inconclusive_result["registered_surface_centroid_separation_m"] is None
+    assert (
+        inconclusive_result["provenance"][
+            "longitudinal_change_withheld_due_to_inconclusive_identity_review"
+        ]
+        is True
+    )
+    graph["graph_id"] = "mesh-longitudinal-inconclusive-identity-v14"
+    graph["nodes"][3]["parameters"]["reidentification_evidence"] = inconclusive_identity
+    inconclusive_saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert inconclusive_saved.status_code == 201, inconclusive_saved.text
+    inconclusive_run = client.post(
+        f"{base}/workflow-runs",
+        json={"graph_record_id": inconclusive_saved.json()["id"]},
+    )
+    assert inconclusive_run.status_code == 202, inconclusive_run.text
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(inconclusive_run.json()["job_id"])
+    )
+    inconclusive_detail = client.get(
+        f"/api/v1/workflow-runs/{inconclusive_run.json()['id']}"
+    )
+    assert inconclusive_detail.status_code == 200, inconclusive_detail.text
+    inconclusive_artifact = next(
+        item
+        for item in inconclusive_detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert inconclusive_artifact["payload_json"] == inconclusive_result
+    assert len(inconclusive_artifact["payload_sha256"]) == 64
+
 
 @pytest.mark.parametrize(
     ("rms", "extent", "expected_ratio", "warning"),
