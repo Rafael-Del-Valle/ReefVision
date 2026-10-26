@@ -363,7 +363,15 @@ def compare_mesh_observations(
         reidentification_record = identity.model_dump(mode="json", exclude_none=True)
         if identity.specimen_id is None:
             warnings.append("reidentification_specimen_binding_unavailable")
-        warnings.append("reidentification_evidence_requires_independent_review")
+        if identity.independent_reviewer_id is None:
+            warnings.append("reidentification_evidence_requires_independent_review")
+        else:
+            # A reviewer decision is attributed evidence, not identity approval.
+            warnings.append("reidentification_independent_review_recorded_not_identity_verification")
+            if identity.independent_review_decision == "disputes_match":
+                warnings.append("reidentification_independent_review_disputes_match")
+            elif identity.independent_review_decision == "inconclusive":
+                warnings.append("reidentification_independent_review_inconclusive")
     if scale_normalized_area_ratio is not None:
         warnings.append("scale_normalized_area_ratio_requires_common_units_and_registration")
     elif normalized_ratio_out_of_range:
