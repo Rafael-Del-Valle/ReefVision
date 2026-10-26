@@ -29,6 +29,12 @@ const rows = [0, 1].flatMap((hour) =>
             ? 0
             : 2,
       normalized_unit: "m/s",
+      normalized_uncertainty:
+        hour === 0 && depth === 5 && direction === "eastward" ? 0.25 : null,
+      uncertainty:
+        hour === 0 && depth === 5 && direction === "eastward"
+          ? { value: 0.25, kind: "standard_deviation" }
+          : null,
       observed_at: `2026-04-03T0${hour}:00:00Z`,
       depth_m: depth,
       depth_reference: "sea_surface",
@@ -104,6 +110,12 @@ it("opens cached vectors offline with time/depth controls and scientific provena
   expect(screen.getByText(/36.9° toward true north/)).toBeInTheDocument();
   expect(screen.getByText(/stale_offline/)).toBeInTheDocument();
   expect(screen.getByText(/Modeled.*synthetic.*202601/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/East component uncertainty: 0\.250 m\/s \(standard deviation\)/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/North component uncertainty: unknown/),
+  ).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Current time (UTC)"), {
     target: { value: "2026-04-03T01:00:00Z" },
   });
