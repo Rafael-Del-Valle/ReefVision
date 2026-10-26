@@ -71,6 +71,23 @@ def _status(report: dict[str, Any], key: str) -> str:
     return status
 
 
+def _verified_pass(
+    report: dict[str, Any], key: str, *, started: datetime, completed: datetime
+) -> None:
+    """Require a dated, explained PASS produced during this acceptance run."""
+    _require(_status(report, key) == "PASS", f"Required installed acceptance gate {key} did not PASS")
+    entry = report[key]
+    _require(
+        isinstance(entry.get("detail"), str) and bool(entry["detail"].strip()),
+        f"Missing {key} PASS evidence detail",
+    )
+    recorded = _utc(entry.get("timestamp_utc"), f"{key}.timestamp_utc")
+    _require(
+        started <= recorded <= completed,
+        f"{key} PASS timestamp falls outside the acceptance run",
+    )
+
+
 def validate_report(
     report: dict[str, Any],
     *,
@@ -108,14 +125,18 @@ def validate_report(
         "Installed migration revision does not match expected revision",
     )
     for key in REQUIRED_PASS:
-        _require(_status(report, key) == "PASS", f"Required installed acceptance gate {key} did not PASS")
+        _verified_pass(report, key, started=start, completed=end)
     for key in OPTIONAL_APPROVAL_GATES:
-        _require(_status(report, key) in {"PASS", "SKIPPED"}, f"Invalid optional researcher-approval gate {key}")
+        status = _status(report, key)
+        _require(status in {"PASS", "SKIPPED"}, f"Invalid optional researcher-approval gate {key}")
+        if status == "PASS":
+            _verified_pass(report, key, started=start, completed=end)
 
     upgrade = _status(report, "upgrade")
     _require(expected_upgrade in {"passed", "skipped"}, "Unknown expected upgrade policy")
     if expected_upgrade == "passed":
         _require(upgrade == "PASS", "Real MSI upgrade did not PASS")
+        _verified_pass(report, "upgrade", started=start, completed=end)
         _require(bool(report.get("previous_installer_path")) and bool(report.get("previous_installer_version")), "Missing previous MSI evidence")
         previous_version = _msi_version(report["previous_installer_version"], "previous MSI version")
         _require(previous_version < target_version, "Target MSI is not newer than previous MSI")
