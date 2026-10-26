@@ -95,6 +95,16 @@ def test_registration_rejects_mutated_model_instances(mutation: str) -> None:
         compare_mesh_observations(before, after, evidence)
 
 
+def test_registration_accepts_valid_model_instance_as_unverified() -> None:
+    evidence = MeshRegistrationEvidence.model_validate(_evidence())
+    before = _observation("scan-1", "2026-10-01T12:00:00Z", "survey-a")
+    after = _observation("scan-2", "2026-10-02T12:00:00Z", "survey-b")
+    result = compare_mesh_observations(before, after, evidence)
+    assert result["registration_translation_magnitude_m"] == pytest.approx(0.0)
+    assert result["provenance"]["registration_evidence"]["correspondence_count"] == 6
+    assert result["provenance"]["coordinate_registration_verified"] is False
+
+
 def test_registration_accepts_integer_matrix_as_unverified() -> None:
     evidence = _evidence()
     evidence["rms_residual_m"] = 0
