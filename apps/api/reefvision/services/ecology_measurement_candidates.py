@@ -566,6 +566,9 @@ def summarize_projected_population_summaries(
     # constrain parentage across *different* metric-specific organism rosters.
     # Partial parent lists cannot safely identify an individual organism.
     possible_parents_by_organism: dict[str, set[str]] = {}
+    # Each fully enumerated parent roster requires a distinct-parent matching.
+    # Pairwise candidate intersections alone cannot prove joint feasibility.
+    full_parent_rosters: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
     for row in unit_summaries:
         if row.unit_status != "candidate":
             continue
@@ -627,6 +630,7 @@ def summarize_projected_population_summaries(
                         "Projected organism parent-colony candidates conflict across metrics"
                     )
                 possible_parents_by_organism[organism_key] = allowed
+            full_parent_rosters.append((tuple(sorted(row.complete_organism_keys)), parents))
         stratum_key = (
             normalized_level or row.experimental_unit_type.casefold(),
             row.metric,
@@ -634,6 +638,31 @@ def summarize_projected_population_summaries(
             row.sampling_windows_utc[0],
         )
         groups.setdefault(stratum_key, []).append(row)
+
+    # A full aggregate parent roster states that each organism has a distinct
+    # parent, but does not state *which* parent. Check that the candidate
+    # intersections across metrics admit at least one one-to-one assignment.
+    # This is a necessary integrity check, not biological parent verification.
+    for organism_roster, parent_roster in full_parent_rosters:
+        assigned_parents: dict[str, str] = {}
+        parent_set = set(parent_roster)
+
+        def match_parent(organism_key: str, visited: set[str]) -> bool:
+            for parent_key in sorted(possible_parents_by_organism[organism_key] & parent_set):
+                if parent_key in visited:
+                    continue
+                visited.add(parent_key)
+                incumbent = assigned_parents.get(parent_key)
+                if incumbent is None or match_parent(incumbent, visited):
+                    assigned_parents[parent_key] = organism_key
+                    return True
+            return False
+
+        if any(not match_parent(organism_key, set()) for organism_key in organism_roster):
+            raise ValidationError(
+                "Projected organism parent-colony assignments are jointly impossible "
+                "across metrics"
+            )
 
     results: list[EcologyProjectedPopulationSummary] = []
     for (unit_type, metric, unit, window), records in sorted(groups.items()):
