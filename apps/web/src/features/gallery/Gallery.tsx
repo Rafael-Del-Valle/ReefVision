@@ -652,7 +652,8 @@ export function Gallery({
     // A non-passive native listener is needed to suppress WebView2's default
     // document scrolling; React wheel listeners can be passive at the root.
     const handleWheel = (event: WheelEvent) => {
-      if (event.ctrlKey) return;
+      // Preserve native browser zoom gestures on both Windows and macOS.
+      if (event.ctrlKey || event.metaKey) return;
       const delta =
         Math.abs(event.deltaX) > Math.abs(event.deltaY)
           ? event.deltaX
