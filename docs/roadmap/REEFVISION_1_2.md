@@ -1850,3 +1850,32 @@ and saved-workflow parity, dated arithmetic, missing/forged endpoint records
 and legacy compatibility. These are **unverified projected geometry changes**,
 not biological growth, survival, independent replication or inference.
 Scientist review, full CI and installed Windows acceptance remain required.
+
+## Source-derived projected aggregate integrity (2026-10-26; development)
+
+The existing calibrated-measurement-candidate series CSV exporter now
+**recomputes per-date visit coverage, declared experimental-unit summaries,
+and equal-unit-weighted population summaries from linked measurement
+candidates** before exporting a modern fingerprinted artifact. It already
+recomputed sampling-date QC and projected endpoint arithmetic. A self-consistent
+but falsified source digest/report digest cannot legitimize invented visit
+counts, altered unit means or fabricated population means. The exporter fails
+closed on any disagreement with source-derived results.
+
+This check operates on the same typed persisted
+`ecology_measurement_candidates` artifact produced by the existing
+executable Workflow Builder source and consumed by the standalone CSV API;
+no duplicate analysis node or storage model is introduced. New regression
+cases deliberately re-sign modified visit, unit and population evidence and
+require scientific validation errors. Legacy artifacts without the modern
+source-fingerprint contract remain readable and explicitly report
+`source_fingerprint_rechecked=false`; they are **not** retrospectively
+certified. The previous exact-head CI at `dd4592a1` had 16/19 workflows
+successful and three backend gates failing on Ruff formatting in the
+candidate exporter and projected CSV regression; those reported formatting
+differences were corrected in this iteration.
+
+This remains `linked_unverified` projected geometry, not reviewed biological
+growth or an authenticated study design. Full new-head CI, real-data scientific
+review, migration reconciliation and installed Windows GUI/installer
+acceptance remain outstanding. No version completion or release is claimed.
