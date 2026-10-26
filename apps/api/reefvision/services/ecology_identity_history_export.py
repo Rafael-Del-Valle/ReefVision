@@ -114,6 +114,7 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
         ):
             raise ValidationError("Ecological design-change audit differs from identity history")
 
+    details = []
     if registry.cross_unit_parent_audit_status != "unavailable":
         details = derive_cross_unit_parent_details(registry.identities)
         shared_parent_keys = sorted({row.parent_colony_key for row in details})
@@ -123,7 +124,10 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
         if (
             registry.cross_unit_parent_audit_status != expected_status
             or registry.cross_unit_shared_parent_colony_keys != shared_parent_keys
-            or registry.cross_unit_parent_details != details
+            or (
+                "cross_unit_parent_details" in registry.model_fields_set
+                and registry.cross_unit_parent_details != details
+            )
         ):
             raise ValidationError("Ecological cross-unit parent audit differs from identities")
     elif registry.cross_unit_shared_parent_colony_keys or registry.cross_unit_parent_details:
@@ -174,7 +178,7 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
                 registry.cross_unit_parent_audit_status,
                 "|".join(registry.cross_unit_shared_parent_colony_keys),
                 json.dumps(
-                    [detail.model_dump(mode="json") for detail in registry.cross_unit_parent_details],
+                    [detail.model_dump(mode="json") for detail in details],
                     sort_keys=True,
                     separators=(",", ":"),
                 ),

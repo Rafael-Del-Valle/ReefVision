@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.schemas.ecology_identity import (
+    EcologyCrossUnitParentDetail,
     EcologyDesignChangedField,
     EcologyDesignRevisionChange,
-    EcologyCrossUnitParentDetail,
     EcologyIdentityRow,
 )
 
@@ -88,4 +88,6 @@ def derive_cross_unit_shared_parent_colony_keys(
     identities: list[EcologyIdentityRow],
 ) -> list[str]:
     """Disclose shared parents, retaining the original backward-compatible field."""
-    return sorted({detail.parent_colony_key for detail in derive_cross_unit_parent_details(identities)})
+    return sorted(
+        {detail.parent_colony_key for detail in derive_cross_unit_parent_details(identities)}
+    )

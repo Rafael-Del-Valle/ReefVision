@@ -1774,3 +1774,10 @@ They do not establish actual biological dependence, simultaneous
 sampling, verified experimental-unit assignments or valid statistical
 replication. Full exact-head CI, real-dataset scientific review and
 installed Windows GUI acceptance remain required.
+
+Backward compatibility note: pre-detail saved workflow artifacts may contain
+a modern shared-parent status but no `cross_unit_parent_details` field. Their
+CSV export reconstructs details from fingerprint-verified identities rather
+than falsely treating missing detail as an empty result. Artifacts explicitly
+carrying details are compared against the recomputation and rejected if
+tampered. This is an additive artifact contract, not a verification upgrade.
