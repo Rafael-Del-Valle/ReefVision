@@ -77,6 +77,7 @@ describe("ReviewQueueBulkTriage", () => {
         item_ids: ["pending-1"],
         action: "start",
         actor: "lab reviewer",
+        client_request_id: expect.any(String),
       }),
     );
     await waitFor(() =>
@@ -116,6 +117,7 @@ describe("ReviewQueueBulkTriage", () => {
         item_ids: ["pending-1", "active-2"],
         action: "skip",
         actor: "lab reviewer",
+        client_request_id: expect.any(String),
         reason: "obscured specimen",
       }),
     );
@@ -184,6 +186,7 @@ describe("ReviewQueueBulkTriage", () => {
         item_ids: ["active-2"],
         action: "complete",
         actor: "lab reviewer",
+        client_request_id: expect.any(String),
         review_confirmed: true,
       }),
     );
