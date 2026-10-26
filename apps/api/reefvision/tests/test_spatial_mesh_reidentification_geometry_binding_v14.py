@@ -322,4 +322,3 @@ def test_invalid_or_mutated_project_binding_is_rejected() -> None:
     before, after = _observations()
     with pytest.raises(ValueError, match="must match the project ID"):
         compare_mesh_observations(before, after, reidentification_evidence=model)
-
