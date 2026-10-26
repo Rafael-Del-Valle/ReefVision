@@ -199,19 +199,22 @@ while ($true) {
     # Some training providers persist losses as epoch histories, while
     # others include the newest values in the summary metrics object.
     # Show both without inventing unavailable fields.
+    # Summary metrics may lag behind the current epoch. Load them first;
+    # where both sources have a value, the latest persisted epoch history
+    # wins so box/cls/dfl losses reflect the actual training progression.
     $latestMetrics = @{}
+    if ($null -ne $run.metrics) {
+      foreach ($metric in $run.metrics.PSObject.Properties) {
+        if ($null -ne $metric.Value) {
+          $latestMetrics[$metric.Name] = $metric.Value
+        }
+      }
+    }
     if ($null -ne $run.metrics_history) {
       foreach ($series in $run.metrics_history.PSObject.Properties) {
         $values = @($series.Value)
         if ($values.Count -gt 0 -and $null -ne $values[-1]) {
           $latestMetrics[$series.Name] = $values[-1]
-        }
-      }
-    }
-    if ($null -ne $run.metrics) {
-      foreach ($metric in $run.metrics.PSObject.Properties) {
-        if ($null -ne $metric.Value) {
-          $latestMetrics[$metric.Name] = $metric.Value
         }
       }
     }
