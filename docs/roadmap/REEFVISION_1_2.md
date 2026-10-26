@@ -2059,3 +2059,29 @@ migration reconciliation and installed Windows GUI/installer tests are still
 required. Linked projected geometry remains `linked_unverified` with
 `scientist_review_required`; no biological growth or inferential validity
 is claimed.
+
+
+## Reject padded or blank biological identifiers in projected population summaries (2026-10-26)
+
+The existing population-aggregation boundary now fails closed when an eligible
+source-linked or caller-constructed intermediate unit has a blank, leading-
+or trailing-whitespace experimental-unit ID, organism key, or parent-colony
+key. An ID such as `tank-1 ` is not a second physical tank distinct from
+`tank-1`; silently trimming would rewrite source lineage, while counting it
+separately risks pseudoreplication. Invalid identities therefore require
+scientist review instead of being normalized or promoted to an independent
+replicate. This check is shared by the existing standalone source-derived
+calculation and executable persisted `ecology_measurement_candidates`
+Workflow Builder node; no parallel implementation, schema migration, model
+weights or 1.1 environmental context were added.
+
+Six forged-intermediate-summary cases and one complete source-linked time
+series with a padded tank ID were added as regressions. Existing standalone
+API and saved-workflow acceptance tests remain in the 1.2 suite. The same
+iteration fixes the exact Ruff formatting discrepancy that caused the three
+backend workflow failures at predecessor SHA `c99544ce` (16/19 successful
+workflows). These new tests are committed but not claimed to have passed
+until exact-head CI executes. Local cloning/testing remains blocked by
+GitHub DNS resolution. Independent scientific review, authenticated design,
+migration reconciliation and installed Windows GUI/installer acceptance
+remain outstanding. **1.2 is not release-ready.**
