@@ -93,3 +93,22 @@ notes across specimen labels; it does **not** verify reidentification. The
 `specimen_identity_verified` flag remains `false` and an independent human
 review is still required. Tests cover bound and legacy evidence, cross-specimen
 rejection, mutable-model revalidation, and saved-workflow artifact parity.
+
+## Reidentification timepoint binding
+
+The optional paired `reidentification_evidence.before_observed_at_utc` and
+`after_observed_at_utc` fields bind provisional matching notes to the
+**observation instants**, in addition to specimen/observation IDs and geometry
+fingerprints. Both values must be timezone-aware timestamps. The comparison
+normalizes instants for equality, so equivalent UTC and offset timestamps
+match; a reused note whose source or target survey time changed is rejected.
+Partial timestamp bindings and naive datetimes are rejected. Existing saved
+records without timestamp binding remain readable, but the output adds
+`reidentification_timepoint_binding_unavailable` for review.
+
+Timestamp, geometry, and specimen binding only guard evidence consistency.
+They do not verify field timestamps, identity, reconstruction registration,
+biological change, or independent reviewer approval. The shared standalone
+comparison and persisted typed Workflow Builder node enforce identical rules;
+regression tests cover matching offsets, mismatched times, partial evidence,
+legacy records, and saved-workflow artifact parity.
