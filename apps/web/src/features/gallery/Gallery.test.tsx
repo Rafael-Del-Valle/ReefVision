@@ -11,7 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Project, ProjectImage } from "../../api/client";
-import { Gallery } from "./Gallery";
+import { Gallery, galleryPendingThumbnailRefetchMs } from "./Gallery";
 
 const project: Project = {
   id: "project-1",
@@ -81,6 +81,57 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   window.localStorage.clear();
+});
+
+describe("Gallery pending thumbnail refresh", () => {
+  it("limits background metadata checks to the currently pending thumbnails", () => {
+    const pending = { items: [{ thumbnail_path: null }] };
+    const complete = { items: [{ thumbnail_path: "thumbnails/ready.jpg" }] };
+    expect(galleryPendingThumbnailRefetchMs(undefined, 0)).toBe(false);
+    expect(galleryPendingThumbnailRefetchMs(pending, 1)).toBe(5000);
+    expect(galleryPendingThumbnailRefetchMs(pending, 12)).toBe(5000);
+    expect(galleryPendingThumbnailRefetchMs(pending, 13)).toBe(false);
+    expect(galleryPendingThumbnailRefetchMs(complete, 1)).toBe(false);
+    expect(galleryPendingThumbnailRefetchMs({ items: [] }, 1)).toBe(false);
+  });
+
+  it("can refresh a pending image thumbnail without reimporting the original", async () => {
+    let polls = 0;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (!url.includes(`/projects/${project.id}/images`))
+          throw new Error(`Unexpected request ${url}`);
+        polls += 1;
+        return jsonResponse({
+          items: [
+            {
+              ...image,
+              thumbnail_path: polls === 1 ? null : "thumbnails/ready.jpg",
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      });
+
+    renderGallery();
+    await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh pending thumbnails" }),
+    );
+    expect(
+      await screen.findByAltText("Thumbnail of swiftia-01.png"),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole("button", { name: "Refresh pending thumbnails" }),
+    ).toBeNull();
+  });
 });
 
 describe("Gallery", () => {
