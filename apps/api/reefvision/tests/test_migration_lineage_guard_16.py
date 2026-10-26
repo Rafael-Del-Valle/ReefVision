@@ -423,6 +423,16 @@ def test_concurrent_review_heads_fail_closed_without_modifying_research_assets(
     engine.dispose()
 
 
+_REVIEW_QUEUE_FK = (
+    ", FOREIGN KEY(review_queue_id) REFERENCES review_queues(id) "
+    "ON DELETE RESTRICT"
+)
+_PROJECT_FK = (
+    ", FOREIGN KEY(project_id) REFERENCES projects(id) "
+    "ON DELETE RESTRICT"
+)
+
+
 def test_revision_0041_requires_global_bulk_request_registry() -> None:
     """A forged 0041 stamp must never bypass the global request-ID constraint."""
     engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -448,13 +458,62 @@ def test_revision_0041_requires_global_bulk_request_registry() -> None:
                 "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
                 "project_id TEXT NOT NULL, action TEXT NOT NULL, "
                 "actor TEXT NOT NULL, reason TEXT, item_ids_json TEXT NOT NULL, "
-                "created_at TEXT NOT NULL)"
+                f"created_at TEXT NOT NULL{_REVIEW_QUEUE_FK}{_PROJECT_FK})"
             )
         )
         assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
     engine.dispose()
 
+
+
+@pytest.mark.parametrize(
+    "foreign_keys",
+    [
+        "",
+        _REVIEW_QUEUE_FK,
+        _PROJECT_FK,
+        _REVIEW_QUEUE_FK.replace("RESTRICT", "CASCADE") + _PROJECT_FK,
+        _REVIEW_QUEUE_FK + _PROJECT_FK.replace("projects(id)", "review_queues(id)"),
+        _REVIEW_QUEUE_FK + _PROJECT_FK.replace("RESTRICT", "CASCADE"),
+    ],
+)
+def test_revision_0041_rejects_missing_or_unsafe_bulk_foreign_keys(
+    foreign_keys: str,
+) -> None:
+    """Reject orphanable or cascading QC request history without data writes."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0041')"))
+        connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO preserved VALUES ('research evidence')"))
+        allowed = (
+            "'comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return', 'triage_complete'"
+        )
+        connection.execute(
+            text(
+                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
+                "CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed})))"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE review_queue_bulk_requests ("
+                "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+                "project_id TEXT NOT NULL, action TEXT NOT NULL, "
+                "actor TEXT NOT NULL, reason TEXT, item_ids_json TEXT NOT NULL, "
+                f"created_at TEXT NOT NULL{foreign_keys})"
+            )
+        )
+        with pytest.raises(RuntimeError, match="required RESTRICT links"):
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT value FROM preserved")) == "research evidence"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+        assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
+    engine.dispose()
 
 
 @pytest.mark.parametrize(
@@ -506,9 +565,7 @@ def test_revision_0041_rejects_nullable_bulk_identity_without_writes(
             for field in required
         ]
         columns.append("reason TEXT")
-        connection.execute(
-            text(f"CREATE TABLE review_queue_bulk_requests ({', '.join(columns)})")
-        )
+        connection.execute(text(f"CREATE TABLE review_queue_bulk_requests ({', '.join(columns)})"))
 
         with pytest.raises(RuntimeError, match="nullable required columns"):
             assert_compatible_revision_0038(connection)
