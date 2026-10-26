@@ -116,7 +116,26 @@ class MeshRegistrationEvidence(BaseModel):
         return self
 
 
+class MeshReidentificationEvidence(BaseModel):
+    """Provisional source-to-target specimen matching notes, never verified."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    before_observation_id: str = Field(
+        min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    after_observation_id: str = Field(
+        min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    method: Literal["visual_morphology", "survey_tag", "photo_match", "other"]
+    observer_id: str = Field(
+        min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    evidence_note: str = Field(min_length=1, max_length=2_000)
+
+
 class MeshLongitudinalComparisonRequest(BaseModel):
     before: MeshPreviewRequest
     after: MeshPreviewRequest
     registration_evidence: MeshRegistrationEvidence | None = None
+    reidentification_evidence: MeshReidentificationEvidence | None = None
