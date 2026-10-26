@@ -986,3 +986,22 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   and does not establish Windows MSI upgrade/rollback, installed GUI, or
   scientific release acceptance. No review decisions, user assets or saved
   Workflow Builder graphs are changed. **Release HOLD.**
+
+## 2026-10-26 — Pooled SQLite foreign-key enforcement (Track D)
+
+- Audited runtime engine setup and revision 0041's RESTRICT constraints. A
+  newly connected SQLite session enabled foreign keys, but an existing pooled
+  connection could subsequently execute `PRAGMA foreign_keys=OFF` and be
+  returned to the pool without revalidation.
+- Engine connect **and pool checkout** now verify that enforcement is enabled,
+  re-enabling it when safe and failing closed if SQLite refuses. This preserves
+  the existing local-first schema, request registry and review history.
+- Added a regression that disables the PRAGMA on a pooled DBAPI connection and
+  verifies enforcement is restored on its next checkout. Also corrected the
+  two exact Ruff SIM117 failures in the existing parent-deletion/orphan tests.
+- Isolated SQLAlchemy/SQLite behavior was reproduced locally, but the complete
+  ReefVision checkout, Ruff, backend/E2E, native Windows MSI and installed GUI
+  are unavailable in this runtime. Exact-head CI is the next required gate.
+- The independent 1.1/1.6 Alembic 0038 collision is **not** reconciled.
+  Existing typed `qc_review_queue` Workflow Builder execution, saved runs,
+  provenance and researcher review gates are unchanged. **Release HOLD.**
