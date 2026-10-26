@@ -642,10 +642,9 @@ def test_parent_feasibility_handles_large_augmenting_chain_without_recursion() -
     count = 1300
     organisms = tuple(f"fragment-{i:04d}" for i in range(count))
     parents = tuple(f"parent-{i:04d}" for i in range(count))
-    options = {
-        organisms[i]: {parents[i], parents[i + 1]}
-        for i in range(count - 1)
-    }
+    options: dict[str, set[str]] = {}
+    for index in range(count - 1):
+        options[organisms[index]] = {parents[index], parents[index + 1]}
     options[organisms[-1]] = {parents[0]}
     assert _full_parent_roster_feasible(organisms, parents, options)
     assert not _full_parent_roster_feasible(organisms, parents[:-1], options)
