@@ -151,8 +151,12 @@ class MeshReidentificationEvidence(BaseModel):
     independent_reviewer_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
-    independent_review_decision: Literal["supports_match", "disputes_match", "inconclusive"] | None = None
+    independent_review_decision: Literal[
+        "supports_match", "disputes_match", "inconclusive"
+    ] | None = None
     independent_review_note: str | None = Field(default=None, min_length=1, max_length=2_000)
+    # Optional audit time; an undated legacy review stays provisional and flagged.
+    independent_reviewed_at_utc: AwareDatetime | None = None
 
     @model_validator(mode="after")
     def require_complete_geometry_binding(self) -> MeshReidentificationEvidence:
@@ -168,7 +172,11 @@ class MeshReidentificationEvidence(BaseModel):
         if any(value is not None for value in review_fields) and not all(
             value is not None for value in review_fields
         ):
-            raise ValueError("Independent reidentification review requires reviewer, decision, and note")
+            raise ValueError(
+                "Independent reidentification review requires reviewer, decision, and note"
+            )
+        if self.independent_reviewed_at_utc is not None and self.independent_reviewer_id is None:
+            raise ValueError("Dated independent review requires a separately attributed reviewer")
         if self.independent_reviewer_id == self.observer_id:
             raise ValueError("Independent reviewer must differ from matching observer")
         return self
