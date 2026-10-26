@@ -98,13 +98,15 @@ if (($script:requests -join [char]10) -cne ($expectedRequests -join [char]10)) {
 if ($script:pollCount -ne 2 -or $script:sleeps -ne 1) {
   throw 'Monitor did not poll an active run and then stop after completion.'
 }
+# ConvertFrom-Json parses JSON numbers as numeric values, so PowerShell may
+# display 0.30 as 0.3. Match equivalent values without accepting 0.31/0.21.
 foreach ($expected in @(
   'Epoch: 2 / 3',
   'Epoch: 3 / 3',
   'train/box_loss\s+0\.25',
-  'train/cls_loss\s+0\.3(?:0)?',
-  'train/dfl_loss\s+0\.1(?:0)?',
-  'train/box_loss\s+0\.2(?:0)?',
+  'train/cls_loss\s+0\.3(?:0)?(?!\d)',
+  'train/dfl_loss\s+0\.1(?:0)?(?!\d)',
+  'train/box_loss\s+0\.2(?:0)?(?!\d)',
   'train/cls_loss\s+0\.24',
   'train/dfl_loss\s+0\.08',
   'metrics/mAP50\(B\)\s+0\.75',
