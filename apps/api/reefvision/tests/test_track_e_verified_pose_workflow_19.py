@@ -692,7 +692,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         )
 
     # Even if the manifest is re-signed to agree with the tampered dataset,
-    # the independent landmark revision must still reject schema drift.
+    # independently frozen item schema identities must still reject drift.
     with app.state.session_factory() as session:
         frozen = session.get(PoseTrainingDataset, dataset_id)
         assert frozen is not None
@@ -725,14 +725,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     )
     assert schema_plan.status_code == 200, schema_plan.text
     assert schema_plan.json()["valid"] is False
-    assert "pose_dataset_schema_mismatch" in {
+    assert "pose_dataset_item_lineage_mismatch" in {
         issue["code"] for issue in schema_plan.json()["issues"]
     }
 
-    # Execution independently rejects the same drift after successful planning.
+    # Execution independently rejects the same drift before reaching schema revision lookup.
     with (
         app.state.session_factory() as session,
-        pytest.raises(ValidationError, match="landmark schema no longer matches"),
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
     ):
         execute_pose_training_dataset_adapter(
             session,
