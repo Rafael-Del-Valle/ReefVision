@@ -302,13 +302,13 @@ release publication, tag, or merge was performed.
 - Windows clean-install harness safeguards: **PASS** — 44 assertions.
 - Rust training-console opaque run-ID validation: **PASS** — 1 test.
 
-A fresh 25-epoch CPU-only synthetic segmentation lifecycle completed in 75.10 seconds.
+A fresh 25-epoch CPU-only synthetic segmentation lifecycle completed in 56.64 seconds.
 It preserved immutable source bytes, registered checkpoint SHA-256
-`d85431c9f31ff4a350276290672467f24d57f252bb3ef888a57c3c65fc81cb4c`,
-created 45 valid pending polygon proposals across five held-out images, explicitly
+`c75ff1a30f870e5ce30f72b7d2c5b2359d9b0a4f87876314a031e922c4abe379`,
+created 55 valid pending polygon proposals across five held-out images, explicitly
 accepted and persisted one verified mask, and passed restart inference. PyTorch reported
 zero peak VRAM and the configured training device was `cpu`. Evidence is retained at
-`C:\Windows\Temp\rv103-seg-20261026-final\report.json`. This is technical synthetic
+`C:\Windows\Temp\rv103-seg-20261026-final2\report.json`. This is technical synthetic
 regression evidence, not representative coral-polyp accuracy evidence.
 
 ### Remaining release gates
