@@ -58,6 +58,11 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "rms_residual_m": 0.02,
         "correspondence_count": 6,
         "evidence_note": "Provisional landmark alignment; independent review pending",
+        "project_id": project_id,
+        "source_observation_id": "survey-1",
+        "target_observation_id": "survey-2",
+        "source_observed_at_utc": "2026-10-01T12:00:00Z",
+        "target_observed_at_utc": "2026-10-02T07:00:00-05:00",
         "source_to_target_transform_m": _rigid_transform(),
         "source_centroid_position_error_bound_m": 0.01,
         "target_centroid_position_error_bound_m": 0.02,
@@ -180,6 +185,9 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "caller_supplied_unverified"
     )
     assert "registration_geometry_binding_unavailable" not in expected["qc_warnings"]
+    assert "registration_project_binding_unavailable" not in expected["qc_warnings"]
+    assert "registration_observation_binding_unavailable" not in expected["qc_warnings"]
+    assert "registration_timepoint_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_residual_requires_independent_review" in expected["qc_warnings"]
     assert "registration_transform_requires_independent_review" in expected["qc_warnings"]
     assert "registration_transform_unavailable" not in expected["qc_warnings"]
