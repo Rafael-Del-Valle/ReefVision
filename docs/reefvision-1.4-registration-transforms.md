@@ -43,6 +43,17 @@ or used to certify spatial registration, organism identity, branch length,
 growth, or measurement accuracy. The result retains
 `coordinate_registration_verified: false`, and a supplied transform adds
 `registration_transform_requires_independent_review` to scientific QC.
+The comparison additionally exposes two **unverified transform diagnostics**:
+`registration_translation_magnitude_m` is the Euclidean norm of the three
+translation entries, and `registration_rotation_angle_degrees` is the
+principal rigid rotation angle in [0, 180] degrees, computed with a stable
+`atan2` formulation. These are summaries of the **supplied matrix**, not
+observed coral movement, growth, biological rotation, or registration quality.
+A large translation can be expected when survey-frame origins differ.
+Both fields are `null` when the matrix is absent; a missing matrix is not
+misrepresented as an identity transform. The fields are identical in the
+standalone API and persisted Workflow Builder output, which remains provisional.
+
 Registration evidence without a transform remains valid for backward
 compatibility and adds `registration_transform_unavailable`. Existing
 `registration_transform_and_accuracy_not_verified` and residual warnings
