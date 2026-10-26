@@ -326,6 +326,7 @@ def compare_mesh_observations(
     # audit evidence, never a verified specimen-identity determination.
     reidentification_record = None
     identity_disputed = False
+    identity_inconclusive = False
     if reidentification_evidence is None:
         warnings.append("reidentification_evidence_unavailable")
     else:
@@ -389,6 +390,7 @@ def compare_mesh_observations(
                 identity_disputed = True
                 warnings.append("reidentification_independent_review_disputes_match")
             elif identity.independent_review_decision == "inconclusive":
+                identity_inconclusive = True
                 warnings.append("reidentification_independent_review_inconclusive")
     if scale_normalized_area_ratio is not None:
         warnings.append("scale_normalized_area_ratio_requires_common_units_and_registration")
@@ -780,6 +782,8 @@ def compare_mesh_observations(
         warnings.append("scale_uncertainty_interval_unavailable")
     if identity_disputed:
         warnings.append("longitudinal_change_withheld_disputed_specimen_identity")
+    if identity_inconclusive:
+        warnings.append("longitudinal_change_withheld_inconclusive_specimen_identity")
     result = {
         "schema_version": "mesh-longitudinal-comparison-0001",
         "specimen_id": specimen,
@@ -872,14 +876,19 @@ def compare_mesh_observations(
             "observation_metadata_verified": False,
             "calibration_verified": False,
             "scale_uncertainty_only": (
-                difference_bounds is not None and not identity_disputed
+                difference_bounds is not None
+                and not identity_disputed
+                and not identity_inconclusive
             ),
             "longitudinal_change_withheld_due_to_identity_dispute": identity_disputed,
+            "longitudinal_change_withheld_due_to_inconclusive_identity_review": (
+                identity_inconclusive
+            ),
         },
     }
-    if identity_disputed:
+    if identity_disputed or identity_inconclusive:
         # Keep each original observation and reconstruction QC intact. A
-        # disputed specimen match cannot support cross-timepoint organism
+        # disputed or inconclusive match cannot support cross-timepoint organism
         # change estimates, even if the numerical geometry is well formed.
         for key in (
             "scale_normalized_surface_area_ratio_after_to_before",
