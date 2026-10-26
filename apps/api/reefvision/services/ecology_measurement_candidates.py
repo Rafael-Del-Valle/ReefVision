@@ -559,6 +559,9 @@ def summarize_projected_population_summaries(
 
     groups: dict[tuple[str, str, str, str], list[EcologyProjectedUnitSummary]] = {}
     seen_unit_metrics: set[tuple[str, str, str]] = set()
+    # Reject contradictory parent sets across metrics for an identical
+    # complete organism roster in the same canonical biological unit.
+    roster_parentage: dict[tuple[str, str, tuple[str, ...]], tuple[str, ...]] = {}
     for row in unit_summaries:
         if row.unit_status != "candidate":
             continue
@@ -582,6 +585,8 @@ def summarize_projected_population_summaries(
             raise ValidationError("Projected unit organism coverage is inconsistent")
         if len(row.parent_colony_keys) != len(set(row.parent_colony_keys)):
             raise ValidationError("Projected unit parent-colony provenance is inconsistent")
+        if len(row.parent_colony_keys) > len(row.complete_organism_keys):
+            raise ValidationError("Projected unit has more parent colonies than organisms")
         # A tank and an aquarium are the same biological sampling level.
         # Reusing one physical unit ID under aliases must never inflate the
         # number of independent experimental replicates.
@@ -594,6 +599,17 @@ def summarize_projected_population_summaries(
         if unit_metric_key in seen_unit_metrics:
             raise ValidationError("Duplicate projected experimental-unit metric")
         seen_unit_metrics.add(unit_metric_key)
+        # Aggregate rows do not identify each organism's parent. Compare
+        # only identical complete rosters; never invent individual mappings.
+        roster_key = (
+            unit_metric_key[0],
+            row.experimental_unit_id,
+            tuple(sorted(row.complete_organism_keys)),
+        )
+        parents = tuple(sorted(row.parent_colony_keys))
+        previous_parents = roster_parentage.setdefault(roster_key, parents)
+        if previous_parents != parents:
+            raise ValidationError("Projected parent-colony provenance changes across metrics")
         stratum_key = (
             normalized_level or row.experimental_unit_type.casefold(),
             row.metric,
