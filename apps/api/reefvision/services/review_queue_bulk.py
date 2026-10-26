@@ -7,9 +7,10 @@ All items are validated before any state is changed; one transaction commits the
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import uuid4, uuid5
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import ReviewQueue, ReviewQueueItem
@@ -50,6 +51,55 @@ def bulk_triage_review_queue(
             raise NotFoundError("Review queue item not found")
         if item.review_queue_id != queue_id or item.project_id != queue.project_id:
             raise ConflictError("Review item belongs to another review queue")
+        ordered.append(item)
+
+    # Optional request-key replay is checked before state validation: a
+    # previously committed "start" must not restart an item that was later
+    # skipped by another researcher. IDs are deterministic per item and batch.
+    keyed_ids = (
+        {item.id: str(uuid5(request.client_request_id, item.id)) for item in ordered}
+        if request.client_request_id is not None
+        else {}
+    )
+
+    def prior_events() -> dict[str, ReviewQueueItemEvent]:
+        if not keyed_ids:
+            return {}
+        events = session.scalars(
+            select(ReviewQueueItemEvent).where(
+                ReviewQueueItemEvent.review_queue_id == queue_id,
+                ReviewQueueItemEvent.client_request_id.in_(list(keyed_ids.values())),
+            )
+        )
+        return {event.review_queue_item_id: event for event in events}
+
+    def validate_prior(events: dict[str, ReviewQueueItemEvent]) -> bool:
+        if not events:
+            return False
+        # A partially repeated selection is ambiguous and must not append
+        # new audit history under a reused request ID.
+        if set(events) != set(keyed_ids):
+            raise ConflictError("Bulk request ID was already used for another item selection")
+        for item in ordered:
+            event = events[item.id]
+            if (
+                event.client_request_id != keyed_ids[item.id]
+                or event.event_type != f"triage_{request.action}"
+                or event.actor != request.actor
+                or event.comment != (reason if request.action == "skip" else None)
+                or event.assignee is not None
+            ):
+                raise ConflictError("Bulk request ID was already used for a different action")
+        return True
+
+    if validate_prior(prior_events()):
+        return ReviewQueueBulkResponse(
+            queue_id=queue_id,
+            action=request.action,
+            changed_count=0,
+            items=[ReviewQueueItemResponse.model_validate(item) for item in ordered],
+        )
+
         if request.action == "start" and item.review_state not in {
             "pending",
             "in_progress",
@@ -70,8 +120,6 @@ def bulk_triage_review_queue(
             and not (item.review_state == "pending" and item.returned_at is not None)
         ):
             raise ConflictError("Only previously skipped items can be returned")
-        ordered.append(item)
-
     now = datetime.now(UTC)
     changed = 0
     changed_ids: set[str] = set()
@@ -110,13 +158,21 @@ def bulk_triage_review_queue(
                     review_queue_id=queue_id,
                     review_queue_item_id=item.id,
                     project_id=item.project_id,
-                    client_request_id=str(uuid4()),
+                    client_request_id=keyed_ids.get(item.id, str(uuid4())),
                     event_type=f"triage_{request.action}",
                     actor=request.actor,
                     comment=reason if request.action == "skip" else None,
                 )
             )
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            # Another request may have committed the identical batch.
+            # Never silently accept conflicting/partial audit history.
+            if not keyed_ids or not validate_prior(prior_events()):
+                raise ConflictError("Bulk review request ID conflict") from None
+            changed = 0
         for item in ordered:
             session.refresh(item)
     return ReviewQueueBulkResponse(
