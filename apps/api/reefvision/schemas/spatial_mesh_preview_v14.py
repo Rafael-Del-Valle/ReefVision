@@ -121,6 +121,12 @@ class MeshReidentificationEvidence(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # Optional for legacy evidence; when present, binds the observation pair
+    # to a provisional specimen label and prevents cross-specimen reuse.
+    specimen_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+
     before_observation_id: str = Field(
         min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
