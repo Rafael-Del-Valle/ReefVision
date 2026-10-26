@@ -50,7 +50,7 @@ $script:completed = @'
 }
 '@ | ConvertFrom-Json
 $script:logText = ('epoch=2', 'train/box_loss=0.25', 'train/cls_loss=0.30') -join [char]10
-$script:logText += [char]10 + [char]0x001B + ']0;spoofed log title' + [char]0x0007 + 'train/dfl_loss=0.10'
+$script:logText += ([string][char]10) + ([string][char]0x001B) + ']0;spoofed log title' + ([string][char]0x0007) + 'train/dfl_loss=0.10'
 
 function Invoke-RestMethod {
   param([string]$Uri, [string]$Method, [int]$TimeoutSec)
