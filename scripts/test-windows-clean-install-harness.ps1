@@ -103,6 +103,20 @@ Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion '1.0.
 Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion '1.0.2' -TargetVersion '1.0.65536' } 'Windows Installer limits'
 Assert-ThrowsContaining { Assert-ReefVisionUpgradeVersion -PreviousVersion 'not-an-msi-version' -TargetVersion '1.0.2' } 'Invalid MSI ProductVersion'
 
+# The real installed-MSI report previously serialized ProductVersion as
+# [null, "1.0.2", null] because COM Execute/Close leaked pipeline output.
+# Test the scalar contract before accepting any version as release evidence.
+Assert-True ((Assert-ReefVisionMsiVersionScalar -Value '1.0.2') -ceq '1.0.2') 'Valid MSI version was changed.'
+Assert-True ((Assert-ReefVisionMsiVersionScalar -Value '255.255.65535') -ceq '255.255.65535') 'Valid maximum MSI version was rejected.'
+Assert-ThrowsContaining { Assert-ReefVisionMsiVersionScalar -Value @($null, '1.0.2', $null) } 'single major.minor.build'
+Assert-ThrowsContaining { Assert-ReefVisionMsiVersionScalar -Value $null } 'single major.minor.build'
+Assert-ThrowsContaining { Assert-ReefVisionMsiVersionScalar -Value '1.0.2.0' } 'single major.minor.build'
+Assert-ThrowsContaining { Assert-ReefVisionMsiVersionScalar -Value '256.0.0' } 'numeric limits'
+Assert-ThrowsContaining { Assert-ReefVisionMsiVersionScalar -Value '1.0.65536' } 'numeric limits'
+$librarySource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1') -Raw
+Assert-True ($librarySource.Contains('[void]$view.Execute()')) 'MSI COM Execute must not contaminate version evidence.'
+Assert-True ($librarySource.Contains('[void]$view.Close()')) 'MSI COM Close must not contaminate version evidence.'
+
 $uninstall = New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00000000-0000-0000-0000-000000000000}' -LogPath 'C:\rv-test\uninstall.log'
 Assert-True ($uninstall[0] -eq '/x') 'Uninstall command does not use /x.'
 
