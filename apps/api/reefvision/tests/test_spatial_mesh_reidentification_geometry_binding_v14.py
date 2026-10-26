@@ -221,6 +221,46 @@ def test_disputed_specimen_match_withholds_cross_timepoint_changes() -> None:
 
 
 
+
+
+def test_inconclusive_identity_review_withholds_change_without_discarding_sources() -> None:
+    before, after = _observations()
+    after["surface_area_m2"] = 2.0
+    evidence = {
+        **_evidence(),
+        "independent_reviewer_id": "reviewer-2",
+        "independent_review_decision": "inconclusive",
+        "independent_review_note": "Survey photographs cannot establish identity",
+        "independent_reviewed_at_utc": "2026-10-03T12:00:00Z",
+    }
+    result = compare_mesh_observations(
+        before, after, reidentification_evidence=evidence
+    )
+    assert result["before_surface_area_m2"] == pytest.approx(1.0)
+    assert result["after_surface_area_m2"] == pytest.approx(2.0)
+    assert result["elapsed_days"] == pytest.approx(1.0)
+    assert result["delta_surface_area_m2"] is None
+    assert result["relative_surface_area_change_percent"] is None
+    assert result["average_surface_area_change_m2_per_day"] is None
+    assert result["scale_normalized_surface_area_ratio_after_to_before"] is None
+    assert result["provenance"]["reidentification_evidence"] == evidence
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["scale_uncertainty_only"] is False
+    assert (
+        result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"]
+        is False
+    )
+    assert (
+        result["provenance"]["longitudinal_change_withheld_due_to_inconclusive_identity_review"]
+        is True
+    )
+    assert "reidentification_independent_review_inconclusive" in result["qc_warnings"]
+    assert (
+        "longitudinal_change_withheld_inconclusive_specimen_identity"
+        in result["qc_warnings"]
+    )
+
+
 @pytest.mark.parametrize(
     "missing_field",
     ["independent_reviewer_id", "independent_review_decision", "independent_review_note"],
