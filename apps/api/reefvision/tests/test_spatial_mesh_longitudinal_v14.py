@@ -125,6 +125,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["registration_residual_to_smaller_extent_ratio"] == pytest.approx(
         0.02 / sqrt(2)
     )
+    assert expected["registration_translation_magnitude_m"] == pytest.approx(0.1)
+    assert expected["registration_rotation_angle_degrees"] == pytest.approx(0.0)
     assert "registration_residual_at_least_smaller_mesh_extent" not in expected["qc_warnings"]
     assert "matching_coordinate_frame_id_not_registration_proof" in expected["qc_warnings"]
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
@@ -1690,3 +1692,78 @@ def test_registration_transform_accepts_proper_rotation_without_verification() -
     )
     assert evidence.source_to_target_transform_m == transform
     assert "verified" not in evidence.model_dump(mode="json")
+
+
+@pytest.mark.parametrize(
+    ("rotation", "translation", "expected_angle", "expected_distance"),
+    [
+        (
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            (0.0, 0.0, 0.0),
+            0.0,
+            0.0,
+        ),
+        (
+            [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+            (0.3, 0.4, 0.0),
+            90.0,
+            0.5,
+        ),
+        (
+            [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]],
+            (0.0, 0.0, -0.2),
+            180.0,
+            0.2,
+        ),
+    ],
+)
+def test_registration_transform_diagnostics_remain_unverified(
+    rotation: list[list[float]],
+    translation: tuple[float, float, float],
+    expected_angle: float,
+    expected_distance: float,
+) -> None:
+    """Summarize an unverified rigid transform, without applying it to coral geometry."""
+    before, after = _minimal_topology_pair()
+    before["provenance"]["coordinate_frame_id"] = "survey-a"
+    after["provenance"]["coordinate_frame_id"] = "survey-b"
+    transform = [
+        [*row, offset] for row, offset in zip(rotation, translation, strict=True)
+    ] + [[0.0, 0.0, 0.0, 1.0]]
+    evidence = {
+        "source_frame_id": "survey-a",
+        "target_frame_id": "survey-b",
+        "method": "landmark",
+        "rms_residual_m": 0.01,
+        "correspondence_count": 6,
+        "evidence_note": "Caller-supplied alignment; no independent verification",
+        "source_to_target_transform_m": transform,
+    }
+    result = compare_mesh_observations(before, after, evidence)
+    assert result["registration_translation_magnitude_m"] == pytest.approx(expected_distance)
+    assert result["registration_rotation_angle_degrees"] == pytest.approx(expected_angle)
+    assert result["provenance"]["registration_evidence"]["source_to_target_transform_m"] == (
+        transform
+    )
+    assert result["provenance"]["coordinate_registration_verified"] is False
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert "registration_transform_requires_independent_review" in result["qc_warnings"]
+
+
+def test_registration_transform_diagnostics_missing_matrix_stay_unknown() -> None:
+    before, after = _minimal_topology_pair()
+    before["provenance"]["coordinate_frame_id"] = "survey-a"
+    after["provenance"]["coordinate_frame_id"] = "survey-b"
+    evidence = {
+        "source_frame_id": "survey-a",
+        "target_frame_id": "survey-b",
+        "method": "landmark",
+        "rms_residual_m": 0.01,
+        "correspondence_count": 6,
+        "evidence_note": "Registration residual available; transform unavailable",
+    }
+    result = compare_mesh_observations(before, after, evidence)
+    assert result["registration_translation_magnitude_m"] is None
+    assert result["registration_rotation_angle_degrees"] is None
+    assert "registration_transform_unavailable" in result["qc_warnings"]
+    assert result["provenance"]["coordinate_registration_verified"] is False
