@@ -7,12 +7,13 @@ saved Workflow Builder runs; export never promotes identities to verified data.
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
 from reefvision.services.ecology_identity_design_audit import (
-    derive_cross_unit_shared_parent_colony_keys,
+    derive_cross_unit_parent_details,
     derive_ecology_design_changes,
 )
 from reefvision.storage.datasets import canonical_json_sha256
@@ -114,16 +115,18 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             raise ValidationError("Ecological design-change audit differs from identity history")
 
     if registry.cross_unit_parent_audit_status != "unavailable":
-        shared_parent_keys = derive_cross_unit_shared_parent_colony_keys(registry.identities)
+        details = derive_cross_unit_parent_details(registry.identities)
+        shared_parent_keys = sorted({row.parent_colony_key for row in details})
         expected_status = (
             "shared_parent_requires_review" if shared_parent_keys else "no_cross_unit_parent_reuse"
         )
         if (
             registry.cross_unit_parent_audit_status != expected_status
             or registry.cross_unit_shared_parent_colony_keys != shared_parent_keys
+            or registry.cross_unit_parent_details != details
         ):
             raise ValidationError("Ecological cross-unit parent audit differs from identities")
-    elif registry.cross_unit_shared_parent_colony_keys:
+    elif registry.cross_unit_shared_parent_colony_keys or registry.cross_unit_parent_details:
         raise ValidationError("Unavailable cross-unit parent audit cannot claim reviewed keys")
 
     output = StringIO(newline="")
@@ -147,6 +150,7 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             "design_change_count",
             "cross_unit_parent_audit_status",
             "cross_unit_shared_parent_colony_keys",
+            "cross_unit_parent_details_json",
         )
     )
     for row in history:
@@ -169,6 +173,11 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
                 registry.design_change_count,
                 registry.cross_unit_parent_audit_status,
                 "|".join(registry.cross_unit_shared_parent_colony_keys),
+                json.dumps(
+                    [detail.model_dump(mode="json") for detail in registry.cross_unit_parent_details],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
             )
         )
     return output.getvalue()

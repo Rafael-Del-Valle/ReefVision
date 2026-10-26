@@ -42,7 +42,7 @@ from reefvision.schemas.ecology_identity import (
 from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.services.annotations import annotation_snapshot, mask_annotation_snapshot
 from reefvision.services.ecology_identity_design_audit import (
-    derive_cross_unit_shared_parent_colony_keys,
+    derive_cross_unit_parent_details,
     derive_ecology_design_changes,
 )
 from reefvision.storage.datasets import canonical_json_sha256
@@ -833,7 +833,8 @@ class EcologyIdentityService:
         )
         identity_history = [EcologyIdentityRow.model_validate(row) for row in history]
         design_changes = derive_ecology_design_changes(identity_history)
-        shared_parent_keys = derive_cross_unit_shared_parent_colony_keys(identities)
+        shared_parent_details = derive_cross_unit_parent_details(identities)
+        shared_parent_keys = sorted({row.parent_colony_key for row in shared_parent_details})
         history_rows = [
             {
                 "id": row.id,
@@ -901,6 +902,7 @@ class EcologyIdentityService:
                 else "no_cross_unit_parent_reuse"
             ),
             cross_unit_shared_parent_colony_keys=shared_parent_keys,
+            cross_unit_parent_details=shared_parent_details,
             design_change_count=len(design_changes),
             design_change_events=design_changes,
             history_sha256=canonical_json_sha256(

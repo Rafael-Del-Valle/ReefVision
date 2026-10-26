@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 from typing import cast
 
@@ -87,6 +88,14 @@ def test_shared_parent_tanks_api_csv_and_saved_workflow(client: TestClient) -> N
     payload = response.json()
     assert payload["cross_unit_parent_audit_status"] == "shared_parent_requires_review"
     assert payload["cross_unit_shared_parent_colony_keys"] == ["parent-A"]
+    assert payload["cross_unit_parent_details"] == [
+        {
+            "parent_colony_key": "parent-A",
+            "experimental_unit_level": "tank",
+            "experimental_unit_ids": ["tank-1", "tank-2"],
+            "fragment_keys": ["fragment-A", "fragment-B", "fragment-C"],
+        }
+    ]
     assert payload["evidence_level"] == "registered_unverified"
     assert payload["review_gate"] == "scientist_review_required"
 
@@ -97,6 +106,10 @@ def test_shared_parent_tanks_api_csv_and_saved_workflow(client: TestClient) -> N
         row["cross_unit_parent_audit_status"] == "shared_parent_requires_review" for row in csv_rows
     )
     assert all(row["cross_unit_shared_parent_colony_keys"] == "parent-A" for row in csv_rows)
+    expected_details = json.dumps(
+        payload["cross_unit_parent_details"], sort_keys=True, separators=(",", ":")
+    )
+    assert all(row["cross_unit_parent_details_json"] == expected_details for row in csv_rows)
 
     graph = {
         "graph_id": "registered-shared-parent-review",
@@ -180,6 +193,7 @@ def test_no_false_cross_unit_parent_claims_and_csv_tampering(client: TestClient)
     payload = response.json()
     assert payload["cross_unit_parent_audit_status"] == "no_cross_unit_parent_reuse"
     assert payload["cross_unit_shared_parent_colony_keys"] == []
+    assert payload["cross_unit_parent_details"] == []
     assert payload["review_gate"] == "scientist_review_required"
 
     typed = EcologyIdentityRegistryResponse.model_validate(payload)
@@ -191,10 +205,16 @@ def test_no_false_cross_unit_parent_claims_and_csv_tampering(client: TestClient)
     tampered.cross_unit_shared_parent_colony_keys = ["invented-parent"]
     with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
         render_ecology_identity_history_csv(tampered)
+    tampered = typed.model_copy(deep=True)
+    tampered.cross_unit_parent_details = []
+    with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
+        render_ecology_identity_history_csv(tampered)
 
     legacy = payload.copy()
     legacy.pop("cross_unit_parent_audit_status")
     legacy.pop("cross_unit_shared_parent_colony_keys")
+    legacy.pop("cross_unit_parent_details")
     old = EcologyIdentityRegistryResponse.model_validate(legacy)
     assert old.cross_unit_parent_audit_status == "unavailable"
+    assert old.cross_unit_parent_details == []
     assert "unavailable" in render_ecology_identity_history_csv(old)

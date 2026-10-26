@@ -6,6 +6,7 @@ from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_le
 from reefvision.schemas.ecology_identity import (
     EcologyDesignChangedField,
     EcologyDesignRevisionChange,
+    EcologyCrossUnitParentDetail,
     EcologyIdentityRow,
 )
 
@@ -52,15 +53,14 @@ def derive_ecology_design_changes(
     return events
 
 
-def derive_cross_unit_shared_parent_colony_keys(
+def derive_cross_unit_parent_details(
     identities: list[EcologyIdentityRow],
-) -> list[str]:
-    """Disclose parent colonies represented in multiple units at one level.
+) -> list[EcologyCrossUnitParentDetail]:
+    """Return auditable fragment and unit IDs without pooling sampling levels.
 
-    This is a study-design review signal, not proof of dependence.
-    Different sampling levels are never pooled as equivalent units.
+    These are unverified registrations, not proof of biological dependence.
     """
-    units_by_parent_level: dict[tuple[str, str], set[str]] = {}
+    grouped: dict[tuple[str, str], dict[str, set[str]]] = {}
     for row in identities:
         if row.kind != "fragment" or row.parent_colony_key is None:
             continue
@@ -70,12 +70,22 @@ def derive_cross_unit_shared_parent_colony_keys(
             classify_ecological_unit_level(row.experimental_unit_type)
             or row.experimental_unit_type.casefold()
         )
-        key = (row.parent_colony_key, level)
-        units_by_parent_level.setdefault(key, set()).add(row.experimental_unit_id)
-    return sorted(
-        {
-            parent
-            for (parent, _level), unit_ids in units_by_parent_level.items()
-            if len(unit_ids) > 1
-        }
-    )
+        units = grouped.setdefault((row.parent_colony_key, level), {})
+        units.setdefault(row.experimental_unit_id, set()).add(row.organism_key)
+    return [
+        EcologyCrossUnitParentDetail(
+            parent_colony_key=parent,
+            experimental_unit_level=level,
+            experimental_unit_ids=sorted(units),
+            fragment_keys=sorted({key for members in units.values() for key in members}),
+        )
+        for (parent, level), units in sorted(grouped.items())
+        if len(units) > 1
+    ]
+
+
+def derive_cross_unit_shared_parent_colony_keys(
+    identities: list[EcologyIdentityRow],
+) -> list[str]:
+    """Disclose shared parents, retaining the original backward-compatible field."""
+    return sorted({detail.parent_colony_key for detail in derive_cross_unit_parent_details(identities)})

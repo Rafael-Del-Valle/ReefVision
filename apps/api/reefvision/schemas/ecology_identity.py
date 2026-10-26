@@ -162,6 +162,17 @@ class EcologyDesignRevisionChange(BaseModel):
     current_experimental_unit_id: str | None
 
 
+class EcologyCrossUnitParentDetail(BaseModel):
+    """Registered shared-parent evidence at one declared sampling level."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    parent_colony_key: str
+    experimental_unit_level: str
+    experimental_unit_ids: list[str] = Field(min_length=2)
+    fragment_keys: list[str] = Field(min_length=2)
+
+
 class EcologyIdentityRegistryResponse(BaseModel):
     schema_version: Literal["ecology-identity-registry-0001"] = "ecology-identity-registry-0001"
     project_id: str
@@ -193,5 +204,7 @@ class EcologyIdentityRegistryResponse(BaseModel):
         "unavailable", "no_cross_unit_parent_reuse", "shared_parent_requires_review"
     ] = "unavailable"
     cross_unit_shared_parent_colony_keys: list[str] = Field(default_factory=list)
+    # Actionable, deterministic review evidence; absent in older saved artifacts.
+    cross_unit_parent_details: list[EcologyCrossUnitParentDetail] = Field(default_factory=list)
     evidence_level: Literal["registered_unverified"] = "registered_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"

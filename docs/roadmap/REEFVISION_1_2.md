@@ -1748,3 +1748,29 @@ the three failing backend gates stopped at Ruff formatting in the
 design-change implementation/test. This increment also corrects the
 reported formatting. New exact-head CI, real-data scientific acceptance
 and installed Windows GUI/installer checks remain outstanding.
+
+## Actionable cross-unit parent review evidence (2026-10-25; development only)
+
+The existing registered parent-colony audit now includes typed
+`cross_unit_parent_details` for every flagged parent **at each declared
+sampling level**: normalized level, sorted distinct unit IDs and sorted
+contributing fragment keys. This lets a scientist review exactly which
+fragments and units generated a pseudoreplication warning, rather than
+receiving only a parent key. Tank/aquarium aliases are grouped; tank and
+site levels remain separate. Repeat fragments within a single tank do not
+produce a false cross-unit finding.
+
+The existing project-owned registry API and executable, persisted
+`ecology_identity_registry_source` Workflow Builder node share these typed
+results. The deterministic identity-history CSV includes the detail as
+JSON and recomputes it against fingerprint-verified current identities,
+failing closed on tampering. Legacy workflow artifacts deserialize with
+empty details and an `unavailable` audit status; they do not claim a
+clean experimental design. No new migration, model weights or 1.1
+environmental integration is introduced.
+
+These details are `registered_unverified` and require scientist review.
+They do not establish actual biological dependence, simultaneous
+sampling, verified experimental-unit assignments or valid statistical
+replication. Full exact-head CI, real-dataset scientific review and
+installed Windows GUI acceptance remain required.
