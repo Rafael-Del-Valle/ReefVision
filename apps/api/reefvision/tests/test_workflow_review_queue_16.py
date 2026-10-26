@@ -133,9 +133,15 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
 
     # A manually triaged item produced by a saved executable workflow keeps
     # its queue reference, scientific evidence and researcher-review gate.
+    keyed_start = {
+        "item_ids": [item_id],
+        "action": "start",
+        "actor": "workflow reviewer",
+        "client_request_id": str(uuid4()),
+    }
     triaged = client.post(
         f"/api/v1/review-queues/{result['queue_id']}/items/bulk",
-        json={"item_ids": [item_id], "action": "start", "actor": "workflow reviewer"},
+        json=keyed_start,
     )
     assert triaged.status_code == 200, triaged.text
     assert triaged.json()["changed_count"] == 1
@@ -153,6 +159,17 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
         json={"reason": "Verify uncertain octocoral boundary"},
     )
     assert skipped.status_code == 200, skipped.text
+    # Replaying the original saved-workflow queue triage must not override a
+    # subsequent scientist's decision or duplicate the original audit event.
+    replayed_start = client.post(
+        f"/api/v1/review-queues/{result['queue_id']}/items/bulk",
+        json=keyed_start,
+    )
+    assert replayed_start.status_code == 200, replayed_start.text
+    assert replayed_start.json()["changed_count"] == 0
+    assert replayed_start.json()["items"][0]["review_state"] == "skipped"
+    assert replayed_start.json()["requires_researcher_review"] is True
+    assert client.get(event_url).json()["total"] == 3
     returned = client.post(f"/api/v1/review-queue-items/{item_id}/return")
     assert returned.status_code == 200, returned.text
     history = client.get(event_url).json()
