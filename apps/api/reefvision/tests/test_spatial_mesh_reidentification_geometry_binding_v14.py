@@ -115,7 +115,11 @@ def test_reidentification_cannot_be_reused_for_other_timepoint(
     evidence["before_observed_at_utc"] = "2026-10-01T12:00:00Z"
     evidence["after_observed_at_utc"] = "2026-10-02T12:00:00Z"
     record = before if changed_observation == "before" else after
-    record["provenance"]["observed_at_utc"] = "2026-10-03T12:00:00Z"
+    record["provenance"]["observed_at_utc"] = (
+        "2026-10-01T13:00:00Z"
+        if changed_observation == "before"
+        else "2026-10-02T13:00:00Z"
+    )
     with pytest.raises(ValueError, match="observation timestamps"):
         compare_mesh_observations(before, after, reidentification_evidence=evidence)
 
