@@ -13,7 +13,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import PoseTrainingDataset, PoseTrainingDatasetItem, WorkflowGraphRecord
+from reefvision.db.models import (
+    PoseTrainingDataset,
+    PoseTrainingDatasetItem,
+    WorkflowArtifact,
+    WorkflowGraphRecord,
+)
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.pose_training_datasets import (
@@ -167,6 +172,26 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["pose_schema_id"] == dataset["pose_schema_id"]
     assert payload["pose_schema_revision"] == dataset["pose_schema_revision"]
     assert payload["pose_schema_content_hash"] == dataset["pose_schema_content_hash"]
+
+    # A completed saved workflow must not expose a changed scientific output
+    # through the run-detail API, even when its original digest remains stored.
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert artifact is not None
+        original_payload = dict(artifact.payload_json)
+        artifact.payload_json = {**original_payload, "dataset_id": "changed-after-execution"}
+        session.commit()
+
+    corrupted_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert corrupted_detail.status_code == 409, corrupted_detail.text
+    assert "Workflow artifact checksum failed" in corrupted_detail.json()["detail"]
+
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert artifact is not None
+        artifact.payload_json = original_payload
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
 
     # A corrupted saved revision must be rejected before another job is
     # queued, even when it previously executed successfully. This exercises
