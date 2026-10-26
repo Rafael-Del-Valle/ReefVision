@@ -34,6 +34,21 @@ from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.storage.datasets import canonical_json_sha256
 
 
+def _source_sampling_level(unit_type: str | None) -> str | None:
+    """Canonicalize biological aliases without laundering technical replicates.
+
+    A compound declaration such as "camera tank" remains invalid as an
+    experimental unit even though it contains a recognizable biological word.
+    """
+    if unit_type is None:
+        return None
+    try:
+        require_ecological_unit_type(unit_type)
+    except ValueError:
+        return unit_type
+    return classify_ecological_unit_level(unit_type) or unit_type
+
+
 def summarize_sampling_date_qc(
     candidates: list[EcologyMeasurementCandidate],
 ) -> list[EcologySamplingDateQC]:
@@ -365,10 +380,7 @@ def summarize_projected_unit_summaries(
         context = (
             candidate.identity_revision,
             candidate.parent_colony_key,
-            (
-                classify_ecological_unit_level(candidate.experimental_unit_type)
-                or candidate.experimental_unit_type
-            ),
+            _source_sampling_level(candidate.experimental_unit_type),
             candidate.experimental_unit_id,
         )
         previous = organism_contexts.setdefault(candidate.organism_key, context)
@@ -384,10 +396,7 @@ def summarize_projected_unit_summaries(
         # unit-level summaries. A tank and an aquarium with the same ID are
         # one declared unit, not two independent replicates.
         key = (
-            (
-                classify_ecological_unit_level(candidate.experimental_unit_type)
-                or candidate.experimental_unit_type
-            ),
+            _source_sampling_level(candidate.experimental_unit_type),
             candidate.experimental_unit_id,
             candidate.metric,
         )
