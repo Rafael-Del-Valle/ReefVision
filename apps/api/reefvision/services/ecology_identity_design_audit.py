@@ -6,6 +6,8 @@ from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_le
 from reefvision.schemas.ecology_identity import (
     EcologyCrossUnitParentDetail,
     EcologyDesignChangedField,
+    EcologyHistoricalCrossUnitParentDetail,
+    EcologyHistoricalParentAssignment,
     EcologyDesignRevisionChange,
     EcologyIdentityRow,
 )
@@ -91,3 +93,55 @@ def derive_cross_unit_shared_parent_colony_keys(
     return sorted(
         {detail.parent_colony_key for detail in derive_cross_unit_parent_details(identities)}
     )
+
+
+def derive_historical_cross_unit_parent_details(
+    history: list[EcologyIdentityRow],
+) -> list[EcologyHistoricalCrossUnitParentDetail]:
+    """Find parents ever *registered* in multiple units at one sampling level.
+
+    Revisions can be corrections rather than movements; do not infer occupancy
+    overlap, actual transfers, or independent biological replication.
+    """
+    grouped: dict[
+        tuple[str, str], list[EcologyHistoricalParentAssignment]
+    ] = {}
+    for row in history:
+        if row.kind != "fragment" or row.parent_colony_key is None:
+            continue
+        if row.experimental_unit_type is None or row.experimental_unit_id is None:
+            continue
+        level = (
+            classify_ecological_unit_level(row.experimental_unit_type)
+            or row.experimental_unit_type.casefold()
+        )
+        grouped.setdefault((row.parent_colony_key, level), []).append(
+            EcologyHistoricalParentAssignment(
+                organism_key=row.organism_key,
+                identity_revision=row.revision,
+                experimental_unit_type=row.experimental_unit_type,
+                experimental_unit_id=row.experimental_unit_id,
+            )
+        )
+    details: list[EcologyHistoricalCrossUnitParentDetail] = []
+    for (parent, level), assignments in sorted(grouped.items()):
+        units = sorted({item.experimental_unit_id for item in assignments})
+        if len(units) < 2:
+            continue
+        details.append(
+            EcologyHistoricalCrossUnitParentDetail(
+                parent_colony_key=parent,
+                experimental_unit_level=level,
+                experimental_unit_ids=units,
+                assignments=sorted(
+                    assignments,
+                    key=lambda item: (
+                        item.experimental_unit_id,
+                        item.organism_key,
+                        item.identity_revision,
+                        item.experimental_unit_type,
+                    ),
+                ),
+            )
+        )
+    return details

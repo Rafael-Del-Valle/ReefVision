@@ -173,6 +173,28 @@ class EcologyCrossUnitParentDetail(BaseModel):
     fragment_keys: list[str] = Field(min_length=2)
 
 
+class EcologyHistoricalParentAssignment(BaseModel):
+    """One unverified identity revision recording a fragment in a declared unit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    organism_key: str
+    identity_revision: int = Field(ge=1)
+    experimental_unit_type: str
+    experimental_unit_id: str
+
+
+class EcologyHistoricalCrossUnitParentDetail(BaseModel):
+    """Historical registrations, not proof of simultaneous occupancy or movement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    parent_colony_key: str
+    experimental_unit_level: str
+    experimental_unit_ids: list[str] = Field(min_length=2)
+    assignments: list[EcologyHistoricalParentAssignment] = Field(min_length=2)
+
+
 class EcologyIdentityRegistryResponse(BaseModel):
     schema_version: Literal["ecology-identity-registry-0001"] = "ecology-identity-registry-0001"
     project_id: str
@@ -206,5 +228,15 @@ class EcologyIdentityRegistryResponse(BaseModel):
     cross_unit_shared_parent_colony_keys: list[str] = Field(default_factory=list)
     # Actionable, deterministic review evidence; absent in older saved artifacts.
     cross_unit_parent_details: list[EcologyCrossUnitParentDetail] = Field(default_factory=list)
+    # Earlier revisions can record units no longer present in the latest snapshot.
+    # This is a historical registration warning, NOT an observed movement event.
+    historical_cross_unit_parent_audit_status: Literal[
+        "unavailable",
+        "no_recorded_cross_unit_parent_reuse",
+        "recorded_across_units_requires_review",
+    ] = "unavailable"
+    historical_cross_unit_parent_details: list[
+        EcologyHistoricalCrossUnitParentDetail
+    ] = Field(default_factory=list)
     evidence_level: Literal["registered_unverified"] = "registered_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"

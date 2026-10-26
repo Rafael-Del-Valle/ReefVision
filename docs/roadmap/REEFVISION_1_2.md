@@ -1804,3 +1804,30 @@ standalone CSV and persisted saved-workflow tests remain the acceptance
 contract. New exact-head CI must pass before considering the repair
 validated; scientist-reviewed study design, longitudinal observations,
 and installed Windows acceptance are still outstanding.
+
+
+## Historical cross-unit parent registration audit (2026-10-26)
+
+The existing project-owned identity registry API and executable, persisted
+`ecology_identity_registry_source` Workflow Builder node now separately
+disclose **historical** parent-colony registrations spanning multiple
+declared experimental units at the same normalized sampling level. Every
+contributing fragment revision, original unit type, and unit ID is retained
+in a deterministic typed audit. Unlike the current-snapshot shared-parent
+audit, this catches a previously registered tank assignment that was later
+corrected or reverted. It is a warning about **recorded revision history**,
+not evidence that a specimen physically moved, two tanks were occupied
+simultaneously, or the treatments were statistically independent.
+
+The identity-history CSV includes the historical audit status and full
+revision evidence; export recalculates the audit from SHA-256-checked history
+and rejects altered evidence. Older saved artifacts default to an explicit
+`unavailable` status rather than falsely reporting no historical reuse.
+Standalone API, saved Workflow Builder replay, CSV parity, alias handling,
+tamper rejection and legacy deserialization have regression coverage.
+No new migration, inference, external service, model weights or verified-data
+promotion is introduced. Evidence remains `registered_unverified` with
+`scientist_review_required`. Source-linked scientist-reviewed longitudinal
+measurements, design attestation, cross-branch migration reconciliation,
+scientific acceptance and installed Windows GUI/installer validation remain
+required before 1.2 release approval.

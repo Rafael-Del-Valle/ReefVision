@@ -254,3 +254,137 @@ def test_no_false_cross_unit_parent_claims_and_csv_tampering(client: TestClient)
     assert old.cross_unit_parent_audit_status == "unavailable"
     assert old.cross_unit_parent_details == []
     assert "unavailable" in render_ecology_identity_history_csv(old)
+
+
+def test_historical_parent_unit_exposure_api_workflow_and_csv(
+    client: TestClient,
+) -> None:
+    """A corrected latest tank assignment must not erase earlier QC evidence."""
+    project_id = str(create_project(client, "Historical parent-unit audit")["id"])
+    _register(client, project_id, "parent-history", "colony")
+    _register(
+        client,
+        project_id,
+        "fragment-history",
+        "fragment",
+        parent="parent-history",
+        unit_type="tank",
+        unit_id="tank-A",
+    )
+    url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
+    initial = client.get(url)
+    assert initial.status_code == 200, initial.text
+    assert (
+        initial.json()["historical_cross_unit_parent_audit_status"]
+        == "no_recorded_cross_unit_parent_reuse"
+    )
+
+    for revision, tank in [(1, "tank-B"), (2, "tank-A")]:
+        response = client.post(
+            f"/api/v1/projects/{project_id}/ecology/organisms/"
+            "fragment-history/revisions",
+            json={
+                "expected_revision": revision,
+                "kind": "fragment",
+                "parent_colony_key": "parent-history",
+                "experimental_unit_type": "aquarium" if revision == 1 else "tank",
+                "experimental_unit_id": tank,
+                "reason": "Correct historical experimental assignment for audit",
+            },
+        )
+        assert response.status_code == 201, response.text
+
+    response = client.get(url)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["cross_unit_parent_details"] == []
+    assert payload["cross_unit_parent_audit_status"] == "no_cross_unit_parent_reuse"
+    assert (
+        payload["historical_cross_unit_parent_audit_status"]
+        == "recorded_across_units_requires_review"
+    )
+    details = payload["historical_cross_unit_parent_details"]
+    assert len(details) == 1
+    assert details[0]["experimental_unit_level"] == "tank"
+    assert details[0]["experimental_unit_ids"] == ["tank-A", "tank-B"]
+    assert [
+        (row["identity_revision"], row["experimental_unit_id"])
+        for row in details[0]["assignments"]
+    ] == [(1, "tank-A"), (3, "tank-A"), (2, "tank-B")]
+    assert payload["evidence_level"] == "registered_unverified"
+    assert payload["review_gate"] == "scientist_review_required"
+
+    csv_response = client.get(f"{url}/history.csv")
+    assert csv_response.status_code == 200, csv_response.text
+    csv_rows = list(csv.DictReader(StringIO(csv_response.text)))
+    assert len(csv_rows) == 4
+    expected_json = json.dumps(details, sort_keys=True, separators=(",", ":"))
+    assert all(
+        row["historical_cross_unit_parent_details_json"] == expected_json
+        for row in csv_rows
+    )
+
+    graph = {
+        "graph_id": "historical-parent-unit-audit",
+        "name": "Historical parent unit review",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings,
+        app.state.session_factory,
+        str(queued.json()["job_id"]),
+    ) is True
+    result = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert result.status_code == 200, result.text
+    assert result.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        item
+        for item in result.json()["artifacts"]
+        if item["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == payload
+
+    typed = EcologyIdentityRegistryResponse.model_validate(payload)
+    assert render_ecology_identity_history_csv(typed) == csv_response.text
+    tampered = typed.model_copy(deep=True)
+    tampered.historical_cross_unit_parent_details[0].assignments.pop()
+    with pytest.raises(ValidationError, match="historical parent audit differs"):
+        render_ecology_identity_history_csv(tampered)
+    tampered = typed.model_copy(deep=True)
+    tampered.historical_cross_unit_parent_audit_status = (
+        "no_recorded_cross_unit_parent_reuse"
+    )
+    with pytest.raises(ValidationError, match="historical parent audit differs"):
+        render_ecology_identity_history_csv(tampered)
+
+    legacy = payload.copy()
+    legacy.pop("historical_cross_unit_parent_audit_status")
+    legacy.pop("historical_cross_unit_parent_details")
+    old = EcologyIdentityRegistryResponse.model_validate(legacy)
+    assert old.historical_cross_unit_parent_audit_status == "unavailable"
+    assert old.historical_cross_unit_parent_details == []
+    assert "unavailable" in render_ecology_identity_history_csv(old)
