@@ -383,8 +383,16 @@ def compare_mesh_observations(
     if registration_evidence is None:
         warnings.append("registration_evidence_unavailable")
     else:
+        # Pydantic normally trusts an existing model instance. Revalidate its
+        # current values because callers can mutate nested transform lists or
+        # scalar evidence after construction, bypassing the original QC.
+        evidence_values = (
+            registration_evidence.model_dump(mode="python")
+            if isinstance(registration_evidence, MeshRegistrationEvidence)
+            else registration_evidence
+        )
         try:
-            registration = MeshRegistrationEvidence.model_validate(registration_evidence)
+            registration = MeshRegistrationEvidence.model_validate(evidence_values)
         except ValueError as exc:
             raise ValueError("Invalid pairwise registration evidence") from exc
         if (
