@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import tempfile
 import importlib.util
 import sys
 import unittest
@@ -100,6 +102,18 @@ class AcceptanceEvidenceTests(unittest.TestCase):
             changed["previous_installer_version"] = version
             with self.assertRaises(MODULE.AcceptanceEvidenceError):
                 MODULE.validate_report(changed, expected_version="1.0.3", expected_upgrade="passed")
+
+    def test_installer_hash_is_checked_against_real_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            installer = Path(folder) / "ReefVision_1.0.2_x64_en-US.msi"
+            installer.write_bytes(b"disposable MSI digest fixture")
+            report = good_report()
+            report["installer_path"] = str(installer)
+            report["installer_sha256"] = hashlib.sha256(installer.read_bytes()).hexdigest()
+            MODULE.validate_report(report, expected_version="1.0.2", installer=installer)
+            installer.write_bytes(b"tampered fixture")
+            with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "hash differs"):
+                MODULE.validate_report(report, expected_version="1.0.2", installer=installer)
 
     def test_upgrade_skip_must_be_explicit(self) -> None:
         report = good_report()
