@@ -67,6 +67,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "method": "photo_match",
         "observer_id": "lab-annotator-1",
         "evidence_note": "Provisional photo match; independent review pending",
+        "before_observed_at_utc": "2026-10-01T12:00:00Z",
+        "after_observed_at_utc": "2026-10-02T07:00:00-05:00",
     }
     # Bind matching notes to the actual imported geometry, not only labels.
     preliminary = client.post(
@@ -147,6 +149,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert "reidentification_evidence_requires_independent_review" in warnings
     assert "reidentification_specimen_binding_unavailable" not in warnings
     assert "reidentification_geometry_binding_unavailable" not in warnings
+    assert "reidentification_timepoint_binding_unavailable" not in warnings
     assert expected["provenance"]["registration_evidence_review_status"] == (
         "caller_supplied_unverified"
     )
