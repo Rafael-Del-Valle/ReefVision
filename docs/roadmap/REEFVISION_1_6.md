@@ -1044,3 +1044,27 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   Local repository testing is blocked by GitHub DNS and missing Ruff.
   Native Windows installed GUI/MSI upgrade and 1.1/1.6 Alembic migration
   reconciliation remain outstanding. **Release HOLD.**
+
+## 2026-10-26 — QC coordination event scope validation (Track D; pending CI)
+
+- Audited the existing standalone comments/assignments service, bulk QC audit
+  service, persisted `qc_review_queue` Workflow Builder node, and saved-graph
+  regression before changing code. Class visibility and typed queue artifacts
+  already existed and were not reimplemented.
+- A keyed coordination-event retry now checks the event's persisted queue,
+  project and item identifiers, in addition to its actor, action and content.
+  Corrupted or cross-scoped audit evidence fails closed with HTTP 409 rather
+  than being silently treated as a successful idempotent retry.
+- Reading coordination history also rejects a mismatched persisted scope
+  instead of silently exposing it under the wrong queue or hiding it.
+  No repair, deletion, reviewer approval or scientific annotation mutation
+  occurs automatically.
+- Added standalone API regressions for cross-project and cross-queue event
+  reassignment, plus a saved executable Workflow Builder queue regression
+  exercising corrupted comment retries and recovery after **test-only**
+  restoration. Existing typed `review_queue_reference` artifacts and
+  `requires_researcher_review` gates remain unchanged.
+- Fixed the precise missing blank line identified by the previous exact-head
+  Ruff formatter logs. GitHub source read-back and CI are required to verify
+  this iteration; Windows installed-GUI/MSI upgrade, full scientific acceptance
+  and the independent 1.1/1.6 Alembic lineage conflict remain blockers.
