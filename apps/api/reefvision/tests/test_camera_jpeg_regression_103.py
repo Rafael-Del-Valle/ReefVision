@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
+import struct
 from threading import Barrier, Lock
 from typing import Any
 
@@ -557,3 +558,37 @@ def test_camera_rendition_retries_transient_windows_replace_denial(
 
     assert attempts == 2
     assert destination.exists()
+
+@pytest.mark.parametrize("mode,byte_order", [("I;16L", "<"), ("I;16B", ">")])
+def test_16bit_tiff_display_preserves_raw_intensity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    byte_order: str,
+) -> None:
+    """Browser PNGs must preserve 16-bit grayscale pixels in the raw image frame."""
+    values = (0, 1, 255, 256, 30000, 65535)
+    source = tmp_path / "camera-depth.tif"
+    destination = tmp_path / "display.png"
+    # TIFF decoders can expose either endian-specific mode. Pillow may
+    # canonicalize a reopened little-endian TIFF to I;16, so explicitly mock
+    # the decoder's I;16L result to exercise that branch.
+    decoded = Image.frombytes(mode, (3, 2), struct.pack(f"{byte_order}6H", *values))
+    decoded.save(source, format="TIFF")
+    original_bytes = source.read_bytes()
+    original_open = Image.open
+
+    def open_source(path: Path | str, *args: Any, **kwargs: Any) -> Image.Image:
+        if Path(path) == source:
+            return decoded.copy()
+        return original_open(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(image_storage.Image, "open", open_source)
+        create_browser_display(source, destination)
+
+    with Image.open(destination) as rendered:
+        assert rendered.mode in {"I;16", "I;16B"}
+        assert rendered.size == (3, 2)
+        assert tuple(rendered.getpixel((x, y)) for y in range(2) for x in range(3)) == values
+    assert source.read_bytes() == original_bytes
