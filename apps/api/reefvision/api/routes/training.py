@@ -1,6 +1,7 @@
 """Training workspace API routes."""
 
 import re
+import unicodedata
 from pathlib import Path
 from typing import Annotated
 
@@ -229,16 +230,15 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # Progress bars use carriage returns to overwrite the current line.
     # Show each update on a new line instead of allowing terminal rewrites.
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    # Directional Unicode controls can visually reorder loss labels/values in
-    # PowerShell. Preserve normal Unicode (including scientific units), but
-    # prevent invisible bidi overrides and isolates from spoofing output.
+    # Unicode format controls (including zero-width joins, bidi overrides,
+    # isolates and BOMs) can invisibly alter loss labels or terminal display.
+    # Unicode line/paragraph separators can visually create fake records.
+    # Preserve printable scientific units while removing those spoofing forms.
     return "".join(
         char
         for char in text
         if (char in "\t\n" or (ord(char) >= 32 and not 127 <= ord(char) <= 159))
-        and ord(char) not in {0x061C, 0x200E, 0x200F}
-        and not 0x202A <= ord(char) <= 0x202E
-        and not 0x2066 <= ord(char) <= 0x2069
+        and unicodedata.category(char) not in {"Cf", "Zl", "Zp"}
     )
 
 
