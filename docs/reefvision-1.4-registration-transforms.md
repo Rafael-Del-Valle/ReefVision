@@ -62,6 +62,17 @@ Both fields are `null` when the matrix is absent; a missing matrix is not
 misrepresented as an identity transform. The fields are identical in the
 standalone API and persisted Workflow Builder output, which remains provisional.
 
+An independently recorded `disputes_alignment` decision **withholds**
+registered centroid offsets, separation, caller-bound intervals, and the
+centroid-to-RMS ratio, even if a syntactically valid rigid matrix is present.
+The submitted transform, review attribution, and transform-level rotation and
+translation diagnostics remain available for audit, with explicit
+`registered_surface_centroid_comparison_withheld_disputed_alignment` QC.
+This safeguard applies identically to the standalone endpoint and persisted,
+executable typed Workflow Builder graphs. A supporting review still does not
+verify registration or biological movement. Regression coverage saves and
+executes a disputed-review graph and checks exact standalone artifact parity.
+
 Registration evidence without a transform remains valid for backward
 compatibility and adds `registration_transform_unavailable`. Existing
 `registration_transform_and_accuracy_not_verified` and residual warnings
