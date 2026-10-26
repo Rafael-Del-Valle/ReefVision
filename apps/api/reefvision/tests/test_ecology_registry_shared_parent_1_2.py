@@ -281,8 +281,7 @@ def test_historical_parent_unit_exposure_api_workflow_and_csv(
 
     for revision, tank in [(1, "tank-B"), (2, "tank-A")]:
         response = client.post(
-            f"/api/v1/projects/{project_id}/ecology/organisms/"
-            "fragment-history/revisions",
+            f"/api/v1/projects/{project_id}/ecology/organisms/fragment-history/revisions",
             json={
                 "expected_revision": revision,
                 "kind": "fragment",
@@ -308,8 +307,7 @@ def test_historical_parent_unit_exposure_api_workflow_and_csv(
     assert details[0]["experimental_unit_level"] == "tank"
     assert details[0]["experimental_unit_ids"] == ["tank-A", "tank-B"]
     assert [
-        (row["identity_revision"], row["experimental_unit_id"])
-        for row in details[0]["assignments"]
+        (row["identity_revision"], row["experimental_unit_id"]) for row in details[0]["assignments"]
     ] == [(1, "tank-A"), (3, "tank-A"), (2, "tank-B")]
     assert payload["evidence_level"] == "registered_unverified"
     assert payload["review_gate"] == "scientist_review_required"
@@ -320,8 +318,7 @@ def test_historical_parent_unit_exposure_api_workflow_and_csv(
     assert len(csv_rows) == 4
     expected_json = json.dumps(details, sort_keys=True, separators=(",", ":"))
     assert all(
-        row["historical_cross_unit_parent_details_json"] == expected_json
-        for row in csv_rows
+        row["historical_cross_unit_parent_details_json"] == expected_json for row in csv_rows
     )
 
     graph = {
@@ -378,9 +375,7 @@ def test_historical_parent_unit_exposure_api_workflow_and_csv(
     with pytest.raises(ValidationError, match="historical parent audit differs"):
         render_ecology_identity_history_csv(tampered)
     tampered = typed.model_copy(deep=True)
-    tampered.historical_cross_unit_parent_audit_status = (
-        "no_recorded_cross_unit_parent_reuse"
-    )
+    tampered.historical_cross_unit_parent_audit_status = "no_recorded_cross_unit_parent_reuse"
     with pytest.raises(ValidationError, match="historical parent audit differs"):
         render_ecology_identity_history_csv(tampered)
 

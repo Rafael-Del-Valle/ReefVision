@@ -235,8 +235,8 @@ class EcologyIdentityRegistryResponse(BaseModel):
         "no_recorded_cross_unit_parent_reuse",
         "recorded_across_units_requires_review",
     ] = "unavailable"
-    historical_cross_unit_parent_details: list[
-        EcologyHistoricalCrossUnitParentDetail
-    ] = Field(default_factory=list)
+    historical_cross_unit_parent_details: list[EcologyHistoricalCrossUnitParentDetail] = Field(
+        default_factory=list
+    )
     evidence_level: Literal["registered_unverified"] = "registered_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"

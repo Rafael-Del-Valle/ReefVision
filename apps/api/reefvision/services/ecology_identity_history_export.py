@@ -145,12 +145,9 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             if historical_details
             else "no_recorded_cross_unit_parent_reuse"
         )
-        if (
-            registry.historical_cross_unit_parent_audit_status != expected_status
-            or (
-                "historical_cross_unit_parent_details" in registry.model_fields_set
-                and registry.historical_cross_unit_parent_details != historical_details
-            )
+        if registry.historical_cross_unit_parent_audit_status != expected_status or (
+            "historical_cross_unit_parent_details" in registry.model_fields_set
+            and registry.historical_cross_unit_parent_details != historical_details
         ):
             raise ValidationError(
                 "Ecological historical parent audit differs from identity history"

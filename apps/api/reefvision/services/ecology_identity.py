@@ -834,9 +834,7 @@ class EcologyIdentityService:
         )
         identity_history = [EcologyIdentityRow.model_validate(row) for row in history]
         design_changes = derive_ecology_design_changes(identity_history)
-        historical_parent_details = derive_historical_cross_unit_parent_details(
-            identity_history
-        )
+        historical_parent_details = derive_historical_cross_unit_parent_details(identity_history)
         shared_parent_details = derive_cross_unit_parent_details(identities)
         shared_parent_keys = sorted({row.parent_colony_key for row in shared_parent_details})
         history_rows = [
