@@ -470,7 +470,7 @@ def summarize_projected_population_summaries(
     """Stratified descriptive means with one vote per eligible declared unit.
 
     Units with failed QC are never pooled. Different measurement dimensions,
-    declared unit types and UTC sampling windows remain separate strata.
+    normalized biological unit levels and UTC sampling windows remain separate strata.
     Parent-colony reuse across units is disclosed, not assumed independent.
     """
     # One biological organism cannot contribute as an independent replicate
@@ -481,7 +481,11 @@ def summarize_projected_population_summaries(
             continue
         if not row.experimental_unit_type or not row.experimental_unit_id:
             raise ValidationError("Eligible projected unit is missing its declaration")
-        owner = (row.experimental_unit_type, row.experimental_unit_id)
+        owner = (
+            classify_ecological_unit_level(row.experimental_unit_type)
+            or row.experimental_unit_type.casefold(),
+            row.experimental_unit_id,
+        )
         for organism_key in row.complete_organism_keys:
             # Experimental-unit membership is an organism property, not a
             # measurement-metric property. Width and height cannot assign the
@@ -530,7 +534,7 @@ def summarize_projected_population_summaries(
             raise ValidationError("Duplicate projected experimental-unit metric")
         seen_unit_metrics.add(unit_metric_key)
         stratum_key = (
-            row.experimental_unit_type,
+            normalized_level or row.experimental_unit_type.casefold(),
             row.metric,
             row.units[0],
             row.sampling_windows_utc[0],
