@@ -1005,3 +1005,23 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - The independent 1.1/1.6 Alembic 0038 collision is **not** reconciled.
   Existing typed `qc_review_queue` Workflow Builder execution, saved runs,
   provenance and researcher review gates are unchanged. **Release HOLD.**
+
+## 2026-10-26 — QC batch audit-project provenance replay guard
+
+- Inspected the live draft PR #77 head and all 20 exact-head workflows. CI,
+  Pose Workflow Validation and ReefVision 1.0 Acceptance were blocked by the
+  same Ruff SIM117 nested-context-manager error in the orphan-FK regression;
+  Windows Desktop Build and 16 other workflows succeeded.
+- Corrected the failing nested `with` statement without weakening the FK
+  rejection test or changing production migration history.
+- Keyed bulk QC retries now reject a saved audit event whose `project_id`
+  differs from its parent queue's project, even when its event UUID, item ID,
+  action, actor and other fields match. This is a read-only validation of
+  existing records, not a rewrite of scientific observations or audit history.
+- Added API regressions for both current keyed event IDs and historical
+  UUIDv5-per-item layouts, asserting HTTP 409, no additional events, unchanged
+  review states and annotations, and retained request-registry provenance.
+- Source changes were pushed and GitHub file contents read back. Full
+  exact-head CI and the new API regressions are **pending**, not accepted.
+  Native Windows installed-GUI/MSI upgrade, scientific-image validation and
+  independent 1.1/1.6 Alembic lineage reconciliation remain **blocked**.
