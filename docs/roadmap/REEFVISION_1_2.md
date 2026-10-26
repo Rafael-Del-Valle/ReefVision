@@ -2026,3 +2026,36 @@ real-data scientific review, authenticated study-design/observation
 verification, migration lineage and installed Windows GUI acceptance are
 still required. Outputs remain `linked_unverified` with
 `scientist_review_required`; not biological growth or independent inference.
+
+
+## Fail-closed experimental-unit lineage at population aggregation (2026-10-26)
+
+The existing source-linked projected population calculator now independently
+checks every *candidate* unit summary before allowing it to contribute to
+descriptive population statistics. This guards the aggregation boundary even
+when an intermediate typed summary is constructed or modified outside the
+normal source-candidate producer:
+
+- A technical image/frame/camera unit cannot masquerade as a biological unit.
+- An organism-level independent unit cannot contain two distinct fragments.
+- A colony-level unit cannot contain fragments from different parent colonies.
+- A single parent colony cannot be split across multiple independent
+  colony-level unit IDs, including aliases such as `colony` and `colonies`.
+- A shared parent across different **tank-level** units remains permitted but
+  explicitly flagged for scientist review, not silently treated as independent.
+
+The same shared calculation is used by the standalone calibrated-candidate API
+and the existing executable, typed, persisted
+`ecology_measurement_candidates` Workflow Builder source. Source-linked and
+directly forged intermediate-summary regressions were added; the preceding
+head's three backend workflows all failed at one Ruff formatting discrepancy
+in the alias regression test, which was corrected here. No migration, separate
+analysis engine, environmental context, new model weights, or change to
+successful `ecology-measurement-candidates-0018` artifacts is introduced.
+
+**Acceptance:** exact-head Ruff/mypy/pytest, saved-workflow parity, real
+scientist-reviewed data, registered design/identity verification, 1.1
+migration reconciliation and installed Windows GUI/installer tests are still
+required. Linked projected geometry remains `linked_unverified` with
+`scientist_review_required`; no biological growth or inferential validity
+is claimed.
