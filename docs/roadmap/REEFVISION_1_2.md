@@ -1935,3 +1935,25 @@ saved-workflow compatibility. The latest **pre-change** head `233e16af`
 completed 19/19 GitHub Actions workflows successfully; new-head tests
 and Windows installed-GUI/scientific acceptance must be checked separately.
 This does not authenticate study design or promote unverified growth.
+
+## Canonical population sampling levels (2026-10-26)
+
+Projected ecological population summaries now normalize known biological-unit
+aliases (for example, `tank`, `aquarium`, `aquaria`, and `tank-level`) before
+forming descriptive strata or checking organism ownership across metrics.
+Distinct physical tank IDs are pooled as one *descriptive* tank-level stratum
+with one contribution per tank, rather than incorrectly appearing as separate
+strata because their unit labels differ. A physical tank cannot contribute
+twice under aliases for the same metric. An organism measured across different
+metrics may retain the same tank under aliases, but reassignment to a different
+physical tank still fails closed. Unknown study-specific unit labels remain
+unverified; alias normalization is not independent-design authentication.
+
+Regression tests cover alias pooling, duplicate-unit rejection, cross-metric
+ownership, conflicting tank reassignment, and existing API/saved Workflow
+Builder artifact behavior. The calculation still requires scientist review,
+remains local/offline, and cannot promote candidate measurements into verified
+research datasets. No migration or new Workflow Builder node is required:
+existing executable typed candidate artifacts and standalone API reuse the
+same population calculator. Full exact-head CI, scientific acceptance and
+installed Windows acceptance remain outstanding until verified.
