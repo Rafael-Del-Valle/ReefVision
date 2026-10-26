@@ -349,3 +349,22 @@ comparison remains provisional with explicit review warnings. Missing
 registration evidence stays null rather than being inferred from matching
 frame labels. Full transform/landmark storage and independent human review
 remain future work.
+
+## Observation-bound reidentification notes (provisional)
+
+The standalone longitudinal comparison API and executable persisted
+`mesh_longitudinal_comparison` Workflow Builder node accept optional
+`reidentification_evidence` with earlier/later observation IDs, a bounded
+observer identifier, a matching method (visual morphology, survey tag,
+photo match, or other), and an evidence note. The evidence must reference
+exactly the observations being compared; unexpected fields, including
+`verified: true`, are rejected. Notes are preserved in the comparison
+provenance and saved workflow artifact.
+
+These are **unverified caller-supplied matching notes**, not verified
+reidentification or a biological condition score. The output retains
+`specimen_identity_verified: false` and emits a review-required QC warning;
+missing evidence is recorded explicitly. Independent human review and
+project-scoped identity records are still needed before longitudinal growth
+or condition claims. Existing comparisons without this optional evidence
+remain supported.
