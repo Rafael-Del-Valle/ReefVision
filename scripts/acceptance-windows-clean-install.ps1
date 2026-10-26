@@ -47,10 +47,12 @@ $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
-$ProductVersion = Get-ReefVisionMsiProductVersion -Path $InstallerPath
+# Validate the entire function result, not just the COM record's value:
+# leaked PowerShell pipeline output must never enter evidence or upgrade checks.
+$ProductVersion = Assert-ReefVisionMsiVersionScalar -Value (Get-ReefVisionMsiProductVersion -Path $InstallerPath)
 $PreviousProductVersion = $null
 if ($PreviousInstallerPath -and -not $SkipUpgrade) {
-    $PreviousProductVersion = Get-ReefVisionMsiProductVersion -Path $PreviousInstallerPath
+    $PreviousProductVersion = Assert-ReefVisionMsiVersionScalar -Value (Get-ReefVisionMsiProductVersion -Path $PreviousInstallerPath)
     [void](Assert-ReefVisionUpgradeVersion -PreviousVersion $PreviousProductVersion -TargetVersion $ProductVersion)
 }
 
