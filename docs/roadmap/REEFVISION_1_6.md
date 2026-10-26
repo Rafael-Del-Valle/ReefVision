@@ -865,3 +865,31 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Added eight standalone regression tests, including actual disposable-file tampering and strict upgrade version checks. The Windows packaging workflow now runs these tests before building and independently verifies the final report and 2.7 GB MSI digest after installed-app acceptance; failure blocks the job before the evidence upload step (which still uploads diagnostic logs on failure).
 - Local standard-library unit tests **8/8 passed** and compileall passed in a separate Linux fixture; remote GitHub file read-back confirms committed sources. Full exact-head GitHub Actions and native Windows execution of the new verifier are **pending**, not claimed as passing.
 - This is an evidence-integrity increment, **not** a claim of 1.6 release readiness. Real MSI upgrade/rollback, physical installed-GUI/dense-scene acceptance, representative scientific tests, and reconciliation of independent 1.1/1.6 Alembic `0038` lineages remain HOLD. No automatic checkpoint downloads, merge, tag, release, or user asset changes.
+
+## 2026-10-26 — Stable-key QC bulk retry safety (Track D)
+
+- Audited the existing standalone bulk triage endpoint and saved executable
+  `qc_review_queue` Workflow Builder node. Both already share durable review
+  queue IDs; no duplicate node or schema migration was needed.
+- New manual bulk requests may include a client-generated UUID
+  `client_request_id`. Each affected item records a deterministic UUIDv5
+  audit-event request ID under the existing unique constraint. An identical
+  retry checks the committed audit event **before** current-state validation,
+  so a lost HTTP response cannot restart an item another researcher has
+  subsequently skipped, returned, or completed.
+- Keyed first attempts require every selected item to transition, ensuring a
+  complete audit marker set. Reusing a key for a different action, reviewer,
+  reason, or overlapping larger selection fails closed. A batch key is
+  scoped to the selected item IDs and must not be reused for a different
+  selection; entirely disjoint selections cannot be correlated without a
+  separate persisted batch registry. Historical API clients without a key
+  retain the previous state-based retry behavior.
+- The UI generates one UUID per confirmed submission and reuses the *same*
+  request payload for an uncertain-response retry. Backend API tests cover
+  an intervening reviewer decision, audit preservation, conflicting keys,
+  and partial-state preflight. The saved-graph regression covers a keyed
+  triage retry on a persisted, typed `review_queue_reference` artifact.
+- No biological annotations are verified or altered, and no model checkpoint,
+  user asset, migration, or cloud resource is touched. This is a development
+  increment pending exact-head backend/frontend/Windows CI and installed-GUI
+  acceptance, not a release-ready claim.
