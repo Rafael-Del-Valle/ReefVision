@@ -441,11 +441,64 @@ def test_keyed_bulk_first_attempt_requires_all_items_to_transition(
     assert client.get(
         f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
     ).json()["total"] == 0
-    assert client.post(
+    assert (
+        client.post(
+            url,
+            json={
+                "item_ids": [ids[1]],
+                "action": "start",
+                "client_request_id": "not-a-uuid",
+            },
+        ).status_code
+        == 422
+    )
+
+
+def test_keyed_bulk_skip_retry_preserves_later_return_and_reason_history(
+    client: TestClient,
+) -> None:
+    """A lost skip response cannot undo a later researcher's return decision."""
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    original = {
+        "item_ids": ids,
+        "action": "skip",
+        "reason": "Requires visual inspection",
+        "actor": "researcher one",
+        "client_request_id": str(uuid4()),
+    }
+    first = client.post(url, json=original)
+    assert first.status_code == 200, first.text
+    assert first.json()["changed_count"] == 2
+
+    returned = client.post(
         url,
-        json={
-            "item_ids": [ids[1]],
-            "action": "start",
-            "client_request_id": "not-a-uuid",
-        },
-    ).status_code == 422
+        json={"item_ids": [ids[0]], "action": "return", "actor": "researcher two"},
+    )
+    assert returned.status_code == 200, returned.text
+    assert returned.json()["changed_count"] == 1
+
+    replay = client.post(url, json=original)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["changed_count"] == 0
+    assert {item["id"]: item["review_state"] for item in replay.json()["items"]} == {
+        ids[0]: "pending",
+        ids[1]: "skipped",
+    }
+    first_history = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events")
+    second_history = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events")
+    assert first_history.status_code == 200, first_history.text
+    assert second_history.status_code == 200, second_history.text
+    assert [event["event_type"] for event in first_history.json()["items"]] == [
+        "triage_skip",
+        "triage_return",
+    ]
+    assert first_history.json()["items"][1]["actor"] == "researcher two"
+    assert second_history.json()["total"] == 1
+    assert second_history.json()["items"][0]["comment"] == "Requires visual inspection"
+
+    conflicting = client.post(url, json={**original, "reason": "Different reason"})
+    assert conflicting.status_code == 409, conflicting.text
+    assert client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events").json() == (
+        first_history.json()
+    )
