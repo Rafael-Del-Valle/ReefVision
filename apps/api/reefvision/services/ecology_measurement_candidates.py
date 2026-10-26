@@ -365,7 +365,10 @@ def summarize_projected_unit_summaries(
         context = (
             candidate.identity_revision,
             candidate.parent_colony_key,
-            candidate.experimental_unit_type,
+            (
+                classify_ecological_unit_level(candidate.experimental_unit_type)
+                or candidate.experimental_unit_type
+            ),
             candidate.experimental_unit_id,
         )
         previous = organism_contexts.setdefault(candidate.organism_key, context)
@@ -376,8 +379,15 @@ def summarize_projected_unit_summaries(
 
     groups: dict[tuple[str | None, str | None, str], list[EcologyMeasurementCandidate]] = {}
     for candidate in candidates:
+        # Preserve the raw declaration in each linked source record, but
+        # pool known aliases of the same biological unit for descriptive
+        # unit-level summaries. A tank and an aquarium with the same ID are
+        # one declared unit, not two independent replicates.
         key = (
-            candidate.experimental_unit_type,
+            (
+                classify_ecological_unit_level(candidate.experimental_unit_type)
+                or candidate.experimental_unit_type
+            ),
             candidate.experimental_unit_id,
             candidate.metric,
         )
