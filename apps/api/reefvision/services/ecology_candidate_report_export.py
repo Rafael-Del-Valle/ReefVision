@@ -117,11 +117,14 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
             response.candidates, response.sampling_date_qc
         )
     }
-    actual_endpoints = {
-        (item.organism_key, item.metric): item.model_dump(mode="json")
+    endpoint_rows = {
+        (item.organism_key, item.metric): item
         for item in response.projected_endpoint_changes
     }
-    if len(actual_endpoints) != len(response.projected_endpoint_changes):
+    actual_endpoints = {
+        key: item.model_dump(mode="json") for key, item in endpoint_rows.items()
+    }
+    if len(endpoint_rows) != len(response.projected_endpoint_changes):
         raise ValidationError("Duplicate ecological projected endpoint evidence")
     if response.source_fingerprint_contract is not None:
         if actual_endpoints != expected_endpoints:
@@ -228,14 +231,7 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(_SERIES_COLUMNS)
     for row in sorted(response.sampling_date_qc, key=lambda item: (item.organism_key, item.metric)):
-        endpoint = next(
-            (
-                item
-                for item in response.projected_endpoint_changes
-                if (item.organism_key, item.metric) == (row.organism_key, row.metric)
-            ),
-            None,
-        )
+        endpoint = endpoint_rows.get((row.organism_key, row.metric))
         writer.writerow(
             (
                 report.project_id,
