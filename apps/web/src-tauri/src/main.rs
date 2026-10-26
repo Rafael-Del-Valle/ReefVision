@@ -250,7 +250,9 @@ while ($true) {
         Write-Host 'Training job log (last 20 lines, read-only)'
         $logLines = @($tail.text -split '\r?\n' | Where-Object { $_ -ne '' })
         foreach ($line in ($logLines | Select-Object -Last 20)) {
-          Write-Host $line
+          # Training logs are untrusted terminal text, just like run metadata.
+          # Sanitize the displayed copy; never rewrite persisted log bytes.
+          Write-Host (Format-SafeText $line)
         }
       } else {
         Write-Host 'No persisted training job log available yet.'
