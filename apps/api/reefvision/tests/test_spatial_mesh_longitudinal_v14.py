@@ -127,6 +127,14 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert expected["registration_translation_magnitude_m"] == pytest.approx(0.1)
     assert expected["registration_rotation_angle_degrees"] == pytest.approx(0.0)
+    assert expected["registered_surface_centroid_offset_target_frame_m"] == pytest.approx(
+        [-0.1, 1 / 3, 0.0]
+    )
+    assert expected["registered_surface_centroid_separation_m"] == pytest.approx(
+        sqrt(0.1**2 + (1 / 3) ** 2)
+    )
+    assert "registered_centroid_offset_not_verified_biological_movement" in expected["qc_warnings"]
+    assert "registered_centroid_position_uncertainty_not_estimated" in expected["qc_warnings"]
     assert "registration_residual_at_least_smaller_mesh_extent" not in expected["qc_warnings"]
     assert "matching_coordinate_frame_id_not_registration_proof" in expected["qc_warnings"]
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
@@ -1768,3 +1776,114 @@ def test_registration_transform_diagnostics_missing_matrix_stay_unknown() -> Non
     assert result["registration_rotation_angle_degrees"] is None
     assert "registration_transform_unavailable" in result["qc_warnings"]
     assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("source_centroid", "target_centroid", "expected_offset"),
+    [
+        ([1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 1.0, 0.0]),
+        (None, [0.0, 2.0, 0.0], None),
+    ],
+)
+def test_registered_centroid_uses_provisional_source_to_target_transform(
+    source_centroid: list[float] | None,
+    target_centroid: list[float],
+    expected_offset: list[float] | None,
+) -> None:
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "project_id": "study-1",
+        "surface_area_m2": 1.0,
+        "area_weighted_surface_centroid_m": source_centroid,
+        "provenance": {
+            "specimen_id": "colony-1",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "coordinate_frame_id": "frame-a",
+        },
+    }
+    after = {
+        **before,
+        "area_weighted_surface_centroid_m": target_centroid,
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "coordinate_frame_id": "frame-b",
+        },
+    }
+    evidence = {
+        "source_frame_id": "frame-a",
+        "target_frame_id": "frame-b",
+        "method": "landmark",
+        "rms_residual_m": 0.01,
+        "correspondence_count": 5,
+        "evidence_note": "Unreviewed landmark registration",
+        "source_to_target_transform_m": [
+            [0.0, -1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+    }
+    result = compare_mesh_observations(before, after, evidence)
+    assert result["registered_surface_centroid_offset_target_frame_m"] == expected_offset
+    if expected_offset is None:
+        assert result["registered_surface_centroid_separation_m"] is None
+        assert "registered_surface_centroid_comparison_unavailable" in result["qc_warnings"]
+    else:
+        assert result["registered_surface_centroid_separation_m"] == pytest.approx(1.0)
+        assert "registered_centroid_offset_not_verified_biological_movement" in (
+            result["qc_warnings"]
+        )
+        assert result["provenance"]["coordinate_registration_verified"] is False
+        assert result["provenance"]["specimen_identity_verified"] is False
+    evidence.pop("source_to_target_transform_m")
+    missing_transform = compare_mesh_observations(before, after, evidence)
+    assert missing_transform["registered_surface_centroid_separation_m"] is None
+
+
+@pytest.mark.parametrize(
+    "invalid_centroid",
+    [[1.0, float("nan"), 0.0], [True, 0.0, 0.0], [0.0, 1.0]],
+)
+def test_registered_centroid_rejects_invalid_coordinates(
+    invalid_centroid: list[float],
+) -> None:
+    before = {
+        "schema_version": "mesh-preview-0001",
+        "measurement_status": "caller_supplied_unverified",
+        "project_id": "study-1",
+        "surface_area_m2": 1.0,
+        "area_weighted_surface_centroid_m": invalid_centroid,
+        "provenance": {
+            "specimen_id": "colony-1",
+            "observation_id": "first",
+            "observed_at_utc": "2026-10-01T12:00:00Z",
+            "calibration_verified": False,
+            "coordinate_frame_id": "frame-a",
+        },
+    }
+    after = {
+        **before,
+        "area_weighted_surface_centroid_m": [0.0, 0.0, 0.0],
+        "provenance": {
+            **before["provenance"],
+            "observation_id": "second",
+            "observed_at_utc": "2026-10-02T12:00:00Z",
+            "coordinate_frame_id": "frame-b",
+        },
+    }
+    evidence = {
+        "source_frame_id": "frame-a",
+        "target_frame_id": "frame-b",
+        "method": "landmark",
+        "rms_residual_m": 0.01,
+        "correspondence_count": 5,
+        "evidence_note": "Unreviewed alignment",
+        "source_to_target_transform_m": _rigid_transform(),
+    }
+    with pytest.raises(ValueError, match="Surface centroid must be three finite"):
+        compare_mesh_observations(before, after, evidence)
