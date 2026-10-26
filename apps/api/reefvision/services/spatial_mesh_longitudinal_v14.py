@@ -349,7 +349,9 @@ def compare_mesh_observations(
             identity.before_geometry_sha256 != first.get("geometry_sha256")
             or identity.after_geometry_sha256 != second.get("geometry_sha256")
         ):
-            raise ValueError("Reidentification evidence must match both source geometry fingerprints")
+            raise ValueError(
+                "Reidentification evidence must match both source geometry fingerprints"
+            )
         reidentification_record = identity.model_dump(mode="json", exclude_none=True)
         if identity.specimen_id is None:
             warnings.append("reidentification_specimen_binding_unavailable")
