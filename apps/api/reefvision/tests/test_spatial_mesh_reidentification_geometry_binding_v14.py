@@ -93,3 +93,45 @@ def test_mutated_evidence_model_is_revalidated_before_comparison() -> None:
     evidence.after_geometry_sha256 = "c" * 64
     with pytest.raises(ValueError, match="source geometry fingerprints"):
         compare_mesh_observations(before, after, reidentification_evidence=evidence)
+
+
+def test_reidentification_timepoint_binding_accepts_equivalent_offsets() -> None:
+    before, after = _observations()
+    evidence = _evidence()
+    evidence["before_observed_at_utc"] = "2026-10-01T07:00:00-05:00"
+    evidence["after_observed_at_utc"] = "2026-10-02T12:00:00Z"
+    result = compare_mesh_observations(before, after, reidentification_evidence=evidence)
+    assert "reidentification_timepoint_binding_unavailable" not in result["qc_warnings"]
+    assert result["provenance"]["reidentification_evidence"]["before_observed_at_utc"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+@pytest.mark.parametrize("changed_observation", ["before", "after"])
+def test_reidentification_cannot_be_reused_for_other_timepoint(
+    changed_observation: str,
+) -> None:
+    before, after = _observations()
+    evidence = _evidence()
+    evidence["before_observed_at_utc"] = "2026-10-01T12:00:00Z"
+    evidence["after_observed_at_utc"] = "2026-10-02T12:00:00Z"
+    record = before if changed_observation == "before" else after
+    record["provenance"]["observed_at_utc"] = "2026-10-03T12:00:00Z"
+    with pytest.raises(ValueError, match="observation timestamps"):
+        compare_mesh_observations(before, after, reidentification_evidence=evidence)
+
+
+def test_partial_or_naive_timepoint_binding_is_rejected() -> None:
+    evidence = _evidence()
+    evidence["before_observed_at_utc"] = "2026-10-01T12:00:00Z"
+    with pytest.raises(PydanticValidationError, match="requires both UTC timestamps"):
+        MeshReidentificationEvidence.model_validate(evidence)
+    evidence["after_observed_at_utc"] = "2026-10-02T12:00:00"
+    with pytest.raises(PydanticValidationError):
+        MeshReidentificationEvidence.model_validate(evidence)
+
+
+def test_legacy_reidentification_without_timepoint_binding_is_flagged() -> None:
+    before, after = _observations()
+    result = compare_mesh_observations(before, after, reidentification_evidence=_evidence())
+    assert "reidentification_timepoint_binding_unavailable" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
