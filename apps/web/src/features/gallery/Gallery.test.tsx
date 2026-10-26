@@ -1174,6 +1174,66 @@ describe("Gallery", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("refreshes the filmstrip thumbnail when its persisted rendition changes", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const response = (thumbnailPath: string) => ({
+      items: [{ ...image, thumbnail_path: thumbnailPath }],
+      total: 1,
+      page: 1,
+      page_size: 24,
+      pages: 1,
+    });
+    const oldPath = "projects/project-1/images/thumbnails/old.jpg";
+    const newPath = "projects/project-1/images/thumbnails/new.jpg";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(response(oldPath)),
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Gallery project={project} />
+      </QueryClientProvider>,
+    );
+
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    const thumbnail = () => filmstrip.querySelector("img");
+    await waitFor(() => expect(thumbnail()).not.toBeNull());
+    const first = thumbnail();
+    expect(first?.getAttribute("src")).toContain(encodeURIComponent(oldPath));
+
+    // A normal query refresh with the same path must not re-request the image.
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response(oldPath),
+      );
+    });
+    expect(thumbnail()).toBe(first);
+
+    // A background thumbnail replacement must bypass WebView2's cached 404
+    // and detach the old image request, without changing the focused image.
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response(newPath),
+      );
+    });
+    await waitFor(() =>
+      expect(thumbnail()?.getAttribute("src")).toContain(
+        encodeURIComponent(newPath),
+      ),
+    );
+    expect(thumbnail()).not.toBe(first);
+    expect(first?.isConnected).toBe(false);
+    expect(screen.getByRole("listitem", { name: "Focus swiftia-01.png" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+  });
+
   it("keeps the first gallery image fixed under wheel input while preserving browser zoom", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
