@@ -338,6 +338,62 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
 
+    # A disputed registration must not yield apparently usable centroid
+    # measurements, even when a rigid matrix and caller bounds are supplied.
+    # Verify the standalone endpoint and a saved executable typed graph.
+    disputed_evidence = {
+        **registration_evidence,
+        "independent_review_decision": "disputes_alignment",
+        "independent_review_note": "Control landmarks contradict the alignment",
+    }
+    disputed_response = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={
+            "before": before,
+            "after": after,
+            "registration_evidence": disputed_evidence,
+            "reidentification_evidence": reidentification_evidence,
+        },
+    )
+    assert disputed_response.status_code == 200, disputed_response.text
+    disputed_result = disputed_response.json()
+    for field in (
+        "registered_surface_centroid_offset_target_frame_m",
+        "registered_surface_centroid_separation_m",
+        "registered_centroid_separation_to_registration_rms_ratio",
+        "registered_surface_centroid_separation_caller_bound_interval_m",
+        "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m",
+    ):
+        assert disputed_result[field] is None
+    assert disputed_result["registration_translation_magnitude_m"] == pytest.approx(0.1)
+    assert disputed_result["provenance"]["registration_evidence"] == disputed_evidence
+    assert disputed_result["provenance"]["coordinate_registration_verified"] is False
+    assert "registration_independent_review_disputes_alignment" in disputed_result["qc_warnings"]
+    assert (
+        "registered_surface_centroid_comparison_withheld_disputed_alignment"
+        in disputed_result["qc_warnings"]
+    )
+    graph["graph_id"] = "mesh-longitudinal-disputed-registration-v14"
+    graph["nodes"][3]["parameters"]["registration_evidence"] = disputed_evidence
+    disputed_saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert disputed_saved.status_code == 201, disputed_saved.text
+    disputed_run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": disputed_saved.json()["id"]}
+    )
+    assert disputed_run.status_code == 202, disputed_run.text
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(disputed_run.json()["job_id"])
+    )
+    disputed_detail = client.get(f"/api/v1/workflow-runs/{disputed_run.json()['id']}")
+    assert disputed_detail.status_code == 200, disputed_detail.text
+    disputed_artifact = next(
+        item
+        for item in disputed_detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert disputed_artifact["payload_json"] == disputed_result
+    assert len(disputed_artifact["payload_sha256"]) == 64
+
 
 @pytest.mark.parametrize(
     ("rms", "extent", "expected_ratio", "warning"),
