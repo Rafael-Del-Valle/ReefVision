@@ -238,7 +238,5 @@ def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
         detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "failed"
-        assert detail.json()["run"]["error_message"] == (
-            "Workflow graph provenance checksum failed"
-        )
+        assert detail.json()["run"]["error_message"] == "Workflow graph provenance checksum failed"
         assert detail.json()["artifacts"] == []
