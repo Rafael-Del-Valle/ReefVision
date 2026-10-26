@@ -28,6 +28,19 @@ import {
   type GalleryNavigationAction,
 } from "./galleryNavigation";
 
+// Thumbnail jobs complete asynchronously after import. Recheck the image page
+// for a limited time without polling failed or abandoned jobs indefinitely.
+export function galleryPendingThumbnailRefetchMs(
+  page: { items: Array<{ thumbnail_path: string | null }> } | undefined,
+  successfulLoads: number,
+): number | false {
+  return page?.items.some((item) => !item.thumbnail_path) &&
+    successfulLoads > 0 &&
+    successfulLoads <= 12
+    ? 5000
+    : false;
+}
+
 const statuses: { value: AnnotationStatus | ""; label: string }[] = [
   { value: "", label: "All statuses" },
   { value: "unannotated", label: "Unannotated" },
@@ -499,6 +512,11 @@ export function Gallery({
 
   const images = useQuery({
     queryKey: ["images", project.id, page, filters, sortBy],
+    refetchInterval: (query) =>
+      galleryPendingThumbnailRefetchMs(
+        query.state.data,
+        query.state.dataUpdateCount,
+      ),
     queryFn: ({ signal }) =>
       getImages(
         project.id,
@@ -1088,6 +1106,15 @@ export function Gallery({
         >
           Clear selection
         </button>
+        {images.data?.items.some((item) => !item.thumbnail_path) && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void images.refetch()}
+          >
+            Refresh pending thumbnails
+          </button>
+        )}
       </div>
 
       {images.isPending && (
