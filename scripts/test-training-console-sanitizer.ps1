@@ -34,4 +34,20 @@ if ((Format-SafeText $scientific) -cne $scientific) {
 if ((Format-SafeText $null) -ne '') {
   throw 'Null metadata must render as empty text.'
 }
+# The actual persisted log-tail rendering must sanitize untrusted log bytes,
+# not only the run name and metric metadata. Keep this source assertion next
+# to the executable formatter regression so removing the call fails Windows CI.
+$tailLoop = [regex]::Match($source, '(?ms)foreach \(\$line in \(\$logLines \| Select-Object -Last 20\)\) \{(?<body>.*?)^\s*\}')
+if (-not $tailLoop.Success -or $tailLoop.Groups['body'].Value -notmatch 'Write-Host\s+\(Format-SafeText\s+\$line\)') {
+  throw 'Persisted training log tail must pass through Format-SafeText before Write-Host.'
+}
+$unsafeLog = 'train/box_loss=0.25' + [char]0x001B + '[2J' + [char]0x001B + ']0;spoofed log title' + [char]0x0007 + [char]0x202E + ' epoch 4'
+$safeLog = Format-SafeText $unsafeLog
+if ($safeLog -match '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]' -or $safeLog.Contains('spoofed log title')) {
+  throw 'Persisted training log control characters escaped display sanitization.'
+}
+if (-not $safeLog.Contains('train/box_loss=0.25') -or -not $safeLog.Contains('epoch 4')) {
+  throw 'Sanitization removed valid training loss or epoch information.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
