@@ -867,6 +867,7 @@ def _ecology_measurement_csv_export(
     if source.project_id != project_id:
         raise ValidationError("Ecological measurement export requires current project sources")
     csv_text = render_ecology_measurements_csv(source)
+    fingerprint_rechecked = source.source_fingerprint_contract is not None
     report = source.candidate_report
     if report is None:
         raise ValidationError("Ecological candidate report is missing")
@@ -879,8 +880,7 @@ def _ecology_measurement_csv_export(
                 "project_id": project_id,
                 "source_input_sha256": source.input_sha256,
                 "report_sha256": report.report_sha256,
-                "source_fingerprint_rechecked": source.source_fingerprint_contract
-                is not None,
+                "source_fingerprint_rechecked": fingerprint_rechecked,
                 "csv_text": csv_text,
                 "evidence_level": "linked_unverified",
                 "review_gate": "scientist_review_required",
