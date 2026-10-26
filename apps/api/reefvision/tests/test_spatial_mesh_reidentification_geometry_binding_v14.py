@@ -220,9 +220,6 @@ def test_disputed_specimen_match_withholds_cross_timepoint_changes() -> None:
         assert result[key] is None
 
 
-
-
-
 def test_inconclusive_identity_review_withholds_change_without_discarding_sources() -> None:
     before, after = _observations()
     after["surface_area_m2"] = 2.0
