@@ -185,15 +185,20 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         pytest.approx([centroid_separation - 0.06, centroid_separation + 0.06])
     )
     assert "registered_centroid_caller_bounds_not_independently_verified" in expected["qc_warnings"]
-    assert expected["registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"] == (
-        pytest.approx(
-            [
-                [-0.1 - 0.06, -0.1 + 0.06],
-                [1 / 3 - 0.06, 1 / 3 + 0.06],
-                [-0.06, 0.06],
-            ]
-        )
-    )
+    component_intervals = expected[
+        "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"
+    ]
+    assert component_intervals is not None
+    for observed, bounds in zip(
+        component_intervals,
+        [
+            [-0.1 - 0.06, -0.1 + 0.06],
+            [1 / 3 - 0.06, 1 / 3 + 0.06],
+            [-0.06, 0.06],
+        ],
+        strict=True,
+    ):
+        assert observed == pytest.approx(bounds)
     assert expected["registered_centroid_separation_to_registration_rms_ratio"] == (
         pytest.approx(sqrt(0.1**2 + (1 / 3) ** 2) / 0.02)
     )
