@@ -368,3 +368,21 @@ missing evidence is recorded explicitly. Independent human review and
 project-scoped identity records are still needed before longitudinal growth
 or condition claims. Existing comparisons without this optional evidence
 remain supported.
+
+### Reidentification evidence bound to source geometry (Track C, 2026-10-26)
+
+Pairwise `MeshReidentificationEvidence` can now include optional
+`before_geometry_sha256` and `after_geometry_sha256` fields. When supplied,
+**both** lowercase SHA-256 fingerprints are required and must match the two
+source mesh preview provenance fingerprints. Mismatches are rejected rather
+than silently reusing notes across reconstructions with the same observation
+labels. Earlier evidence without hashes remains readable, with
+`reidentification_geometry_binding_unavailable` QC. Fingerprint equality
+binds evidence to supplied geometry bytes; it does **not** verify biological
+identity, capture location, calibration, or an independent reviewer.
+
+The standalone longitudinal API and persisted typed Workflow Builder node
+share this validation engine. Regression tests cover valid binding, cross-mesh
+reuse, malformed/partial hashes, legacy evidence, post-validation mutation,
+and saved-workflow artifact parity. CI and Windows installed-GUI/GPU scientific
+acceptance are separate release gates, not implied by these tests.
