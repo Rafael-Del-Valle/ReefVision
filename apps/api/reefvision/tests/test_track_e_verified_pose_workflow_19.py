@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import PoseTrainingDataset, PoseTrainingDatasetItem
+from reefvision.db.models import PoseTrainingDataset, PoseTrainingDatasetItem, WorkflowGraphRecord
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.pose_training_datasets import (
@@ -167,6 +167,34 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["pose_schema_id"] == dataset["pose_schema_id"]
     assert payload["pose_schema_revision"] == dataset["pose_schema_revision"]
     assert payload["pose_schema_content_hash"] == dataset["pose_schema_content_hash"]
+
+    # A corrupted saved revision must be rejected before another job is
+    # queued, even when it previously executed successfully. This exercises
+    # the real frozen-dataset workflow rather than a synthetic graph fixture.
+    runs_before = client.get(f"/api/v1/projects/{project_id}/workflow-runs")
+    assert runs_before.status_code == 200, runs_before.text
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowGraphRecord, graph_record["id"])
+        assert persisted is not None
+        original_graph = dict(persisted.graph_json)
+        persisted.graph_json = {**original_graph, "nodes": "corrupted-after-save"}
+        session.commit()
+
+    rejected = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": graph_record["id"]},
+    )
+    assert rejected.status_code == 422, rejected.text
+    assert "Saved workflow graph revision is invalid" in rejected.text
+    runs_after = client.get(f"/api/v1/projects/{project_id}/workflow-runs")
+    assert runs_after.status_code == 200, runs_after.text
+    assert runs_after.json() == runs_before.json()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowGraphRecord, graph_record["id"])
+        assert persisted is not None
+        persisted.graph_json = original_graph
+        session.commit()
 
     # The unmodified scientist-verified dataset remains retrievable and exportable.
     with app.state.session_factory() as session:
