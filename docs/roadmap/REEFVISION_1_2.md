@@ -1986,3 +1986,37 @@ CI, Pose Workflow Validation, and ReefVision 1.0 Acceptance failed at Ruff
 formatting of the alias regression test. New exact-head CI and scientific,
 migration, and installed Windows GUI acceptance are **not yet established**.
 No verified dataset promotion or release-readiness is claimed.
+
+## Canonical source-derived projected unit aggregation (2026-10-26; development)
+
+The existing source-linked `summarize_projected_unit_summaries` now groups
+known biological sampling-level aliases (e.g., `tank` and `aquarium`)
+**before** calculating descriptive unit means. Previously, two different
+fragments in the same physical tank could produce two separate provisional
+unit rows and a downstream duplicate-unit failure, despite valid linked
+measurements. One tank now contributes one descriptive unit mean across
+its fragments. Raw sampling-level labels remain intact in the underlying
+candidate/endpoint evidence, and no original registered identity is rewritten.
+
+Across different measurement metrics, one organism may retain its physical
+tank while its registered label uses a recognized alias. Different physical
+tank IDs, ambiguous mixed-level declarations and unreviewed provenance still
+fail closed. Per-organism changes of declared sampling level *within a single
+time series* continue to require review through existing date/identity QC;
+this update does not silently approve identity revisions or movement.
+
+Four focused regression cases exercise pooled fragment means, equal-unit
+population denominators, multi-metric aliases, cross-tank reassignment,
+mixed-level rejection and deterministic order. The existing standalone
+calibrated-candidate API and executable, persisted typed Workflow Builder
+source both use this shared calculation. No new node, migration, model
+download or environmental subsystem was introduced.
+
+**Acceptance pending:** exact-head CI (pre-change 1.2 HEAD `de51e992`
+completed 18/19 Actions workflows; CI frontend failed at the pre-existing
+`VideoTrackingWorkspace.test.tsx` pose-frame import test, while backend,
+Pose Workflow Validation and Windows Desktop Build passed). Independent
+real-data scientific review, authenticated study-design/observation
+verification, migration lineage and installed Windows GUI acceptance are
+still required. Outputs remain `linked_unverified` with
+`scientist_review_required`; not biological growth or independent inference.
