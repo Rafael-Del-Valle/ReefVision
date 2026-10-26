@@ -94,12 +94,9 @@ def test_shared_parent_tanks_api_csv_and_saved_workflow(client: TestClient) -> N
     assert csv_response.status_code == 200, csv_response.text
     csv_rows = list(csv.DictReader(StringIO(csv_response.text)))
     assert all(
-        row["cross_unit_parent_audit_status"] == "shared_parent_requires_review"
-        for row in csv_rows
+        row["cross_unit_parent_audit_status"] == "shared_parent_requires_review" for row in csv_rows
     )
-    assert all(
-        row["cross_unit_shared_parent_colony_keys"] == "parent-A" for row in csv_rows
-    )
+    assert all(row["cross_unit_shared_parent_colony_keys"] == "parent-A" for row in csv_rows)
 
     graph = {
         "graph_id": "registered-shared-parent-review",
