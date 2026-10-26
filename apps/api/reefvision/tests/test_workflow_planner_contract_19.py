@@ -96,6 +96,8 @@ def test_corrupt_saved_verified_pose_graph_finishes_as_failed(
     with app.state.session_factory() as session:
         record = session.get(WorkflowGraphRecord, str(saved.json()["id"]))
         assert record is not None
+        # Preserve the exact persisted revision so restoration can be verified.
+        original_graph_json = record.graph_json
         # Simulate a malformed persisted graph after the valid run was queued.
         record.graph_json = {
             "schema_version": "workflow-graph-0001",
@@ -112,6 +114,18 @@ def test_corrupt_saved_verified_pose_graph_finishes_as_failed(
         )
         is False
     )
+    # A corrupted saved graph must block readback even for a failed run.
+    rejected = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert rejected.status_code == 409, rejected.text
+    assert rejected.json()["detail"] == "Workflow graph provenance checksum failed"
+
+    # Restoring the original revision permits inspection of the failed job.
+    with app.state.session_factory() as session:
+        record = session.get(WorkflowGraphRecord, str(saved.json()["id"]))
+        assert record is not None
+        record.graph_json = original_graph_json
+        session.commit()
+
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     result = detail.json()
