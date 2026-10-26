@@ -192,8 +192,8 @@ Assert-True ($acceptanceScript.Contains('qcSkipRetry.changed_count -ne 0')) 'Ins
 Assert-True ($acceptanceScript.Contains('review_confirmed = $true')) 'Installed QC completion must require explicit confirmation on disposable test data.'
 Assert-True ($acceptanceScript.Contains('qcCompleteRetry.changed_count -ne 0')) 'Installed QC completion retry must not duplicate audit events.'
 Assert-True ($acceptanceScript.Contains('qcCompleted.requires_researcher_review -ne $true')) 'Installed QC completion must not auto-verify biological observations.'
-Assert-True ($acceptanceScript.Contains("$qcCompleteEvents[0].actor -ne 'disposable-lab-reviewer'")) 'Installed completion audit must retain the reviewer label.'
-Assert-True ($acceptanceScript.Contains("$qcPersistedItem[0].review_state -ne 'completed'")) 'Installed QC completion state must survive restart.'
+Assert-True ($acceptanceScript.Contains('$qcCompleteEvents[0].actor -ne ''disposable-lab-reviewer''')) 'Installed completion audit must retain the reviewer label.'
+Assert-True ($acceptanceScript.Contains('$qcPersistedItem[0].review_state -ne ''completed''')) 'Installed QC completion state must survive restart.'
 Assert-True ($acceptanceScript.Contains('qcPersistedEvents.total -ne 6')) 'Installed QC audit history, including completion, must be checked after desktop restart.'
 Assert-True ($acceptanceScript.Contains('qcPersistedAnnotations.annotations')) 'Installed QC acceptance must preserve the original annotation.'
 
