@@ -34,17 +34,13 @@ def test_runtime_sqlite_rejects_orphans_and_preserves_referenced_evidence(
             pytest.raises(IntegrityError),
             engine.begin() as connection,
         ):
-            connection.execute(
-                text("DELETE FROM fk_parent_16 WHERE id = 'research-parent'")
-            )
+            connection.execute(text("DELETE FROM fk_parent_16 WHERE id = 'research-parent'"))
 
         with (
             pytest.raises(IntegrityError),
             engine.begin() as connection,
         ):
-            connection.execute(
-                text("INSERT INTO fk_review_16 VALUES ('orphan', 'missing-parent')")
-            )
+            connection.execute(text("INSERT INTO fk_review_16 VALUES ('orphan', 'missing-parent')"))
 
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT COUNT(*) FROM fk_parent_16")) == 1
