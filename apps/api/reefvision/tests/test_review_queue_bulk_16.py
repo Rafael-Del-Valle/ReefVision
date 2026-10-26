@@ -398,18 +398,16 @@ def test_keyed_bulk_retry_never_reapplies_after_intervening_reviewer_action(
         ids[0]: "skipped",
         ids[1]: "in_progress",
     }
-    first_history = client.get(
-        f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events"
-    ).json()
+    first_history = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events").json()
     assert [event["event_type"] for event in first_history["items"]] == [
         "triage_start",
         "triage_skip",
     ]
     assert first_history["items"][0]["actor"] == "researcher one"
     assert first_history["items"][1]["actor"] == "researcher two"
-    assert client.get(
-        f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
-    ).json()["total"] == 1
+    assert (
+        client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events").json()["total"] == 1
+    )
 
     # A request key is bound to its original action, reviewer and reason.
     for changed in (
@@ -418,9 +416,10 @@ def test_keyed_bulk_retry_never_reapplies_after_intervening_reviewer_action(
     ):
         rejected = client.post(url, json=changed)
         assert rejected.status_code == 409, rejected.text
-    assert client.get(
-        f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events"
-    ).json() == first_history
+    assert (
+        client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events").json()
+        == first_history
+    )
 
 
 def test_keyed_bulk_first_attempt_requires_all_items_to_transition(
@@ -428,9 +427,7 @@ def test_keyed_bulk_first_attempt_requires_all_items_to_transition(
 ) -> None:
     queue_id, ids = _queue_with_two_images(client)
     url = f"/api/v1/review-queues/{queue_id}/items/bulk"
-    assert client.post(
-        url, json={"item_ids": [ids[0]], "action": "start"}
-    ).status_code == 200
+    assert client.post(url, json={"item_ids": [ids[0]], "action": "start"}).status_code == 200
     rejected = client.post(
         url,
         json={
@@ -440,9 +437,9 @@ def test_keyed_bulk_first_attempt_requires_all_items_to_transition(
         },
     )
     assert rejected.status_code == 409, rejected.text
-    assert client.get(
-        f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
-    ).json()["total"] == 0
+    assert (
+        client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events").json()["total"] == 0
+    )
     assert (
         client.post(
             url,
@@ -509,3 +506,69 @@ def test_keyed_bulk_skip_retry_preserves_later_return_and_reason_history(
     assert second_after.status_code == 200, second_after.text
     assert first_after.json() == first_history.json()
     assert second_after.json() == second_history.json()
+
+def test_keyed_bulk_retry_preserves_intervening_comments_and_assignments(
+    client: TestClient,
+) -> None:
+    """A lost batch response cannot erase later human coordination events."""
+    queue_id, ids = _queue_with_two_images(client)
+    bulk_url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    event_urls = [
+        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in ids
+    ]
+    original = {
+        "item_ids": ids,
+        "action": "start",
+        "actor": "first researcher",
+        "client_request_id": str(uuid4()),
+    }
+    started = client.post(bulk_url, json=original)
+    assert started.status_code == 200, started.text
+    assert started.json()["changed_count"] == 2
+
+    comment = client.post(
+        event_urls[0],
+        json={
+            "client_request_id": str(uuid4()),
+            "event_type": "comment",
+            "actor": "second researcher",
+            "comment": "Check the ambiguous polyp boundary",
+        },
+    )
+    assert comment.status_code == 201, comment.text
+    assignment = client.post(
+        event_urls[1],
+        json={
+            "client_request_id": str(uuid4()),
+            "event_type": "assign",
+            "actor": "second researcher",
+            "assignee": "third researcher",
+        },
+    )
+    assert assignment.status_code == 201, assignment.text
+
+    before = [client.get(event_url).json() for event_url in event_urls]
+    assert [event["event_type"] for event in before[0]["items"]] == [
+        "triage_start",
+        "comment",
+    ]
+    assert [event["event_type"] for event in before[1]["items"]] == [
+        "triage_start",
+        "assign",
+    ]
+    assert before[1]["current_assignee"] == "third researcher"
+
+    replay = client.post(bulk_url, json=original)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["changed_count"] == 0
+    assert [client.get(event_url).json() for event_url in event_urls] == before
+
+    conflicting = client.post(
+        bulk_url, json={**original, "actor": "different researcher"}
+    )
+    assert conflicting.status_code == 409, conflicting.text
+    assert [client.get(event_url).json() for event_url in event_urls] == before
+    for item in replay.json()["items"]:
+        annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
+        assert annotations.status_code == 200, annotations.text
+        assert annotations.json()["annotations"] == []
