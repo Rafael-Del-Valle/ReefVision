@@ -11,7 +11,10 @@ import json
 from io import StringIO
 
 from reefvision.domain.errors import ValidationError
-from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
+from reefvision.schemas.ecology_identity import (
+    EcologyCrossUnitParentDetail,
+    EcologyIdentityRegistryResponse,
+)
 from reefvision.services.ecology_identity_design_audit import (
     derive_cross_unit_parent_details,
     derive_ecology_design_changes,
@@ -114,7 +117,7 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
         ):
             raise ValidationError("Ecological design-change audit differs from identity history")
 
-    details = []
+    details: list[EcologyCrossUnitParentDetail] = []
     if registry.cross_unit_parent_audit_status != "unavailable":
         details = derive_cross_unit_parent_details(registry.identities)
         shared_parent_keys = sorted({row.parent_colony_key for row in details})

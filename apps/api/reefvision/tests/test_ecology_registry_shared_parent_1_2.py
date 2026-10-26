@@ -156,6 +156,15 @@ def test_shared_parent_tanks_api_csv_and_saved_workflow(client: TestClient) -> N
     typed = EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
     assert render_ecology_identity_history_csv(typed) == csv_response.text
 
+    # Existing saved artifacts with the older, status-only audit remain
+    # exportable; the CSV recomputes details from fingerprint-checked rows.
+    pre_detail = payload.copy()
+    pre_detail.pop("cross_unit_parent_details")
+    restored = EcologyIdentityRegistryResponse.model_validate(pre_detail)
+    assert restored.cross_unit_parent_audit_status == "shared_parent_requires_review"
+    assert restored.cross_unit_parent_details == []
+    assert render_ecology_identity_history_csv(restored) == csv_response.text
+
 
 def test_no_false_cross_unit_parent_claims_and_csv_tampering(client: TestClient) -> None:
     project_id = str(create_project(client, "Separate tank and site levels")["id"])
