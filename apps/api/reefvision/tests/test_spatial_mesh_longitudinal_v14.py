@@ -2025,8 +2025,18 @@ def test_mutated_reidentification_specimen_binding_is_revalidated() -> None:
 @pytest.mark.parametrize(
     ("rms", "centroid_separation", "expected_ratio", "warning"),
     [
-        (0.25, 0.5, 2.0, "registered_centroid_rms_ratio_not_a_movement_significance_test"),
-        (0.25, 0.0, 0.0, "registered_centroid_rms_ratio_not_a_movement_significance_test"),
+        (
+            0.25,
+            0.5,
+            2.0,
+            "registered_centroid_rms_ratio_not_a_movement_significance_test",
+        ),
+        (
+            0.25,
+            0.0,
+            0.0,
+            "registered_centroid_rms_ratio_not_a_movement_significance_test",
+        ),
         (0.0, 0.5, None, "registered_centroid_rms_ratio_unavailable_zero_residual"),
         (1e-320, 0.5, None, "registered_centroid_rms_ratio_out_of_numeric_range"),
     ],
@@ -2063,7 +2073,9 @@ def test_registered_centroid_rms_ratio_is_only_a_provisional_diagnostic(
     assert warning in result["qc_warnings"]
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert result["provenance"]["specimen_identity_verified"] is False
-    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+    assert result["measurement_status"] == (
+        "provisional_unverified_longitudinal_comparison"
+    )
 
 
 def test_registered_centroid_rms_ratio_is_unknown_without_centroids() -> None:
