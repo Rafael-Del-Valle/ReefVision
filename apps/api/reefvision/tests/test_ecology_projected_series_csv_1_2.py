@@ -198,9 +198,7 @@ def _resign_derived_evidence(
             "report_sha256": canonical_json_sha256(report_values),
         }
     )
-    return artifact.model_copy(
-        update={"input_sha256": new_sha, "candidate_report": signed_report}
-    )
+    return artifact.model_copy(update={"input_sha256": new_sha, "candidate_report": signed_report})
 
 
 @pytest.mark.parametrize(
@@ -228,6 +226,29 @@ def test_projected_csv_rejects_resigned_forged_aggregates(
     tampered = _resign_derived_evidence(original.model_copy(update={field: altered}))
     with pytest.raises(ValidationError, match=f"Projected {error} evidence"):
         render_ecology_series_qc_csv(tampered)
+
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"absolute_change": 999.0},
+        {"baseline_image_id": "forged-baseline"},
+        {"final_calibration_evidence_id": "forged-calibration"},
+    ],
+)
+def test_projected_csv_rejects_resigned_forged_endpoint_evidence(
+    client: TestClient,
+    patch: dict[str, float | str],
+) -> None:
+    """A valid new fingerprint cannot certify fabricated longitudinal evidence."""
+    original = _dated_artifact(client)
+    endpoint = original.projected_endpoint_changes[0].model_copy(update=patch)
+    forged = _resign_derived_evidence(
+        original.model_copy(update={"projected_endpoint_changes": [endpoint]})
+    )
+    with pytest.raises(ValidationError, match="Projected endpoint evidence"):
+        render_ecology_series_qc_csv(forged)
 
 
 def test_legacy_endpoint_absence_remains_explicit(client: TestClient) -> None:
