@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import zipfile
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
@@ -116,6 +117,12 @@ def frozen_pose_item_fingerprints_match(
             or not isinstance(review.get("reviewed_at"), str)
             or not review["reviewed_at"].strip()
         ):
+            return False
+        # A re-signed review must still carry a parseable verification time;
+        # malformed timestamps cannot be accepted as scientific evidence.
+        try:
+            datetime.fromisoformat(review["reviewed_at"])
+        except ValueError:
             return False
 
         canonical_pose = row.canonical_pose_json
