@@ -1,4 +1,5 @@
 import {
+  currentComponentUncertaintyText,
   vectorColor,
   type CurrentVector,
 } from "../environmental-context/currentVectors";
@@ -182,7 +183,19 @@ export function OpenStreetMapView({
       arrow.textContent = vector.bearing === null ? "•" : "↑";
       arrow.style.cssText = `font-size:28px;line-height:32px;text-align:center;color:${vectorColor(vector.speed)};transform:rotate(${vector.bearing ?? 0}deg);`;
       const tooltip = document.createElement("span");
-      tooltip.textContent = `${vector.speed.toFixed(3)} m/s; ${vector.bearing === null ? "stationary" : `${vector.bearing.toFixed(1)}° toward, true north`}; ${vector.sourceKind}; ${vector.dataset}; ${vector.observedAt}; ${vector.depthM} m; uncertainty unknown`;
+      tooltip.textContent = [
+        `${vector.speed.toFixed(3)} m/s`,
+        vector.bearing === null
+          ? "stationary"
+          : `${vector.bearing.toFixed(1)}° toward true north`,
+        vector.sourceKind,
+        vector.dataset,
+        vector.observedAt,
+        `${vector.depthM} m`,
+        "vector speed/direction and position uncertainty not estimated",
+        currentComponentUncertaintyText("East", vector.eastUncertainty),
+        currentComponentUncertaintyText("North", vector.northUncertainty),
+      ].join("; ");
       L.marker([vector.latitude, vector.longitude], {
         icon: L.divIcon({
           html: arrow,
