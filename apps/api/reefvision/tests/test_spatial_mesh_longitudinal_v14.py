@@ -231,6 +231,13 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         (0.02, 1.0, 0.02, None),
         (2.0, 1.0, 2.0, "registration_residual_at_least_smaller_mesh_extent"),
         (2.0, None, None, "registration_residual_extent_ratio_unavailable"),
+        (0.0, 1_000_000.0, 0.0, None),
+        (
+            1e-320,
+            1_000_000.0,
+            None,
+            "registration_residual_extent_ratio_out_of_numeric_range",
+        ),
         (
             1_000_000.0,
             1e-320,
@@ -285,6 +292,92 @@ def test_registration_residual_size_qc_is_provisional_and_finite(
     assert result["provenance"]["registration_evidence"] == evidence
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+
+def test_positive_registration_residual_underflow_matches_saved_workflow(
+    client: TestClient,
+) -> None:
+    """Do not serialize an underflowed positive RMS ratio as perfect alignment."""
+    project_id = str(create_project(client, "Registration underflow QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    before = _mesh("scan-1", "2026-10-01T12:00:00Z", 1)
+    after = _mesh("scan-2", "2026-10-02T12:00:00Z", 1)
+    for record, frame in ((before, "frame-a"), (after, "frame-b")):
+        record["meters_per_unit"] = 1_000_000
+        record["coordinate_frame_id"] = frame
+    evidence = {
+        "source_frame_id": "frame-a",
+        "target_frame_id": "frame-b",
+        "method": "landmark",
+        "rms_residual_m": 1e-320,
+        "correspondence_count": 5,
+        "evidence_note": "Unverified near-zero positive RMS; not exact alignment",
+    }
+    standalone = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after, "registration_evidence": evidence},
+    )
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["registration_residual_to_smaller_extent_ratio"] is None
+    assert "registration_residual_extent_ratio_out_of_numeric_range" in expected["qc_warnings"]
+    assert expected["provenance"]["coordinate_registration_verified"] is False
+    assert expected["provenance"]["registration_evidence"]["rms_residual_m"] > 0
+
+    graph = {
+        "graph_id": "registration-underflow-v14",
+        "name": "Provisional positive registration residual underflow",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
+            {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": after},
+            {
+                "node_id": "compare",
+                "node_type": "mesh_longitudinal_comparison",
+                "parameters": {"registration_evidence": evidence},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": f"project-{node}",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": node,
+                "target_port_id": "project",
+            }
+            for node in ("early", "late")
+        ]
+        + [
+            {
+                "edge_id": f"{node}-compare",
+                "source_node_id": node,
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": port,
+            }
+            for node, port in (("early", "before"), ("late", "after"))
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    artifact = next(
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert artifact["payload_json"] == expected
+    assert len(artifact["payload_sha256"]) == 64
 
 
 @pytest.mark.parametrize(
