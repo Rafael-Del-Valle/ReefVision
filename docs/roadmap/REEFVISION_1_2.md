@@ -2133,3 +2133,35 @@ three failed solely on a Ruff formatting discrepancy in the existing alias
 population regression. That exact formatting change was committed alongside
 the new tests. Current-head CI and installed Windows/scientific acceptance
 must still pass; **1.2 remains NOT RELEASE-READY**.
+
+
+## Jointly feasible cross-metric parent-colony rosters (2026-10-26)
+
+The existing source-linked projected population calculator now checks whether
+**fully enumerated distinct-parent rosters** from different measurement metrics
+admit a joint one-to-one organism-to-parent assignment. Intersecting candidate
+parent sets for each organism individually was insufficient: three overlapping
+metric rosters could each leave a nonempty candidate set while jointly forcing
+two organisms to claim the same distinct parent within one metric.
+
+The validation uses a deterministic bipartite matching feasibility check for
+each fully enumerated roster after collecting cross-metric candidate constraints.
+A scientifically impossible aggregate now fails closed rather than contributing
+to a descriptive population summary. It does **not** infer, persist, or verify
+any individual organism-parent mapping. Partially known parent rosters remain
+reviewable and do not invent missing lineage. The calculation remains shared by
+the existing standalone calibrated-candidate API and the executable, persisted,
+typed `ecology_measurement_candidates` Workflow Builder source. No new node,
+schema migration, model acquisition, 1.1 environmental provider, or verified
+dataset promotion is introduced.
+
+Focused regression tests cover impossible three-metric rosters in both input
+orders, feasible rosters in both orders, and incomplete lineage. The preceding
+exact-head CI at `8c08fd44` completed 16/19 workflows successfully; CI,
+Pose Workflow Validation and ReefVision 1.0 Acceptance all failed at one Ruff
+formatting discrepancy in the earlier alias test (line 554). The exact Ruff
+formatting correction was committed with these tests. The new head's tests,
+Ruff/mypy, scientific acceptance, migration reconciliation and installed
+Windows GUI/installer acceptance remain pending. All source-linked projected
+measurements remain `linked_unverified`, with
+`scientist_review_required`; **1.2 is not release-ready**.
