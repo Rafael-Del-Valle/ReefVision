@@ -1899,3 +1899,16 @@ These checks establish only internal consistency of linked, unverified
 projected geometry; independent scientist review, registered experimental
 design, verified biological growth and installed Windows acceptance remain
 outstanding. ReefVision 1.2 is not release-ready.
+
+## Projected ecological report type-check repair (2026-10-26)
+
+The latest completed pre-change CI for `01cda88a` reported 16/19 successful
+workflows; the remaining three failed at the same five mypy diagnostics in
+`ecology_candidate_report_export.py`. A heterogeneous aggregate audit loop
+reused `expected`, previously inferred as a single endpoint dictionary or
+`None`, for lists of projected coverage, unit and population model rows.
+The repair gives aggregate loop variables distinct names (`actual_rows`,
+`expected_rows`) so static analysis can infer their model-list types without
+altering scientific comparisons, provenance, source re-derivation, or review
+gates. Source read-back is confirmed; exact-head mypy, tests and Windows
+acceptance are still pending. This is not a release-ready milestone.
