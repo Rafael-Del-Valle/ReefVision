@@ -423,14 +423,8 @@ def test_concurrent_review_heads_fail_closed_without_modifying_research_assets(
     engine.dispose()
 
 
-_REVIEW_QUEUE_FK = (
-    ", FOREIGN KEY(review_queue_id) REFERENCES review_queues(id) "
-    "ON DELETE RESTRICT"
-)
-_PROJECT_FK = (
-    ", FOREIGN KEY(project_id) REFERENCES projects(id) "
-    "ON DELETE RESTRICT"
-)
+_REVIEW_QUEUE_FK = ", FOREIGN KEY(review_queue_id) REFERENCES review_queues(id) ON DELETE RESTRICT"
+_PROJECT_FK = ", FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE RESTRICT"
 
 
 def test_revision_0041_requires_global_bulk_request_registry() -> None:
