@@ -141,10 +141,17 @@ class MeshReidentificationEvidence(BaseModel):
     before_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     after_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
+    # Optional timepoint binding: observation IDs and geometry hashes alone do
+    # not prevent a dated survey record from being silently reassigned.
+    before_observed_at_utc: AwareDatetime | None = None
+    after_observed_at_utc: AwareDatetime | None = None
+
     @model_validator(mode="after")
     def require_complete_geometry_binding(self) -> MeshReidentificationEvidence:
         if (self.before_geometry_sha256 is None) != (self.after_geometry_sha256 is None):
             raise ValueError("Reidentification geometry binding requires both SHA-256 fingerprints")
+        if (self.before_observed_at_utc is None) != (self.after_observed_at_utc is None):
+            raise ValueError("Reidentification timepoint binding requires both UTC timestamps")
         return self
 
 
