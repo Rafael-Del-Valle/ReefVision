@@ -35,6 +35,7 @@ def _observations() -> tuple[dict, dict]:
 
 def _evidence() -> dict:
     return {
+        "project_id": "local-study",
         "specimen_id": "coral-1",
         "before_observation_id": "before",
         "after_observation_id": "after",
@@ -201,6 +202,7 @@ def test_mutated_independent_review_is_revalidated_before_comparison() -> None:
     with pytest.raises(ValueError, match="Invalid pairwise reidentification evidence"):
         compare_mesh_observations(before, after, reidentification_evidence=model)
 
+
 def test_independent_review_timestamp_is_preserved_without_identity_certification() -> None:
     before, after = _observations()
     evidence = _evidence()
@@ -274,3 +276,50 @@ def test_mutated_review_timestamp_is_rechecked_at_execution() -> None:
     model.independent_reviewed_at_utc = datetime(2026, 10, 1, 12, tzinfo=UTC)
     with pytest.raises(ValueError, match="predates the later observation"):
         compare_mesh_observations(before, after, reidentification_evidence=model)
+
+
+def test_project_bound_reidentification_cannot_cross_projects() -> None:
+    before, after = _observations()
+    before["project_id"] = "other-project"
+    after["project_id"] = "other-project"
+    with pytest.raises(ValueError, match="must match the project ID"):
+        compare_mesh_observations(before, after, reidentification_evidence=_evidence())
+
+
+def test_project_binding_rejects_wrong_project_even_with_same_observation_ids() -> None:
+    before, after = _observations()
+    evidence = _evidence()
+    evidence["project_id"] = "other-project"
+    with pytest.raises(ValueError, match="must match the project ID"):
+        compare_mesh_observations(before, after, reidentification_evidence=evidence)
+
+
+def test_legacy_unbound_project_evidence_is_flagged_not_certified() -> None:
+    before, after = _observations()
+    evidence = _evidence()
+    del evidence["project_id"]
+    result = compare_mesh_observations(before, after, reidentification_evidence=evidence)
+    assert "reidentification_project_binding_unavailable" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+def test_bound_project_evidence_remains_provisional() -> None:
+    before, after = _observations()
+    result = compare_mesh_observations(before, after, reidentification_evidence=_evidence())
+    assert "reidentification_project_binding_unavailable" not in result["qc_warnings"]
+    assert result["provenance"]["reidentification_evidence"]["project_id"] == "local-study"
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+def test_invalid_or_mutated_project_binding_is_rejected() -> None:
+    evidence = _evidence()
+    evidence["project_id"] = ""
+    with pytest.raises(PydanticValidationError):
+        MeshReidentificationEvidence.model_validate(evidence)
+    evidence["project_id"] = "local-study"
+    model = MeshReidentificationEvidence.model_validate(evidence)
+    model.project_id = "other-project"
+    before, after = _observations()
+    with pytest.raises(ValueError, match="must match the project ID"):
+        compare_mesh_observations(before, after, reidentification_evidence=model)
+
