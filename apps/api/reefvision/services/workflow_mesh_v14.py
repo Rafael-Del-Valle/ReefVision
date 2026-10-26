@@ -156,7 +156,7 @@ def extend_mesh_registry(
                 )
             ],
             required_parameters=[],
-            optional_parameters={"registration_evidence": None},
+            optional_parameters={"registration_evidence": None, "reidentification_evidence": None},
             execution_state="executable_analysis",
             executable=True,
             implementation_notes=[
@@ -165,6 +165,7 @@ def extend_mesh_registry(
                 "No identity, calibration, registration or biological growth is verified.",
                 "Conservative area-difference bounds reflect scale uncertainty only.",
                 "Optional registration residual evidence is provisional and frame-bound.",
+                "Reidentification notes are observation-bound and never verify identity.",
             ],
         )
         return nodes
@@ -238,9 +239,10 @@ def execute_mesh_longitudinal_comparison(
         "__workflow_run_id",
         "__workflow_node_run_id",
         "registration_evidence",
+        "reidentification_evidence",
     }
     if unexpected:
-        raise ValidationError("Longitudinal comparison accepts only registration_evidence")
+        raise ValidationError("Longitudinal comparison accepts only registration_evidence or reidentification_evidence")
     records: list[dict[str, Any]] = []
     for port in ("before", "after"):
         artifacts = inputs.get(port, [])
@@ -255,7 +257,10 @@ def execute_mesh_longitudinal_comparison(
         records.append(artifacts[0].payload_json)
     try:
         result = compare_mesh_observations(
-            records[0], records[1], parameters.get("registration_evidence")
+            records[0],
+            records[1],
+            parameters.get("registration_evidence"),
+            parameters.get("reidentification_evidence"),
         )
     except ValueError as exc:
         raise ValidationError(f"Invalid longitudinal comparison: {exc}") from exc
