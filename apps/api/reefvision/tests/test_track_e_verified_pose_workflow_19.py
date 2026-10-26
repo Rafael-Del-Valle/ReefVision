@@ -184,8 +184,10 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         f"/api/v1/projects/{project_id}/workflow-runs",
         json={"graph_record_id": graph_record["id"]},
     )
-    assert rejected.status_code == 422, rejected.text
-    assert "Saved workflow graph revision is invalid" in rejected.text
+    # Invalid persisted state is a domain ValidationError (HTTP 400), not
+    # request-body schema validation (HTTP 422).
+    assert rejected.status_code == 400, rejected.text
+    assert rejected.json() == {"detail": "Saved workflow graph revision is invalid"}
     runs_after = client.get(f"/api/v1/projects/{project_id}/workflow-runs")
     assert runs_after.status_code == 200, runs_after.text
     assert runs_after.json() == runs_before.json()
