@@ -1025,3 +1025,22 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   exact-head CI and the new API regressions are **pending**, not accepted.
   Native Windows installed-GUI/MSI upgrade, scientific-image validation and
   independent 1.1/1.6 Alembic lineage reconciliation remain **blocked**.
+
+## 2026-10-26 — Cross-queue QC retry provenance regression and CI formatter repair
+
+- Preflight: isolated 1.6 draft PR #77 at `04f1bfd3`; 17/20 exact-head
+  workflows succeeded. Backend jobs in CI, Pose Workflow Validation and
+  ReefVision 1.0 Acceptance all stopped at Ruff formatting in two QC tests.
+- Applied all four exact formatting edits from the CI log. Added an API
+  regression that moves an otherwise valid keyed reviewer event to a different
+  existing review queue and verifies a retry fails with HTTP 409, without
+  duplicating or changing reviewer events. An explicit test-only restoration
+  permits the same request to replay as an idempotent no-op.
+- This protects the existing queue/project provenance contract without adding
+  another QC implementation or changing the typed saved `qc_review_queue`
+  Workflow Builder node. No migration, scientific approval or user-data
+  rewrite was performed.
+- The new regression and exact-head Ruff check have **not yet passed CI**.
+  Local repository testing is blocked by GitHub DNS and missing Ruff.
+  Native Windows installed GUI/MSI upgrade and 1.1/1.6 Alembic migration
+  reconciliation remain outstanding. **Release HOLD.**
