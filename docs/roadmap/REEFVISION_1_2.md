@@ -1879,3 +1879,23 @@ This remains `linked_unverified` projected geometry, not reviewed biological
 growth or an authenticated study design. Full new-head CI, real-data scientific
 review, migration reconciliation and installed Windows GUI/installer
 acceptance remain outstanding. No version completion or release is claimed.
+
+
+## Signed longitudinal endpoint falsification regression (2026-10-26)
+
+The existing projected series CSV scientific acceptance suite now tests three
+re-signed forgeries: altered endpoint change magnitude, substituted baseline
+image identity, and substituted final calibration evidence identity. Each
+must fail the existing source-candidate recomputation even when the input
+and report SHA-256 fingerprints are recalculated to match the falsified
+artifact. The same typed candidate artifact is produced by the standalone
+API and executable, persisted Workflow Builder source; no parallel analysis
+node, migration, or unverified-to-verified promotion is introduced.
+
+This iteration also fixes the exact Ruff formatter discrepancy reported by
+all three failed backend workflows at predecessor head `f2ad045e`.
+New-head CI must pass before these regressions are considered validated.
+These checks establish only internal consistency of linked, unverified
+projected geometry; independent scientist review, registered experimental
+design, verified biological growth and installed Windows acceptance remain
+outstanding. ReefVision 1.2 is not release-ready.
