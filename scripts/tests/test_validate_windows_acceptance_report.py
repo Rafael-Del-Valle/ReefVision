@@ -18,6 +18,14 @@ sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
 
+def pass_evidence() -> dict:
+    return {
+        "status": "PASS",
+        "detail": "Verified on isolated installed Windows desktop",
+        "timestamp_utc": "2026-10-25T02:10:00Z",
+    }
+
+
 def good_report() -> dict:
     result = {
         "schema_version": "reefvision-windows-clean-acceptance-1",
@@ -39,7 +47,7 @@ def good_report() -> dict:
         "confidence_review": {"status": "SKIPPED"},
     }
     for key in MODULE.REQUIRED_PASS:
-        result[key] = {"status": "PASS", "detail": "verified"}
+        result[key] = pass_evidence()
     return result
 
 
@@ -90,7 +98,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                     MODULE.validate_report(good_report(), expected_version=version)
                 report = good_report()
                 report["reefvision_version"] = "2.0.0"
-                report["upgrade"] = {"status": "PASS"}
+                report["upgrade"] = pass_evidence()
                 report["previous_installer_path"] = "C:/previous.msi"
                 report["previous_installer_version"] = version
                 with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "MSI numeric limits"):
@@ -106,7 +114,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
     def test_upgrade_requires_real_higher_version_and_previous_installer(self) -> None:
         report = good_report()
         report["reefvision_version"] = "1.0.3"
-        report["upgrade"] = {"status": "PASS"}
+        report["upgrade"] = pass_evidence()
         report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         report["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
@@ -127,6 +135,41 @@ class AcceptanceEvidenceTests(unittest.TestCase):
             installer.write_bytes(b"tampered fixture")
             with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "hash differs"):
                 MODULE.validate_report(report, expected_version="1.0.2", installer=installer)
+
+    def test_pass_evidence_must_be_dated_explained_and_within_run(self) -> None:
+        invalid = (
+            ("detail", ""),
+            ("detail", None),
+            ("timestamp_utc", None),
+            ("timestamp_utc", "2026-10-25T01:59:59Z"),
+            ("timestamp_utc", "2026-10-25T02:20:01Z"),
+            ("timestamp_utc", "2026-10-25T02:10:00-05:00"),
+        )
+        for key in MODULE.REQUIRED_PASS:
+            for field, value in invalid:
+                with self.subTest(gate=key, field=field, value=value):
+                    report = good_report()
+                    report[key][field] = value
+                    with self.assertRaises(MODULE.AcceptanceEvidenceError):
+                        MODULE.validate_report(report, expected_version="1.0.2")
+
+    def test_optional_live_pass_and_real_upgrade_need_run_evidence(self) -> None:
+        report = good_report()
+        report["sam2_live"] = pass_evidence()
+        MODULE.validate_report(report, expected_version="1.0.2")
+        report["sam2_live"]["timestamp_utc"] = "2026-10-24T02:10:00Z"
+        with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "outside the acceptance run"):
+            MODULE.validate_report(report, expected_version="1.0.2")
+
+        upgraded = good_report()
+        upgraded["reefvision_version"] = "1.0.3"
+        upgraded["upgrade"] = pass_evidence()
+        upgraded["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        upgraded["previous_installer_version"] = "1.0.2"
+        MODULE.validate_report(upgraded, expected_version="1.0.3", expected_upgrade="passed")
+        upgraded["upgrade"]["detail"] = "  "
+        with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "PASS evidence detail"):
+            MODULE.validate_report(upgraded, expected_version="1.0.3", expected_upgrade="passed")
 
     def test_upgrade_skip_must_be_explicit(self) -> None:
         report = good_report()
