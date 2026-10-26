@@ -78,9 +78,7 @@ def test_registration_accepts_integer_matrix_as_unverified() -> None:
     evidence["rms_residual_m"] = 0
     validated = MeshRegistrationEvidence.model_validate(evidence)
     assert validated.rms_residual_m == 0.0
-    assert validated.source_to_target_transform_m == evidence[
-        "source_to_target_transform_m"
-    ]
+    assert validated.source_to_target_transform_m == evidence["source_to_target_transform_m"]
 
     before = _observation("scan-1", "2026-10-01T12:00:00Z", "survey-a")
     after = _observation("scan-2", "2026-10-02T12:00:00Z", "survey-b")
