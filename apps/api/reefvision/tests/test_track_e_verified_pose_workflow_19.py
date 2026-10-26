@@ -212,6 +212,15 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert corrupted_graph_detail.status_code == 409, corrupted_graph_detail.text
     assert corrupted_graph_detail.json() == {"detail": "Workflow graph provenance checksum failed"}
 
+    # Re-saving an identical verified workflow must not return a corrupted
+    # revision as if its original checksum still authenticated the graph.
+    corrupted_resave = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert corrupted_resave.status_code == 409, corrupted_resave.text
+    assert corrupted_resave.json() == {"detail": "Workflow graph revision checksum failed"}
+
     rejected = client.post(
         f"/api/v1/projects/{project_id}/workflow-runs",
         json={"graph_record_id": graph_record["id"]},
@@ -230,6 +239,12 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         persisted.graph_json = original_graph
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
+    restored_resave = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert restored_resave.status_code == 201, restored_resave.text
+    assert restored_resave.json()["id"] == graph_record["id"]
 
     # The unmodified scientist-verified dataset remains retrievable and exportable.
     with app.state.session_factory() as session:
