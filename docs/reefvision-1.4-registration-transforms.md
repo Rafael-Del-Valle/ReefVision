@@ -43,9 +43,12 @@ Example (identity rotation with a provisional 0.1 m x translation):
 }
 ```
 
-The transform is **preserved in provenance, not applied** to mesh coordinates
-or used to certify spatial registration, organism identity, branch length,
-growth, or measurement accuracy. The result retains
+The transform is **preserved in provenance** and is not applied to source
+mesh vertices or calibrated surface measurements. It is applied only to the
+caller-supplied surface centroid to report a provisional target-frame offset
+and separation, when both centroids are available. These diagnostics cannot
+certify coral movement, spatial registration, identity, branch length, growth,
+or measurement accuracy. The result retains
 `coordinate_registration_verified: false`, and a supplied transform adds
 `registration_transform_requires_independent_review` to scientific QC.
 The comparison additionally exposes two **unverified transform diagnostics**:
@@ -74,3 +77,19 @@ are involved.
 Regression coverage exercises malformed transforms, proper rotations,
 standalone API output, and exact artifact parity after saving and executing
 a typed Workflow Builder graph.
+
+## Provisional reidentification evidence binding
+
+Optional `reidentification_evidence.specimen_id` can bind the before/after
+observation IDs and observer notes to the same provisional specimen label used
+by the comparison. A supplied label must match both observations; evidence
+from another specimen is rejected. Legacy evidence without a specimen label
+remains readable but adds `reidentification_specimen_binding_unavailable` to
+QC. The field is optional to avoid invalidating previously saved graphs.
+
+The standalone endpoint and saved, executable Workflow Builder node share the
+same validation and provenance. Binding a label prevents accidental reuse of
+notes across specimen labels; it does **not** verify reidentification. The
+`specimen_identity_verified` flag remains `false` and an independent human
+review is still required. Tests cover bound and legacy evidence, cross-specimen
+rejection, mutable-model revalidation, and saved-workflow artifact parity.
