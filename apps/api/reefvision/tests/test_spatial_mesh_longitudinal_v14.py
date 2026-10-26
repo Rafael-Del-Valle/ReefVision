@@ -68,6 +68,18 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "observer_id": "lab-annotator-1",
         "evidence_note": "Provisional photo match; independent review pending",
     }
+    # Bind matching notes to the actual imported geometry, not only labels.
+    preliminary = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after},
+    )
+    assert preliminary.status_code == 200, preliminary.text
+    reidentification_evidence["before_geometry_sha256"] = preliminary.json()["provenance"][
+        "before_geometry_sha256"
+    ]
+    reidentification_evidence["after_geometry_sha256"] = preliminary.json()["provenance"][
+        "after_geometry_sha256"
+    ]
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={
@@ -134,6 +146,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert "reidentification_evidence_requires_independent_review" in warnings
     assert "reidentification_specimen_binding_unavailable" not in warnings
+    assert "reidentification_geometry_binding_unavailable" not in warnings
     assert expected["provenance"]["registration_evidence_review_status"] == (
         "caller_supplied_unverified"
     )
