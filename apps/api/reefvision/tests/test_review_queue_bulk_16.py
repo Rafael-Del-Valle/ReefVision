@@ -620,3 +620,77 @@ def test_keyed_start_retry_cannot_reopen_completed_review(client: TestClient) ->
     annotations = client.get(f"/api/v1/images/{completed_image_id}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
+
+def test_keyed_bulk_retry_preserves_mixed_completion_and_skip(
+    client: TestClient,
+) -> None:
+    """A lost multi-item start response must not undo two later reviewer decisions."""
+    queue_id, ids = _queue_with_two_images(client)
+    bulk_url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    event_urls = [f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in ids]
+    original = {
+        "item_ids": ids,
+        "action": "start",
+        "actor": "first researcher",
+        "client_request_id": str(uuid4()),
+    }
+    started = client.post(bulk_url, json=original)
+    assert started.status_code == 200, started.text
+    assert started.json()["changed_count"] == 2
+
+    completed = client.post(
+        bulk_url,
+        json={
+            "item_ids": [ids[0]],
+            "action": "complete",
+            "actor": "second researcher",
+            "review_confirmed": True,
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    skipped = client.post(
+        bulk_url,
+        json={
+            "item_ids": [ids[1]],
+            "action": "skip",
+            "reason": "Uncertain biological boundary",
+            "actor": "third researcher",
+        },
+    )
+    assert skipped.status_code == 200, skipped.text
+
+    before = [client.get(url).json() for url in event_urls]
+    assert [event["event_type"] for event in before[0]["items"]] == [
+        "triage_start",
+        "triage_complete",
+    ]
+    assert [event["event_type"] for event in before[1]["items"]] == [
+        "triage_start",
+        "triage_skip",
+    ]
+    assert before[0]["items"][-1]["actor"] == "second researcher"
+    assert before[1]["items"][-1]["actor"] == "third researcher"
+    assert before[1]["items"][-1]["comment"] == "Uncertain biological boundary"
+
+    retry = client.post(bulk_url, json=original)
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["changed_count"] == 0
+    assert retry.json()["requires_researcher_review"] is True
+    assert {item["id"]: item["review_state"] for item in retry.json()["items"]} == {
+        ids[0]: "completed",
+        ids[1]: "skipped",
+    }
+    assert retry.json()["items"][0]["completed_at"] == completed.json()["items"][0][
+        "completed_at"
+    ]
+    assert retry.json()["items"][1]["skip_reason"] == "Uncertain biological boundary"
+    assert [client.get(url).json() for url in event_urls] == before
+
+    conflict = client.post(bulk_url, json={**original, "actor": "other researcher"})
+    assert conflict.status_code == 409, conflict.text
+    assert [client.get(url).json() for url in event_urls] == before
+    for item in retry.json()["items"]:
+        image_id = item["image_id"]
+        annotations = client.get(f"/api/v1/images/{image_id}/annotations")
+        assert annotations.status_code == 200, annotations.text
+        assert annotations.json()["annotations"] == []
