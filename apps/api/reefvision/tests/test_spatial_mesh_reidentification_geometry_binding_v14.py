@@ -162,6 +162,53 @@ def test_independent_reviewer_disagreement_remains_provisional() -> None:
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
 
 
+
+def test_disputed_specimen_match_withholds_cross_timepoint_changes() -> None:
+    before, after = _observations()
+    after["surface_area_m2"] = 2.0
+    before["axis_aligned_bounding_box_diagonal_m"] = 1.0
+    after["axis_aligned_bounding_box_diagonal_m"] = 2.0
+    evidence = {
+        **_evidence(),
+        "independent_reviewer_id": "reviewer-2",
+        "independent_review_decision": "supports_match",
+        "independent_review_note": "Provisional visual match",
+    }
+    supported = compare_mesh_observations(before, after, reidentification_evidence=evidence)
+    assert supported["delta_surface_area_m2"] == pytest.approx(1.0)
+    assert supported["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(1.0)
+    assert supported["provenance"]["specimen_identity_verified"] is False
+    assert supported["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is False
+
+    disputed = {
+        **evidence,
+        "independent_review_decision": "disputes_match",
+        "independent_review_note": "Branch junctions contradict specimen identity",
+    }
+    result = compare_mesh_observations(before, after, reidentification_evidence=disputed)
+    assert result["before_surface_area_m2"] == pytest.approx(1.0)
+    assert result["after_surface_area_m2"] == pytest.approx(2.0)
+    assert result["elapsed_days"] == pytest.approx(1.0)
+    assert result["before_reconstruction_topology_counts"]["face_count"] is None
+    assert result["provenance"]["reidentification_evidence"] == disputed
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is True
+    assert "reidentification_independent_review_disputes_match" in result["qc_warnings"]
+    assert "longitudinal_change_withheld_disputed_specimen_identity" in result["qc_warnings"]
+    for key in (
+        "delta_surface_area_m2",
+        "relative_surface_area_change_percent",
+        "average_surface_area_change_m2_per_day",
+        "delta_surface_area_scale_interval_m2",
+        "delta_axis_aligned_bounding_box_diagonal_m",
+        "relative_axis_aligned_bounding_box_diagonal_change_percent",
+        "average_axis_aligned_bounding_box_diagonal_change_m_per_day",
+        "registered_surface_centroid_separation_m",
+    ):
+        assert result[key] is None
+
+
+
 @pytest.mark.parametrize(
     "missing_field",
     ["independent_reviewer_id", "independent_review_decision", "independent_review_note"],
