@@ -184,9 +184,16 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["registered_surface_centroid_separation_caller_bound_interval_m"] == (
         pytest.approx([centroid_separation - 0.06, centroid_separation + 0.06])
     )
-    assert "registered_centroid_caller_bounds_not_independently_verified" in expected[
-        "qc_warnings"
-    ]
+    assert "registered_centroid_caller_bounds_not_independently_verified" in expected["qc_warnings"]
+    assert expected["registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"] == (
+        pytest.approx(
+            [
+                [-0.1 - 0.06, -0.1 + 0.06],
+                [1 / 3 - 0.06, 1 / 3 + 0.06],
+                [-0.06, 0.06],
+            ]
+        )
+    )
     assert expected["registered_centroid_separation_to_registration_rms_ratio"] == (
         pytest.approx(sqrt(0.1**2 + (1 / 3) ** 2) / 0.02)
     )
@@ -2081,9 +2088,7 @@ def test_registered_centroid_rms_ratio_is_only_a_provisional_diagnostic(
     assert warning in result["qc_warnings"]
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert result["provenance"]["specimen_identity_verified"] is False
-    assert result["measurement_status"] == (
-        "provisional_unverified_longitudinal_comparison"
-    )
+    assert result["measurement_status"] == ("provisional_unverified_longitudinal_comparison")
 
 
 def test_registered_centroid_rms_ratio_is_unknown_without_centroids() -> None:
