@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -116,6 +117,75 @@ def test_single_item_triage_persists_atomic_events(client: TestClient) -> None:
     assert len({event["client_request_id"] for event in final_history["items"]}) == 4
     assert final_history["requires_researcher_review"] is True
 
+    annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
+    assert annotations.status_code == 200, annotations.text
+    assert annotations.json()["annotations"] == []
+
+
+@pytest.mark.parametrize("tampered_field", ["project_id", "review_queue_id"])
+def test_coordination_retries_and_history_reject_foreign_provenance(
+    client: TestClient, tampered_field: str
+) -> None:
+    """A reused event key must not authenticate an event moved to another scope."""
+    project = create_project(client, "Coordination provenance")
+    import_one(client, project["id"])
+    queue = client.post(f"/api/v1/projects/{project['id']}/review-queues", json={})
+    assert queue.status_code == 201, queue.text
+    queue_id = queue.json()["id"]
+    item = client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"][0]
+
+    foreign_project = create_project(client, "Foreign coordination provenance")
+    import_one(client, foreign_project["id"])
+    foreign_queue = client.post(
+        f"/api/v1/projects/{foreign_project['id']}/review-queues", json={}
+    )
+    assert foreign_queue.status_code == 201, foreign_queue.text
+
+    url = f"/api/v1/review-queues/{queue_id}/items/{item['id']}/events"
+    payload = {
+        "client_request_id": str(uuid4()),
+        "event_type": "assign",
+        "actor": "researcher",
+        "assignee": "reviewer-two",
+    }
+    created = client.post(url, json=payload)
+    assert created.status_code == 201, created.text
+    event_id = created.json()["id"]
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        event = session.get(ReviewQueueItemEvent, event_id)
+        assert event is not None
+        original_scope = getattr(event, tampered_field)
+        foreign_scope = (
+            foreign_project["id"]
+            if tampered_field == "project_id"
+            else foreign_queue.json()["id"]
+        )
+        setattr(event, tampered_field, foreign_scope)
+        session.commit()
+
+    retry = client.post(url, json=payload)
+    assert retry.status_code == 409, retry.text
+    history = client.get(url)
+    assert history.status_code == 409, history.text
+
+    with app.state.session_factory() as session:
+        event = session.get(ReviewQueueItemEvent, event_id)
+        assert event is not None
+        assert getattr(event, tampered_field) == foreign_scope
+        assert event.actor == "researcher"
+        assert event.assignee == "reviewer-two"
+        setattr(event, tampered_field, original_scope)
+        session.commit()
+
+    recovered = client.post(url, json=payload)
+    assert recovered.status_code == 201, recovered.text
+    assert recovered.json()["id"] == event_id
+    restored_history = client.get(url)
+    assert restored_history.status_code == 200, restored_history.text
+    assert restored_history.json()["total"] == 1
+    assert restored_history.json()["current_assignee"] == "reviewer-two"
     annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
