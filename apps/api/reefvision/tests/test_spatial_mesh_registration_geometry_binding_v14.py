@@ -23,6 +23,7 @@ def _observations() -> tuple[dict, dict]:
             "observed_at_utc": "2026-10-01T12:00:00Z",
             "coordinate_frame_id": "survey-a",
             "geometry_sha256": "a" * 64,
+            "calibration_verified": False,
         },
     }
     after = deepcopy(before)
@@ -100,4 +101,82 @@ def test_mutated_registration_model_cannot_remove_half_of_geometry_binding() -> 
     evidence = MeshRegistrationEvidence.model_validate(_evidence())
     evidence.target_geometry_sha256 = None
     with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
+        compare_mesh_observations(before, after, registration_evidence=evidence)
+
+
+def _bound_evidence() -> dict:
+    return {
+        **_evidence(),
+        "project_id": "study-1",
+        "source_observation_id": "scan-1",
+        "target_observation_id": "scan-2",
+        "source_observed_at_utc": "2026-10-01T12:00:00Z",
+        "target_observed_at_utc": "2026-10-02T12:00:00Z",
+    }
+
+
+def test_registration_project_observation_and_time_bindings_are_preserved() -> None:
+    before, after = _observations()
+    evidence = _bound_evidence()
+    result = compare_mesh_observations(before, after, registration_evidence=evidence)
+    assert result["provenance"]["registration_evidence"] == evidence
+    for warning in (
+        "registration_project_binding_unavailable",
+        "registration_observation_binding_unavailable",
+        "registration_timepoint_binding_unavailable",
+    ):
+        assert warning not in result["qc_warnings"]
+    assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("project_id", "other-study", "project ID"),
+        ("source_observation_id", "other-scan", "observation IDs"),
+        ("target_observation_id", "other-scan", "observation IDs"),
+        ("source_observed_at_utc", "2026-09-30T12:00:00Z", "observation timestamps"),
+        ("target_observed_at_utc", "2026-10-03T12:00:00Z", "observation timestamps"),
+    ],
+)
+def test_registration_binding_rejects_stale_evidence(
+    field: str, value: str, message: str
+) -> None:
+    before, after = _observations()
+    evidence = _bound_evidence()
+    evidence[field] = value
+    with pytest.raises(ValueError, match=message):
+        compare_mesh_observations(before, after, registration_evidence=evidence)
+
+
+@pytest.mark.parametrize("missing", ["target_observation_id", "target_observed_at_utc"])
+def test_registration_rejects_partial_observation_or_time_binding(missing: str) -> None:
+    evidence = _bound_evidence()
+    del evidence[missing]
+    with pytest.raises(PydanticValidationError, match="requires both"):
+        MeshRegistrationEvidence.model_validate(evidence)
+
+
+def test_registration_time_binding_compares_instants_not_timezone_strings() -> None:
+    before, after = _observations()
+    evidence = _bound_evidence()
+    evidence["target_observed_at_utc"] = "2026-10-02T07:00:00-05:00"
+    result = compare_mesh_observations(before, after, registration_evidence=evidence)
+    assert "registration_timepoint_binding_unavailable" not in result["qc_warnings"]
+    assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+def test_legacy_registration_missing_observation_bindings_is_flagged() -> None:
+    before, after = _observations()
+    result = compare_mesh_observations(before, after, registration_evidence=_evidence())
+    assert "registration_project_binding_unavailable" in result["qc_warnings"]
+    assert "registration_observation_binding_unavailable" in result["qc_warnings"]
+    assert "registration_timepoint_binding_unavailable" in result["qc_warnings"]
+
+
+def test_mutated_registration_project_binding_is_revalidated() -> None:
+    before, after = _observations()
+    evidence = MeshRegistrationEvidence.model_validate(_bound_evidence())
+    evidence.project_id = "another-study"
+    with pytest.raises(ValueError, match="project ID"):
         compare_mesh_observations(before, after, registration_evidence=evidence)
