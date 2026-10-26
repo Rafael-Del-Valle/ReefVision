@@ -1957,3 +1957,32 @@ research datasets. No migration or new Workflow Builder node is required:
 existing executable typed candidate artifacts and standalone API reuse the
 same population calculator. Full exact-head CI, scientific acceptance and
 installed Windows acceptance remain outstanding until verified.
+
+## Canonical observed-visit coverage for biological-unit aliases (2026-10-26)
+
+The existing source-linked projected-visit coverage calculator now groups
+registered measurements by **canonical biological sampling level** before
+constructing observed UTC-date rosters. A physical tank described as `tank`
+for one fragment and `aquarium` for another no longer produces two isolated
+rosters that conceal each other's missing linked measurements. Same-day
+repeat images of the same organism across aliases are still counted as
+technical replicates, and different physical tank IDs remain separate.
+Unknown study-specific unit labels are preserved without authentication.
+The original technical image/frame/annotation unit exclusions remain active.
+
+The result is strictly a coverage audit of **linked measurements**, not a
+registered study-visit schedule or evidence of organism absence, mortality,
+survival, or biological growth. All output retains `linked_unverified`
+and `scientist_review_required`. The standalone calibrated-candidate API
+and the persisted typed executable Workflow Builder artifact already use
+this shared service; no parallel node, migration, or environmental context
+subsystem is introduced. Added focused regressions for cross-alias missing
+measurement coverage, same-day repeat images, distinct tanks, and
+standalone/saved-workflow response parity. Fixed the predecessor exact-head
+Ruff formatting gate in the existing alias regression test.
+
+Pre-change PR #74 HEAD `e12150e3` had 16/19 successful Actions workflows;
+CI, Pose Workflow Validation, and ReefVision 1.0 Acceptance failed at Ruff
+formatting of the alias regression test. New exact-head CI and scientific,
+migration, and installed Windows GUI acceptance are **not yet established**.
+No verified dataset promotion or release-readiness is claimed.
