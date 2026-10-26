@@ -510,7 +510,8 @@ def test_different_metric_organism_rosters_are_not_assumed_identical() -> None:
 def _partial_metric_roster(
     metric: str, organisms: list[str], parents: list[str]
 ) -> EcologyProjectedUnitSummary:
-    return _unit("tank", "fragment-A", "parent-A").model_copy(
+    unit_type = "aquarium" if metric == "box_height" else "tank"
+    return _unit(unit_type, "fragment-A", "parent-A").model_copy(
         update={
             "metric": metric,
             "organism_keys": organisms,
