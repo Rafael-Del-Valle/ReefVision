@@ -334,3 +334,19 @@ def test_source_mixed_biological_levels_fail_closed() -> None:
     )
     with pytest.raises(ValidationError, match="mixes biological sampling levels"):
         summarize_projected_unit_summaries(records, changes)
+
+
+@pytest.mark.parametrize("technical_type", ["camera tank", "image-tank", "frame aquarium"])
+def test_technical_compound_label_is_not_laundered_into_biological_unit(
+    technical_type: str,
+) -> None:
+    records = _dated_alias_series("fragment-A", technical_type, "tank-1", 601, 2.0)
+    changes = summarize_projected_endpoint_changes(
+        records, summarize_sampling_date_qc(records)
+    )
+    summaries = summarize_projected_unit_summaries(records, changes)
+    assert len(summaries) == 1
+    assert summaries[0].experimental_unit_type == technical_type
+    assert summaries[0].unit_status == "technical_replicate_unit"
+    assert summaries[0].review_gate == "scientist_review_required"
+    assert summarize_projected_population_summaries(summaries) == []
