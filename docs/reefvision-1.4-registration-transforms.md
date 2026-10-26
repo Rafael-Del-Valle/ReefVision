@@ -17,7 +17,12 @@ transforms, and malformed matrices are rejected. The registration RMS residual
 and each transform entry must be JSON numbers (integers or decimals); strings
 such as `"0.02"` and booleans such as `true` are rejected rather than silently
 converted into scientific measurements. Existing JSON integer matrices remain
-compatible.
+compatible. The comparison service also revalidates existing Pydantic evidence
+objects when passed directly from Python. Mutating an already-constructed
+model (including nested matrix rows) cannot bypass numeric, correspondence,
+or rigid-transform checks; invalid mutations are rejected before results or
+provenance are emitted. Saved Workflow Builder graphs use the same comparison
+engine, while JSON inputs are validated at the API boundary.
 
 Example (identity rotation with a provisional 0.1 m x translation):
 
