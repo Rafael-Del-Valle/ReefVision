@@ -125,7 +125,11 @@ def frozen_pose_item_fingerprints_match(
         # malformed or missing correction/review time evidence.
         for field in ("reviewed_at", "correction_created_at"):
             timestamp = review.get(field)
-            if not isinstance(timestamp, str) or len(timestamp) < 19 or timestamp[10] != "T":
+            if (
+                not isinstance(timestamp, str)
+                or len(timestamp) < 19
+                or timestamp[10] != "T"
+            ):
                 return False
             try:
                 datetime.fromisoformat(timestamp)
