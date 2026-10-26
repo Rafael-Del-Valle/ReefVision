@@ -590,5 +590,8 @@ def test_16bit_tiff_display_preserves_raw_intensity(
     with Image.open(destination) as rendered:
         assert rendered.mode in {"I;16", "I;16B"}
         assert rendered.size == (3, 2)
-        assert tuple(rendered.getpixel((x, y)) for y in range(2) for x in range(3)) == values
+        actual_values = tuple(
+            rendered.getpixel((x, y)) for y in range(2) for x in range(3)
+        )
+        assert actual_values == values
     assert source.read_bytes() == original_bytes
