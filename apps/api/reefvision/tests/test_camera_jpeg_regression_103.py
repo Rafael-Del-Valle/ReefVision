@@ -134,6 +134,45 @@ def test_multi_page_tiff_is_not_silently_imported_as_one_image(client: TestClien
 
 
 @pytest.mark.parametrize(
+    ("format_name", "extension"),
+    [("PNG", ".png"), ("WEBP", ".webp")],
+)
+def test_animated_still_image_formats_are_rejected_without_losing_frames(
+    client: TestClient, format_name: str, extension: str
+) -> None:
+    """APNG and animated WebP must not silently become one-frame observations."""
+    project = create_project(client, f"Animated {format_name} scientific image")
+    stream = BytesIO()
+    first = Image.new("RGB", (40, 30), (240, 20, 20))
+    second = Image.new("RGB", (40, 30), (20, 20, 240))
+    first.save(
+        stream,
+        format=format_name,
+        save_all=True,
+        append_images=[second],
+        duration=100,
+        loop=0,
+    )
+    payload = stream.getvalue()
+    with Image.open(BytesIO(payload)) as decoded:
+        assert decoded.n_frames == 2  # A real animated fixture, not a still.
+
+    report = import_one(
+        client,
+        project["id"],
+        filename=f"TIME_SERIES{extension.upper()}",
+        content=payload,
+    )
+    assert not report["successful"], report
+    assert not report["failed"], report
+    assert len(report["unsupported"]) == 1, report
+    assert "Multi-frame" in report["unsupported"][0]["detail"]
+    gallery = client.get(f"/api/v1/projects/{project['id']}/images")
+    assert gallery.status_code == 200
+    assert gallery.json()["total"] == 0
+
+
+@pytest.mark.parametrize(
     ("orientation", "expected"),
     [
         (1, (64, 48)),
