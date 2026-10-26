@@ -10,7 +10,7 @@ $parseErrors = $null
 $acceptanceAst = [System.Management.Automation.Language.Parser]::ParseFile(
     $acceptanceLibrary, [ref]$parseTokens, [ref]$parseErrors
 )
-if (@($parseErrors).Count -ne 0) {
+if ($null -ne $parseErrors -and $parseErrors.Count -gt 0) {
     throw "Windows acceptance library has PowerShell parse errors: $($parseErrors | ForEach-Object { $_.Message } | Out-String)"
 }
 $functionDefinitions = @($acceptanceAst.FindAll({
