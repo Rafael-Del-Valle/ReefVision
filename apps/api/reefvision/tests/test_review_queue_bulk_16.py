@@ -680,9 +680,8 @@ def test_keyed_bulk_retry_preserves_mixed_completion_and_skip(
         ids[0]: "completed",
         ids[1]: "skipped",
     }
-    assert retry.json()["items"][0]["completed_at"] == completed.json()["items"][0][
-        "completed_at"
-    ]
+    completion_time = completed.json()["items"][0]["completed_at"]
+    assert retry.json()["items"][0]["completed_at"] == completion_time
     assert retry.json()["items"][1]["skip_reason"] == "Uncertain biological boundary"
     assert [client.get(url).json() for url in event_urls] == before
 
