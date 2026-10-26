@@ -13,7 +13,10 @@ from fastapi.testclient import TestClient
 
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
+from reefvision.schemas.ecology_identity import (
+    EcologyCrossUnitParentDetail,
+    EcologyIdentityRegistryResponse,
+)
 from reefvision.services.ecology_identity_history_export import render_ecology_identity_history_csv
 from reefvision.tests.test_annotations import create_project
 
@@ -156,6 +159,20 @@ def test_shared_parent_tanks_api_csv_and_saved_workflow(client: TestClient) -> N
     typed = EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
     assert render_ecology_identity_history_csv(typed) == csv_response.text
 
+    # An explicitly supplied modern detail list is authenticated against
+    # fingerprint-checked identities; dropping the shared-parent evidence
+    # must fail closed rather than suppressing the pseudoreplication warning.
+    tampered = typed.model_copy(deep=True)
+    tampered.cross_unit_parent_details = []
+    with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
+        render_ecology_identity_history_csv(tampered)
+
+    # Altered contributing fragments or units are likewise rejected.
+    tampered = typed.model_copy(deep=True)
+    tampered.cross_unit_parent_details[0].fragment_keys = ["fragment-A", "fragment-B"]
+    with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
+        render_ecology_identity_history_csv(tampered)
+
     # Existing saved artifacts with the older, status-only audit remain
     # exportable; the CSV recomputes details from fingerprint-checked rows.
     pre_detail = payload.copy()
@@ -214,8 +231,18 @@ def test_no_false_cross_unit_parent_claims_and_csv_tampering(client: TestClient)
     tampered.cross_unit_shared_parent_colony_keys = ["invented-parent"]
     with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
         render_ecology_identity_history_csv(tampered)
+    # The expected details are already empty for a parent present in only
+    # one tank; assigning [] again is not tampering. A fabricated detail
+    # naming a second tank must be rejected instead.
     tampered = typed.model_copy(deep=True)
-    tampered.cross_unit_parent_details = []
+    tampered.cross_unit_parent_details = [
+        EcologyCrossUnitParentDetail(
+            parent_colony_key="parent-C",
+            experimental_unit_level="tank",
+            experimental_unit_ids=["unit-1", "invented-unit"],
+            fragment_keys=["fragment-1", "fragment-2"],
+        )
+    ]
     with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
         render_ecology_identity_history_csv(tampered)
 

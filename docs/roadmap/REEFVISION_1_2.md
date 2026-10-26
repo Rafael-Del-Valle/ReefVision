@@ -1781,3 +1781,26 @@ CSV export reconstructs details from fingerprint-verified identities rather
 than falsely treating missing detail as an empty result. Artifacts explicitly
 carrying details are compared against the recomputation and rejected if
 tampered. This is an additive artifact contract, not a verification upgrade.
+
+## Track B — Cross-unit parent audit regression correction (2026-10-25; development)
+
+Exact-head Actions at `a173924446a61ed4a3cd27f11bc3505582100593`
+completed **17/19** workflows; the two backend failures were the same
+`test_no_false_cross_unit_parent_claims_and_csv_tampering` assertion
+(1 failed, 1470 passed, 32 skipped). The test assigned an empty detail
+list to an already-empty, scientifically valid no-cross-unit registry and
+incorrectly expected the CSV exporter to reject that no-op. The exporter
+correctly accepted it.
+
+The regression now exercises actual falsification: an invented second
+tank in a no-cross-unit registry, removal of shared-parent evidence in a
+registry that genuinely spans tanks, and omission of a contributing
+fragment. Each must fail the existing deterministic identity-derived
+audit, while the explicit legacy status-only saved-workflow artifact
+continues to reconstruct details from fingerprint-verified identities.
+No production behavior, scientific denominators, workflow port types,
+identity records, migrations, or verification status change. The same
+standalone CSV and persisted saved-workflow tests remain the acceptance
+contract. New exact-head CI must pass before considering the repair
+validated; scientist-reviewed study design, longitudinal observations,
+and installed Windows acceptance are still outstanding.
