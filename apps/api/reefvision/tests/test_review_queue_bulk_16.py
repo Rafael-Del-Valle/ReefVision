@@ -246,6 +246,7 @@ def test_bulk_completion_rejects_mixed_states_atomically(client: TestClient) -> 
         client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events").json()["total"] == 1
     )
 
+
 def test_bulk_completion_partial_retry_preserves_original_reviewer_audit(
     client: TestClient,
 ) -> None:
@@ -308,3 +309,50 @@ def test_bulk_completion_partial_retry_preserves_original_reviewer_audit(
         events = client.get(f"/api/v1/review-queues/{queue_id}/items/{item_id}/events")
         assert events.status_code == 200, events.text
         assert events.json()["total"] == 2
+
+
+def test_bulk_completion_mixed_completed_and_pending_preserves_audit(
+    client: TestClient,
+) -> None:
+    queue_id, ids = _queue_with_two_images(client)
+    bulk_url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    first_event_url = f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events"
+    second_event_url = f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
+
+    started = client.post(bulk_url, json={"item_ids": [ids[0]], "action": "start"})
+    assert started.status_code == 200, started.text
+    completed = client.post(
+        bulk_url,
+        json={
+            "item_ids": [ids[0]],
+            "action": "complete",
+            "review_confirmed": True,
+            "actor": "original reviewer",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    original_completion = completed.json()["items"][0]["completed_at"]
+    original_history = client.get(first_event_url).json()
+    assert [event["event_type"] for event in original_history["items"]] == [
+        "triage_start",
+        "triage_complete",
+    ]
+    assert original_history["items"][-1]["actor"] == "original reviewer"
+
+    rejected = client.post(
+        bulk_url,
+        json={
+            "item_ids": ids,
+            "action": "complete",
+            "review_confirmed": True,
+            "actor": "different reviewer",
+        },
+    )
+    assert rejected.status_code == 409, rejected.text
+    items = client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"]
+    by_id = {item["id"]: item for item in items}
+    assert by_id[ids[0]]["review_state"] == "completed"
+    assert by_id[ids[0]]["completed_at"] == original_completion
+    assert by_id[ids[1]]["review_state"] == "pending"
+    assert client.get(first_event_url).json() == original_history
+    assert client.get(second_event_url).json()["total"] == 0
