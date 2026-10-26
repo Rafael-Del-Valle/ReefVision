@@ -16,6 +16,7 @@ from reefvision.db.models import (
     WorkflowArtifact,
     WorkflowNodeRun,
 )
+from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review_queue_integrity import queue_item_evidence_sha256
@@ -119,16 +120,36 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
         "id"
     ]
     event_url = f"/api/v1/review-queues/{result['queue_id']}/items/{item_id}/events"
-    comment = client.post(
-        event_url,
-        json={
-            "client_request_id": str(uuid4()),
-            "event_type": "comment",
-            "actor": "researcher",
-            "comment": "Review this saved workflow image",
-        },
-    )
+    comment_payload = {
+        "client_request_id": str(uuid4()),
+        "event_type": "comment",
+        "actor": "researcher",
+        "comment": "Review this saved workflow image",
+    }
+    comment = client.post(event_url, json=comment_payload)
     assert comment.status_code == 201, comment.text
+
+    # The saved executable graph's review queue must not accept a replay of
+    # manually authored coordination evidence assigned to another project.
+    # The API cannot repair history; this deliberate corruption is test-only.
+    unrelated = create_project(client, "Foreign saved QC comment provenance")
+    with app.state.session_factory() as session:
+        event = session.get(ReviewQueueItemEvent, comment.json()["id"])
+        assert event is not None
+        event.project_id = unrelated["id"]
+        session.commit()
+    rejected_comment_retry = client.post(event_url, json=comment_payload)
+    assert rejected_comment_retry.status_code == 409, rejected_comment_retry.text
+    assert client.get(event_url).status_code == 409
+    with app.state.session_factory() as session:
+        event = session.get(ReviewQueueItemEvent, comment.json()["id"])
+        assert event is not None
+        assert event.project_id == unrelated["id"]
+        event.project_id = project["id"]
+        session.commit()
+    recovered_comment_retry = client.post(event_url, json=comment_payload)
+    assert recovered_comment_retry.status_code == 201, recovered_comment_retry.text
+    assert recovered_comment_retry.json()["id"] == comment.json()["id"]
     assert client.get(event_url).json()["total"] == 1
 
     # A manually triaged item produced by a saved executable workflow keeps
