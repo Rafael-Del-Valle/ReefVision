@@ -2022,6 +2022,7 @@ def test_mutated_reidentification_specimen_binding_is_revalidated() -> None:
     with pytest.raises(ValueError, match="provisional specimen ID"):
         compare_mesh_observations(before, after, reidentification_evidence=evidence)
 
+
 @pytest.mark.parametrize(
     ("rms", "centroid_separation", "expected_ratio", "warning"),
     [
