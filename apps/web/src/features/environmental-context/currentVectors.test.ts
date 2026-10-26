@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { currentVectors } from "./currentVectors";
+import { currentComponentUncertaintyText, currentVectors } from "./currentVectors";
 import type { ScientificRecord } from "./environmentalContextApi";
 function component(
   variable: string,
@@ -40,6 +40,58 @@ it("computes speed and direction toward true north from east/north components", 
   expect(vectors).toHaveLength(1);
   expect(vectors[0].speed).toBe(5);
   expect(vectors[0].bearing).toBeCloseTo(36.86989765);
+});
+it("preserves supplied component uncertainty without estimating vector uncertainty", () => {
+  const vectors = currentVectors([
+    component("current_eastward_velocity", 3, {
+      normalized_uncertainty: 0.25,
+      uncertainty: { value: 0.25, kind: "standard_deviation" },
+    }),
+    component("current_northward_velocity", 4, {
+      normalized_uncertainty: 0.1,
+      uncertainty: { value: 0.1, kind: "bound" },
+    }),
+  ]);
+  expect(vectors).toHaveLength(1);
+  expect(vectors[0]).toMatchObject({
+    eastUncertainty: { value: 0.25, kind: "standard_deviation" },
+    northUncertainty: { value: 0.1, kind: "bound" },
+  });
+  expect(
+    currentComponentUncertaintyText("East", vectors[0].eastUncertainty),
+  ).toBe("East component uncertainty: 0.250 m/s (standard deviation)");
+  expect(
+    currentComponentUncertaintyText("North", vectors[0].northUncertainty),
+  ).toBe("North component uncertainty: 0.100 m/s (bound)");
+});
+it("keeps missing, zero and invalid component uncertainties distinct", () => {
+  const unknown = currentVectors([
+    component("current_eastward_velocity", 3),
+    component("current_northward_velocity", 4, {
+      normalized_uncertainty: 0,
+      uncertainty: { value: 0, kind: "standard_error" },
+    }),
+  ])[0];
+  expect(unknown.eastUncertainty).toBeNull();
+  expect(unknown.northUncertainty).toEqual({
+    value: 0,
+    kind: "standard_error",
+  });
+  expect(
+    currentComponentUncertaintyText("East", unknown.eastUncertainty),
+  ).toBe("East component uncertainty: unknown");
+  const invalid = currentVectors([
+    component("current_eastward_velocity", 3, {
+      normalized_uncertainty: -1,
+      uncertainty: { value: 1, kind: "bound" },
+    }),
+    component("current_northward_velocity", 4, {
+      normalized_uncertainty: Number.NaN,
+      uncertainty: { value: 1, kind: "bound" },
+    }),
+  ])[0];
+  expect(invalid.eastUncertainty).toBeNull();
+  expect(invalid.northUncertainty).toBeNull();
 });
 it("omits a derived current whose magnitude overflows despite finite components", () => {
   expect(
