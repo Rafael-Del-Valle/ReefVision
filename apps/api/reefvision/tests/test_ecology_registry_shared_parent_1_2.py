@@ -352,11 +352,14 @@ def test_historical_parent_unit_exposure_api_workflow_and_csv(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        str(queued.json()["job_id"]),
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is True
+    )
     result = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert result.status_code == 200, result.text
     assert result.json()["run"]["status"] == "succeeded"

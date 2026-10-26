@@ -103,9 +103,7 @@ def derive_historical_cross_unit_parent_details(
     Revisions can be corrections rather than movements; do not infer occupancy
     overlap, actual transfers, or independent biological replication.
     """
-    grouped: dict[
-        tuple[str, str], list[EcologyHistoricalParentAssignment]
-    ] = {}
+    grouped: dict[tuple[str, str], list[EcologyHistoricalParentAssignment]] = {}
     for row in history:
         if row.kind != "fragment" or row.parent_colony_key is None:
             continue
