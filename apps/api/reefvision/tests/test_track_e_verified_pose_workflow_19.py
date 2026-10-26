@@ -21,6 +21,7 @@ from reefvision.services.pose_training_datasets import (
     PACKAGE_ITEMS_FILENAME,
     PACKAGE_MANIFEST_FILENAME,
     PoseTrainingDatasetService,
+    frozen_pose_item_evidence_sha256,
 )
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
@@ -1242,6 +1243,70 @@ def test_resigned_pose_item_cannot_change_frozen_schema_identity(
                 "node_id": "frozen-pose",
                 "node_type": "pose_training_dataset",
                 "parameters": {"dataset_id": dataset_id, "manifest_sha256": changed_sha},
+            }
+        ],
+        "edges": [],
+    }
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] is False
+    assert "pose_dataset_item_lineage_mismatch" in {
+        issue["code"] for issue in plan.json()["issues"]
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
+
+
+def test_resigned_review_cannot_reassign_scientist(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Start with an actual API-frozen, scientist-verified pose and its saved
+    # review evidence. A new valid manifest digest cannot authorize a change
+    # in the identity of the scientist who verified that pose.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    dataset_id = str(dataset["id"])
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
+        )
+        assert frozen is not None and item is not None
+        review = dict(item.review_provenance_json)
+        assert review["actor"] == review["reviewed_by"] == "scientist"
+        assert review["reviewed_at"]
+        item.review_provenance_json = {**review, "reviewed_by": "another-scientist"}
+        summaries = [dict(summary) for summary in frozen.manifest_json["items"]]
+        assert len(summaries) == 1 and summaries[0]["item_id"] == item.id
+        summaries[0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        changed_manifest = {**frozen.manifest_json, "items": summaries}
+        frozen.manifest_json = changed_manifest
+        frozen.manifest_sha256 = canonical_json_sha256(changed_manifest)
+        resigned_sha = frozen.manifest_sha256
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).native_package(dataset_id)
+
+    graph = {
+        "graph_id": "track-e-resigned-review-attribution",
+        "name": "Reject substituted scientist attribution",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": {"dataset_id": dataset_id, "manifest_sha256": resigned_sha},
             }
         ],
         "edges": [],
