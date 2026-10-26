@@ -501,9 +501,61 @@ def test_cross_metric_parent_lineage_is_order_invariant_for_same_roster() -> Non
 def test_different_metric_organism_rosters_are_not_assumed_identical() -> None:
     """A missing measurement metric does not imply changed biological parentage."""
     width = _unit("tank", "fragment-A", "parent-A")
-    height = _unit("aquarium", "fragment-B", "parent-B").model_copy(
-        update={"metric": "box_height"}
-    )
+    height = _unit("aquarium", "fragment-B", "parent-B").model_copy(update={"metric": "box_height"})
     summaries = summarize_projected_population_summaries([width, height])
     assert len(summaries) == 2
     assert all(row.independent_unit_inference_allowed is False for row in summaries)
+
+
+def _partial_metric_roster(
+    metric: str, organisms: list[str], parents: list[str]
+) -> EcologyProjectedUnitSummary:
+    return _unit("tank", "fragment-A", "parent-A").model_copy(
+        update={
+            "metric": metric,
+            "organism_keys": organisms,
+            "complete_organism_keys": organisms,
+            "parent_colony_keys": parents,
+        }
+    )
+
+
+def test_overlapping_metric_rosters_reject_impossible_parent_lineage() -> None:
+    """A shared fragment cannot have disjoint fully known parent candidates."""
+    width = _partial_metric_roster(
+        "box_width", ["fragment-A", "fragment-B"], ["parent-A", "parent-B"]
+    )
+    height = _partial_metric_roster(
+        "box_height", ["fragment-A", "fragment-C"], ["parent-C", "parent-D"]
+    )
+    for rows in ([width, height], [height, width]):
+        with pytest.raises(ValidationError, match="parent-colony candidates conflict"):
+            summarize_projected_population_summaries(rows)
+
+
+def test_overlapping_metric_rosters_preserve_possible_parent_lineage() -> None:
+    """Shared parent candidates do not establish which parent owns a fragment."""
+    width = _partial_metric_roster(
+        "box_width", ["fragment-A", "fragment-B"], ["parent-A", "parent-B"]
+    )
+    height = _partial_metric_roster(
+        "box_height", ["fragment-A", "fragment-C"], ["parent-B", "parent-C"]
+    )
+    for rows in ([width, height], [height, width]):
+        summaries = summarize_projected_population_summaries(rows)
+        assert len(summaries) == 2
+        assert all(row.review_gate == "scientist_review_required" for row in summaries)
+        assert all(row.independent_unit_inference_allowed is False for row in summaries)
+
+
+def test_partial_parent_rosters_do_not_invent_organism_parent_assignments() -> None:
+    """A parent list shorter than the organism roster is not a full mapping."""
+    width = _partial_metric_roster(
+        "box_width", ["fragment-A", "fragment-B"], ["parent-A"]
+    )
+    height = _partial_metric_roster(
+        "box_height", ["fragment-A", "fragment-C"], ["parent-B"]
+    )
+    summaries = summarize_projected_population_summaries([width, height])
+    assert len(summaries) == 2
+    assert all(row.review_gate == "scientist_review_required" for row in summaries)
