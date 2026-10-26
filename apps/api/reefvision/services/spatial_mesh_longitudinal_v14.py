@@ -7,7 +7,10 @@ from math import atan2, degrees, exp, hypot, isclose, isfinite, log
 from re import fullmatch
 from typing import Any
 
-from reefvision.schemas.spatial_mesh_preview_v14 import MeshRegistrationEvidence
+from reefvision.schemas.spatial_mesh_preview_v14 import (
+    MeshRegistrationEvidence,
+    MeshReidentificationEvidence,
+)
 
 
 def _is_sha256_fingerprint(value: Any) -> bool:
@@ -23,6 +26,7 @@ def compare_mesh_observations(
     before: dict[str, Any],
     after: dict[str, Any],
     registration_evidence: MeshRegistrationEvidence | dict[str, Any] | None = None,
+    reidentification_evidence: MeshReidentificationEvidence | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compare two explicitly identified timepoints without asserting coral growth."""
     first = before.get("provenance")
@@ -318,6 +322,28 @@ def compare_mesh_observations(
         "surface_area_change_is_not_verified_biological_growth",
         "average_change_per_day_is_not_a_biological_growth_rate",
     ]
+    # Bind provisional matching notes to this pair of observations. They are
+    # audit evidence, never a verified specimen-identity determination.
+    reidentification_record = None
+    if reidentification_evidence is None:
+        warnings.append("reidentification_evidence_unavailable")
+    else:
+        evidence_values = (
+            reidentification_evidence.model_dump(mode="python")
+            if isinstance(reidentification_evidence, MeshReidentificationEvidence)
+            else reidentification_evidence
+        )
+        try:
+            identity = MeshReidentificationEvidence.model_validate(evidence_values)
+        except ValueError as exc:
+            raise ValueError("Invalid pairwise reidentification evidence") from exc
+        if (
+            identity.before_observation_id != first_id
+            or identity.after_observation_id != second_id
+        ):
+            raise ValueError("Reidentification evidence must match both observation IDs")
+        reidentification_record = identity.model_dump(mode="json")
+        warnings.append("reidentification_evidence_requires_independent_review")
     if scale_normalized_area_ratio is not None:
         warnings.append("scale_normalized_area_ratio_requires_common_units_and_registration")
     elif normalized_ratio_out_of_range:
@@ -437,8 +463,7 @@ def compare_mesh_observations(
                     not isinstance(centroid, list)
                     or len(centroid) != 3
                     or any(
-                        type(value) not in (int, float) or not isfinite(value)
-                        for value in centroid
+                        type(value) not in (int, float) or not isfinite(value) for value in centroid
                     )
                 ):
                     raise ValueError("Surface centroid must be three finite coordinates")
@@ -613,6 +638,12 @@ def compare_mesh_observations(
             "before_coordinate_frame_id": frames[0],
             "after_coordinate_frame_id": frames[1],
             "registration_evidence": registration_record,
+            "reidentification_evidence": reidentification_record,
+            "reidentification_evidence_review_status": (
+                "caller_supplied_unverified"
+                if reidentification_record is not None
+                else "unavailable"
+            ),
             "registration_evidence_review_status": (
                 "caller_supplied_unverified" if registration_record is not None else "unavailable"
             ),
