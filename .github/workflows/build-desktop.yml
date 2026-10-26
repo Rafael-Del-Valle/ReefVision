@@ -44,6 +44,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Validate installed-Windows evidence policy regressions
+        shell: pwsh
+        run: python -m unittest discover -s scripts/tests -p test_validate_windows_acceptance_report.py -v
+
       # Catch syntax regressions before installing large provider dependencies.
       # compileall is standard-library-only and does not download model weights.
       - name: Fail fast on backend Python syntax before packaging
@@ -225,6 +229,24 @@ jobs:
             -InstallerPath $msi `
             -AcceptanceRoot 'C:\reefvision-1-0-2-disposable-acceptance' `
             -SkipUpgrade -DisposableTest -KeepArtifacts
+
+      # Passing msiexec or exiting the harness is not enough: independently
+      # verify every required installed-app gate, isolated migration state,
+      # MSI SHA-256 and explicit upgrade SKIPPED (not falsely accepted).
+      - name: Verify installed Windows acceptance evidence
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
+          $msi = Join-Path $folder 'ReefVision_1.0.2_x64_en-US.msi'
+          $reports = @(Get-ChildItem -Path '.artifacts' -Directory -Filter 'windows-clean-acceptance-*' |
+            ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'report.json') -ErrorAction SilentlyContinue })
+          if ($reports.Count -ne 1) {
+            throw "Expected exactly one installed-Windows acceptance report; found $($reports.Count)."
+          }
+          python scripts/validate_windows_acceptance_report.py --report $reports[0].FullName --expected-version 1.0.2 --expected-upgrade skipped --installer $msi
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Installed-Windows acceptance evidence verification failed.'
+          }
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
