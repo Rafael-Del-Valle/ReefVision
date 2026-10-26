@@ -141,3 +141,27 @@ retains unverified status and explicit scientific QC; calibration,
 occlusion, reconstruction, and identity still require independent review.
 Standalone analyses and persisted executable Workflow Builder graphs share
 the same calculation and provenance, with a saved-workflow parity regression.
+
+## Target-frame signed centroid-offset bounds
+
+When the same three caller-supplied Euclidean error radii and rigid transform
+are available, the longitudinal comparison additionally emits
+`registered_surface_centroid_offset_target_frame_caller_bound_intervals_m`.
+This is a three-element list, ordered **x, y, z** in the target frame, with
+one `[lower_m, upper_m]` interval per signed offset component. For each
+component `offset_i`, the conservative interval is
+`[offset_i - u_total, offset_i + u_total]`, where
+`u_total = u_source + u_target + u_alignment`. A Euclidean error radius bounds
+each Cartesian component, so this calculation does not assume independent
+coordinate errors, Gaussian residuals, or an estimated covariance matrix.
+
+The component intervals are `null` if either centroid, the transform, or
+complete caller bounds are unavailable, or if the separation calculation is
+numerically invalid. A zero signed offset may have an interval extending in
+both directions; unlike scalar separation, signed component bounds must **not**
+be clipped at zero. These bounds are conditional on the researcher-provided
+radii and are **not** confidence intervals, statistical movement tests,
+independent registration validation, or evidence of coral growth. The existing
+provisional measurement status, QC warnings, and human-verification flags are
+unchanged. Standalone and persisted typed Workflow Builder executions share
+the same implementation and are checked for artifact parity.
