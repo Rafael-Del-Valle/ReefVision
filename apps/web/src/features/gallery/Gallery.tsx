@@ -9,6 +9,7 @@ import {
   updateImage,
   type AnnotationStatus,
   type ImageImportReport,
+  type ImagePage,
   type Project,
   type ProjectImageListItem,
 } from "../../api/client";
@@ -510,7 +511,7 @@ export function Gallery({
     }
   }, []);
 
-  const images = useQuery({
+  const images = useQuery<ImagePage>({
     queryKey: ["images", project.id, page, filters, sortBy],
     refetchInterval: (query) =>
       galleryPendingThumbnailRefetchMs(
