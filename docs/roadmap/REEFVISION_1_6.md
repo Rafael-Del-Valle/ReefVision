@@ -967,3 +967,22 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - This is schema-collision detection, **not** reconciliation of the independent
   1.1/1.6 revision 0038. Full CI, real Windows MSI upgrade/rollback, installed
   GUI and scientific acceptance remain mandatory; version 1.6 stays HOLD.
+
+## 2026-10-26 — Revision 0041 QC registry foreign-key integrity (Track D)
+
+- Pre-edit audit found the new registry guard validated non-null identities and
+  the global request primary key, but could still accept a forged 0041 schema
+  with no queue/project foreign keys or cascading deletion of review history.
+- Desktop preflight now requires exact review-queue and project references with
+  `ON DELETE RESTRICT`. SQLite uses read-only `PRAGMA foreign_key_list`
+  because SQLAlchemy's SQLite inspector omits delete-policy metadata.
+  Non-SQLite backends use SQLAlchemy foreign-key inspection.
+- Added a valid registry-schema regression and six rejected forged-schema
+  cases: missing links, one-sided links, wrong project target and CASCADE
+  policies. Tests preserve an unrelated research sentinel and Alembic stamp.
+- Fixed the two formatter discrepancies from the previous exact-head CI;
+  repository CI and new regressions remain pending until the new SHA runs.
+- This guard does not resolve the independent 1.1/1.6 revision 0038 collision
+  and does not establish Windows MSI upgrade/rollback, installed GUI, or
+  scientific release acceptance. No review decisions, user assets or saved
+  Workflow Builder graphs are changed. **Release HOLD.**
