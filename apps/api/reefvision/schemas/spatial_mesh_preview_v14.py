@@ -5,7 +5,15 @@ from __future__ import annotations
 from math import isclose, isfinite
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictFloat, StrictInt, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictFloat,
+    StrictInt,
+    model_validator,
+)
 
 
 class MeshPreviewRequest(BaseModel):
