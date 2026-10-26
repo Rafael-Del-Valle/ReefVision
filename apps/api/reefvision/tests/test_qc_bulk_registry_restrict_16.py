@@ -47,10 +47,44 @@ def test_committed_bulk_request_restricts_queue_deletion_and_remains_retryable(
             text("PRAGMA foreign_key_list(review_queue_bulk_requests)")
         ).all()
     assert any(row[2] == "review_queues" and row[6] == "RESTRICT" for row in links)
+    assert any(row[2] == "projects" and row[6] == "RESTRICT" for row in links)
+
+    # Neither a nonexistent project nor a nonexistent queue may acquire a
+    # committed request identity. The database must reject both before any
+    # reviewer event can be attributed to an orphaned scientific record.
+    with app.state.session_factory() as session:
+        committed = session.get(ReviewQueueBulkRequestRecord, request_id)
+        assert committed is not None
+        real_project_id = committed.project_id
+
+    for invalid_queue, invalid_project in (
+        (queue_id, str(uuid4())),
+        (str(uuid4()), real_project_id),
+    ):
+        with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
+            with app.state.engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO review_queue_bulk_requests "
+                        "(id, review_queue_id, project_id, action, actor, "
+                        "item_ids_json, created_at) "
+                        "VALUES (:id, :queue_id, :project_id, 'start', "
+                        "'researcher one', '[]', CURRENT_TIMESTAMP)"
+                    ),
+                    {
+                        "id": str(uuid4()),
+                        "queue_id": invalid_queue,
+                        "project_id": invalid_project,
+                    },
+                )
+
+    with app.state.engine.connect() as connection:
+        assert connection.scalar(
+            text("SELECT COUNT(*) FROM review_queue_bulk_requests")
+        ) == 1
 
     event_urls = [
-        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
-        for item_id in item_ids
+        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in item_ids
     ]
     before = [client.get(url).json() for url in event_urls]
     assert all(history["total"] == 1 for history in before)
