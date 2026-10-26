@@ -154,3 +154,91 @@ def test_corrupt_saved_verified_pose_graph_finishes_as_failed(
             project_id,
             WorkflowRunCreateRequest(graph_record_id=str(saved.json()["id"])),
         )
+
+def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Use an API-frozen scientist-verified pose dataset and a persisted graph,
+    # then change only the stored revision after a valid queue request.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    other_project = create_project(client, "Pose dequeue provenance isolation")
+    graph = {
+        "graph_id": "track-e-queued-pose-provenance",
+        "name": "Queued frozen pose provenance",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": {
+                    "dataset_id": str(dataset["id"]),
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+            }
+        ],
+        "edges": [],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    record_id = str(saved.json()["id"])
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        record = session.get(WorkflowGraphRecord, record_id)
+        assert record is not None
+        original_graph = dict(record.graph_json)
+        original_sha = record.graph_sha256
+
+    for mutation in ("foreign_project", "changed_digest", "ignored_extra_json"):
+        queued = client.post(
+            f"/api/v1/projects/{project_id}/workflow-runs",
+            json={"graph_record_id": record_id},
+        )
+        assert queued.status_code == 202, queued.text
+        with app.state.session_factory() as session:
+            record = session.get(WorkflowGraphRecord, record_id)
+            assert record is not None
+            if mutation == "foreign_project":
+                record.project_id = str(other_project["id"])
+            elif mutation == "changed_digest":
+                record.graph_sha256 = "0" * 64
+            else:
+                # Unknown JSON fields are discarded by Pydantic, so a
+                # normalized graph hash alone cannot detect this change.
+                record.graph_json = {
+                    **original_graph,
+                    "unexpected_scientific_revision": "altered",
+                }
+            session.commit()
+
+        assert (
+            process_workflow_run_job(
+                app.state.settings,
+                app.state.session_factory,
+                str(queued.json()["job_id"]),
+            )
+            is False
+        )
+        with app.state.session_factory() as session:
+            job = session.get(Job, str(queued.json()["job_id"]))
+            assert job is not None
+            assert job.status == "failed"
+            assert job.error_message == "Workflow graph provenance checksum failed"
+            assert job.completed_at is not None
+            record = session.get(WorkflowGraphRecord, record_id)
+            assert record is not None
+            record.project_id = project_id
+            record.graph_sha256 = original_sha
+            record.graph_json = original_graph
+            session.commit()
+
+        detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "failed"
+        assert detail.json()["run"]["error_message"] == (
+            "Workflow graph provenance checksum failed"
+        )
+        assert detail.json()["artifacts"] == []
