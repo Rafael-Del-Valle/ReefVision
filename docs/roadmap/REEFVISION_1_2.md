@@ -2085,3 +2085,27 @@ until exact-head CI executes. Local cloning/testing remains blocked by
 GitHub DNS resolution. Independent scientific review, authenticated design,
 migration reconciliation and installed Windows GUI/installer acceptance
 remain outstanding. **1.2 is not release-ready.**
+
+
+## Cross-metric projected parent-colony provenance guard (2026-10-26)
+
+At the population-aggregation boundary, an eligible intermediate unit row
+must not claim more distinct parent colonies than complete organisms. When
+the **same canonical biological unit and identical complete organism roster**
+appear under multiple measurement metrics, their declared parent-colony set
+must also agree (order and known tank/aquarium aliases are immaterial).
+This prevents caller-constructed or re-signed intermediate summaries from
+silently changing parentage between width, height and projected-area
+analyses. Different metric-specific organism rosters are **not** assumed
+identical; no parent-to-organism assignment is invented from aggregates.
+
+The existing source-linked candidate calculation, standalone API and
+executable saved Workflow Builder use the same population service; no
+new analysis node, migration, environmental provider or pretrained model
+is introduced. Added order-invariant forgery and valid-roster regressions,
+and applied the exact Ruff formatting correction reported at predecessor
+head `40f4bf47` (16/19 workflows passed; three failed at one test formatting
+line). The new head's CI and installed Windows/scientific acceptance
+remain to be verified. All outputs remain `linked_unverified` and gated
+for scientist review; this does **not** authenticate experimental design
+or make ReefVision 1.2 release-ready.
