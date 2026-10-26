@@ -857,3 +857,11 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   production QC API, migrations, scientific observations and workflow engine
   are unchanged. Full exact-head CI and physical interactive Windows GUI/
   MSI upgrade acceptance remain required; **release HOLD**.
+
+## 2026-10-26 — Installed-MSI acceptance evidence verification (Track D)
+
+- Prior exact head `c9b7e2080c895b5457929e1c3cda8affc11ead0c` passed **20/20 Actions workflows**, including disposable Windows MSI clean installation, packaged API QC coordination and saved Workflow Builder replay. The CI workflow explicitly uses `-SkipUpgrade`; it does **not** establish a real MSI upgrade, rollback, or interactive WebView GUI acceptance.
+- Added a read-only, standard-library verifier `scripts/validate_windows_acceptance_report.py` that rejects plan-only, failed, incomplete, or non-UTC evidence; missing required installed-app/QC/workflow checks; stale/non-isolated migrations; MSI version or actual installer SHA-256 mismatch; and misleading upgrade PASS/SKIPPED claims. Optional live SAM and confidence review are explicitly recorded, not silently promoted.
+- Added eight standalone regression tests, including actual disposable-file tampering and strict upgrade version checks. The Windows packaging workflow now runs these tests before building and independently verifies the final report and 2.7 GB MSI digest after installed-app acceptance; failure blocks the job before the evidence upload step (which still uploads diagnostic logs on failure).
+- Local standard-library unit tests **8/8 passed** and compileall passed in a separate Linux fixture; remote GitHub file read-back confirms committed sources. Full exact-head GitHub Actions and native Windows execution of the new verifier are **pending**, not claimed as passing.
+- This is an evidence-integrity increment, **not** a claim of 1.6 release readiness. Real MSI upgrade/rollback, physical installed-GUI/dense-scene acceptance, representative scientific tests, and reconciliation of independent 1.1/1.6 Alembic `0038` lineages remain HOLD. No automatic checkpoint downloads, merge, tag, release, or user asset changes.
