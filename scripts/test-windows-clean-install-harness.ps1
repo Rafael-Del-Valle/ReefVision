@@ -2,7 +2,26 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $Root = Split-Path -Parent $PSScriptRoot
-. (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
+$acceptanceLibrary = Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1'
+# Parse the actual packaged library before dot-sourcing. A malformed function
+# body or duplicate definition must fail the native Windows installer gate.
+$parseTokens = $null
+$parseErrors = $null
+$acceptanceAst = [System.Management.Automation.Language.Parser]::ParseFile(
+    $acceptanceLibrary, [ref]$parseTokens, [ref]$parseErrors
+)
+if (@($parseErrors).Count -ne 0) {
+    throw "Windows acceptance library has PowerShell parse errors: $($parseErrors | ForEach-Object { $_.Message } | Out-String)"
+}
+$functionDefinitions = @($acceptanceAst.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst]
+}, $true))
+$duplicateDefinitions = @($functionDefinitions | Group-Object Name | Where-Object { $_.Count -gt 1 })
+if ($duplicateDefinitions.Count -gt 0) {
+    throw "Windows acceptance library contains duplicate function definitions: $(($duplicateDefinitions.Name) -join ', ')"
+}
+. $acceptanceLibrary
 
 $passed = 0
 function Assert-True([bool]$Condition, [string]$Message) {
