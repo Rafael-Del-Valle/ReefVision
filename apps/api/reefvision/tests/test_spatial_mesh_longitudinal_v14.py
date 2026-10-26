@@ -2203,17 +2203,21 @@ def test_reidentification_specimen_binding_is_provisional_and_legacy_safe() -> N
         "observer_id": "reviewer-1",
         "evidence_note": "Unverified visual correspondence",
     }
-    legacy = compare_mesh_observations(before, after, evidence)
+    legacy = compare_mesh_observations(before, after, reidentification_evidence=evidence)
     assert legacy["provenance"]["reidentification_evidence"] == evidence
     assert "reidentification_specimen_binding_unavailable" in legacy["qc_warnings"]
     bound = {**evidence, "specimen_id": "colony-16"}
-    result = compare_mesh_observations(before, after, bound)
+    result = compare_mesh_observations(before, after, reidentification_evidence=bound)
     assert result["provenance"]["reidentification_evidence"] == bound
     assert "reidentification_specimen_binding_unavailable" not in result["qc_warnings"]
     assert result["provenance"]["specimen_identity_verified"] is False
     assert "reidentification_evidence_requires_independent_review" in result["qc_warnings"]
     with pytest.raises(ValueError, match="provisional specimen ID"):
-        compare_mesh_observations(before, after, {**bound, "specimen_id": "other-colony"})
+        compare_mesh_observations(
+            before,
+            after,
+            reidentification_evidence={**bound, "specimen_id": "other-colony"},
+        )
 
 
 def test_mutated_reidentification_specimen_binding_is_revalidated() -> None:
