@@ -244,6 +244,7 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   const [retry, setRetry] = useState(0);
   const attemptedThumbnailPath = useRef<string | null>(null);
   const imageElement = useRef<HTMLImageElement | null>(null);
+  const canvasElement = useRef<HTMLDivElement | null>(null);
   const thumbnail =
     phase === "thumbnail-loading" || phase === "thumbnail-loaded";
   const waiting = phase === "loading" || phase === "thumbnail-loading";
@@ -252,6 +253,28 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   const requestKind = thumbnail
     ? `thumbnail:${image.thumbnail_path ?? ""}`
     : "original";
+
+  useEffect(() => {
+    const canvas = canvasElement.current;
+    if (!canvas) return;
+    // Gallery media is a fixed preview, not a zoomable annotation canvas.
+    // WebView2 otherwise scrolls the document under the cursor and makes the
+    // first image appear to shift or partially change while it is loading.
+    // Use a non-passive native listener so preventDefault works in WebView2.
+    const containPreviewWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) return;
+      if (
+        (!Number.isFinite(event.deltaX) || event.deltaX === 0) &&
+        (!Number.isFinite(event.deltaY) || event.deltaY === 0)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    canvas.addEventListener("wheel", containPreviewWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", containPreviewWheel);
+  }, []);
 
   useEffect(() => {
     if (!waiting) return;
@@ -334,7 +357,7 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   }
 
   return (
-    <div className="rv-media-canvas">
+    <div ref={canvasElement} className="rv-media-canvas">
       {phase === "error" ? (
         <div className="rv-media-load-error" role="alert">
           <strong>Image could not be displayed</strong>
