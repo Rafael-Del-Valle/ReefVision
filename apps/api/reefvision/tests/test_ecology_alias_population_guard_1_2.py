@@ -51,14 +51,13 @@ def test_population_rejects_aliases_of_one_independent_tank(alias: str) -> None:
         summarize_projected_population_summaries(list(reversed(rows)))
 
 
-
-
 @pytest.mark.parametrize("unit_type", [" tank", "tank ", "\ttank", " tank-level "])
 def test_population_rejects_padded_biological_sampling_level(unit_type: str) -> None:
     """A forged unit type cannot silently rewrite its registered design label."""
     row = _unit(unit_type, "fragment-A", "parent-A")
     with pytest.raises(ValidationError, match="experimental-unit type is blank or padded"):
         summarize_projected_population_summaries([row])
+
 
 def test_distinct_tanks_remain_distinct_declared_units() -> None:
     second = _unit("aquarium", "fragment-B", "parent-B").model_copy(
