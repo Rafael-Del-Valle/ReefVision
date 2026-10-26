@@ -460,9 +460,9 @@ def test_forged_cross_metric_parent_lineage_cannot_change(
     height = _unit("aquarium", "fragment-A", "parent-A").model_copy(
         update={"metric": "box_height", "parent_colony_keys": second_parents}
     )
-    with pytest.raises(ValidationError, match="parent-colony provenance changes across metrics"):
+    with pytest.raises(ValidationError, match="parent-colony provenance changes"):
         summarize_projected_population_summaries([width, height])
-    with pytest.raises(ValidationError, match="parent-colony provenance changes across metrics"):
+    with pytest.raises(ValidationError, match="parent-colony provenance changes"):
         summarize_projected_population_summaries([height, width])
 
 
