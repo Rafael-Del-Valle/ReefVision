@@ -539,7 +539,7 @@ class PoseTrainingDatasetService:
         # A verified pose must not freeze with acquisition metadata changed
         # after selection while its original candidate fingerprint remains.
         if canonical_json_sha256(provenance) != candidate.provenance_sha256:
-            raise ConflictError("Pose candidate acquisition provenance changed after selection")
+            raise ConflictError("Pose acquisition provenance changed after selection")
         source_video_sha = provenance.get("video_sha256")
         if (
             isinstance(source_video_sha, str)
