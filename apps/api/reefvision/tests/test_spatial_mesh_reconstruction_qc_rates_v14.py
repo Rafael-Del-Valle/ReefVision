@@ -96,6 +96,32 @@ def test_zero_triangle_reconstructions_have_unavailable_rates() -> None:
     assert "reconstruction_qc_rates_unavailable" in result["qc_warnings"]
 
 
+
+def test_zero_face_baseline_preserves_missing_rates_against_valid_followup() -> None:
+    before, after = _observations()
+    before.update(
+        face_count=0,
+        edge_connected_patch_count=0,
+        boundary_edge_count=0,
+        nonmanifold_edge_count=0,
+        degenerate_face_count=0,
+    )
+    result = compare_mesh_observations(before, after)
+    assert all(value is None for value in result["before_reconstruction_qc_rates"].values())
+    assert result["after_reconstruction_qc_rates"] == pytest.approx(
+        {
+            "degenerate_face_fraction": 0.0,
+            "boundary_edges_per_face": 0.1,
+            "nonmanifold_edges_per_face": 0.0,
+        }
+    )
+    assert all(
+        value is None
+        for value in result["reconstruction_qc_rate_changes_after_minus_before"].values()
+    )
+    assert "reconstruction_topology_changed_requires_review" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+
 def test_invalid_boolean_face_count_is_rejected() -> None:
     before, after = _observations()
     before["face_count"] = True
