@@ -380,6 +380,8 @@ def compare_mesh_observations(
     registration_residual_to_smaller_extent_ratio = None
     registration_translation_magnitude_m = None
     registration_rotation_angle_degrees = None
+    registered_surface_centroid_offset_target_frame_m = None
+    registered_surface_centroid_separation_m = None
     if registration_evidence is None:
         warnings.append("registration_evidence_unavailable")
     else:
@@ -425,6 +427,46 @@ def compare_mesh_observations(
                 )
             )
             warnings.append("registration_transform_requires_independent_review")
+            # Compare surface centroids only after applying the *supplied* rigid
+            # source-to-target transform. This is a reconstruction-alignment
+            # diagnostic, never evidence of organism motion or biological growth.
+            centroids = []
+            for observation in (before, after):
+                centroid = observation.get("area_weighted_surface_centroid_m")
+                if centroid is not None and (
+                    not isinstance(centroid, list)
+                    or len(centroid) != 3
+                    or any(
+                        type(value) not in (int, float) or not isfinite(value)
+                        for value in centroid
+                    )
+                ):
+                    raise ValueError("Surface centroid must be three finite coordinates")
+                centroids.append(centroid)
+            if any(centroid is None for centroid in centroids):
+                warnings.append("registered_surface_centroid_comparison_unavailable")
+            else:
+                source_centroid, target_centroid = centroids
+                assert source_centroid is not None and target_centroid is not None
+                offset = [
+                    target_centroid[axis]
+                    - (
+                        sum(
+                            transform[axis][column] * source_centroid[column]
+                            for column in range(3)
+                        )
+                        + transform[axis][3]
+                    )
+                    for axis in range(3)
+                ]
+                separation = hypot(*offset)
+                if all(isfinite(value) for value in offset) and isfinite(separation):
+                    registered_surface_centroid_offset_target_frame_m = offset
+                    registered_surface_centroid_separation_m = separation
+                    warnings.append("registered_centroid_offset_not_verified_biological_movement")
+                    warnings.append("registered_centroid_position_uncertainty_not_estimated")
+                else:
+                    warnings.append("registered_surface_centroid_comparison_out_of_numeric_range")
         if (
             early_extent is not None
             and early_extent > 0
@@ -539,6 +581,10 @@ def compare_mesh_observations(
         ),
         "registration_translation_magnitude_m": registration_translation_magnitude_m,
         "registration_rotation_angle_degrees": registration_rotation_angle_degrees,
+        "registered_surface_centroid_offset_target_frame_m": (
+            registered_surface_centroid_offset_target_frame_m
+        ),
+        "registered_surface_centroid_separation_m": registered_surface_centroid_separation_m,
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
         "delta_surface_area_m2": difference,
