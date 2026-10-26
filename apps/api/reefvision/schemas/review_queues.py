@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from math import isfinite
 from typing import Any, Literal, Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
@@ -129,6 +130,9 @@ class ReviewQueueBulkRequest(BaseModel):
     # Self-reported local label, not authenticated account identity.
     actor: str = Field(default="local_user", min_length=1, max_length=100)
     review_confirmed: StrictBool = False
+    # Optional stable ID: repeat an uncertain request without reapplying it
+    # after another researcher changes the queue state.
+    client_request_id: UUID | None = None
 
     @field_validator("actor")
     @classmethod
