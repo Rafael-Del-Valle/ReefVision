@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import struct
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
-import struct
 from threading import Barrier, Lock
 from typing import Any
 
