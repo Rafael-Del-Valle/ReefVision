@@ -74,6 +74,10 @@ class MeshRegistrationEvidence(BaseModel):
     rms_residual_m: StrictFloat = Field(ge=0, le=1_000_000, allow_inf_nan=False)
     correspondence_count: StrictInt = Field(ge=3, le=1_000_000)
     evidence_note: str = Field(min_length=1, max_length=2_000)
+    # Optional paired source fingerprints prevent stale registration reuse.
+    # This is a consistency binding, not proof of alignment or identity.
+    source_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    target_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     # Optional caller-supplied rigid source-to-target transform in meters.
     # Structural validity does not establish correct alignment or review.
     source_to_target_transform_m: list[list[StrictFloat]] | None = None
@@ -92,6 +96,8 @@ class MeshRegistrationEvidence(BaseModel):
 
     @model_validator(mode="after")
     def validate_rigid_transform(self) -> MeshRegistrationEvidence:
+        if (self.source_geometry_sha256 is None) != (self.target_geometry_sha256 is None):
+            raise ValueError("Registration geometry binding requires both SHA-256 fingerprints")
         transform = self.source_to_target_transform_m
         centroid_bounds = (
             self.source_centroid_position_error_bound_m,
