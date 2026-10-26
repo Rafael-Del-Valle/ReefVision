@@ -394,6 +394,60 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert disputed_artifact["payload_json"] == disputed_result
     assert len(disputed_artifact["payload_sha256"]) == 64
 
+    # An independently disputed specimen match must withhold organism-change
+    # estimates even when the spatial registration itself is not disputed.
+    disputed_identity = {
+        **reidentification_evidence,
+        "independent_review_decision": "disputes_match",
+        "independent_review_note": "Survey images show different colonies",
+    }
+    identity_response = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={
+            "before": before,
+            "after": after,
+            "registration_evidence": registration_evidence,
+            "reidentification_evidence": disputed_identity,
+        },
+    )
+    assert identity_response.status_code == 200, identity_response.text
+    identity_result = identity_response.json()
+    assert identity_result["before_surface_area_m2"] == pytest.approx(0.5)
+    assert identity_result["after_surface_area_m2"] == pytest.approx(1.0)
+    assert identity_result["delta_surface_area_m2"] is None
+    assert identity_result["average_surface_area_change_m2_per_day"] is None
+    assert identity_result["registered_surface_centroid_separation_m"] is None
+    assert identity_result["registration_translation_magnitude_m"] == pytest.approx(0.1)
+    assert (
+        identity_result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"]
+        is True
+    )
+    assert (
+        "longitudinal_change_withheld_disputed_specimen_identity"
+        in identity_result["qc_warnings"]
+    )
+    graph["graph_id"] = "mesh-longitudinal-disputed-identity-v14"
+    graph["nodes"][3]["parameters"]["registration_evidence"] = registration_evidence
+    graph["nodes"][3]["parameters"]["reidentification_evidence"] = disputed_identity
+    identity_saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert identity_saved.status_code == 201, identity_saved.text
+    identity_run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": identity_saved.json()["id"]}
+    )
+    assert identity_run.status_code == 202, identity_run.text
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(identity_run.json()["job_id"])
+    )
+    identity_detail = client.get(f"/api/v1/workflow-runs/{identity_run.json()['id']}")
+    assert identity_detail.status_code == 200, identity_detail.text
+    identity_artifact = next(
+        item
+        for item in identity_detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert identity_artifact["payload_json"] == identity_result
+    assert len(identity_artifact["payload_sha256"]) == 64
+
 
 @pytest.mark.parametrize(
     ("rms", "extent", "expected_ratio", "warning"),
