@@ -846,9 +846,12 @@ def test_keyed_bulk_registry_is_durable_and_global(client: TestClient) -> None:
         json={**payload, "item_ids": other_ids},
     )
     assert conflicting.status_code == 409, conflicting.text
-    assert client.get(f"/api/v1/review-queues/{other_queue_id}/items").json()["items"][0][
-        "review_state"
-    ] == "pending"
+    assert (
+        client.get(f"/api/v1/review-queues/{other_queue_id}/items").json()["items"][0][
+            "review_state"
+        ]
+        == "pending"
+    )
     retry = client.post(url, json={**payload, "item_ids": list(reversed(ids))})
     assert retry.status_code == 200, retry.text
     assert retry.json()["changed_count"] == 0

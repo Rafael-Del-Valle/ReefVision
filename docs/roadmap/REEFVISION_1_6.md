@@ -948,3 +948,22 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   destructive downgrades. Workflow Builder review gates remain unchanged.
 - CI, native Windows GUI, MSI upgrade/rollback, scientific acceptance and
   cross-version 1.1/1.6 Alembic reconciliation remain release blockers.
+
+
+## 2026-10-26 — Revision 0041 registry schema-integrity guard (Track D)
+
+- Audited the existing global bulk-request registry, desktop migration guard,
+  saved Workflow Builder QC queue and 1.1/1.6 revision collision. The 0041
+  guard previously checked registry columns and the primary-key name but
+  accepted nullable actor, queue/project, action, selected items and timestamps.
+  SQLite can also allow NULL in a bare TEXT PRIMARY KEY.
+- Read-only desktop preflight now rejects any nullable required 0041 registry
+  identity/scope field; only the optional skip reason may be NULL. It does not
+  stamp, mutate, or delete databases. Seven synthetic forged-schema regressions
+  preserve a sentinel research table and Alembic revision on rejection.
+- Corrected the exact Ruff formatting discrepancy reported for the preceding
+  0041 API regression. Existing API, typed saved Workflow Builder node and
+  explicit researcher approval remain unchanged.
+- This is schema-collision detection, **not** reconciliation of the independent
+  1.1/1.6 revision 0038. Full CI, real Windows MSI upgrade/rollback, installed
+  GUI and scientific acceptance remain mandatory; version 1.6 stays HOLD.

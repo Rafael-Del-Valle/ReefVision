@@ -89,22 +89,32 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         )
 
     if revision == "0041":
-        bulk_columns = (
-            {column["name"] for column in inspector.get_columns(_BULK_TABLE)}
-            if _BULK_TABLE in tables
-            else set()
+        bulk_details = (
+            inspector.get_columns(_BULK_TABLE) if _BULK_TABLE in tables else []
         )
-        missing_bulk = sorted(_BULK_COLUMNS - bulk_columns)
+        bulk_columns = {column["name"]: column for column in bulk_details}
+        missing_bulk = sorted(_BULK_COLUMNS - bulk_columns.keys())
+        # SQLite permits NULL in a bare TEXT PRIMARY KEY. An apparently
+        # unique registry with nullable identity/scope fields cannot prove
+        # who submitted a batch or which scientific review it targeted.
+        # Only the optional human skip reason may be NULL.
+        nullable_bulk = sorted(
+            name
+            for name in _BULK_COLUMNS - {"reason"}
+            if name in bulk_columns and bulk_columns[name].get("nullable", True)
+        )
         bulk_primary_key = (
             inspector.get_pk_constraint(_BULK_TABLE).get("constrained_columns")
             if _BULK_TABLE in tables
             else None
         )
-        if missing_bulk or bulk_primary_key != ["id"]:
+        if missing_bulk or bulk_primary_key != ["id"] or nullable_bulk:
             raise RuntimeError(
                 "Unsafe ReefVision Alembic revision 0041 collision: "
-                f"bulk request registry missing columns={missing_bulk} "
-                "or global primary key. Preserve the database and reconcile."
+                f"bulk request registry missing columns={missing_bulk}; "
+                f"nullable required columns={nullable_bulk}; "
+                "or missing global primary key. Preserve the database "
+                "and reconcile without rewriting reviewer history."
             )
 
     # SQL CHECK constraints do not reject NULL in SQLite. An event_type

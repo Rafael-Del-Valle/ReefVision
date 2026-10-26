@@ -445,11 +445,74 @@ def test_revision_0041_requires_global_bulk_request_registry() -> None:
         connection.execute(
             text(
                 "CREATE TABLE review_queue_bulk_requests ("
-                "id TEXT PRIMARY KEY, review_queue_id TEXT, project_id TEXT, "
-                "action TEXT, actor TEXT, reason TEXT, item_ids_json TEXT, "
-                "created_at TEXT)"
+                "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+                "project_id TEXT NOT NULL, action TEXT NOT NULL, "
+                "actor TEXT NOT NULL, reason TEXT, item_ids_json TEXT NOT NULL, "
+                "created_at TEXT NOT NULL)"
             )
         )
         assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+    engine.dispose()
+
+
+
+@pytest.mark.parametrize(
+    "nullable_field",
+    [
+        "id",
+        "review_queue_id",
+        "project_id",
+        "action",
+        "actor",
+        "item_ids_json",
+        "created_at",
+    ],
+)
+def test_revision_0041_rejects_nullable_bulk_identity_without_writes(
+    nullable_field: str,
+) -> None:
+    """A forged registry cannot accept missing reviewer/scope/batch evidence."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0041')"))
+        connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO preserved VALUES ('original research data')"))
+        allowed = (
+            "'comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return', 'triage_complete'"
+        )
+        connection.execute(
+            text(
+                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
+                "CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed})))"
+            )
+        )
+        required = [
+            "id",
+            "review_queue_id",
+            "project_id",
+            "action",
+            "actor",
+            "item_ids_json",
+            "created_at",
+        ]
+        columns = [
+            f"{field} TEXT"
+            f"{'' if field == nullable_field else ' NOT NULL'}"
+            f"{' PRIMARY KEY' if field == 'id' else ''}"
+            for field in required
+        ]
+        columns.append("reason TEXT")
+        connection.execute(
+            text(f"CREATE TABLE review_queue_bulk_requests ({', '.join(columns)})")
+        )
+
+        with pytest.raises(RuntimeError, match="nullable required columns"):
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+        assert connection.scalar(text("SELECT value FROM preserved")) == "original research data"
+        assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
     engine.dispose()
