@@ -9,8 +9,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import Job, WorkflowGraphRecord
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.workflow_execution import EXECUTABLE_NODE_TYPES
+from reefvision.schemas.workflow_execution import WorkflowRunCreateRequest
+from reefvision.services.workflow_execution import EXECUTABLE_NODE_TYPES, WorkflowExecutionService
 from reefvision.services.workflow_graphs import _ACTIONS
 from reefvision.services.workflow_node_registry_v1 import workflow_node_registry
 from reefvision.services.workflow_runtime_adapters import (
@@ -118,3 +120,20 @@ def test_corrupt_saved_verified_pose_graph_finishes_as_failed(
         assert job is not None
         assert job.status == "failed"
         assert job.completed_at is not None
+
+    # A still-parseable but modified saved revision must fail at queue time,
+    # rather than producing a new run with already-invalid provenance.
+    with app.state.session_factory() as session:
+        record = session.get(WorkflowGraphRecord, str(saved.json()["id"]))
+        assert record is not None
+        record.graph_json = {**graph, "name": "Tampered verified pose graph"}
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="revision checksum"),
+    ):
+        WorkflowExecutionService(session).queue_run(
+            project_id,
+            WorkflowRunCreateRequest(graph_record_id=str(saved.json()["id"])),
+        )
