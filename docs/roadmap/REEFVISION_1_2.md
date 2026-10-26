@@ -1912,3 +1912,26 @@ The repair gives aggregate loop variables distinct names (`actual_rows`,
 altering scientific comparisons, provenance, source re-derivation, or review
 gates. Source read-back is confirmed; exact-head mypy, tests and Windows
 acceptance are still pending. This is not a release-ready milestone.
+
+## Prevent biological sampling-level aliases from doubling a tank (2026-10-26)
+
+The existing source-linked projected population summary now compares the
+**biological sampling level**, not only the literal unit-type label, when
+checking whether a declared experimental unit/metric is duplicated. Thus
+`tank`, `aquarium`, `aquaria`, `tanks`, and `Tank-level` with the same
+unit ID cannot become separate apparent independent replicates. The
+population summary fails closed with a scientific validation error instead
+of reporting a misleading denominator. Different tank IDs remain allowed;
+different biological levels remain distinct. This reuses the existing
+`classify_ecological_unit_level` policy and existing standalone API,
+persisted typed Workflow Builder artifact and scientist-review gates.
+
+This is a narrow validation correction: successful artifact shapes and the
+`ecology-measurement-candidates-0018` fingerprint contract remain unchanged;
+older artifacts that would double-count an aliased physical unit are not
+certified by export-time recomputation. Regression tests cover biological
+aliases, order invariance, distinct units, and registered identity API /
+saved-workflow compatibility. The latest **pre-change** head `233e16af`
+completed 19/19 GitHub Actions workflows successfully; new-head tests
+and Windows installed-GUI/scientific acceptance must be checked separately.
+This does not authenticate study design or promote unverified growth.

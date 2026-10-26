@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from reefvision.db.models.annotation import Annotation
 from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.mask_annotation import MaskAnnotation
+from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
@@ -516,8 +517,12 @@ def summarize_projected_population_summaries(
             raise ValidationError("Projected unit organism coverage is inconsistent")
         if len(row.parent_colony_keys) != len(set(row.parent_colony_keys)):
             raise ValidationError("Projected unit parent-colony provenance is inconsistent")
+        # A tank and an aquarium are the same biological sampling level.
+        # Reusing one physical unit ID under aliases must never inflate the
+        # number of independent experimental replicates.
+        normalized_level = classify_ecological_unit_level(row.experimental_unit_type)
         unit_metric_key = (
-            row.experimental_unit_type,
+            normalized_level or row.experimental_unit_type.casefold(),
             row.experimental_unit_id,
             row.metric,
         )
