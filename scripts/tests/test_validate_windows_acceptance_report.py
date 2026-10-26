@@ -83,6 +83,19 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 with self.assertRaises(MODULE.AcceptanceEvidenceError):
                     MODULE.validate_report(report, expected_version="1.0.2")
 
+    def test_windows_installer_numeric_limits_are_enforced(self) -> None:
+        for version in ("256.0.0", "1.256.0", "1.0.65536"):
+            with self.subTest(version=version):
+                with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "MSI numeric limits"):
+                    MODULE.validate_report(good_report(), expected_version=version)
+                report = good_report()
+                report["reefvision_version"] = "2.0.0"
+                report["upgrade"] = {"status": "PASS"}
+                report["previous_installer_path"] = "C:/previous.msi"
+                report["previous_installer_version"] = version
+                with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "MSI numeric limits"):
+                    MODULE.validate_report(report, expected_version="2.0.0", expected_upgrade="passed")
+
     def test_optional_review_gates_must_be_explicit(self) -> None:
         for field in MODULE.OPTIONAL_APPROVAL_GATES:
             report = good_report()
