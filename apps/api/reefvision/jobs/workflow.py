@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -222,7 +223,20 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
-        graph = WorkflowGraphRequest.model_validate(graph_record.graph_json)
+        # A persisted graph can become malformed after queueing (for example,
+        # through an interrupted migration). Fail the queued job explicitly
+        # instead of leaving it queued after an uncaught Pydantic exception.
+        try:
+            graph = WorkflowGraphRequest.model_validate(graph_record.graph_json)
+        except PydanticValidationError:
+            job.status = "failed"
+            job.error_message = "Saved workflow graph revision is invalid"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
         if canonical_json_sha256(graph.model_dump(mode="json")) != run.graph_sha256:
             job.status = "failed"
             job.error_message = "Workflow graph checksum no longer matches the queued run"
