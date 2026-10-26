@@ -2165,3 +2165,23 @@ Ruff/mypy, scientific acceptance, migration reconciliation and installed
 Windows GUI/installer acceptance remain pending. All source-linked projected
 measurements remain `linked_unverified`, with
 `scientist_review_required`; **1.2 is not release-ready**.
+
+
+## Iterative parent-roster matching and CI repair (2026-10-26)
+
+The source-linked projected population calculator checks joint feasibility of
+parent-colony rosters across measurement metrics without assigning unobserved
+parents to organisms. Replaced a recursive loop-captured matcher with an
+iterative augmenting-path matcher: this addresses three exact-head Ruff B023
+failures and avoids recursion-depth failure on large rosters. Added focused
+regressions for reassignable parent candidates, impossible parent candidates,
+and a 1,300-organism augmenting chain; existing source-derived standalone
+and saved Workflow Builder acceptance cases remain applicable. The
+algorithm remains a necessary consistency check, **not** verified lineage
+or a guarantee of globally consistent parentage across all partial rosters.
+Inputs and outputs remain `linked_unverified` with scientist review required.
+
+Previous head `95e01646511471c1a26029e4042d3b6037af593e` had 16/19 completed
+Actions workflows successful; the three failures stopped at Ruff B023 in
+`ecology_measurement_candidates.py`. New-head CI, real-data scientific review,
+migration reconciliation and installed Windows GUI acceptance remain required.

@@ -34,6 +34,51 @@ from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.storage.datasets import canonical_json_sha256
 
 
+def _full_parent_roster_feasible(
+    organism_roster: tuple[str, ...],
+    parent_roster: tuple[str, ...],
+    possible_parents_by_organism: dict[str, set[str]],
+) -> bool:
+    """Check a one-to-one lineage assignment without guessing parent identities.
+
+    Iterative augmenting paths avoid recursion limits for large coral colonies.
+    The assignment is internal feasibility evidence, never an asserted lineage.
+    """
+    available_parents = set(parent_roster)
+    if len(organism_roster) > len(available_parents):
+        return False
+    assigned_parents: dict[str, str] = {}
+    for start_organism in organism_roster:
+        pending = [start_organism]
+        visited_organisms = {start_organism}
+        predecessor: dict[str, tuple[str, str]] = {}
+        unmatched: tuple[str, str] | None = None
+        index = 0
+        while index < len(pending) and unmatched is None:
+            organism = pending[index]
+            index += 1
+            for parent in sorted(
+                possible_parents_by_organism[organism] & available_parents
+            ):
+                incumbent = assigned_parents.get(parent)
+                if incumbent is None:
+                    unmatched = (organism, parent)
+                    break
+                if incumbent not in visited_organisms:
+                    visited_organisms.add(incumbent)
+                    predecessor[incumbent] = (organism, parent)
+                    pending.append(incumbent)
+        if unmatched is None:
+            return False
+        organism, parent = unmatched
+        while True:
+            assigned_parents[parent] = organism
+            if organism == start_organism:
+                break
+            organism, parent = predecessor[organism]
+    return True
+
+
 def _source_sampling_level(unit_type: str | None) -> str | None:
     """Canonicalize biological aliases without laundering technical replicates.
 
@@ -646,24 +691,8 @@ def summarize_projected_population_summaries(
     # intersections across metrics admit at least one one-to-one assignment.
     # This is a necessary integrity check, not biological parent verification.
     for organism_roster, parent_roster in full_parent_rosters:
-        assigned_parents: dict[str, str] = {}
-        parent_set = set(parent_roster)
-
-        def match_parent(organism_key: str, visited: set[str]) -> bool:
-            for parent_key in sorted(
-                possible_parents_by_organism[organism_key] & parent_set
-            ):
-                if parent_key in visited:
-                    continue
-                visited.add(parent_key)
-                incumbent = assigned_parents.get(parent_key)
-                if incumbent is None or match_parent(incumbent, visited):
-                    assigned_parents[parent_key] = organism_key
-                    return True
-            return False
-
-        if any(
-            not match_parent(organism_key, set()) for organism_key in organism_roster
+        if not _full_parent_roster_feasible(
+            organism_roster, parent_roster, possible_parents_by_organism
         ):
             raise ValidationError(
                 "Projected organism parent-colony assignments are jointly impossible "

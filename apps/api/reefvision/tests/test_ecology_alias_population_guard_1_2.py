@@ -13,6 +13,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyProjectedUnitSummary,
 )
 from reefvision.services.ecology_measurement_candidates import (
+    _full_parent_roster_feasible,
     summarize_projected_endpoint_changes,
     summarize_projected_population_summaries,
     summarize_projected_unit_summaries,
@@ -621,3 +622,30 @@ def test_partial_parent_roster_does_not_require_invented_distinct_parents() -> N
     summaries = summarize_projected_population_summaries([width, height, area])
     assert len(summaries) == 3
     assert all(row.review_gate == "scientist_review_required" for row in summaries)
+
+
+def test_parent_feasibility_can_reassign_a_prior_parent_without_guessing() -> None:
+    """A locally occupied parent is not proof of impossible shared lineage."""
+    options = {"fragment-A": {"parent-1", "parent-2"}, "fragment-B": {"parent-1"}}
+    assert _full_parent_roster_feasible(
+        ("fragment-A", "fragment-B"), ("parent-1", "parent-2"), options
+    )
+    assert not _full_parent_roster_feasible(
+        ("fragment-A", "fragment-B"),
+        ("parent-1", "parent-2"),
+        {"fragment-A": {"parent-1"}, "fragment-B": {"parent-1"}},
+    )
+
+
+def test_parent_feasibility_handles_large_augmenting_chain_without_recursion() -> None:
+    """A long linked colony roster must not crash with RecursionError."""
+    count = 1300
+    organisms = tuple(f"fragment-{i:04d}" for i in range(count))
+    parents = tuple(f"parent-{i:04d}" for i in range(count))
+    options = {
+        organisms[i]: {parents[i], parents[i + 1]}
+        for i in range(count - 1)
+    }
+    options[organisms[-1]] = {parents[0]}
+    assert _full_parent_roster_feasible(organisms, parents, options)
+    assert not _full_parent_roster_feasible(organisms, parents[:-1], options)
