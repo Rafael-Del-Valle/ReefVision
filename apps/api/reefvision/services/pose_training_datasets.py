@@ -118,6 +118,24 @@ def frozen_pose_item_fingerprints_match(
             or not review["reviewed_at"].strip()
         ):
             return False
+        # The correction's before/after snapshots are scientific audit
+        # evidence, not just arbitrary metadata. A re-signed manifest must
+        # not silently substitute the pose, schema, or acquisition lineage.
+        before = review.get("before")
+        after = review.get("after")
+        source_provenance_sha = canonical_json_sha256(row.acquisition_provenance_json)
+        if (
+            not isinstance(before, dict)
+            or before.get("candidate_id") != row.candidate_id
+            or before.get("candidate_provenance_sha256") != source_provenance_sha
+            or not isinstance(after, dict)
+            or after.get("verified_track_revision") != row.verified_track_revision
+            or after.get("verified_pose_sha256") != row.verified_pose_sha256
+            or after.get("pose_schema_id") != row.pose_schema_id
+            or after.get("pose_schema_revision") != row.pose_schema_revision
+        ):
+            return False
+
         # Both timestamps originate from datetime.isoformat() when the
         # scientist verifies a pose. A date-only string is accepted by
         # datetime.fromisoformat(), but is not a verification timestamp.
