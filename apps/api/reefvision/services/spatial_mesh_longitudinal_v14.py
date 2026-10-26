@@ -325,6 +325,7 @@ def compare_mesh_observations(
     # Bind provisional matching notes to this pair of observations. They are
     # audit evidence, never a verified specimen-identity determination.
     reidentification_record = None
+    identity_disputed = False
     if reidentification_evidence is None:
         warnings.append("reidentification_evidence_unavailable")
     else:
@@ -385,6 +386,7 @@ def compare_mesh_observations(
                 "reidentification_independent_review_recorded_not_identity_verification"
             )
             if identity.independent_review_decision == "disputes_match":
+                identity_disputed = True
                 warnings.append("reidentification_independent_review_disputes_match")
             elif identity.independent_review_decision == "inconclusive":
                 warnings.append("reidentification_independent_review_inconclusive")
@@ -776,7 +778,9 @@ def compare_mesh_observations(
                 warnings.append("identical_geometry_extent_inconsistent_with_calibration_scale")
     if difference_bounds is None:
         warnings.append("scale_uncertainty_interval_unavailable")
-    return {
+    if identity_disputed:
+        warnings.append("longitudinal_change_withheld_disputed_specimen_identity")
+    result = {
         "schema_version": "mesh-longitudinal-comparison-0001",
         "specimen_id": specimen,
         "before_observation_id": first_id,
@@ -867,6 +871,34 @@ def compare_mesh_observations(
             "coordinate_registration_verified": False,
             "observation_metadata_verified": False,
             "calibration_verified": False,
-            "scale_uncertainty_only": difference_bounds is not None,
+            "scale_uncertainty_only": difference_bounds is not None and not identity_disputed,
+            "longitudinal_change_withheld_due_to_identity_dispute": identity_disputed,
         },
     }
+    if identity_disputed:
+        # Keep each original observation and reconstruction QC intact. A
+        # disputed specimen match cannot support cross-timepoint organism
+        # change estimates, even if the numerical geometry is well formed.
+        for key in (
+            "scale_normalized_surface_area_ratio_after_to_before",
+            "scale_normalized_bounding_box_diagonal_ratio_after_to_before",
+            "registered_surface_centroid_offset_target_frame_m",
+            "registered_surface_centroid_separation_m",
+            "registered_centroid_separation_to_registration_rms_ratio",
+            "registered_surface_centroid_separation_caller_bound_interval_m",
+            "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m",
+            "delta_surface_area_m2",
+            "delta_axis_aligned_bounding_box_diagonal_m",
+            "relative_axis_aligned_bounding_box_diagonal_change_percent",
+            "relative_axis_aligned_bounding_box_diagonal_scale_interval_percent",
+            "delta_axis_aligned_bounding_box_diagonal_scale_interval_m",
+            "average_axis_aligned_bounding_box_diagonal_change_m_per_day",
+            "average_axis_aligned_bounding_box_diagonal_change_scale_interval_m_per_day",
+            "average_surface_area_change_m2_per_day",
+            "average_surface_area_change_scale_interval_m2_per_day",
+            "delta_surface_area_scale_interval_m2",
+            "relative_surface_area_change_percent",
+            "relative_surface_area_scale_interval_percent",
+        ):
+            result[key] = None
+    return result
