@@ -174,27 +174,39 @@ def test_disputed_specimen_match_withholds_cross_timepoint_changes() -> None:
         "independent_review_decision": "supports_match",
         "independent_review_note": "Provisional visual match",
     }
-    supported = compare_mesh_observations(before, after, reidentification_evidence=evidence)
+    supported = compare_mesh_observations(
+        before, after, reidentification_evidence=evidence
+    )
     assert supported["delta_surface_area_m2"] == pytest.approx(1.0)
     assert supported["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(1.0)
     assert supported["provenance"]["specimen_identity_verified"] is False
-    assert supported["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is False
+    assert (
+        supported["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"]
+        is False
+    )
 
     disputed = {
         **evidence,
         "independent_review_decision": "disputes_match",
         "independent_review_note": "Branch junctions contradict specimen identity",
     }
-    result = compare_mesh_observations(before, after, reidentification_evidence=disputed)
+    result = compare_mesh_observations(
+        before, after, reidentification_evidence=disputed
+    )
     assert result["before_surface_area_m2"] == pytest.approx(1.0)
     assert result["after_surface_area_m2"] == pytest.approx(2.0)
     assert result["elapsed_days"] == pytest.approx(1.0)
     assert result["before_reconstruction_topology_counts"]["face_count"] is None
     assert result["provenance"]["reidentification_evidence"] == disputed
     assert result["provenance"]["specimen_identity_verified"] is False
-    assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is True
+    assert (
+        result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"]
+        is True
+    )
     assert "reidentification_independent_review_disputes_match" in result["qc_warnings"]
-    assert "longitudinal_change_withheld_disputed_specimen_identity" in result["qc_warnings"]
+    assert (
+        "longitudinal_change_withheld_disputed_specimen_identity" in result["qc_warnings"]
+    )
     for key in (
         "delta_surface_area_m2",
         "relative_surface_area_change_percent",
