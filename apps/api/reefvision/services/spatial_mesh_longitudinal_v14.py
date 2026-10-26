@@ -406,7 +406,9 @@ def compare_mesh_observations(
             and late_extent > 0
         ):
             ratio = registration.rms_residual_m / min(early_extent, late_extent)
-            if isfinite(ratio):
+            # A positive RMS residual must not underflow to a reported exact
+            # zero: that would falsely imply perfect source registration.
+            if isfinite(ratio) and (ratio != 0 or registration.rms_residual_m == 0):
                 registration_residual_to_smaller_extent_ratio = ratio
                 if ratio >= 1:
                     warnings.append("registration_residual_at_least_smaller_mesh_extent")
