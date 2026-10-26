@@ -44,13 +44,13 @@ function Get-MsiProductVersion([string]$Path) {
     $database = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($Path, 0)
     $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
     try {
-        $view.Execute()
+        [void]$view.Execute()
         $record = $view.Fetch()
         if ($null -eq $record) { throw "MSI does not declare ProductVersion: $Path" }
         return ConvertTo-ReefVisionVersionString ([string]$record.StringData(1))
     }
     finally {
-        $view.Close()
+        [void]$view.Close()
     }
 }
 

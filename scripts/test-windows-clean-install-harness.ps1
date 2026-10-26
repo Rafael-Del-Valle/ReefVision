@@ -79,6 +79,8 @@ $parseErrors = $null
 )
 Assert-True (@($parseErrors).Count -eq 0) "Windows acceptance PowerShell syntax invalid: $($parseErrors -join '; ')"
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+Assert-True ($acceptanceScript.Contains('[void]$view.Execute()')) 'MSI ProductVersion extraction must suppress COM Execute output.'
+Assert-True ($acceptanceScript.Contains('[void]$view.Close()')) 'MSI ProductVersion extraction must suppress COM Close output.'
 # Guard the packaged acceptance request against retired project templates and
 # legacy model catalog selectors. Production API supports blank projects only.
 Assert-True ($acceptanceScript.Contains("template='blank'")) 'Acceptance project must use the supported blank template.'
