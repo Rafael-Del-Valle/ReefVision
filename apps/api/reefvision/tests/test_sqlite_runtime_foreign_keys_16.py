@@ -30,12 +30,18 @@ def test_runtime_sqlite_rejects_orphans_and_preserves_referenced_evidence(
                 text("INSERT INTO fk_review_16 VALUES ('review-evidence', 'research-parent')")
             )
 
-        with pytest.raises(IntegrityError), engine.begin() as connection:
+        with (
+            pytest.raises(IntegrityError),
+            engine.begin() as connection,
+        ):
             connection.execute(
                 text("DELETE FROM fk_parent_16 WHERE id = 'research-parent'")
             )
 
-        with pytest.raises(IntegrityError), engine.begin() as connection:
+        with (
+            pytest.raises(IntegrityError),
+            engine.begin() as connection,
+        ):
             connection.execute(
                 text("INSERT INTO fk_review_16 VALUES ('orphan', 'missing-parent')")
             )
