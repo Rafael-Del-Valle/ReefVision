@@ -1,5 +1,12 @@
 Set-StrictMode -Version Latest
 
+function ConvertTo-ReefVisionVersionString {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    # Windows Installer COM may pad StringData values with spaces. Keep the
+    # release comparison semantic while discarding transport-only padding.
+    return $Value.Trim()
+}
+
 function Invoke-ReefVisionIsolatedEnvironment {
     param(
         [Parameter(Mandatory = $true)][string]$DataRoot,

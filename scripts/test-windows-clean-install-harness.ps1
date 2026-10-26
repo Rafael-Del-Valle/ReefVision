@@ -48,6 +48,7 @@ Assert-True ($arguments[0] -eq '/i') 'Install command does not use /i.'
 Assert-True (($arguments -join ' ') -match 'INSTALLDIR=') 'Install command omitted isolated INSTALLDIR.'
 $uninstall = New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00000000-0000-0000-0000-000000000000}' -LogPath 'C:\rv-test\uninstall.log'
 Assert-True ($uninstall[0] -eq '/x') 'Uninstall command does not use /x.'
+Assert-True ((ConvertTo-ReefVisionVersionString ' 1.0.3 ') -eq '1.0.3') 'MSI version comparison did not normalize COM padding.'
 
 function Get-ItemProperty {
     [CmdletBinding()]

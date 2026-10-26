@@ -47,7 +47,7 @@ function Get-MsiProductVersion([string]$Path) {
         $view.Execute()
         $record = $view.Fetch()
         if ($null -eq $record) { throw "MSI does not declare ProductVersion: $Path" }
-        return $record.StringData(1)
+        return ConvertTo-ReefVisionVersionString ([string]$record.StringData(1))
     }
     finally {
         $view.Close()
@@ -267,8 +267,9 @@ try {
     $api = "http://127.0.0.1:$port/api/v1"
     $versionPayload = Invoke-RestMethod "$api/system/version"
     $expectedInitialVersion = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousProductVersion } else { $ProductVersion }
-    if ($versionPayload.application_version -ne $expectedInitialVersion) {
-        throw "Initial packaged API version $($versionPayload.application_version) does not match installed MSI version $expectedInitialVersion."
+    $actualInitialVersion = ConvertTo-ReefVisionVersionString ([string]$versionPayload.application_version)
+    if ($actualInitialVersion -ne $expectedInitialVersion) {
+        throw "Initial packaged API version $actualInitialVersion does not match installed MSI version $expectedInitialVersion."
     }
     $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
@@ -467,8 +468,9 @@ try {
     $api = "http://127.0.0.1:$port/api/v1"
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         $postUpgradeVersion = Invoke-RestMethod "$api/system/version"
-        if ($postUpgradeVersion.application_version -ne $ProductVersion) {
-            throw "Post-upgrade API version $($postUpgradeVersion.application_version) does not match candidate MSI version $ProductVersion."
+        $actualPostUpgradeVersion = ConvertTo-ReefVisionVersionString ([string]$postUpgradeVersion.application_version)
+        if ($actualPostUpgradeVersion -ne $ProductVersion) {
+            throw "Post-upgrade API version $actualPostUpgradeVersion does not match candidate MSI version $ProductVersion."
         }
         $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Upgraded packaged API from $PreviousProductVersion to $ProductVersion."
     }
