@@ -104,8 +104,10 @@ def test_bulk_review_rejects_partial_changes_and_foreign_queue_members(
     ] in {"pending", "skipped"}
 
     # Rejected mixed-state and foreign-queue batches must not leave orphan audit events.
-    first_history = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events")
-    second_history = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events")
+    first_url = f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events"
+    second_url = f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
+    first_history = client.get(first_url)
+    second_history = client.get(second_url)
     assert first_history.status_code == 200, first_history.text
     assert second_history.status_code == 200, second_history.text
     assert first_history.json()["total"] == 0
@@ -499,6 +501,6 @@ def test_keyed_bulk_skip_retry_preserves_later_return_and_reason_history(
 
     conflicting = client.post(url, json={**original, "reason": "Different reason"})
     assert conflicting.status_code == 409, conflicting.text
-    assert client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events").json() == (
-        first_history.json()
-    )
+    after = client.get(first_url)
+    assert after.status_code == 200, after.text
+    assert after.json() == first_history.json()
