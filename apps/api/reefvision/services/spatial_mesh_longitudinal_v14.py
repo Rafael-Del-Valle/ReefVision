@@ -342,7 +342,11 @@ def compare_mesh_observations(
             or identity.after_observation_id != second_id
         ):
             raise ValueError("Reidentification evidence must match both observation IDs")
-        reidentification_record = identity.model_dump(mode="json")
+        if identity.specimen_id is not None and identity.specimen_id != specimen:
+            raise ValueError("Reidentification evidence must match the provisional specimen ID")
+        reidentification_record = identity.model_dump(mode="json", exclude_none=True)
+        if identity.specimen_id is None:
+            warnings.append("reidentification_specimen_binding_unavailable")
         warnings.append("reidentification_evidence_requires_independent_review")
     if scale_normalized_area_ratio is not None:
         warnings.append("scale_normalized_area_ratio_requires_common_units_and_registration")
