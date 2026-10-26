@@ -186,6 +186,17 @@ WGS84 object overlays exclude stale georeferencing and are labeled spatial-only
 until explicit UTC synchronization exists. The Web Mercator map excludes polar
 vectors above 85° latitude; their exact values remain in the measurement list.
 
+An east/north pair must also share the provider acquisition timestamp: observations
+captured together must not be combined across different dataset refreshes. The
+velocity table and map tooltip retain each component's **original uncertainty
+kind** (standard deviation, standard error or bound) while displaying its
+normalized numeric uncertainty in m/s. Unknown or invalid component uncertainty
+stays explicitly unknown; a known zero remains zero. No vector-speed, bearing or
+position uncertainty is inferred without the necessary covariance/position
+evidence. A non-finite derived speed is not displayed, even when both individual
+velocity components are finite.
+
+
 **Acquire Copernicus modeled data** accepts an exact `cmems_mod_…` dataset/version,
 variables `uo`, `vo`, `thetao`, `so`, WGS84 bounds, UTC interval and sea-surface depth.
 Limits are 5° per horizontal axis, seven days, 5,000 scalar values and 90 seconds.
