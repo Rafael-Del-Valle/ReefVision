@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError as PydanticValidationError
@@ -198,4 +199,78 @@ def test_mutated_independent_review_is_revalidated_before_comparison() -> None:
     model = MeshReidentificationEvidence.model_validate(evidence)
     model.independent_reviewer_id = model.observer_id
     with pytest.raises(ValueError, match="Invalid pairwise reidentification evidence"):
+        compare_mesh_observations(before, after, reidentification_evidence=model)
+
+def test_independent_review_timestamp_is_preserved_without_identity_certification() -> None:
+    before, after = _observations()
+    evidence = _evidence()
+    evidence.update(
+        independent_reviewer_id="reviewer-2",
+        independent_review_decision="supports_match",
+        independent_review_note="Reviewed after the second survey",
+        independent_reviewed_at_utc="2026-10-02T08:00:00-05:00",
+    )
+    result = compare_mesh_observations(before, after, reidentification_evidence=evidence)
+    assert "reidentification_independent_review_timestamp_unavailable" not in result["qc_warnings"]
+    assert result["provenance"]["reidentification_evidence"]["independent_reviewed_at_utc"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "reviewed_at",
+    ["2026-10-02T11:59:59Z", "2026-10-02T06:59:59-05:00"],
+)
+def test_independent_review_cannot_predate_followup_survey(reviewed_at: str) -> None:
+    before, after = _observations()
+    evidence = _evidence()
+    evidence.update(
+        independent_reviewer_id="reviewer-2",
+        independent_review_decision="supports_match",
+        independent_review_note="Timestamp precedes the survey",
+        independent_reviewed_at_utc=reviewed_at,
+    )
+    with pytest.raises(ValueError, match="predates the later observation"):
+        compare_mesh_observations(before, after, reidentification_evidence=evidence)
+
+
+def test_legacy_undated_independent_review_remains_provisional_with_qc() -> None:
+    before, after = _observations()
+    evidence = _evidence()
+    evidence.update(
+        independent_reviewer_id="reviewer-2",
+        independent_review_decision="inconclusive",
+        independent_review_note="Historical review without a timestamp",
+    )
+    result = compare_mesh_observations(before, after, reidentification_evidence=evidence)
+    assert "reidentification_independent_review_timestamp_unavailable" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+def test_dated_review_without_reviewer_or_timezone_is_rejected() -> None:
+    evidence = _evidence()
+    evidence["independent_reviewed_at_utc"] = "2026-10-03T12:00:00Z"
+    with pytest.raises(PydanticValidationError, match="requires a separately attributed reviewer"):
+        MeshReidentificationEvidence.model_validate(evidence)
+    evidence.update(
+        independent_reviewer_id="reviewer-2",
+        independent_review_decision="supports_match",
+        independent_review_note="Dated review",
+        independent_reviewed_at_utc="2026-10-03T12:00:00",
+    )
+    with pytest.raises(PydanticValidationError):
+        MeshReidentificationEvidence.model_validate(evidence)
+
+
+def test_mutated_review_timestamp_is_rechecked_at_execution() -> None:
+    before, after = _observations()
+    evidence = _evidence()
+    evidence.update(
+        independent_reviewer_id="reviewer-2",
+        independent_review_decision="supports_match",
+        independent_review_note="Valid when recorded",
+        independent_reviewed_at_utc="2026-10-03T12:00:00Z",
+    )
+    model = MeshReidentificationEvidence.model_validate(evidence)
+    model.independent_reviewed_at_utc = datetime(2026, 10, 1, 12, tzinfo=UTC)
+    with pytest.raises(ValueError, match="predates the later observation"):
         compare_mesh_observations(before, after, reidentification_evidence=model)
