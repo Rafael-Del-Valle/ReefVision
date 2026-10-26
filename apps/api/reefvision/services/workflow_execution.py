@@ -210,6 +210,11 @@ class WorkflowExecutionService:
         if record.project_id != project_id:
             raise ValidationError("Workflow graph revision does not belong to this project")
         graph = WorkflowGraphRequest.model_validate(record.graph_json)
+        # A saved revision may have been altered since it was persisted. Reject
+        # structurally valid but modified graphs before queueing a run whose
+        # pinned provenance would otherwise fail only after dequeue.
+        if canonical_json_sha256(graph.model_dump(mode="json")) != record.graph_sha256:
+            raise ValidationError("Workflow graph revision checksum no longer matches saved contents")
         plan = self.graphs.plan(project_id, graph)
         if not plan.valid:
             raise ValidationError("Workflow graph is no longer valid")
