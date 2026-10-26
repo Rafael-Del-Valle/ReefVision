@@ -1174,6 +1174,46 @@ describe("Gallery", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the first gallery image fixed under wheel input while preserving browser zoom", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+
+    const focused = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    // Wheel events on the preview must not scroll the page while the first
+    // WebView2 media request is still pending or after its load event.
+    for (const loaded of [false, true]) {
+      if (loaded) fireEvent.load(focused);
+      const wheel = new WheelEvent("wheel", {
+        deltaY: 120,
+        bubbles: true,
+        cancelable: true,
+      });
+      fireEvent(focused, wheel);
+      expect(wheel.defaultPrevented).toBe(true);
+    }
+
+    for (const modifier of [{ ctrlKey: true }, { metaKey: true }]) {
+      const zoom = new WheelEvent("wheel", {
+        deltaY: 120,
+        ...modifier,
+        bubbles: true,
+        cancelable: true,
+      });
+      fireEvent(focused, zoom);
+      expect(zoom.defaultPrevented).toBe(false);
+    }
+  });
+
   it("contains wheel input when thumbnails fit without scrolling the page", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
