@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
 from reefvision.domain.errors import ValidationError
-from reefvision.schemas.ecology_measurement_candidates import EcologyProjectedUnitSummary
+from reefvision.schemas.ecology_measurement_candidates import (
+    EcologyMeasurementCandidate,
+    EcologyProjectedUnitSummary,
+)
 from reefvision.services.ecology_measurement_candidates import (
     summarize_projected_population_summaries,
+    summarize_projected_visit_coverage,
 )
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
@@ -64,9 +70,7 @@ def test_aliases_across_metrics_preserve_one_organism_owner() -> None:
     # A width/height analysis may legitimately use different spelling for
     # the same physical tank without reassigning the organism.
     width = _unit("tank", "fragment-A", "parent-A")
-    height = _unit("aquarium", "fragment-A", "parent-A").model_copy(
-        update={"metric": "box_height"}
-    )
+    height = _unit("aquarium", "fragment-A", "parent-A").model_copy(update={"metric": "box_height"})
     summaries = summarize_projected_population_summaries([width, height])
     assert len(summaries) == 2
     assert {row.metric for row in summaries} == {"box_width", "box_height"}
@@ -138,3 +142,89 @@ def test_registered_aliases_remain_reviewable_in_api_and_saved_workflow(
     ]
     assert len(candidate_artifacts) == 1
     assert candidate_artifacts[0]["payload_json"]["projected_population_summaries"] == []
+    standalone = client.get(
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert (
+        candidate_artifacts[0]["payload_json"]["projected_visit_coverage"]
+        == standalone.json()["projected_visit_coverage"]
+    )
+
+
+def _visit_candidate(
+    organism: str, unit_type: str, unit_id: str, day: int, image_id: str
+) -> EcologyMeasurementCandidate:
+    """Synthetic linked-unverified geometry for a bounded visit-coverage test."""
+    return EcologyMeasurementCandidate(
+        organism_key=organism,
+        identity_revision=1,
+        parent_colony_key="parent-A",
+        experimental_unit_type=unit_type,
+        experimental_unit_id=unit_id,
+        image_id=image_id,
+        image_sha256="a" * 64,
+        annotation_evidence_id=f"annotation-{image_id}",
+        calibration_evidence_id=f"calibration-{image_id}",
+        annotation_kind="box",
+        annotation_id=f"box-{image_id}",
+        annotation_revision=1,
+        annotation_sha256="b" * 64,
+        calibration_sha256="c" * 64,
+        metric="box_width",
+        value=10.0,
+        unit="mm",
+        capture_timestamp_utc=datetime(2026, 4, day, tzinfo=UTC),
+        capture_time_status="timezone_aware",
+    )
+
+
+def test_visit_coverage_combines_tank_aliases_without_claiming_absence() -> None:
+    rows = summarize_projected_visit_coverage(
+        [
+            _visit_candidate("fragment-A", "tank", "tank-1", 3, "image-a"),
+            _visit_candidate("fragment-B", "aquarium", "tank-1", 5, "image-b"),
+        ]
+    )
+    assert len(rows) == 2
+    assert [row.experimental_unit_type for row in rows] == ["tank", "tank"]
+    assert [row.sampling_date_utc for row in rows] == ["2026-04-03", "2026-04-05"]
+    assert all(
+        row.series_organism_keys == ["fragment-A", "fragment-B"] for row in rows
+    )
+    assert [row.measured_organism_keys for row in rows] == [
+        ["fragment-A"],
+        ["fragment-B"],
+    ]
+    assert [row.no_linked_measurement_organism_keys for row in rows] == [
+        ["fragment-B"],
+        ["fragment-A"],
+    ]
+    assert all(row.evidence_level == "linked_unverified" for row in rows)
+    assert all(row.review_gate == "scientist_review_required" for row in rows)
+
+
+def test_visit_coverage_detects_same_day_alias_technical_replicates() -> None:
+    rows = summarize_projected_visit_coverage(
+        [
+            _visit_candidate("fragment-A", "tank", "tank-1", 3, "image-a"),
+            _visit_candidate("fragment-A", "aquarium", "tank-1", 3, "image-b"),
+        ]
+    )
+    assert len(rows) == 1
+    assert rows[0].linked_measurement_count == 2
+    assert rows[0].same_day_repeat_organism_keys == ["fragment-A"]
+    assert rows[0].no_linked_measurement_organism_keys == []
+
+
+def test_visit_coverage_keeps_distinct_physical_tanks_separate() -> None:
+    rows = summarize_projected_visit_coverage(
+        [
+            _visit_candidate("fragment-A", "tank", "tank-1", 3, "image-a"),
+            _visit_candidate("fragment-B", "aquarium", "tank-2", 3, "image-b"),
+        ]
+    )
+    assert len(rows) == 2
+    assert {row.experimental_unit_id for row in rows} == {"tank-1", "tank-2"}
+    assert all(row.experimental_unit_type == "tank" for row in rows)
+    assert all(row.no_linked_measurement_organism_keys == [] for row in rows)
