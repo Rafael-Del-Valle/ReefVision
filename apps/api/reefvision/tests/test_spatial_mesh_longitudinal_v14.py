@@ -423,8 +423,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         is True
     )
     assert (
-        "longitudinal_change_withheld_disputed_specimen_identity"
-        in identity_result["qc_warnings"]
+        "longitudinal_change_withheld_disputed_specimen_identity" in identity_result["qc_warnings"]
     )
     graph["graph_id"] = "mesh-longitudinal-disputed-identity-v14"
     graph["nodes"][3]["parameters"]["registration_evidence"] = registration_evidence
@@ -486,9 +485,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert process_workflow_run_job(
         app.state.settings, app.state.session_factory, str(inconclusive_run.json()["job_id"])
     )
-    inconclusive_detail = client.get(
-        f"/api/v1/workflow-runs/{inconclusive_run.json()['id']}"
-    )
+    inconclusive_detail = client.get(f"/api/v1/workflow-runs/{inconclusive_run.json()['id']}")
     assert inconclusive_detail.status_code == 200, inconclusive_detail.text
     inconclusive_artifact = next(
         item
