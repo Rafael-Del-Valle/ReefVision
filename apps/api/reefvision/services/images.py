@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from math import ceil
 from pathlib import Path
 from typing import BinaryIO
@@ -37,6 +38,20 @@ from reefvision.storage.images import (
     stream_to_staging,
 )
 from reefvision.storage.projects import resolve_managed_project_path
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _cleanup_import_path(path: Path) -> None:
+    """Remove an uncommitted import artifact without aborting the batch."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        # Windows scanners, WebView2, and removable media can temporarily
+        # retain a handle. The artifact is unreferenced and can be cleaned up
+        # later; preserving the per-file report is more important than
+        # replacing the original import outcome with a request-level error.
+        LOGGER.warning("Could not clean up import artifact %s", path, exc_info=True)
 
 
 class ImageService:
@@ -83,7 +98,7 @@ class ImageService:
                 inspected = inspect_staged_image(staging, sha256, size)
                 duplicate = self.images.find_duplicate(project_id, sha256)
                 if duplicate is not None:
-                    staging.unlink(missing_ok=True)
+                    _cleanup_import_path(staging)
                     report["duplicates"].append(
                         ImportItemResponse(
                             filename=filename,
@@ -149,7 +164,7 @@ class ImageService:
             except UnsupportedImageError as exc:
                 self.session.rollback()
                 if staging_owned:
-                    staging.unlink(missing_ok=True)
+                    _cleanup_import_path(staging)
                 report["unsupported"].append(
                     ImportItemResponse(
                         filename=filename,
@@ -161,11 +176,11 @@ class ImageService:
             except (InvalidImageError, OSError, IntegrityError, ValidationError) as exc:
                 self.session.rollback()
                 if staging_owned:
-                    staging.unlink(missing_ok=True)
+                    _cleanup_import_path(staging)
                 # Do not delete an existing original when exclusive placement
                 # failed, or a committed original after a response error.
                 if uncommitted_original and managed_destination is not None:
-                    managed_destination.unlink(missing_ok=True)
+                    _cleanup_import_path(managed_destination)
                 report["failed"].append(
                     ImportItemResponse(
                         filename=filename,
@@ -177,11 +192,11 @@ class ImageService:
             except Exception as exc:
                 self.session.rollback()
                 if staging_owned:
-                    staging.unlink(missing_ok=True)
+                    _cleanup_import_path(staging)
                 # Do not delete an existing original when exclusive placement
                 # failed, or a committed original after a response error.
                 if uncommitted_original and managed_destination is not None:
-                    managed_destination.unlink(missing_ok=True)
+                    _cleanup_import_path(managed_destination)
                 report["failed"].append(
                     ImportItemResponse(
                         filename=filename,

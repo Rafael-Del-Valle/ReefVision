@@ -445,6 +445,51 @@ describe("AnnotationEditor", () => {
     ).toHaveAttribute("href", expect.stringContaining("/display?retry=1"));
   });
 
+  it("fails an eventless full-image stall and prevents thumbnail-only persistence", async () => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    vi.spyOn(window, "setTimeout").mockImplementation(
+      (handler, timeout, ...args) =>
+        nativeSetTimeout(handler, timeout === 30_000 ? 100 : timeout, ...args),
+    );
+    const preloaders: FakeImage[] = [];
+    class FakeImage {
+      decoding = "";
+      onload: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      src = "";
+      constructor() {
+        preloaders.push(this);
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        return jsonResponse({
+          ...session,
+          image: { ...session.image, thumbnail_path: "thumb.png" },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    await waitFor(() => expect(preloaders.length).toBeGreaterThan(0));
+    expect(
+      await screen.findByText("Full-resolution image could not load"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save now" })).toBeDisabled();
+    expect(screen.getByLabelText("Annotation status")).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Retry full-resolution image" }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps thumbnail preview until the full image has decoded", async () => {
     const decodeGate: { release: () => void } = {
       release: () => undefined,

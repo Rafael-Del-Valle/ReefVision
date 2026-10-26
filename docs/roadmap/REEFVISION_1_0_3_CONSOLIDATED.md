@@ -263,6 +263,10 @@ release publication, tag, or merge was performed.
   with bounded exponential backoff. Deterministic regression coverage exercises the
   Windows `PermissionError` path, and concurrent display/thumbnail stress coverage no
   longer reproduces the intermittent import failure.
+- Camera originals now recognize Windows' distinct `EOPNOTSUPP` code when a removable
+  filesystem cannot create hard links. Cleanup of locked invalid staging artifacts is
+  best-effort and logged, so one Windows sharing violation cannot abort later files in a
+  batch or hide already completed per-file results.
 - The installer gate accepts the two observed valid WiX layouts (five or six contiguous
   external CABs), derives its final size partition from the files actually emitted, and
   continues to require exact MSI Media membership, version, provenance, payload hashes,
@@ -270,6 +274,12 @@ release publication, tag, or merge was performed.
 - Video pose hydration preserves an asynchronously restored pose selection on initial
   load while synchronously clearing it when the selected video actually changes. This
   prevents both lost initial state and stale cross-video imports.
+- The annotation editor now times out an eventless WebView2 full-image stall, exposes an
+  immediate retry, and blocks saving, status verification, and prediction review while
+  only a thumbnail preview is available.
+- The detached PowerShell monitor ignores null and non-finite partial-epoch samples,
+  scans backward to the latest real loss, and keeps per-epoch history authoritative over
+  stale summary values for box, classification, DFL, and segmentation losses.
 - The consolidated raw-source-pixel image contract, EXIF warning fallback, gallery
   first-open recovery, training architecture selection, loss monitoring, annotation
   review boundaries, polygon persistence/export, and detection/segmentation/hybrid

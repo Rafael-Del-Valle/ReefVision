@@ -229,6 +229,38 @@ def test_import_remains_recorded_when_staging_cleanup_is_denied(
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 1
 
 
+def test_cleanup_failure_on_corrupt_image_does_not_abort_later_batch_item(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A locked invalid staging file must not hide later successful imports."""
+    project = create_project(client, "Per-file staging cleanup isolation")
+    valid = image_bytes(size=(43, 33))
+    real_unlink = Path.unlink
+
+    def denied_staging_unlink(path: Path, *args: object, **kwargs: object) -> None:
+        if ".imports" in path.parts and path.suffix == ".part":
+            raise PermissionError("staging cleanup temporarily denied")
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", denied_staging_unlink)
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/imports/images",
+        files=[
+            ("files", ("broken.png", b"not an image", "image/png")),
+            ("files", ("valid.png", valid, "image/png")),
+        ],
+        data={"relative_paths": ["camera/broken.png", "camera/valid.png"]},
+    )
+
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert [item["filename"] for item in report["failed"]] == ["broken.png"]
+    assert [item["filename"] for item in report["successful"]] == ["valid.png"]
+    image_id = report["successful"][0]["image_id"]
+    assert client.get(f"/api/v1/images/{image_id}/content").content == valid
+
+
 @pytest.mark.parametrize("subseconds", [b"123400\x00", "123400\x00"])
 def test_camera_exif_nul_terminated_subseconds_are_preserved(
     subseconds: bytes | str,
