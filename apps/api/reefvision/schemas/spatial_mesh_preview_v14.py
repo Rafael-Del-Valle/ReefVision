@@ -74,6 +74,17 @@ class MeshRegistrationEvidence(BaseModel):
     rms_residual_m: StrictFloat = Field(ge=0, le=1_000_000, allow_inf_nan=False)
     correspondence_count: StrictInt = Field(ge=3, le=1_000_000)
     evidence_note: str = Field(min_length=1, max_length=2_000)
+    # Optional project, observation and timepoint bindings prevent evidence
+    # reuse across surveys with recycled local frame labels or geometry.
+    project_id: str | None = Field(default=None, min_length=1, max_length=128)
+    source_observation_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    target_observation_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    source_observed_at_utc: AwareDatetime | None = None
+    target_observed_at_utc: AwareDatetime | None = None
     # Optional paired source fingerprints prevent stale registration reuse.
     # This is a consistency binding, not proof of alignment or identity.
     source_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
@@ -96,6 +107,10 @@ class MeshRegistrationEvidence(BaseModel):
 
     @model_validator(mode="after")
     def validate_rigid_transform(self) -> MeshRegistrationEvidence:
+        if (self.source_observation_id is None) != (self.target_observation_id is None):
+            raise ValueError("Registration observation binding requires both observation IDs")
+        if (self.source_observed_at_utc is None) != (self.target_observed_at_utc is None):
+            raise ValueError("Registration timepoint binding requires both UTC timestamps")
         if (self.source_geometry_sha256 is None) != (self.target_geometry_sha256 is None):
             raise ValueError("Registration geometry binding requires both SHA-256 fingerprints")
         transform = self.source_to_target_transform_m
