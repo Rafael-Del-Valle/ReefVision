@@ -153,6 +153,11 @@ class WorkflowExecutionService:
             .limit(1)
         )
         if latest is not None and latest.graph_sha256 == checksum:
+            # Idempotent saves must not return a revision whose persisted
+            # graph was changed after it was signed. Require a new reviewed
+            # revision rather than silently blessing altered science.
+            if canonical_json_sha256(latest.graph_json) != latest.graph_sha256:
+                raise ConflictError("Workflow graph revision checksum failed")
             return WorkflowGraphRecordResponse.model_validate(latest)
 
         record = WorkflowGraphRecord(
