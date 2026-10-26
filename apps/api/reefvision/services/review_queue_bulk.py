@@ -53,45 +53,64 @@ def bulk_triage_review_queue(
             raise ConflictError("Review item belongs to another review queue")
         ordered.append(item)
 
-    # Optional request-key replay is checked before state validation: a
-    # previously committed "start" must not restart an item that was later
-    # skipped by another researcher. IDs are deterministic per item and batch.
+    # A batch's canonical item stores the original UUID as a scope marker;
+    # the remaining items retain deterministic UUIDv5 event keys. This makes
+    # disjoint selection reuse detectable without rewriting existing events.
+    # Old batches (UUIDv5 on every item) remain replayable after upgrades.
     request_id = request.client_request_id
-    keyed_ids = (
+    legacy_ids = (
         {item.id: str(uuid5(request_id, item.id)) for item in ordered}
         if request_id is not None
         else {}
     )
+    keyed_ids = (
+        {
+            item.id: str(request_id) if item.id == min(legacy_ids) else legacy_ids[item.id]
+            for item in ordered
+        }
+        if request_id is not None
+        else {}
+    )
 
-    def prior_events() -> dict[str, ReviewQueueItemEvent]:
+    def prior_events() -> list[ReviewQueueItemEvent]:
         if not keyed_ids:
-            return {}
-        events = session.scalars(
-            select(ReviewQueueItemEvent).where(
-                ReviewQueueItemEvent.review_queue_id == queue_id,
-                ReviewQueueItemEvent.client_request_id.in_(list(keyed_ids.values())),
+            return []
+        # Do not filter to this queue: a reused UUID on a different project or
+        # disjoint item selection must not silently authorize a second batch.
+        candidate_ids = set(keyed_ids.values()) | set(legacy_ids.values())
+        return list(
+            session.scalars(
+                select(ReviewQueueItemEvent).where(
+                    ReviewQueueItemEvent.client_request_id.in_(candidate_ids)
+                )
             )
         )
-        return {event.review_queue_item_id: event for event in events}
 
-    def validate_prior(events: dict[str, ReviewQueueItemEvent]) -> bool:
+    def validate_prior(events: list[ReviewQueueItemEvent]) -> bool:
         if not events:
             return False
-        # A partially repeated selection is ambiguous and must not append
-        # new audit history under a reused request ID.
-        if set(events) != set(keyed_ids):
-            raise ConflictError("Bulk request ID was already used for another item selection")
-        for item in ordered:
-            event = events[item.id]
-            if (
-                event.client_request_id != keyed_ids[item.id]
-                or event.event_type != f"triage_{request.action}"
-                or event.actor != request.actor
-                or event.comment != (reason if request.action == "skip" else None)
-                or event.assignee is not None
-            ):
-                raise ConflictError("Bulk request ID was already used for a different action")
-        return True
+        for ids in (keyed_ids, legacy_ids):
+            matched = {
+                event.review_queue_item_id: event
+                for event in events
+                if event.review_queue_id == queue_id
+                and event.client_request_id == ids.get(event.review_queue_item_id)
+            }
+            if len(matched) != len(ids) or len(events) != len(ids):
+                continue
+            for item in ordered:
+                event = matched[item.id]
+                if (
+                    event.event_type != f"triage_{request.action}"
+                    or event.actor != request.actor
+                    or event.comment != (reason if request.action == "skip" else None)
+                    or event.assignee is not None
+                ):
+                    raise ConflictError("Bulk request ID was already used for a different action")
+            return True
+        # Any partial match or foreign-queue marker means the request UUID has
+        # already been consumed. Never append audit history for another batch.
+        raise ConflictError("Bulk request ID was already used for another item selection")
 
     if validate_prior(prior_events()):
         return ReviewQueueBulkResponse(
