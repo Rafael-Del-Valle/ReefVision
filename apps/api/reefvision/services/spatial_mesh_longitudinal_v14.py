@@ -561,7 +561,9 @@ def compare_mesh_observations(
                                 "registered_centroid_caller_interval_not_a_confidence_interval"
                             )
                         else:
-                            warnings.append("registered_centroid_caller_interval_out_of_numeric_range")
+                            warnings.append(
+                                "registered_centroid_caller_interval_out_of_numeric_range"
+                            )
                     else:
                         warnings.append("registered_centroid_error_bounds_unavailable")
                     # The ratio compares a centroid separation with a reported

@@ -190,7 +190,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["registered_centroid_separation_to_registration_rms_ratio"] == (
         pytest.approx(sqrt(0.1**2 + (1 / 3) ** 2) / 0.02)
     )
-    assert "registered_centroid_rms_ratio_not_a_movement_significance_test" in expected["qc_warnings"]
+    assert "registered_centroid_rms_ratio_not_a_movement_significance_test" in warnings
     assert "registration_residual_at_least_smaller_mesh_extent" not in expected["qc_warnings"]
     assert "matching_coordinate_frame_id_not_registration_proof" in expected["qc_warnings"]
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
