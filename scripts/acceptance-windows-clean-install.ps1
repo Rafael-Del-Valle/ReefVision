@@ -650,10 +650,29 @@ try {
         @($qcStarted.items)[0].review_state -ne 'in_progress') {
         throw 'Installed QC bulk return/start transitions did not persist.'
     }
+    # Exercise the real installed bulk-completion API with an explicit
+    # confirmation on disposable synthetic data. This completes review
+    # coordination only; it does not verify biological annotations.
+    $qcCompleteBody = @{
+        item_ids = @($qcItemId)
+        action = 'complete'
+        actor = 'disposable-lab-reviewer'
+        review_confirmed = $true
+    } | ConvertTo-Json
+    $qcCompleted = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcCompleteBody
+    $qcCompleteRetry = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcCompleteBody
+    if ($qcCompleted.changed_count -ne 1 -or $qcCompleteRetry.changed_count -ne 0 -or
+        @($qcCompleted.items)[0].review_state -ne 'completed' -or
+        -not @($qcCompleted.items)[0].completed_at -or
+        $qcCompleted.requires_researcher_review -ne $true) {
+        throw 'Installed QC bulk completion did not require reviewed state, preserve the review gate or retry idempotently.'
+    }
     $qcHistory = Invoke-RestMethod $qcEventsUrl
     $qcEventTypes = @($qcHistory.items | ForEach-Object { $_.event_type } | Sort-Object)
-    if ($qcHistory.total -ne 5 -or
-        ($qcEventTypes -join ',') -ne 'assign,comment,triage_return,triage_skip,triage_start' -or
+    $qcCompleteEvents = @($qcHistory.items | Where-Object { $_.event_type -eq 'triage_complete' })
+    if ($qcHistory.total -ne 6 -or
+        ($qcEventTypes -join ',') -ne 'assign,comment,triage_complete,triage_return,triage_skip,triage_start' -or
+        $qcCompleteEvents.Count -ne 1 -or $qcCompleteEvents[0].actor -ne 'disposable-lab-reviewer' -or
         $qcHistory.current_assignee -ne 'disposable-reviewer-two') {
         throw 'Installed QC audit history or reviewer assignment is inconsistent.'
     }
@@ -735,8 +754,9 @@ try {
     $qcPersistedEvents = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items/$qcItemId/events"
     $qcPersistedItem = @($qcPersistedItems.items | Where-Object { $_.id -eq $qcItemId })
     if ($qcPersistedQueue.project_id -ne $projectId -or $qcPersistedItem.Count -ne 1 -or
-        $qcPersistedItem[0].review_state -ne 'in_progress' -or
-        $qcPersistedEvents.total -ne 5 -or
+        $qcPersistedItem[0].review_state -ne 'completed' -or
+        -not $qcPersistedItem[0].completed_at -or
+        $qcPersistedEvents.total -ne 6 -or
         $qcPersistedEvents.current_assignee -ne 'disposable-reviewer-two') {
         throw 'QC queue, bulk triage, audit events or reviewer assignment did not survive desktop restart.'
     }
@@ -744,7 +764,7 @@ try {
     if (@($qcPersistedAnnotations.annotations | Where-Object { $_.id -eq $annotationId }).Count -ne 1) {
         throw 'Packaged QC review changed the researcher annotation across restart.'
     }
-    $report.qc_review_coordination = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Installed API: scoped queue, idempotent comment and bulk skip, assignment, return/start, five durable audit events and unchanged annotation across desktop restart.'
+    $report.qc_review_coordination = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Installed API: scoped queue, idempotent comment/skip/completion, assignment, return/start/confirmed-complete, six durable audit events and unchanged annotation across desktop restart.'
 
     # Verify saved graph, executed typed artifact, provenance digest and queue
     # survive a full installed-desktop restart, not merely the in-process job.
@@ -806,7 +826,7 @@ try {
         $qcReplayQueue.created_by -notlike 'workflow:*' -or
         $qcReplayQueue.item_count -ne @($qcReplayItems.items).Count -or
         $qcOriginalAfterReplay.item_count -ne $qcWorkflowQueue.item_count -or
-        $qcReviewEventsAfterReplay.total -ne 5) {
+        $qcReviewEventsAfterReplay.total -ne 6) {
         throw 'Installed saved QC replay changed the original queue, manual audit history, or project scope.'
     }
     $report.qc_workflow_replay = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed saved graph re-executed after restart as distinct run $($qcReplayQueued.id), preserving immutable QC evidence digests, review gate, and original reviewer audit."

@@ -189,7 +189,12 @@ Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/review-queues
 Assert-True ($acceptanceScript.Contains('requires_researcher_review -ne $true')) 'Installed QC acceptance must assert researcher-review gating.'
 Assert-True ($acceptanceScript.Contains('qcComment.id -ne $qcCommentRetry.id')) 'Installed QC comment idempotence regression is missing.'
 Assert-True ($acceptanceScript.Contains('qcSkipRetry.changed_count -ne 0')) 'Installed QC bulk retry regression is missing.'
-Assert-True ($acceptanceScript.Contains('qcPersistedEvents.total -ne 5')) 'Installed QC audit history must be checked after desktop restart.'
+Assert-True ($acceptanceScript.Contains('review_confirmed = $true')) 'Installed QC completion must require explicit confirmation on disposable test data.'
+Assert-True ($acceptanceScript.Contains('qcCompleteRetry.changed_count -ne 0')) 'Installed QC completion retry must not duplicate audit events.'
+Assert-True ($acceptanceScript.Contains('qcCompleted.requires_researcher_review -ne $true')) 'Installed QC completion must not auto-verify biological observations.'
+Assert-True ($acceptanceScript.Contains("$qcCompleteEvents[0].actor -ne 'disposable-lab-reviewer'")) 'Installed completion audit must retain the reviewer label.'
+Assert-True ($acceptanceScript.Contains("$qcPersistedItem[0].review_state -ne 'completed'")) 'Installed QC completion state must survive restart.'
+Assert-True ($acceptanceScript.Contains('qcPersistedEvents.total -ne 6')) 'Installed QC audit history, including completion, must be checked after desktop restart.'
 Assert-True ($acceptanceScript.Contains('qcPersistedAnnotations.annotations')) 'Installed QC acceptance must preserve the original annotation.'
 
 # Regression: a port file may exist before Uvicorn binds. Every installed
@@ -247,7 +252,7 @@ Assert-True ($acceptanceScript.Contains('$qcReplayPayload.input_checksums.queue_
 Assert-True ($acceptanceScript.Contains('$qcReplayPayload.input_checksums.item_evidence_sha256 -ne $qcWorkflowPayload.input_checksums.item_evidence_sha256')) 'Installed replay must compare immutable scientific item evidence.'
 Assert-True ($acceptanceScript.Contains('$qcReplayPayload.input_checksums.scoring_provenance_sha256 -ne $qcWorkflowPayload.input_checksums.scoring_provenance_sha256')) 'Installed replay must compare scoring provenance.'
 Assert-True ($acceptanceScript.Contains('$qcReplayPayload.review_status -ne ''requires_researcher_review''')) 'Installed replay must retain researcher approval gates.'
-Assert-True ($acceptanceScript.Contains('$qcReviewEventsAfterReplay.total -ne 5')) 'Installed replay must not mutate prior manual QC audit history.'
+Assert-True ($acceptanceScript.Contains('$qcReviewEventsAfterReplay.total -ne 6')) 'Installed replay must not mutate prior manual QC completion audit history.'
 $qcReplayOffset = $acceptanceScript.IndexOf('$qcReplayQueued = Invoke-RestMethod', [System.StringComparison]::Ordinal)
 Assert-True ($qcReplayOffset -gt $apiReadinessCalls[2].Index) 'Installed saved graph replay must occur after the third packaged API readiness barrier.'
 

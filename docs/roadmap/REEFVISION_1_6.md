@@ -842,3 +842,18 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   must pass and serialize `reefvision_version` as the JSON string
   `"1.0.2"`. No new-head CI success or real upgrade/rollback is claimed
   until observed.
+
+## 2026-10-25 — Installed MSI bulk QC completion acceptance (Track D)
+
+- Extended the existing **disposable** Windows installed-MSI API acceptance to
+  exercise manually confirmed bulk review completion, exact retry idempotency,
+  actor-labeled `triage_complete` audit history, and completed-state persistence
+  across an installed-desktop restart. The existing saved typed QC Workflow
+  Builder replay must leave the six-event manual audit history unchanged.
+- This is a synthetic installation fixture only: `review_confirmed` is explicitly
+  supplied by the test, and queue completion **does not** verify scientific
+  annotations or automatically approve model predictions.
+- Native PowerShell harness contract tests guard these expectations. The
+  production QC API, migrations, scientific observations and workflow engine
+  are unchanged. Full exact-head CI and physical interactive Windows GUI/
+  MSI upgrade acceptance remain required; **release HOLD**.
