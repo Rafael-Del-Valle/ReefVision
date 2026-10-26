@@ -123,7 +123,9 @@ it("never combines mismatched depth, time, acquisition or source", () => {
     { depth_m: 10 },
     { observed_at: "2026-04-03T01:00:00Z" },
     { source_kind: "observed" as const },
-    { provenance: { ...component("x", 0).provenance, model_version: "other" } },
+    {
+      provenance: { ...component("x", 0).provenance, model_version: "other" },
+    },
     {
       provenance: {
         ...component("x", 0).provenance,
@@ -135,6 +137,23 @@ it("never combines mismatched depth, time, acquisition or source", () => {
       currentVectors([
         component("current_eastward_velocity", 3),
         component("current_northward_velocity", 4, patch),
+      ]),
+    ).toEqual([]);
+  }
+});
+it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
+  const east = component("current_eastward_velocity", 3);
+  const north = component("current_northward_velocity", 4);
+  for (const location of [
+    { latitude: Number.NaN, longitude: -79.5, crs: "EPSG:4326" },
+    { latitude: 91, longitude: -79.5, crs: "EPSG:4326" },
+    { latitude: 32.5, longitude: Number.POSITIVE_INFINITY, crs: "EPSG:4326" },
+    { latitude: 32.5, longitude: -181, crs: "EPSG:4326" },
+  ]) {
+    expect(
+      currentVectors([
+        { ...east, location },
+        { ...north, location },
       ]),
     ).toEqual([]);
   }
