@@ -10,7 +10,7 @@ if (-not $match.Success) {
 }
 Invoke-Expression $match.Value
 
-$unsafe = "Study`e[2J`e]0;fake terminal title`a" + [char]0x202E + "`ntrain/dfl_loss=0.00"
+$unsafe = 'Study' + [char]0x001B + '[2J' + [char]0x001B + ']0;fake terminal title' + [char]0x0007 + [char]0x202E + "`ntrain/dfl_loss=0.00"
 $actual = Format-SafeText $unsafe
 if ($actual -match '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]') {
   throw 'A terminal or invisible control escaped sanitization.'
