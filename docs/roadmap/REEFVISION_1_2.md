@@ -2185,3 +2185,25 @@ Previous head `95e01646511471c1a26029e4042d3b6037af593e` had 16/19 completed
 Actions workflows successful; the three failures stopped at Ruff B023 in
 `ecology_measurement_candidates.py`. New-head CI, real-data scientific review,
 migration reconciliation and installed Windows GUI acceptance remain required.
+
+
+## Strict sampling-level provenance and exact-head formatting repair (2026-10-26)
+
+The source-linked projected population aggregation boundary now rejects an
+eligible intermediate experimental-unit **type** with leading or trailing
+whitespace, matching the existing fail-closed rule for padded unit, organism,
+and parent-colony identifiers. A researcher-entered sampling level is not
+silently rewritten during export; it requires correction/review. Recognized
+biological aliases remain supported when recorded without padding. The
+existing standalone calibrated-candidate service and executable, persisted,
+typed `ecology_measurement_candidates` Workflow Builder source use this
+shared boundary; outputs remain `linked_unverified` and require scientist
+review. Focused parameterized regressions cover padded tank/alias labels.
+
+The predecessor exact-head `412e8c35` completed 16/19 Actions workflows;
+CI, Pose Workflow Validation and ReefVision 1.0 Acceptance stopped at Ruff
+formatting of two 1.2 files. This commit applies the **exact** Ruff-suggested
+formatting to those files without changing the iterative parent-matching
+algorithm. New-head CI and scientific/Windows installed-GUI acceptance must
+still be independently verified. No migrations, 1.1 cross-merge, model
+weights, verified dataset promotion or release actions are introduced.

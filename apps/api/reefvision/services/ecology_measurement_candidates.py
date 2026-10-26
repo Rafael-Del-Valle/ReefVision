@@ -57,9 +57,7 @@ def _full_parent_roster_feasible(
         while index < len(pending) and unmatched is None:
             organism = pending[index]
             index += 1
-            for parent in sorted(
-                possible_parents_by_organism[organism] & available_parents
-            ):
+            for parent in sorted(possible_parents_by_organism[organism] & available_parents):
                 incumbent = assigned_parents.get(parent)
                 if incumbent is None:
                     unmatched = (organism, parent)
@@ -559,6 +557,10 @@ def summarize_projected_population_summaries(
             or row.experimental_unit_id != row.experimental_unit_id.strip()
         ):
             raise ValidationError("Projected experimental-unit ID is blank or padded")
+        # Preserve declared sampling-level provenance. Silently stripping an
+        # imported label would conceal a correction to study design metadata.
+        if row.experimental_unit_type != row.experimental_unit_type.strip():
+            raise ValidationError("Projected experimental-unit type is blank or padded")
         if any(not key.strip() or key != key.strip() for key in row.organism_keys):
             raise ValidationError("Projected organism identity is blank or padded")
         if any(not key.strip() or key != key.strip() for key in row.parent_colony_keys):
@@ -675,9 +677,7 @@ def summarize_projected_population_summaries(
                         "Projected organism parent-colony candidates conflict across metrics"
                     )
                 possible_parents_by_organism[organism_key] = allowed
-            full_parent_rosters.append(
-                (tuple(sorted(row.complete_organism_keys)), parents)
-            )
+            full_parent_rosters.append((tuple(sorted(row.complete_organism_keys)), parents))
         stratum_key = (
             normalized_level or row.experimental_unit_type.casefold(),
             row.metric,
@@ -695,8 +695,7 @@ def summarize_projected_population_summaries(
             organism_roster, parent_roster, possible_parents_by_organism
         ):
             raise ValidationError(
-                "Projected organism parent-colony assignments are jointly impossible "
-                "across metrics"
+                "Projected organism parent-colony assignments are jointly impossible across metrics"
             )
 
     results: list[EcologyProjectedPopulationSummary] = []

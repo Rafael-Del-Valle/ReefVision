@@ -51,6 +51,15 @@ def test_population_rejects_aliases_of_one_independent_tank(alias: str) -> None:
         summarize_projected_population_summaries(list(reversed(rows)))
 
 
+
+
+@pytest.mark.parametrize("unit_type", [" tank", "tank ", "\ttank", " tank-level "])
+def test_population_rejects_padded_biological_sampling_level(unit_type: str) -> None:
+    """A forged unit type cannot silently rewrite its registered design label."""
+    row = _unit(unit_type, "fragment-A", "parent-A")
+    with pytest.raises(ValidationError, match="experimental-unit type is blank or padded"):
+        summarize_projected_population_summaries([row])
+
 def test_distinct_tanks_remain_distinct_declared_units() -> None:
     second = _unit("aquarium", "fragment-B", "parent-B").model_copy(
         update={"experimental_unit_id": "tank-2"}
@@ -616,9 +625,7 @@ def test_partial_parent_roster_does_not_require_invented_distinct_parents() -> N
     height = _partial_metric_roster(
         "box_height", ["fragment-A", "fragment-C"], ["parent-A", "parent-C"]
     )
-    area = _partial_metric_roster(
-        "mask_projected_area", ["fragment-B", "fragment-C"], ["parent-A"]
-    )
+    area = _partial_metric_roster("mask_projected_area", ["fragment-B", "fragment-C"], ["parent-A"])
     summaries = summarize_projected_population_summaries([width, height, area])
     assert len(summaries) == 3
     assert all(row.review_gate == "scientist_review_required" for row in summaries)
