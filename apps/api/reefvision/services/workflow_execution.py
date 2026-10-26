@@ -214,7 +214,9 @@ class WorkflowExecutionService:
         # structurally valid but modified graphs before queueing a run whose
         # pinned provenance would otherwise fail only after dequeue.
         if canonical_json_sha256(graph.model_dump(mode="json")) != record.graph_sha256:
-            raise ValidationError("Workflow graph revision checksum no longer matches saved contents")
+            raise ValidationError(
+                "Workflow graph revision checksum no longer matches saved contents"
+            )
         plan = self.graphs.plan(project_id, graph)
         if not plan.valid:
             raise ValidationError("Workflow graph is no longer valid")
