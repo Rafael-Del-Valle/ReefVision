@@ -13,8 +13,11 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyProjectedUnitSummary,
 )
 from reefvision.services.ecology_measurement_candidates import (
+    summarize_projected_endpoint_changes,
     summarize_projected_population_summaries,
+    summarize_projected_unit_summaries,
     summarize_projected_visit_coverage,
+    summarize_sampling_date_qc,
 )
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
@@ -226,3 +229,104 @@ def test_visit_coverage_keeps_distinct_physical_tanks_separate() -> None:
     assert {row.experimental_unit_id for row in rows} == {"tank-1", "tank-2"}
     assert all(row.experimental_unit_type == "tank" for row in rows)
     assert all(row.no_linked_measurement_organism_keys == [] for row in rows)
+
+
+def _dated_alias_series(
+    organism: str, unit_type: str, unit_id: str, image_offset: int, delta: float
+) -> list[EcologyMeasurementCandidate]:
+    """Unique image bytes/IDs; two source-linked UTC dates for one fragment."""
+    result: list[EcologyMeasurementCandidate] = []
+    for position, day in enumerate((3, 5)):
+        image_number = image_offset + position
+        image_id = f"image-{image_number}"
+        source = _visit_candidate(organism, unit_type, unit_id, day, image_id)
+        result.append(
+            source.model_copy(
+                update={
+                    "image_sha256": f"{image_number:064x}",
+                    "value": 10.0 + (delta if position else 0.0),
+                }
+            )
+        )
+    return result
+
+
+def test_source_linked_aliases_pool_into_one_unit_not_two_replicates() -> None:
+    """Alias normalization must happen before source-derived unit aggregation."""
+    records = [
+        *_dated_alias_series("fragment-A", "tank", "tank-1", 101, 2.0),
+        *_dated_alias_series("fragment-B", "aquarium", "tank-1", 201, 4.0),
+    ]
+    qc = summarize_sampling_date_qc(records)
+    assert [row.qc_status for row in qc] == ["date_series_candidate"] * 2
+    changes = summarize_projected_endpoint_changes(records, qc)
+    summaries = summarize_projected_unit_summaries(records, changes)
+    assert len(summaries) == 1
+    assert summaries[0].experimental_unit_type == "tank"
+    assert summaries[0].experimental_unit_id == "tank-1"
+    assert summaries[0].organism_keys == ["fragment-A", "fragment-B"]
+    assert summaries[0].mean_absolute_change == pytest.approx(3.0)
+    assert summaries[0].mean_percent_change == pytest.approx(30.0)
+    assert summaries[0].review_gate == "scientist_review_required"
+    population = summarize_projected_population_summaries(summaries)
+    assert len(population) == 1
+    assert population[0].declared_unit_count == 1
+    assert population[0].contributing_organism_count == 2
+    assert population[0].independent_unit_inference_allowed is False
+    assert population[0].mean_unit_absolute_change == pytest.approx(3.0)
+    assert summarize_projected_unit_summaries(
+        list(reversed(records)), summarize_projected_endpoint_changes(
+            list(reversed(records)), summarize_sampling_date_qc(list(reversed(records)))
+        )
+    ) == summaries
+
+
+def test_source_alias_across_metrics_preserves_one_organism_owner() -> None:
+    width = _dated_alias_series("fragment-A", "tank", "tank-1", 301, 2.0)
+    height = [
+        record.model_copy(
+            update={
+                "metric": "box_height",
+                "experimental_unit_type": "aquarium",
+                "value": record.value * 2,
+            }
+        )
+        for record in width
+    ]
+    records = width + height
+    qc = summarize_sampling_date_qc(records)
+    assert all(row.qc_status == "date_series_candidate" for row in qc)
+    changes = summarize_projected_endpoint_changes(records, qc)
+    summaries = summarize_projected_unit_summaries(records, changes)
+    assert {row.metric for row in summaries} == {"box_width", "box_height"}
+    assert {row.experimental_unit_type for row in summaries} == {"tank"}
+    population = summarize_projected_population_summaries(summaries)
+    assert len(population) == 2
+    assert all(row.declared_unit_count == 1 for row in population)
+    assert all(row.review_gate == "scientist_review_required" for row in population)
+
+
+def test_source_alias_does_not_hide_cross_tank_reassignment() -> None:
+    width = _dated_alias_series("fragment-A", "tank", "tank-1", 401, 2.0)
+    height = [
+        record.model_copy(
+            update={
+                "metric": "box_height",
+                "experimental_unit_type": "aquarium",
+                "experimental_unit_id": "tank-2",
+                "value": record.value * 2,
+            }
+        )
+        for record in width
+    ]
+    records = width + height
+    changes = summarize_projected_endpoint_changes(records, summarize_sampling_date_qc(records))
+    with pytest.raises(ValidationError, match="identity or experimental unit changed"):
+        summarize_projected_unit_summaries(records, changes)
+
+
+def test_source_mixed_biological_levels_fail_closed() -> None:
+    records = _dated_alias_series("fragment-A", "tank/site", "tank-1", 501, 2.0)
+    changes = summarize_projected_endpoint_changes(records, summarize_sampling_date_qc(records))
+    with pytest.raises(ValidationError, match="mixes biological sampling levels"):
+        summarize_projected_unit_summaries(records, changes)
