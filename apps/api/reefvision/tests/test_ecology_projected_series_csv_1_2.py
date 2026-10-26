@@ -228,7 +228,6 @@ def test_projected_csv_rejects_resigned_forged_aggregates(
         render_ecology_series_qc_csv(tampered)
 
 
-
 @pytest.mark.parametrize(
     "patch",
     [
