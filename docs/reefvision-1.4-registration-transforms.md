@@ -165,3 +165,30 @@ independent registration validation, or evidence of coral growth. The existing
 provisional measurement status, QC warnings, and human-verification flags are
 unchanged. Standalone and persisted typed Workflow Builder executions share
 the same implementation and are checked for artifact parity.
+
+## Optional registration-to-source geometry binding
+
+`registration_evidence.source_geometry_sha256` and
+`registration_evidence.target_geometry_sha256` may now bind provisional
+registration diagnostics and transforms to the **exact source and target
+reconstruction fingerprints** recorded in each mesh preview. Both lowercase,
+64-character hexadecimal SHA-256 strings must be supplied together. If either
+differs from the corresponding observation's recorded geometry fingerprint,
+the comparison is rejected rather than silently reusing a stale registration
+for a different mesh with the same coordinate-frame labels.
+
+Existing saved workflows and registration records without either fingerprint
+remain executable, but the comparison adds
+`registration_geometry_binding_unavailable` to scientific QC. Partially bound,
+malformed, or post-validation-mutated evidence is rejected. The standalone
+comparison endpoint and saved executable typed Workflow Builder node use the
+same validation and retain the supplied fingerprints in provenance; a
+saved-workflow regression checks exact result parity.
+
+**Limits:** These are caller-supplied provenance fingerprints, not verified
+asset hashes, landmark correspondences, calibration, or proof of successful
+registration. A matching pair does not establish a correct rigid transform,
+specimen identity, or biological movement. Independent human review and
+scientific validation remain required; `coordinate_registration_verified`
+stays `false`.
+
