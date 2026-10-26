@@ -417,3 +417,35 @@ def test_source_linked_colony_split_is_rejected_but_tank_split_is_reviewable() -
     assert tank_population[0].shared_parent_colony_keys == ["parent-A"]
     assert "shared_parent_colonies" in tank_population[0].design_review_blockers
     assert tank_population[0].independent_unit_inference_allowed is False
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("experimental_unit_id", " "),
+        ("experimental_unit_id", "tank-1 "),
+        ("experimental_unit_id", " tank-1"),
+        ("organism_keys", ["fragment-A", " "]),
+        ("organism_keys", [" fragment-A"]),
+        ("parent_colony_keys", ["parent-A "]),
+    ],
+)
+def test_forged_population_unit_rejects_blank_or_padded_lineage(
+    field: str, value: str | list[str]
+) -> None:
+    """Re-signed intermediate summaries cannot invent distinct biological IDs."""
+    forged = _unit("tank", "fragment-A", "parent-A").model_copy(update={field: value})
+    with pytest.raises(ValidationError, match="blank or padded"):
+        summarize_projected_population_summaries([forged])
+
+
+def test_source_linked_padded_unit_id_cannot_enter_population() -> None:
+    """Even complete projected time series must not promote padded tank IDs."""
+    records = _dated_alias_series("fragment-A", "tank", "tank-1 ", 1101, 2.0)
+    qc = summarize_sampling_date_qc(records)
+    changes = summarize_projected_endpoint_changes(records, qc)
+    units = summarize_projected_unit_summaries(records, changes)
+    assert len(units) == 1
+    assert units[0].unit_status == "candidate"
+    with pytest.raises(ValidationError, match="experimental-unit ID is blank or padded"):
+        summarize_projected_population_summaries(units)
