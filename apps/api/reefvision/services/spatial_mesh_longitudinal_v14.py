@@ -452,6 +452,7 @@ def compare_mesh_observations(
     registration_rotation_angle_degrees = None
     registered_surface_centroid_offset_target_frame_m = None
     registered_surface_centroid_separation_m = None
+    registered_centroid_separation_to_registration_rms_ratio = None
     if registration_evidence is None:
         warnings.append("registration_evidence_unavailable")
     else:
@@ -533,6 +534,20 @@ def compare_mesh_observations(
                     registered_surface_centroid_separation_m = separation
                     warnings.append("registered_centroid_offset_not_verified_biological_movement")
                     warnings.append("registered_centroid_position_uncertainty_not_estimated")
+                    # The ratio compares a centroid separation with a reported
+                    # landmark-fit RMS. It is not a positional uncertainty,
+                    # significance test, or evidence of biological movement.
+                    if registration.rms_residual_m == 0:
+                        warnings.append("registered_centroid_rms_ratio_unavailable_zero_residual")
+                    else:
+                        ratio = separation / registration.rms_residual_m
+                        if isfinite(ratio) and (ratio > 0 or separation == 0):
+                            registered_centroid_separation_to_registration_rms_ratio = ratio
+                            warnings.append(
+                                "registered_centroid_rms_ratio_not_a_movement_significance_test"
+                            )
+                        else:
+                            warnings.append("registered_centroid_rms_ratio_out_of_numeric_range")
                 else:
                     warnings.append("registered_surface_centroid_comparison_out_of_numeric_range")
         if (
@@ -653,6 +668,9 @@ def compare_mesh_observations(
             registered_surface_centroid_offset_target_frame_m
         ),
         "registered_surface_centroid_separation_m": registered_surface_centroid_separation_m,
+        "registered_centroid_separation_to_registration_rms_ratio": (
+            registered_centroid_separation_to_registration_rms_ratio
+        ),
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
         "delta_surface_area_m2": difference,
