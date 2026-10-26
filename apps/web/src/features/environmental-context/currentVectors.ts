@@ -1,4 +1,8 @@
 import type { ScientificRecord } from "./environmentalContextApi";
+export interface CurrentComponentUncertainty {
+  value: number;
+  kind: NonNullable<ScientificRecord["uncertainty"]>["kind"];
+}
 export interface CurrentVector {
   id: string;
   latitude: number;
@@ -7,6 +11,8 @@ export interface CurrentVector {
   bearing: number | null;
   east: number;
   north: number;
+  eastUncertainty: CurrentComponentUncertainty | null;
+  northUncertainty: CurrentComponentUncertainty | null;
   source: string;
   sourceKind: string;
   dataset: string;
@@ -14,6 +20,23 @@ export interface CurrentVector {
   observedAt: string;
   depthM: number;
   recordIds: string[];
+}
+function componentUncertainty(
+  row: ScientificRecord,
+): CurrentComponentUncertainty | null {
+  const value = row.normalized_uncertainty;
+  const kind = row.uncertainty?.kind;
+  if (value == null || !Number.isFinite(value) || value < 0 || !kind)
+    return null;
+  return { value, kind };
+}
+export function currentComponentUncertaintyText(
+  component: "East" | "North",
+  uncertainty: CurrentComponentUncertainty | null,
+): string {
+  return uncertainty
+    ? `${component} component uncertainty: ${uncertainty.value.toFixed(3)} m/s (${uncertainty.kind.replaceAll("_", " ")})`
+    : `${component} component uncertainty: unknown`;
 }
 export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
   const groups = new Map<
@@ -73,6 +96,8 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       longitude: row.location!.longitude,
       east,
       north,
+      eastUncertainty: componentUncertainty(row),
+      northUncertainty: componentUncertainty(group.north[0]),
       speed,
       bearing:
         speed === 0
