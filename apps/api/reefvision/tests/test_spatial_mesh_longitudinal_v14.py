@@ -1743,10 +1743,13 @@ def test_registration_transform_diagnostics_remain_unverified(
     assert result["registration_translation_magnitude_m"] == pytest.approx(
         expected_distance
     )
-    assert result["registration_rotation_angle_degrees"] == pytest.approx(expected_angle)
-    assert result["provenance"]["registration_evidence"]["source_to_target_transform_m"] == (
-        transform
+    assert result["registration_rotation_angle_degrees"] == pytest.approx(
+        expected_angle
     )
+    preserved_transform = result["provenance"]["registration_evidence"][
+        "source_to_target_transform_m"
+    ]
+    assert preserved_transform == transform
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert result["provenance"]["specimen_identity_verified"] is False
     assert "registration_transform_requires_independent_review" in result["qc_warnings"]
