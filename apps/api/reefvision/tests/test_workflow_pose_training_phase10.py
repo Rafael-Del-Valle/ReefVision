@@ -9,12 +9,15 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import (
     Job,
     ModelRegistration,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
     PoseModelSchemaBinding,
     PoseTrainingDataset,
     Project,
@@ -507,4 +510,70 @@ def test_pose_training_can_require_separate_validation_truth(
                 },
             },
             processor=(_fake_pose_processor),
+        )
+
+
+def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The dataset is frozen from a real scientist-verified active-learning round.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    model_id = _seed_model(app, project, dataset)
+
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, str(dataset["id"]))
+        assert frozen is not None
+        source_revision = session.scalar(
+            select(PoseLandmarkSchemaRevision).where(
+                PoseLandmarkSchemaRevision.schema_id == frozen.pose_schema_id,
+                PoseLandmarkSchemaRevision.revision == frozen.pose_schema_revision,
+            )
+        )
+        assert source_revision is not None
+
+        # Two project schemas can describe identical landmarks yet represent
+        # different scientist-managed identities and review lineage.
+        other_schema = PoseLandmarkSchema(
+            project_id=str(project["id"]),
+            name="Independent schema with identical landmarks",
+        )
+        session.add(other_schema)
+        session.flush()
+        session.add(
+            PoseLandmarkSchemaRevision(
+                schema_id=other_schema.id,
+                revision=1,
+                schema_version=source_revision.schema_version,
+                groups_json=source_revision.groups_json,
+                expanded_labels_json=source_revision.expanded_labels_json,
+                keypoint_count=source_revision.keypoint_count,
+                allows_repeated_labels=source_revision.allows_repeated_labels,
+                content_hash=source_revision.content_hash,
+            )
+        )
+        binding = session.get(PoseModelSchemaBinding, model_id)
+        assert binding is not None
+        binding.schema_id = other_schema.id
+        binding.schema_revision = 1
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="schema identity does not match"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            initial_model_payload={"model_id": model_id},
+            parameters={"training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
         )
