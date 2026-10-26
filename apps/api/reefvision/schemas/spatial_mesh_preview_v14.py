@@ -134,7 +134,9 @@ class MeshRegistrationEvidence(BaseModel):
         if any(value is not None for value in review_fields) and not all(
             value is not None for value in review_fields
         ):
-            raise ValueError("Independent registration review requires reviewer, decision, and note")
+            raise ValueError(
+                "Independent registration review requires reviewer, decision, and note"
+            )
         if self.independent_reviewed_at_utc is not None and self.independent_reviewer_id is None:
             raise ValueError("Dated registration review requires an attributed reviewer")
         if self.independent_reviewer_id is not None and self.registration_operator_id is None:
