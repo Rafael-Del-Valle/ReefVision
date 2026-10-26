@@ -196,9 +196,10 @@ def test_independent_registration_review_stays_provisional() -> None:
     evidence = _reviewed_evidence()
     result = compare_mesh_observations(before, after, registration_evidence=evidence)
     assert result["provenance"]["registration_evidence"] == evidence
-    assert "registration_independent_review_recorded_not_alignment_verification" in result[
-        "qc_warnings"
-    ]
+    assert (
+        "registration_independent_review_recorded_not_alignment_verification"
+        in result["qc_warnings"]
+    )
     assert "registration_evidence_requires_independent_review" not in result["qc_warnings"]
     assert result["provenance"]["coordinate_registration_verified"] is False
 
@@ -241,9 +242,7 @@ def test_registration_review_timestamp_handles_timezone_offsets() -> None:
     evidence = _reviewed_evidence()
     evidence["independent_reviewed_at_utc"] = "2026-10-03T07:00:00-05:00"
     result = compare_mesh_observations(before, after, registration_evidence=evidence)
-    assert "registration_independent_review_timestamp_unavailable" not in result[
-        "qc_warnings"
-    ]
+    assert "registration_independent_review_timestamp_unavailable" not in result["qc_warnings"]
 
 
 def test_legacy_registration_review_missing_is_flagged() -> None:
