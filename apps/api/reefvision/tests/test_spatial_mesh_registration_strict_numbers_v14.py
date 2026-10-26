@@ -73,6 +73,28 @@ def test_registration_rejects_coerced_numbers_in_standalone_comparison(
         compare_mesh_observations(before, after, evidence)
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    ["negative_rms", "invalid_correspondences", "boolean_matrix", "nonfinite_matrix"],
+)
+def test_registration_rejects_mutated_model_instances(mutation: str) -> None:
+    """Mutable Pydantic evidence must not bypass scientific validation."""
+    evidence = MeshRegistrationEvidence.model_validate(_evidence())
+    if mutation == "negative_rms":
+        evidence.rms_residual_m = -0.01
+    elif mutation == "invalid_correspondences":
+        evidence.correspondence_count = 1
+    else:
+        transform = evidence.source_to_target_transform_m
+        assert transform is not None
+        transform[0][0] = True if mutation == "boolean_matrix" else float("nan")
+
+    before = _observation("scan-1", "2026-10-01T12:00:00Z", "survey-a")
+    after = _observation("scan-2", "2026-10-02T12:00:00Z", "survey-b")
+    with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
+        compare_mesh_observations(before, after, evidence)
+
+
 def test_registration_accepts_integer_matrix_as_unverified() -> None:
     evidence = _evidence()
     evidence["rms_residual_m"] = 0
