@@ -126,6 +126,14 @@ class WorkflowExecutionService:
                 )
             )
         )
+        # A saved revision is scientific provenance, not just a UI listing.
+        # Reject altered graphs before clients can select or reuse them.
+        for record in records:
+            if (
+                not isinstance(record.graph_json, dict)
+                or canonical_json_sha256(record.graph_json) != record.graph_sha256
+            ):
+                raise ConflictError("Workflow graph revision checksum failed")
         return [WorkflowGraphRecordResponse.model_validate(record) for record in records]
 
     def save_graph(
