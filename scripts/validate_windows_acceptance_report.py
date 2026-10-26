@@ -46,6 +46,13 @@ def _require(condition: bool, message: str) -> None:
         raise AcceptanceEvidenceError(message)
 
 
+def _msi_version(value: Any, label: str) -> tuple[int, int, int]:
+    _require(isinstance(value, str) and MSI_VERSION.fullmatch(value) is not None, f"Invalid {label}")
+    major, minor, build = (int(part) for part in value.split("."))
+    _require(major <= 255 and minor <= 255 and build <= 65535, f"{label} exceeds MSI numeric limits")
+    return major, minor, build
+
+
 def _utc(value: Any, label: str) -> datetime:
     _require(isinstance(value, str), f"{label} must be an ISO-8601 UTC timestamp")
     try:
@@ -79,7 +86,7 @@ def validate_report(
     start = _utc(report.get("started_at_utc"), "started_at_utc")
     end = _utc(report.get("completed_at_utc"), "completed_at_utc")
     _require(end >= start, "Acceptance completion precedes start")
-    _require(isinstance(expected_version, str) and MSI_VERSION.fullmatch(expected_version) is not None, "Invalid expected MSI version")
+    target_version = _msi_version(expected_version, "expected MSI version")
     _require(report.get("reefvision_version") == expected_version, "Reported MSI version differs from expected version")
     _require(isinstance(report.get("installer_sha256"), str) and SHA256.fullmatch(report["installer_sha256"]) is not None, "Invalid installer SHA-256")
     _require(isinstance(report.get("installer_path"), str) and report["installer_path"].lower().endswith(".msi"), "Missing MSI path")
@@ -110,12 +117,8 @@ def validate_report(
     if expected_upgrade == "passed":
         _require(upgrade == "PASS", "Real MSI upgrade did not PASS")
         _require(bool(report.get("previous_installer_path")) and bool(report.get("previous_installer_version")), "Missing previous MSI evidence")
-        _require(MSI_VERSION.fullmatch(report["previous_installer_version"]) is not None, "Invalid previous MSI version")
-        _require(
-            tuple(map(int, report["previous_installer_version"].split(".")))
-            < tuple(map(int, expected_version.split("."))),
-            "Target MSI is not newer than previous MSI",
-        )
+        previous_version = _msi_version(report["previous_installer_version"], "previous MSI version")
+        _require(previous_version < target_version, "Target MSI is not newer than previous MSI")
     else:
         _require(upgrade == "SKIPPED", "Clean-install-only report must not claim upgrade acceptance")
         _require(
