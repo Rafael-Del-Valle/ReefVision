@@ -610,7 +610,13 @@ def compare_mesh_observations(
                 ):
                     raise ValueError("Surface centroid must be three finite coordinates")
                 centroids.append(centroid)
-            if any(centroid is None for centroid in centroids):
+            # A disputed alignment cannot support even a provisional
+            # transformed-centroid comparison. Preserve the submitted matrix
+            # and its diagnostics for audit, but withhold derived offsets,
+            # separations, uncertainty intervals, and RMS ratios.
+            if registration.independent_review_decision == "disputes_alignment":
+                warnings.append("registered_surface_centroid_comparison_withheld_disputed_alignment")
+            elif any(centroid is None for centroid in centroids):
                 warnings.append("registered_surface_centroid_comparison_unavailable")
             else:
                 source_centroid, target_centroid = centroids
