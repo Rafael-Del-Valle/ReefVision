@@ -7,6 +7,7 @@ import errno
 import hashlib
 import os
 import shutil
+import struct
 import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -215,11 +216,27 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                     f"Multi-frame {decoded_format} cannot be imported as a single scientific image"
                 )
             image.load()
-            image_exif = image.getexif()
-            exif = dict(image_exif)
-            # Real cameras normally store DateTimeOriginal and OffsetTimeOriginal
-            # in the nested Exif IFD. The top-level dict contains only its offset.
-            exif.update(image_exif.get_ifd(ExifTags.IFD.Exif))
+            # A valid camera JPEG can contain a damaged EXIF IFD while its
+            # pixels still decode correctly. Preserve those original bytes and
+            # report metadata uncertainty rather than reject a usable image.
+            # Never infer exposure time from DateTime when the acquisition IFD
+            # could not be read: that tag may describe a later file modification.
+            exif_warning: str | None = None
+            try:
+                image_exif = image.getexif()
+                exif = dict(image_exif)
+            except (OSError, SyntaxError, ValueError, TypeError, struct.error):
+                exif = {}
+                exif_warning = "EXIF metadata could not be decoded; capture time is unavailable"
+            else:
+                try:
+                    # DateTimeOriginal and OffsetTimeOriginal are typically
+                    # nested, rather than exposed in the top-level EXIF dict.
+                    exif.update(image_exif.get_ifd(ExifTags.IFD.Exif))
+                except (OSError, SyntaxError, ValueError, TypeError, struct.error):
+                    exif_warning = (
+                        "Nested EXIF metadata could not be decoded; capture time is unavailable"
+                    )
             named_exif = {
                 ExifTags.TAGS.get(key, str(key)): _json_safe(value)
                 for key, value in exif.items()
@@ -236,6 +253,8 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 "info": safe_info,
                 "exif": named_exif,
             }
+            if exif_warning is not None:
+                metadata["exif_warning"] = exif_warning
             return InspectedImage(
                 sha256=sha256,
                 width_px=width,
@@ -244,7 +263,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 media_type=media_type,
                 extension=extension,
                 metadata=metadata,
-                capture_timestamp=_capture_timestamp(exif),
+                capture_timestamp=None if exif_warning is not None else _capture_timestamp(exif),
             )
     except UnsupportedImageError:
         raise
