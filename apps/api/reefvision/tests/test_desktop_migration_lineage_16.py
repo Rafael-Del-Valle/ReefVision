@@ -29,7 +29,7 @@ def _prepare_desktop_migration(
     )
 
 
-@pytest.mark.parametrize("revision", ["0038", "0039", "0040"])
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040", "0041"])
 def test_desktop_rejects_foreign_review_lineage_even_when_at_head(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -70,9 +70,9 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
             {"revision": revision},
         )
         allowed = "'comment', 'assign', 'unassign'"
-        if revision in {"0039", "0040"}:
+        if revision in {"0039", "0040", "0041"}:
             allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
-        if revision == "0040":
+        if revision in {"0040", "0041"}:
             allowed += ", 'triage_complete'"
         event_type_check = (
             f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed}))"
@@ -85,6 +85,15 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
                 f"comment TEXT, assignee TEXT, created_at TEXT{event_type_check})"
             )
         )
+        if revision == "0041":
+            connection.execute(
+                text(
+                    "CREATE TABLE review_queue_bulk_requests ("
+                    "id TEXT PRIMARY KEY, review_queue_id TEXT, project_id TEXT, "
+                    "action TEXT, actor TEXT, reason TEXT, item_ids_json TEXT, "
+                    "created_at TEXT)"
+                )
+            )
     _prepare_desktop_migration(monkeypatch, engine, head=revision)
 
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
@@ -103,9 +112,9 @@ def test_desktop_rejects_defaulted_audit_event_type_at_head(
     """An already-at-head stamp cannot bypass the explicit-event contract."""
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'lineage.sqlite'}")
     allowed = "'comment', 'assign', 'unassign'"
-    if revision in {"0039", "0040"}:
+    if revision in {"0039", "0040", "0041"}:
         allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
-    if revision == "0040":
+    if revision in {"0040", "0041"}:
         allowed += ", 'triage_complete'"
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))

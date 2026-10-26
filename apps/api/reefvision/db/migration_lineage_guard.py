@@ -1,4 +1,4 @@
-"""Fail closed on incompatible QC audit schemas at Alembic revisions 0038-0040.
+"""Fail closed on incompatible QC audit schemas at Alembic revisions 0038-0041.
 
 ReefVision 1.6's 0038 adds review_queue_item_events; 1.1's 0038 instead
 adds scientific_records and environmental_cache_entries. Alembic records only
@@ -26,6 +26,19 @@ _REVIEW_COLUMNS = frozenset(
     }
 )
 _SCIENCE_TABLES = frozenset({"scientific_records", "environmental_cache_entries"})
+_BULK_TABLE = "review_queue_bulk_requests"
+_BULK_COLUMNS = frozenset(
+    {
+        "id",
+        "review_queue_id",
+        "project_id",
+        "action",
+        "actor",
+        "reason",
+        "item_ids_json",
+        "created_at",
+    }
+)
 
 
 def assert_compatible_revision_0038(connection: Connection) -> None:
@@ -44,7 +57,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
     )
     revisions = set(revision_rows)
-    review_revisions = revisions & {"0038", "0039", "0040"}
+    review_revisions = revisions & {"0038", "0039", "0040", "0041"}
     if not review_revisions:
         return
     # Alembic can record unrelated branch heads in the same version table.
@@ -75,6 +88,25 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "migration; do not stamp, downgrade, or delete tables."
         )
 
+    if revision == "0041":
+        bulk_columns = (
+            {column["name"] for column in inspector.get_columns(_BULK_TABLE)}
+            if _BULK_TABLE in tables
+            else set()
+        )
+        missing_bulk = sorted(_BULK_COLUMNS - bulk_columns)
+        bulk_primary_key = (
+            inspector.get_pk_constraint(_BULK_TABLE).get("constrained_columns")
+            if _BULK_TABLE in tables
+            else None
+        )
+        if missing_bulk or bulk_primary_key != ["id"]:
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic revision 0041 collision: "
+                f"bulk request registry missing columns={missing_bulk} "
+                "or global primary key. Preserve the database and reconcile."
+            )
+
     # SQL CHECK constraints do not reject NULL in SQLite. An event_type
     # column that became nullable would allow untyped audit events despite
     # an otherwise correct named allowlist. The original 0038 migration
@@ -102,7 +134,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     # Every 0038-0040 stamp requires the exact named audit-event CHECK from its
     # migration. A missing/renamed or obsolete CHECK is unsafe even when the
     # revision marker claims otherwise. Read-only inspection.
-    if revision in {"0038", "0039", "0040"}:
+    if revision in {"0038", "0039", "0040", "0041"}:
         event_checks = inspector.get_check_constraints(_REVIEW_TABLE)
         named_check = next(
             (
@@ -121,9 +153,9 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         # Match the exact migration-specific allowlist. Reject weakened
         # CHECK expressions, missing values and unreviewed extra event types.
         allowed = ["comment", "assign", "unassign"]
-        if revision in {"0039", "0040"}:
+        if revision in {"0039", "0040", "0041"}:
             allowed.extend(["triage_start", "triage_skip", "triage_return"])
-        if revision == "0040":
+        if revision in {"0040", "0041"}:
             allowed.append("triage_complete")
         expected_check = (
             r"\s*event_type\s+IN\s*\(\s*"

@@ -421,3 +421,35 @@ def test_concurrent_review_heads_fail_closed_without_modifying_research_assets(
             == revisions
         )
     engine.dispose()
+
+
+def test_revision_0041_requires_global_bulk_request_registry() -> None:
+    """A forged 0041 stamp must never bypass the global request-ID constraint."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0041')"))
+        allowed = (
+            "'comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return', 'triage_complete'"
+        )
+        connection.execute(
+            text(
+                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
+                "CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed})))"
+            )
+        )
+        with pytest.raises(RuntimeError, match="bulk request registry"):
+            assert_compatible_revision_0038(connection)
+        connection.execute(
+            text(
+                "CREATE TABLE review_queue_bulk_requests ("
+                "id TEXT PRIMARY KEY, review_queue_id TEXT, project_id TEXT, "
+                "action TEXT, actor TEXT, reason TEXT, item_ids_json TEXT, "
+                "created_at TEXT)"
+            )
+        )
+        assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+    engine.dispose()

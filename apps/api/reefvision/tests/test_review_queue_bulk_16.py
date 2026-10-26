@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from reefvision.db.models.review_queue_bulk_request import ReviewQueueBulkRequestRecord
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.tests.test_annotations import create_project, import_one
 
@@ -491,9 +492,9 @@ def test_keyed_batch_uuid_rejects_disjoint_selection_and_foreign_queue(
     foreign = client.post(other_url, json={**original, "item_ids": [other_ids[0]]})
     assert foreign.status_code == 409, foreign.text
     assert (
-        client.get(
-            f"/api/v1/review-queues/{other_queue_id}/items/{other_ids[0]}/events"
-        ).json()["total"]
+        client.get(f"/api/v1/review-queues/{other_queue_id}/items/{other_ids[0]}/events").json()[
+            "total"
+        ]
         == 0
     )
 
@@ -556,25 +557,19 @@ def test_legacy_uuid5_bulk_events_remain_retryable(client: TestClient) -> None:
     with app.state.session_factory() as session:
         events = list(
             session.scalars(
-                select(ReviewQueueItemEvent).where(
-                    ReviewQueueItemEvent.review_queue_id == queue_id
-                )
+                select(ReviewQueueItemEvent).where(ReviewQueueItemEvent.review_queue_id == queue_id)
             )
         )
         assert len(events) == 2
         for event in events:
-            event.client_request_id = str(
-                uuid5(UUID(request_id), event.review_queue_item_id)
-            )
+            event.client_request_id = str(uuid5(UUID(request_id), event.review_queue_item_id))
         session.commit()
 
     replay = client.post(url, json=payload)
     assert replay.status_code == 200, replay.text
     assert replay.json()["changed_count"] == 0
     for item_id in ids:
-        history = client.get(
-            f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
-        ).json()
+        history = client.get(f"/api/v1/review-queues/{queue_id}/items/{item_id}/events").json()
         assert history["total"] == 1
         assert history["items"][0]["actor"] == "legacy reviewer"
 
@@ -820,3 +815,42 @@ def test_keyed_bulk_retry_preserves_mixed_completion_and_skip(
         annotations = client.get(f"/api/v1/images/{image_id}/annotations")
         assert annotations.status_code == 200, annotations.text
         assert annotations.json()["annotations"] == []
+
+
+def test_keyed_bulk_registry_is_durable_and_global(client: TestClient) -> None:
+    """A committed request ID cannot be reused in a second queue or project."""
+    queue_id, ids = _queue_with_two_images(client)
+    request_id = str(uuid4())
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    payload = {
+        "item_ids": ids,
+        "action": "start",
+        "actor": "reviewer one",
+        "client_request_id": request_id,
+    }
+    first = client.post(url, json=payload)
+    assert first.status_code == 200, first.text
+    assert first.json()["changed_count"] == 2
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        record = session.get(ReviewQueueBulkRequestRecord, request_id)
+        assert record is not None
+        assert record.review_queue_id == queue_id
+        assert record.action == "start"
+        assert record.item_ids_json == sorted(ids)
+
+    other_queue_id, other_ids = _queue_with_two_images(client)
+    conflicting = client.post(
+        f"/api/v1/review-queues/{other_queue_id}/items/bulk",
+        json={**payload, "item_ids": other_ids},
+    )
+    assert conflicting.status_code == 409, conflicting.text
+    assert client.get(f"/api/v1/review-queues/{other_queue_id}/items").json()["items"][0][
+        "review_state"
+    ] == "pending"
+    retry = client.post(url, json={**payload, "item_ids": list(reversed(ids))})
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["changed_count"] == 0
+    with app.state.session_factory() as session:
+        assert session.get(ReviewQueueBulkRequestRecord, request_id) is not None

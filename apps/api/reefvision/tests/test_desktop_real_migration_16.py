@@ -31,8 +31,9 @@ def test_desktop_fresh_sqlite_migration_persists_revision_across_restarts(
     engine = create_database_engine(settings)
     try:
         with engine.connect() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0040"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
             assert inspect(connection).has_table("review_queue_item_events")
+            assert inspect(connection).has_table("review_queue_bulk_requests")
     finally:
         engine.dispose()
 
@@ -42,7 +43,7 @@ def test_desktop_fresh_sqlite_migration_persists_revision_across_restarts(
     reopened_engine = create_database_engine(settings)
     try:
         with reopened_engine.connect() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0040"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
             assert inspect(connection).has_table("review_queue_item_events")
     finally:
         reopened_engine.dispose()
@@ -79,7 +80,7 @@ def test_review_revision_roundtrip_commits_sqlite_version_markers(tmp_path: Path
     engine = create_database_engine(settings)
     try:
         with engine.connect() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0040"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
             assert inspect(connection).has_table("review_queue_item_events")
     finally:
         engine.dispose()

@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import ReviewQueue, ReviewQueueItem
+from reefvision.db.models.review_queue_bulk_request import ReviewQueueBulkRequestRecord
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.review_queues import (
@@ -65,9 +66,7 @@ def bulk_triage_review_queue(
     )
     keyed_ids = (
         {
-            item.id: (
-                str(request_id) if item.id == min(legacy_ids) else legacy_ids[item.id]
-            )
+            item.id: (str(request_id) if item.id == min(legacy_ids) else legacy_ids[item.id])
             for item in ordered
         }
         if request_id is not None
@@ -108,17 +107,34 @@ def bulk_triage_review_queue(
                     or event.comment != (reason if request.action == "skip" else None)
                     or event.assignee is not None
                 ):
-                    raise ConflictError(
-                        "Bulk request ID was already used for a different action"
-                    )
+                    raise ConflictError("Bulk request ID was already used for a different action")
             return True
         # Any partial match or foreign-queue marker means the request UUID has
         # already been consumed. Never append audit history for another batch.
-        raise ConflictError(
-            "Bulk request ID was already used for another item selection"
+        raise ConflictError("Bulk request ID was already used for another item selection")
+
+    def matching_registry(record: ReviewQueueBulkRequestRecord) -> bool:
+        return (
+            record.review_queue_id == queue_id
+            and record.project_id == queue.project_id
+            and record.action == request.action
+            and record.actor == request.actor
+            and record.reason == (reason if request.action == "skip" else None)
+            and record.item_ids_json == sorted(request.item_ids)
         )
 
-    if validate_prior(prior_events()):
+    # The global primary key serializes competing requests for one UUID.
+    # Existing UUIDv5-only audit histories remain readable without rewriting.
+    registered = (
+        session.get(ReviewQueueBulkRequestRecord, str(request_id))
+        if request_id is not None
+        else None
+    )
+    if registered is not None and not matching_registry(registered):
+        raise ConflictError("Bulk request ID was already used for another batch")
+    if registered is not None and not validate_prior(prior_events()):
+        raise ConflictError("Committed bulk request is missing its audit events")
+    if registered is not None or validate_prior(prior_events()):
         return ReviewQueueBulkResponse(
             queue_id=queue_id,
             action=request.action,
@@ -188,6 +204,19 @@ def bulk_triage_review_queue(
             changed_ids.add(item.id)
 
     if changed:
+        if request_id is not None:
+            session.add(
+                ReviewQueueBulkRequestRecord(
+                    id=str(request_id),
+                    review_queue_id=queue_id,
+                    project_id=queue.project_id,
+                    action=request.action,
+                    actor=request.actor,
+                    reason=reason if request.action == "skip" else None,
+                    item_ids_json=sorted(request.item_ids),
+                    created_at=now,
+                )
+            )
         # Record only actual state transitions. Persist events and state changes
         # in one transaction so an interrupted batch cannot leave partial audit.
         # Retried identical requests are no-ops and do not duplicate events.
@@ -211,7 +240,12 @@ def bulk_triage_review_queue(
             session.rollback()
             # Another request may have committed the identical batch.
             # Never silently accept conflicting/partial audit history.
-            if not keyed_ids or not validate_prior(prior_events()):
+            if not keyed_ids:
+                raise ConflictError("Bulk review request ID conflict") from None
+            winner = session.get(ReviewQueueBulkRequestRecord, str(request_id))
+            if winner is not None and not matching_registry(winner):
+                raise ConflictError("Bulk review request ID conflict") from None
+            if not validate_prior(prior_events()):
                 raise ConflictError("Bulk review request ID conflict") from None
             changed = 0
         for item in ordered:

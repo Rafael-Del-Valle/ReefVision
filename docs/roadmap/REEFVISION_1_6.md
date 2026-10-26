@@ -935,3 +935,16 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   concurrency semantics. Do not claim release acceptance from these tests.
 - Exact-head CI, real installed Windows GUI, MSI upgrade/rollback, representative
   scientific data and 1.1/1.6 Alembic 0038 reconciliation remain **HOLD**.
+
+
+### 2026-10-26 — Global bulk QC request identity (unaccepted)
+- Additive migration 0041 introduces a globally unique persisted request registry,
+  protecting against concurrent disjoint batches using the same UUID.
+- Matching retries remain no-ops after later reviewer changes. Conflicting
+  selection, actor, action, project or skip reason is rejected. Registry rows
+  and append-only audit events commit atomically.
+- Legacy UUIDv5-only events remain readable, with no retroactive guarantee
+  that historical disjoint UUID reuse was absent. Nonempty registry blocks
+  destructive downgrades. Workflow Builder review gates remain unchanged.
+- CI, native Windows GUI, MSI upgrade/rollback, scientific acceptance and
+  cross-version 1.1/1.6 Alembic reconciliation remain release blockers.
