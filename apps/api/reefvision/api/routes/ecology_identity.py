@@ -26,6 +26,9 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
 from reefvision.services.ecology_candidate_report_export import render_ecology_series_qc_csv
+from reefvision.services.ecology_candidate_measurements_export import (
+    render_ecology_measurements_csv,
+)
 from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.services.ecology_identity_history_export import render_ecology_identity_history_csv
 from reefvision.services.ecology_measurement_candidates import EcologyMeasurementCandidateService
@@ -65,6 +68,21 @@ def list_calibrated_measurement_candidates(
     project_id: str, session: DbSession
 ) -> EcologyMeasurementCandidatesResponse:
     return EcologyMeasurementCandidateService(session).candidates(project_id)
+
+
+@router.get(
+    "/projects/{project_id}/ecology/calibrated-measurement-candidates/measurements.csv",
+)
+def export_ecology_source_measurements(project_id: str, session: DbSession) -> Response:
+    """Reproducible source-level projected measurements; never verified growth."""
+    response = EcologyMeasurementCandidateService(session).candidates(project_id)
+    return Response(
+        content=render_ecology_measurements_csv(response),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="reefvision-ecology-measurements.csv"'
+        },
+    )
 
 
 @router.get(
