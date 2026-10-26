@@ -221,6 +221,26 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert corrupted_resave.status_code == 409, corrupted_resave.text
     assert corrupted_resave.json() == {"detail": "Workflow graph revision checksum failed"}
 
+    # A different valid revision must not conceal a corrupted predecessor
+    # in the real scientist-verified pose workflow's saved graph history.
+    changed_revision = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={
+            "graph": {**graph, "name": "Verified pose dataset lineage (revision 2)"},
+            "create_new_revision": True,
+        },
+    )
+    assert changed_revision.status_code == 409, changed_revision.text
+    assert changed_revision.json() == {"detail": "Workflow graph revision checksum failed"}
+    with app.state.session_factory() as session:
+        revisions = session.scalars(
+            select(WorkflowGraphRecord.revision).where(
+                WorkflowGraphRecord.project_id == project_id,
+                WorkflowGraphRecord.graph_key == graph["graph_id"],
+            )
+        ).all()
+    assert revisions == [1]
+
     rejected = client.post(
         f"/api/v1/projects/{project_id}/workflow-runs",
         json={"graph_record_id": graph_record["id"]},
