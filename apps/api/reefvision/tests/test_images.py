@@ -12,7 +12,7 @@ from PIL import ExifTags, Image
 
 from reefvision.config import Settings
 from reefvision.db.base import Base
-from reefvision.db.models import Job, MaskAnnotation
+from reefvision.db.models import ImageAsset, Job, MaskAnnotation
 from reefvision.jobs.worker import process_thumbnail_job, recover_interrupted_jobs
 from reefvision.main import create_app
 from reefvision.tests.class_fixtures import seed_synthetic_label_classes
@@ -349,6 +349,59 @@ def test_malformed_camera_exif_does_not_discard_decodable_jpeg(
     with Image.open(BytesIO(thumbnail.content)) as rendition:
         assert rendition.size == (64, 48)
         assert rendition.getexif().get(274) in (None, 1)
+
+
+def test_unreadable_camera_exif_forces_raw_pixel_display_and_thumbnail(
+    client: TestClient,
+) -> None:
+    """Missing orientation metadata must not allow WebView2 to rotate camera pixels."""
+    project = create_project(client, "Camera EXIF decode failure")
+    camera_exif = Image.Exif()
+    camera_exif[274] = 6
+    source = Image.new("RGB", (64, 48), (240, 20, 20))
+    source.paste((20, 20, 240), (32, 0, 64, 48))
+    stream = BytesIO()
+    source.save(stream, format="JPEG", quality=100, subsampling=0, exif=camera_exif)
+    original = stream.getvalue()
+
+    report = import_one(
+        client, project["id"], filename="unreadable-camera-exif.JPG", content=original
+    )
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+
+    # Simulate a decoder that recovered image pixels but could not recover
+    # EXIF orientation. The original file still contains its rotation tag.
+    factory = cast(FastAPI, client.app).state.session_factory
+    with factory() as session:
+        record = session.get(ImageAsset, image_id)
+        assert record is not None
+        record.metadata_json = {
+            **(record.metadata_json or {}),
+            "exif": {},
+            "exif_warning": "EXIF metadata could not be decoded; capture time is unavailable",
+        }
+        session.commit()
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getexif().get(274) in (None, 1)
+        assert rendition.convert("RGB").getpixel((16, 12))[0] > 200
+        assert rendition.convert("RGB").getpixel((48, 12))[2] > 200
+
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    assert thumbnail.headers["content-type"].startswith("image/jpeg")
+    with Image.open(BytesIO(thumbnail.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getexif().get(274) in (None, 1)
+        assert rendition.convert("RGB").getpixel((16, 12))[0] > 200
+        assert rendition.convert("RGB").getpixel((48, 12))[2] > 200
+
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
 
 
 @pytest.mark.parametrize("orientation", range(2, 9))
