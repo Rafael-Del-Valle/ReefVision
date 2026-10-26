@@ -337,13 +337,19 @@ def compare_mesh_observations(
             identity = MeshReidentificationEvidence.model_validate(evidence_values)
         except ValueError as exc:
             raise ValueError("Invalid pairwise reidentification evidence") from exc
-        if (
-            identity.before_observation_id != first_id
-            or identity.after_observation_id != second_id
-        ):
+        if identity.before_observation_id != first_id or identity.after_observation_id != second_id:
             raise ValueError("Reidentification evidence must match both observation IDs")
         if identity.specimen_id is not None and identity.specimen_id != specimen:
             raise ValueError("Reidentification evidence must match the provisional specimen ID")
+        # Match both source geometry fingerprints, not only mutable labels.
+        # Missing hashes remain supported for older evidence but are flagged.
+        if identity.before_geometry_sha256 is None:
+            warnings.append("reidentification_geometry_binding_unavailable")
+        elif (
+            identity.before_geometry_sha256 != first.get("geometry_sha256")
+            or identity.after_geometry_sha256 != second.get("geometry_sha256")
+        ):
+            raise ValueError("Reidentification evidence must match both source geometry fingerprints")
         reidentification_record = identity.model_dump(mode="json", exclude_none=True)
         if identity.specimen_id is None:
             warnings.append("reidentification_specimen_binding_unavailable")
@@ -481,8 +487,7 @@ def compare_mesh_observations(
                     target_centroid[axis]
                     - (
                         sum(
-                            transform[axis][column] * source_centroid[column]
-                            for column in range(3)
+                            transform[axis][column] * source_centroid[column] for column in range(3)
                         )
                         + transform[axis][3]
                     )
