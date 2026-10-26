@@ -144,17 +144,15 @@ it("never combines mismatched depth, time, acquisition or source", () => {
 it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
   const east = component("current_eastward_velocity", 3);
   const north = component("current_northward_velocity", 4);
-  for (const location of [
+  const invalidLocations: NonNullable<ScientificRecord["location"]>[] = [
     { latitude: Number.NaN, longitude: -79.5, crs: "EPSG:4326" },
     { latitude: 91, longitude: -79.5, crs: "EPSG:4326" },
     { latitude: 32.5, longitude: Number.POSITIVE_INFINITY, crs: "EPSG:4326" },
     { latitude: 32.5, longitude: -181, crs: "EPSG:4326" },
-  ]) {
+  ];
+  for (const location of invalidLocations) {
     expect(
-      currentVectors([
-        { ...east, location },
-        { ...north, location },
-      ]),
+      currentVectors([{ ...east, location }, { ...north, location }]),
     ).toEqual([]);
   }
 });
