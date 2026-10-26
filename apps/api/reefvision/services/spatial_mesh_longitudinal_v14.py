@@ -615,7 +615,9 @@ def compare_mesh_observations(
             # and its diagnostics for audit, but withhold derived offsets,
             # separations, uncertainty intervals, and RMS ratios.
             if registration.independent_review_decision == "disputes_alignment":
-                warnings.append("registered_surface_centroid_comparison_withheld_disputed_alignment")
+                warnings.append(
+                    "registered_surface_centroid_comparison_withheld_disputed_alignment"
+                )
             elif any(centroid is None for centroid in centroids):
                 warnings.append("registered_surface_centroid_comparison_unavailable")
             else:
