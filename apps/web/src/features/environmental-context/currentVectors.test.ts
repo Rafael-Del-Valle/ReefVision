@@ -55,12 +55,18 @@ it.each([
     ])[0].bearing,
   ).toBe(bearing);
 });
-it("never combines mismatched depth, time, model version or source kind", () => {
+it("never combines mismatched depth, observation time, acquisition, model or source", () => {
   for (const patch of [
     { depth_m: 10 },
     { observed_at: "2026-04-03T01:00:00Z" },
     { source_kind: "observed" as const },
     { provenance: { ...component("x", 0).provenance, model_version: "other" } },
+    {
+      provenance: {
+        ...component("x", 0).provenance,
+        acquired_at: "2026-04-04T01:00:00Z",
+      },
+    },
   ]) {
     expect(
       currentVectors([
