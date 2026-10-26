@@ -410,3 +410,24 @@ identity determination: `specimen_identity_verified` remains false and
 spatial registration, anatomical growth, or biological condition. Regression
 coverage includes partial/self-review rejection, mutated evidence,
 disagreement QC, and standalone-versus-persisted-workflow artifact parity.
+
+## Longitudinal registered-centroid versus landmark RMS (provisional)
+
+The standalone 3D longitudinal comparison and the persisted typed
+`mesh_longitudinal_comparison` Workflow Builder node now include
+`registered_centroid_separation_to_registration_rms_ratio`. This is the
+Euclidean separation between two reconstruction surface centroids after
+applying a caller-supplied source-to-target rigid transform, divided by the
+reported positive landmark-fit RMS residual. The result is dimensionless.
+
+A missing centroid or transform, zero RMS, or a floating-point out-of-range
+ratio yields `null` with explicit QC. A true zero centroid separation with
+positive RMS yields zero. Tests cover these edge cases and compare the
+standalone artifact with the saved, executed Workflow Builder result.
+
+**This ratio is not a confidence interval, positional uncertainty estimate,
+statistical significance test, or evidence of coral movement or growth.**
+Landmark-fit RMS describes the supplied correspondence fit, not the
+reconstruction surface-centroid error distribution. Calibration, specimen
+identity, registration, and biological interpretation remain unverified and
+require independent scientific review.
