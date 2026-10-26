@@ -5,11 +5,14 @@ from __future__ import annotations
 import csv
 from datetime import UTC, datetime
 from io import StringIO
+from typing import Any, cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.domain.errors import ValidationError
+from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
@@ -124,4 +127,115 @@ def test_measurement_csv_rejects_ambiguous_capture_metadata(
 def test_measurement_csv_normalizes_utc_timestamp() -> None:
     assert _utc_capture(datetime(2026, 4, 3, 8, tzinfo=UTC), "timezone_aware") == (
         "2026-04-03T08:00:00Z"
+    )
+
+
+def test_executable_saved_workflow_exports_typed_unverified_csv(
+    client: TestClient,
+) -> None:
+    project_id, _ = _source(client)
+    node_registry = client.get("/api/v1/workflow-graphs/node-registry")
+    assert node_registry.status_code == 200
+    node = next(
+        item
+        for item in node_registry.json()
+        if item["node_type"] == "ecology_measurement_csv_export"
+    )
+    assert node["executable"] is True
+    assert node["input_ports"][0]["accepted_types"] == [
+        "ecology_measurement_candidates"
+    ]
+    assert node["output_ports"][0]["accepted_types"] == ["ecology_measurement_csv"]
+
+    graph: dict[str, Any] = {
+        "graph_id": "ecology-source-measurements-export-1-2",
+        "name": "Traceable projected source measurements",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
+            {"node_id": "export", "node_type": "ecology_measurement_csv_export"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            },
+            {
+                "edge_id": "candidate-export",
+                "source_node_id": "identity",
+                "source_port_id": "measurement_candidates",
+                "target_node_id": "export",
+                "target_port_id": "candidates",
+            },
+        ],
+    }
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is True
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        row
+        for row in detail.json()["artifacts"]
+        if row["data_type"] == "ecology_measurement_csv"
+    ]
+    assert len(artifacts) == 1
+    payload = artifacts[0]["payload_json"]
+    assert payload["schema_version"] == "ecology-measurement-export-0001"
+    assert payload["project_id"] == project_id
+    assert payload["source_fingerprint_rechecked"] is True
+    assert payload["evidence_level"] == "linked_unverified"
+    assert payload["review_gate"] == "scientist_review_required"
+    standalone = client.get(
+        f"/api/v1/projects/{project_id}/ecology/"
+        "calibrated-measurement-candidates/measurements.csv"
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert payload["csv_text"] == standalone.text
+
+    # An exported unverified CSV is not a verified-dataset input.
+    graph["nodes"].append(
+        {"node_id": "dataset", "node_type": "dataset_version_create"}
+    )
+    graph["edges"].append(
+        {
+            "edge_id": "csv-to-verified",
+            "source_node_id": "export",
+            "source_port_id": "csv",
+            "target_node_id": "dataset",
+            "target_port_id": "reviewed",
+        }
+    )
+    invalid = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph
+    )
+    assert invalid.status_code == 200, invalid.text
+    assert invalid.json()["valid"] is False
+    assert any(
+        issue["code"] == "incompatible_port_types"
+        for issue in invalid.json()["issues"]
     )
