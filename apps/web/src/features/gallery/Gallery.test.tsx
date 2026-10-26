@@ -1007,12 +1007,16 @@ describe("Gallery", () => {
     expect(secondThumbnail.getAttribute("src")).toContain(
       "thumbnails%2Fsecond.jpg",
     );
-    expect(screen.getByText("Loading thumbnail preview...")).toBeInTheDocument();
+    expect(
+      screen.getByText("Loading thumbnail preview..."),
+    ).toBeInTheDocument();
 
     // An old request must never hide or mark the replacement as loaded.
     fireEvent.error(firstThumbnail);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByText("Loading thumbnail preview...")).toBeInTheDocument();
+    expect(
+      screen.getByText("Loading thumbnail preview..."),
+    ).toBeInTheDocument();
 
     fireEvent.load(secondThumbnail);
     expect(
