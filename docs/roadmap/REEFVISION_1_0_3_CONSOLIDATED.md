@@ -289,8 +289,12 @@ release publication, tag, or merge was performed.
 
 - Ruff lint and format: **PASS** — 667 Python files.
 - Strict mypy package check: **PASS** — 408 source files.
+- Pytest: **PASS** — 1,360 passed, 32 documented opt-in/live integration skips,
+  and one Starlette deprecation warning.
+- Alembic isolated upgrade -> downgrade -> upgrade: **PASS**, current revision `0037`
+  (`head`).
 - Frontend lockfile, Prettier, and TypeScript: **PASS**.
-- Vitest: **PASS** — 93 files, 477 tests.
+- Vitest: **PASS** — 93 files, 478 tests.
 - Playwright: **PASS** — 13 passed, 1 documented opt-in live-OSM skip.
 - Production web build: **PASS** — existing non-blocking chunk-size advisory only.
 - Scientific/dataset/segmentation/calibration/import-export suite: **PASS** — 191 tests.

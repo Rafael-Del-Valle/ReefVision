@@ -101,12 +101,13 @@ Assert-True ($acceptanceScript -match 'Stop-AcceptanceDesktop\s+\$desktop\s*\r?\
 Assert-True ($acceptanceScript -match 'Where-Object\s+FullName\s+-eq\s+''reefvision-exchange-manifest\.json''') 'Project Exchange validation does not require the canonical manifest name.'
 Assert-True ($acceptanceScript -notmatch 'Where-Object\s+FullName\s+-eq\s+''manifest\.json''') 'Project Exchange validation still accepts the incorrect manifest.json name.'
 
-$reportPath = Join-Path $env:TEMP ('reefvision-evidence-' + [guid]::NewGuid().ToString('N') + '.json')
+$reportPath = Join-Path $Root ('.artifacts\reefvision-evidence-' + [guid]::NewGuid().ToString('N') + '.json')
 $report = [ordered]@{ upgrade = New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied'; failure_reason = $null }
 Write-ReefVisionEvidenceReport -Report $report -Path $reportPath
 $roundTrip = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
 Assert-True ($roundTrip.upgrade.status -eq 'SKIPPED') 'Report did not preserve skip semantics.'
 Assert-True ($null -eq $roundTrip.failure_reason) 'Report did not preserve an empty failure reason.'
+if (-not (Test-ReefVisionPathWithin -Path $reportPath -Parent (Join-Path $Root '.artifacts'))) { throw 'Unsafe harness report cleanup path.' }
 Remove-Item -LiteralPath $reportPath -Force
 
 $cleanupRoot = Join-Path $Root ('.artifacts\harness-cleanup-' + [guid]::NewGuid().ToString('N'))
