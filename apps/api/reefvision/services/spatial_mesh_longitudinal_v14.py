@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from math import exp, isclose, isfinite, log
+from math import atan2, degrees, exp, hypot, isclose, isfinite, log
 from re import fullmatch
 from typing import Any
 
@@ -378,6 +378,8 @@ def compare_mesh_observations(
     # reconstruction orientation and cannot certify registration accuracy.
     registration_record = None
     registration_residual_to_smaller_extent_ratio = None
+    registration_translation_magnitude_m = None
+    registration_rotation_angle_degrees = None
     if registration_evidence is None:
         warnings.append("registration_evidence_unavailable")
     else:
@@ -398,6 +400,24 @@ def compare_mesh_observations(
         if registration.source_to_target_transform_m is None:
             warnings.append("registration_transform_unavailable")
         else:
+            # Diagnostic only: summarize the caller-supplied rigid transform.
+            # The transform is NOT applied to either mesh or independently verified.
+            transform = registration.source_to_target_transform_m
+            registration_translation_magnitude_m = hypot(
+                *(row[3] for row in transform[:3])
+            )
+            rotation = [row[:3] for row in transform[:3]]
+            # atan2 is stable near zero and 180 degrees, unlike acos(trace).
+            registration_rotation_angle_degrees = degrees(
+                atan2(
+                    hypot(
+                        rotation[2][1] - rotation[1][2],
+                        rotation[0][2] - rotation[2][0],
+                        rotation[1][0] - rotation[0][1],
+                    ),
+                    rotation[0][0] + rotation[1][1] + rotation[2][2] - 1.0,
+                )
+            )
             warnings.append("registration_transform_requires_independent_review")
         if (
             early_extent is not None
@@ -511,6 +531,8 @@ def compare_mesh_observations(
         "registration_residual_to_smaller_extent_ratio": (
             registration_residual_to_smaller_extent_ratio
         ),
+        "registration_translation_magnitude_m": registration_translation_magnitude_m,
+        "registration_rotation_angle_degrees": registration_rotation_angle_degrees,
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
         "delta_surface_area_m2": difference,
