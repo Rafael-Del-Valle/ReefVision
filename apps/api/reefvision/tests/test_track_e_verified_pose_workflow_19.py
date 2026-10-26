@@ -279,6 +279,50 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert restored_resave.status_code == 201, restored_resave.text
     assert restored_resave.json()["id"] == graph_record["id"]
 
+    # An intact latest revision must not conceal an older corrupted revision.
+    # Both revisions reference the real frozen scientist-verified pose dataset.
+    second_graph = {**graph, "name": "Verified pose dataset lineage (revision 2)"}
+    second_saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": second_graph, "create_new_revision": True},
+    )
+    assert second_saved.status_code == 201, second_saved.text
+    assert second_saved.json()["revision"] == 2
+    with app.state.session_factory() as session:
+        first = session.get(WorkflowGraphRecord, graph_record["id"])
+        assert first is not None
+        first.graph_json = {**original_graph, "name": "altered historical pose graph"}
+        session.commit()
+
+    third_graph = {**graph, "name": "Verified pose dataset lineage (revision 3)"}
+    rejected_history = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": third_graph, "create_new_revision": True},
+    )
+    assert rejected_history.status_code == 409, rejected_history.text
+    assert rejected_history.json() == {"detail": "Workflow graph revision checksum failed"}
+    with app.state.session_factory() as session:
+        revisions = session.scalars(
+            select(WorkflowGraphRecord.revision)
+            .where(
+                WorkflowGraphRecord.project_id == project_id,
+                WorkflowGraphRecord.graph_key == graph["graph_id"],
+            )
+            .order_by(WorkflowGraphRecord.revision)
+        ).all()
+        first = session.get(WorkflowGraphRecord, graph_record["id"])
+        assert first is not None
+        first.graph_json = original_graph
+        session.commit()
+    assert revisions == [1, 2]
+    recovered_history = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": third_graph, "create_new_revision": True},
+    )
+    assert recovered_history.status_code == 201, recovered_history.text
+    assert recovered_history.json()["revision"] == 3
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
+
     # The unmodified scientist-verified dataset remains retrievable and exportable.
     with app.state.session_factory() as session:
         service = PoseTrainingDatasetService(session)
