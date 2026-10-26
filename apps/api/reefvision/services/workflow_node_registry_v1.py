@@ -682,6 +682,42 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
     )
 
+    registry["ecology_measurement_csv_export"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_measurement_csv_export",
+        display_name="Export Ecological Source Measurements CSV",
+        category="Scientific analysis",
+        description=(
+            "Export each source-linked projected measurement with QC and provenance; "
+            "never promote unverified geometry to biological growth."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="candidates",
+                display_name="Unverified calibrated measurement candidates",
+                accepted_types=["ecology_measurement_candidates"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="csv",
+                display_name="Unverified source-level CSV with fingerprint and QC",
+                accepted_types=["ecology_measurement_csv"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Rechecks the same candidate fingerprint, QC and derived summaries as the API.",
+            "Persists CSV text and its source fingerprint in the workflow artifact.",
+            "Source-linked geometry is unverified; scientist review remains required.",
+            "Cannot connect to verified-dataset ports or promote biological growth.",
+        ],
+    )
+
     registry["ecology_longitudinal_analysis"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_longitudinal_analysis",
         display_name="Exploratory Longitudinal Ecology",
