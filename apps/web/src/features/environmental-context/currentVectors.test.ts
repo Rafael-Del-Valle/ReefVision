@@ -123,9 +123,7 @@ it("never combines mismatched depth, time, acquisition or source", () => {
     { depth_m: 10 },
     { observed_at: "2026-04-03T01:00:00Z" },
     { source_kind: "observed" as const },
-    {
-      provenance: { ...component("x", 0).provenance, model_version: "other" },
-    },
+    { provenance: { ...component("x", 0).provenance, model_version: "other" } },
     {
       provenance: {
         ...component("x", 0).provenance,
@@ -152,10 +150,7 @@ it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
   ];
   for (const location of invalidLocations) {
     expect(
-      currentVectors([
-        { ...east, location },
-        { ...north, location },
-      ]),
+      currentVectors([{ ...east, location }, { ...north, location }]),
     ).toEqual([]);
   }
 });
