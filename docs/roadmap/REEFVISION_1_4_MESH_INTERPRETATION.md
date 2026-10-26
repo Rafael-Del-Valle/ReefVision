@@ -331,3 +331,30 @@ axis-aligned diagonals are orientation-dependent, and residuals can hide
 registration bias or missing anatomy. The standalone endpoint and persisted
 typed Workflow Builder use the same calculation, with saved-workflow parity
 and direct numerical QC regression coverage.
+
+### Registration-frame surface-centroid comparison (Track C)
+
+When the caller supplies a validated rigid source-to-target transform and both
+mesh previews have finite triangle-area-weighted surface centroids, the
+longitudinal engine transforms the earlier centroid into the later observation's
+coordinate frame. It reports
+`registered_surface_centroid_offset_target_frame_m` (a signed XYZ offset in
+target-frame meters) and `registered_surface_centroid_separation_m` (its
+Euclidean magnitude). The underlying imported mesh geometry is **not** changed.
+
+The results are explicitly provisional: surface-centroid shifts can result
+from different mesh coverage, occlusion, reconstruction quality, or calibration,
+even when the organism is stationary. They are **not** measured organism
+movement, branch growth, or verified reidentification. The output retains
+`coordinate_registration_verified: false` and
+`specimen_identity_verified: false`; QC includes
+`registered_centroid_offset_not_verified_biological_movement` and
+`registered_centroid_position_uncertainty_not_estimated`. No displacement
+confidence interval is invented from calibration-only scale bounds.
+
+Missing centroids or a missing transform produce null results; malformed
+nonfinite, Boolean, or non-XYZ centroids are rejected when used for transformed
+comparison. Standalone API and saved typed Workflow Builder graphs use the
+same calculation and are checked for complete artifact parity. Human review
+of both specimen identity and spatial registration is required before
+interpreting any difference biologically.
