@@ -46,9 +46,7 @@ def test_committed_bulk_request_restricts_queue_deletion_and_remains_retryable(
         links = connection.execute(
             text("PRAGMA foreign_key_list(review_queue_bulk_requests)")
         ).all()
-    assert any(
-        row[2] == "review_queues" and row[6] == "RESTRICT" for row in links
-    )
+    assert any(row[2] == "review_queues" and row[6] == "RESTRICT" for row in links)
 
     event_urls = [
         f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
