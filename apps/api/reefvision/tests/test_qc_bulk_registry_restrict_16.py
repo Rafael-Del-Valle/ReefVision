@@ -81,9 +81,7 @@ def test_committed_bulk_request_restricts_queue_deletion_and_remains_retryable(
             )
 
     with app.state.engine.connect() as connection:
-        assert connection.scalar(
-            text("SELECT COUNT(*) FROM review_queue_bulk_requests")
-        ) == 1
+        assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 1
 
     event_urls = [
         f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in item_ids
