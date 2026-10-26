@@ -96,7 +96,7 @@ function setup() {
   return fetch;
 }
 afterEach(() => vi.unstubAllGlobals());
-it("opens cached vectors offline with time/depth controls and scientific provenance", async () => {
+it("opens offline cached currents with time, depth and provenance", async () => {
   const fetch = setup();
   expect(fetch).not.toHaveBeenCalled();
   fireEvent.click(
@@ -111,7 +111,9 @@ it("opens cached vectors offline with time/depth controls and scientific provena
   expect(screen.getByText(/stale_offline/)).toBeInTheDocument();
   expect(screen.getByText(/Modeled.*synthetic.*202601/)).toBeInTheDocument();
   expect(
-    screen.getByText(/East component uncertainty: 0\.250 m\/s \(standard deviation\)/),
+    screen.getByText(
+      /East component uncertainty: 0\.250 m\/s \(standard deviation\)/,
+    ),
   ).toBeInTheDocument();
   expect(
     screen.getByText(/North component uncertainty: unknown/),
