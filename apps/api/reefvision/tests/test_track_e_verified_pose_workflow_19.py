@@ -1196,3 +1196,66 @@ def test_resigned_empty_dataset_cannot_be_exported_or_planned(
         execute_pose_training_dataset_adapter(
             session, app.state.settings, project_id, parameters, {}
         )
+
+def test_resigned_pose_item_cannot_change_frozen_schema_identity(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A real scientist-verified freeze uses exactly one landmark schema.
+    # Re-signing an item's altered schema hash must not bypass that contract.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    dataset_id = str(dataset["id"])
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
+        )
+        assert frozen is not None and item is not None
+        assert item.pose_schema_content_hash == frozen.pose_schema_content_hash
+        altered_hash = "0" * 64
+        assert altered_hash != frozen.pose_schema_content_hash
+        item.pose_schema_content_hash = altered_hash
+        summaries = [dict(summary) for summary in frozen.manifest_json["items"]]
+        assert len(summaries) == 1 and summaries[0]["item_id"] == item.id
+        summaries[0]["pose_schema_content_hash"] = altered_hash
+        changed_manifest = {**frozen.manifest_json, "items": summaries}
+        frozen.manifest_json = changed_manifest
+        frozen.manifest_sha256 = canonical_json_sha256(changed_manifest)
+        changed_sha = frozen.manifest_sha256
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).manifest(dataset_id)
+
+    graph = {
+        "graph_id": "track-e-resigned-item-schema",
+        "name": "Reject frozen item schema substitution",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": {"dataset_id": dataset_id, "manifest_sha256": changed_sha},
+            }
+        ],
+        "edges": [],
+    }
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] is False
+    assert "pose_dataset_item_lineage_mismatch" in {
+        issue["code"] for issue in plan.json()["issues"]
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
+
