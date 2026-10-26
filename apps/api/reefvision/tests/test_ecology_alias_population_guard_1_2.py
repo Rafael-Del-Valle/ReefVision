@@ -551,12 +551,73 @@ def test_overlapping_metric_rosters_preserve_possible_parent_lineage() -> None:
 
 def test_partial_parent_rosters_do_not_invent_organism_parent_assignments() -> None:
     """A parent list shorter than the organism roster is not a full mapping."""
-    width = _partial_metric_roster(
-        "box_width", ["fragment-A", "fragment-B"], ["parent-A"]
-    )
-    height = _partial_metric_roster(
-        "box_height", ["fragment-A", "fragment-C"], ["parent-B"]
-    )
+    width = _partial_metric_roster("box_width", ["fragment-A", "fragment-B"], ["parent-A"])
+    height = _partial_metric_roster("box_height", ["fragment-A", "fragment-C"], ["parent-B"])
     summaries = summarize_projected_population_summaries([width, height])
     assert len(summaries) == 2
+    assert all(row.review_gate == "scientist_review_required" for row in summaries)
+
+
+@pytest.mark.parametrize("reverse_order", [False, True])
+def test_full_parent_rosters_require_jointly_feasible_assignments(
+    reverse_order: bool,
+) -> None:
+    """Pairwise overlap is insufficient when every parent is forced to A."""
+    width = _partial_metric_roster(
+        "box_width", ["fragment-A", "fragment-B"], ["parent-A", "parent-B"]
+    )
+    height = _partial_metric_roster(
+        "box_height", ["fragment-A", "fragment-C"], ["parent-A", "parent-C"]
+    )
+    area = _partial_metric_roster(
+        "mask_projected_area",
+        ["fragment-B", "fragment-C"],
+        ["parent-A", "parent-D"],
+    )
+    rows = [width, height, area]
+    if reverse_order:
+        rows.reverse()
+    with pytest.raises(ValidationError, match="jointly impossible across metrics"):
+        summarize_projected_population_summaries(rows)
+
+
+@pytest.mark.parametrize("reverse_order", [False, True])
+def test_full_parent_rosters_allow_a_feasible_unverified_mapping(
+    reverse_order: bool,
+) -> None:
+    """Do not infer a parent mapping, but retain feasible descriptive rows."""
+    width = _partial_metric_roster(
+        "box_width", ["fragment-A", "fragment-B"], ["parent-A", "parent-B"]
+    )
+    height = _partial_metric_roster(
+        "box_height", ["fragment-A", "fragment-C"], ["parent-A", "parent-C"]
+    )
+    area = _partial_metric_roster(
+        "mask_projected_area",
+        ["fragment-B", "fragment-C"],
+        ["parent-B", "parent-C"],
+    )
+    rows = [width, height, area]
+    if reverse_order:
+        rows.reverse()
+    summaries = summarize_projected_population_summaries(rows)
+    assert len(summaries) == 3
+    assert all(row.declared_unit_count == 1 for row in summaries)
+    assert all(row.independent_unit_inference_allowed is False for row in summaries)
+    assert all(row.review_gate == "scientist_review_required" for row in summaries)
+
+
+def test_partial_parent_roster_does_not_require_invented_distinct_parents() -> None:
+    """Partial lineage evidence cannot justify a one-to-one parent constraint."""
+    width = _partial_metric_roster(
+        "box_width", ["fragment-A", "fragment-B"], ["parent-A", "parent-B"]
+    )
+    height = _partial_metric_roster(
+        "box_height", ["fragment-A", "fragment-C"], ["parent-A", "parent-C"]
+    )
+    area = _partial_metric_roster(
+        "mask_projected_area", ["fragment-B", "fragment-C"], ["parent-A"]
+    )
+    summaries = summarize_projected_population_summaries([width, height, area])
+    assert len(summaries) == 3
     assert all(row.review_gate == "scientist_review_required" for row in summaries)
