@@ -447,7 +447,5 @@ def test_source_linked_padded_unit_id_cannot_enter_population() -> None:
     units = summarize_projected_unit_summaries(records, changes)
     assert len(units) == 1
     assert units[0].unit_status == "candidate"
-    with pytest.raises(
-        ValidationError, match="experimental-unit ID is blank or padded"
-    ):
+    with pytest.raises(ValidationError, match="experimental-unit ID is blank or padded"):
         summarize_projected_population_summaries(units)
