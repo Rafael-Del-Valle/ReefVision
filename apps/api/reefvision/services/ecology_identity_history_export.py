@@ -11,6 +11,7 @@ from io import StringIO
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
+from reefvision.services.ecology_identity_design_audit import derive_ecology_design_changes
 from reefvision.storage.datasets import canonical_json_sha256
 
 
@@ -96,6 +97,19 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
     if snapshot_digest != registry.snapshot_sha256:
         raise ValidationError("Ecological identity latest snapshot fingerprint mismatch")
 
+    # Old saved artifacts remain explicitly unknown, not silently stable.
+    if registry.design_history_status != "history_unavailable":
+        changes = derive_ecology_design_changes(history)
+        expected_status = (
+            "design_changes_require_review" if changes else "no_design_changes_recorded"
+        )
+        if (
+            registry.design_change_events != changes
+            or registry.design_change_count != len(changes)
+            or registry.design_history_status != expected_status
+        ):
+            raise ValidationError("Ecological design-change audit differs from identity history")
+
     output = StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(
@@ -113,6 +127,8 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             "created_at",
             "evidence_level",
             "review_gate",
+            "design_history_status",
+            "design_change_count",
         )
     )
     for row in history:
@@ -131,6 +147,8 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
                 row.created_at.isoformat(),
                 registry.evidence_level,
                 registry.review_gate,
+                registry.design_history_status,
+                registry.design_change_count,
             )
         )
     return output.getvalue()

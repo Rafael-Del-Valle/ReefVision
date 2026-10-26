@@ -1702,3 +1702,21 @@ authenticate a human reviewer, certify true experimental independence or
 promote observations to verified growth. Full exact-head CI, independently
 reviewed study design/longitudinal measurements, 1.1 migration reconciliation,
 and installed Windows GUI/installer scientific acceptance remain mandatory.
+
+## Experimental-design revision QC (2026-10-25; development only)
+
+The project-owned ecological identity registry and existing executable typed
+`ecology_identity_registry_source` Workflow Builder node now publish
+`design_history_status`, `design_change_count`, and ordered
+`design_change_events` derived from complete append-only revisions. They
+flag organism-kind, parent-colony, experimental-unit type and ID changes,
+including tank reassignment and reversion. Reason-only corrections are not
+counted. Older persisted artifacts default to `history_unavailable`, never
+false design stability. The identity-history CSV discloses status/count and
+checks derived events against fingerprint-verified revision history.
+
+These registered changes are **unverified** and require scientist review;
+no independent experimental design, signed approval, or longitudinal growth
+is certified. Existing candidate exclusions and immutable evidence remain
+unchanged. No migration, cloud service, or 1.1 environmental duplication.
+Scientific, installed Windows GUI and full release acceptance remain pending.

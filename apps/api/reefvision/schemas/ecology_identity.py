@@ -138,6 +138,30 @@ class EcologyCalibrationEvidenceRow(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
 
 
+EcologyDesignChangedField = Literal[
+    "kind", "parent_colony_key", "experimental_unit_type", "experimental_unit_id"
+]
+
+
+class EcologyDesignRevisionChange(BaseModel):
+    """An unverified experimental-design or lineage revision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    organism_key: str
+    from_revision: int = Field(ge=1)
+    to_revision: int = Field(ge=2)
+    changed_fields: list[EcologyDesignChangedField] = Field(min_length=1)
+    previous_kind: Literal["colony", "fragment", "individual"]
+    current_kind: Literal["colony", "fragment", "individual"]
+    previous_parent_colony_key: str | None
+    current_parent_colony_key: str | None
+    previous_experimental_unit_type: str | None
+    previous_experimental_unit_id: str | None
+    current_experimental_unit_type: str | None
+    current_experimental_unit_id: str | None
+
+
 class EcologyIdentityRegistryResponse(BaseModel):
     schema_version: Literal["ecology-identity-registry-0001"] = "ecology-identity-registry-0001"
     project_id: str
@@ -158,5 +182,11 @@ class EcologyIdentityRegistryResponse(BaseModel):
     # Optional defaults preserve deserialization of earlier persisted artifacts.
     history_sha256: str | None = None
     history_revision_count: int = 0
+    # Legacy saved artifacts cannot claim a stable design without a derived audit.
+    design_history_status: Literal[
+        "history_unavailable", "no_design_changes_recorded", "design_changes_require_review"
+    ] = "history_unavailable"
+    design_change_count: int = Field(default=0, ge=0)
+    design_change_events: list[EcologyDesignRevisionChange] = Field(default_factory=list)
     evidence_level: Literal["registered_unverified"] = "registered_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"

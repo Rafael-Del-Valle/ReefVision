@@ -41,6 +41,7 @@ from reefvision.schemas.ecology_identity import (
 )
 from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.services.annotations import annotation_snapshot, mask_annotation_snapshot
+from reefvision.services.ecology_identity_design_audit import derive_ecology_design_changes
 from reefvision.storage.datasets import canonical_json_sha256
 
 
@@ -828,6 +829,7 @@ class EcologyIdentityService:
             )
         )
         identity_history = [EcologyIdentityRow.model_validate(row) for row in history]
+        design_changes = derive_ecology_design_changes(identity_history)
         history_rows = [
             {
                 "id": row.id,
@@ -886,6 +888,13 @@ class EcologyIdentityService:
             ),
             history_revision_count=len(history_rows),
             identity_history=identity_history,
+            design_history_status=(
+                "design_changes_require_review"
+                if design_changes
+                else "no_design_changes_recorded"
+            ),
+            design_change_count=len(design_changes),
+            design_change_events=design_changes,
             history_sha256=canonical_json_sha256(
                 {
                     "algorithm_version": "ecology-identity-history-0001",
