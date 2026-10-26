@@ -1740,12 +1740,8 @@ def test_registration_transform_diagnostics_remain_unverified(
         "source_to_target_transform_m": transform,
     }
     result = compare_mesh_observations(before, after, evidence)
-    assert result["registration_translation_magnitude_m"] == pytest.approx(
-        expected_distance
-    )
-    assert result["registration_rotation_angle_degrees"] == pytest.approx(
-        expected_angle
-    )
+    assert result["registration_translation_magnitude_m"] == pytest.approx(expected_distance)
+    assert result["registration_rotation_angle_degrees"] == pytest.approx(expected_angle)
     preserved_transform = result["provenance"]["registration_evidence"][
         "source_to_target_transform_m"
     ]
