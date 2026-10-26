@@ -162,7 +162,6 @@ def test_independent_reviewer_disagreement_remains_provisional() -> None:
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
 
 
-
 def test_disputed_specimen_match_withholds_cross_timepoint_changes() -> None:
     before, after = _observations()
     after["surface_area_m2"] = 2.0
@@ -174,39 +173,27 @@ def test_disputed_specimen_match_withholds_cross_timepoint_changes() -> None:
         "independent_review_decision": "supports_match",
         "independent_review_note": "Provisional visual match",
     }
-    supported = compare_mesh_observations(
-        before, after, reidentification_evidence=evidence
-    )
+    supported = compare_mesh_observations(before, after, reidentification_evidence=evidence)
     assert supported["delta_surface_area_m2"] == pytest.approx(1.0)
     assert supported["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(1.0)
     assert supported["provenance"]["specimen_identity_verified"] is False
-    assert (
-        supported["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"]
-        is False
-    )
+    assert supported["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is False
 
     disputed = {
         **evidence,
         "independent_review_decision": "disputes_match",
         "independent_review_note": "Branch junctions contradict specimen identity",
     }
-    result = compare_mesh_observations(
-        before, after, reidentification_evidence=disputed
-    )
+    result = compare_mesh_observations(before, after, reidentification_evidence=disputed)
     assert result["before_surface_area_m2"] == pytest.approx(1.0)
     assert result["after_surface_area_m2"] == pytest.approx(2.0)
     assert result["elapsed_days"] == pytest.approx(1.0)
     assert result["before_reconstruction_topology_counts"]["face_count"] is None
     assert result["provenance"]["reidentification_evidence"] == disputed
     assert result["provenance"]["specimen_identity_verified"] is False
-    assert (
-        result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"]
-        is True
-    )
+    assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is True
     assert "reidentification_independent_review_disputes_match" in result["qc_warnings"]
-    assert (
-        "longitudinal_change_withheld_disputed_specimen_identity" in result["qc_warnings"]
-    )
+    assert "longitudinal_change_withheld_disputed_specimen_identity" in result["qc_warnings"]
     for key in (
         "delta_surface_area_m2",
         "relative_surface_area_change_percent",
@@ -230,9 +217,7 @@ def test_inconclusive_identity_review_withholds_change_without_discarding_source
         "independent_review_note": "Survey photographs cannot establish identity",
         "independent_reviewed_at_utc": "2026-10-03T12:00:00Z",
     }
-    result = compare_mesh_observations(
-        before, after, reidentification_evidence=evidence
-    )
+    result = compare_mesh_observations(before, after, reidentification_evidence=evidence)
     assert result["before_surface_area_m2"] == pytest.approx(1.0)
     assert result["after_surface_area_m2"] == pytest.approx(2.0)
     assert result["elapsed_days"] == pytest.approx(1.0)
@@ -243,19 +228,13 @@ def test_inconclusive_identity_review_withholds_change_without_discarding_source
     assert result["provenance"]["reidentification_evidence"] == evidence
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["scale_uncertainty_only"] is False
-    assert (
-        result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"]
-        is False
-    )
+    assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is False
     assert (
         result["provenance"]["longitudinal_change_withheld_due_to_inconclusive_identity_review"]
         is True
     )
     assert "reidentification_independent_review_inconclusive" in result["qc_warnings"]
-    assert (
-        "longitudinal_change_withheld_inconclusive_specimen_identity"
-        in result["qc_warnings"]
-    )
+    assert "longitudinal_change_withheld_inconclusive_specimen_identity" in result["qc_warnings"]
 
 
 @pytest.mark.parametrize(
