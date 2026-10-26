@@ -152,7 +152,10 @@ it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
   ];
   for (const location of invalidLocations) {
     expect(
-      currentVectors([{ ...east, location }, { ...north, location }]),
+      currentVectors([
+        { ...east, location },
+        { ...north, location },
+      ]),
     ).toEqual([]);
   }
 });
