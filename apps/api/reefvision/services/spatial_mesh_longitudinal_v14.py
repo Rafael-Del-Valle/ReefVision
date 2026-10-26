@@ -428,6 +428,36 @@ def compare_mesh_observations(
         before_topology[field] is None or after_topology[field] is None for field in topology_fields
     ):
         warnings.append("reconstruction_topology_comparison_incomplete")
+    # Rates normalize reconstruction defects by the number of triangles, so
+    # scans with different tessellation densities can be compared descriptively.
+    # These are mesh-acquisition QC indicators, NOT biological condition scores.
+    qc_rate_sources = {
+        "degenerate_face_fraction": "degenerate_face_count",
+        "boundary_edges_per_face": "boundary_edge_count",
+        "nonmanifold_edges_per_face": "nonmanifold_edge_count",
+    }
+    reconstruction_qc_rates = []
+    for counts in topology_counts:
+        faces = counts["face_count"]
+        reconstruction_qc_rates.append(
+            {
+                label: counts[field] / faces if faces and counts[field] is not None else None
+                for label, field in qc_rate_sources.items()
+            }
+        )
+    reconstruction_qc_rate_changes = {
+        label: (
+            reconstruction_qc_rates[1][label] - reconstruction_qc_rates[0][label]
+            if reconstruction_qc_rates[0][label] is not None
+            and reconstruction_qc_rates[1][label] is not None
+            else None
+        )
+        for label in qc_rate_sources
+    }
+    if any(value is not None for rates in reconstruction_qc_rates for value in rates.values()):
+        warnings.append("reconstruction_qc_rates_not_biological_condition")
+    else:
+        warnings.append("reconstruction_qc_rates_unavailable")
     # Source-frame labels are audit metadata, not registration transforms.
     frames = [first.get("coordinate_frame_id"), second.get("coordinate_frame_id")]
     for frame in frames:
@@ -454,7 +484,7 @@ def compare_mesh_observations(
     registered_surface_centroid_separation_m = None
     registered_centroid_separation_to_registration_rms_ratio = None
     registered_surface_centroid_separation_caller_bound_interval_m = None
-    registered_surface_centroid_offset_target_frame_caller_bound_intervals_m = None
+    centroid_axis_bound_intervals_m = None
     if registration_evidence is None:
         warnings.append("registration_evidence_unavailable")
     else:
@@ -558,7 +588,7 @@ def compare_mesh_observations(
                             # A Euclidean error radius also bounds each signed
                             # target-frame offset component, without assuming
                             # independent axes or a probability distribution.
-                            registered_surface_centroid_offset_target_frame_caller_bound_intervals_m = [
+                            centroid_axis_bound_intervals_m = [
                                 [component - combined_bound, component + combined_bound]
                                 for component in offset
                             ]
@@ -699,6 +729,9 @@ def compare_mesh_observations(
         "before_reconstruction_topology_counts": before_topology,
         "after_reconstruction_topology_counts": after_topology,
         "reconstruction_topology_changed_fields": topology_changed_fields,
+        "before_reconstruction_qc_rates": reconstruction_qc_rates[0],
+        "after_reconstruction_qc_rates": reconstruction_qc_rates[1],
+        "reconstruction_qc_rate_changes_after_minus_before": reconstruction_qc_rate_changes,
         "registration_residual_to_smaller_extent_ratio": (
             registration_residual_to_smaller_extent_ratio
         ),
@@ -715,7 +748,7 @@ def compare_mesh_observations(
             registered_surface_centroid_separation_caller_bound_interval_m
         ),
         "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m": (
-            registered_surface_centroid_offset_target_frame_caller_bound_intervals_m
+            centroid_axis_bound_intervals_m
         ),
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,

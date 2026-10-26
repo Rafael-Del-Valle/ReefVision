@@ -431,3 +431,23 @@ Landmark-fit RMS describes the supplied correspondence fit, not the
 reconstruction surface-centroid error distribution. Calibration, specimen
 identity, registration, and biological interpretation remain unverified and
 require independent scientific review.
+
+
+## Longitudinal reconstruction QC rates (provisional)
+
+The standalone mesh-longitudinal API and saved executable
+`mesh_longitudinal_comparison` Workflow Builder artifacts now include
+`before_reconstruction_qc_rates`, `after_reconstruction_qc_rates`, and
+`reconstruction_qc_rate_changes_after_minus_before`. Each record reports
+degenerate-face fraction, boundary edges per face, and nonmanifold edges per
+face, with denominators taken from the corresponding timepoint's face count.
+These are **descriptive reconstruction diagnostics**, not biological condition
+scores. Boundary and nonmanifold edges per face are rates, not probabilities;
+they may exceed one. Changes can reflect sampling, meshing, resolution, or
+segmentation differences rather than coral tissue condition or growth.
+
+Missing topology fields or zero-face meshes yield `null` rates and changes,
+never fabricated zero defects. Scientific QC warnings flag that the rates
+cannot establish biological condition. The source counts, provisional
+measurement status, provenance, and independent review requirements remain
+unchanged. A saved-workflow parity test exercises the new fields.

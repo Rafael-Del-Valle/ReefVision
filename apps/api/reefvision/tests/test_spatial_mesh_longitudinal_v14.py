@@ -101,6 +101,14 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
+    assert expected["before_reconstruction_qc_rates"]["boundary_edges_per_face"] == 3.0
+    assert expected["after_reconstruction_qc_rates"]["degenerate_face_fraction"] == 0.0
+    assert expected["reconstruction_qc_rate_changes_after_minus_before"] == {
+        "degenerate_face_fraction": 0.0,
+        "boundary_edges_per_face": 0.0,
+        "nonmanifold_edges_per_face": 0.0,
+    }
+    assert "reconstruction_qc_rates_not_biological_condition" in expected["qc_warnings"]
     assert expected["delta_surface_area_m2"] == pytest.approx(0.5)
     assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)

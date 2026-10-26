@@ -73,7 +73,9 @@ def test_missing_caller_bounds_never_infers_interval_from_rms() -> None:
     result = _compare(_registration())
     assert result["registered_surface_centroid_separation_m"] == pytest.approx(1.0)
     assert result["registered_surface_centroid_separation_caller_bound_interval_m"] is None
-    assert result["registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"] is None
+    assert (
+        result["registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"] is None
+    )
     assert "registered_centroid_error_bounds_unavailable" in result["qc_warnings"]
 
 
