@@ -50,6 +50,8 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       row.provenance.source,
       row.provenance.dataset_id,
       row.provenance.model_version,
+      // Components from separate acquisitions must not form a synthetic current.
+      row.provenance.acquired_at,
       row.environmental_cache_key,
     ]);
     const group = groups.get(key) ?? { east: [], north: [] };
