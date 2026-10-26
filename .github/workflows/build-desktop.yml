@@ -27,6 +27,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Exercise the actual embedded monitor formatter on Windows before
+      # spending time packaging the multi-GB MSI/CAB payload.
+      - name: Verify read-only PowerShell monitor output sanitization
+        shell: pwsh
+        run: ./scripts/test-training-console-sanitizer.ps1
+
       # Fast safety checks run before bootstrap / the multi-GB MSI build.
       - name: Validate Windows clean-install harness safeguards
         shell: pwsh
