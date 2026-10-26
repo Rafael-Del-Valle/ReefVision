@@ -453,6 +453,7 @@ def compare_mesh_observations(
     registered_surface_centroid_offset_target_frame_m = None
     registered_surface_centroid_separation_m = None
     registered_centroid_separation_to_registration_rms_ratio = None
+    registered_surface_centroid_separation_caller_bound_interval_m = None
     if registration_evidence is None:
         warnings.append("registration_evidence_unavailable")
     else:
@@ -534,6 +535,35 @@ def compare_mesh_observations(
                     registered_surface_centroid_separation_m = separation
                     warnings.append("registered_centroid_offset_not_verified_biological_movement")
                     warnings.append("registered_centroid_position_uncertainty_not_estimated")
+                    # The rotation preserves the Euclidean source-centroid
+                    # error radius. Triangle inequality bounds the separation
+                    # error by source + target + registration-alignment radii.
+                    # RMS residual is NOT an error bound and is never substituted.
+                    centroid_bounds = (
+                        registration.source_centroid_position_error_bound_m,
+                        registration.target_centroid_position_error_bound_m,
+                        registration.registration_alignment_error_bound_m,
+                    )
+                    if all(bound is not None for bound in centroid_bounds):
+                        combined_bound = sum(
+                            bound for bound in centroid_bounds if bound is not None
+                        )
+                        upper_bound = separation + combined_bound
+                        if isfinite(upper_bound):
+                            registered_surface_centroid_separation_caller_bound_interval_m = [
+                                max(0.0, separation - combined_bound),
+                                upper_bound,
+                            ]
+                            warnings.append(
+                                "registered_centroid_caller_bounds_not_independently_verified"
+                            )
+                            warnings.append(
+                                "registered_centroid_caller_interval_not_a_confidence_interval"
+                            )
+                        else:
+                            warnings.append("registered_centroid_caller_interval_out_of_numeric_range")
+                    else:
+                        warnings.append("registered_centroid_error_bounds_unavailable")
                     # The ratio compares a centroid separation with a reported
                     # landmark-fit RMS. It is not a positional uncertainty,
                     # significance test, or evidence of biological movement.
@@ -670,6 +700,9 @@ def compare_mesh_observations(
         "registered_surface_centroid_separation_m": registered_surface_centroid_separation_m,
         "registered_centroid_separation_to_registration_rms_ratio": (
             registered_centroid_separation_to_registration_rms_ratio
+        ),
+        "registered_surface_centroid_separation_caller_bound_interval_m": (
+            registered_surface_centroid_separation_caller_bound_interval_m
         ),
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,

@@ -112,3 +112,32 @@ biological change, or independent reviewer approval. The shared standalone
 comparison and persisted typed Workflow Builder node enforce identical rules;
 regression tests cover matching offsets, mismatched times, partial evidence,
 legacy records, and saved-workflow artifact parity.
+
+## Caller-supplied conservative centroid-separation error bounds
+
+Optional `registration_evidence` fields
+`source_centroid_position_error_bound_m`,
+`target_centroid_position_error_bound_m`, and
+`registration_alignment_error_bound_m` describe **absolute Euclidean error
+radii in meters**, supplied by the researcher for the source centroid, target
+centroid, and source-to-target alignment at the source centroid. All three
+must be present together with a rigid transform, or all omitted. Values must
+be finite, nonnegative numeric floats no greater than 1,000,000 m. The
+landmark-fit RMS residual is **not** treated as an error bound.
+
+When both surface centroids and all three caller bounds are available,
+ReefVision uses the triangle inequality to emit
+`registered_surface_centroid_separation_caller_bound_interval_m`:
+`[max(0, d - (u_source + u_target + u_alignment)), d + u_source +
+u_target + u_alignment]`, where `d` is the registered centroid separation.
+The source-centroid bound is preserved by the rigid rotation. Missing bounds
+produce `null` rather than an invented zero-error interval. Invalid or
+incomplete evidence is rejected, including a model modified after validation.
+
+This is a **conditional bound given the truth of the supplied error radii**,
+not a statistical confidence interval, verified registration, biological
+movement test, or total reconstruction uncertainty estimate. The result
+retains unverified status and explicit scientific QC; calibration,
+occlusion, reconstruction, and identity still require independent review.
+Standalone analyses and persisted executable Workflow Builder graphs share
+the same calculation and provenance, with a saved-workflow parity regression.

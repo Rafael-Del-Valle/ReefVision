@@ -59,6 +59,9 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "correspondence_count": 6,
         "evidence_note": "Provisional landmark alignment; independent review pending",
         "source_to_target_transform_m": _rigid_transform(),
+        "source_centroid_position_error_bound_m": 0.01,
+        "target_centroid_position_error_bound_m": 0.02,
+        "registration_alignment_error_bound_m": 0.03,
     }
     reidentification_evidence = {
         "project_id": project_id,
@@ -177,13 +180,17 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert "registered_centroid_offset_not_verified_biological_movement" in expected["qc_warnings"]
     assert "registered_centroid_position_uncertainty_not_estimated" in expected["qc_warnings"]
+    centroid_separation = sqrt(0.1**2 + (1 / 3) ** 2)
+    assert expected["registered_surface_centroid_separation_caller_bound_interval_m"] == (
+        pytest.approx([centroid_separation - 0.06, centroid_separation + 0.06])
+    )
+    assert "registered_centroid_caller_bounds_not_independently_verified" in expected[
+        "qc_warnings"
+    ]
     assert expected["registered_centroid_separation_to_registration_rms_ratio"] == (
         pytest.approx(sqrt(0.1**2 + (1 / 3) ** 2) / 0.02)
     )
-    assert (
-        "registered_centroid_rms_ratio_not_a_movement_significance_test"
-        in expected["qc_warnings"]
-    )
+    assert "registered_centroid_rms_ratio_not_a_movement_significance_test" in expected["qc_warnings"]
     assert "registration_residual_at_least_smaller_mesh_extent" not in expected["qc_warnings"]
     assert "matching_coordinate_frame_id_not_registration_proof" in expected["qc_warnings"]
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]

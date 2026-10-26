@@ -77,10 +77,33 @@ class MeshRegistrationEvidence(BaseModel):
     # Optional caller-supplied rigid source-to-target transform in meters.
     # Structural validity does not establish correct alignment or review.
     source_to_target_transform_m: list[list[StrictFloat]] | None = None
+    # Optional *absolute Euclidean error bounds*, in meters, supplied by the
+    # researcher. They are not inferred from registration RMS or calibration.
+    # All three are required to bound target-frame centroid separation.
+    source_centroid_position_error_bound_m: StrictFloat | None = Field(
+        default=None, ge=0, le=1_000_000, allow_inf_nan=False
+    )
+    target_centroid_position_error_bound_m: StrictFloat | None = Field(
+        default=None, ge=0, le=1_000_000, allow_inf_nan=False
+    )
+    registration_alignment_error_bound_m: StrictFloat | None = Field(
+        default=None, ge=0, le=1_000_000, allow_inf_nan=False
+    )
 
     @model_validator(mode="after")
     def validate_rigid_transform(self) -> MeshRegistrationEvidence:
         transform = self.source_to_target_transform_m
+        centroid_bounds = (
+            self.source_centroid_position_error_bound_m,
+            self.target_centroid_position_error_bound_m,
+            self.registration_alignment_error_bound_m,
+        )
+        if any(bound is not None for bound in centroid_bounds) and (
+            transform is None or any(bound is None for bound in centroid_bounds)
+        ):
+            raise ValueError(
+                "Centroid separation bounds require a transform and all three error bounds"
+            )
         if transform is None:
             return self
         if len(transform) != 4 or any(len(row) != 4 for row in transform):
