@@ -501,6 +501,11 @@ def test_keyed_bulk_skip_retry_preserves_later_return_and_reason_history(
 
     conflicting = client.post(url, json={**original, "reason": "Different reason"})
     assert conflicting.status_code == 409, conflicting.text
-    after = client.get(first_url)
-    assert after.status_code == 200, after.text
-    assert after.json() == first_history.json()
+    # A conflicting reuse of the same request key must be atomic: it cannot
+    # mutate either reviewer's event history or the original skip reason.
+    first_after = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events")
+    second_after = client.get(f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events")
+    assert first_after.status_code == 200, first_after.text
+    assert second_after.status_code == 200, second_after.text
+    assert first_after.json() == first_history.json()
+    assert second_after.json() == second_history.json()
