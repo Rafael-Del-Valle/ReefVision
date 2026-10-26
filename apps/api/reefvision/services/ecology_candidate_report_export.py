@@ -121,9 +121,7 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
         (item.organism_key, item.metric): item
         for item in response.projected_endpoint_changes
     }
-    actual_endpoints = {
-        key: item.model_dump(mode="json") for key, item in endpoint_rows.items()
-    }
+    actual_endpoints = {key: item.model_dump(mode="json") for key, item in endpoint_rows.items()}
     if len(endpoint_rows) != len(response.projected_endpoint_changes):
         raise ValidationError("Duplicate ecological projected endpoint evidence")
     if response.source_fingerprint_contract is not None:
