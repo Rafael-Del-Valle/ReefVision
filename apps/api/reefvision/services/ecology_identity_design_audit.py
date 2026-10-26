@@ -6,9 +6,9 @@ from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_le
 from reefvision.schemas.ecology_identity import (
     EcologyCrossUnitParentDetail,
     EcologyDesignChangedField,
+    EcologyDesignRevisionChange,
     EcologyHistoricalCrossUnitParentDetail,
     EcologyHistoricalParentAssignment,
-    EcologyDesignRevisionChange,
     EcologyIdentityRow,
 )
 
