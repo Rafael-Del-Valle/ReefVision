@@ -18,6 +18,7 @@ type BulkRequest = {
   reason?: string;
   actor: string;
   review_confirmed?: boolean;
+  client_request_id: string;
 };
 
 function eligible(
@@ -85,6 +86,9 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
       item_ids: selectedIds,
       action,
       actor: actor.trim(),
+      // Stable across an uncertain-response retry; never reapply a stale
+      // triage action after another researcher changes the queue state.
+      client_request_id: crypto.randomUUID(),
       ...(action === "skip" ? { reason: reason.trim() } : {}),
       ...(action === "complete" ? { review_confirmed: true } : {}),
     });
