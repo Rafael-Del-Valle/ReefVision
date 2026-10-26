@@ -58,6 +58,11 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "rms_residual_m": 0.02,
         "correspondence_count": 6,
         "evidence_note": "Provisional landmark alignment; independent review pending",
+        "registration_operator_id": "field-operator-1",
+        "independent_reviewer_id": "lab-reviewer-2",
+        "independent_review_decision": "supports_alignment",
+        "independent_review_note": "Reviewed landmark fit, not verified alignment",
+        "independent_reviewed_at_utc": "2026-10-03T12:00:00Z",
         "project_id": project_id,
         "source_observation_id": "survey-1",
         "target_observation_id": "survey-2",
@@ -170,6 +175,9 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["provenance"]["after_coordinate_frame_id"] == "survey-local"
     assert expected["provenance"]["coordinate_registration_verified"] is False
     assert expected["provenance"]["registration_evidence"] == registration_evidence
+    assert "registration_independent_review_recorded_not_alignment_verification" in warnings
+    assert "registration_evidence_requires_independent_review" not in warnings
+    assert expected["provenance"]["coordinate_registration_verified"] is False
     assert expected["provenance"]["reidentification_evidence"] == reidentification_evidence
     assert expected["provenance"]["reidentification_evidence_review_status"] == (
         "caller_supplied_unverified"

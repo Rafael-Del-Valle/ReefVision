@@ -139,9 +139,7 @@ def test_registration_project_observation_and_time_bindings_are_preserved() -> N
         ("target_observed_at_utc", "2026-10-03T12:00:00Z", "observation timestamps"),
     ],
 )
-def test_registration_binding_rejects_stale_evidence(
-    field: str, value: str, message: str
-) -> None:
+def test_registration_binding_rejects_stale_evidence(field: str, value: str, message: str) -> None:
     before, after = _observations()
     evidence = _bound_evidence()
     evidence[field] = value
@@ -180,3 +178,93 @@ def test_mutated_registration_project_binding_is_revalidated() -> None:
     evidence.project_id = "another-study"
     with pytest.raises(ValueError, match="project ID"):
         compare_mesh_observations(before, after, registration_evidence=evidence)
+
+
+def _reviewed_evidence() -> dict:
+    return {
+        **_bound_evidence(),
+        "registration_operator_id": "operator-1",
+        "independent_reviewer_id": "reviewer-2",
+        "independent_review_decision": "supports_alignment",
+        "independent_review_note": "Checked landmarks, not certified alignment",
+        "independent_reviewed_at_utc": "2026-10-03T12:00:00Z",
+    }
+
+
+def test_independent_registration_review_stays_provisional() -> None:
+    before, after = _observations()
+    evidence = _reviewed_evidence()
+    result = compare_mesh_observations(before, after, registration_evidence=evidence)
+    assert result["provenance"]["registration_evidence"] == evidence
+    assert "registration_independent_review_recorded_not_alignment_verification" in result[
+        "qc_warnings"
+    ]
+    assert "registration_evidence_requires_independent_review" not in result["qc_warnings"]
+    assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("missing", "message"),
+    [
+        ("independent_reviewer_id", "requires reviewer"),
+        ("independent_review_decision", "requires reviewer"),
+        ("independent_review_note", "requires reviewer"),
+        ("registration_operator_id", "requires operator attribution"),
+    ],
+)
+def test_registration_review_requires_complete_independent_attribution(
+    missing: str, message: str
+) -> None:
+    evidence = _reviewed_evidence()
+    del evidence[missing]
+    with pytest.raises(PydanticValidationError, match=message):
+        MeshRegistrationEvidence.model_validate(evidence)
+
+
+def test_registration_operator_cannot_self_review() -> None:
+    evidence = _reviewed_evidence()
+    evidence["independent_reviewer_id"] = "operator-1"
+    with pytest.raises(PydanticValidationError, match="must differ"):
+        MeshRegistrationEvidence.model_validate(evidence)
+
+
+def test_registration_review_cannot_predate_later_observation() -> None:
+    before, after = _observations()
+    evidence = _reviewed_evidence()
+    evidence["independent_reviewed_at_utc"] = "2026-10-01T12:00:00Z"
+    with pytest.raises(ValueError, match="predates the later observation"):
+        compare_mesh_observations(before, after, registration_evidence=evidence)
+
+
+def test_registration_review_timestamp_handles_timezone_offsets() -> None:
+    before, after = _observations()
+    evidence = _reviewed_evidence()
+    evidence["independent_reviewed_at_utc"] = "2026-10-03T07:00:00-05:00"
+    result = compare_mesh_observations(before, after, registration_evidence=evidence)
+    assert "registration_independent_review_timestamp_unavailable" not in result[
+        "qc_warnings"
+    ]
+
+
+def test_legacy_registration_review_missing_is_flagged() -> None:
+    before, after = _observations()
+    result = compare_mesh_observations(before, after, registration_evidence=_bound_evidence())
+    assert "registration_operator_attribution_unavailable" in result["qc_warnings"]
+    assert "registration_evidence_requires_independent_review" in result["qc_warnings"]
+
+
+def test_mutated_registration_review_cannot_bypass_validation() -> None:
+    before, after = _observations()
+    evidence = MeshRegistrationEvidence.model_validate(_reviewed_evidence())
+    evidence.independent_reviewer_id = "operator-1"
+    with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
+        compare_mesh_observations(before, after, registration_evidence=evidence)
+
+
+def test_disputed_registration_review_produces_explicit_qc() -> None:
+    before, after = _observations()
+    evidence = _reviewed_evidence()
+    evidence["independent_review_decision"] = "disputes_alignment"
+    result = compare_mesh_observations(before, after, registration_evidence=evidence)
+    assert "registration_independent_review_disputes_alignment" in result["qc_warnings"]
+    assert result["provenance"]["coordinate_registration_verified"] is False

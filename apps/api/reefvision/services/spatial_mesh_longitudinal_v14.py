@@ -559,6 +559,20 @@ def compare_mesh_observations(
         ) or registration.target_geometry_sha256 != second.get("geometry_sha256"):
             raise ValueError("Registration evidence must match both source geometry fingerprints")
         registration_record = registration.model_dump(mode="json", exclude_none=True)
+        if registration.registration_operator_id is None:
+            warnings.append("registration_operator_attribution_unavailable")
+        if registration.independent_reviewer_id is None:
+            warnings.append("registration_evidence_requires_independent_review")
+        else:
+            if registration.independent_reviewed_at_utc is None:
+                warnings.append("registration_independent_review_timestamp_unavailable")
+            elif registration.independent_reviewed_at_utc < after_time:
+                raise ValueError("Independent registration review predates the later observation")
+            warnings.append("registration_independent_review_recorded_not_alignment_verification")
+            if registration.independent_review_decision == "disputes_alignment":
+                warnings.append("registration_independent_review_disputes_alignment")
+            elif registration.independent_review_decision == "inconclusive":
+                warnings.append("registration_independent_review_inconclusive")
         warnings.append("registration_residual_requires_independent_review")
         warnings.append("registration_transform_and_accuracy_not_verified")
         if registration.source_to_target_transform_m is None:

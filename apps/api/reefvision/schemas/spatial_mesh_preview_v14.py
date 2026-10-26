@@ -74,6 +74,19 @@ class MeshRegistrationEvidence(BaseModel):
     rms_residual_m: StrictFloat = Field(ge=0, le=1_000_000, allow_inf_nan=False)
     correspondence_count: StrictInt = Field(ge=3, le=1_000_000)
     evidence_note: str = Field(min_length=1, max_length=2_000)
+    # Optional separately attributed registration review is audit evidence,
+    # not proof of accurate spatial alignment or scientific verification.
+    registration_operator_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    independent_reviewer_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    independent_review_decision: (
+        Literal["supports_alignment", "disputes_alignment", "inconclusive"] | None
+    ) = None
+    independent_review_note: str | None = Field(default=None, min_length=1, max_length=2_000)
+    independent_reviewed_at_utc: AwareDatetime | None = None
     # Optional project, observation and timepoint bindings prevent evidence
     # reuse across surveys with recycled local frame labels or geometry.
     project_id: str | None = Field(default=None, min_length=1, max_length=128)
@@ -113,6 +126,24 @@ class MeshRegistrationEvidence(BaseModel):
             raise ValueError("Registration timepoint binding requires both UTC timestamps")
         if (self.source_geometry_sha256 is None) != (self.target_geometry_sha256 is None):
             raise ValueError("Registration geometry binding requires both SHA-256 fingerprints")
+        review_fields = (
+            self.independent_reviewer_id,
+            self.independent_review_decision,
+            self.independent_review_note,
+        )
+        if any(value is not None for value in review_fields) and not all(
+            value is not None for value in review_fields
+        ):
+            raise ValueError("Independent registration review requires reviewer, decision, and note")
+        if self.independent_reviewed_at_utc is not None and self.independent_reviewer_id is None:
+            raise ValueError("Dated registration review requires an attributed reviewer")
+        if self.independent_reviewer_id is not None and self.registration_operator_id is None:
+            raise ValueError("Independent registration review requires operator attribution")
+        if (
+            self.independent_reviewer_id is not None
+            and self.independent_reviewer_id == self.registration_operator_id
+        ):
+            raise ValueError("Registration reviewer must differ from registration operator")
         transform = self.source_to_target_transform_m
         centroid_bounds = (
             self.source_centroid_position_error_bound_m,

@@ -496,3 +496,20 @@ Neither matching project/observation metadata nor matching geometry
 fingerprints establish correct alignment, specimen identity, calibrated
 physical movement, or coral growth. All measurements remain provisional
 until scientific and installed-desktop acceptance are completed.
+
+
+### Independently attributed registration review (Track C)
+
+Pairwise 3D registration evidence now accepts optional registration-operator
+attribution and a separately attributed reviewer, decision, note and
+timezone-aware review timestamp. A reviewer cannot be the operator; incomplete
+review fields, dates preceding the later observation, and post-construction
+mutations are rejected. Legacy unreviewed evidence remains readable with
+explicit missing-attribution/review QC warnings.
+
+Supporting, disputing and inconclusive reviewer decisions are **audit records
+only**. Disputes and inconclusive decisions produce additional QC warnings.
+A supporting decision never sets `coordinate_registration_verified` to true
+and does not certify calibration, alignment, uncertainty or coral movement.
+Standalone and persisted typed Workflow Builder comparisons use the same
+validation engine and preserve review provenance in their artifacts.
