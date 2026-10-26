@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import (
+    PoseActiveLearningCandidate,
     PoseLandmarkObservation,
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
@@ -391,6 +392,40 @@ def test_training_dataset_blocks_pose_changed_after_verification(
 
     assert response.status_code == 409
     assert "changed after scientist verification" in (response.text)
+
+
+def test_freeze_rejects_changed_candidate_acquisition_provenance(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise the real reviewed-round API path before any dataset exists.
+    # Editing the candidate's source metadata must not create frozen truth
+    # under the original acquisition fingerprint.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        original_sha = candidate.provenance_sha256
+        candidate.provenance_json = {
+            **dict(candidate.provenance_json),
+            "altered_after_review": True,
+        }
+        assert candidate.provenance_sha256 == original_sha
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Must not freeze altered acquisition evidence"},
+    )
+    assert response.status_code == 409, response.text
+    assert "acquisition provenance changed after selection" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
 
 
 def test_native_pose_training_package_is_deterministic_and_verified_only(
