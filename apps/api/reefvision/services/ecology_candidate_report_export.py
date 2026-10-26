@@ -12,6 +12,9 @@ from reefvision.schemas.ecology_measurement_candidates import (
 )
 from reefvision.services.ecology_measurement_candidates import (
     summarize_projected_endpoint_changes,
+    summarize_projected_population_summaries,
+    summarize_projected_unit_summaries,
+    summarize_projected_visit_coverage,
     summarize_sampling_date_qc,
 )
 from reefvision.storage.datasets import canonical_json_sha256
@@ -118,8 +121,7 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
         )
     }
     endpoint_rows = {
-        (item.organism_key, item.metric): item
-        for item in response.projected_endpoint_changes
+        (item.organism_key, item.metric): item for item in response.projected_endpoint_changes
     }
     actual_endpoints = {key: item.model_dump(mode="json") for key, item in endpoint_rows.items()}
     if len(endpoint_rows) != len(response.projected_endpoint_changes):
@@ -142,6 +144,31 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
                 if not (field in optional_slopes and value is None)
             ):
                 raise ValidationError("Legacy projected endpoint evidence is inconsistent")
+
+    # A valid checksum alone does not establish scientific integrity: an
+    # imported/saved artifact can be altered and then re-signed. Recompute
+    # every derived sampling-effort and unit-balanced aggregate from the
+    # underlying linked candidates before allowing a reproducible CSV export.
+    # Historical artifacts without this fingerprint contract remain readable
+    # but are explicitly marked as not rechecked in the exported CSV.
+    if response.source_fingerprint_contract is not None:
+        expected_visits = summarize_projected_visit_coverage(response.candidates)
+        expected_units = summarize_projected_unit_summaries(
+            response.candidates,
+            summarize_projected_endpoint_changes(response.candidates, response.sampling_date_qc),
+        )
+        expected_population = summarize_projected_population_summaries(expected_units)
+        for label, actual, expected in (
+            ("visit coverage", response.projected_visit_coverage, expected_visits),
+            ("unit summaries", response.projected_unit_summaries, expected_units),
+            ("population summaries", response.projected_population_summaries, expected_population),
+        ):
+            if [row.model_dump(mode="json") for row in actual] != [
+                row.model_dump(mode="json") for row in expected
+            ]:
+                raise ValidationError(
+                    f"Projected {label} evidence does not match source candidates"
+                )
 
     # A report digest is meaningful only when the complete report is checked
     # against the candidate/series denominators that produced it. This is an
