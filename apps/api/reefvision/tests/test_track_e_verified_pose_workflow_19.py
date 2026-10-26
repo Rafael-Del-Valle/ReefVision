@@ -1262,13 +1262,18 @@ def test_resigned_pose_item_cannot_change_frozen_schema_identity(
         )
 
 
-def test_resigned_review_cannot_reassign_scientist(
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [("reviewed_by", "another-scientist"), ("reviewed_at", "not-a-timestamp")],
+)
+def test_resigned_review_cannot_change_scientist_or_timestamp(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    replacement: str,
 ) -> None:
-    # Start with an actual API-frozen, scientist-verified pose and its saved
-    # review evidence. A new valid manifest digest cannot authorize a change
-    # in the identity of the scientist who verified that pose.
+    # Start with an API-frozen, scientist-verified pose and its review evidence.
+    # Re-signing a manifest cannot substitute the reviewer or corrupt the time.
     project, dataset = _frozen_dataset(client, monkeypatch)
     project_id = str(project["id"])
     dataset_id = str(dataset["id"])
@@ -1283,7 +1288,7 @@ def test_resigned_review_cannot_reassign_scientist(
         review = dict(item.review_provenance_json)
         assert review["actor"] == review["reviewed_by"] == "scientist"
         assert review["reviewed_at"]
-        item.review_provenance_json = {**review, "reviewed_by": "another-scientist"}
+        item.review_provenance_json = {**review, field: replacement}
         summaries = [dict(summary) for summary in frozen.manifest_json["items"]]
         assert len(summaries) == 1 and summaries[0]["item_id"] == item.id
         summaries[0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
