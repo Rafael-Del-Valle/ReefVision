@@ -94,6 +94,7 @@ def test_keyed_retry_rejects_foreign_project_audit_without_mutation(
     assert recovered.json()["requires_researcher_review"] is True
     assert all(client.get(event_url).json()["total"] == 1 for event_url in event_urls)
 
+
 def test_keyed_retry_rejects_audit_event_reassigned_to_another_queue(
     client: TestClient,
 ) -> None:
