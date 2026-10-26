@@ -999,10 +999,16 @@ describe("Gallery", () => {
       );
     });
 
+    // TanStack Query batches cache notifications. Wait for React to apply
+    // the refreshed image metadata before asserting DOM node replacement.
+    await waitFor(() => {
+      expect(
+        screen.getByAltText("Focused project image: swiftia-01.png"),
+      ).not.toBe(firstThumbnail);
+    });
     const secondThumbnail = screen.getByAltText(
       "Focused project image: swiftia-01.png",
     );
-    expect(secondThumbnail).not.toBe(firstThumbnail);
     expect(firstThumbnail.isConnected).toBe(false);
     expect(secondThumbnail.getAttribute("src")).toContain(
       "thumbnails%2Fsecond.jpg",
