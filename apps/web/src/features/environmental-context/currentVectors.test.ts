@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { currentComponentUncertaintyText, currentVectors } from "./currentVectors";
+import {
+  currentComponentUncertaintyText,
+  currentVectors,
+} from "./currentVectors";
 import type { ScientificRecord } from "./environmentalContextApi";
 function component(
   variable: string,
@@ -32,7 +35,7 @@ function component(
     ...patch,
   };
 }
-it("computes speed and direction toward true north from east/north components", () => {
+it("computes speed and true-north bearing from east/north components", () => {
   const vectors = currentVectors([
     component("current_eastward_velocity", 3),
     component("current_northward_velocity", 4),
@@ -41,7 +44,7 @@ it("computes speed and direction toward true north from east/north components", 
   expect(vectors[0].speed).toBe(5);
   expect(vectors[0].bearing).toBeCloseTo(36.86989765);
 });
-it("preserves supplied component uncertainty without estimating vector uncertainty", () => {
+it("preserves component uncertainty without inventing vector uncertainty", () => {
   const vectors = currentVectors([
     component("current_eastward_velocity", 3, {
       normalized_uncertainty: 0.25,
@@ -93,7 +96,7 @@ it("keeps missing, zero and invalid component uncertainties distinct", () => {
   expect(invalid.eastUncertainty).toBeNull();
   expect(invalid.northUncertainty).toBeNull();
 });
-it("omits a derived current whose magnitude overflows despite finite components", () => {
+it("omits currents whose magnitude overflows finite components", () => {
   expect(
     currentVectors([
       component("current_eastward_velocity", Number.MAX_VALUE),
@@ -115,7 +118,7 @@ it.each([
     ])[0].bearing,
   ).toBe(bearing);
 });
-it("never combines mismatched depth, observation time, acquisition, model or source", () => {
+it("never combines mismatched depth, time, acquisition, model or source", () => {
   for (const patch of [
     { depth_m: 10 },
     { observed_at: "2026-04-03T01:00:00Z" },
@@ -136,7 +139,7 @@ it("never combines mismatched depth, observation time, acquisition, model or sou
     ).toEqual([]);
   }
 });
-it("excludes rejected, superseded, duplicate and incompatible coordinates", () => {
+it("excludes rejected, superseded, duplicate or mismatched coordinates", () => {
   const east = component("current_eastward_velocity", 3);
   const north = component("current_northward_velocity", 4);
   expect(currentVectors([east, { ...east, id: "duplicate" }, north])).toEqual(
