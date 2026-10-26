@@ -562,6 +562,10 @@ def summarize_projected_population_summaries(
     # Reject contradictory parent sets across metrics for an identical
     # complete organism roster in the same canonical biological unit.
     roster_parentage: dict[tuple[str, str, tuple[str, ...]], tuple[str, ...]] = {}
+    # Only fully identified, one-parent-per-organism aggregate rosters can
+    # constrain parentage across *different* metric-specific organism rosters.
+    # Partial parent lists cannot safely identify an individual organism.
+    possible_parents_by_organism: dict[str, set[str]] = {}
     for row in unit_summaries:
         if row.unit_status != "candidate":
             continue
@@ -610,6 +614,19 @@ def summarize_projected_population_summaries(
         previous_parents = roster_parentage.setdefault(roster_key, parents)
         if previous_parents != parents:
             raise ValidationError("Projected parent-colony provenance changes across metrics")
+        if len(parents) == len(row.complete_organism_keys):
+            # Every organism has a distinct, known parent in this row, though
+            # the aggregate does not specify which. Intersect possibilities
+            # across metrics without inventing a one-to-one assignment.
+            parent_options = set(parents)
+            for organism_key in row.complete_organism_keys:
+                prior = possible_parents_by_organism.get(organism_key)
+                allowed = parent_options if prior is None else prior & parent_options
+                if not allowed:
+                    raise ValidationError(
+                        "Projected organism parent-colony candidates conflict across metrics"
+                    )
+                possible_parents_by_organism[organism_key] = allowed
         stratum_key = (
             normalized_level or row.experimental_unit_type.casefold(),
             row.metric,
