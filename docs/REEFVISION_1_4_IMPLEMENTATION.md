@@ -528,9 +528,15 @@ interpreting two potentially different colonies as a growth time series.
 
 Original per-observation measurements, timestamps, mesh reconstruction QC,
 registration diagnostics, and reviewer notes remain available for audit.
-Missing or inconclusive identity review still leaves results **provisional**,
-not verified; the new suppression is specifically for an explicit dispute.
-The standalone API and saved, executable typed Workflow Builder node share
-the comparison engine, with dedicated disputed-match and saved-artifact
-parity regressions. This does not constitute biological identity verification,
-validated growth, or Windows desktop acceptance.
+Missing identity review still leaves any descriptive changes **provisional**,
+not verified. An explicitly `inconclusive` independent identity review now
+also withholds paired change estimates: insufficient evidence of a match
+cannot support an organism growth comparison. The distinct
+`longitudinal_change_withheld_inconclusive_specimen_identity` QC warning
+and `provenance.longitudinal_change_withheld_due_to_inconclusive_identity_review`
+flag preserve the review reason without conflating it with a disputed match.
+The original observations, reconstruction QC and attributed review remain
+available for audit. The standalone API and saved, executable typed Workflow
+Builder node share the comparison engine, with dedicated disputed-match,
+inconclusive-review and persisted-artifact parity regressions. Neither
+decision establishes verified identity, growth, or Windows desktop acceptance.
