@@ -62,12 +62,8 @@ def test_complete_caller_bounds_produce_conservative_unverified_interval() -> No
     assert result["registered_surface_centroid_separation_caller_bound_interval_m"] == (
         pytest.approx([0.65, 1.35])
     )
-    assert "registered_centroid_caller_bounds_not_independently_verified" in result[
-        "qc_warnings"
-    ]
-    assert "registered_centroid_caller_interval_not_a_confidence_interval" in result[
-        "qc_warnings"
-    ]
+    assert "registered_centroid_caller_bounds_not_independently_verified" in result["qc_warnings"]
+    assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
     assert result["provenance"]["registration_evidence"] == evidence
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
@@ -77,6 +73,7 @@ def test_missing_caller_bounds_never_infers_interval_from_rms() -> None:
     result = _compare(_registration())
     assert result["registered_surface_centroid_separation_m"] == pytest.approx(1.0)
     assert result["registered_surface_centroid_separation_caller_bound_interval_m"] is None
+    assert result["registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"] is None
     assert "registered_centroid_error_bounds_unavailable" in result["qc_warnings"]
 
 
@@ -131,3 +128,27 @@ def test_mutated_existing_evidence_is_revalidated_before_comparison() -> None:
     evidence.target_centroid_position_error_bound_m = -0.2
     with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
         _compare(evidence)
+
+
+@pytest.mark.parametrize("separation", [0.0, 1.0])
+def test_signed_centroid_component_intervals_bound_each_axis(separation: float) -> None:
+    """Euclidean radii bound signed components, not just scalar separation."""
+    evidence = {
+        **_registration(),
+        "source_centroid_position_error_bound_m": 0.1,
+        "target_centroid_position_error_bound_m": 0.2,
+        "registration_alignment_error_bound_m": 0.05,
+    }
+    before = _observation("before", "2026-10-01T12:00:00Z", 0.0)
+    after = _observation("after", "2026-10-02T12:00:00Z", separation)
+    result = compare_mesh_observations(before, after, registration_evidence=evidence)
+    intervals = result["registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"]
+    assert intervals is not None
+    for observed, expected in zip(
+        intervals,
+        [[separation - 0.35, separation + 0.35], [-0.35, 0.35], [-0.35, 0.35]],
+        strict=True,
+    ):
+        assert observed == pytest.approx(expected)
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+    assert result["provenance"]["coordinate_registration_verified"] is False
