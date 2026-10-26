@@ -10,7 +10,10 @@ from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
-from reefvision.services.ecology_measurement_candidates import summarize_sampling_date_qc
+from reefvision.services.ecology_measurement_candidates import (
+    summarize_projected_endpoint_changes,
+    summarize_sampling_date_qc,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 _SERIES_COLUMNS = (
@@ -33,6 +36,14 @@ _SERIES_COLUMNS = (
     "conflicting_source_image_sha256_json",
     "evidence_level",
     "review_gate",
+    "projected_endpoint_status",
+    "baseline_image_id",
+    "final_image_id",
+    "absolute_change",
+    "percent_change",
+    "elapsed_days",
+    "projected_absolute_change_per_day",
+    "projected_endpoint_json",
 )
 
 
@@ -97,6 +108,39 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
         raise ValidationError(
             "Ecological sampling-date QC evidence does not match source candidates"
         )
+
+    # Recalculate endpoint arithmetic from source-linked candidates. Re-signing
+    # an artifact must never authorize fabricated projected growth values.
+    expected_endpoints = {
+        (item.organism_key, item.metric): item.model_dump(mode="json")
+        for item in summarize_projected_endpoint_changes(
+            response.candidates, response.sampling_date_qc
+        )
+    }
+    actual_endpoints = {
+        (item.organism_key, item.metric): item.model_dump(mode="json")
+        for item in response.projected_endpoint_changes
+    }
+    if len(actual_endpoints) != len(response.projected_endpoint_changes):
+        raise ValidationError("Duplicate ecological projected endpoint evidence")
+    if response.source_fingerprint_contract is not None:
+        if actual_endpoints != expected_endpoints:
+            raise ValidationError("Projected endpoint evidence does not match source candidates")
+    else:
+        # Older artifacts may lack endpoint records or daily-slope fields.
+        # Preserve missing historical data rather than manufacturing values.
+        optional_slopes = {
+            "projected_absolute_change_per_day",
+            "projected_baseline_percent_change_per_day",
+        }
+        for key, values in actual_endpoints.items():
+            expected = expected_endpoints.get(key)
+            if expected is None or any(
+                value != expected.get(field)
+                for field, value in values.items()
+                if not (field in optional_slopes and value is None)
+            ):
+                raise ValidationError("Legacy projected endpoint evidence is inconsistent")
 
     # A report digest is meaningful only when the complete report is checked
     # against the candidate/series denominators that produced it. This is an
@@ -184,6 +228,14 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(_SERIES_COLUMNS)
     for row in sorted(response.sampling_date_qc, key=lambda item: (item.organism_key, item.metric)):
+        endpoint = next(
+            (
+                item
+                for item in response.projected_endpoint_changes
+                if (item.organism_key, item.metric) == (row.organism_key, row.metric)
+            ),
+            None,
+        )
         writer.writerow(
             (
                 report.project_id,
@@ -205,6 +257,35 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
                 _json_array(row.conflicting_source_image_sha256),
                 row.evidence_level,
                 row.review_gate,
+                (
+                    "projected_unverified"
+                    if endpoint is not None
+                    else (
+                        "legacy_unavailable"
+                        if row.qc_status == "date_series_candidate"
+                        else "excluded_by_date_qc"
+                    )
+                ),
+                _csv_identifier(endpoint.baseline_image_id) if endpoint is not None else "",
+                _csv_identifier(endpoint.final_image_id) if endpoint is not None else "",
+                endpoint.absolute_change if endpoint is not None else "",
+                endpoint.percent_change if endpoint is not None else "",
+                endpoint.elapsed_days if endpoint is not None else "",
+                (
+                    endpoint.projected_absolute_change_per_day
+                    if endpoint is not None
+                    and endpoint.projected_absolute_change_per_day is not None
+                    else ""
+                ),
+                (
+                    json.dumps(
+                        endpoint.model_dump(mode="json"),
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    if endpoint is not None
+                    else ""
+                ),
             )
         )
     return output.getvalue()

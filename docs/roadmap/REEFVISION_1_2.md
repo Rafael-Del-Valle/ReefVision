@@ -1831,3 +1831,22 @@ promotion is introduced. Evidence remains `registered_unverified` with
 measurements, design attestation, cross-branch migration reconciliation,
 scientific acceptance and installed Windows GUI/installer validation remain
 required before 1.2 release approval.
+
+## Source-rechecked projected endpoint CSV (2026-10-26)
+
+The existing project `calibrated-measurement-candidates/report-series.csv`
+now appends source-linked projected endpoint arithmetic (absolute/percentage
+changes, elapsed days, descriptive per-day change), baseline/final image IDs,
+and a JSON cell containing the complete typed endpoint evidence including
+annotation/calibration IDs and UTC instants. Existing QC columns remain.
+Excluded series have blank endpoint cells; older saved artifacts lacking
+endpoint records are marked `legacy_unavailable` instead of being backfilled.
+
+The renderer recomputes endpoint arithmetic from linked candidates and
+cross-checks persisted results even if an artifact fingerprint is rewritten.
+The standalone API and executable saved Workflow Builder source share the
+typed `ecology_measurement_candidates` artifact. Focused tests cover API/CSV
+and saved-workflow parity, dated arithmetic, missing/forged endpoint records
+and legacy compatibility. These are **unverified projected geometry changes**,
+not biological growth, survival, independent replication or inference.
+Scientist review, full CI and installed Windows acceptance remain required.
