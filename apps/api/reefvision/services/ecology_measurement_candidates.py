@@ -506,6 +506,18 @@ def summarize_projected_population_summaries(
             continue
         if not row.experimental_unit_type or not row.experimental_unit_id:
             raise ValidationError("Eligible projected unit is missing its declaration")
+        # A caller-constructed intermediate summary must not manufacture a
+        # second independent unit using whitespace around an opaque ID.
+        # Do not silently strip or merge source identities: fail for review.
+        if (
+            not row.experimental_unit_id.strip()
+            or row.experimental_unit_id != row.experimental_unit_id.strip()
+        ):
+            raise ValidationError("Projected experimental-unit ID is blank or padded")
+        if any(not key.strip() or key != key.strip() for key in row.organism_keys):
+            raise ValidationError("Projected organism identity is blank or padded")
+        if any(not key.strip() or key != key.strip() for key in row.parent_colony_keys):
+            raise ValidationError("Projected parent-colony identity is blank or padded")
         # Revalidate even a caller-constructed 'candidate' row. A technical
         # observation cannot be promoted into an independent biological unit.
         try:
@@ -516,9 +528,7 @@ def summarize_projected_population_summaries(
             ) from exc
         level = classify_ecological_unit_level(row.experimental_unit_type)
         if level == "organism" and len(row.organism_keys) != 1:
-            raise ValidationError(
-                "One organism-level unit cannot contain distinct organisms"
-            )
+            raise ValidationError("One organism-level unit cannot contain distinct organisms")
         if level == "colony":
             if len(row.parent_colony_keys) > 1:
                 raise ValidationError(
