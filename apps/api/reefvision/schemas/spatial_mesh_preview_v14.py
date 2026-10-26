@@ -134,10 +134,18 @@ class MeshReidentificationEvidence(BaseModel):
         min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
     method: Literal["visual_morphology", "survey_tag", "photo_match", "other"]
-    observer_id: str = Field(
-        min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
-    )
+    observer_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
     evidence_note: str = Field(min_length=1, max_length=2_000)
+    # Bind provisional matching evidence to the exact source reconstructions.
+    # Both hashes must be supplied together; labels alone are not unique assets.
+    before_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    after_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def require_complete_geometry_binding(self) -> MeshReidentificationEvidence:
+        if (self.before_geometry_sha256 is None) != (self.after_geometry_sha256 is None):
+            raise ValueError("Reidentification geometry binding requires both SHA-256 fingerprints")
+        return self
 
 
 class MeshLongitudinalComparisonRequest(BaseModel):
