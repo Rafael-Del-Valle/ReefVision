@@ -33,6 +33,12 @@ jobs:
         shell: pwsh
         run: ./scripts/test-training-console-sanitizer.ps1
 
+      # Run the embedded monitor against mocked local GET responses to catch
+      # stale box/cls/dfl losses and accidental training API mutations.
+      - name: Verify live read-only PowerShell loss polling
+        shell: pwsh
+        run: ./scripts/test-training-console-readonly.ps1
+
       # Fast safety checks run before bootstrap / the multi-GB MSI build.
       - name: Validate Windows clean-install harness safeguards
         shell: pwsh
