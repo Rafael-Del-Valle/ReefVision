@@ -206,6 +206,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         persisted.graph_json = {**original_graph, "nodes": "corrupted-after-save"}
         session.commit()
 
+    # A previously successful run must not advertise valid scientific lineage
+    # when its saved graph has been changed after execution.
+    corrupted_graph_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert corrupted_graph_detail.status_code == 409, corrupted_graph_detail.text
+    assert corrupted_graph_detail.json() == {
+        "detail": "Workflow graph provenance checksum failed"
+    }
+
     rejected = client.post(
         f"/api/v1/projects/{project_id}/workflow-runs",
         json={"graph_record_id": graph_record["id"]},
@@ -223,6 +231,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         assert persisted is not None
         persisted.graph_json = original_graph
         session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
 
     # The unmodified scientist-verified dataset remains retrievable and exportable.
     with app.state.session_factory() as session:
