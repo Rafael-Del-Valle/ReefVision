@@ -305,9 +305,9 @@ class ImageService:
         # disagree with stored source-pixel masks. Regenerate those JPEGs in a
         # new cache namespace rather than reusing misaligned legacy thumbnails.
         needs_raw_thumbnail = (
-            image.media_type == "image/tiff" and mode in {"I;16", "I;16L", "I;16B"}
-        ) or orientation not in (None, 1) or (
-            image.media_type == "image/jpeg" and bool(metadata.get("exif_warning"))
+            (image.media_type == "image/tiff" and mode in {"I;16", "I;16L", "I;16B"})
+            or orientation not in (None, 1)
+            or (image.media_type == "image/jpeg" and bool(metadata.get("exif_warning")))
         )
         if needs_raw_thumbnail:
             source = self.content_path_for_image(image)
