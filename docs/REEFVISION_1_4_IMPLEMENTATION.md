@@ -386,3 +386,27 @@ share this validation engine. Regression tests cover valid binding, cross-mesh
 reuse, malformed/partial hashes, legacy evidence, post-validation mutation,
 and saved-workflow artifact parity. CI and Windows installed-GUI/GPU scientific
 acceptance are separate release gates, not implied by these tests.
+
+
+### Independently attributed reidentification review (Track C, 2026-10-26)
+
+Pairwise reidentification notes now optionally retain `independent_reviewer_id`,
+`independent_review_decision` (`supports_match`, `disputes_match`, or
+`inconclusive`), and `independent_review_note`. These fields are an
+all-or-none audit record: incomplete reviews and reviews attributed to the
+original matching observer are rejected. Legacy evidence without a separate
+reviewer remains valid but carries
+`reidentification_evidence_requires_independent_review` QC.
+
+An independent reviewer decision is preserved with the exact observation
+pair in both the standalone comparison API and saved, executable
+`mesh_longitudinal_comparison` Workflow Builder artifacts. The engine
+emits `reidentification_independent_review_recorded_not_identity_verification`
+for any recorded review and explicit dispute/inconclusive QC when applicable.
+A supporting review is **not** an approval workflow or a verified biological
+identity determination: `specimen_identity_verified` remains false and
+`reidentification_evidence_review_status` remains
+`caller_supplied_unverified`. Review notes cannot establish calibration,
+spatial registration, anatomical growth, or biological condition. Regression
+coverage includes partial/self-review rejection, mutated evidence,
+disagreement QC, and standalone-versus-persisted-workflow artifact parity.
