@@ -1727,9 +1727,9 @@ def test_registration_transform_diagnostics_remain_unverified(
     before, after = _minimal_topology_pair()
     before["provenance"]["coordinate_frame_id"] = "survey-a"
     after["provenance"]["coordinate_frame_id"] = "survey-b"
-    transform = [
-        [*row, offset] for row, offset in zip(rotation, translation, strict=True)
-    ] + [[0.0, 0.0, 0.0, 1.0]]
+    transform = [[*row, offset] for row, offset in zip(rotation, translation, strict=True)] + [
+        [0.0, 0.0, 0.0, 1.0]
+    ]
     evidence = {
         "source_frame_id": "survey-a",
         "target_frame_id": "survey-b",
