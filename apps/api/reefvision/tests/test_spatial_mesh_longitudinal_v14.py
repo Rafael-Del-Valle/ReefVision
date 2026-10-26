@@ -1723,7 +1723,7 @@ def test_registration_transform_diagnostics_remain_unverified(
     expected_angle: float,
     expected_distance: float,
 ) -> None:
-    """Summarize an unverified rigid transform, without applying it to coral geometry."""
+    """Summarize a rigid transform without applying it to coral geometry."""
     before, after = _minimal_topology_pair()
     before["provenance"]["coordinate_frame_id"] = "survey-a"
     after["provenance"]["coordinate_frame_id"] = "survey-b"
@@ -1740,7 +1740,9 @@ def test_registration_transform_diagnostics_remain_unverified(
         "source_to_target_transform_m": transform,
     }
     result = compare_mesh_observations(before, after, evidence)
-    assert result["registration_translation_magnitude_m"] == pytest.approx(expected_distance)
+    assert result["registration_translation_magnitude_m"] == pytest.approx(
+        expected_distance
+    )
     assert result["registration_rotation_angle_degrees"] == pytest.approx(expected_angle)
     assert result["provenance"]["registration_evidence"]["source_to_target_transform_m"] == (
         transform
