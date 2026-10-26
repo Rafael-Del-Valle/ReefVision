@@ -88,6 +88,14 @@ def frozen_pose_item_fingerprints_match(
     # persisted canonical landmarks are still the scientist-verified pose.
     # Recompute the original verification fingerprint from frozen row data.
     for row in rows:
+        # Every verified item must retain the frozen dataset's single landmark
+        # schema identity, even if its summary and manifest are re-signed.
+        if (
+            row.pose_schema_id != dataset.pose_schema_id
+            or row.pose_schema_revision != dataset.pose_schema_revision
+            or row.pose_schema_content_hash != dataset.pose_schema_content_hash
+        ):
+            return False
         # Frozen human-review evidence must remain a valid verification record.
         # Otherwise a corrupted JSON value could raise an AttributeError
         # instead of rejecting the dataset before export or workflow execution.
