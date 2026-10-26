@@ -28,6 +28,7 @@ from reefvision.services.pose_training_datasets import (
     PoseTrainingDatasetService,
     frozen_pose_item_evidence_sha256,
 )
+from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
     execute_pose_training_dataset_adapter,
@@ -212,6 +213,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert corrupted_graph_detail.status_code == 409, corrupted_graph_detail.text
     assert corrupted_graph_detail.json() == {"detail": "Workflow graph provenance checksum failed"}
 
+    # The graph browser must not expose the same corrupted revision as a
+    # selectable scientist-verified workflow, even without opening a run.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="Workflow graph revision checksum failed"),
+    ):
+        WorkflowExecutionService(session).list_graphs(project_id)
+
     # Re-saving an identical verified workflow must not return a corrupted
     # revision as if its original checksum still authenticated the graph.
     corrupted_resave = client.post(
@@ -259,6 +268,10 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         persisted.graph_json = original_graph
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
+    with app.state.session_factory() as session:
+        listed = WorkflowExecutionService(session).list_graphs(project_id)
+    assert len(listed) == 1
+    assert listed[0].graph_sha256 == graph_record["graph_sha256"]
     restored_resave = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
         json={"graph": graph, "create_new_revision": True},
