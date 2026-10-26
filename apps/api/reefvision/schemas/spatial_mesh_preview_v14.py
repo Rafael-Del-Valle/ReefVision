@@ -146,12 +146,31 @@ class MeshReidentificationEvidence(BaseModel):
     before_observed_at_utc: AwareDatetime | None = None
     after_observed_at_utc: AwareDatetime | None = None
 
+    # An optional, separately attributed human review is an audit record.
+    # Even a supporting decision does not certify biological identity.
+    independent_reviewer_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    independent_review_decision: Literal["supports_match", "disputes_match", "inconclusive"] | None = None
+    independent_review_note: str | None = Field(default=None, min_length=1, max_length=2_000)
+
     @model_validator(mode="after")
     def require_complete_geometry_binding(self) -> MeshReidentificationEvidence:
         if (self.before_geometry_sha256 is None) != (self.after_geometry_sha256 is None):
             raise ValueError("Reidentification geometry binding requires both SHA-256 fingerprints")
         if (self.before_observed_at_utc is None) != (self.after_observed_at_utc is None):
             raise ValueError("Reidentification timepoint binding requires both UTC timestamps")
+        review_fields = (
+            self.independent_reviewer_id,
+            self.independent_review_decision,
+            self.independent_review_note,
+        )
+        if any(value is not None for value in review_fields) and not all(
+            value is not None for value in review_fields
+        ):
+            raise ValueError("Independent reidentification review requires reviewer, decision, and note")
+        if self.independent_reviewer_id == self.observer_id:
+            raise ValueError("Independent reviewer must differ from matching observer")
         return self
 
 
