@@ -157,7 +157,6 @@ def test_projected_csv_rejects_tampered_or_missing_endpoints(client: TestClient)
             render_ecology_series_qc_csv(tampered)
 
 
-
 def _resign_derived_evidence(
     artifact: EcologyMeasurementCandidatesResponse,
 ) -> EcologyMeasurementCandidatesResponse:
