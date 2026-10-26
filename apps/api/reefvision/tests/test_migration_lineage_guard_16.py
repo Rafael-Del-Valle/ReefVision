@@ -466,7 +466,6 @@ def test_revision_0041_requires_global_bulk_request_registry() -> None:
     engine.dispose()
 
 
-
 @pytest.mark.parametrize(
     "foreign_keys",
     [
