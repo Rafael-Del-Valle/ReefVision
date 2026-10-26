@@ -454,6 +454,7 @@ def compare_mesh_observations(
     registered_surface_centroid_separation_m = None
     registered_centroid_separation_to_registration_rms_ratio = None
     registered_surface_centroid_separation_caller_bound_interval_m = None
+    registered_surface_centroid_offset_target_frame_caller_bound_intervals_m = None
     if registration_evidence is None:
         warnings.append("registration_evidence_unavailable")
     else:
@@ -553,6 +554,13 @@ def compare_mesh_observations(
                             registered_surface_centroid_separation_caller_bound_interval_m = [
                                 max(0.0, separation - combined_bound),
                                 upper_bound,
+                            ]
+                            # A Euclidean error radius also bounds each signed
+                            # target-frame offset component, without assuming
+                            # independent axes or a probability distribution.
+                            registered_surface_centroid_offset_target_frame_caller_bound_intervals_m = [
+                                [component - combined_bound, component + combined_bound]
+                                for component in offset
                             ]
                             warnings.append(
                                 "registered_centroid_caller_bounds_not_independently_verified"
@@ -705,6 +713,9 @@ def compare_mesh_observations(
         ),
         "registered_surface_centroid_separation_caller_bound_interval_m": (
             registered_surface_centroid_separation_caller_bound_interval_m
+        ),
+        "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m": (
+            registered_surface_centroid_offset_target_frame_caller_bound_intervals_m
         ),
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
