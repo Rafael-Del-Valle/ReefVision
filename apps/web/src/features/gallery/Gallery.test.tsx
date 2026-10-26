@@ -1228,10 +1228,9 @@ describe("Gallery", () => {
     );
     expect(thumbnail()).not.toBe(first);
     expect(first?.isConnected).toBe(false);
-    expect(screen.getByRole("listitem", { name: "Focus swiftia-01.png" })).toHaveAttribute(
-      "aria-current",
-      "true",
-    );
+    expect(
+      screen.getByRole("listitem", { name: "Focus swiftia-01.png" }),
+    ).toHaveAttribute("aria-current", "true");
   });
 
   it("keeps the first gallery image fixed under wheel input while preserving browser zoom", async () => {
