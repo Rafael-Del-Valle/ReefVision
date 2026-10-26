@@ -209,6 +209,34 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await assertDecodedAndContained(6000, 400);
   expect(await previewWheelPolicy()).toEqual(expectedPreviewWheelPolicy);
   const filmstrip = workbench.locator(".rv-media-filmstrip");
+  // The strip converts ordinary wheel movement to horizontal browsing, but
+  // must not intercept Ctrl/Meta browser zoom gestures.
+  const filmstripWheelPolicy = () =>
+    filmstrip.evaluate((element) => {
+      const prevented = (init: WheelEventInit) => {
+        const event = new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        });
+        element.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      return {
+        vertical: prevented({ deltaY: 160 }),
+        horizontal: prevented({ deltaX: 160 }),
+        ctrlZoom: prevented({ deltaY: 160, ctrlKey: true }),
+        metaZoom: prevented({ deltaY: 160, metaKey: true }),
+        zeroDelta: prevented({}),
+      };
+    });
+  expect(await filmstripWheelPolicy()).toEqual({
+    vertical: true,
+    horizontal: true,
+    ctrlZoom: false,
+    metaZoom: false,
+    zeroDelta: false,
+  });
   const scrollOffset = () =>
     filmstrip.evaluate((element) => element.scrollLeft);
   // Keyboard navigation must not scroll the document or partially displace
