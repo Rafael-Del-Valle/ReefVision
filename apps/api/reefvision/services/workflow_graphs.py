@@ -354,6 +354,18 @@ class WorkflowGraphService:
                         node_id=node_id,
                     )
                 )
+            elif not expected_manifest:
+                # Keep existing unpinned graphs executable, but make the
+                # reproducibility risk explicit before researchers save a run.
+                issues.append(
+                    self._issue(
+                        "warning",
+                        "pose_dataset_manifest_unpinned",
+                        "Frozen pose dataset has no pinned manifest_sha256; "
+                        "save the current checksum for reproducible reruns",
+                        node_id=node_id,
+                    )
+                )
 
     def _validate_model_source(
         self,
