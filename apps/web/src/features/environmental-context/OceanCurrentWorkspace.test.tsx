@@ -96,7 +96,7 @@ function setup() {
   return fetch;
 }
 afterEach(() => vi.unstubAllGlobals());
-it("opens offline cached currents with time, depth and provenance", async () => {
+it("opens cached currents with time, depth and provenance", async () => {
   const fetch = setup();
   expect(fetch).not.toHaveBeenCalled();
   fireEvent.click(
