@@ -89,9 +89,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         )
 
     if revision == "0041":
-        bulk_details = (
-            inspector.get_columns(_BULK_TABLE) if _BULK_TABLE in tables else []
-        )
+        bulk_details = inspector.get_columns(_BULK_TABLE) if _BULK_TABLE in tables else []
         bulk_columns = {column["name"]: column for column in bulk_details}
         missing_bulk = sorted(_BULK_COLUMNS - bulk_columns.keys())
         # SQLite permits NULL in a bare TEXT PRIMARY KEY. An apparently
@@ -108,12 +106,48 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             if _BULK_TABLE in tables
             else None
         )
-        if missing_bulk or bulk_primary_key != ["id"] or nullable_bulk:
+        # A registry with an unlinked project or queue permits orphaned
+        # request identities, while cascading deletes could erase evidence.
+        # SQLite's inspector omits ON DELETE options, so read its PRAGMA
+        # directly. Non-SQLite backends expose the policy via inspection.
+        expected_foreign_keys = {
+            ("review_queue_id", "review_queues", "id", "RESTRICT"),
+            ("project_id", "projects", "id", "RESTRICT"),
+        }
+        if _BULK_TABLE not in tables:
+            actual_foreign_keys = set()
+        elif connection.dialect.name == "sqlite":
+            actual_foreign_keys = {
+                (row["from"], row["table"], row["to"], row["on_delete"].upper())
+                for row in connection.execute(
+                    text("PRAGMA foreign_key_list(review_queue_bulk_requests)")
+                ).mappings()
+            }
+        else:
+            actual_foreign_keys = {
+                (
+                    fk["constrained_columns"][0],
+                    fk["referred_table"],
+                    fk["referred_columns"][0],
+                    str((fk.get("options") or {}).get("ondelete") or "").upper(),
+                )
+                for fk in inspector.get_foreign_keys(_BULK_TABLE)
+                if len(fk.get("constrained_columns") or ()) == 1
+                and len(fk.get("referred_columns") or ()) == 1
+            }
+        if (
+            missing_bulk
+            or bulk_primary_key != ["id"]
+            or nullable_bulk
+            or actual_foreign_keys != expected_foreign_keys
+        ):
             raise RuntimeError(
                 "Unsafe ReefVision Alembic revision 0041 collision: "
                 f"bulk request registry missing columns={missing_bulk}; "
                 f"nullable required columns={nullable_bulk}; "
-                "or missing global primary key. Preserve the database "
+                f"foreign keys={sorted(actual_foreign_keys)}; "
+                "or missing global primary key / required RESTRICT links. "
+                "Preserve the database "
                 "and reconcile without rewriting reviewer history."
             )
 
