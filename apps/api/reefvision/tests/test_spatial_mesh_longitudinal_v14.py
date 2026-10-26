@@ -177,6 +177,13 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert "registered_centroid_offset_not_verified_biological_movement" in expected["qc_warnings"]
     assert "registered_centroid_position_uncertainty_not_estimated" in expected["qc_warnings"]
+    assert expected["registered_centroid_separation_to_registration_rms_ratio"] == (
+        pytest.approx(sqrt(0.1**2 + (1 / 3) ** 2) / 0.02)
+    )
+    assert (
+        "registered_centroid_rms_ratio_not_a_movement_significance_test"
+        in expected["qc_warnings"]
+    )
     assert "registration_residual_at_least_smaller_mesh_extent" not in expected["qc_warnings"]
     assert "matching_coordinate_frame_id_not_registration_proof" in expected["qc_warnings"]
     assert "surface_area_change_is_not_verified_biological_growth" in expected["qc_warnings"]
@@ -2014,3 +2021,72 @@ def test_mutated_reidentification_specimen_binding_is_revalidated() -> None:
     evidence.specimen_id = "other-colony"
     with pytest.raises(ValueError, match="provisional specimen ID"):
         compare_mesh_observations(before, after, reidentification_evidence=evidence)
+
+@pytest.mark.parametrize(
+    ("rms", "centroid_separation", "expected_ratio", "warning"),
+    [
+        (0.25, 0.5, 2.0, "registered_centroid_rms_ratio_not_a_movement_significance_test"),
+        (0.25, 0.0, 0.0, "registered_centroid_rms_ratio_not_a_movement_significance_test"),
+        (0.0, 0.5, None, "registered_centroid_rms_ratio_unavailable_zero_residual"),
+        (1e-320, 0.5, None, "registered_centroid_rms_ratio_out_of_numeric_range"),
+    ],
+)
+def test_registered_centroid_rms_ratio_is_only_a_provisional_diagnostic(
+    rms: float,
+    centroid_separation: float,
+    expected_ratio: float | None,
+    warning: str,
+) -> None:
+    before, after = _minimal_topology_pair()
+    before["provenance"]["coordinate_frame_id"] = "frame-a"
+    after["provenance"]["coordinate_frame_id"] = "frame-b"
+    before["area_weighted_surface_centroid_m"] = [0.0, 0.0, 0.0]
+    after["area_weighted_surface_centroid_m"] = [centroid_separation, 0.0, 0.0]
+    evidence = {
+        "source_frame_id": "frame-a",
+        "target_frame_id": "frame-b",
+        "method": "landmark",
+        "rms_residual_m": rms,
+        "correspondence_count": 6,
+        "evidence_note": "Unreviewed caller-supplied registration",
+        "source_to_target_transform_m": [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+    }
+    result = compare_mesh_observations(before, after, evidence)
+    assert result["registered_centroid_separation_to_registration_rms_ratio"] == (
+        pytest.approx(expected_ratio) if expected_ratio is not None else None
+    )
+    assert warning in result["qc_warnings"]
+    assert result["provenance"]["coordinate_registration_verified"] is False
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+
+def test_registered_centroid_rms_ratio_is_unknown_without_centroids() -> None:
+    before, after = _minimal_topology_pair()
+    before["provenance"]["coordinate_frame_id"] = "frame-a"
+    after["provenance"]["coordinate_frame_id"] = "frame-b"
+    result = compare_mesh_observations(
+        before,
+        after,
+        {
+            "source_frame_id": "frame-a",
+            "target_frame_id": "frame-b",
+            "method": "landmark",
+            "rms_residual_m": 0.2,
+            "correspondence_count": 6,
+            "evidence_note": "Unreviewed alignment",
+            "source_to_target_transform_m": [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        },
+    )
+    assert result["registered_centroid_separation_to_registration_rms_ratio"] is None
+    assert "registered_surface_centroid_comparison_unavailable" in result["qc_warnings"]
