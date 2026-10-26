@@ -107,6 +107,14 @@ def frozen_pose_item_fingerprints_match(
             or review.get("target_type") != "pose_active_learning_candidate"
             or review.get("target_id") != row.candidate_id
             or not isinstance(review.get("correction_id"), str)
+            or not review["correction_id"].strip()
+            # Re-signing a manifest cannot turn an unattributed or conflicting
+            # review into scientist-verified training truth.
+            or not isinstance(review.get("actor"), str)
+            or not review["actor"].strip()
+            or review.get("reviewed_by") != review["actor"]
+            or not isinstance(review.get("reviewed_at"), str)
+            or not review["reviewed_at"].strip()
         ):
             return False
 
