@@ -242,7 +242,9 @@ def execute_mesh_longitudinal_comparison(
         "reidentification_evidence",
     }
     if unexpected:
-        raise ValidationError("Longitudinal comparison accepts only registration_evidence or reidentification_evidence")
+        raise ValidationError(
+            "Longitudinal comparison accepts only registration_evidence or reidentification_evidence"
+        )
     records: list[dict[str, Any]] = []
     for port in ("before", "after"):
         artifacts = inputs.get(port, [])
