@@ -206,6 +206,14 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 raise UnsupportedImageError(
                     "Multi-page TIFFs cannot be safely imported as a single scientific image"
                 )
+            # APNG and animated WebP also decode their first frame without
+            # error. Importing that first frame as a still scientific image
+            # would silently discard the remaining time points. Preserve the
+            # entire source by rejecting multi-frame containers before commit.
+            if getattr(image, "n_frames", 1) != 1:
+                raise UnsupportedImageError(
+                    f"Multi-frame {decoded_format} cannot be imported as a single scientific image"
+                )
             image.load()
             image_exif = image.getexif()
             exif = dict(image_exif)
