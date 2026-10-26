@@ -189,9 +189,7 @@ def test_visit_coverage_combines_tank_aliases_without_claiming_absence() -> None
     assert len(rows) == 2
     assert [row.experimental_unit_type for row in rows] == ["tank", "tank"]
     assert [row.sampling_date_utc for row in rows] == ["2026-04-03", "2026-04-05"]
-    assert all(
-        row.series_organism_keys == ["fragment-A", "fragment-B"] for row in rows
-    )
+    assert all(row.series_organism_keys == ["fragment-A", "fragment-B"] for row in rows)
     assert [row.measured_organism_keys for row in rows] == [
         ["fragment-A"],
         ["fragment-B"],
