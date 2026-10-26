@@ -210,9 +210,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     # when its saved graph has been changed after execution.
     corrupted_graph_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert corrupted_graph_detail.status_code == 409, corrupted_graph_detail.text
-    assert corrupted_graph_detail.json() == {
-        "detail": "Workflow graph provenance checksum failed"
-    }
+    assert corrupted_graph_detail.json() == {"detail": "Workflow graph provenance checksum failed"}
 
     rejected = client.post(
         f"/api/v1/projects/{project_id}/workflow-runs",
