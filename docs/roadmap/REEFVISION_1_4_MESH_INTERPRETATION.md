@@ -358,3 +358,23 @@ comparison. Standalone API and saved typed Workflow Builder graphs use the
 same calculation and are checked for complete artifact parity. Human review
 of both specimen identity and spatial registration is required before
 interpreting any difference biologically.
+
+### Dated independent specimen reidentification review (Track C)
+
+Optional `independent_reviewed_at_utc` records when a separately identified
+reviewer assessed a provisional pairwise specimen match. The timestamp must
+include a timezone and accompany a complete reviewer ID, decision, and note.
+The shared longitudinal comparison rejects a review dated **before** the
+later observation, including when equivalent instants are written with
+different UTC offsets. Existing undated reviewer decisions remain readable
+but emit `reidentification_independent_review_timestamp_unavailable`.
+Review records are revalidated before execution, including after in-memory
+mutation, to prevent stale or backdated audit evidence.
+
+This is a chronology and attribution check, **not** cryptographic
+authentication, proof that the reviewer examined the images, or verified
+organism identity. A supporting review still leaves
+`specimen_identity_verified: false`. Both standalone analysis and executable
+persisted Workflow Builder graphs use the same comparison engine; regression
+coverage checks dated review provenance, invalid chronology, legacy QC,
+and saved-workflow artifact parity.
