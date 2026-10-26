@@ -630,7 +630,9 @@ def summarize_projected_population_summaries(
                         "Projected organism parent-colony candidates conflict across metrics"
                     )
                 possible_parents_by_organism[organism_key] = allowed
-            full_parent_rosters.append((tuple(sorted(row.complete_organism_keys)), parents))
+            full_parent_rosters.append(
+                (tuple(sorted(row.complete_organism_keys)), parents)
+            )
         stratum_key = (
             normalized_level or row.experimental_unit_type.casefold(),
             row.metric,
@@ -648,7 +650,9 @@ def summarize_projected_population_summaries(
         parent_set = set(parent_roster)
 
         def match_parent(organism_key: str, visited: set[str]) -> bool:
-            for parent_key in sorted(possible_parents_by_organism[organism_key] & parent_set):
+            for parent_key in sorted(
+                possible_parents_by_organism[organism_key] & parent_set
+            ):
                 if parent_key in visited:
                     continue
                 visited.add(parent_key)
@@ -658,7 +662,9 @@ def summarize_projected_population_summaries(
                     return True
             return False
 
-        if any(not match_parent(organism_key, set()) for organism_key in organism_roster):
+        if any(
+            not match_parent(organism_key, set()) for organism_key in organism_roster
+        ):
             raise ValidationError(
                 "Projected organism parent-colony assignments are jointly impossible "
                 "across metrics"
