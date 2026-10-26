@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
+from typing import cast
+from uuid import UUID, uuid4, uuid5
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -451,6 +455,128 @@ def test_keyed_bulk_first_attempt_requires_all_items_to_transition(
         ).status_code
         == 422
     )
+
+
+def test_keyed_batch_uuid_rejects_disjoint_selection_and_foreign_queue(
+    client: TestClient,
+) -> None:
+    """A request UUID must not authorize a second, unrelated review batch."""
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    request_id = str(uuid4())
+    original = {
+        "item_ids": [ids[0]],
+        "action": "start",
+        "actor": "researcher one",
+        "client_request_id": request_id,
+    }
+    started = client.post(url, json=original)
+    assert started.status_code == 200, started.text
+    assert started.json()["changed_count"] == 1
+
+    # Previously, UUIDv5-per-item keys permitted the same batch UUID to be
+    # silently reused for a completely disjoint selection.
+    disjoint = client.post(url, json={**original, "item_ids": [ids[1]]})
+    assert disjoint.status_code == 409, disjoint.text
+    items = client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"]
+    assert {item["id"]: item["review_state"] for item in items} == {
+        ids[0]: "in_progress",
+        ids[1]: "pending",
+    }
+    second_history_url = f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
+    assert client.get(second_history_url).json()["total"] == 0
+
+    other_queue_id, other_ids = _queue_with_two_images(client)
+    other_url = f"/api/v1/review-queues/{other_queue_id}/items/bulk"
+    foreign = client.post(other_url, json={**original, "item_ids": [other_ids[0]]})
+    assert foreign.status_code == 409, foreign.text
+    assert (
+        client.get(
+            f"/api/v1/review-queues/{other_queue_id}/items/{other_ids[0]}/events"
+        ).json()["total"]
+        == 0
+    )
+
+    replay = client.post(url, json=original)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["changed_count"] == 0
+    fresh = client.post(
+        url,
+        json={**original, "item_ids": [ids[1]], "client_request_id": str(uuid4())},
+    )
+    assert fresh.status_code == 200, fresh.text
+    assert fresh.json()["changed_count"] == 1
+
+
+def test_keyed_batch_retry_accepts_reordered_same_selection(client: TestClient) -> None:
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    payload = {
+        "item_ids": ids,
+        "action": "start",
+        "actor": "researcher one",
+        "client_request_id": str(uuid4()),
+    }
+    first = client.post(url, json=payload)
+    assert first.status_code == 200, first.text
+    assert first.json()["changed_count"] == 2
+    before = [
+        client.get(f"/api/v1/review-queues/{queue_id}/items/{item_id}/events").json()
+        for item_id in ids
+    ]
+
+    replay = client.post(url, json={**payload, "item_ids": list(reversed(ids))})
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["changed_count"] == 0
+    after = [
+        client.get(f"/api/v1/review-queues/{queue_id}/items/{item_id}/events").json()
+        for item_id in ids
+    ]
+    assert after == before
+
+
+def test_legacy_uuid5_bulk_events_remain_retryable(client: TestClient) -> None:
+    """Previously persisted UUIDv5-only audit batches must remain readable."""
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    request_id = str(uuid4())
+    payload = {
+        "item_ids": ids,
+        "action": "start",
+        "actor": "legacy reviewer",
+        "client_request_id": request_id,
+    }
+    started = client.post(url, json=payload)
+    assert started.status_code == 200, started.text
+    assert started.json()["changed_count"] == 2
+
+    # Reconstruct the persisted identifier layout from the prior release,
+    # without touching the production migration or scientific annotations.
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        events = list(
+            session.scalars(
+                select(ReviewQueueItemEvent).where(
+                    ReviewQueueItemEvent.review_queue_id == queue_id
+                )
+            )
+        )
+        assert len(events) == 2
+        for event in events:
+            event.client_request_id = str(
+                uuid5(UUID(request_id), event.review_queue_item_id)
+            )
+        session.commit()
+
+    replay = client.post(url, json=payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["changed_count"] == 0
+    for item_id in ids:
+        history = client.get(
+            f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+        ).json()
+        assert history["total"] == 1
+        assert history["items"][0]["actor"] == "legacy reviewer"
 
 
 def test_keyed_bulk_skip_retry_preserves_later_return_and_reason_history(
