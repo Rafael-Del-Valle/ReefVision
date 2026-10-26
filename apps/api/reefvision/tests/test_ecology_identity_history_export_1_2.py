@@ -106,9 +106,7 @@ def test_history_csv_matches_persisted_typed_workflow_and_retains_old_units(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in detail.json()["artifacts"]
-        if row["data_type"] == "ecology_identity_registry"
+        row for row in detail.json()["artifacts"] if row["data_type"] == "ecology_identity_registry"
     ]
     assert len(artifacts) == 1
     typed = EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
