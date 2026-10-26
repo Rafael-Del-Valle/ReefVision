@@ -48,6 +48,7 @@ from reefvision.services.workflow_classification import (
 from reefvision.services.workflow_consensus import build_detection_consensus
 from reefvision.services.workflow_datasets import create_workflow_dataset_version
 from reefvision.services.workflow_graphs import WorkflowGraphService
+from reefvision.services.workflow_provenance import verify_workflow_artifact
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
     execute_runtime_adapter,
@@ -195,6 +196,10 @@ class WorkflowExecutionService:
                 .order_by(WorkflowArtifact.created_at, WorkflowArtifact.id)
             )
         )
+        # A run-detail response is a scientific-data read path. Do not return
+        # altered persisted artifacts as if they were verified workflow output.
+        for artifact in artifacts:
+            verify_workflow_artifact(artifact, expected_run_id=run.id)
         return WorkflowRunDetailResponse(
             run=WorkflowRunResponse.model_validate(run),
             nodes=[WorkflowNodeRunResponse.model_validate(node) for node in nodes],
