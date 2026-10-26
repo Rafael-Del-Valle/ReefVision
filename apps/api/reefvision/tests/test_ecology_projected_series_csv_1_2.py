@@ -30,9 +30,7 @@ from reefvision.tests.test_ecology_projected_visit_coverage_1_2 import _source
 
 def _dated_artifact(client: TestClient) -> EcologyMeasurementCandidatesResponse:
     project_id, source = _source(client)
-    result = client.get(
-        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
-    )
+    result = client.get(f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates")
     assert result.status_code == 200
     original = EcologyMeasurementCandidatesResponse.model_validate(result.json())
     baseline = source.model_copy(
@@ -121,8 +119,7 @@ def test_series_export_matches_api_and_saved_workflow(client: TestClient) -> Non
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        row for row in workflow["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     saved = EcologyMeasurementCandidatesResponse.model_validate(artifacts[0]["payload_json"])
@@ -153,13 +150,85 @@ def test_projected_endpoint_csv_reports_dated_arithmetic_and_sources(
 
 def test_projected_csv_rejects_tampered_or_missing_endpoints(client: TestClient) -> None:
     artifact = _dated_artifact(client)
-    forged = artifact.projected_endpoint_changes[0].model_copy(
-        update={"absolute_change": 999.0}
-    )
+    forged = artifact.projected_endpoint_changes[0].model_copy(update={"absolute_change": 999.0})
     for changes in ([forged], []):
         tampered = artifact.model_copy(update={"projected_endpoint_changes": changes})
         with pytest.raises(ValidationError, match="Projected endpoint evidence"):
             render_ecology_series_qc_csv(tampered)
+
+
+
+def _resign_derived_evidence(
+    artifact: EcologyMeasurementCandidatesResponse,
+) -> EcologyMeasurementCandidatesResponse:
+    """Re-sign forged data to prove the exporter checks science, not only hashes."""
+    source_values = {
+        "algorithm_version": artifact.source_fingerprint_contract,
+        "project_id": artifact.project_id,
+        "registry_history_sha256": artifact.source_registry_history_sha256,
+        "registry_image_evidence_sha256": artifact.source_image_evidence_sha256,
+        "registry_annotation_evidence_sha256": artifact.source_annotation_evidence_sha256,
+        "registry_calibration_evidence_sha256": artifact.source_calibration_evidence_sha256,
+        "candidates": [row.model_dump(mode="json") for row in artifact.candidates],
+        "sampling_date_qc": [row.model_dump(mode="json") for row in artifact.sampling_date_qc],
+        "projected_visit_coverage": [
+            row.model_dump(mode="json") for row in artifact.projected_visit_coverage
+        ],
+        "projected_endpoint_changes": [
+            row.model_dump(mode="json") for row in artifact.projected_endpoint_changes
+        ],
+        "projected_unit_summaries": [
+            row.model_dump(mode="json") for row in artifact.projected_unit_summaries
+        ],
+        "projected_population_summaries": [
+            row.model_dump(mode="json") for row in artifact.projected_population_summaries
+        ],
+        "exclusions": [row.model_dump(mode="json") for row in artifact.exclusions],
+    }
+    new_sha = canonical_json_sha256(source_values)
+    report = artifact.candidate_report
+    assert report is not None
+    report_values = report.model_dump(
+        mode="json",
+        exclude={"schema_version", "report_sha256", "evidence_level", "review_gate"},
+    )
+    report_values["source_input_sha256"] = new_sha
+    signed_report = report.model_copy(
+        update={
+            "source_input_sha256": new_sha,
+            "report_sha256": canonical_json_sha256(report_values),
+        }
+    )
+    return artifact.model_copy(
+        update={"input_sha256": new_sha, "candidate_report": signed_report}
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "patch", "error"),
+    [
+        ("projected_visit_coverage", {"linked_measurement_count": 999}, "visit coverage"),
+        ("projected_unit_summaries", {"mean_absolute_change": 999.0}, "unit summaries"),
+        (
+            "projected_population_summaries",
+            {"mean_unit_absolute_change": 999.0},
+            "population summaries",
+        ),
+    ],
+)
+def test_projected_csv_rejects_resigned_forged_aggregates(
+    client: TestClient,
+    field: str,
+    patch: dict[str, float | int],
+    error: str,
+) -> None:
+    original = _dated_artifact(client)
+    records = getattr(original, field)
+    assert records
+    altered = [records[0].model_copy(update=patch), *records[1:]]
+    tampered = _resign_derived_evidence(original.model_copy(update={field: altered}))
+    with pytest.raises(ValidationError, match=f"Projected {error} evidence"):
+        render_ecology_series_qc_csv(tampered)
 
 
 def test_legacy_endpoint_absence_remains_explicit(client: TestClient) -> None:
