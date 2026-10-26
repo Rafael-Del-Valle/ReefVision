@@ -79,3 +79,22 @@ def test_keyed_retry_rejects_foreign_project_audit_without_mutation(
         annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
         assert annotations.status_code == 200, annotations.text
         assert annotations.json()["annotations"] == []
+
+    # An explicitly repaired local audit record must become retryable again.
+    # The API never repairs or rewrites the record itself.
+    with app.state.session_factory() as session:
+        corrupted = session.scalar(
+            select(ReviewQueueItemEvent).where(
+                ReviewQueueItemEvent.review_queue_id == queue_id,
+                ReviewQueueItemEvent.project_id == unrelated_project["id"],
+            )
+        )
+        assert corrupted is not None
+        corrupted.project_id = original_project_id
+        session.commit()
+
+    recovered = client.post(url, json=payload)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["changed_count"] == 0
+    assert recovered.json()["requires_researcher_review"] is True
+    assert all(client.get(event_url).json()["total"] == 1 for event_url in event_urls)
