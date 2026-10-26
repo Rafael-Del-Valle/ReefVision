@@ -57,12 +57,20 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "evidence_note": "Provisional landmark alignment; independent review pending",
         "source_to_target_transform_m": _rigid_transform(),
     }
+    reidentification_evidence = {
+        "before_observation_id": "survey-1",
+        "after_observation_id": "survey-2",
+        "method": "photo_match",
+        "observer_id": "lab-annotator-1",
+        "evidence_note": "Provisional photo match; independent review pending",
+    }
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={
             "before": before,
             "after": after,
             "registration_evidence": registration_evidence,
+            "reidentification_evidence": reidentification_evidence,
         },
     )
     assert standalone.status_code == 200, standalone.text
@@ -116,6 +124,11 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["provenance"]["after_coordinate_frame_id"] == "survey-local"
     assert expected["provenance"]["coordinate_registration_verified"] is False
     assert expected["provenance"]["registration_evidence"] == registration_evidence
+    assert expected["provenance"]["reidentification_evidence"] == reidentification_evidence
+    assert expected["provenance"]["reidentification_evidence_review_status"] == (
+        "caller_supplied_unverified"
+    )
+    assert "reidentification_evidence_requires_independent_review" in warnings
     assert expected["provenance"]["registration_evidence_review_status"] == (
         "caller_supplied_unverified"
     )
@@ -158,6 +171,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert node["executable"] is True
     assert "registration_evidence" in node["optional_parameters"]
+    assert "reidentification_evidence" in node["optional_parameters"]
     assert [port["accepted_types"] for port in node["input_ports"]] == [
         ["mesh_measurement_preview"],
         ["mesh_measurement_preview"],
@@ -172,7 +186,10 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
             {
                 "node_id": "compare",
                 "node_type": "mesh_longitudinal_comparison",
-                "parameters": {"registration_evidence": registration_evidence},
+                "parameters": {
+                    "registration_evidence": registration_evidence,
+                    "reidentification_evidence": reidentification_evidence,
+                },
             },
         ],
         "edges": [
@@ -1835,8 +1852,8 @@ def test_registered_centroid_uses_provisional_source_to_target_transform(
         assert "registered_surface_centroid_comparison_unavailable" in result["qc_warnings"]
     else:
         assert result["registered_surface_centroid_separation_m"] == pytest.approx(1.0)
-        assert "registered_centroid_offset_not_verified_biological_movement" in (
-            result["qc_warnings"]
+        assert (
+            "registered_centroid_offset_not_verified_biological_movement" in (result["qc_warnings"])
         )
         assert result["provenance"]["coordinate_registration_verified"] is False
         assert result["provenance"]["specimen_identity_verified"] is False
@@ -1887,3 +1904,44 @@ def test_registered_centroid_rejects_invalid_coordinates(
     }
     with pytest.raises(ValueError, match="Surface centroid must be three finite"):
         compare_mesh_observations(before, after, evidence)
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"before_observation_id": "different-scan"},
+        {"after_observation_id": "different-scan"},
+        {"verified": True},
+        {"method": "automatic_certified"},
+        {"observer_id": ""},
+    ],
+)
+def test_provisional_reidentification_rejects_mismatched_or_verified_claims(
+    client: TestClient, override: dict
+) -> None:
+    project_id = str(create_project(client, "Provisional identity review")["id"])
+    evidence = {
+        "before_observation_id": "scan-1",
+        "after_observation_id": "scan-2",
+        "method": "visual_morphology",
+        "observer_id": "observer-1",
+        "evidence_note": "Unreviewed visual match",
+        **override,
+    }
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
+        json={
+            "before": _mesh("scan-1", "2026-10-01T12:00:00Z", 1),
+            "after": _mesh("scan-2", "2026-10-02T12:00:00Z", 1),
+            "reidentification_evidence": evidence,
+        },
+    )
+    assert response.status_code in (400, 422), response.text
+
+
+def test_reidentification_missing_does_not_imply_verified_identity() -> None:
+    before, after = _minimal_topology_pair()
+    result = compare_mesh_observations(before, after)
+    assert result["provenance"]["reidentification_evidence"] is None
+    assert result["provenance"]["reidentification_evidence_review_status"] == "unavailable"
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert "reidentification_evidence_unavailable" in result["qc_warnings"]
