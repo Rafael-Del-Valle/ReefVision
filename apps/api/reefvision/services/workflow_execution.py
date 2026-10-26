@@ -151,26 +151,28 @@ class WorkflowExecutionService:
 
         graph_json = request.graph.model_dump(mode="json")
         checksum = canonical_json_sha256(graph_json)
-        latest = self.session.scalar(
-            select(WorkflowGraphRecord)
-            .where(
-                WorkflowGraphRecord.project_id == project_id,
-                WorkflowGraphRecord.graph_key == request.graph.graph_id,
+        revisions = list(
+            self.session.scalars(
+                select(WorkflowGraphRecord)
+                .where(
+                    WorkflowGraphRecord.project_id == project_id,
+                    WorkflowGraphRecord.graph_key == request.graph.graph_id,
+                )
+                .order_by(WorkflowGraphRecord.revision.desc())
             )
-            .order_by(WorkflowGraphRecord.revision.desc())
-            .limit(1)
         )
-        if latest is not None:
-            # A corrupted predecessor cannot be used to mint a new revision,
-            # even when the proposed graph differs from its original checksum.
-            # Otherwise a valid new revision would conceal broken run lineage.
+        # Every predecessor remains part of the scientific audit trail.
+        # Checking only the newest revision would let a valid new save hide
+        # a corrupted older graph still referenced by historical runs.
+        for revision in revisions:
             if (
-                not isinstance(latest.graph_json, dict)
-                or canonical_json_sha256(latest.graph_json) != latest.graph_sha256
+                not isinstance(revision.graph_json, dict)
+                or canonical_json_sha256(revision.graph_json) != revision.graph_sha256
             ):
                 raise ConflictError("Workflow graph revision checksum failed")
-            if latest.graph_sha256 == checksum:
-                return WorkflowGraphRecordResponse.model_validate(latest)
+        latest = revisions[0] if revisions else None
+        if latest is not None and latest.graph_sha256 == checksum:
+            return WorkflowGraphRecordResponse.model_validate(latest)
 
         record = WorkflowGraphRecord(
             project_id=project_id,
