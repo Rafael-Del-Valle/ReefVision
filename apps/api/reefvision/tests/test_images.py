@@ -341,6 +341,15 @@ def test_malformed_camera_exif_does_not_discard_decodable_jpeg(
         assert rendition.size == (64, 48)
         assert rendition.getexif().get(274) in (None, 1)
 
+    # Damaged acquisition metadata must not break the gallery thumbnail.
+    # Preserve the source-pixel axes even when camera orientation is present.
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    assert thumbnail.headers["content-type"].startswith("image/jpeg")
+    with Image.open(BytesIO(thumbnail.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getexif().get(274) in (None, 1)
+
 
 @pytest.mark.parametrize("orientation", range(2, 9))
 def test_exif_oriented_jpeg_display_preserves_raw_pixel_geometry(
