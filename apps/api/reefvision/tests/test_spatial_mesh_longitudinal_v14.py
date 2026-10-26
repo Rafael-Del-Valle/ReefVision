@@ -103,6 +103,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     expected = standalone.json()
     assert expected["before_reconstruction_qc_rates"]["boundary_edges_per_face"] == 3.0
     assert expected["after_reconstruction_qc_rates"]["degenerate_face_fraction"] == 0.0
+    assert expected["reconstruction_face_count_ratio_after_to_before"] == 1.0
     assert expected["reconstruction_qc_rate_changes_after_minus_before"] == {
         "degenerate_face_fraction": 0.0,
         "boundary_edges_per_face": 0.0,

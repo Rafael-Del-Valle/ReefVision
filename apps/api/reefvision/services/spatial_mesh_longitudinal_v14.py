@@ -455,14 +455,34 @@ def compare_mesh_observations(
         before_rate = reconstruction_qc_rates[0][label]
         after_rate = reconstruction_qc_rates[1][label]
         reconstruction_qc_rate_changes[label] = (
-            after_rate - before_rate
-            if before_rate is not None and after_rate is not None
-            else None
+            after_rate - before_rate if before_rate is not None and after_rate is not None else None
         )
     if any(value is not None for rates in reconstruction_qc_rates for value in rates.values()):
         warnings.append("reconstruction_qc_rates_not_biological_condition")
     else:
         warnings.append("reconstruction_qc_rates_unavailable")
+    # A change in triangle count changes the reconstruction sampling. This
+    # dimensionless ratio is a QC descriptor, not biological growth evidence.
+    early_faces = before_topology["face_count"]
+    late_faces = after_topology["face_count"]
+    face_count_ratio = None
+    if early_faces is not None and early_faces > 0 and late_faces is not None:
+        try:
+            candidate = late_faces / early_faces
+        except OverflowError:
+            warnings.append("reconstruction_face_count_ratio_out_of_numeric_range")
+        else:
+            if isfinite(candidate) and (candidate > 0 or late_faces == 0):
+                face_count_ratio = candidate
+            else:
+                warnings.append("reconstruction_face_count_ratio_out_of_numeric_range")
+    if face_count_ratio is None:
+        warnings.append("reconstruction_face_count_ratio_unavailable")
+    if early_faces is not None and late_faces is not None:
+        if early_faces != late_faces:
+            warnings.append(
+                "reconstruction_face_count_changed_qc_rate_comparability_requires_review"
+            )
     # Source-frame labels are audit metadata, not registration transforms.
     frames = [first.get("coordinate_frame_id"), second.get("coordinate_frame_id")]
     for frame in frames:
@@ -737,6 +757,7 @@ def compare_mesh_observations(
         "before_reconstruction_qc_rates": reconstruction_qc_rates[0],
         "after_reconstruction_qc_rates": reconstruction_qc_rates[1],
         "reconstruction_qc_rate_changes_after_minus_before": reconstruction_qc_rate_changes,
+        "reconstruction_face_count_ratio_after_to_before": face_count_ratio,
         "registration_residual_to_smaller_extent_ratio": (
             registration_residual_to_smaller_extent_ratio
         ),

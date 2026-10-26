@@ -64,6 +64,9 @@ def test_reconstruction_qc_rates_normalize_counts_without_claiming_condition() -
         }
     )
     assert "reconstruction_qc_rates_not_biological_condition" in result["qc_warnings"]
+    assert result["reconstruction_face_count_ratio_after_to_before"] == pytest.approx(2.0)
+    warning = "reconstruction_face_count_changed_qc_rate_comparability_requires_review"
+    assert warning in result["qc_warnings"]
     assert result["provenance"]["specimen_identity_verified"] is False
 
 
@@ -94,6 +97,7 @@ def test_zero_triangle_reconstructions_have_unavailable_rates() -> None:
     assert all(value is None for value in result["before_reconstruction_qc_rates"].values())
     assert all(value is None for value in result["after_reconstruction_qc_rates"].values())
     assert "reconstruction_qc_rates_unavailable" in result["qc_warnings"]
+    assert result["reconstruction_face_count_ratio_after_to_before"] is None
 
 
 def test_zero_face_baseline_preserves_missing_rates_against_valid_followup() -> None:
@@ -119,7 +123,39 @@ def test_zero_face_baseline_preserves_missing_rates_against_valid_followup() -> 
         for value in result["reconstruction_qc_rate_changes_after_minus_before"].values()
     )
     assert "reconstruction_topology_changed_requires_review" in result["qc_warnings"]
+    assert result["reconstruction_face_count_ratio_after_to_before"] is None
     assert result["provenance"]["specimen_identity_verified"] is False
+
+
+def test_zero_face_followup_is_an_observed_zero_ratio() -> None:
+    before, after = _observations()
+    after.update(
+        face_count=0,
+        edge_connected_patch_count=0,
+        boundary_edge_count=0,
+        nonmanifold_edge_count=0,
+        degenerate_face_count=0,
+    )
+    result = compare_mesh_observations(before, after)
+    assert result["reconstruction_face_count_ratio_after_to_before"] == 0.0
+    assert "reconstruction_face_count_ratio_unavailable" not in result["qc_warnings"]
+
+
+def test_missing_face_count_does_not_imply_zero_ratio() -> None:
+    before, after = _observations()
+    after.pop("face_count")
+    result = compare_mesh_observations(before, after)
+    assert result["reconstruction_face_count_ratio_after_to_before"] is None
+    assert "reconstruction_face_count_ratio_unavailable" in result["qc_warnings"]
+
+
+def test_equal_face_counts_have_unit_ratio() -> None:
+    before, after = _observations()
+    after["face_count"] = before["face_count"]
+    result = compare_mesh_observations(before, after)
+    assert result["reconstruction_face_count_ratio_after_to_before"] == 1.0
+    warning = "reconstruction_face_count_changed_qc_rate_comparability_requires_review"
+    assert warning not in result["qc_warnings"]
 
 
 def test_invalid_boolean_face_count_is_rejected() -> None:

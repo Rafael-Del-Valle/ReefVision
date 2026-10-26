@@ -451,3 +451,18 @@ never fabricated zero defects. Scientific QC warnings flag that the rates
 cannot establish biological condition. The source counts, provisional
 measurement status, provenance, and independent review requirements remain
 unchanged. A saved-workflow parity test exercises the new fields.
+
+
+## Longitudinal reconstruction triangle-count comparability (provisional)
+
+The shared standalone and saved, executable `mesh_longitudinal_comparison`
+engine now reports `reconstruction_face_count_ratio_after_to_before`.
+A ratio of 2 means the follow-up reconstruction contains twice as many
+triangles as the baseline; it does **not** mean twice the coral surface,
+growth, or resolution. Changes in triangulation, coverage, mesh decimation,
+and reconstruction settings can affect normalized topology QC rates, so
+unequal available counts trigger an explicit comparability-review warning.
+A known zero-face follow-up yields a true zero ratio when the baseline has
+faces; missing counts or a zero-face baseline yield `null` rather than a
+fabricated value. Numerically unrepresentable ratios are withheld. All
+measurements remain provisional, and human scientific review is required.
