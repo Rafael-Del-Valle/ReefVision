@@ -1,0 +1,127 @@
+"""Source-level ecological CSV export: standalone, saved workflow and QC gates."""
+
+from __future__ import annotations
+
+import csv
+from datetime import UTC, datetime
+from io import StringIO
+
+import pytest
+from fastapi.testclient import TestClient
+
+from reefvision.domain.errors import ValidationError
+from reefvision.schemas.ecology_measurement_candidates import (
+    EcologyMeasurementCandidatesResponse,
+)
+from reefvision.services.ecology_candidate_measurements_export import (
+    _utc_capture,
+    render_ecology_measurements_csv,
+)
+from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
+from reefvision.tests.test_ecology_projected_visit_coverage_1_2 import _source
+
+
+def _rows(csv_text: str) -> list[dict[str, str]]:
+    return list(csv.DictReader(StringIO(csv_text)))
+
+
+def test_measurement_csv_preserves_all_source_links_and_saved_workflow_parity(
+    client: TestClient,
+) -> None:
+    project_id, source = _source(client)
+    path = f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    standalone = client.get(path)
+    assert standalone.status_code == 200, standalone.text
+    csv_response = client.get(path + "/measurements.csv")
+    assert csv_response.status_code == 200, csv_response.text
+    assert csv_response.headers["content-type"].startswith("text/csv")
+    assert "attachment;" in csv_response.headers["content-disposition"]
+    rows = _rows(csv_response.text)
+    payload = standalone.json()
+    assert len(rows) == payload["candidate_count"] == 2
+    assert [row["metric"] for row in rows] == ["box_height", "box_width"]
+    for row in rows:
+        assert row["export_schema_version"] == "ecology-measurement-export-0001"
+        assert row["project_id"] == project_id
+        assert row["source_input_sha256"] == payload["input_sha256"]
+        assert row["report_sha256"] == payload["candidate_report"]["report_sha256"]
+        assert row["source_fingerprint_rechecked"] == "true"
+        assert row["organism_key"] == source.organism_key
+        assert row["identity_revision"] == str(source.identity_revision)
+        assert row["image_id"] == source.image_id
+        assert row["image_sha256"] == source.image_sha256
+        assert row["annotation_evidence_id"] == source.annotation_evidence_id
+        assert row["calibration_evidence_id"] == source.calibration_evidence_id
+        assert row["annotation_sha256"] == source.annotation_sha256
+        assert row["calibration_sha256"] == source.calibration_sha256
+        assert row["capture_timestamp_utc"] == ""
+        assert row["capture_time_status"] == "missing"
+        assert row["sampling_date_qc_status"] == "missing_timestamps"
+        assert row["evidence_level"] == "linked_unverified"
+        assert row["review_gate"] == "scientist_review_required"
+
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "succeeded"
+    artifacts = [
+        row
+        for row in workflow["artifacts"]
+        if row["data_type"] == "ecology_measurement_candidates"
+    ]
+    assert len(artifacts) == 1
+    persisted = EcologyMeasurementCandidatesResponse.model_validate(
+        artifacts[0]["payload_json"]
+    )
+    assert render_ecology_measurements_csv(persisted) == csv_response.text
+
+
+def test_measurement_csv_rejects_modified_source_even_if_qc_counts_unchanged(
+    client: TestClient,
+) -> None:
+    project_id, _ = _source(client)
+    response = client.get(
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    )
+    assert response.status_code == 200
+    payload = EcologyMeasurementCandidatesResponse.model_validate(response.json())
+    candidate = payload.candidates[0]
+    altered = payload.model_copy(
+        update={
+            "candidates": [
+                candidate.model_copy(update={"value": candidate.value + 0.25}),
+                *payload.candidates[1:],
+            ]
+        }
+    )
+    with pytest.raises(ValidationError, match="source input fingerprint"):
+        render_ecology_measurements_csv(altered)
+
+
+def test_measurement_csv_empty_project_has_only_header(client: TestClient) -> None:
+    project_id = str(create_project(client, "Empty ecological source export")["id"])
+    path = f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    response = client.get(path + "/measurements.csv")
+    assert response.status_code == 200, response.text
+    assert _rows(response.text) == []
+    assert "source_input_sha256" in response.text
+
+
+@pytest.mark.parametrize(
+    ("capture", "status", "error"),
+    [
+        (datetime(2026, 4, 3, 8), "timezone_aware", "lacks timezone"),
+        (None, "timezone_aware", "missing its capture timestamp"),
+        (datetime(2026, 4, 3, 8, tzinfo=UTC), "missing", "conflicts"),
+    ],
+)
+def test_measurement_csv_rejects_ambiguous_capture_metadata(
+    capture: datetime | None, status: str, error: str
+) -> None:
+    with pytest.raises(ValidationError, match=error):
+        _utc_capture(capture, status)
+
+
+def test_measurement_csv_normalizes_utc_timestamp() -> None:
+    assert _utc_capture(datetime(2026, 4, 3, 8, tzinfo=UTC), "timezone_aware") == (
+        "2026-04-03T08:00:00Z"
+    )
