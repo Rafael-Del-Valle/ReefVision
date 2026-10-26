@@ -436,24 +436,29 @@ def compare_mesh_observations(
         "boundary_edges_per_face": "boundary_edge_count",
         "nonmanifold_edges_per_face": "nonmanifold_edge_count",
     }
-    reconstruction_qc_rates = []
+    reconstruction_qc_rates: list[dict[str, float | None]] = []
     for counts in topology_counts:
         faces = counts["face_count"]
-        reconstruction_qc_rates.append(
-            {
-                label: counts[field] / faces if faces and counts[field] is not None else None
-                for label, field in qc_rate_sources.items()
-            }
-        )
-    reconstruction_qc_rate_changes = {
-        label: (
-            reconstruction_qc_rates[1][label] - reconstruction_qc_rates[0][label]
-            if reconstruction_qc_rates[0][label] is not None
-            and reconstruction_qc_rates[1][label] is not None
+        rates: dict[str, float | None] = {}
+        for label, field in qc_rate_sources.items():
+            defect_count = counts[field]
+            # Narrow both optional operands before division (also avoids
+            # treating absent counts or a zero-face mesh as zero defects).
+            rates[label] = (
+                defect_count / faces
+                if faces is not None and faces > 0 and defect_count is not None
+                else None
+            )
+        reconstruction_qc_rates.append(rates)
+    reconstruction_qc_rate_changes: dict[str, float | None] = {}
+    for label in qc_rate_sources:
+        before_rate = reconstruction_qc_rates[0][label]
+        after_rate = reconstruction_qc_rates[1][label]
+        reconstruction_qc_rate_changes[label] = (
+            after_rate - before_rate
+            if before_rate is not None and after_rate is not None
             else None
         )
-        for label in qc_rate_sources
-    }
     if any(value is not None for rates in reconstruction_qc_rates for value in rates.values()):
         warnings.append("reconstruction_qc_rates_not_biological_condition")
     else:
