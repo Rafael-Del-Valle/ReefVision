@@ -311,9 +311,7 @@ def test_malformed_camera_exif_does_not_discard_decodable_jpeg(
     # DateTimeOriginal/OffsetTimeOriginal IFD is unreadable.
     camera_exif[306] = "2026:10:25 14:15:16"
     stream = BytesIO()
-    Image.new("RGB", (64, 48), (20, 90, 120)).save(
-        stream, format="JPEG", exif=camera_exif
-    )
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=camera_exif)
     original = stream.getvalue()
 
     original_get_ifd = Image.Exif.get_ifd
