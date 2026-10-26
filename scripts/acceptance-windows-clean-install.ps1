@@ -39,8 +39,23 @@ $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
-$Version = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($InstallerPath, 0).OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
-$Version.Execute(); $VersionRecord = $Version.Fetch(); $ProductVersion = $VersionRecord.StringData(1)
+
+function Get-MsiProductVersion([string]$Path) {
+    $database = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($Path, 0)
+    $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
+    try {
+        [void]$view.Execute()
+        $record = $view.Fetch()
+        if ($null -eq $record) { throw "MSI does not declare ProductVersion: $Path" }
+        return ConvertTo-ReefVisionVersionString ([string]$record.StringData(1))
+    }
+    finally {
+        [void]$view.Close()
+    }
+}
+
+$ProductVersion = Get-MsiProductVersion -Path $InstallerPath
+$PreviousProductVersion = if ($PreviousInstallerPath) { Get-MsiProductVersion -Path $PreviousInstallerPath } else { $null }
 
 $report = [ordered]@{
     schema_version = 'reefvision-windows-clean-acceptance-1'
@@ -251,6 +266,11 @@ try {
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
     $versionPayload = Invoke-RestMethod "$api/system/version"
+    $expectedInitialVersion = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousProductVersion } else { $ProductVersion }
+    $actualInitialVersion = ConvertTo-ReefVisionVersionString ([string]$versionPayload.application_version)
+    if ($actualInitialVersion -ne $expectedInitialVersion) {
+        throw "Initial packaged API version $actualInitialVersion does not match installed MSI version $expectedInitialVersion."
+    }
     $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
     $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
@@ -441,12 +461,19 @@ try {
 
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Previous installer upgraded to current installer.'
     }
 
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        $postUpgradeVersion = Invoke-RestMethod "$api/system/version"
+        $actualPostUpgradeVersion = ConvertTo-ReefVisionVersionString ([string]$postUpgradeVersion.application_version)
+        if ($actualPostUpgradeVersion -ne $ProductVersion) {
+            throw "Post-upgrade API version $actualPostUpgradeVersion does not match candidate MSI version $ProductVersion."
+        }
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Upgraded packaged API from $PreviousProductVersion to $ProductVersion."
+    }
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"

@@ -119,7 +119,7 @@ describe("ProjectTrainingMonitor", () => {
     renderMonitor();
     await screen.findByText("Swiftia detector");
     await userEvent.click(
-      screen.getByRole("button", { name: "Open PowerShell monitor" }),
+      screen.getByRole("button", { name: "Open Training Console" }),
     );
     await waitFor(() => expect(open).toHaveBeenCalledWith("run-active"));
   });
@@ -145,7 +145,7 @@ describe("ProjectTrainingMonitor", () => {
         screen.queryByRole("button", { name: "Cancel run" }),
       ).not.toBeInTheDocument();
       await userEvent.click(
-        screen.getByRole("button", { name: "Open PowerShell monitor" }),
+        screen.getByRole("button", { name: "Open Training Console" }),
       );
       await waitFor(() => expect(open).toHaveBeenCalledWith("run-completed"));
     },
@@ -162,7 +162,7 @@ describe("ProjectTrainingMonitor", () => {
     renderMonitor();
     await screen.findByText("Swiftia detector completed");
     expect(
-      screen.queryByRole("button", { name: "Open PowerShell monitor" }),
+      screen.queryByRole("button", { name: "Open Training Console" }),
     ).not.toBeInTheDocument();
   });
 

@@ -263,8 +263,8 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                     onClick={() => void openConsole(run.id)}
                   >
                     {openingRunId === run.id
-                      ? "Opening PowerShell…"
-                      : "Open PowerShell monitor"}
+                      ? "Opening Console…"
+                      : "Open Training Console"}
                   </button>
                 )}
 

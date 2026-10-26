@@ -9,6 +9,7 @@ import os
 import shutil
 import struct
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -285,7 +286,13 @@ def commit_staged_image(staged_path: Path, destination: Path) -> None:
         # Some Windows removable filesystems (notably exFAT/FAT) do not
         # support hard links. Exclusively create and fsync the destination
         # instead; never fall back to an overwriting rename.
-        unsupported = {errno.EPERM, errno.EACCES, errno.EXDEV, errno.ENOTSUP}
+        unsupported = {
+            errno.EPERM,
+            errno.EACCES,
+            errno.EXDEV,
+            errno.ENOTSUP,
+            errno.EOPNOTSUPP,
+        }
         if exc.errno not in unsupported and getattr(exc, "winerror", None) not in {1, 50}:
             raise
         created = False
@@ -318,6 +325,19 @@ def _unique_rendition_temporary(destination: Path) -> Path:
     return Path(name)
 
 
+def _replace_rendition(temporary: Path, destination: Path) -> None:
+    """Publish a rendition despite brief Windows destination-file contention."""
+
+    for attempt in range(5):
+        try:
+            os.replace(temporary, destination)
+            return
+        except PermissionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.01 * (2**attempt))
+
+
 def create_browser_display(source: Path, destination: Path) -> None:
     """Create a browser-safe, full-resolution PNG rendition without changing the source."""
 
@@ -334,7 +354,7 @@ def create_browser_display(source: Path, destination: Path) -> None:
             if display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16", "I;16B"}:
                 display = display.convert("RGB")
             display.save(temporary, format="PNG", optimize=True)
-        os.replace(temporary, destination)
+        _replace_rendition(temporary, destination)
     except Exception:
         temporary.unlink(missing_ok=True)
         raise
@@ -363,7 +383,7 @@ def create_thumbnail(source: Path, destination: Path, *, max_width: int, max_hei
             if oriented.mode == "L":
                 oriented = oriented.convert("RGB")
             oriented.save(temporary, format="JPEG", quality=85, optimize=True)
-        os.replace(temporary, destination)
+        _replace_rendition(temporary, destination)
     except Exception:
         temporary.unlink(missing_ok=True)
         raise

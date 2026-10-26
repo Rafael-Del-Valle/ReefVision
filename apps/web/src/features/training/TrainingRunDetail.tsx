@@ -208,7 +208,6 @@ export function TrainingRunDetail({
       <div className="training-chart-grid">
         {Object.entries(metricHistory)
           .filter(([key]) => !/^epoch$|^time$/i.test(key))
-          .slice(0, 6)
           .map(([key, values]) => (
             <MetricChart key={key} label={key} values={values} />
           ))}
@@ -350,9 +349,7 @@ export function TrainingRunDetail({
             disabled={consoleOpening}
             onClick={() => void handleOpenTrainingConsole()}
           >
-            {consoleOpening
-              ? "Opening PowerShell…"
-              : "Open live training in PowerShell"}
+            {consoleOpening ? "Opening Console…" : "Open Training Console"}
           </button>
         )}
         {!active && (

@@ -188,6 +188,18 @@ function Format-SafeText {
   $text = [regex]::Replace($text, '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]', ' ')
   return $text
 }
+function Test-FiniteMetricValue {
+  param([AllowNull()][object]$Value)
+  if ($null -eq $Value -or $Value -is [bool] -or $Value -is [string] -or $Value -isnot [System.ValueType]) {
+    return $false
+  }
+  try {
+    $number = [Convert]::ToDouble($Value, [Globalization.CultureInfo]::InvariantCulture)
+  } catch {
+    return $false
+  }
+  return -not [double]::IsNaN($number) -and -not [double]::IsInfinity($number)
+}
 Write-Host 'ReefVision training monitor (read-only). Close this window to stop monitoring.'
 while ($true) {
   try {
@@ -205,7 +217,7 @@ while ($true) {
     $latestMetrics = @{}
     if ($null -ne $run.metrics) {
       foreach ($metric in $run.metrics.PSObject.Properties) {
-        if ($null -ne $metric.Value) {
+        if (Test-FiniteMetricValue -Value $metric.Value) {
           $latestMetrics[$metric.Name] = $metric.Value
         }
       }
@@ -213,8 +225,11 @@ while ($true) {
     if ($null -ne $run.metrics_history) {
       foreach ($series in $run.metrics_history.PSObject.Properties) {
         $values = @($series.Value)
-        if ($values.Count -gt 0 -and $null -ne $values[-1]) {
-          $latestMetrics[$series.Name] = $values[-1]
+        for ($index = $values.Count - 1; $index -ge 0; $index -= 1) {
+          if (Test-FiniteMetricValue -Value $values[$index]) {
+            $latestMetrics[$series.Name] = $values[$index]
+            break
+          }
         }
       }
     }

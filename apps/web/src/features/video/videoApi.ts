@@ -258,6 +258,7 @@ export interface VideoTrackKeyframe {
   keypoints?: VideoPoseKeypoint[] | null;
   pose_observations?: VideoPoseObservation[] | null;
   pose_uncertainty?: PoseProviderUncertaintyEvidence | null;
+  mask_polygons?: [number, number][][] | null;
 }
 
 export interface VideoTrackRecord {
@@ -340,6 +341,8 @@ export interface VideoTrackingRun {
   stage: string;
   tracker: string;
   model_id: string;
+  tracking_mode?: "auto" | "detect" | "segment" | "hybrid";
+  segmentation_model_id?: string | null;
   link_detections: boolean;
   confidence: number;
   iou: number;
@@ -760,6 +763,9 @@ export function createVideoTrackingJob(
   videoId: string,
   payload: {
     model_id: string;
+    tracking_mode?: "auto" | "detect" | "segment" | "hybrid";
+    segmentation_model_id?: string | null;
+    hybrid_match_iou?: number;
     tracker: string;
     confidence: number;
     iou: number;

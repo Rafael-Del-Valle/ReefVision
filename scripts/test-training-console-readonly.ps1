@@ -28,9 +28,9 @@ $script:active = @'
   "progress_total_epochs": 3,
   "metrics": {"train/box_loss": 0.99, "metrics/mAP50(B)": 0.75},
   "metrics_history": {
-    "train/box_loss": [0.50, 0.25],
-    "train/cls_loss": [0.60, 0.30],
-    "train/dfl_loss": [0.20, 0.10]
+    "train/box_loss": [0.50, 0.25, null],
+    "train/cls_loss": [0.60, 0.30, null],
+    "train/dfl_loss": [0.20, 0.10, null]
   }
 }
 '@ | ConvertFrom-Json
@@ -43,9 +43,9 @@ $script:completed = @'
   "progress_total_epochs": 3,
   "metrics": {"train/box_loss": 0.99},
   "metrics_history": {
-    "train/box_loss": [0.50, 0.25, 0.20],
-    "train/cls_loss": [0.60, 0.30, 0.24],
-    "train/dfl_loss": [0.20, 0.10, 0.08]
+    "train/box_loss": [0.50, 0.25, 0.20, null],
+    "train/cls_loss": [0.60, 0.30, 0.24, null],
+    "train/dfl_loss": [0.20, 0.10, 0.08, null]
   }
 }
 '@ | ConvertFrom-Json

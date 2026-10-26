@@ -101,7 +101,7 @@ describe("TrainingRunDetail", () => {
       />,
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Open live training in PowerShell" }),
+      screen.getByRole("button", { name: "Open Training Console" }),
     );
     await waitFor(() => expect(openConsole).toHaveBeenCalledWith("run-1"));
     vi.restoreAllMocks();
@@ -129,5 +129,50 @@ describe("TrainingRunDetail", () => {
     expect(
       screen.getByRole("button", { name: "Register best detector" }),
     ).toBeEnabled();
+  });
+
+  it("shows every available detection, segmentation, and validation metric", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          task: "segment",
+          metrics_history: {
+            epoch: [1, 2],
+            "train/box_loss": [1.2, 0.9],
+            "train/seg_loss": [1.1, 0.8],
+            "train/cls_loss": [0.7, 0.5],
+            "train/dfl_loss": [0.6, 0.4],
+            "metrics/mAP50-95(M)": [0.2, 0.3],
+            "val/box_loss": [1.0, 0.8],
+            "val/seg_loss": [0.9, 0.7],
+            "val/cls_loss": [0.6, 0.4],
+            "val/dfl_loss": [0.5, 0.3],
+          },
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", { name: /train box loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train seg loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train cls loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train dfl loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /val seg loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /val dfl loss across 2 epochs/i }),
+    ).toBeInTheDocument();
   });
 });

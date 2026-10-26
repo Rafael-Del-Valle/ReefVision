@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from reefvision.storage import images as image_storage
 from reefvision.storage.images import _capture_timestamp, create_browser_display, create_thumbnail
 from reefvision.tests.test_images import create_project, import_one
 
@@ -50,6 +51,13 @@ def test_progressive_camera_jpeg_keeps_original_bytes_and_exif(
     original = client.get(f"/api/v1/images/{image_id}/content")
     assert original.status_code == 200
     assert original.content == payload
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as decoded:
+        assert decoded.size == (64, 48)
+        assert decoded.getexif().get(274) is None
 
 
 @pytest.mark.parametrize("extension", [".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"])
@@ -249,7 +257,7 @@ def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
         ("L", 127, "L"),
     ],
 )
-def test_non_rgb_camera_jpeg_import_and_oriented_renditions(
+def test_non_rgb_camera_jpeg_source_aligned_display_and_oriented_thumbnail(
     client: TestClient,
     tmp_path: Path,
     mode: str,
@@ -520,3 +528,32 @@ def test_parallel_camera_renditions_use_unique_temporary_files(
         rendered.load()
         assert rendered.size == (64, 48)
     assert source.read_bytes() == original_bytes
+
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+def test_camera_rendition_retries_transient_windows_replace_denial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rendition: str
+) -> None:
+    """A brief Windows destination lock must not fail an otherwise valid rendition."""
+    source = tmp_path / "CAMERA.JPEG"
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumb.jpg")
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(source, format="JPEG")
+    original_replace = image_storage.os.replace
+    attempts = 0
+
+    def transient_denial(source_path: Path, destination_path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise PermissionError("transient destination lock")
+        original_replace(source_path, destination_path)
+
+    monkeypatch.setattr(image_storage.os, "replace", transient_denial)
+
+    if rendition == "display":
+        create_browser_display(source, destination)
+    else:
+        create_thumbnail(source, destination, max_width=128, max_height=128)
+
+    assert attempts == 2
+    assert destination.exists()

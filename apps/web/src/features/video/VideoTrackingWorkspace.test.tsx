@@ -89,6 +89,7 @@ vi.mock("./videoApi", async () => {
     getVideoFrameSpatialMetrics: vi.fn(),
     getVideoTrackingRuns: vi.fn(),
     getTrackingModels: vi.fn(),
+    createVideoTrackingJob: vi.fn(),
     getAnnotatedVideoExports: vi.fn(),
     importVideo: vi.fn(),
     updateVideoTrack: vi.fn(),
@@ -402,13 +403,75 @@ describe("VideoTrackingWorkspace", () => {
     expect(api.importVideo).not.toHaveBeenCalled();
   });
 
+  it("selects detector and segmenter models for hybrid tracking", async () => {
+    const base = {
+      project_id: project.id,
+      source_filename: "fish.pt",
+      managed_path: "projects/project-1/models/fish.pt",
+      sha256: "b".repeat(64),
+      file_size_bytes: 100,
+      framework: "ultralytics",
+      provider_name: "ultralytics",
+      provider_version: "8.3.228",
+      class_map_json: { mapping: { fish: "class-1" } },
+      input_size_json: null,
+      metadata_json: {},
+      notes: null,
+      created_at: "2026-10-22T00:00:00Z",
+      updated_at: "2026-10-22T00:00:00Z",
+    } as const;
+    vi.mocked(api.getTrackingModels).mockResolvedValue([
+      {
+        ...base,
+        id: "detector-1",
+        purpose: "detector",
+        task: "detect",
+        display_name: "Fish detector",
+      },
+      {
+        ...base,
+        id: "segmenter-1",
+        purpose: "segmenter",
+        task: "segment",
+        display_name: "Fish segmenter",
+      },
+    ]);
+    vi.mocked(api.createVideoTrackingJob).mockResolvedValue({
+      id: "job-1",
+      status: "queued",
+    } as Awaited<ReturnType<typeof api.createVideoTrackingJob>>);
+    renderWorkspace();
+    const mode = await screen.findByLabelText("Tracking mode");
+    fireEvent.change(mode, { target: { value: "hybrid" } });
+    expect(await screen.findByLabelText("Detection model")).toHaveValue(
+      "detector-1",
+    );
+    expect(screen.getByLabelText("Segmentation model")).toHaveValue(
+      "segmenter-1",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Run hybrid/ }));
+    await waitFor(() =>
+      expect(api.createVideoTrackingJob).toHaveBeenCalledWith(
+        "video-1",
+        expect.objectContaining({
+          tracking_mode: "hybrid",
+          model_id: "detector-1",
+          segmentation_model_id: "segmenter-1",
+          hybrid_match_iou: 0.5,
+        }),
+      ),
+    );
+  });
+
   it("shows managed video, frame, track, and automated tracking sections", async () => {
     renderWorkspace();
 
     expect(await screen.findByText("Managed videos")).toBeInTheDocument();
     expect(screen.getByText("Source-coordinate overlay")).toBeInTheDocument();
     expect(screen.getByText("Identities and keyframes")).toBeInTheDocument();
-    expect(screen.getByText("Detection / pose + tracker")).toBeInTheDocument();
+    expect(
+      screen.getByText("Detection / segmentation / hybrid video tracking"),
+    ).toBeInTheDocument();
     expect(
       await screen.findByText("Geographic observations"),
     ).toBeInTheDocument();
@@ -639,6 +702,93 @@ describe("VideoTrackingWorkspace", () => {
     ).toBe(false);
   });
 
+  it("renders and edits segmentation masks in source-pixel coordinates", async () => {
+    const segmentationTrack: api.VideoTrackRecord = {
+      id: "segment-track-1",
+      video_id: "video-1",
+      label_class_id: "class-1",
+      track_number: 8,
+      geometry_kind: "bbox",
+      keyframes_json: [
+        {
+          frame: 0,
+          bbox: [100, 120, 300, 260],
+          confidence: 0.91,
+          mask_polygons: [
+            [
+              [110, 130],
+              [390, 140],
+              [380, 360],
+            ],
+          ],
+        },
+      ],
+      interpolation: "linear",
+      status: "machine_generated",
+      source_model_id: "segment-model-1",
+      source_job_id: "segment-job-1",
+      metadata_json: null,
+      revision: 4,
+    };
+
+    vi.mocked(api.getVideoTracks).mockResolvedValue([segmentationTrack]);
+    vi.mocked(api.updateVideoTrack).mockImplementation(
+      async (_trackId, payload) => ({
+        ...segmentationTrack,
+        keyframes_json: payload.keyframes,
+        interpolation: payload.interpolation,
+        status: payload.status,
+        revision: payload.base_revision + 1,
+      }),
+    );
+
+    renderWorkspace();
+
+    await screen.findByRole("option", { name: /Track 8/ });
+    fireEvent.change(screen.getByLabelText("Existing track"), {
+      target: { value: segmentationTrack.id },
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Enable source-coordinate overlay",
+      }),
+    );
+
+    const renderedMask = await screen.findByLabelText(
+      "Segmentation mask 1 for track 8",
+    );
+    expect(renderedMask).toHaveAttribute("points", "110,130 390,140 380,360");
+
+    const maskEditor = screen.getByLabelText("Mask polygons for frame 0");
+    fireEvent.change(maskEditor, {
+      target: {
+        value: "[[[120,140],[400,150],[390,370]]]",
+      },
+    });
+    fireEvent.blur(maskEditor);
+    fireEvent.click(screen.getByRole("button", { name: "Save track" }));
+
+    await waitFor(() => expect(api.updateVideoTrack).toHaveBeenCalledTimes(1));
+    expect(api.updateVideoTrack).toHaveBeenCalledWith(
+      segmentationTrack.id,
+      expect.objectContaining({
+        base_revision: 4,
+        keyframes: [
+          expect.objectContaining({
+            frame: 0,
+            mask_polygons: [
+              [
+                [120, 140],
+                [400, 150],
+                [390, 370],
+              ],
+            ],
+          }),
+        ],
+      }),
+    );
+  });
+
   it("imports external pose data with explicit frame mapping confirmation", async () => {
     vi.mocked(poseInteropApi.importPoseInteroperability).mockResolvedValue({
       schema_version: "pose-interoperability-import-0001",
@@ -673,8 +823,6 @@ describe("VideoTrackingWorkspace", () => {
         name: /I confirm external frame indices correspond to this video/,
       }),
     );
-    // Initial video hydration must not clear an already selected pose file
-    // or the scientist's explicit frame-mapping confirmation.
     const importButton = screen.getByRole("button", { name: "Import pose" });
     await waitFor(() => expect(importButton).toBeEnabled());
     expect(
@@ -740,6 +888,13 @@ describe("VideoTrackingWorkspace", () => {
     });
     await waitFor(() => expect(confirmation).not.toBeChecked());
     expect(screen.getByRole("button", { name: "Import pose" })).toBeDisabled();
+    expect(
+      (
+        screen.getByLabelText(
+          "Pose interoperability import file",
+        ) as HTMLInputElement
+      ).files,
+    ).toHaveLength(0);
     expect(poseInteropApi.importPoseInteroperability).not.toHaveBeenCalled();
   });
 
