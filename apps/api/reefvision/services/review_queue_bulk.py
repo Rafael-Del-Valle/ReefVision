@@ -65,7 +65,9 @@ def bulk_triage_review_queue(
     )
     keyed_ids = (
         {
-            item.id: str(request_id) if item.id == min(legacy_ids) else legacy_ids[item.id]
+            item.id: (
+                str(request_id) if item.id == min(legacy_ids) else legacy_ids[item.id]
+            )
             for item in ordered
         }
         if request_id is not None
@@ -106,11 +108,15 @@ def bulk_triage_review_queue(
                     or event.comment != (reason if request.action == "skip" else None)
                     or event.assignee is not None
                 ):
-                    raise ConflictError("Bulk request ID was already used for a different action")
+                    raise ConflictError(
+                        "Bulk request ID was already used for a different action"
+                    )
             return True
         # Any partial match or foreign-queue marker means the request UUID has
         # already been consumed. Never append audit history for another batch.
-        raise ConflictError("Bulk request ID was already used for another item selection")
+        raise ConflictError(
+            "Bulk request ID was already used for another item selection"
+        )
 
     if validate_prior(prior_events()):
         return ReviewQueueBulkResponse(
