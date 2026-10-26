@@ -121,6 +121,10 @@ class MeshReidentificationEvidence(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # Optional project binding prevents reuse of otherwise identical local
+    # observation labels in a different research project. Legacy evidence is flagged.
+    project_id: str | None = Field(default=None, min_length=1, max_length=128)
+
     # Optional for legacy evidence; when present, binds the observation pair
     # to a provisional specimen label and prevents cross-specimen reuse.
     specimen_id: str | None = Field(
@@ -151,9 +155,9 @@ class MeshReidentificationEvidence(BaseModel):
     independent_reviewer_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
-    independent_review_decision: Literal[
-        "supports_match", "disputes_match", "inconclusive"
-    ] | None = None
+    independent_review_decision: (
+        Literal["supports_match", "disputes_match", "inconclusive"] | None
+    ) = None
     independent_review_note: str | None = Field(default=None, min_length=1, max_length=2_000)
     # Optional audit time; an undated legacy review stays provisional and flagged.
     independent_reviewed_at_utc: AwareDatetime | None = None
