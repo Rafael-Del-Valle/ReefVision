@@ -2239,3 +2239,22 @@ action is involved. Before this iteration, exact head
 GitHub Actions workflows successful**. The new export head still requires
 exact-head CI, independent scientific review, migration reconciliation and
 installed Windows GUI acceptance; **1.2 remains not release-ready**.
+
+### Executable Workflow Builder export (same 1.2 increment)
+
+The `ecology_measurement_csv_export` node now accepts a typed
+`ecology_measurement_candidates` artifact on its `candidates` input
+(e.g., from `ecology_identity_registry_source.measurement_candidates`).
+It executes the **same** source-QC and fingerprint-validated CSV serializer
+as the standalone endpoint and persists a typed `ecology_measurement_csv`
+artifact containing the CSV text, project ID, source/report digests,
+fingerprint-check status, `linked_unverified` evidence level and
+`scientist_review_required` review gate. It rejects foreign project
+sources and scientist-supplied parameters; the graph's typed ports block
+direct connection to verified-dataset inputs.
+
+Focused acceptance covers the node registry, executable graph planning,
+saved-workflow execution and artifact parity with the standalone CSV,
+plus attempted verified-dataset port connection. These tests must pass
+exact-head CI before any acceptance claim. No source is promoted to
+verified biological truth by exporting it.
