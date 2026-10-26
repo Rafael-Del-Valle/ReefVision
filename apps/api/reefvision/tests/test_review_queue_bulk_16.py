@@ -616,6 +616,7 @@ def test_keyed_start_retry_cannot_reopen_completed_review(client: TestClient) ->
     conflicting = client.post(bulk_url, json={**keyed_start, "actor": "third reviewer"})
     assert conflicting.status_code == 409, conflicting.text
     assert client.get(event_url).json() == original_history
-    annotations = client.get(f"/api/v1/images/{completed.json()['items'][0]['image_id']}/annotations")
+    completed_image_id = completed.json()["items"][0]["image_id"]
+    annotations = client.get(f"/api/v1/images/{completed_image_id}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
