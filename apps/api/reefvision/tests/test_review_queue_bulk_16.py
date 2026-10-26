@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from reefvision.tests.test_annotations import create_project, import_one
@@ -356,3 +358,94 @@ def test_bulk_completion_mixed_completed_and_pending_preserves_audit(
     assert by_id[ids[1]]["review_state"] == "pending"
     assert client.get(first_event_url).json() == original_history
     assert client.get(second_event_url).json()["total"] == 0
+
+
+def test_keyed_bulk_retry_never_reapplies_after_intervening_reviewer_action(
+    client: TestClient,
+) -> None:
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    request_id = str(uuid4())
+    first = {
+        "item_ids": ids,
+        "action": "start",
+        "actor": "researcher one",
+        "client_request_id": request_id,
+    }
+    started = client.post(url, json=first)
+    assert started.status_code == 200, started.text
+    assert started.json()["changed_count"] == 2
+
+    # A second researcher changes the first item after the first batch
+    # committed, but before its original HTTP response was acknowledged.
+    skipped = client.post(
+        url,
+        json={
+            "item_ids": [ids[0]],
+            "action": "skip",
+            "reason": "Manual inspection needed",
+            "actor": "researcher two",
+        },
+    )
+    assert skipped.status_code == 200, skipped.text
+
+    replay = client.post(url, json=first)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["changed_count"] == 0
+    assert {item["id"]: item["review_state"] for item in replay.json()["items"]} == {
+        ids[0]: "skipped",
+        ids[1]: "in_progress",
+    }
+    first_history = client.get(
+        f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events"
+    ).json()
+    assert [event["event_type"] for event in first_history["items"]] == [
+        "triage_start",
+        "triage_skip",
+    ]
+    assert first_history["items"][0]["actor"] == "researcher one"
+    assert first_history["items"][1]["actor"] == "researcher two"
+    assert client.get(
+        f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
+    ).json()["total"] == 1
+
+    # A request key is bound to its original action, reviewer and reason.
+    for changed in (
+        {**first, "actor": "different reviewer"},
+        {**first, "action": "skip", "reason": "different action"},
+    ):
+        rejected = client.post(url, json=changed)
+        assert rejected.status_code == 409, rejected.text
+    assert client.get(
+        f"/api/v1/review-queues/{queue_id}/items/{ids[0]}/events"
+    ).json() == first_history
+
+
+def test_keyed_bulk_first_attempt_requires_all_items_to_transition(
+    client: TestClient,
+) -> None:
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    assert client.post(
+        url, json={"item_ids": [ids[0]], "action": "start"}
+    ).status_code == 200
+    rejected = client.post(
+        url,
+        json={
+            "item_ids": ids,
+            "action": "start",
+            "client_request_id": str(uuid4()),
+        },
+    )
+    assert rejected.status_code == 409, rejected.text
+    assert client.get(
+        f"/api/v1/review-queues/{queue_id}/items/{ids[1]}/events"
+    ).json()["total"] == 0
+    assert client.post(
+        url,
+        json={
+            "item_ids": [ids[1]],
+            "action": "start",
+            "client_request_id": "not-a-uuid",
+        },
+    ).status_code == 422
