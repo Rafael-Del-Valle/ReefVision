@@ -621,6 +621,7 @@ def test_keyed_start_retry_cannot_reopen_completed_review(client: TestClient) ->
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
 
+
 def test_keyed_bulk_retry_preserves_mixed_completion_and_skip(
     client: TestClient,
 ) -> None:
