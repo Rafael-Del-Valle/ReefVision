@@ -47,6 +47,10 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
     if (
       !row.location ||
       (row.location.crs ?? "EPSG:4326") !== "EPSG:4326" ||
+      !Number.isFinite(row.location.latitude) ||
+      Math.abs(row.location.latitude) > 90 ||
+      !Number.isFinite(row.location.longitude) ||
+      Math.abs(row.location.longitude) > 180 ||
       row.depth_m == null ||
       !row.depth_reference ||
       row.normalized_unit !== "m/s" ||
