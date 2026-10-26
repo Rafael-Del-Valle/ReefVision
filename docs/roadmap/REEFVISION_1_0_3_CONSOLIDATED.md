@@ -23,6 +23,25 @@ Baseline: approved ReefVision 1.0.2 main line, with the candidate first-open vie
 4. Keep development in `develop/reefvision-1.0.3-consolidated` and its draft PR. No release, merge, tag, or published installer until all P0–P7 evidence is accepted and the owner authorizes publication.
 5. If a feature cannot be validated in an automated runner, document its specific Windows acceptance procedure and label the gate **UNVERIFIED**, not PASS.
 
+
+## Manual acceptance record — pending physical Windows evidence
+
+The automated CI suite is necessary but cannot establish the following installed-app behaviors. Record the exact candidate commit, Windows build, WebView2 runtime, camera model/sample hash, and installer artifact checksum for every run. Keep original scientific images immutable; use copies for testing.
+
+| Gate | Reproducible procedure | Pass evidence | Current disposition |
+| --- | --- | --- | --- |
+| Cold image / gallery | Clean-launch installed MSI, open a project with one image and then a multi-image gallery; wheel over the strip when it both fits and overflows, switch images, resize and change DPI | Screen recording with image identity, stable pixels and overlays, no page drift; Ctrl+wheel unaffected | UNVERIFIED |
+| Camera JPEG | Import real `.jpg`, `.jpeg`, `.jpe`, `.jfif`, `.jfi`, `.jif` and uppercase samples including EXIF orientation and CMYK; verify original SHA-256 before/after and raw-pixel annotations; include TIFF and PNG control samples | Camera/sample provenance, hashes, decode/thumbnail screenshots, explicit rejection evidence for malformed media | UNVERIFIED |
+| Live console | Start a CPU training job with local user-trained weights; open the external PowerShell monitor during and after the job; close the monitor mid-run | Read-only job ID, real epoch/box/cls/dfl loss log excerpts, unchanged job PID/state and uninterrupted completion | UNVERIFIED |
+| Installer | On a disposable Windows test environment, validate signed/hashed MSI and any external CAB, clean install, launch, relaunch, upgrade and uninstall without modifying real projects | Build SHA, checksums, install logs, WebView2 version, screenshots and retained data checks | UNVERIFIED |
+| Scientific regression | Reopen a representative project and compare original hashes, mask coordinates, calibration snapshots, experimental-unit assignments, verified annotations and export provenance | Reproducible before/after comparison with documented QC and uncertainty | UNVERIFIED |
+
+RTX 3090 GPU acceptance is **DEFERRED** until hardware is operational; it is not implied by CPU testing or CI. Do not mark the release ready while any required acceptance gate is unverified.
+
+### Training console acceptance details
+
+For each CPU run, capture the immutable training run ID, start/end UTC timestamps, model configuration and locally registered checkpoint identity. Confirm the external PowerShell process only polls a loopback read-only endpoint, rejects malformed run IDs, and does not spawn a second training process. Compare epoch and box/classification/distribution-focal loss values against the original job log at matching steps; distinguish absent metrics from zero values. Close the console during an active epoch and verify the training PID, status transitions, checkpoints and final metrics remain unchanged. Repeat for completed, failed, and unavailable-terminal cases. Do not claim GPU acceptance from this CPU exercise.
+
 ## First development slice
 
 - Candidate first-open viewport effect fix inherited from PR #72.

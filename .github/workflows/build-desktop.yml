@@ -30,6 +30,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Exercise the actual embedded monitor formatter on Windows before
+      # spending time packaging the multi-GB MSI/CAB payload.
+      - name: Verify read-only PowerShell monitor output sanitization
+        shell: pwsh
+        run: ./scripts/test-training-console-sanitizer.ps1
+
       # Fast safety checks run before bootstrap / the multi-GB MSI build.
       - name: Validate Windows clean-install harness safeguards
         shell: pwsh
@@ -112,16 +118,21 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-      # The previous 2.8 GB upload reported success but rv5.cab was absent
-      # after extraction on the acceptance runner. Upload all six CABs in
-      # separate bounded-size partitions so acceptance can verify every byte.
+      # A previous 2.8 GB upload lost an external CAB after extraction.
+      # Split five or six CABs into bounded artifacts; never omit a generated cabinet.
       - name: Verify CAB partition matches the packaged 1.0.3 installer
         shell: pwsh
         run: |
           $folder = 'apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi'
           $actual = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File |
             Select-Object -ExpandProperty Name | Sort-Object)
-          $expected = @('rv1.cab', 'rv2.cab', 'rv3.cab', 'rv4.cab', 'rv5.cab', 'rv6.cab')
+          # WiX can emit five or six external cabinets as dependency sizes change.
+          # Verify contiguous names; the clean-install runner checks the MSI Media
+          # table against every downloaded CAB before attempting installation.
+          if ($actual.Count -notin @(5, 6)) {
+            throw "Installer CAB count needs review: found $($actual.Count) cabinets."
+          }
+          $expected = @(1..$actual.Count | ForEach-Object { "rv$_.cab" })
           if (($actual -join ',') -ne ($expected -join ',')) {
             throw "Installer CAB partition needs review: found $($actual -join ', ')."
           }
@@ -131,10 +142,11 @@ jobs:
           }
           # GitHub artifact upload previously lost a CAB when the compressed
           # archive was too large. Fail closed if any intended part reaches 2 GiB.
+          $lastPartitionCabs = @($actual | Where-Object { $_ -in @('rv5.cab', 'rv6.cab') })
           $partitions = @(
             @{ Name = 'Part-1'; Files = @($msi[0].Name, 'rv1.cab', 'rv2.cab', 'build-provenance.json') }
             @{ Name = 'Part-2'; Files = @('rv3.cab', 'rv4.cab') }
-            @{ Name = 'Part-3'; Files = @('rv5.cab', 'rv6.cab') }
+            @{ Name = 'Part-3'; Files = $lastPartitionCabs }
           )
           foreach ($part in $partitions) {
             [long]$bytes = 0
@@ -173,7 +185,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload Windows installer CABs 5-6
+      - name: Upload Windows installer CABs 5-6 (sixth optional)
         uses: actions/upload-artifact@v4
         with:
           name: ReefVision-Windows-Installer-Part-3
@@ -198,7 +210,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Retrieve exact MSI and all six candidate CABs
+      - name: Retrieve exact MSI and all external CABs
         uses: actions/download-artifact@v4
         with:
           pattern: ReefVision-Windows-Installer-Part-*

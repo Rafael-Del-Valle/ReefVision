@@ -570,24 +570,40 @@ export function AnnotationEditor({
     }
     const preloader = new window.Image();
     let cancelled = false;
+    let decodeFallback: number | null = null;
+    let fallbackActivated = false;
     const retry = fullImageRetry;
     setImagePreload({ imageId, retry, phase: "loading" });
     preloader.decoding = "async";
     preloader.onload = () => {
+      if (cancelled) return;
       if (typeof preloader.decode !== "function") {
+        setImagePreload({ imageId, retry, phase: "loaded" });
+        return;
+      }
+      // WebView2 can fire load but leave decode() pending indefinitely.
+      // Reveal a successfully loaded image after a bounded grace period.
+      decodeFallback = window.setTimeout(() => {
+        decodeFallback = null;
+        fallbackActivated = true;
         if (!cancelled) {
           setImagePreload({ imageId, retry, phase: "loaded" });
         }
-        return;
-      }
+      }, 3_000);
       void preloader.decode().then(
         () => {
+          if (decodeFallback !== null) window.clearTimeout(decodeFallback);
+          decodeFallback = null;
           if (!cancelled) {
             setImagePreload({ imageId, retry, phase: "loaded" });
           }
         },
         () => {
-          if (!cancelled) {
+          if (decodeFallback !== null) window.clearTimeout(decodeFallback);
+          decodeFallback = null;
+          // A late rejection must not hide an image already revealed after
+          // its successful load event.
+          if (!cancelled && !fallbackActivated) {
             setImagePreload({ imageId, retry, phase: "failed" });
           }
         },
@@ -595,12 +611,15 @@ export function AnnotationEditor({
     };
     preloader.onerror = () => {
       if (!cancelled) {
+        if (decodeFallback !== null) window.clearTimeout(decodeFallback);
+        decodeFallback = null;
         setImagePreload({ imageId, retry, phase: "failed" });
       }
     };
     preloader.src = annotationImageSource(imageId, null, true, retry);
     return () => {
       cancelled = true;
+      if (decodeFallback !== null) window.clearTimeout(decodeFallback);
       preloader.onload = null;
       preloader.onerror = null;
     };

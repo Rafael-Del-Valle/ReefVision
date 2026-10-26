@@ -181,6 +181,7 @@ export function VideoTrackingWorkspace({
   const pendingMapSeekRef = useRef<PendingVideoMapSeek | null>(null);
   const mapSeekSequenceRef = useRef(0);
   const lastWorkspaceCommandIdRef = useRef(0);
+  const previousSelectedVideoIdRef = useRef("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [telemetryFile, setTelemetryFile] = useState<File | null>(null);
   const [airdataFile, setAirdataFile] = useState<File | null>(null);
@@ -532,6 +533,12 @@ export function VideoTrackingWorkspace({
     }
   }, [selectedVideoId, videosQuery.data]);
   useLayoutEffect(() => {
+    const previousVideoId = previousSelectedVideoIdRef.current;
+    previousSelectedVideoIdRef.current = selectedVideoId;
+    // The first asynchronously loaded video is not a user-initiated switch.
+    // Do not clear a pose file or its explicit frame-mapping confirmation if
+    // the user starts interacting as soon as the initial video appears.
+    if (!previousVideoId || previousVideoId === selectedVideoId) return;
     pendingMapSeekRef.current = null;
     setFrameIndex(0);
     setPreviewFrameIndex(0);

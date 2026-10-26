@@ -172,16 +172,45 @@ test("initial image and gallery scrolling", async ({ page }) => {
   };
 
   await assertDecodedAndContained(1600, 1200);
+  // Exercise the native non-passive listener in a real Chromium page, not just
+  // jsdom. Prevent wheel-driven WebView2 page movement over the preview while
+  // leaving browser zoom modifiers and zero-delta events untouched.
+  const previewWheelPolicy = () =>
+    workbench.locator(".rv-media-canvas").evaluate((canvas) => {
+      const prevented = (init: WheelEventInit) => {
+        const event = new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        });
+        canvas.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      return {
+        vertical: prevented({ deltaY: 160 }),
+        horizontal: prevented({ deltaX: 160 }),
+        ctrlZoom: prevented({ deltaY: 160, ctrlKey: true }),
+        metaZoom: prevented({ deltaY: 160, metaKey: true }),
+        zeroDelta: prevented({}),
+      };
+    });
+  const expectedPreviewWheelPolicy = {
+    vertical: true,
+    horizontal: true,
+    ctrlZoom: false,
+    metaZoom: false,
+    zeroDelta: false,
+  };
+  expect(await previewWheelPolicy()).toEqual(expectedPreviewWheelPolicy);
   const lastImage = workbench.getByRole("listitem", {
     name: "Focus camera-12.JPEG",
   });
   await lastImage.click();
   await assertDecodedAndContained(6000, 400);
+  expect(await previewWheelPolicy()).toEqual(expectedPreviewWheelPolicy);
   const filmstrip = workbench.locator(".rv-media-filmstrip");
   const scrollOffset = () =>
     filmstrip.evaluate((element) => element.scrollLeft);
-  await expect.poll(scrollOffset).toBeGreaterThan(0);
-
   // Keyboard navigation must not scroll the document or partially displace
   // the main image. Only the horizontal thumbnail filmstrip may move.
   await workbench.focus();
@@ -206,6 +235,20 @@ test("initial image and gallery scrolling", async ({ page }) => {
   expect(await page.evaluate(() => window.scrollY)).toBe(
     documentScrollBeforeNavigation,
   );
+  // Mouse-wheel input over the filmstrip must scroll thumbnails horizontally
+  // without moving the page or clipping the initial full-resolution image.
+  await filmstrip.hover();
+  // Hover may align a focused thumbnail a few pixels into view; verify
+  // wheel-driven movement relative to the post-hover position.
+  const scrollBeforeWheel = await scrollOffset();
+  const documentScrollBeforeWheel = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 280);
+  await expect.poll(scrollOffset).toBeGreaterThan(scrollBeforeWheel);
+  expect(await page.evaluate(() => window.scrollY)).toBe(
+    documentScrollBeforeWheel,
+  );
+  await assertDecodedAndContained(1600, 1200);
+
   expect(displayRequests).toContain("image-1");
   expect(displayRequests).toContain("image-12");
 });

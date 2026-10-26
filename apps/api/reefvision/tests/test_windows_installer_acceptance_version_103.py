@@ -18,40 +18,17 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-def test_six_cab_upload_partitions_are_complete_and_bounded() -> None:
-    """A sixth cabinet must not be silently omitted from uploaded MSI artifacts."""
-    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(
-        encoding="utf-8"
-    )
+def test_cab_upload_partitions_are_complete_and_bounded() -> None:
+    """Every generated cabinet must be uploaded without oversized artifact parts."""
+    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
     build_job = workflow.split("  build-windows-installer:", 1)[1].split(
         "  windows-clean-install-acceptance:", 1
     )[0]
-    expected = [f"rv{i}.cab" for i in range(1, 7)]
-    assert "$expected = @(" in build_job
-    assert "$expected = @(" + ", ".join(f"'{cab}'" for cab in expected) + ")" in build_job
+    assert "$actual.Count -notin @(5, 6)" in build_job
+    assert '$expected = @(1..$actual.Count | ForEach-Object { "rv$_.cab" })' in build_job
     assert "if ($bytes -ge 2GB)" in build_job
     assert "MSI before artifact upload" in build_job
-
-    partitions = []
-    for part in range(1, 4):
-        marker = f"name: ReefVision-Windows-Installer-Part-{part}"
-        assert build_job.count(marker) == 1
-        block = build_job.split(marker, 1)[1].split("retention-days: 14", 1)[0]
-        cab_paths = [
-            line.strip().rsplit("/", 1)[-1]
-            for line in block.splitlines()
-            if "/rv" in line and line.strip().endswith(".cab")
-        ]
-        partitions.append(cab_paths)
-
-    assert partitions == [
-        ["rv1.cab", "rv2.cab"],
-        ["rv3.cab", "rv4.cab"],
-        ["rv5.cab", "rv6.cab"],
-    ]
-    assert [cab for partition in partitions for cab in partition] == expected
-    assert "merge-multiple: true" in workflow
-    assert "MSI/CAB mismatch." in workflow
+    assert MODULE.check_cab_artifact_partition(workflow) == []
 
 
 def test_repository_workflow_matches_tauri_version() -> None:
@@ -267,3 +244,69 @@ def test_mixed_msi_versions_are_rejected() -> None:
 def test_missing_provenance_guard_is_rejected(required_fragment: str) -> None:
     workflow = valid_workflow().replace(required_fragment, "REMOVED")
     assert any("provenance" in error.lower() for error in MODULE.check_workflow(workflow, "1.0.3"))
+
+
+CAB_WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
+
+
+def test_windows_cab_guard_accepts_five_or_six_contiguous_cabinets() -> None:
+    """CAB counts vary with payload size; the MSI Media table remains authoritative."""
+    assert "$actual.Count -notin @(5, 6)" in CAB_WORKFLOW
+    assert '$expected = @(1..$actual.Count | ForEach-Object { "rv$_.cab" })' in CAB_WORKFLOW
+    assert "MSI-declared cabinet payload" in CAB_WORKFLOW
+
+    modified = CAB_WORKFLOW.replace(
+        "$lastPartitionCabs = @($actual | Where-Object { $_ -in @('rv5.cab', 'rv6.cab') })",
+        "$lastPartitionCabs = @('rv5.cab', 'rv6.cab')",
+        1,
+    )
+    assert any(
+        "derive its final size-check partition" in error
+        for error in MODULE.check_cab_artifact_partition(modified)
+    )
+
+
+def test_windows_cab_artifact_manifest_preflight_matches_real_workflow() -> None:
+    assert MODULE.check_cab_artifact_partition(CAB_WORKFLOW) == []
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        ("msi/rv4.cab", "msi/rv3.cab"),
+        ("msi/rv6.cab", "msi/rv7.cab"),
+        ("name: ReefVision-Windows-Installer-Part-3", "name: ReefVision-Windows-Installer-Part-2"),
+        ("pattern: ReefVision-Windows-Installer-Part-*", "pattern: unrelated-*"),
+        ("merge-multiple: true", "merge-multiple: false"),
+        ("msi/*.msi", "msi/incorrect.msi"),
+    ],
+)
+def test_windows_cab_preflight_rejects_missing_or_duplicated_artifacts(
+    original: str, replacement: str
+) -> None:
+    assert original in CAB_WORKFLOW
+    modified = CAB_WORKFLOW.replace(original, replacement, 1)
+    assert MODULE.check_cab_artifact_partition(modified)
+
+
+def test_windows_cab_preflight_requires_missing_file_upload_failure() -> None:
+    assert "if-no-files-found: error" in CAB_WORKFLOW
+    modified = CAB_WORKFLOW.replace("if-no-files-found: error", "if-no-files-found: warn", 1)
+    assert any(
+        "must reject missing upload files" in error
+        for error in MODULE.check_cab_artifact_partition(modified)
+    )
+
+
+def test_windows_cab_preflight_rejects_removed_msi_media_verification() -> None:
+    for required in (
+        "$database.OpenView('SELECT `Cabinet` FROM `Media`')",
+        "$missing = @($requiredCabs | Where-Object { $_ -notin $actualCabs })",
+        "$unexpected = @($actualCabs | Where-Object { $_ -notin $requiredCabs })",
+    ):
+        assert required in CAB_WORKFLOW
+        modified = CAB_WORKFLOW.replace(required, "# removed", 1)
+        assert any(
+            "must verify MSI Media table" in error
+            for error in MODULE.check_cab_artifact_partition(modified)
+        )

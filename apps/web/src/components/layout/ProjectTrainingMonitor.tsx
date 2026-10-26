@@ -26,9 +26,15 @@ function metricEntries(run: TrainingRun): Array<[string, number]> {
   const latest = new Map<string, number>();
   for (const [key, values] of Object.entries(run.metrics_history ?? {})) {
     if (!Array.isArray(values)) continue;
-    const value = values.at(-1);
-    if (typeof value === "number" && Number.isFinite(value)) {
-      latest.set(key, value);
+    // An in-progress epoch can append a missing or non-finite sample before
+    // the next loss is available. Retain the last real observation instead
+    // of making the box/cls/dfl metric disappear from the live monitor.
+    for (let index = values.length - 1; index >= 0; index -= 1) {
+      const value = values[index];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        latest.set(key, value);
+        break;
+      }
     }
   }
   for (const [key, value] of Object.entries(run.metrics ?? {})) {
@@ -249,7 +255,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                   <p className="form-error">{run.error_message}</p>
                 )}
 
-                {active && showPowerShell && (
+                {showPowerShell && (
                   <button
                     type="button"
                     className="secondary"

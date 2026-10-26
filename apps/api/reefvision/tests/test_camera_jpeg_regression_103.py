@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
+from threading import Barrier, Lock
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from reefvision.storage.images import create_browser_display, create_thumbnail
+from reefvision.storage import images as image_storage
+from reefvision.storage.images import _capture_timestamp, create_browser_display, create_thumbnail
 from reefvision.tests.test_images import create_project, import_one
 
 
@@ -91,6 +96,91 @@ def test_truncated_camera_jpeg_rejected_before_import_commit(
 
 
 @pytest.mark.parametrize(
+    ("image_format", "extension", "truncated_bytes"),
+    [
+        ("TIFF", ".tiff", 20),
+        ("BMP", ".bmp", 20),
+        ("BMP", ".dib", 20),
+        ("GIF", ".gif", 10),
+    ],
+)
+def test_truncated_static_scientific_image_rejected_before_import_commit(
+    client: TestClient,
+    image_format: str,
+    extension: str,
+    truncated_bytes: int,
+) -> None:
+    """Pillow verify() alone can accept a file with missing image pixels."""
+    project = create_project(client, f"Truncated {image_format}")
+    stream = BytesIO()
+    Image.new("RGB", (120, 100), (20, 90, 120)).save(stream, format=image_format)
+    truncated = stream.getvalue()[:-truncated_bytes]
+
+    report = import_one(
+        client, project["id"], filename=f"CAMERA_0002{extension}", content=truncated
+    )
+    assert not report["successful"], report
+    assert len(report["failed"]) == 1, report
+
+
+def test_multi_page_tiff_is_not_silently_imported_as_one_image(client: TestClient) -> None:
+    """A scientific image stack must not be mistaken for a single 2D exposure."""
+    project = create_project(client, "Multi-page TIFF")
+    stream = BytesIO()
+    first = Image.new("RGB", (40, 30), (20, 90, 120))
+    second = Image.new("RGB", (40, 30), (120, 90, 20))
+    first.save(stream, format="TIFF", save_all=True, append_images=[second])
+
+    report = import_one(
+        client, project["id"], filename="CAMERA_STACK.TIFF", content=stream.getvalue()
+    )
+    assert not report["successful"], report
+    assert not report["failed"], report
+    assert len(report["unsupported"]) == 1, report
+    assert report["unsupported"][0]["status"] == "unsupported"
+    assert "Multi-page TIFF" in report["unsupported"][0]["detail"]
+
+
+@pytest.mark.parametrize(
+    ("format_name", "extension"),
+    [("PNG", ".png"), ("WEBP", ".webp")],
+)
+def test_animated_still_image_formats_are_rejected_without_losing_frames(
+    client: TestClient, format_name: str, extension: str
+) -> None:
+    """APNG and animated WebP must not silently become one-frame observations."""
+    project = create_project(client, f"Animated {format_name} scientific image")
+    stream = BytesIO()
+    first = Image.new("RGB", (40, 30), (240, 20, 20))
+    second = Image.new("RGB", (40, 30), (20, 20, 240))
+    first.save(
+        stream,
+        format=format_name,
+        save_all=True,
+        append_images=[second],
+        duration=100,
+        loop=0,
+    )
+    payload = stream.getvalue()
+    with Image.open(BytesIO(payload)) as decoded:
+        assert decoded.n_frames == 2  # A real animated fixture, not a still.
+
+    report = import_one(
+        client,
+        project["id"],
+        filename=f"TIME_SERIES{extension.upper()}",
+        content=payload,
+    )
+    assert not report["successful"], report
+    assert not report["failed"], report
+    assert len(report["unsupported"]) == 1, report
+    assert "Multi-frame" in report["unsupported"][0]["detail"]
+    gallery = client.get(f"/api/v1/projects/{project['id']}/images")
+    assert gallery.status_code == 200
+    assert gallery.json()["total"] == 0
+
+
+@pytest.mark.parametrize(
     ("orientation", "expected"),
     [
         (1, (64, 48)),
@@ -123,23 +213,11 @@ def test_camera_display_exif_orientation_preserves_original(
         assert camera.getexif().get(274) == orientation
 
 
-@pytest.mark.parametrize(
-    ("orientation", "quadrant_order"),
-    [
-        (1, (0, 1, 2, 3)),
-        (2, (1, 0, 3, 2)),
-        (3, (3, 2, 1, 0)),
-        (4, (2, 3, 0, 1)),
-        (5, (0, 2, 1, 3)),
-        (6, (2, 0, 3, 1)),
-        (7, (3, 1, 2, 0)),
-        (8, (1, 3, 0, 2)),
-    ],
-)
-def test_camera_exif_display_preserves_source_pixels_while_thumbnail_is_oriented(
-    tmp_path: Path, orientation: int, quadrant_order: tuple[int, int, int, int]
+@pytest.mark.parametrize("orientation", range(1, 9))
+def test_camera_exif_orientation_keeps_display_and_thumbnail_pixels_aligned(
+    tmp_path: Path, orientation: int
 ) -> None:
-    """Keep editor coordinates source-aligned while orienting the gallery thumbnail."""
+    """Detect incorrect mirrored/rotated camera pixels, not just swapped dimensions."""
 
     source = tmp_path / "DSC_0043.JPEG"
     display = tmp_path / "display.png"
@@ -156,26 +234,19 @@ def test_camera_exif_display_preserves_source_pixels_while_thumbnail_is_oriented
     create_browser_display(source, display)
     create_thumbnail(source, thumbnail, max_width=160, max_height=160)
 
+    # The scientific coordinate frame is the original, unrotated camera raster.
+    expected_size = (80, 60)
     sample_points = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)]
-    with Image.open(display) as rendered:
-        assert rendered.size == (80, 60)
-        assert rendered.getexif().get(274) is None
-        for (fx, fy), expected in zip(sample_points, colors, strict=True):
-            actual = rendered.convert("RGB").getpixel(
-                (int(rendered.width * fx), int(rendered.height * fy))
-            )
-            assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
-
-    expected_thumbnail_size = (80, 60) if orientation <= 4 else (60, 80)
-    with Image.open(thumbnail) as rendered:
-        assert rendered.size == expected_thumbnail_size
-        assert rendered.getexif().get(274) is None
-        for (fx, fy), color_index in zip(sample_points, quadrant_order, strict=True):
-            actual = rendered.convert("RGB").getpixel(
-                (int(rendered.width * fx), int(rendered.height * fy))
-            )
-            expected = colors[color_index]
-            assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
+    for rendition in (display, thumbnail):
+        with Image.open(rendition) as rendered:
+            assert rendered.size == expected_size
+            assert rendered.getexif().get(274) is None
+            for (fx, fy), color_index in zip(sample_points, (0, 1, 2, 3), strict=True):
+                actual = rendered.convert("RGB").getpixel(
+                    (int(rendered.width * fx), int(rendered.height * fy))
+                )
+                expected = colors[color_index]
+                assert all(abs(a - b) < 35 for a, b in zip(actual, expected, strict=True))
     assert source.read_bytes() == original
 
 
@@ -220,6 +291,269 @@ def test_non_rgb_camera_jpeg_source_aligned_display_and_oriented_thumbnail(
         assert rendered.getexif().get(274) is None
     with Image.open(thumbnail) as rendered:
         assert rendered.mode == "RGB"
-        assert rendered.size == (60, 80)
+        assert rendered.size == (80, 60)
         assert rendered.getexif().get(274) is None
     assert source.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("timestamp_tag", "offset_tag"),
+    [(36867, 36881), (36868, 36882), (306, 36880)],
+)
+@pytest.mark.parametrize(
+    ("offset", "expected_utc"),
+    [("-04:00", "2026-10-01T16:30:00"), ("+05:30", "2026-10-01T07:00:00")],
+)
+def test_camera_exif_offset_normalizes_capture_time_without_mutating_original(
+    client: TestClient,
+    timestamp_tag: int,
+    offset_tag: int,
+    offset: str,
+    expected_utc: str,
+) -> None:
+    """Explicit camera-local EXIF offsets must yield correct UTC acquisition time."""
+    project = create_project(client, "Camera EXIF timezone")
+    exif = Image.Exif()
+    exif[timestamp_tag] = "2026:10:01 12:30:00"
+    exif[offset_tag] = offset
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_TIME.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"].startswith(expected_utc)
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+def test_invalid_camera_exif_offset_does_not_invent_utc_capture_time(
+    client: TestClient,
+) -> None:
+    """A malformed explicit offset must not silently be interpreted as UTC."""
+    project = create_project(client, "Invalid camera EXIF timezone")
+    exif = Image.Exif()
+    exif[36867] = "2026:10:01 12:30:00"
+    exif[36881] = "not-an-offset"
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_INVALID_TIME.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"] is None
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+@pytest.mark.parametrize(
+    ("offset", "expected_utc"),
+    [("-04:00", "2026-10-01T16:30:00"), ("+05:30", "2026-10-01T07:00:00")],
+)
+def test_real_camera_nested_exif_ifd_capture_time_and_provenance(
+    client: TestClient, offset: str, expected_utc: str
+) -> None:
+    """Real camera DateTimeOriginal lives in ExifIFD, not the top-level tags."""
+    project = create_project(client, "Camera nested EXIF IFD")
+    exif = Image.Exif()
+    # The top-level timestamp must not override the acquisition timestamp.
+    exif[306] = "2026:09:30 08:00:00"
+    exif[34665] = {36867: "2026:10:01 12:30:00", 36881: offset}
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_SUBIFD.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"].startswith(expected_utc)
+    exif_metadata = metadata["metadata_json"]["exif"]
+    assert exif_metadata["DateTimeOriginal"] == "2026:10:01 12:30:00"
+    assert exif_metadata["OffsetTimeOriginal"] == offset
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+@pytest.mark.parametrize(
+    ("timestamp_tag", "offset_tag", "subsec_tag", "subsec_name"),
+    [
+        (36867, 36881, 37521, "SubsecTimeOriginal"),
+        (36868, 36882, 37522, "SubsecTimeDigitized"),
+        (306, 36880, 37520, "SubsecTime"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("subseconds", "expected_fraction"),
+    [
+        ("123", ".123000"),
+        ("000045", ".000045"),
+        ("123456789", ".123456"),
+        ("not-a-fraction", ""),
+    ],
+)
+def test_camera_exif_subseconds_preserve_acquisition_precision_and_original(
+    client: TestClient,
+    timestamp_tag: int,
+    offset_tag: int,
+    subsec_tag: int,
+    subsec_name: str,
+    subseconds: str,
+    expected_fraction: str,
+) -> None:
+    """Subsecond EXIF timestamps must not be lost or borrowed across camera fields."""
+    project = create_project(client, "Camera EXIF subsecond precision")
+    exif = Image.Exif()
+    tags = {
+        timestamp_tag: "2026:10:01 12:30:00",
+        offset_tag: "-04:00",
+        subsec_tag: subseconds,
+    }
+    if timestamp_tag == 306:
+        exif.update(tags)
+    else:
+        exif[34665] = tags
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_SUBSECOND.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"].startswith(f"2026-10-01T16:30:00{expected_fraction}")
+    assert metadata["capture_timestamp"].endswith(("Z", "+00:00"))
+    assert metadata["metadata_json"]["exif"][subsec_name] == subseconds
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+@pytest.mark.parametrize(
+    ("primary_timestamp", "primary_offset"),
+    [
+        ("not-a-date", "-04:00"),
+        ("2026:10:01 12:30:00", "invalid-offset"),
+        (b"\xff", "-04:00"),
+        ("2026:10:01 12:30:00", b"\xff"),
+    ],
+)
+def test_malformed_exposure_exif_does_not_fall_back_to_digitization_or_file_time(
+    primary_timestamp: str | bytes, primary_offset: str | bytes
+) -> None:
+    """A later digitization/file timestamp is not a valid exposure-time substitute."""
+    exif = {
+        36867: primary_timestamp,
+        36881: primary_offset,
+        36868: "2026:10:02 13:00:00",
+        36882: "+00:00",
+        306: "2026:10:03 14:00:00",
+    }
+    assert _capture_timestamp(exif) is None
+
+
+def test_camera_exif_ascii_byte_strings_keep_explicit_offset_and_subseconds() -> None:
+    """Preserve acquisition time when camera decoders expose EXIF ASCII as bytes."""
+    exif = {
+        36867: b"2026:10:01 12:30:00\x00",
+        36881: b"-04:00\x00",
+        37521: b"123",
+    }
+    assert _capture_timestamp(exif) == datetime(2026, 10, 1, 16, 30, 0, 123000, tzinfo=UTC)
+
+
+def test_malformed_camera_exposure_does_not_become_digitized_time_in_api(
+    client: TestClient,
+) -> None:
+    """Persist the image without mislabeling a later processing time as capture time."""
+    project = create_project(client, "Malformed camera exposure time")
+    exif = Image.Exif()
+    exif[306] = "2026:10:03 14:00:00"
+    exif[34665] = {
+        36867: "2026:10:01 12:30:00",
+        36881: "invalid-offset",
+        36868: "2026:10:02 13:00:00",
+        36882: "+00:00",
+    }
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+    report = import_one(client, project["id"], filename="DSC_BAD_OFFSET.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"] is None
+    assert metadata["metadata_json"]["exif"]["DateTimeDigitized"] == "2026:10:02 13:00:00"
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+def test_parallel_camera_renditions_use_unique_temporary_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rendition: str
+) -> None:
+    """Concurrent thumbnail/display jobs must never delete or reuse another job's .part."""
+    source = tmp_path / "CAMERA.JPEG"
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumb.jpg")
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(source, format="JPEG")
+    original_bytes = source.read_bytes()
+    original_save = Image.Image.save
+    barrier = Barrier(2)
+    lock = Lock()
+    temporary_paths: list[Path] = []
+
+    def synchronized_save(image: Image.Image, fp: str | Path, *args: Any, **kwargs: Any) -> None:
+        with lock:
+            temporary_paths.append(Path(fp))
+        # Both workers must have chosen their temporary file before either
+        # writes or atomically replaces the final destination.
+        barrier.wait(timeout=20)
+        original_save(image, fp, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", synchronized_save)
+
+    def render() -> None:
+        if rendition == "display":
+            create_browser_display(source, destination)
+        else:
+            create_thumbnail(source, destination, max_width=128, max_height=128)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = [executor.submit(render) for _ in range(2)]
+        for result in results:
+            result.result(timeout=30)
+
+    assert len(temporary_paths) == 2
+    assert temporary_paths[0] != temporary_paths[1]
+    assert all(path.parent == tmp_path and not path.exists() for path in temporary_paths)
+    with Image.open(destination) as rendered:
+        rendered.load()
+        assert rendered.size == (64, 48)
+    assert source.read_bytes() == original_bytes
+
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+def test_camera_rendition_retries_transient_windows_replace_denial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rendition: str
+) -> None:
+    """A brief Windows destination lock must not fail an otherwise valid rendition."""
+    source = tmp_path / "CAMERA.JPEG"
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumb.jpg")
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(source, format="JPEG")
+    original_replace = image_storage.os.replace
+    attempts = 0
+
+    def transient_denial(source_path: Path, destination_path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise PermissionError("transient destination lock")
+        original_replace(source_path, destination_path)
+
+    monkeypatch.setattr(image_storage.os, "replace", transient_denial)
+
+    if rendition == "display":
+        create_browser_display(source, destination)
+    else:
+        create_thumbnail(source, destination, max_width=128, max_height=128)
+
+    assert attempts == 2
+    assert destination.exists()

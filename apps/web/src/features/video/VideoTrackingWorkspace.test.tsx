@@ -825,6 +825,11 @@ describe("VideoTrackingWorkspace", () => {
     );
     const importButton = screen.getByRole("button", { name: "Import pose" });
     await waitFor(() => expect(importButton).toBeEnabled());
+    expect(
+      screen.getByRole("checkbox", {
+        name: /I confirm external frame indices correspond to this video/,
+      }),
+    ).toBeChecked();
     fireEvent.click(importButton);
 
     await waitFor(() =>
@@ -842,37 +847,53 @@ describe("VideoTrackingWorkspace", () => {
     expect(screen.getByText("Frame mapping confirmed.")).toBeInTheDocument();
   });
 
-  it("clears pending external pose imports when the target video changes", async () => {
-    const [originalVideo] = await api.getVideos(project.id);
+  it("clears unsubmitted pose import and frame confirmation when switching videos", async () => {
+    const existingVideos = await api.getVideos(project.id);
     vi.mocked(api.getVideos).mockResolvedValue([
-      originalVideo,
+      ...existingVideos,
       {
-        ...originalVideo,
+        ...existingVideos[0],
         id: "video-2",
-        original_filename: "other-fish.mp4",
+        original_filename: "second-video.mp4",
       },
     ]);
     renderWorkspace();
-    await screen.findByRole("heading", { name: "Pose interoperability" });
+    expect(
+      await screen.findByRole("heading", { name: "Pose interoperability" }),
+    ).toBeInTheDocument();
 
-    const poseFile = new File(["pose"], "external.slp", {
-      type: "application/octet-stream",
-    });
     fireEvent.change(
       screen.getByLabelText("Pose interoperability import file"),
-      { target: { files: [poseFile] } },
+      {
+        target: {
+          files: [
+            new File(["pose"], "unsubmitted.slp", {
+              type: "application/octet-stream",
+            }),
+          ],
+        },
+      },
     );
-    const importButton = screen.getByRole("button", { name: "Import pose" });
-    await waitFor(() => expect(importButton).toBeEnabled());
+    const confirmation = screen.getByRole("checkbox", {
+      name: /I confirm external frame indices correspond to this video/,
+    });
+    fireEvent.click(confirmation);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Import pose" })).toBeEnabled(),
+    );
+    expect(confirmation).toBeChecked();
 
-    fireEvent.change(screen.getByLabelText("Video", { exact: true }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Video" }), {
       target: { value: "video-2" },
     });
-    await waitFor(() => expect(importButton).toBeDisabled());
+    await waitFor(() => expect(confirmation).not.toBeChecked());
+    expect(screen.getByRole("button", { name: "Import pose" })).toBeDisabled();
     expect(
-      (screen.getByLabelText(
-        "Pose interoperability import file",
-      ) as HTMLInputElement).files,
+      (
+        screen.getByLabelText(
+          "Pose interoperability import file",
+        ) as HTMLInputElement
+      ).files,
     ).toHaveLength(0);
     expect(poseInteropApi.importPoseInteroperability).not.toHaveBeenCalled();
   });

@@ -34,6 +34,151 @@ def test_log_tail_is_bounded_and_read_only(tmp_path: Path) -> None:
     assert log.read_bytes() == original
 
 
+def test_log_tail_discards_truncated_first_metric_line(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = b"train/box_loss=999" + b"x" * 20000 + b"\ntrain/box_loss=0.25\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "train/box_loss=0.25\n",
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_keeps_complete_line_at_tail_boundary(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    complete_tail = b"epoch=1\n" * 2048  # Exactly 16 KiB, all complete lines.
+    original = b"older epoch\n" + complete_tail
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": complete_tail.decode("utf-8"),
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_omits_oversized_unterminated_line(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = b"train/cls_loss=" + b"9" * 20000
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "",
+    }
+    assert log.read_bytes() == original
+
+
+def test_live_log_tail_waits_for_complete_loss_record(tmp_path: Path) -> None:
+    """An in-progress worker write must not look like a finished loss value."""
+    log = tmp_path / "training.log"
+    partial = b"epoch=3\ntrain/box_loss=0."
+    log.write_bytes(partial)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "epoch=3\n",
+    }
+    assert log.read_bytes() == partial
+
+    with log.open("ab") as handle:
+        handle.write(b"25\ntrain/cls_loss=0.3")
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "epoch=3\ntrain/box_loss=0.25\n",
+    }
+
+    with log.open("ab") as handle:
+        handle.write(b"0\ntrain/dfl_loss=0.10\n")
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": ("epoch=3\ntrain/box_loss=0.25\ntrain/cls_loss=0.30\ntrain/dfl_loss=0.10\n"),
+    }
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("training", "epoch=3\n"),
+        ("cancel_requested", "epoch=3\n"),
+        ("completed", "epoch=3\ntrain/dfl_loss=0.10"),
+        ("failed", "epoch=3\ntrain/dfl_loss=0.10"),
+        ("cancelled", "epoch=3\ntrain/dfl_loss=0.10"),
+    ],
+)
+def test_training_log_api_preserves_final_loss_only_after_run_ends(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+    expected: str,
+) -> None:
+    """A terminal run's last loss is complete even without a final newline."""
+    log = test_settings.resolved_data_dir / "training.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    original = b"epoch=3\ntrain/dfl_loss=0.10"
+    log.write_bytes(original)
+
+    def fake_service(_request: object, _session: object) -> SimpleNamespace:
+        def get_run(_run_id: str) -> SimpleNamespace:
+            return SimpleNamespace(logs_path=str(log), status=status)
+
+        return SimpleNamespace(get_run=get_run)
+
+    monkeypatch.setattr(training_routes, "service", fake_service)
+    response = client.get("/api/v1/training-runs/run-1/logs/tail")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {"available": True, "text": expected}
+    assert log.read_bytes() == original
+
+
+def test_live_log_tail_accepts_carriage_return_progress_records(
+    tmp_path: Path,
+) -> None:
+    """CR progress is complete, but the currently written line is not."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\rtrain/box_loss=0.22\rtrain/dfl_loss=0."
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "epoch=4\ntrain/box_loss=0.22\n",
+    }
+    assert log.read_bytes() == original
+
+
+def test_live_log_tail_normalizes_windows_crlf_without_blank_records(
+    tmp_path: Path,
+) -> None:
+    """Windows CRLF logs and CR progress should produce one line per record."""
+    log = tmp_path / "training.log"
+    original = b"epoch=5\r\ntrain/box_loss=0.20\r\ntrain/cls_loss=0.30\rtrain/dfl_loss=0.10\r\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "epoch=5\ntrain/box_loss=0.20\ntrain/cls_loss=0.30\ntrain/dfl_loss=0.10\n",
+    }
+    assert log.read_bytes() == original
+
+
+def test_live_log_tail_omits_unterminated_only_record(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = b"train/box_loss=0.2"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "",
+    }
+    assert log.read_bytes() == original
+
+
 @pytest.mark.parametrize("filename", ["../private.log", "reefvision.db", "private.csv"])
 def test_log_tail_rejects_unsafe_paths(tmp_path: Path, filename: str) -> None:
     if filename.startswith("../"):
@@ -59,6 +204,90 @@ def test_log_tail_strips_terminal_control_sequences(tmp_path: Path) -> None:
     assert result == {
         "available": True,
         "text": "Epoch 2\ntrain/box_loss=0.25\n",
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_strips_hyperlinks_graphics_and_carriage_return_rewrites(
+    tmp_path: Path,
+) -> None:
+    """Terminal payloads cannot spoof or overwrite actual persisted loss values."""
+    log = tmp_path / "training.log"
+    original = (
+        b"epoch 3\rtrain/box_loss=0.20\n"
+        b"\x1b]8;;https://example.invalid\x1b\\"
+        b"train/cls_loss=0.30"
+        b"\x1b]8;;\x1b\\\n"
+        b"\x1bPgraphics payload\x1b\\"
+        b"\x1b_private APC payload\x1b\\"
+        b"\x1b^private PM payload\x1b\\"
+        b"\x1b[2Ktrain/dfl_loss=0.10\n"
+    )
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": ("epoch 3\ntrain/box_loss=0.20\ntrain/cls_loss=0.30\ntrain/dfl_loss=0.10\n"),
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_discards_unterminated_terminal_title(tmp_path: Path) -> None:
+    log = tmp_path / "training.log"
+    original = b"train/box_loss=0.25\n\x1b]0;Spoofed terminal title"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "train/box_loss=0.25\n",
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_strips_bidi_spoofing(tmp_path: Path) -> None:
+    """Invisible Unicode direction controls must not spoof scientific losses."""
+    log = tmp_path / "training.log"
+    original = (
+        "train/box_loss=\u202e0.25\u202c\n"
+        "train/cls_loss=\u20660.30\u2069\n"
+        "train/dfl_loss=\u200e0.10\u200f\n"
+        "sensor=24 °C; scale=10 µm\n"
+    ).encode("utf-8")
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "train/box_loss=0.25\n"
+            "train/cls_loss=0.30\n"
+            "train/dfl_loss=0.10\n"
+            "sensor=24 °C; scale=10 µm\n"
+        ),
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_strips_zero_width_controls_without_losing_scientific_units(
+    tmp_path: Path,
+) -> None:
+    """Invisible Unicode must not split or disguise actual persisted loss labels."""
+    log = tmp_path / "training.log"
+    original = (
+        "train/box\u200b_loss=0.25\n"
+        "train/cls\u2060_loss=0.30\n"
+        "train/dfl\u2028_loss=0.10\u2029\n"
+        "sensor=24 °C; scale=10 µm\n"
+    ).encode("utf-8")
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "train/box_loss=0.25\n"
+            "train/cls_loss=0.30\n"
+            "train/dfl_loss=0.10\n"
+            "sensor=24 °C; scale=10 µm\n"
+        ),
     }
     assert log.read_bytes() == original
 

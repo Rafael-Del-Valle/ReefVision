@@ -174,14 +174,28 @@ fn open_training_console(state: State<'_, DesktopState>, run_id: String) -> Resu
             + r#"
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# User-supplied run names, metric labels, and error messages are not
+# terminal commands. Strip ANSI/C1 escape strings and invisible controls
+# from displayed fields only; do not modify persisted run provenance.
+function Format-SafeText {
+  param([AllowNull()][object]$Value)
+  if ($null -eq $Value) { return '' }
+  $text = [string]$Value
+  $text = [regex]::Replace($text, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\|$)', '')
+  $text = [regex]::Replace($text, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
+  $text = [regex]::Replace($text, '(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]', '')
+  $text = [regex]::Replace($text, '\x1b[ -/]*[@-_]', '')
+  $text = [regex]::Replace($text, '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]', ' ')
+  return $text
+}
 Write-Host 'ReefVision training monitor (read-only). Close this window to stop monitoring.'
 while ($true) {
   try {
     $run = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10
     Clear-Host
-    Write-Host ('ReefVision - {0}' -f $run.run_name)
-    Write-Host ('Status: {0} | Stage: {1}' -f $run.status, $run.stage)
-    Write-Host ('Epoch: {0} / {1}' -f $run.progress_epoch, $run.progress_total_epochs)
+    Write-Host ('ReefVision - {0}' -f (Format-SafeText $run.run_name))
+    Write-Host ('Status: {0} | Stage: {1}' -f (Format-SafeText $run.status), (Format-SafeText $run.stage))
+    Write-Host ('Epoch: {0} / {1}' -f (Format-SafeText $run.progress_epoch), (Format-SafeText $run.progress_total_epochs))
     # Some training providers persist losses as epoch histories, while
     # others include the newest values in the summary metrics object.
     # Show both without inventing unavailable fields.
@@ -207,14 +221,14 @@ while ($true) {
       Write-Host ''
       Write-Host 'Training losses'
       foreach ($key in $trainingLosses) {
-        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f $key, $latestMetrics[$key]) }
+        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key])) }
       }
     }
     if (@($validationLosses | Where-Object { $latestMetrics.ContainsKey($_) }).Count -gt 0) {
       Write-Host ''
       Write-Host 'Validation losses'
       foreach ($key in $validationLosses) {
-        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f $key, $latestMetrics[$key]) }
+        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key])) }
       }
     }
     $otherMetrics = @($latestMetrics.Keys | Where-Object {
@@ -224,7 +238,7 @@ while ($true) {
       Write-Host ''
       Write-Host 'Other model metrics'
       foreach ($key in $otherMetrics) {
-        Write-Host ('  {0,-30} {1}' -f $key, $latestMetrics[$key])
+        Write-Host ('  {0,-30} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]))
       }
     }
     # The API reads only the persisted run log, with path confinement and a
@@ -236,7 +250,9 @@ while ($true) {
         Write-Host 'Training job log (last 20 lines, read-only)'
         $logLines = @($tail.text -split '\r?\n' | Where-Object { $_ -ne '' })
         foreach ($line in ($logLines | Select-Object -Last 20)) {
-          Write-Host $line
+          # Training logs are untrusted terminal text, just like run metadata.
+          # Sanitize the displayed copy; never rewrite persisted log bytes.
+          Write-Host (Format-SafeText $line)
         }
       } else {
         Write-Host 'No persisted training job log available yet.'
@@ -244,13 +260,13 @@ while ($true) {
     } catch {
       Write-Host 'Training job log unavailable (status/metrics remain live).'
     }
-    if ($run.error_message) { Write-Host ('Error: {0}' -f $run.error_message) }
+    if ($run.error_message) { Write-Host ('Error: {0}' -f (Format-SafeText $run.error_message)) }
     if ($run.status -in @('completed', 'failed', 'cancelled')) {
       Write-Host 'Run ended. This window can now be closed.'
       break
     }
   } catch {
-    Write-Host ('Waiting for ReefVision training status: {0}' -f $_.Exception.Message)
+    Write-Host ('Waiting for ReefVision training status: {0}' -f (Format-SafeText $_.Exception.Message))
   }
   Start-Sleep -Seconds 2
 }
