@@ -27,6 +27,7 @@ WorkflowDataType = Literal[
     "longitudinal_analysis",
     "ecology_identity_registry",
     "ecology_measurement_candidates",
+    "ecology_measurement_csv",
     "ecology_candidate_report",
     "paired_count_comparison",
     "relative_depth_maps",
