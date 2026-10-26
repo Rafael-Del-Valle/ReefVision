@@ -922,7 +922,13 @@ export function Gallery({
                   <span className="rv-filmstrip-thumbnail">
                     {image.thumbnail_path ? (
                       <img
-                        src={imageThumbnailUrl(image.id)}
+                        key={image.thumbnail_path}
+                        src={focusedImageUrl(
+                          image.id,
+                          true,
+                          0,
+                          image.thumbnail_path,
+                        )}
                         alt=""
                         loading="lazy"
                         decoding="async"
