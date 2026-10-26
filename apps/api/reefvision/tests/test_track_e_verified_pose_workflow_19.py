@@ -179,7 +179,8 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         artifact = session.get(WorkflowArtifact, outputs[0]["id"])
         assert artifact is not None
         original_payload = dict(artifact.payload_json)
-        artifact.payload_json = {**original_payload, "dataset_id": "changed-after-execution"}
+        tampered_payload = {**original_payload, "dataset_id": "changed-after-execution"}
+        artifact.payload_json = tampered_payload
         session.commit()
 
     corrupted_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
