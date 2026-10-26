@@ -286,7 +286,13 @@ def commit_staged_image(staged_path: Path, destination: Path) -> None:
         # Some Windows removable filesystems (notably exFAT/FAT) do not
         # support hard links. Exclusively create and fsync the destination
         # instead; never fall back to an overwriting rename.
-        unsupported = {errno.EPERM, errno.EACCES, errno.EXDEV, errno.ENOTSUP}
+        unsupported = {
+            errno.EPERM,
+            errno.EACCES,
+            errno.EXDEV,
+            errno.ENOTSUP,
+            errno.EOPNOTSUPP,
+        }
         if exc.errno not in unsupported and getattr(exc, "winerror", None) not in {1, 50}:
             raise
         created = False
