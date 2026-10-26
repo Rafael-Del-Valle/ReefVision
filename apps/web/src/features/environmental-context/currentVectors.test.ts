@@ -41,6 +41,14 @@ it("computes speed and direction toward true north from east/north components", 
   expect(vectors[0].speed).toBe(5);
   expect(vectors[0].bearing).toBeCloseTo(36.86989765);
 });
+it("omits a derived current whose magnitude overflows despite finite components", () => {
+  expect(
+    currentVectors([
+      component("current_eastward_velocity", Number.MAX_VALUE),
+      component("current_northward_velocity", Number.MAX_VALUE),
+    ]),
+  ).toEqual([]);
+});
 it.each([
   [0, 1, 0],
   [1, 0, 90],
