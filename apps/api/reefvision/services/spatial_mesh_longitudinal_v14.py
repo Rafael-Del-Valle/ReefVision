@@ -7,6 +7,8 @@ from math import atan2, degrees, exp, hypot, isclose, isfinite, log
 from re import fullmatch
 from typing import Any
 
+from pydantic import ValidationError
+
 from reefvision.schemas.spatial_mesh_preview_v14 import (
     MeshRegistrationEvidence,
     MeshReidentificationEvidence,
@@ -528,8 +530,6 @@ def compare_mesh_observations(
             # Keep controlled scientific precondition errors actionable while
             # rejecting malformed fields with the existing generic message.
             # Pydantic's validation details may include caller-supplied input.
-            from pydantic import ValidationError
-
             bounds_error = (
                 "Centroid separation bounds require a transform and all three error bounds"
             )
