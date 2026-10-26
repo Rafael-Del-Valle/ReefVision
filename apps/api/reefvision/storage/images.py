@@ -351,7 +351,13 @@ def create_browser_display(source: Path, destination: Path) -> None:
             display: Image.Image = image.copy()
             display.info.pop("exif", None)
             display.info.pop("orientation", None)
-            if display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16", "I;16B"}:
+            if display.mode == "I;16L":
+                # This 16-bit little-endian decoder mode cannot be saved as
+                # PNG directly. Converting to RGB clips every value above 255,
+                # hiding scientific intensity differences. The PNG encoder
+                # accepts I;16 while preserving all original source pixels.
+                display = Image.frombytes("I;16", display.size, display.tobytes())
+            elif display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16", "I;16B"}:
                 display = display.convert("RGB")
             display.save(temporary, format="PNG", optimize=True)
         _replace_rendition(temporary, destination)
