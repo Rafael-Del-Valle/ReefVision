@@ -246,6 +246,22 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
+        # A parseable graph can still lose its saved revision or project lineage
+        # after queueing. Verify the raw stored JSON as well as the pinned run
+        # digest: Pydantic may discard unknown keys during model validation.
+        if (
+            graph_record.project_id != run.project_id
+            or graph_record.graph_sha256 != run.graph_sha256
+            or canonical_json_sha256(graph_record.graph_json) != graph_record.graph_sha256
+        ):
+            job.status = "failed"
+            job.error_message = "Workflow graph provenance checksum failed"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
         plan = WorkflowGraphService(session).plan(run.project_id, graph)
         if not plan.valid:
             job.status = "failed"
