@@ -119,7 +119,7 @@ describe("Gallery pending thumbnail refresh", () => {
       });
 
     renderGallery();
-    await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    await screen.findByRole("article", { name: /swiftia-01\.png/ });
     expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
     await userEvent.click(
       screen.getByRole("button", { name: "Refresh pending thumbnails" }),
