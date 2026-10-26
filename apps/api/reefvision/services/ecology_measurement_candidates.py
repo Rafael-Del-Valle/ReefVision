@@ -500,11 +500,38 @@ def summarize_projected_population_summaries(
     # One biological organism cannot contribute as an independent replicate
     # in two declared experimental units, even across sampling strata.
     organism_unit_owners: dict[str, tuple[str, str]] = {}
+    colony_parent_owners: dict[str, str] = {}
     for row in unit_summaries:
         if row.unit_status != "candidate":
             continue
         if not row.experimental_unit_type or not row.experimental_unit_id:
             raise ValidationError("Eligible projected unit is missing its declaration")
+        # Revalidate even a caller-constructed 'candidate' row. A technical
+        # observation cannot be promoted into an independent biological unit.
+        try:
+            require_ecological_unit_type(row.experimental_unit_type)
+        except ValueError as exc:
+            raise ValidationError(
+                "Technical replicate cannot enter projected population summary"
+            ) from exc
+        level = classify_ecological_unit_level(row.experimental_unit_type)
+        if level == "organism" and len(row.organism_keys) != 1:
+            raise ValidationError(
+                "One organism-level unit cannot contain distinct organisms"
+            )
+        if level == "colony":
+            if len(row.parent_colony_keys) > 1:
+                raise ValidationError(
+                    "One colony-level unit cannot contain different parent colonies"
+                )
+            for parent_key in row.parent_colony_keys:
+                previous_unit = colony_parent_owners.setdefault(
+                    parent_key, row.experimental_unit_id
+                )
+                if previous_unit != row.experimental_unit_id:
+                    raise ValidationError(
+                        "One parent colony cannot count as multiple independent colony units"
+                    )
         owner = (
             classify_ecological_unit_level(row.experimental_unit_type)
             or row.experimental_unit_type.casefold(),
