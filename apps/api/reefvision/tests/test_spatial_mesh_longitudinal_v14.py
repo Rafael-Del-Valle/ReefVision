@@ -11,7 +11,10 @@ from fastapi.testclient import TestClient
 
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.schemas.spatial_mesh_preview_v14 import MeshRegistrationEvidence
+from reefvision.schemas.spatial_mesh_preview_v14 import (
+    MeshRegistrationEvidence,
+    MeshReidentificationEvidence,
+)
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.workflow_mesh_v14 import execute_mesh_longitudinal_comparison
 from reefvision.tests.test_annotations import create_project
@@ -58,6 +61,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "source_to_target_transform_m": _rigid_transform(),
     }
     reidentification_evidence = {
+        "specimen_id": "colony:16",
         "before_observation_id": "survey-1",
         "after_observation_id": "survey-2",
         "method": "photo_match",
@@ -129,6 +133,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "caller_supplied_unverified"
     )
     assert "reidentification_evidence_requires_independent_review" in warnings
+    assert "reidentification_specimen_binding_unavailable" not in warnings
     assert expected["provenance"]["registration_evidence_review_status"] == (
         "caller_supplied_unverified"
     )
@@ -1914,6 +1919,8 @@ def test_registered_centroid_rejects_invalid_coordinates(
         {"verified": True},
         {"method": "automatic_certified"},
         {"observer_id": ""},
+        {"specimen_id": "different-colony"},
+        {"specimen_id": True},
     ],
 )
 def test_provisional_reidentification_rejects_mismatched_or_verified_claims(
@@ -1946,3 +1953,40 @@ def test_reidentification_missing_does_not_imply_verified_identity() -> None:
     assert result["provenance"]["reidentification_evidence_review_status"] == "unavailable"
     assert result["provenance"]["specimen_identity_verified"] is False
     assert "reidentification_evidence_unavailable" in result["qc_warnings"]
+
+
+def test_reidentification_specimen_binding_is_provisional_and_legacy_safe() -> None:
+    before, after = _minimal_topology_pair()
+    evidence = {
+        "before_observation_id": "first",
+        "after_observation_id": "second",
+        "method": "photo_match",
+        "observer_id": "reviewer-1",
+        "evidence_note": "Unverified visual correspondence",
+    }
+    legacy = compare_mesh_observations(before, after, evidence)
+    assert legacy["provenance"]["reidentification_evidence"] == evidence
+    assert "reidentification_specimen_binding_unavailable" in legacy["qc_warnings"]
+    bound = {**evidence, "specimen_id": "colony-16"}
+    result = compare_mesh_observations(before, after, bound)
+    assert result["provenance"]["reidentification_evidence"] == bound
+    assert "reidentification_specimen_binding_unavailable" not in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert "reidentification_evidence_requires_independent_review" in result["qc_warnings"]
+    with pytest.raises(ValueError, match="provisional specimen ID"):
+        compare_mesh_observations(before, after, {**bound, "specimen_id": "other-colony"})
+
+
+def test_mutated_reidentification_specimen_binding_is_revalidated() -> None:
+    before, after = _minimal_topology_pair()
+    evidence = MeshReidentificationEvidence(
+        specimen_id="colony-16",
+        before_observation_id="first",
+        after_observation_id="second",
+        method="photo_match",
+        observer_id="reviewer-1",
+        evidence_note="Unverified visual correspondence",
+    )
+    evidence.specimen_id = "other-colony"
+    with pytest.raises(ValueError, match="provisional specimen ID"):
+        compare_mesh_observations(before, after, reidentification_evidence=evidence)
