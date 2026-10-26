@@ -507,15 +507,14 @@ def test_keyed_bulk_skip_retry_preserves_later_return_and_reason_history(
     assert first_after.json() == first_history.json()
     assert second_after.json() == second_history.json()
 
+
 def test_keyed_bulk_retry_preserves_intervening_comments_and_assignments(
     client: TestClient,
 ) -> None:
     """A lost batch response cannot erase later human coordination events."""
     queue_id, ids = _queue_with_two_images(client)
     bulk_url = f"/api/v1/review-queues/{queue_id}/items/bulk"
-    event_urls = [
-        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in ids
-    ]
+    event_urls = [f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in ids]
     original = {
         "item_ids": ids,
         "action": "start",
@@ -563,12 +562,60 @@ def test_keyed_bulk_retry_preserves_intervening_comments_and_assignments(
     assert replay.json()["changed_count"] == 0
     assert [client.get(event_url).json() for event_url in event_urls] == before
 
-    conflicting = client.post(
-        bulk_url, json={**original, "actor": "different researcher"}
-    )
+    conflicting = client.post(bulk_url, json={**original, "actor": "different researcher"})
     assert conflicting.status_code == 409, conflicting.text
     assert [client.get(event_url).json() for event_url in event_urls] == before
     for item in replay.json()["items"]:
         annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
         assert annotations.status_code == 200, annotations.text
         assert annotations.json()["annotations"] == []
+
+
+def test_keyed_start_retry_cannot_reopen_completed_review(client: TestClient) -> None:
+    """A late HTTP retry must preserve a different researcher's completion."""
+    queue_id, ids = _queue_with_two_images(client)
+    item_id = ids[0]
+    bulk_url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    event_url = f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+    keyed_start = {
+        "item_ids": [item_id],
+        "action": "start",
+        "actor": "first reviewer",
+        "client_request_id": str(uuid4()),
+    }
+    started = client.post(bulk_url, json=keyed_start)
+    assert started.status_code == 200, started.text
+    assert started.json()["changed_count"] == 1
+
+    completed = client.post(
+        bulk_url,
+        json={
+            "item_ids": [item_id],
+            "action": "complete",
+            "actor": "second reviewer",
+            "review_confirmed": True,
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    completion_timestamp = completed.json()["items"][0]["completed_at"]
+    original_history = client.get(event_url).json()
+    assert [event["event_type"] for event in original_history["items"]] == [
+        "triage_start",
+        "triage_complete",
+    ]
+    assert original_history["items"][-1]["actor"] == "second reviewer"
+
+    retry = client.post(bulk_url, json=keyed_start)
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["changed_count"] == 0
+    assert retry.json()["items"][0]["review_state"] == "completed"
+    assert retry.json()["items"][0]["completed_at"] == completion_timestamp
+    assert retry.json()["requires_researcher_review"] is True
+    assert client.get(event_url).json() == original_history
+
+    conflicting = client.post(bulk_url, json={**keyed_start, "actor": "third reviewer"})
+    assert conflicting.status_code == 409, conflicting.text
+    assert client.get(event_url).json() == original_history
+    annotations = client.get(f"/api/v1/images/{completed.json()['items'][0]['image_id']}/annotations")
+    assert annotations.status_code == 200, annotations.text
+    assert annotations.json()["annotations"] == []
