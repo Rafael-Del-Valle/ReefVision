@@ -1905,6 +1905,7 @@ def test_registered_centroid_rejects_invalid_coordinates(
     with pytest.raises(ValueError, match="Surface centroid must be three finite"):
         compare_mesh_observations(before, after, evidence)
 
+
 @pytest.mark.parametrize(
     "override",
     [
