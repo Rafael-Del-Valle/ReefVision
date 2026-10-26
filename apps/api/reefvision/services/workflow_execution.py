@@ -182,6 +182,18 @@ class WorkflowExecutionService:
 
     def get_run_detail(self, run_id: str) -> WorkflowRunDetailResponse:
         run = self._run(run_id)
+        # Run-detail retrieval must enforce the same saved-graph lineage as
+        # provenance export. Artifact checksums alone cannot establish which
+        # workflow produced a scientific result after its graph is altered.
+        graph = self.session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
+        if (
+            graph is None
+            or graph.project_id != run.project_id
+            or graph.graph_sha256 != run.graph_sha256
+            or not isinstance(graph.graph_json, dict)
+            or canonical_json_sha256(graph.graph_json) != run.graph_sha256
+        ):
+            raise ConflictError("Workflow graph provenance checksum failed")
         nodes = list(
             self.session.scalars(
                 select(WorkflowNodeRun)
