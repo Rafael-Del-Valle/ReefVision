@@ -201,7 +201,12 @@ def summarize_projected_visit_coverage(
         except ValueError:
             # Image/frame/crop labels are technical replicates, not units.
             continue
-        group_key = (unit_type, unit_id, candidate.metric, candidate.unit)
+        # Canonicalize known biological aliases before computing observed-visit
+        # coverage. Otherwise tank/aquarium labels on the same physical unit
+        # create separate rosters and conceal missing linked measurements.
+        # Unknown study-specific labels remain unverified and unchanged.
+        canonical_type = classify_ecological_unit_level(unit_type) or unit_type
+        group_key = (canonical_type, unit_id, candidate.metric, candidate.unit)
         groups.setdefault(group_key, []).append(candidate)
 
     coverage: list[EcologyProjectedVisitCoverage] = []
