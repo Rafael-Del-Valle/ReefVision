@@ -8,7 +8,7 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import ExifTags, Image
 
 from reefvision.config import Settings
 from reefvision.db.base import Base
@@ -298,6 +298,50 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         assert (record["width_px"], record["height_px"]) == (30 + index, 20)
         assert record["original_filename"] == filename
         assert client.get(f"/api/v1/images/{image_id}/content").content == original_bytes
+
+
+def test_malformed_camera_exif_does_not_discard_decodable_jpeg(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A corrupt acquisition IFD must not erase valid pixels or invent a timestamp."""
+    project = create_project(client, "Camera JPEG with damaged EXIF")
+    camera_exif = Image.Exif()
+    camera_exif[274] = 6
+    # A top-level DateTime is not proof of exposure time if the nested
+    # DateTimeOriginal/OffsetTimeOriginal IFD is unreadable.
+    camera_exif[306] = "2026:10:25 14:15:16"
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(
+        stream, format="JPEG", exif=camera_exif
+    )
+    original = stream.getvalue()
+
+    original_get_ifd = Image.Exif.get_ifd
+
+    def broken_nested_ifd(self: Image.Exif, ifd: int) -> dict[int, Any]:
+        if ifd == ExifTags.IFD.Exif:
+            raise ValueError("camera nested EXIF pointer is invalid")
+        return original_get_ifd(self, ifd)
+
+    monkeypatch.setattr(Image.Exif, "get_ifd", broken_nested_ifd)
+    report = import_one(
+        client, project["id"], filename="camera-corrupt-exif.JPEG", content=original
+    )
+    assert len(report["successful"]) == 1, report
+    assert not report["failed"]
+    image_id = report["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    assert (record["width_px"], record["height_px"]) == (64, 48)
+    assert record["capture_timestamp"] is None
+    assert "Nested EXIF" in record["metadata_json"]["exif_warning"]
+    assert record["metadata_json"]["exif"]["Orientation"] == 6
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    with Image.open(BytesIO(display.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getexif().get(274) in (None, 1)
 
 
 @pytest.mark.parametrize("orientation", range(2, 9))
