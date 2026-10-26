@@ -525,6 +525,20 @@ def compare_mesh_observations(
         try:
             registration = MeshRegistrationEvidence.model_validate(evidence_values)
         except ValueError as exc:
+            # Keep controlled scientific precondition errors actionable while
+            # rejecting malformed fields with the existing generic message.
+            # Pydantic's validation details may include caller-supplied input.
+            from pydantic import ValidationError
+
+            bounds_error = (
+                "Centroid separation bounds require a transform and all three error bounds"
+            )
+            if isinstance(exc, ValidationError) and any(
+                error["type"] == "value_error"
+                and error["msg"] == f"Value error, {bounds_error}"
+                for error in exc.errors(include_url=False)
+            ):
+                raise ValueError(bounds_error) from exc
             raise ValueError("Invalid pairwise registration evidence") from exc
         if (
             frames[0] is None
