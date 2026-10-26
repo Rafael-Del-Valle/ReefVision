@@ -102,7 +102,8 @@ def bulk_triage_review_queue(
             for item in ordered:
                 event = matched[item.id]
                 if (
-                    event.event_type != f"triage_{request.action}"
+                    event.project_id != queue.project_id
+                    or event.event_type != f"triage_{request.action}"
                     or event.actor != request.actor
                     or event.comment != (reason if request.action == "skip" else None)
                     or event.assignee is not None
