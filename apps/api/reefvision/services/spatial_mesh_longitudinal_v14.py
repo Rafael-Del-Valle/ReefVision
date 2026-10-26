@@ -403,9 +403,7 @@ def compare_mesh_observations(
             # Diagnostic only: summarize the caller-supplied rigid transform.
             # The transform is NOT applied to either mesh or independently verified.
             transform = registration.source_to_target_transform_m
-            registration_translation_magnitude_m = hypot(
-                *(row[3] for row in transform[:3])
-            )
+            registration_translation_magnitude_m = hypot(*(row[3] for row in transform[:3]))
             rotation = [row[:3] for row in transform[:3]]
             # atan2 is stable near zero and 180 degrees, unlike acos(trace).
             registration_rotation_angle_degrees = degrees(
