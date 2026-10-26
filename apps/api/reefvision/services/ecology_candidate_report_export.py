@@ -158,13 +158,13 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
             summarize_projected_endpoint_changes(response.candidates, response.sampling_date_qc),
         )
         expected_population = summarize_projected_population_summaries(expected_units)
-        for label, actual, expected in (
+        for label, actual_rows, expected_rows in (
             ("visit coverage", response.projected_visit_coverage, expected_visits),
             ("unit summaries", response.projected_unit_summaries, expected_units),
             ("population summaries", response.projected_population_summaries, expected_population),
         ):
-            if [row.model_dump(mode="json") for row in actual] != [
-                row.model_dump(mode="json") for row in expected
+            if [row.model_dump(mode="json") for row in actual_rows] != [
+                row.model_dump(mode="json") for row in expected_rows
             ]:
                 raise ValidationError(
                     f"Projected {label} evidence does not match source candidates"
