@@ -125,9 +125,8 @@ def test_measurement_csv_rejects_ambiguous_capture_metadata(
 
 
 def test_measurement_csv_normalizes_utc_timestamp() -> None:
-    assert _utc_capture(datetime(2026, 4, 3, 8, tzinfo=UTC), "timezone_aware") == (
-        "2026-04-03T08:00:00Z"
-    )
+    value = _utc_capture(datetime(2026, 4, 3, 8, tzinfo=UTC), "timezone_aware")
+    assert value == "2026-04-03T08:00:00Z"
 
 
 def test_executable_saved_workflow_exports_typed_unverified_csv(
@@ -142,9 +141,7 @@ def test_executable_saved_workflow_exports_typed_unverified_csv(
         if item["node_type"] == "ecology_measurement_csv_export"
     )
     assert node["executable"] is True
-    assert node["input_ports"][0]["accepted_types"] == [
-        "ecology_measurement_candidates"
-    ]
+    assert node["input_ports"][0]["accepted_types"] == ["ecology_measurement_candidates"]
     assert node["output_ports"][0]["accepted_types"] == ["ecology_measurement_csv"]
 
     graph: dict[str, Any] = {
