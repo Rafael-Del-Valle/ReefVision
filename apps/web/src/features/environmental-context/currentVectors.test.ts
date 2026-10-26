@@ -44,7 +44,7 @@ it("computes speed and true-north bearing from east/north components", () => {
   expect(vectors[0].speed).toBe(5);
   expect(vectors[0].bearing).toBeCloseTo(36.86989765);
 });
-it("preserves component uncertainty without deriving vector uncertainty", () => {
+it("preserves component uncertainty without deriving uncertainty", () => {
   const vectors = currentVectors([
     component("current_eastward_velocity", 3, {
       normalized_uncertainty: 0.25,
