@@ -819,3 +819,26 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   completed; exact-head CI for the new test is pending. No local full checkout
   is available (GitHub DNS resolution fails), so no local Ruff/pytest or
   installed-Windows GUI/upgrade test is claimed. 1.6 remains **HOLD**.
+
+## 2026-10-25 — MSI ProductVersion evidence integrity (Track D)
+
+- Inspected exact-head Windows Actions artifact `12622085048` from run `40250322549`.
+  The installed MSI, first launch, migrated isolated database (revision `0040`),
+  project/class/QC persistence, saved typed QC Workflow Builder replay,
+  uninstall and retained data all reported PASS. Upgrade was **SKIPPED**;
+  interactive GUI profiling and hardware/scientific acceptance remain open.
+- **Found an actual evidence defect:** the report serialized
+  `reefvision_version` as `[null, "1.0.2", null]` instead of a string.
+  The PowerShell COM `Execute()` and `Close()` calls in the MSI
+  ProductVersion reader emitted pipeline values around the returned string.
+- Suppressed COM method output, added a strict scalar MSI version validator,
+  and made the disposable installer harness reject array-valued versions
+  **before** installing or comparing versions. Added Windows tests for
+  scalar/array/null/invalid/overflow versions and the COM output guard.
+- The change affects only Windows acceptance/provenance evidence; it does
+  not change application data, MSI payloads, scientific review decisions,
+  or executable Workflow Builder behavior.
+- **Acceptance:** exact new-head Windows harness and installed-MSI report
+  must pass and serialize `reefvision_version` as the JSON string
+  `"1.0.2"`. No new-head CI success or real upgrade/rollback is claimed
+  until observed.
