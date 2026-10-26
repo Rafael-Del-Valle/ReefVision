@@ -466,3 +466,33 @@ A known zero-face follow-up yields a true zero ratio when the baseline has
 faces; missing counts or a zero-face baseline yield `null` rather than a
 fabricated value. Numerically unrepresentable ratios are withheld. All
 measurements remain provisional, and human scientific review is required.
+
+
+## Project- and timepoint-bound 3D registration (Track C, 2026-10-26)
+
+Provisional `MeshRegistrationEvidence` now optionally binds the registration
+to `project_id`, a paired `source_observation_id` /
+`target_observation_id`, and paired timezone-aware
+`source_observed_at_utc` / `target_observed_at_utc`. When supplied,
+these must match the project, observation IDs and actual UTC instants in the
+two source mesh previews. Incomplete pairs are rejected. Offset-equivalent
+timestamps compare as the same instant; a changed survey date, project or
+observation label cannot silently reuse stale registration evidence.
+
+Older records without these optional bindings remain readable, but emit
+`registration_project_binding_unavailable`,
+`registration_observation_binding_unavailable` and/or
+`registration_timepoint_binding_unavailable` QC. Paired source-geometry
+SHA-256 bindings and coordinate-frame checks still apply independently.
+The standalone API and saved, executable typed
+`mesh_longitudinal_comparison` Workflow Builder node use the same
+validation engine and preserve the supplied evidence in provenance.
+Regression coverage includes valid bindings, mismatched projects and
+observations, stale timestamps, partial records, timezone-equivalent
+instants, legacy warnings and mutated model objects.
+
+**These are provenance consistency checks, not independent verification.**
+Neither matching project/observation metadata nor matching geometry
+fingerprints establish correct alignment, specimen identity, calibrated
+physical movement, or coral growth. All measurements remain provisional
+until scientific and installed-desktop acceptance are completed.
