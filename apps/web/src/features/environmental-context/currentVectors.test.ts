@@ -44,7 +44,7 @@ it("computes speed and true-north bearing from east/north components", () => {
   expect(vectors[0].speed).toBe(5);
   expect(vectors[0].bearing).toBeCloseTo(36.86989765);
 });
-it("preserves component uncertainty without inventing vector uncertainty", () => {
+it("preserves component uncertainty without estimating vector uncertainty", () => {
   const vectors = currentVectors([
     component("current_eastward_velocity", 3, {
       normalized_uncertainty: 0.25,
@@ -118,7 +118,7 @@ it.each([
     ])[0].bearing,
   ).toBe(bearing);
 });
-it("never combines mismatched depth, time, acquisition, model or source", () => {
+it("never combines mismatched depth, time, acquisition or source", () => {
   for (const patch of [
     { depth_m: 10 },
     { observed_at: "2026-04-03T01:00:00Z" },
