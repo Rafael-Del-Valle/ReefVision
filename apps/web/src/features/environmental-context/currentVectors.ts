@@ -65,6 +65,8 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
     const east = row.normalized_value;
     const north = group.north[0].normalized_value;
     const speed = Math.hypot(east, north);
+    // Finite components can still overflow a derived speed; never map Infinity.
+    if (!Number.isFinite(speed)) continue;
     result.push({
       id: key,
       latitude: row.location!.latitude,
