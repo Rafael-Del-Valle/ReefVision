@@ -118,12 +118,19 @@ def frozen_pose_item_fingerprints_match(
             or not review["reviewed_at"].strip()
         ):
             return False
-        # A re-signed review must still carry a parseable verification time;
-        # malformed timestamps cannot be accepted as scientific evidence.
-        try:
-            datetime.fromisoformat(review["reviewed_at"])
-        except ValueError:
-            return False
+        # Both timestamps originate from datetime.isoformat() when the
+        # scientist verifies a pose. A date-only string is accepted by
+        # datetime.fromisoformat(), but is not a verification timestamp.
+        # Preserve existing timezone-naive historical records while rejecting
+        # malformed or missing correction/review time evidence.
+        for field in ("reviewed_at", "correction_created_at"):
+            timestamp = review.get(field)
+            if not isinstance(timestamp, str) or len(timestamp) < 19 or timestamp[10] != "T":
+                return False
+            try:
+                datetime.fromisoformat(timestamp)
+            except ValueError:
+                return False
 
         canonical_pose = row.canonical_pose_json
         if (
