@@ -39,9 +39,20 @@ def _existing(session: Session, item_id: str, request_id: str) -> ReviewQueueIte
     )
 
 
-def _same(event: ReviewQueueItemEvent, payload: ReviewQueueEventCreate) -> bool:
+def _same(
+    event: ReviewQueueItemEvent,
+    payload: ReviewQueueEventCreate,
+    *,
+    queue_id: str,
+    item: ReviewQueueItem,
+) -> bool:
+    # A request key cannot validate an event whose persisted scientific scope
+    # disagrees with the item. Never trust a matching actor/comment alone.
     return (
-        event.event_type == payload.event_type
+        event.review_queue_id == queue_id
+        and event.review_queue_item_id == item.id
+        and event.project_id == item.project_id
+        and event.event_type == payload.event_type
         and event.actor == payload.actor
         and event.comment == payload.comment
         and event.assignee == payload.assignee
@@ -55,7 +66,7 @@ def create_review_event(
     request_id = str(payload.client_request_id)
     prior = _existing(session, item.id, request_id)
     if prior is not None:
-        if not _same(prior, payload):
+        if not _same(prior, payload, queue_id=queue_id, item=item):
             raise ConflictError("Request ID already used for a different review event")
         return ReviewQueueEventResponse.model_validate(prior)
 
@@ -76,7 +87,7 @@ def create_review_event(
         session.rollback()
         # A concurrent identical retry may win the unique constraint.
         prior = _existing(session, item_id, request_id)
-        if prior is None or not _same(prior, payload):
+        if prior is None or not _same(prior, payload, queue_id=queue_id, item=item):
             raise ConflictError("Review event request ID conflict") from None
         return ReviewQueueEventResponse.model_validate(prior)
     session.refresh(event)
@@ -91,7 +102,22 @@ def list_review_events(
     page: int,
     page_size: int,
 ) -> ReviewQueueEventsPage:
-    _scope(session, queue_id, item_id)
+    item = _scope(session, queue_id, item_id)
+    # Fail closed if a persisted event has been reassigned to another queue or
+    # project. Filtering it out would silently hide reviewer audit evidence.
+    foreign_event_id = session.scalar(
+        select(ReviewQueueItemEvent.id)
+        .where(
+            ReviewQueueItemEvent.review_queue_item_id == item_id,
+            (
+                (ReviewQueueItemEvent.review_queue_id != queue_id)
+                | (ReviewQueueItemEvent.project_id != item.project_id)
+            ),
+        )
+        .limit(1)
+    )
+    if foreign_event_id is not None:
+        raise ConflictError("Review event provenance does not match its queue")
     filters = [ReviewQueueItemEvent.review_queue_item_id == item_id]
     total = (
         session.scalar(select(func.count()).select_from(ReviewQueueItemEvent).where(*filters)) or 0
