@@ -61,6 +61,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "source_to_target_transform_m": _rigid_transform(),
     }
     reidentification_evidence = {
+        "project_id": project_id,
         "specimen_id": "colony:16",
         "before_observation_id": "survey-1",
         "after_observation_id": "survey-2",
@@ -153,6 +154,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert "reidentification_independent_review_recorded_not_identity_verification" in warnings
     assert "reidentification_evidence_requires_independent_review" not in warnings
     assert "reidentification_specimen_binding_unavailable" not in warnings
+    assert "reidentification_project_binding_unavailable" not in warnings
     assert "reidentification_geometry_binding_unavailable" not in warnings
     assert "reidentification_timepoint_binding_unavailable" not in warnings
     assert "reidentification_independent_review_timestamp_unavailable" not in warnings
