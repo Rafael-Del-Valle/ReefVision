@@ -2207,3 +2207,35 @@ formatting to those files without changing the iterative parent-matching
 algorithm. New-head CI and scientific/Windows installed-GUI acceptance must
 still be independently verified. No migrations, 1.1 cross-merge, model
 weights, verified dataset promotion or release actions are introduced.
+
+## Source-level calibrated candidate CSV export (2026-10-26)
+
+The existing project-owned `GET /api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates`
+response now has a companion `/measurements.csv` endpoint. It exports **one
+source-linked projected measurement per row** (not one biological replicate per
+row): organism and parent-colony keys, declared sampling level/ID, image and
+annotation identities/revisions/SHA-256, calibration evidence and SHA-256,
+metric/value/unit, UTC capture status, per-series date QC, evidence/review
+status, source input fingerprint, report fingerprint, and whether the full
+source fingerprint was rechecked. Missing or timezone-ambiguous capture
+metadata cannot be silently rendered as a dated observation.
+
+The serializer reuses the existing scientific QC, derived-value and
+fingerprint reconciliation from the series-report exporter rather than
+introducing an independent verification pathway. It sorts rows
+deterministically and protects user-controlled CSV text from spreadsheet
+formula execution. Existing `ecology_identity_registry_source` Workflow
+Builder runs already persist the same typed
+`ecology_measurement_candidates` payload; the serializer accepts that
+persisted payload unchanged. API/Workflow parity, altered-source rejection,
+empty-project behavior and timezone checks have focused regression tests.
+
+This is an **unverified projected-geometry research export**, not a growth
+estimate, independent experimental-unit count, or reviewed biological dataset.
+All rows retain `linked_unverified` and `scientist_review_required`.
+No new migration, weights, environmental context, branch merge, or release
+action is involved. Before this iteration, exact head
+`5ac2bb6dad3fc040a889970168c69d721204035f` had **19/19 completed
+GitHub Actions workflows successful**. The new export head still requires
+exact-head CI, independent scientific review, migration reconciliation and
+installed Windows GUI acceptance; **1.2 remains not release-ready**.
