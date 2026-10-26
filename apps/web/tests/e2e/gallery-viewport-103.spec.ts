@@ -172,11 +172,42 @@ test("initial image and gallery scrolling", async ({ page }) => {
   };
 
   await assertDecodedAndContained(1600, 1200);
+  // Exercise the native non-passive listener in a real Chromium page, not just
+  // jsdom. Prevent wheel-driven WebView2 page movement over the preview while
+  // leaving browser zoom modifiers and zero-delta events untouched.
+  const previewWheelPolicy = () =>
+    workbench.locator(".rv-media-canvas").evaluate((canvas) => {
+      const prevented = (init: WheelEventInit) => {
+        const event = new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        });
+        canvas.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      return {
+        vertical: prevented({ deltaY: 160 }),
+        horizontal: prevented({ deltaX: 160 }),
+        ctrlZoom: prevented({ deltaY: 160, ctrlKey: true }),
+        metaZoom: prevented({ deltaY: 160, metaKey: true }),
+        zeroDelta: prevented({}),
+      };
+    });
+  const expectedPreviewWheelPolicy = {
+    vertical: true,
+    horizontal: true,
+    ctrlZoom: false,
+    metaZoom: false,
+    zeroDelta: false,
+  };
+  expect(await previewWheelPolicy()).toEqual(expectedPreviewWheelPolicy);
   const lastImage = workbench.getByRole("listitem", {
     name: "Focus camera-12.JPEG",
   });
   await lastImage.click();
   await assertDecodedAndContained(6000, 400);
+  expect(await previewWheelPolicy()).toEqual(expectedPreviewWheelPolicy);
   const filmstrip = workbench.locator(".rv-media-filmstrip");
   const scrollOffset = () =>
     filmstrip.evaluate((element) => element.scrollLeft);
