@@ -100,6 +100,7 @@ def bulk_triage_review_queue(
             items=[ReviewQueueItemResponse.model_validate(item) for item in ordered],
         )
 
+    for item in ordered:
         if request.action == "start" and item.review_state not in {
             "pending",
             "in_progress",
@@ -120,6 +121,20 @@ def bulk_triage_review_queue(
             and not (item.review_state == "pending" and item.returned_at is not None)
         ):
             raise ConflictError("Only previously skipped items can be returned")
+        # A keyed first attempt must create an audit marker for *every*
+        # selected item. Otherwise its replay would look like a partial batch.
+        if keyed_ids:
+            changes = {
+                "start": item.review_state == "pending",
+                "skip": item.review_state in {"pending", "in_progress"},
+                "return": item.review_state == "skipped",
+                "complete": item.review_state == "in_progress",
+            }
+            if not changes[request.action]:
+                raise ConflictError(
+                    "Keyed bulk requests require all selected items to change state"
+                )
+
     now = datetime.now(UTC)
     changed = 0
     changed_ids: set[str] = set()
@@ -158,7 +173,7 @@ def bulk_triage_review_queue(
                     review_queue_id=queue_id,
                     review_queue_item_id=item.id,
                     project_id=item.project_id,
-                    client_request_id=keyed_ids.get(item.id, str(uuid4())),
+                    client_request_id=keyed_ids[item.id] if keyed_ids else str(uuid4()),
                     event_type=f"triage_{request.action}",
                     actor=request.actor,
                     comment=reason if request.action == "skip" else None,
