@@ -63,10 +63,34 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     issue_codes = {issue["code"] for issue in forbidden.json()["issues"]}
     assert "pose_dataset_scope_mismatch" in issue_codes
 
+    # A real scientist-verified dataset can still run through an older,
+    # unpinned graph, but planning must disclose the reproducibility risk.
+    unpinned_graph = {
+        **graph,
+        "nodes": [
+            {
+                **graph["nodes"][0],
+                "parameters": {"dataset_id": dataset_id},
+            }
+        ],
+    }
+    unpinned_plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=unpinned_graph
+    )
+    assert unpinned_plan.status_code == 200, unpinned_plan.text
+    assert unpinned_plan.json()["valid"] is True
+    assert unpinned_plan.json()["executable"] is True
+    assert "pose_dataset_manifest_unpinned" in {
+        issue["code"] for issue in unpinned_plan.json()["issues"]
+    }
+
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is True
     assert plan.json()["executable"] is True
+    assert "pose_dataset_manifest_unpinned" not in {
+        issue["code"] for issue in plan.json()["issues"]
+    }
 
     stale_graph = {
         **graph,
