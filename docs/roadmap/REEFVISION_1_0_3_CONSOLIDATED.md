@@ -249,3 +249,66 @@ the RTX 3090 matrix, or installed interactive P0–P7 acceptance.
 
 No merge, release, tag, installer publication, branch deletion, or rollback is
 authorized by this continuation record.
+
+## 2026-10-26 final release-completion sprint (PR #81)
+
+Release decision remains **HOLD — software candidate validated, physical and
+representative-science gates outstanding**. PR #81 now cleanly integrates the current
+`develop/reefvision-1.0.3-consolidated` base and remains a draft. No GPU validation,
+release publication, tag, or merge was performed.
+
+### Final software changes
+
+- Windows rendition publishing now retries transient destination replacement failures
+  with bounded exponential backoff. Deterministic regression coverage exercises the
+  Windows `PermissionError` path, and concurrent display/thumbnail stress coverage no
+  longer reproduces the intermittent import failure.
+- The installer gate accepts the two observed valid WiX layouts (five or six contiguous
+  external CABs), derives its final size partition from the files actually emitted, and
+  continues to require exact MSI Media membership, version, provenance, payload hashes,
+  required sidecar/runtime files, and the absence of unintended model weights.
+- Video pose hydration preserves an asynchronously restored pose selection on initial
+  load while synchronously clearing it when the selected video actually changes. This
+  prevents both lost initial state and stale cross-video imports.
+- The consolidated raw-source-pixel image contract, EXIF warning fallback, gallery
+  first-open recovery, training architecture selection, loss monitoring, annotation
+  review boundaries, polygon persistence/export, and detection/segmentation/hybrid
+  tracking implementations remain intact.
+
+### Fresh local evidence
+
+- Ruff lint and format: **PASS** — 667 Python files.
+- Strict mypy package check: **PASS** — 408 source files.
+- Frontend lockfile, Prettier, and TypeScript: **PASS**.
+- Vitest: **PASS** — 93 files, 477 tests.
+- Playwright: **PASS** — 13 passed, 1 documented opt-in live-OSM skip.
+- Production web build: **PASS** — existing non-blocking chunk-size advisory only.
+- Scientific/dataset/segmentation/calibration/import-export suite: **PASS** — 191 tests.
+- Focused image/training/video/installer backend regression suite: **PASS** — 195 tests.
+- Windows clean-install harness safeguards: **PASS** — 44 assertions.
+- Rust training-console opaque run-ID validation: **PASS** — 1 test.
+
+A fresh 25-epoch CPU-only synthetic segmentation lifecycle completed in 75.10 seconds.
+It preserved immutable source bytes, registered checkpoint SHA-256
+`d85431c9f31ff4a350276290672467f24d57f252bb3ef888a57c3c65fc81cb4c`,
+created 45 valid pending polygon proposals across five held-out images, explicitly
+accepted and persisted one verified mask, and passed restart inference. PyTorch reported
+zero peak VRAM and the configured training device was `cpu`. Evidence is retained at
+`C:\Windows\Temp\rv103-seg-20261026-final\report.json`. This is technical synthetic
+regression evidence, not representative coral-polyp accuracy evidence.
+
+### Remaining release gates
+
+1. Complete installed, interactive P0–P7 acceptance on a clean supported Windows host,
+   including real mouse/keyboard navigation, DPI/resizing, shortcuts, the detached
+   training monitor, representative media workflows, relaunch/recovery, and uninstall.
+2. Evaluate held-out masks on an authorized representative, scientist-verified coral
+   dataset. No such dataset was present in the repository or configured Models directory,
+   so biological performance remains **BLOCKED**, not inferred from synthetic geometry.
+3. Run the explicitly deferred RTX 3090 matrix when that hardware is operational. GPU
+   training/inference, CUDA compatibility, throughput, VRAM, and performance remain
+   **DEFERRED** rather than failed.
+
+The final pushed SHA's GitHub checks are authoritative for the reproducible MSI/CAB build
+and disposable-runner fresh-install/upgrade acceptance. A passing hosted job still does
+not substitute for the physical interactive gate above.
