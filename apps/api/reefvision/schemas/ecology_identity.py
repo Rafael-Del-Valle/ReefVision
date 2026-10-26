@@ -188,5 +188,10 @@ class EcologyIdentityRegistryResponse(BaseModel):
     ] = "history_unavailable"
     design_change_count: int = Field(default=0, ge=0)
     design_change_events: list[EcologyDesignRevisionChange] = Field(default_factory=list)
+    # Legacy workflow artifacts cannot assert that a parent stayed in one unit.
+    cross_unit_parent_audit_status: Literal[
+        "unavailable", "no_cross_unit_parent_reuse", "shared_parent_requires_review"
+    ] = "unavailable"
+    cross_unit_shared_parent_colony_keys: list[str] = Field(default_factory=list)
     evidence_level: Literal["registered_unverified"] = "registered_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"

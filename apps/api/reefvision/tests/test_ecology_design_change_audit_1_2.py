@@ -30,9 +30,7 @@ def _register(client: TestClient, project_id: str, key: str, kind: str, **extra:
     assert response.status_code == 201, response.text
 
 
-def _revise(
-    client: TestClient, project_id: str, key: str, revision: int, **extra: str
-) -> None:
+def _revise(client: TestClient, project_id: str, key: str, revision: int, **extra: str) -> None:
     response = client.post(
         f"/api/v1/projects/{project_id}/ecology/organisms/{key}/revisions",
         json={
@@ -60,17 +58,32 @@ def test_design_reassignment_reversion_and_saved_workflow_parity(client: TestCli
     assert initial["design_change_events"] == []
 
     _revise(
-        client, project_id, "coral-1", 1,
-        kind="individual", experimental_unit_type="tank", experimental_unit_id="tank-A",
+        client,
+        project_id,
+        "coral-1",
+        1,
+        kind="individual",
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
     )
     assert client.get(url).json()["design_change_count"] == 0
     _revise(
-        client, project_id, "coral-1", 2,
-        kind="individual", experimental_unit_type="tank", experimental_unit_id="tank-B",
+        client,
+        project_id,
+        "coral-1",
+        2,
+        kind="individual",
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-B",
     )
     _revise(
-        client, project_id, "coral-1", 3,
-        kind="individual", experimental_unit_type="tank", experimental_unit_id="tank-A",
+        client,
+        project_id,
+        "coral-1",
+        3,
+        kind="individual",
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
     )
     response = client.get(url)
     assert response.status_code == 200, response.text
@@ -80,7 +93,8 @@ def test_design_reassignment_reversion_and_saved_workflow_parity(client: TestCli
     events = payload["design_change_events"]
     assert [(e["from_revision"], e["to_revision"]) for e in events] == [(2, 3), (3, 4)]
     assert [e["changed_fields"] for e in events] == [
-        ["experimental_unit_id"], ["experimental_unit_id"]
+        ["experimental_unit_id"],
+        ["experimental_unit_id"],
     ]
     assert events[0]["previous_experimental_unit_id"] == "tank-A"
     assert events[0]["current_experimental_unit_id"] == "tank-B"
@@ -94,13 +108,15 @@ def test_design_reassignment_reversion_and_saved_workflow_parity(client: TestCli
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
         ],
-        "edges": [{
-            "edge_id": "project-identity",
-            "source_node_id": "project",
-            "source_port_id": "project",
-            "target_node_id": "identity",
-            "target_port_id": "project",
-        }],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            }
+        ],
     }
     saved = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
@@ -113,9 +129,12 @@ def test_design_reassignment_reversion_and_saved_workflow_parity(client: TestCli
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
@@ -150,12 +169,21 @@ def test_parent_change_is_flagged_and_not_promoted_to_verified(client: TestClien
 def test_history_export_detects_tampering_and_marks_legacy_unknown(client: TestClient) -> None:
     project_id = str(create_project(client, "Design history integrity")["id"])
     _register(
-        client, project_id, "coral-2", "individual",
-        experimental_unit_type="tank", experimental_unit_id="tank-A",
+        client,
+        project_id,
+        "coral-2",
+        "individual",
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
     )
     _revise(
-        client, project_id, "coral-2", 1,
-        kind="individual", experimental_unit_type="tank", experimental_unit_id="tank-B",
+        client,
+        project_id,
+        "coral-2",
+        1,
+        kind="individual",
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-B",
     )
     response = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
     assert response.status_code == 200, response.text

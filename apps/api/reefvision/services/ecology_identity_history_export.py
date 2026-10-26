@@ -11,7 +11,10 @@ from io import StringIO
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
-from reefvision.services.ecology_identity_design_audit import derive_ecology_design_changes
+from reefvision.services.ecology_identity_design_audit import (
+    derive_cross_unit_shared_parent_colony_keys,
+    derive_ecology_design_changes,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 
@@ -110,6 +113,19 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
         ):
             raise ValidationError("Ecological design-change audit differs from identity history")
 
+    if registry.cross_unit_parent_audit_status != "unavailable":
+        shared_parent_keys = derive_cross_unit_shared_parent_colony_keys(registry.identities)
+        expected_status = (
+            "shared_parent_requires_review" if shared_parent_keys else "no_cross_unit_parent_reuse"
+        )
+        if (
+            registry.cross_unit_parent_audit_status != expected_status
+            or registry.cross_unit_shared_parent_colony_keys != shared_parent_keys
+        ):
+            raise ValidationError("Ecological cross-unit parent audit differs from identities")
+    elif registry.cross_unit_shared_parent_colony_keys:
+        raise ValidationError("Unavailable cross-unit parent audit cannot claim reviewed keys")
+
     output = StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(
@@ -129,6 +145,8 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             "review_gate",
             "design_history_status",
             "design_change_count",
+            "cross_unit_parent_audit_status",
+            "cross_unit_shared_parent_colony_keys",
         )
     )
     for row in history:
@@ -149,6 +167,8 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
                 registry.review_gate,
                 registry.design_history_status,
                 registry.design_change_count,
+                registry.cross_unit_parent_audit_status,
+                "|".join(registry.cross_unit_shared_parent_colony_keys),
             )
         )
     return output.getvalue()

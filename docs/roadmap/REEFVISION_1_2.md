@@ -1720,3 +1720,31 @@ no independent experimental design, signed approval, or longitudinal growth
 is certified. Existing candidate exclusions and immutable evidence remain
 unchanged. No migration, cloud service, or 1.1 environmental duplication.
 Scientific, installed Windows GUI and full release acceptance remain pending.
+
+
+## Registered cross-unit parent-colony audit (2026-10-25; development only)
+
+The project-scoped identity registry now discloses sorted
+`cross_unit_shared_parent_colony_keys` for registered fragments assigned
+to distinct declared units **at the same biological sampling level**.
+A parent represented in multiple tanks is flagged for scientist review;
+multiple fragments within one tank are not independent repeats and do not
+create a false cross-unit signal. Tank and site levels are not conflated.
+The additive `cross_unit_parent_audit_status` distinguishes
+`shared_parent_requires_review`, `no_cross_unit_parent_reuse`, and
+`unavailable` (legacy persisted workflow artifacts).
+
+The standalone registry API, existing executable typed/persisted
+`ecology_identity_registry_source` Workflow Builder node, and CSV history
+export share the same audit. The CSV recomputes modern audit fields against
+fingerprint-checked latest identities and rejects mismatches. The result
+remains `registered_unverified` with `scientist_review_required`; it is
+not a determination of biological dependence or a substitute for registered
+experimental designs and independent review. No migration or cloud service
+is introduced.
+
+At the previous exact head `9fc087de5002`, 16/19 workflows passed and
+the three failing backend gates stopped at Ruff formatting in the
+design-change implementation/test. This increment also corrects the
+reported formatting. New exact-head CI, real-data scientific acceptance
+and installed Windows GUI/installer checks remain outstanding.
