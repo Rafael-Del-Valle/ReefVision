@@ -180,53 +180,7 @@ function Assert-ReefVisionUpgradeVersion {
 # and make Windows Installer upgrade comparisons unreliable.
 function Assert-ReefVisionMsiVersionScalar {
     param([AllowNull()][object]$Value)
-    if ($Value -isnot [string] -or $Value -notmatch '^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,5})
-
-function New-ReefVisionMsiArguments {
-    param(
-        [ValidateSet('Install', 'Uninstall')][string]$Action,
-        [Parameter(Mandatory = $true)][string]$PackageOrProduct,
-        [string]$InstallRoot,
-        [Parameter(Mandatory = $true)][string]$LogPath
-    )
-    $operation = if ($Action -eq 'Install') { '/i' } else { '/x' }
-    $arguments = @($operation, ('"{0}"' -f $PackageOrProduct), '/qn', '/norestart', '/L*v', ('"{0}"' -f $LogPath))
-    if ($Action -eq 'Install' -and $InstallRoot) {
-        $arguments += ('INSTALLDIR="{0}"' -f $InstallRoot)
-    }
-    return $arguments
-}
-
-function New-ReefVisionEvidenceResult {
-    param([string]$Status = 'NOT RUN', [string]$Detail = '')
-    return [ordered]@{ status = $Status; detail = $Detail; timestamp_utc = [DateTime]::UtcNow.ToString('o') }
-}
-
-function Write-ReefVisionEvidenceReport {
-    param([Parameter(Mandatory = $true)]$Report, [Parameter(Mandatory = $true)][string]$Path)
-    $parent = Split-Path -Parent $Path
-    New-Item -ItemType Directory -Path $parent -Force | Out-Null
-    $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
-}
-
-function Get-ReefVisionInstalledRegistrations {
-    $roots = @(
-        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
-    )
-    return @(Get-ItemProperty $roots -ErrorAction SilentlyContinue | Where-Object {
-        $displayName = $_.PSObject.Properties['DisplayName']
-        $null -ne $displayName -and $displayName.Value -like 'ReefVision*'
-    })
-}
-
-function Test-ReefVisionAdministrator {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-) {
+    if ($Value -isnot [string] -or $Value -notmatch '^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,5})$') {
         throw 'MSI ProductVersion must be a single major.minor.build string.'
     }
     $parts = @($Value.Split('.') | ForEach-Object { [int]$_ })
