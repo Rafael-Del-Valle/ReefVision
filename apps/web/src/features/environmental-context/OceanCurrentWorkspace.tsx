@@ -3,7 +3,11 @@ import { useMemo, useState } from "react";
 import { OpenStreetMapView } from "../video/OpenStreetMapView";
 import { getVideos } from "../video/videoApi";
 import { getVideoGeoreferencedObservations } from "../video/videoGeoreferencedObservationsApi";
-import { currentVectors, vectorColor } from "./currentVectors";
+import {
+  currentComponentUncertaintyText,
+  currentVectors,
+  vectorColor,
+} from "./currentVectors";
 import {
   getCachedDataset,
   getEnvironmentalDatasets,
@@ -334,8 +338,20 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                     · {vector.dataset} · version{" "}
                     {vector.modelVersion ?? "unknown"} · {vector.source}
                     <br />
-                    Position and velocity uncertainty: unknown. Source record
-                    IDs: {vector.recordIds.join(", ")}
+                    Vector speed/direction and position uncertainty: not
+                    estimated.
+                    <br />
+                    {currentComponentUncertaintyText(
+                      "East",
+                      vector.eastUncertainty,
+                    )}{" "}
+                    ·{" "}
+                    {currentComponentUncertaintyText(
+                      "North",
+                      vector.northUncertainty,
+                    )}
+                    <br />
+                    Source record IDs: {vector.recordIds.join(", ")}
                   </li>
                 ))}
               </ul>
