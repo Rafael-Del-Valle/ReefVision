@@ -449,3 +449,61 @@ def test_source_linked_padded_unit_id_cannot_enter_population() -> None:
     assert units[0].unit_status == "candidate"
     with pytest.raises(ValidationError, match="experimental-unit ID is blank or padded"):
         summarize_projected_population_summaries(units)
+
+
+@pytest.mark.parametrize("second_parents", [["parent-B"], []])
+def test_forged_cross_metric_parent_lineage_cannot_change(
+    second_parents: list[str],
+) -> None:
+    """The same physical unit and complete organism roster have one parent set."""
+    width = _unit("tank", "fragment-A", "parent-A")
+    height = _unit("aquarium", "fragment-A", "parent-A").model_copy(
+        update={"metric": "box_height", "parent_colony_keys": second_parents}
+    )
+    with pytest.raises(ValidationError, match="parent-colony provenance changes across metrics"):
+        summarize_projected_population_summaries([width, height])
+    with pytest.raises(ValidationError, match="parent-colony provenance changes across metrics"):
+        summarize_projected_population_summaries([height, width])
+
+
+def test_forged_parent_count_cannot_exceed_complete_organism_count() -> None:
+    """One fragment cannot independently represent two registered parents."""
+    forged = _unit("tank", "fragment-A", "parent-A").model_copy(
+        update={"parent_colony_keys": ["parent-A", "parent-B"]}
+    )
+    with pytest.raises(ValidationError, match="more parent colonies than organisms"):
+        summarize_projected_population_summaries([forged])
+
+
+def test_cross_metric_parent_lineage_is_order_invariant_for_same_roster() -> None:
+    """Biological unit aliases and parent ordering cannot change the decision."""
+    width = _unit("tank", "fragment-A", "parent-A").model_copy(
+        update={
+            "organism_keys": ["fragment-A", "fragment-B"],
+            "complete_organism_keys": ["fragment-A", "fragment-B"],
+            "parent_colony_keys": ["parent-A", "parent-B"],
+        }
+    )
+    height = width.model_copy(
+        update={
+            "metric": "box_height",
+            "experimental_unit_type": "aquarium",
+            "parent_colony_keys": ["parent-B", "parent-A"],
+        }
+    )
+    for rows in ([width, height], [height, width]):
+        summaries = summarize_projected_population_summaries(rows)
+        assert len(summaries) == 2
+        assert all(row.declared_unit_count == 1 for row in summaries)
+        assert all(row.review_gate == "scientist_review_required" for row in summaries)
+
+
+def test_different_metric_organism_rosters_are_not_assumed_identical() -> None:
+    """A missing measurement metric does not imply changed biological parentage."""
+    width = _unit("tank", "fragment-A", "parent-A")
+    height = _unit("aquarium", "fragment-B", "parent-B").model_copy(
+        update={"metric": "box_height"}
+    )
+    summaries = summarize_projected_population_summaries([width, height])
+    assert len(summaries) == 2
+    assert all(row.independent_unit_inference_allowed is False for row in summaries)
