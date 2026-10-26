@@ -1197,6 +1197,7 @@ def test_resigned_empty_dataset_cannot_be_exported_or_planned(
             session, app.state.settings, project_id, parameters, {}
         )
 
+
 def test_resigned_pose_item_cannot_change_frozen_schema_identity(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -1258,4 +1259,3 @@ def test_resigned_pose_item_cannot_change_frozen_schema_identity(
         execute_pose_training_dataset_adapter(
             session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
         )
-
