@@ -320,18 +320,14 @@ def test_source_alias_does_not_hide_cross_tank_reassignment() -> None:
         for record in width
     ]
     records = width + height
-    changes = summarize_projected_endpoint_changes(
-        records, summarize_sampling_date_qc(records)
-    )
+    changes = summarize_projected_endpoint_changes(records, summarize_sampling_date_qc(records))
     with pytest.raises(ValidationError, match="identity or experimental unit changed"):
         summarize_projected_unit_summaries(records, changes)
 
 
 def test_source_mixed_biological_levels_fail_closed() -> None:
     records = _dated_alias_series("fragment-A", "tank/site", "tank-1", 501, 2.0)
-    changes = summarize_projected_endpoint_changes(
-        records, summarize_sampling_date_qc(records)
-    )
+    changes = summarize_projected_endpoint_changes(records, summarize_sampling_date_qc(records))
     with pytest.raises(ValidationError, match="mixes biological sampling levels"):
         summarize_projected_unit_summaries(records, changes)
 
@@ -341,12 +337,83 @@ def test_technical_compound_label_is_not_laundered_into_biological_unit(
     technical_type: str,
 ) -> None:
     records = _dated_alias_series("fragment-A", technical_type, "tank-1", 601, 2.0)
-    changes = summarize_projected_endpoint_changes(
-        records, summarize_sampling_date_qc(records)
-    )
+    changes = summarize_projected_endpoint_changes(records, summarize_sampling_date_qc(records))
     summaries = summarize_projected_unit_summaries(records, changes)
     assert len(summaries) == 1
     assert summaries[0].experimental_unit_type == technical_type
     assert summaries[0].unit_status == "technical_replicate_unit"
     assert summaries[0].review_gate == "scientist_review_required"
     assert summarize_projected_population_summaries(summaries) == []
+
+
+@pytest.mark.parametrize(
+    "technical_type",
+    ["camera tank", "image-tank", "frame aquarium", "camera"],
+)
+def test_forged_technical_candidate_cannot_enter_population(
+    technical_type: str,
+) -> None:
+    # A tampered intermediate unit row must not bypass source-level QC.
+    forged = _unit(technical_type, "fragment-A", "parent-A")
+    with pytest.raises(
+        ValidationError, match="Technical replicate cannot enter projected population"
+    ):
+        summarize_projected_population_summaries([forged])
+
+
+def test_organism_level_unit_cannot_pool_distinct_fragments() -> None:
+    forged = _unit("organism", "fragment-A", "parent-A").model_copy(
+        update={
+            "organism_keys": ["fragment-A", "fragment-B"],
+            "complete_organism_keys": ["fragment-A", "fragment-B"],
+        }
+    )
+    with pytest.raises(ValidationError, match="organism-level unit"):
+        summarize_projected_population_summaries([forged])
+
+
+def test_colony_level_unit_cannot_pool_different_parents() -> None:
+    forged = _unit("colony", "fragment-A", "parent-A").model_copy(
+        update={"parent_colony_keys": ["parent-A", "parent-B"]}
+    )
+    with pytest.raises(ValidationError, match="different parent colonies"):
+        summarize_projected_population_summaries([forged])
+
+
+def test_parent_colony_cannot_be_split_into_independent_colony_units() -> None:
+    first = _unit("colony", "fragment-A", "parent-A").model_copy(
+        update={"experimental_unit_id": "colony-1"}
+    )
+    second = _unit("colonies", "fragment-B", "parent-A").model_copy(
+        update={"experimental_unit_id": "colony-2"}
+    )
+    with pytest.raises(ValidationError, match="multiple independent colony units"):
+        summarize_projected_population_summaries([first, second])
+
+
+def test_source_linked_colony_split_is_rejected_but_tank_split_is_reviewable() -> None:
+    colony_records = [
+        *_dated_alias_series("fragment-A", "colony", "colony-1", 701, 2.0),
+        *_dated_alias_series("fragment-B", "colonies", "colony-2", 801, 4.0),
+    ]
+    qc = summarize_sampling_date_qc(colony_records)
+    assert all(row.qc_status == "date_series_candidate" for row in qc)
+    changes = summarize_projected_endpoint_changes(colony_records, qc)
+    units = summarize_projected_unit_summaries(colony_records, changes)
+    assert len(units) == 2
+    with pytest.raises(ValidationError, match="multiple independent colony units"):
+        summarize_projected_population_summaries(units)
+
+    tank_records = [
+        *_dated_alias_series("fragment-A", "tank", "tank-1", 901, 2.0),
+        *_dated_alias_series("fragment-B", "aquarium", "tank-2", 1001, 4.0),
+    ]
+    tank_qc = summarize_sampling_date_qc(tank_records)
+    tank_changes = summarize_projected_endpoint_changes(tank_records, tank_qc)
+    tank_units = summarize_projected_unit_summaries(tank_records, tank_changes)
+    tank_population = summarize_projected_population_summaries(tank_units)
+    assert len(tank_population) == 1
+    assert tank_population[0].declared_unit_count == 2
+    assert tank_population[0].shared_parent_colony_keys == ["parent-A"]
+    assert "shared_parent_colonies" in tank_population[0].design_review_blockers
+    assert tank_population[0].independent_unit_inference_allowed is False
