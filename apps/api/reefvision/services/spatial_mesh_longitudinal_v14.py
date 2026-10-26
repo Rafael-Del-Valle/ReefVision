@@ -871,7 +871,9 @@ def compare_mesh_observations(
             "coordinate_registration_verified": False,
             "observation_metadata_verified": False,
             "calibration_verified": False,
-            "scale_uncertainty_only": difference_bounds is not None and not identity_disputed,
+            "scale_uncertainty_only": (
+                difference_bounds is not None and not identity_disputed
+            ),
             "longitudinal_change_withheld_due_to_identity_dispute": identity_disputed,
         },
     }
