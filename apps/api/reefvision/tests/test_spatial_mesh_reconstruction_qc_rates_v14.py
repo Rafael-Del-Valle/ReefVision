@@ -96,7 +96,6 @@ def test_zero_triangle_reconstructions_have_unavailable_rates() -> None:
     assert "reconstruction_qc_rates_unavailable" in result["qc_warnings"]
 
 
-
 def test_zero_face_baseline_preserves_missing_rates_against_valid_followup() -> None:
     before, after = _observations()
     before.update(
@@ -121,6 +120,7 @@ def test_zero_face_baseline_preserves_missing_rates_against_valid_followup() -> 
     )
     assert "reconstruction_topology_changed_requires_review" in result["qc_warnings"]
     assert result["provenance"]["specimen_identity_verified"] is False
+
 
 def test_invalid_boolean_face_count_is_rejected() -> None:
     before, after = _observations()
