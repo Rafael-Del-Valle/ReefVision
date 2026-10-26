@@ -95,6 +95,43 @@ describe("Gallery pending thumbnail refresh", () => {
     expect(galleryPendingThumbnailRefetchMs({ items: [] }, 1)).toBe(false);
   });
 
+  it("automatically reloads metadata after thumbnail job completion", async () => {
+    let reads = 0;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (!url.includes(`/projects/${project.id}/images`)) {
+          throw new Error(`Unexpected request ${url}`);
+        }
+        reads += 1;
+        return jsonResponse({
+          items: [
+            {
+              ...image,
+              thumbnail_path: reads === 1 ? null : "thumbnails/completed.jpg",
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      });
+
+    renderGallery();
+    await screen.findByRole("article", { name: /swiftia-01\.png/ });
+    expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
+    expect(
+      await screen.findByAltText(
+        "Thumbnail of swiftia-01.png",
+        {},
+        { timeout: 8500 },
+      ),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  }, 10_000);
+
   it("can refresh a pending image thumbnail without reimporting the original", async () => {
     let polls = 0;
     const fetchMock = vi
