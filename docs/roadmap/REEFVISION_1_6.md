@@ -893,3 +893,23 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   user asset, migration, or cloud resource is touched. This is a development
   increment pending exact-head backend/frontend/Windows CI and installed-GUI
   acceptance, not a release-ready claim.
+
+## 2026-10-26 — keyed skip/return retry regression and exact-head CI repair
+
+- Inspected draft PR #77 at `88e40274` and its 20 exact-head GitHub Actions runs:
+  17 succeeded; CI, Pose Workflow Validation and 1.0 Acceptance failed in the
+  same backend Ruff formatter check on `test_review_queue_bulk_16.py`.
+  The Windows installer and disposable installed-API acceptance succeeded,
+  but this is not interactive installed-GUI or real MSI upgrade/rollback evidence.
+- Applied the formatter's reported parenthesized status-code assertion and
+  added a standalone API regression for a lost keyed **skip** response followed
+  by another reviewer's **return**. The retry must leave the returned item
+  pending, retain the original skip reason and both actor-labeled events,
+  avoid duplicate events, and reject reuse of the key with a different reason.
+  This complements the existing saved executable Workflow Builder keyed
+  **start** retry regression; no duplicate workflow node was introduced.
+- New code is pushed for CI evaluation; **do not claim the new regression
+  passes** until the new exact-head backend and Windows runs finish. No local
+  Ruff/pytest or native PowerShell was available in this runtime (GitHub clone
+  DNS failed). Cross-version Alembic collision, interactive Windows GUI,
+  upgrade/rollback and representative scientific acceptance remain **HOLD**.
