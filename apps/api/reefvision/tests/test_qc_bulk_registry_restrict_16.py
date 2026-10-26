@@ -61,22 +61,24 @@ def test_committed_bulk_request_restricts_queue_deletion_and_remains_retryable(
         (queue_id, str(uuid4())),
         (str(uuid4()), real_project_id),
     ):
-        with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
-            with app.state.engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "INSERT INTO review_queue_bulk_requests "
-                        "(id, review_queue_id, project_id, action, actor, "
-                        "item_ids_json, created_at) "
-                        "VALUES (:id, :queue_id, :project_id, 'start', "
-                        "'researcher one', '[]', CURRENT_TIMESTAMP)"
-                    ),
-                    {
-                        "id": str(uuid4()),
-                        "queue_id": invalid_queue,
-                        "project_id": invalid_project,
-                    },
-                )
+        with (
+            pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"),
+            app.state.engine.begin() as connection,
+        ):
+            connection.execute(
+                text(
+                    "INSERT INTO review_queue_bulk_requests "
+                    "(id, review_queue_id, project_id, action, actor, "
+                    "item_ids_json, created_at) "
+                    "VALUES (:id, :queue_id, :project_id, 'start', "
+                    "'researcher one', '[]', CURRENT_TIMESTAMP)"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "queue_id": invalid_queue,
+                    "project_id": invalid_project,
+                },
+            )
 
     with app.state.engine.connect() as connection:
         assert connection.scalar(
