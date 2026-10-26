@@ -341,14 +341,22 @@ def compare_mesh_observations(
             raise ValueError("Reidentification evidence must match both observation IDs")
         if identity.specimen_id is not None and identity.specimen_id != specimen:
             raise ValueError("Reidentification evidence must match the provisional specimen ID")
+        # Bind evidence to the actual observation instants as well as IDs.
+        # Legacy evidence without both timestamps remains provisional and flagged.
+        if identity.before_observed_at_utc is None:
+            warnings.append("reidentification_timepoint_binding_unavailable")
+        elif (
+            identity.before_observed_at_utc != before_time
+            or identity.after_observed_at_utc != after_time
+        ):
+            raise ValueError("Reidentification evidence must match both observation timestamps")
         # Match both source geometry fingerprints, not only mutable labels.
         # Missing hashes remain supported for older evidence but are flagged.
         if identity.before_geometry_sha256 is None:
             warnings.append("reidentification_geometry_binding_unavailable")
-        elif (
-            identity.before_geometry_sha256 != first.get("geometry_sha256")
-            or identity.after_geometry_sha256 != second.get("geometry_sha256")
-        ):
+        elif identity.before_geometry_sha256 != first.get(
+            "geometry_sha256"
+        ) or identity.after_geometry_sha256 != second.get("geometry_sha256"):
             raise ValueError(
                 "Reidentification evidence must match both source geometry fingerprints"
             )
