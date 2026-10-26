@@ -84,6 +84,12 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         json={"before": before, "after": after},
     )
     assert preliminary.status_code == 200, preliminary.text
+    registration_evidence["source_geometry_sha256"] = preliminary.json()["provenance"][
+        "before_geometry_sha256"
+    ]
+    registration_evidence["target_geometry_sha256"] = preliminary.json()["provenance"][
+        "after_geometry_sha256"
+    ]
     reidentification_evidence["before_geometry_sha256"] = preliminary.json()["provenance"][
         "before_geometry_sha256"
     ]
@@ -173,6 +179,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["provenance"]["registration_evidence_review_status"] == (
         "caller_supplied_unverified"
     )
+    assert "registration_geometry_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_residual_requires_independent_review" in expected["qc_warnings"]
     assert "registration_transform_requires_independent_review" in expected["qc_warnings"]
     assert "registration_transform_unavailable" not in expected["qc_warnings"]
