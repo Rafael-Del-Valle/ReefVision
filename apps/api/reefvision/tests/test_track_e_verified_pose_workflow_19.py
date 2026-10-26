@@ -1320,16 +1320,22 @@ def test_resigned_pose_item_cannot_change_frozen_schema_identity(
 
 @pytest.mark.parametrize(
     ("field", "replacement"),
-    [("reviewed_by", "another-scientist"), ("reviewed_at", "not-a-timestamp")],
+    [
+        ("reviewed_by", "another-scientist"),
+        ("reviewed_at", "not-a-timestamp"),
+        ("reviewed_at", "2026-10-26"),
+        ("correction_created_at", "not-a-timestamp"),
+        ("correction_created_at", "2026-10-26"),
+    ],
 )
-def test_resigned_review_cannot_change_scientist_or_timestamp(
+def test_resigned_review_cannot_change_scientist_or_timestamps(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
     field: str,
     replacement: str,
 ) -> None:
     # Start with an API-frozen, scientist-verified pose and its review evidence.
-    # Re-signing a manifest cannot substitute the reviewer or corrupt the time.
+    # Re-signing a manifest cannot substitute a reviewer or erase time precision.
     project, dataset = _frozen_dataset(client, monkeypatch)
     project_id = str(project["id"])
     dataset_id = str(dataset["id"])
