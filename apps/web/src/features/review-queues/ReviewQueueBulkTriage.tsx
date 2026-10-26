@@ -21,6 +21,17 @@ type BulkRequest = {
   client_request_id: string;
 };
 
+function newBulkRequestId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  // Some older desktop WebView2 environments expose getRandomValues but
+  // not randomUUID. Keep the idempotency key cryptographically random.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function eligible(
   item: ReviewQueueItem,
   action: ReviewQueueBulkAction,
@@ -88,7 +99,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
       actor: actor.trim(),
       // Stable across an uncertain-response retry; never reapply a stale
       // triage action after another researcher changes the queue state.
-      client_request_id: crypto.randomUUID(),
+      client_request_id: newBulkRequestId(),
       ...(action === "skip" ? { reason: reason.trim() } : {}),
       ...(action === "complete" ? { review_confirmed: true } : {}),
     });
