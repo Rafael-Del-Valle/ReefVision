@@ -2870,6 +2870,7 @@ export async function bulkTriageReviewQueueItems(
     reason?: string;
     actor?: string;
     review_confirmed?: boolean;
+    client_request_id?: string;
   },
 ): Promise<ReviewQueueBulkResponse> {
   return request<ReviewQueueBulkResponse>(
