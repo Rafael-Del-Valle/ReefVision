@@ -67,6 +67,9 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "method": "photo_match",
         "observer_id": "lab-annotator-1",
         "evidence_note": "Provisional photo match; independent review pending",
+        "independent_reviewer_id": "lab-reviewer-2",
+        "independent_review_decision": "supports_match",
+        "independent_review_note": "Separate visual check; no certified identity determination",
         "before_observed_at_utc": "2026-10-01T12:00:00Z",
         "after_observed_at_utc": "2026-10-02T07:00:00-05:00",
     }
@@ -146,7 +149,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["provenance"]["reidentification_evidence_review_status"] == (
         "caller_supplied_unverified"
     )
-    assert "reidentification_evidence_requires_independent_review" in warnings
+    assert "reidentification_independent_review_recorded_not_identity_verification" in warnings
+    assert "reidentification_evidence_requires_independent_review" not in warnings
     assert "reidentification_specimen_binding_unavailable" not in warnings
     assert "reidentification_geometry_binding_unavailable" not in warnings
     assert "reidentification_timepoint_binding_unavailable" not in warnings
