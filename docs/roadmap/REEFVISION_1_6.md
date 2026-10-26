@@ -872,18 +872,19 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   `qc_review_queue` Workflow Builder node. Both already share durable review
   queue IDs; no duplicate node or schema migration was needed.
 - New manual bulk requests may include a client-generated UUID
-  `client_request_id`. Each affected item records a deterministic UUIDv5
-  audit-event request ID under the existing unique constraint. An identical
-  retry checks the committed audit event **before** current-state validation,
-  so a lost HTTP response cannot restart an item another researcher has
-  subsequently skipped, returned, or completed.
+  `client_request_id`. A new batch stores the original UUID on the
+  lexicographically first item as a durable selection marker, and deterministic
+  UUIDv5 keys on the remaining items. An identical retry checks committed
+  audit events **before** current-state validation, so a lost HTTP response
+  cannot restart an item another researcher subsequently changed.
 - Keyed first attempts require every selected item to transition, ensuring a
   complete audit marker set. Reusing a key for a different action, reviewer,
-  reason, or overlapping larger selection fails closed. A batch key is
-  scoped to the selected item IDs and must not be reused for a different
-  selection; entirely disjoint selections cannot be correlated without a
-  separate persisted batch registry. Historical API clients without a key
-  retain the previous state-based retry behavior.
+  reason, changed selection (including disjoint items), or foreign queue
+  fails closed once the first batch is committed. Existing UUIDv5-only event
+  batches remain replayable; historical API clients without a key retain
+  their state-based retry behavior. A future durable batch registry with a
+  unique key is still needed for a formally guaranteed concurrent,
+  disjoint-request race across independent database writers.
 - The UI generates one UUID per confirmed submission and reuses the *same*
   request payload for an uncertain-response retry. Backend API tests cover
   an intervening reviewer decision, audit preservation, conflicting keys,
@@ -913,3 +914,24 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   Ruff/pytest or native PowerShell was available in this runtime (GitHub clone
   DNS failed). Cross-version Alembic collision, interactive Windows GUI,
   upgrade/rollback and representative scientific acceptance remain **HOLD**.
+
+## 2026-10-26 — QC batch UUID selection binding (Track D)
+
+- Audited existing 1.6 QC bulk retry logic and found a reproducible gap:
+  the same client UUID could be reused for an entirely disjoint item set,
+  because UUIDv5 keys were derived independently for each item.
+- New batches persist the original UUID on the canonical first item and
+  UUIDv5 identifiers for the others. Replay lookup checks all candidate
+  identifiers across queues, validates the complete selection and actor/action,
+  and rejects any partial or foreign-queue marker. The original audit events,
+  human review decisions and scientific annotations are not rewritten.
+- Added API regressions for disjoint and cross-project reuse, reordered
+  identical retries, and a persisted pre-change UUIDv5-only batch fixture.
+  Existing saved executable QC Workflow Builder replay tests remain the
+  integration gate for the shared service.
+- This is a backwards-compatible service/test increment with **no migration**.
+  Sequential committed-request reuse is protected; a separate persisted
+  unique batch registry would be required to guarantee cross-writer
+  concurrency semantics. Do not claim release acceptance from these tests.
+- Exact-head CI, real installed Windows GUI, MSI upgrade/rollback, representative
+  scientific data and 1.1/1.6 Alembic 0038 reconciliation remain **HOLD**.
