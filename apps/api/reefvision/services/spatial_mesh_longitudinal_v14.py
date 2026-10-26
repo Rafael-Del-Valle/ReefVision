@@ -341,6 +341,12 @@ def compare_mesh_observations(
             raise ValueError("Reidentification evidence must match both observation IDs")
         if identity.specimen_id is not None and identity.specimen_id != specimen:
             raise ValueError("Reidentification evidence must match the provisional specimen ID")
+        # Local observation labels and geometry fingerprints are not globally
+        # unique. Reject cross-project evidence reuse when a binding is supplied.
+        if identity.project_id is None:
+            warnings.append("reidentification_project_binding_unavailable")
+        elif identity.project_id != project_before:
+            raise ValueError("Reidentification evidence must match the project ID")
         # Bind evidence to the actual observation instants as well as IDs.
         # Legacy evidence without both timestamps remains provisional and flagged.
         if identity.before_observed_at_utc is None:
