@@ -259,6 +259,17 @@ def _seed_pose_model(
     if binding is None:
         raise ValidationError("Pose retraining seed requires a bound ReefVision landmark schema")
 
+    # Matching keypoint definitions are not sufficient provenance: distinct
+    # schema identities can have identical content hashes. Require the exact
+    # frozen schema revision before using a locally registered checkpoint.
+    if (
+        binding.schema_id != dataset.pose_schema_id
+        or binding.schema_revision != dataset.pose_schema_revision
+    ):
+        raise ValidationError(
+            "Pose retraining seed landmark schema identity does not match frozen training dataset"
+        )
+
     revision = session.scalar(
         select(PoseLandmarkSchemaRevision).where(
             PoseLandmarkSchemaRevision.schema_id == binding.schema_id,
