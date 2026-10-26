@@ -479,9 +479,7 @@ def compare_mesh_observations(
     if face_count_ratio is None:
         warnings.append("reconstruction_face_count_ratio_unavailable")
     if early_faces is not None and late_faces is not None and early_faces != late_faces:
-        warnings.append(
-            "reconstruction_face_count_changed_qc_rate_comparability_requires_review"
-        )
+        warnings.append("reconstruction_face_count_changed_qc_rate_comparability_requires_review")
     # Source-frame labels are audit metadata, not registration transforms.
     frames = [first.get("coordinate_frame_id"), second.get("coordinate_frame_id")]
     for frame in frames:
@@ -531,14 +529,34 @@ def compare_mesh_observations(
             or registration.target_frame_id != frames[1]
         ):
             raise ValueError("Registration evidence frame IDs must match observation source frames")
+        # Local frame labels and geometry can recur across projects or
+        # observation dates. Supplied bindings must match this exact pair.
+        # Missing legacy bindings remain readable but explicitly provisional.
+        if registration.project_id is None:
+            warnings.append("registration_project_binding_unavailable")
+        elif registration.project_id != project_before:
+            raise ValueError("Registration evidence must match the project ID")
+        if registration.source_observation_id is None:
+            warnings.append("registration_observation_binding_unavailable")
+        elif (
+            registration.source_observation_id != first_id
+            or registration.target_observation_id != second_id
+        ):
+            raise ValueError("Registration evidence must match both observation IDs")
+        if registration.source_observed_at_utc is None:
+            warnings.append("registration_timepoint_binding_unavailable")
+        elif (
+            registration.source_observed_at_utc != before_time
+            or registration.target_observed_at_utc != after_time
+        ):
+            raise ValueError("Registration evidence must match both observation timestamps")
         # Frame labels can be reused for new reconstructions. Optional paired
         # fingerprints bind this evidence to the actual imported geometry.
         if registration.source_geometry_sha256 is None:
             warnings.append("registration_geometry_binding_unavailable")
-        elif (
-            registration.source_geometry_sha256 != first.get("geometry_sha256")
-            or registration.target_geometry_sha256 != second.get("geometry_sha256")
-        ):
+        elif registration.source_geometry_sha256 != first.get(
+            "geometry_sha256"
+        ) or registration.target_geometry_sha256 != second.get("geometry_sha256"):
             raise ValueError("Registration evidence must match both source geometry fingerprints")
         registration_record = registration.model_dump(mode="json", exclude_none=True)
         warnings.append("registration_residual_requires_independent_review")
