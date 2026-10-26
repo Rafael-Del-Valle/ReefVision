@@ -274,11 +274,11 @@ def test_source_linked_aliases_pool_into_one_unit_not_two_replicates() -> None:
     assert population[0].contributing_organism_count == 2
     assert population[0].independent_unit_inference_allowed is False
     assert population[0].mean_unit_absolute_change == pytest.approx(3.0)
-    assert summarize_projected_unit_summaries(
-        list(reversed(records)), summarize_projected_endpoint_changes(
-            list(reversed(records)), summarize_sampling_date_qc(list(reversed(records)))
-        )
-    ) == summaries
+    reversed_records = list(reversed(records))
+    reversed_changes = summarize_projected_endpoint_changes(
+        reversed_records, summarize_sampling_date_qc(reversed_records)
+    )
+    assert summarize_projected_unit_summaries(reversed_records, reversed_changes) == summaries
 
 
 def test_source_alias_across_metrics_preserves_one_organism_owner() -> None:
@@ -320,13 +320,17 @@ def test_source_alias_does_not_hide_cross_tank_reassignment() -> None:
         for record in width
     ]
     records = width + height
-    changes = summarize_projected_endpoint_changes(records, summarize_sampling_date_qc(records))
+    changes = summarize_projected_endpoint_changes(
+        records, summarize_sampling_date_qc(records)
+    )
     with pytest.raises(ValidationError, match="identity or experimental unit changed"):
         summarize_projected_unit_summaries(records, changes)
 
 
 def test_source_mixed_biological_levels_fail_closed() -> None:
     records = _dated_alias_series("fragment-A", "tank/site", "tank-1", 501, 2.0)
-    changes = summarize_projected_endpoint_changes(records, summarize_sampling_date_qc(records))
+    changes = summarize_projected_endpoint_changes(
+        records, summarize_sampling_date_qc(records)
+    )
     with pytest.raises(ValidationError, match="mixes biological sampling levels"):
         summarize_projected_unit_summaries(records, changes)
