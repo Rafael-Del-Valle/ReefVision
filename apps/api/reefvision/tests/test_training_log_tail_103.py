@@ -267,6 +267,31 @@ def test_log_tail_strips_bidi_spoofing(tmp_path: Path) -> None:
     assert log.read_bytes() == original
 
 
+def test_log_tail_strips_zero_width_controls_without_losing_scientific_units(
+    tmp_path: Path,
+) -> None:
+    """Invisible Unicode must not split or disguise actual persisted loss labels."""
+    log = tmp_path / "training.log"
+    original = (
+        "train/box\u200b_loss=0.25\n"
+        "train/cls\u2060_loss=0.30\n"
+        "train/dfl\u2028_loss=0.10\u2029\n"
+        "sensor=24 °C; scale=10 µm\n"
+    ).encode("utf-8")
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "train/box_loss=0.25\n"
+            "train/cls_loss=0.30\n"
+            "train/dfl_loss=0.10\n"
+            "sensor=24 °C; scale=10 µm\n"
+        ),
+    }
+    assert log.read_bytes() == original
+
+
 def test_training_log_api_uses_persisted_run_path_only(
     client: TestClient,
     test_settings: Settings,
