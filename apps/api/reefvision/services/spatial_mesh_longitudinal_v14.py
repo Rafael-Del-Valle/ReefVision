@@ -366,8 +366,18 @@ def compare_mesh_observations(
         if identity.independent_reviewer_id is None:
             warnings.append("reidentification_evidence_requires_independent_review")
         else:
+            # A dated review cannot precede the observation it claims to review.
+            # Undated legacy review records are retained with explicit audit QC.
+            if identity.independent_reviewed_at_utc is None:
+                warnings.append("reidentification_independent_review_timestamp_unavailable")
+            elif identity.independent_reviewed_at_utc < after_time:
+                raise ValueError(
+                    "Independent reidentification review predates the later observation"
+                )
             # A reviewer decision is attributed evidence, not identity approval.
-            warnings.append("reidentification_independent_review_recorded_not_identity_verification")
+            warnings.append(
+                "reidentification_independent_review_recorded_not_identity_verification"
+            )
             if identity.independent_review_decision == "disputes_match":
                 warnings.append("reidentification_independent_review_disputes_match")
             elif identity.independent_review_decision == "inconclusive":
