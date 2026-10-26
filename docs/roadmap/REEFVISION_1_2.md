@@ -1998,6 +1998,12 @@ measurements. One tank now contributes one descriptive unit mean across
 its fragments. Raw sampling-level labels remain intact in the underlying
 candidate/endpoint evidence, and no original registered identity is rewritten.
 
+Technical/biological compound labels (e.g. `camera tank`, `image-tank`
+or `frame aquarium`) are **not** normalized into eligible biological units:
+the original technical label remains visible and its unit summary stays
+`technical_replicate_unit`, excluded from population aggregation. Three
+additional parameterized cases guard against technical-replicate laundering.
+
 Across different measurement metrics, one organism may retain its physical
 tank while its registered label uses a recognized alias. Different physical
 tank IDs, ambiguous mixed-level declarations and unreviewed provenance still
