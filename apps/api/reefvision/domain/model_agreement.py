@@ -6,7 +6,9 @@ import math
 from collections import defaultdict
 
 from reefvision.domain.ecology_lineage_policy import (
+    canonical_declared_unit_type,
     cross_unit_shared_parent_colony_ids,
+    ecological_unit_types_equivalent,
     validate_declared_lineage,
 )
 from reefvision.domain.errors import ValidationError
@@ -41,10 +43,15 @@ def compare_paired_counts(
         raise ValidationError("Human-reference and model source record IDs must be distinct")
 
     unit_types = {item.experimental_unit_type for item in pairs if item.experimental_unit_type}
-    if len(unit_types) > 1:
+    canonical_type = canonical_declared_unit_type(unit_types)
+    if unit_types and canonical_type is None:
         raise ValidationError("Pairs declare conflicting experimental unit types")
-    unit_type = request.experimental_unit_type or next(iter(unit_types), None)
-    if unit_types and unit_type not in unit_types:
+    unit_type = request.experimental_unit_type or canonical_type
+    if (
+        canonical_type is not None
+        and unit_type is not None
+        and not ecological_unit_types_equivalent(unit_type, canonical_type)
+    ):
         raise ValidationError("Request and pairs disagree on experimental unit type")
     if unit_type is None and any(item.experimental_unit_id is not None for item in pairs):
         raise ValidationError("experimental_unit_type is required when unit IDs are supplied")
@@ -52,7 +59,11 @@ def compare_paired_counts(
         raise ValidationError("All paired observations require experimental_unit_id")
     memberships: dict[str, str] = {}
     for item in pairs:
-        if item.experimental_unit_type is not None and item.experimental_unit_type != unit_type:
+        if (
+            item.experimental_unit_type is not None
+            and unit_type is not None
+            and not ecological_unit_types_equivalent(item.experimental_unit_type, unit_type)
+        ):
             raise ValidationError("Pair experimental unit type conflicts with the request")
         if unit_type is not None:
             assert item.experimental_unit_id is not None
