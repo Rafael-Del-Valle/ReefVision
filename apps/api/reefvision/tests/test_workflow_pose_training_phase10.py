@@ -517,6 +517,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     # and the recorded validation policy, not just its workflow snapshot.
     for field, corrupt_value, error in (
         ("dataset_manifest_sha256", "0" * 64, "dataset checksum changed"),
+        ("provider_id", "corrupted-provider", "configuration changed"),
         (
             "evaluation_config_json",
             {"validation_mode": "separate_frozen_pose_dataset"},
