@@ -182,7 +182,7 @@ def measure_point_cloud_preview(
             # Flag a zero-length chord instead of implying biological structure.
             chord_qc_warnings: list[str] = []
             # Reversing a chord does not make an independent measurement.
-            unordered_pair = tuple(sorted(pair))
+            unordered_pair = (min(pair), max(pair))
             if unordered_pair in seen_point_pairs:
                 chord_qc_warnings.append("repeated_point_pair")
                 repeated_selected_point_pairs = True
