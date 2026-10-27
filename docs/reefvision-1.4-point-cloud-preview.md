@@ -214,3 +214,22 @@ provenance remain unchanged. The standalone API and executable, persisted typed
 Workflow Builder graph share the implementation and regression coverage.
 Neither warning verifies coral identity, calibration, surface area, anatomical
 branch length, or independent biological replicates; human review is required.
+
+## Selected-chord QC summary (October 27, 2026)
+
+The provisional point-cloud result now includes a
+`selected_point_chord_qc_summary` with the number of requested chords,
+distinct unordered source-index pairs, distinct unordered exact XYZ endpoint
+geometries, and zero-distance chords whose two endpoint coordinates coincide.
+The top-level `coincident_selected_chord_endpoints` warning identifies any
+zero-distance selected chord; individual chord records continue to carry
+`coincident_endpoint_coordinates`. Empty selections report zero counts.
+
+These counts describe **user-selected geometric chords**, not coral branches,
+independent biological replicates, verified landmarks, or observations of
+growth. Duplicate source indices and duplicated reconstructed XYZ vertices
+remain distinguishable. The summary does not alter source geometry, chord
+distances, uncertainty intervals, calibration provenance, or provisional
+verification. The standalone endpoint and saved executable typed Workflow
+Builder graph use the same calculation, with regression checks for identical
+saved-artifact summaries and provenance.
