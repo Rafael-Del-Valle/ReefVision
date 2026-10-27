@@ -57,7 +57,8 @@ def test_backup_job_parent_is_persisted_before_fk_constrained_backup_record(
         assert record is not None
         assert job.job_type == "backup"
         assert record.job_id == job.id
-        assert job.status == "completed"
+        # Background jobs use "succeeded"; backup artifacts use "completed".
+        assert job.status == "succeeded"
         assert record.status == "completed"
 
 
