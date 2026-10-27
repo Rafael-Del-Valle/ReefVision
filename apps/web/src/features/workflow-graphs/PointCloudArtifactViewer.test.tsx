@@ -483,6 +483,27 @@ describe("PointCloudArtifactViewer", () => {
     expect(JSON.stringify(artifact)).toBe(before);
   });
 
+  it("does not transfer a selected source point into a replacement reconstruction", () => {
+    const { rerender } = render(
+      <PointCloudArtifactViewer artifact={validArtifact} />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect source point 1" }),
+    );
+    expect(
+      screen.getByText(/Source point 1 \\(unverified source frame\\)/),
+    ).toBeInTheDocument();
+    // The next artifact may reuse the same point indices for another specimen.
+    // Selection must be deliberate and must never imply a verified identity.
+    rerender(<PointCloudArtifactViewer artifact={{ ...validArtifact }} />);
+    expect(
+      screen.queryByText(/Source point 1 \\(unverified source frame\\)/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Select a displayed source point/),
+    ).toBeInTheDocument();
+  });
+
   it("rejects stale or malformed saved scale intervals but retains legacy previews", () => {
     const validIntervals = [
       [
