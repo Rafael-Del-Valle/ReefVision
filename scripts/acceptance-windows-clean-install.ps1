@@ -559,7 +559,10 @@ try {
         $cameraRestartHttp = [System.Net.Http.HttpClient]::new()
         try {
             $persistedCameraBytes = $cameraRestartHttp.GetByteArrayAsync("$api/images/$cameraId/content").GetAwaiter().GetResult()
-            $persistedHash = [BitConverter]::ToString([System.Security.Cryptography.SHA256]::HashData([byte[]]$persistedCameraBytes)).Replace('-', '')
+            $restartSha = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $persistedHash = [BitConverter]::ToString($restartSha.ComputeHash([byte[]]$persistedCameraBytes)).Replace('-', '')
+            } finally { $restartSha.Dispose() }
             if ($persistedHash -cne $cameraHashBefore) {
                 throw 'Camera JPEG original bytes changed or disappeared after desktop restart.'
             }
