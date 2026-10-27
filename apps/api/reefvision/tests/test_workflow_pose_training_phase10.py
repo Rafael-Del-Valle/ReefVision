@@ -597,6 +597,31 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
         assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # Removing the stored digest or path must not bypass checkpoint integrity
+    # for this newly completed, scientist-verified workflow training run.
+    for missing_field in ("result_checkpoint_sha256", "result_checkpoint_path"):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_manifest = dict(persisted.artifact_manifest_json or {})
+            persisted.artifact_manifest_json = {
+                key: value
+                for key, value in original_manifest.items()
+                if key != missing_field
+            }
+            session.commit()
+
+        with pytest.raises(ValidationError, match="checkpoint provenance is missing"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     checkpoint = resolve_managed_project_path(test_settings, result["result_checkpoint_path"])
     checkpoint.write_bytes(b"changed-after-scientist-verified-pose-training")
     with pytest.raises(ValidationError, match="checkpoint checksum changed"):
