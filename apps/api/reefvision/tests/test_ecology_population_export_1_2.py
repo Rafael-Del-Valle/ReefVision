@@ -265,7 +265,15 @@ def test_population_csv_rejects_resigned_forged_replication_evidence(
     forged = _resign_derived_evidence(
         source.model_copy(update={"projected_population_summaries": [altered_summary]})
     )
-    with pytest.raises(ValidationError, match="Projected population summaries"):
+    # A fabricated missing-parent declaration can fail the earlier source-total
+    # fingerprint guard; other altered aggregates fail population recomputation.
+    # Both checks must reject the re-signed artifact before a CSV is emitted.
+    expected_error = (
+        "fingerprint does not match source totals"
+        if "units_missing_parent_colony" in forged_fields
+        else "Projected population summaries"
+    )
+    with pytest.raises(ValidationError, match=expected_error):
         render_ecology_population_csv(forged)
 
 
