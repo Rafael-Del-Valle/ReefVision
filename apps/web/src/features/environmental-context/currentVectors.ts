@@ -224,9 +224,7 @@ function currentCsvCell(value: string | number | null | undefined): string {
   // numeric measurements (including negative coordinates and velocities).
   const raw = String(value);
   const safe =
-    typeof value === "string" && /^\s*[=+@-]/.test(raw)
-      ? "'" + raw
-      : raw;
+    typeof value === "string" && /^\s*[=+@-]/.test(raw) ? "'" + raw : raw;
   return '"' + safe.replaceAll('"', '""') + '"';
 }
 
