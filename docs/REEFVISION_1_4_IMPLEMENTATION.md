@@ -540,3 +540,28 @@ available for audit. The standalone API and saved, executable typed Workflow
 Builder node share the comparison engine, with dedicated disputed-match,
 inconclusive-review and persisted-artifact parity regressions. Neither
 decision establishes verified identity, growth, or Windows desktop acceptance.
+
+## Mesh triangle-area concentration QC (provisional)
+
+Standalone `mesh-preview` responses and persisted executable
+`mesh_surface_preview` Workflow Builder artifacts now include
+`largest_triangle_area_fraction` and
+`area_weighted_effective_triangle_count`. The former is the largest
+triangle's area divided by the **full-resolution** mesh surface area. The
+latter is `1 / sum((triangle_area / total_area)^2)`, a reciprocal
+area-concentration index analogous to an effective number of triangles.
+For two equal-area triangles the values are `0.5` and `2`; for
+one triangle with all positive area they are `1` and `1`.
+Zero-area triangles contribute no area weight. An entirely zero-area mesh
+reports `null` for both metrics, not an invented concentration.
+
+The engine uses `math.fsum` for the total area and squared shares to
+reduce rounding error. These descriptors are **scale-invariant mesh
+tessellation diagnostics**: they do not estimate surface reconstruction
+accuracy, geometric registration, coral tissue area, specimen identity,
+biological sample size, or uncertainty. No arbitrary mesh-quality pass
+threshold or human verification is inferred. Full mesh areas and the
+existing calibration-scale intervals remain the scientific calculation
+basis; decimated preview triangles do not change these metrics.
+Standalone, direct-service, and saved-workflow regression cases cover
+unequal triangles, zero-area triangles, provenance, and artifact parity.
