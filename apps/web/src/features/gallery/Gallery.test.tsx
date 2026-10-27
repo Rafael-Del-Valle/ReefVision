@@ -550,6 +550,79 @@ describe("Gallery", () => {
     );
   });
 
+  it("restores project-specific page, focus and wrapping when switching projects", async () => {
+    const otherProject: Project = {
+      ...project,
+      id: "project-2",
+      name: "Other coral survey",
+    };
+    const otherImage: ProjectImage = {
+      ...image,
+      id: "image-other-25",
+      project_id: otherProject.id,
+      original_filename: "other-camera-25.JPEG",
+    };
+    window.localStorage.setItem(
+      `reefvision.gallery.${otherProject.id}.v1`,
+      JSON.stringify({ imageId: otherImage.id, page: 2, wrap: true }),
+    );
+    const requested: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input), "http://localhost");
+      const other = url.pathname.includes(`/projects/${otherProject.id}/images`);
+      const first = url.pathname.includes(`/projects/${project.id}/images`);
+      if (!other && !first) throw new Error(`Unexpected request ${url}`);
+      requested.push(`${other ? otherProject.id : project.id}:${url.searchParams.get("page")}`);
+      return jsonResponse({
+        items: other ? [otherImage] : [image],
+        total: other ? 25 : 1,
+        page: other ? 2 : 1,
+        page_size: 24,
+        pages: other ? 2 : 1,
+      });
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const onFocusedImageChange = vi.fn();
+    const renderFor = (selectedProject: Project) => (
+      <QueryClientProvider client={queryClient}>
+        <Gallery
+          project={selectedProject}
+          onFocusedImageChange={onFocusedImageChange}
+        />
+      </QueryClientProvider>
+    );
+    const view = render(renderFor(project));
+    await screen.findByAltText("Focused project image: swiftia-01.png");
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-1"),
+    );
+
+    view.rerender(renderFor(otherProject));
+    await screen.findByAltText("Focused project image: other-camera-25.JPEG");
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith(otherImage.id),
+    );
+    expect(screen.getByLabelText("Wrap image navigation")).toBeChecked();
+    expect(requested).toContain("project-2:2");
+    expect(screen.getByLabelText("Page number")).toHaveValue(2);
+
+    view.rerender(renderFor(project));
+    await screen.findByAltText("Focused project image: swiftia-01.png");
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-1"),
+    );
+    expect(screen.getByLabelText("Wrap image navigation")).not.toBeChecked();
+    expect(requested).toContain("project-1:1");
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(`reefvision.gallery.${otherProject.id}.v1`) ??
+          "{}",
+      ),
+    ).toMatchObject({ imageId: otherImage.id, page: 2, wrap: true });
+  });
+
   it("restores the project's recent image and navigates with viewer keys", async () => {
     const secondImage: ProjectImage = {
       ...image,
