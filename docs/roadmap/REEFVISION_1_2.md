@@ -2258,3 +2258,28 @@ saved-workflow execution and artifact parity with the standalone CSV,
 plus attempted verified-dataset port connection. These tests must pass
 exact-head CI before any acceptance claim. No source is promoted to
 verified biological truth by exporting it.
+
+## Source-measurement CSV CI repair and reproducibility regression (2026-10-26)
+
+The source-linked `measurements.csv` export and its executable, typed,
+persisted `ecology_measurement_csv_export` Workflow Builder node retain their
+existing provenance and scientist-review contracts. Exact-head CI at
+`879a3a5ee5bc15a6b81c8eec791d02867e359fa4` completed **16/19 workflows**;
+the three failing backend jobs all stopped at Ruff formatting in the same
+source CSV renderer and saved-workflow acceptance test, before executing the
+backend scientific suite. Applied the exact formatter changes from those logs.
+
+Added a focused standalone regression requiring byte-identical CSV output
+when the same valid source-linked sampling-date QC records are presented in
+reverse order. The source fingerprint contract intentionally canonicalizes
+QC series, so record ordering must not change exported scientific evidence.
+The existing saved-workflow test continues to check CSV/API parity and that
+an unverified export cannot enter a verified-dataset port. No database schema,
+new workflow node, model weights or 1.1 environmental context is introduced.
+
+**Validation boundary:** formatter changes are based on the failed GitHub
+Actions log, and the new test is committed for exact-head CI; local Ruff and
+full-repository tests are unavailable in the current runner. All outputs remain
+`linked_unverified` with `scientist_review_required`. Complete CI, migration
+reconciliation, representative scientific acceptance, and installed Windows
+GUI/installer validation remain outstanding. This is not a release claim.
