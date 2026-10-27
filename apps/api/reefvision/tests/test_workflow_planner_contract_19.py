@@ -266,6 +266,7 @@ def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
         assert detail.json()["run"]["error_message"] == "Workflow graph provenance checksum failed"
         assert detail.json()["artifacts"] == []
 
+    expected_error = "Workflow job project ownership no longer matches run"
     # A queued job cannot be reassigned to another project and then execute
     # the original project's frozen scientific workflow. Preserve the run's
     # readable failure record after restoring the corrupted job ownership.
@@ -292,7 +293,7 @@ def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
         job = session.get(Job, str(queued.json()["job_id"]))
         assert job is not None
         assert job.status == "failed"
-        assert job.error_message == "Workflow job project ownership no longer matches run"
+        assert job.error_message == expected_error
         assert job.completed_at is not None
         job.project_id = project_id
         session.commit()
@@ -300,5 +301,5 @@ def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
-    assert detail.json()["run"]["error_message"] == "Workflow job project ownership no longer matches run"
+    assert detail.json()["run"]["error_message"] == expected_error
     assert detail.json()["artifacts"] == []
