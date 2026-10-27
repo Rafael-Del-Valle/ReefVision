@@ -110,6 +110,10 @@ class BackupService:
             },
         )
         self.jobs.add(job)
+        # Persist the parent first: without an ORM relationship SQLAlchemy can
+        # flush BackupRecord before Job, which violates the SQLite job FK when
+        # runtime foreign-key enforcement is enabled. Keep both in one transaction.
+        self.session.flush()
         self.backups.add(backup)
         self.session.commit()
         self.session.refresh(job)
