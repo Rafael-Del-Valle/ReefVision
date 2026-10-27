@@ -574,12 +574,13 @@ try {
                 $restartDisplayType = [string]$restartDisplayResponse.Content.Headers.ContentType.MediaType
                 $restartDisplayBytes = $restartDisplayResponse.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
                 $null = Assert-ReefVisionCameraRaster -Bytes ([byte[]]$restartDisplayBytes) -ContentType $restartDisplayType -ExpectedWidth ([int]$cameraMetadata.width_px) -ExpectedHeight ([int]$cameraMetadata.height_px)
+                Assert-ReefVisionStableCameraDisplay -InitialBytes ([byte[]]$displayBytes) -RestartBytes ([byte[]]$restartDisplayBytes) -InitialContentType $displayType -RestartContentType $restartDisplayType
             } finally { $restartDisplayResponse.Dispose() }
         } finally { $cameraRestartHttp.Dispose() }
         if ((Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash -cne $cameraHashBefore) {
             throw 'Camera fixture changed on disk during restart acceptance.'
         }
-        $report.camera_jpeg = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend accepted and persisted $cameraName ($($cameraMetadata.width_px)x$($cameraMetadata.height_px)) across desktop restart; original SHA256 $cameraHashBefore unchanged; display decoded as $restartDisplayType. GUI/WebView2 acceptance remains manual."
+        $report.camera_jpeg = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend accepted and persisted $cameraName ($($cameraMetadata.width_px)x$($cameraMetadata.height_px)) across desktop restart; original SHA256 $cameraHashBefore unchanged; display decoded as $restartDisplayType and display SHA-256 unchanged across restart. GUI/WebView2 acceptance remains manual."
     }
     if ($LiveSam2Acceptance) {
         $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
