@@ -199,9 +199,18 @@ it("retains independent currents for different subjects at the same grid cell", 
   const second = { image_id: "00000000-0000-4000-8000-000000000006" };
   const rows = [
     component("current_eastward_velocity", 3, { id: "east-a", subject: first }),
-    component("current_northward_velocity", 4, { id: "north-a", subject: first }),
-    component("current_eastward_velocity", 5, { id: "east-b", subject: second }),
-    component("current_northward_velocity", 12, { id: "north-b", subject: second }),
+    component("current_northward_velocity", 4, {
+      id: "north-a",
+      subject: first,
+    }),
+    component("current_eastward_velocity", 5, {
+      id: "east-b",
+      subject: second,
+    }),
+    component("current_northward_velocity", 12, {
+      id: "north-b",
+      subject: second,
+    }),
   ];
   expect(currentVectors(rows).map((vector) => vector.speed)).toEqual([5, 13]);
   expect(currentVectors([rows[0], rows[3]])).toEqual([]);
