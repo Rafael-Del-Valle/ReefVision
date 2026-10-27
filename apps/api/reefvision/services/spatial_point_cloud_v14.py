@@ -161,6 +161,8 @@ def measure_point_cloud_preview(
     # Selected point-pair chords refer to original input order, not branches.
     selected_chords: list[dict[str, Any]] = []
     selected_endpoint_indices: set[int] = set()
+    seen_point_pairs: set[tuple[int, int]] = set()
+    repeated_selected_point_pairs = False
     if point_index_pairs is not None:
         if not isinstance(point_index_pairs, list) or len(point_index_pairs) > 32:
             raise ValueError("At most 32 point-index pairs are supported")
@@ -179,6 +181,12 @@ def measure_point_cloud_preview(
             # Different indices can still identify identical XYZ coordinates.
             # Flag a zero-length chord instead of implying biological structure.
             chord_qc_warnings: list[str] = []
+            # Reversing a chord does not make an independent measurement.
+            unordered_pair = tuple(sorted(pair))
+            if unordered_pair in seen_point_pairs:
+                chord_qc_warnings.append("repeated_point_pair")
+                repeated_selected_point_pairs = True
+            seen_point_pairs.add(unordered_pair)
             if endpoints[0] == endpoints[1]:
                 chord_qc_warnings.append("coincident_endpoint_coordinates")
             selected_chords.append(
@@ -348,11 +356,8 @@ def measure_point_cloud_preview(
         "qc_warnings": (
             (["duplicate_points_present"] if unique_count < len(vertices) else [])
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
-            + (
-                ["preview_omits_selected_chord_endpoints"]
-                if omitted_chord_endpoints
-                else []
-            )
+            + (["preview_omits_selected_chord_endpoints"] if omitted_chord_endpoints else [])
+            + (["repeated_selected_point_pairs"] if repeated_selected_point_pairs else [])
         ),
         "measurement_status": "caller_supplied_unverified",
         "provenance": {
