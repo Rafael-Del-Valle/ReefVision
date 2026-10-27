@@ -69,6 +69,32 @@ Assert-True ($registrations[0].DisplayName -eq 'ReefVision') 'Registration filte
 $registrationFixtures += [pscustomobject]@{ DisplayName = 'ReefVision 1.0.0' }
 Assert-True (@(Get-ReefVisionInstalledRegistrations).Count -eq 2) 'Multiple registration results were not preserved as an array.'
 
+# Real pixel decoding is required: HTTP success and byte length alone do not
+# establish that an installed camera JPEG is viewable in the original frame.
+Add-Type -AssemblyName System.Drawing
+$cameraBitmap = [System.Drawing.Bitmap]::new(7, 5)
+$cameraJpegStream = [System.IO.MemoryStream]::new()
+$cameraPngStream = [System.IO.MemoryStream]::new()
+try {
+    $cameraBitmap.Save($cameraJpegStream, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+    $cameraBitmap.Save($cameraPngStream, [System.Drawing.Imaging.ImageFormat]::Png)
+    $cameraJpegBytes = [byte[]]$cameraJpegStream.ToArray()
+    $cameraPngBytes = [byte[]]$cameraPngStream.ToArray()
+    $jpegRaster = Assert-ReefVisionCameraRaster -Bytes $cameraJpegBytes -ContentType 'image/jpeg' -ExpectedWidth 7 -ExpectedHeight 5
+    Assert-True ($jpegRaster.width -eq 7 -and $jpegRaster.height -eq 5) 'JPEG source raster dimensions were not decoded.'
+    $pngRaster = Assert-ReefVisionCameraRaster -Bytes $cameraPngBytes -ContentType 'image/png' -ExpectedWidth 7 -ExpectedHeight 5
+    Assert-True ($pngRaster.media_type -eq 'image/png') 'PNG display raster was not decoded.'
+    Assert-Throws { Assert-ReefVisionCameraRaster -Bytes $cameraJpegBytes -ContentType 'image/png' -ExpectedWidth 7 -ExpectedHeight 5 | Out-Null } 'JPEG bytes must not pass as PNG.'
+    Assert-Throws { Assert-ReefVisionCameraRaster -Bytes $cameraPngBytes -ContentType 'image/jpeg' -ExpectedWidth 7 -ExpectedHeight 5 | Out-Null } 'PNG bytes must not pass as JPEG.'
+    Assert-Throws { Assert-ReefVisionCameraRaster -Bytes $cameraJpegBytes -ContentType 'image/jpeg' -ExpectedWidth 5 -ExpectedHeight 7 | Out-Null } 'Rotated or transposed scientific source dimensions must fail.'
+    Assert-Throws { Assert-ReefVisionCameraRaster -Bytes ([byte[]](1, 2, 3)) -ContentType 'image/jpeg' -ExpectedWidth 7 -ExpectedHeight 5 | Out-Null } 'Nonimage bytes must not pass camera acceptance.'
+    Assert-Throws { Assert-ReefVisionCameraRaster -Bytes $cameraJpegBytes -ContentType 'image/jpeg' -ExpectedWidth 0 -ExpectedHeight 5 | Out-Null } 'Invalid expected source dimensions must fail.'
+} finally {
+    $cameraPngStream.Dispose()
+    $cameraJpegStream.Dispose()
+    $cameraBitmap.Dispose()
+}
+
 $acceptancePath = Join-Path $PSScriptRoot 'acceptance-windows-clean-install.ps1'
 $parseTokens = $null
 $parseErrors = $null
@@ -97,6 +123,7 @@ Assert-True ($acceptanceScript.Contains('camera_jpeg = if ($CameraFixturePath)')
 Assert-True ($acceptanceScript.Contains("-ContentType 'image/jpeg'")) 'Camera acceptance must submit actual JPEG media type.'
 Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/content')) 'Camera acceptance must retrieve the persisted original bytes.'
 Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/display')) 'Camera acceptance must exercise the installed display endpoint.'
+Assert-True (($acceptanceScript -split 'Assert-ReefVisionCameraRaster').Count -eq 3) 'Camera acceptance must decode and validate both original and display rasters.'
 Assert-True ($acceptanceScript.Contains('source SHA256 $cameraHashBefore unchanged')) 'Camera acceptance must record source integrity evidence.'
 
 Assert-True ($acceptanceScript.Contains('function Import-AcceptanceAnnotations')) 'Windows acceptance must use a real multipart annotation import.'
