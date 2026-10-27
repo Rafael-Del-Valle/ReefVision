@@ -316,6 +316,7 @@ def _completed_workflow_pose_training_run(
     precision: str,
     random_seed: int | None,
     training_config: dict[str, Any],
+    resource_limits: dict[str, Any],
 ) -> TrainingRun | None:
     """Find completed child science created by this exact workflow node."""
 
@@ -422,6 +423,7 @@ def _completed_workflow_pose_training_run(
             or candidate.precision != precision
             or candidate.random_seed != random_seed
             or dict(candidate.training_config_json or {}) != training_config
+            or dict(candidate.resource_limits_json or {}) != resource_limits
         ):
             raise ValidationError("Recovered pose-training node configuration changed")
 
@@ -785,6 +787,11 @@ def create_pose_workflow_training_result(
         int(parameters["random_seed"]) if parameters.get("random_seed") is not None else None
     )
 
+    resource_limits = parameters.get("resource_limits") or {}
+    if not isinstance(resource_limits, dict):
+        raise ValidationError("Pose training resource_limits must be an object")
+    resource_limits = dict(resource_limits)
+
     warning_list: list[str] = []
 
     if validation_dataset is None:
@@ -808,6 +815,7 @@ def create_pose_workflow_training_result(
         precision=precision,
         random_seed=random_seed,
         training_config=(training_config),
+        resource_limits=resource_limits,
     )
 
     if existing_completed_run is not None:
@@ -851,7 +859,7 @@ def create_pose_workflow_training_result(
         training_config_json=(training_config),
         tuning_config_json={"mode": "disabled"},
         evaluation_config_json={"validation_mode": (split_manifest["validation_mode"])},
-        resource_limits_json=dict(parameters.get("resource_limits") or {}),
+        resource_limits_json=resource_limits,
         preflight_report_json={
             "status": "ready_with_warnings" if warning_list else "ready",
             "warnings": warning_list,
