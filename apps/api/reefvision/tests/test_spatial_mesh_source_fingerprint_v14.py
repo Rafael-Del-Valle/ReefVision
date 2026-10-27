@@ -100,10 +100,8 @@ def test_source_bytes_and_parsed_geometry_have_separate_fingerprints() -> None:
     assert obj_provenance["geometry_sha256"] == ply_provenance["geometry_sha256"]
     assert obj_provenance["geometry_sha256"] == whitespace_provenance["geometry_sha256"]
     assert obj_provenance["source_payload_sha256"] != ply_provenance["source_payload_sha256"]
-    assert (
-        obj_provenance["source_payload_sha256"]
-        != whitespace_provenance["source_payload_sha256"]
-    )
+    whitespace_sha = whitespace_provenance["source_payload_sha256"]
+    assert obj_provenance["source_payload_sha256"] != whitespace_sha
 
 
 def test_indexed_triangles_do_not_claim_an_imported_source_file() -> None:
