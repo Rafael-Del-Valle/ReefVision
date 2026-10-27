@@ -162,9 +162,9 @@ def measure_point_cloud_preview(
     selected_chords: list[dict[str, Any]] = []
     selected_endpoint_indices: set[int] = set()
     seen_point_pairs: set[tuple[int, int]] = set()
-    seen_endpoint_geometry: set[
-        tuple[tuple[float, float, float], tuple[float, float, float]]
-    ] = set()
+    seen_endpoint_geometry: set[tuple[tuple[float, float, float], tuple[float, float, float]]] = (
+        set()
+    )
     repeated_selected_point_pairs = False
     repeated_selected_endpoint_geometry = False
     coincident_selected_chord_count = 0
