@@ -167,6 +167,61 @@ it("pairs current components only with matching processing provenance", () => {
     ).toEqual([]);
   }
 });
+it("pairs identical nested processing settings regardless of JSON object key order", () => {
+  const provenance = {
+    ...component("x", 0).provenance,
+    processing_parameters: {
+      variables: ["uo", "vo"],
+      subset: { north: 33, south: 32 },
+      method: { interpolation: "none", grid: { x: 0.25, y: 0.25 } },
+    },
+  };
+  const east = component("current_eastward_velocity", 3, { provenance });
+  const north = component("current_northward_velocity", 4, {
+    provenance: {
+      ...provenance,
+      processing_parameters: {
+        method: { grid: { y: 0.25, x: 0.25 }, interpolation: "none" },
+        subset: { south: 32, north: 33 },
+        variables: ["uo", "vo"],
+      },
+    },
+  });
+  const paired = currentVectors([east, north]);
+  expect(paired).toHaveLength(1);
+  expect(currentVectors([north, east])[0].id).toBe(paired[0].id);
+  expect(
+    currentVectors([
+      east,
+      {
+        ...north,
+        provenance: {
+          ...north.provenance,
+          processing_parameters: {
+            ...provenance.processing_parameters,
+            subset: { south: 32, north: 34 },
+          },
+        },
+      },
+    ]),
+  ).toEqual([]);
+  // Array order can encode meaningful provider configuration and is preserved.
+  expect(
+    currentVectors([
+      east,
+      {
+        ...north,
+        provenance: {
+          ...north.provenance,
+          processing_parameters: {
+            ...provenance.processing_parameters,
+            variables: ["vo", "uo"],
+          },
+        },
+      },
+    ]),
+  ).toEqual([]);
+});
 it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
   const east = component("current_eastward_velocity", 3);
   const north = component("current_northward_velocity", 4);
