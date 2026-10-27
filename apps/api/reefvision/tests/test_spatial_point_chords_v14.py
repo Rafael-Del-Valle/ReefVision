@@ -246,3 +246,85 @@ def test_distinct_source_pairs_with_same_xyz_chord_are_flagged_in_saved_workflow
     assert artifact["payload_json"]["qc_warnings"] == expected["qc_warnings"]
     assert artifact["payload_json"]["provenance"] == expected["provenance"]
     assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_coincident_chord_qc_summary_is_preserved_in_saved_workflow(
+    client: TestClient,
+) -> None:
+    # Two distinct source indices can occupy the same XYZ location.
+    # This is a zero-distance chord, not evidence of a coral branch.
+    params = {
+        **PARAMS,
+        "points": [[0, 0, 0], [0, 0, 0], [3, 4, 0]],
+        "point_index_pairs": [[0, 1], [0, 2], [2, 0]],
+    }
+    project_id = str(create_project(client, "Coincident point chord QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    chords = expected["selected_point_chords"]
+    assert [chord["qc_warnings"] for chord in chords] == [
+        ["coincident_endpoint_coordinates"],
+        [],
+        ["repeated_point_pair"],
+    ]
+    assert chords[0]["chord_distance_m"] == 0
+    assert expected["selected_point_chord_qc_summary"] == {
+        "requested_chords": 3,
+        "distinct_source_index_pairs": 2,
+        "distinct_endpoint_geometries": 2,
+        "coincident_endpoint_chords": 1,
+    }
+    assert "coincident_selected_chord_endpoints" in expected["qc_warnings"]
+    assert "repeated_selected_point_pairs" in expected["qc_warnings"]
+    assert expected["branch_length_m"] is None
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "coincident-point-chords-v14",
+        "name": "Audit coincident selected chords",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "cloud",
+                "node_type": "point_cloud_preview",
+                "parameters": params,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "point_cloud_measurement_preview"
+    )
+    assert artifact["payload_json"]["selected_point_chord_qc_summary"] == (
+        expected["selected_point_chord_qc_summary"]
+    )
+    assert artifact["payload_json"]["selected_point_chords"] == chords
+    assert artifact["payload_json"]["qc_warnings"] == expected["qc_warnings"]
+    assert artifact["payload_json"]["provenance"] == expected["provenance"]
+    assert len(artifact["payload_sha256"]) == 64
