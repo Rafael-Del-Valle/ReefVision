@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { getRuntimeContext, openDesktopTrainingConsole } from "../../runtime";
 
 import {
@@ -77,10 +77,15 @@ function metricValue(value: number): string {
 export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const [openingRunId, setOpeningRunId] = useState<string | null>(null);
+  // React state updates are batched; block rapid duplicate clicks synchronously
+  // so one run never launches multiple external PowerShell monitors.
+  const consoleOpening = useRef(false);
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const showPowerShell = getRuntimeContext().desktopMode;
 
   async function openConsole(runId: string) {
+    if (consoleOpening.current) return;
+    consoleOpening.current = true;
     setOpeningRunId(runId);
     setTerminalError(null);
     try {
@@ -88,6 +93,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
     } catch (error) {
       setTerminalError(error instanceof Error ? error.message : String(error));
     } finally {
+      consoleOpening.current = false;
       setOpeningRunId(null);
     }
   }
