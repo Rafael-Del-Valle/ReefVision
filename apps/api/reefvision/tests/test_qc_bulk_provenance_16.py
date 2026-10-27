@@ -55,8 +55,7 @@ def test_keyed_retry_rejects_foreign_project_audit_without_mutation(
         session.commit()
 
     event_urls = {
-        item_id: f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
-        for item_id in item_ids
+        item_id: f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in item_ids
     }
     # A corrupted item's history must fail closed (HTTP 409), not return a
     # partial 200 page. Healthy sibling histories remain independently readable.
