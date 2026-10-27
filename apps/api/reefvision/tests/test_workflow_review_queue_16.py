@@ -522,9 +522,7 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             "pending_proposals": 5.0,
         }
         saved_item.score_breakdown_json = [
-            {**part, "raw_value": 5.0}
-            if part["signal_id"] == "pending_proposals"
-            else part
+            {**part, "raw_value": 5.0} if part["signal_id"] == "pending_proposals" else part
             for part in original_breakdown
         ]
         saved_queue.input_checksums_json = {
