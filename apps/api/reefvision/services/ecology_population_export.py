@@ -25,6 +25,11 @@ _COLUMNS = (
     "source_input_sha256",
     "report_sha256",
     "source_fingerprint_rechecked",
+    "source_fingerprint_contract",
+    "source_candidate_count",
+    "source_image_count",
+    "source_organism_count",
+    "source_excluded_count",
     "source_registry_history_sha256",
     "source_image_evidence_sha256",
     "source_annotation_evidence_sha256",
@@ -84,6 +89,11 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
     writer.writerow(_COLUMNS)
     source_provenance = (
         "true",
+        response.source_fingerprint_contract,
+        report.candidate_count,
+        report.source_image_count,
+        report.source_organism_count,
+        report.excluded_source_count,
         response.source_registry_history_sha256 or "",
         response.source_image_evidence_sha256 or "",
         response.source_annotation_evidence_sha256 or "",
@@ -100,7 +110,7 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
         eligible = row.unit_status == "candidate"
         writer.writerow(
             (
-                "ecology-population-export-0002",
+                "ecology-population-export-0003",
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
@@ -142,7 +152,7 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
     ):
         writer.writerow(
             (
-                "ecology-population-export-0002",
+                "ecology-population-export-0003",
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
