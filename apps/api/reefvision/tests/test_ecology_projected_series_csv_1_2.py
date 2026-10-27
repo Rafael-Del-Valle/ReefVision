@@ -106,14 +106,13 @@ def _dated_artifact(client: TestClient) -> EcologyMeasurementCandidatesResponse:
     )
 
 
-
 class _SyntheticSeasonalTimezone(tzinfo):
     """Portable test timezone with a spring offset change; no OS tzdata needed."""
 
     def utcoffset(self, dt: datetime | None) -> timedelta:
         if dt is None:
             return timedelta(hours=-5)
-        return timedelta(hours=-4 if (dt.month, dt.day) >= (3, 8) else -5)
+        return timedelta(hours=-4 if (3, 8) <= (dt.month, dt.day) < (11, 1) else -5)
 
     def dst(self, dt: datetime | None) -> timedelta:
         return timedelta(0)
@@ -122,33 +121,39 @@ class _SyntheticSeasonalTimezone(tzinfo):
         return "synthetic-seasonal-offset"
 
 
+@pytest.mark.parametrize(
+    ("first_date", "last_date", "expected_hours"),
+    [
+        ((3, 7), (3, 9), 47),
+        ((10, 31), (11, 2), 49),
+    ],
+)
 def test_projected_endpoint_elapsed_time_uses_utc_across_offset_change(
     client: TestClient,
+    first_date: tuple[int, int],
+    last_date: tuple[int, int],
+    expected_hours: int,
 ) -> None:
-    """Wall-clock subtraction misses one real elapsed hour across the shift."""
+    """Both spring and autumn offset changes use real elapsed UTC hours."""
     original = _dated_artifact(client)
     local = _SyntheticSeasonalTimezone()
-    first_local = datetime(2026, 3, 7, 12, tzinfo=local)
-    last_local = datetime(2026, 3, 9, 12, tzinfo=local)
+    first_local = datetime(2026, *first_date, 12, tzinfo=local)
+    last_local = datetime(2026, *last_date, 12, tzinfo=local)
     assert (last_local - first_local).total_seconds() / 86400 == 2
 
     candidates = [
-        original.candidates[0].model_copy(
-            update={"capture_timestamp_utc": first_local}
-        ),
-        original.candidates[1].model_copy(
-            update={"capture_timestamp_utc": last_local}
-        ),
+        original.candidates[0].model_copy(update={"capture_timestamp_utc": first_local}),
+        original.candidates[1].model_copy(update={"capture_timestamp_utc": last_local}),
     ]
     qc = summarize_sampling_date_qc(candidates)
     assert [row.qc_status for row in qc] == ["date_series_candidate"]
     changes = summarize_projected_endpoint_changes(candidates, qc)
     assert len(changes) == 1
     change = changes[0]
-    assert change.baseline_capture_timestamp_utc == datetime(2026, 3, 7, 17, tzinfo=UTC)
-    assert change.final_capture_timestamp_utc == datetime(2026, 3, 9, 16, tzinfo=UTC)
-    assert change.elapsed_days == pytest.approx(47 / 24)
-    assert change.projected_absolute_change_per_day == pytest.approx(2 / (47 / 24))
+    assert change.baseline_capture_timestamp_utc == first_local.astimezone(UTC)
+    assert change.final_capture_timestamp_utc == last_local.astimezone(UTC)
+    assert change.elapsed_days == pytest.approx(expected_hours / 24)
+    assert change.projected_absolute_change_per_day == pytest.approx(2 / (expected_hours / 24))
 
     # The same source/derived evidence must survive signed export rechecks.
     visits = summarize_projected_visit_coverage(candidates)
@@ -167,9 +172,9 @@ def test_projected_endpoint_elapsed_time_uses_utc_across_offset_change(
         )
     )
     row = next(csv.DictReader(StringIO(render_ecology_series_qc_csv(signed))))
-    assert float(row["elapsed_days"]) == pytest.approx(47 / 24)
+    assert float(row["elapsed_days"]) == pytest.approx(expected_hours / 24)
     assert float(row["projected_absolute_change_per_day"]) == pytest.approx(
-        2 / (47 / 24)
+        2 / (expected_hours / 24)
     )
     assert row["review_gate"] == "scientist_review_required"
     assert row["evidence_level"] == "linked_unverified"
@@ -183,13 +188,41 @@ def test_prior_candidate_fingerprint_contract_remains_deserializable(
     legacy = current.model_copy(
         update={"source_fingerprint_contract": "ecology-measurement-candidates-0018"}
     )
-    parsed = EcologyMeasurementCandidatesResponse.model_validate(
-        legacy.model_dump(mode="json")
-    )
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(legacy.model_dump(mode="json"))
     assert parsed.source_fingerprint_contract == "ecology-measurement-candidates-0018"
-    assert all(
-        row.review_gate == "scientist_review_required" for row in parsed.candidates
-    )
+    assert all(row.review_gate == "scientist_review_required" for row in parsed.candidates)
+
+
+@pytest.mark.parametrize(
+    ("status", "timestamp"),
+    [
+        ("timezone_aware", None),
+        ("timezone_aware", datetime(2026, 4, 3, 8)),
+        ("missing", datetime(2026, 4, 3, 8, tzinfo=UTC)),
+        ("timezone_missing", datetime(2026, 4, 3, 8, tzinfo=UTC)),
+    ],
+)
+def test_projected_candidate_rejects_contradictory_capture_metadata(
+    client: TestClient, status: str, timestamp: datetime | None
+) -> None:
+    """Saved source evidence cannot claim both dated and undated acquisition."""
+    original = _dated_artifact(client)
+    payload = original.model_dump(mode="python")
+    payload["candidates"][0]["capture_time_status"] = status
+    payload["candidates"][0]["capture_timestamp_utc"] = timestamp
+    with pytest.raises(ValueError, match="capture status"):
+        EcologyMeasurementCandidatesResponse.model_validate(payload)
+
+
+def test_legacy_undated_candidate_remains_readable(client: TestClient) -> None:
+    original = _dated_artifact(client)
+    payload = original.model_dump(mode="python")
+    payload["candidates"][0]["capture_time_status"] = "timezone_missing"
+    payload["candidates"][0]["capture_timestamp_utc"] = None
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(payload)
+    assert parsed.candidates[0].capture_timestamp_utc is None
+    assert parsed.candidates[0].review_gate == "scientist_review_required"
+
 
 def test_series_export_matches_api_and_saved_workflow(client: TestClient) -> None:
     project_id, _ = _source(client)
