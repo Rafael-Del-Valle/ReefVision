@@ -95,9 +95,7 @@ def export_ecology_population_summaries(project_id: str, session: DbSession) -> 
     return Response(
         content=render_ecology_population_csv(response),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": 'attachment; filename="reefvision-ecology-population.csv"'
-        },
+        headers={"Content-Disposition": 'attachment; filename="reefvision-ecology-population.csv"'},
     )
 
 
