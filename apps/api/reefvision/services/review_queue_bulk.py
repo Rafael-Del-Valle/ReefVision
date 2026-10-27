@@ -54,6 +54,24 @@ def bulk_triage_review_queue(
             raise ConflictError("Review item belongs to another review queue")
         ordered.append(item)
 
+    # Match the standalone coordination API's provenance guard. Without this
+    # preflight an unkeyed bulk request (or a new request key) could append
+    # triage events to an item whose prior reviewer history was moved to a
+    # different project or queue. Check every selected item before any writes.
+    foreign_event_id = session.scalar(
+        select(ReviewQueueItemEvent.id)
+        .where(
+            ReviewQueueItemEvent.review_queue_item_id.in_(request.item_ids),
+            (
+                (ReviewQueueItemEvent.review_queue_id != queue_id)
+                | (ReviewQueueItemEvent.project_id != queue.project_id)
+            ),
+        )
+        .limit(1)
+    )
+    if foreign_event_id is not None:
+        raise ConflictError("Review event provenance does not match its queue")
+
     # A batch's canonical item stores the original UUID as a scope marker;
     # the remaining items retain deterministic UUIDv5 event keys. This makes
     # disjoint selection reuse detectable without rewriting existing events.
