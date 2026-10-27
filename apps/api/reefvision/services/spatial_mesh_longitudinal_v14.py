@@ -577,6 +577,16 @@ def compare_mesh_observations(
             "geometry_sha256"
         ) or registration.target_geometry_sha256 != second.get("geometry_sha256"):
             raise ValueError("Registration evidence must match both source geometry fingerprints")
+        # A geometry hash does not cover physical calibration. Reject a stale
+        # meter-valued registration after either observation is recalibrated.
+        # Older unbound evidence remains readable with explicit QC.
+        if registration.source_meters_per_mesh_unit is None:
+            warnings.append("registration_calibration_scale_binding_unavailable")
+        elif (
+            registration.source_meters_per_mesh_unit != first.get("meters_per_mesh_unit")
+            or registration.target_meters_per_mesh_unit != second.get("meters_per_mesh_unit")
+        ):
+            raise ValueError("Registration evidence must match both calibration scales")
         registration_record = registration.model_dump(mode="json", exclude_none=True)
         if registration.registration_operator_id is None:
             warnings.append("registration_operator_attribution_unavailable")
