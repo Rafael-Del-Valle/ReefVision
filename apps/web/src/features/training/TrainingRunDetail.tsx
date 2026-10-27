@@ -9,6 +9,7 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import { TuningDashboard } from "./TuningDashboard";
 import { ResultsPackageDialog } from "./ResultsPackageDialog";
 import { useState } from "react";
+import { getRuntimeContext, openDesktopTrainingConsole } from "../../runtime";
 
 function history(run: TrainingRun): Record<string, number[]> {
   return Object.fromEntries(
@@ -102,6 +103,21 @@ export function TrainingRunDetail({
   onApplyBest?: (trial: TuningTrial) => void;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
+  const [consoleOpening, setConsoleOpening] = useState(false);
+  const [consoleError, setConsoleError] = useState<string | null>(null);
+  const desktopConsoleAvailable = getRuntimeContext().desktopMode;
+
+  async function handleOpenTrainingConsole() {
+    setConsoleOpening(true);
+    setConsoleError(null);
+    try {
+      await openDesktopTrainingConsole(run.id);
+    } catch (error) {
+      setConsoleError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setConsoleOpening(false);
+    }
+  }
   const metricHistory = history(run);
   const best = bestEpoch(run);
   const artifacts = Array.isArray(run.artifact_manifest.artifacts)
@@ -192,7 +208,6 @@ export function TrainingRunDetail({
       <div className="training-chart-grid">
         {Object.entries(metricHistory)
           .filter(([key]) => !/^epoch$|^time$/i.test(key))
-          .slice(0, 6)
           .map(([key, values]) => (
             <MetricChart key={key} label={key} values={values} />
           ))}
@@ -327,6 +342,16 @@ export function TrainingRunDetail({
         </pre>
       </details>
       <div className="image-card-actions">
+        {desktopConsoleAvailable && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={consoleOpening}
+            onClick={() => void handleOpenTrainingConsole()}
+          >
+            {consoleOpening ? "Opening Console…" : "Open Training Console"}
+          </button>
+        )}
         {!active && (
           <button type="button" onClick={() => setExportOpen(true)}>
             Export Results Package
@@ -352,6 +377,11 @@ export function TrainingRunDetail({
             </button>
           ))}
       </div>
+      {consoleError && (
+        <p className="form-error" role="alert">
+          {consoleError}
+        </p>
+      )}
       {exportOpen && (
         <ResultsPackageDialog run={run} onClose={() => setExportOpen(false)} />
       )}

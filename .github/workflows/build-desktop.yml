@@ -24,8 +24,23 @@ jobs:
   build-windows-installer:
     runs-on: windows-latest
     timeout-minutes: 120
+    outputs:
+      release-version: ${{ steps.package-version.outputs.release-version }}
+      release-slug: ${{ steps.package-version.outputs.release-slug }}
     steps:
       - uses: actions/checkout@v4
+
+      # Exercise the actual embedded monitor formatter on Windows before
+      # spending time packaging the multi-GB MSI/CAB payload.
+      - name: Verify read-only PowerShell monitor output sanitization
+        shell: pwsh
+        run: ./scripts/test-training-console-sanitizer.ps1
+
+      # Run the embedded monitor against mocked local GET responses to catch
+      # stale box/cls/dfl losses and accidental training API mutations.
+      - name: Verify live read-only PowerShell loss polling
+        shell: pwsh
+        run: ./scripts/test-training-console-readonly.ps1
 
       # Fast safety checks run before bootstrap / the multi-GB MSI build.
       - name: Validate Windows clean-install harness safeguards
@@ -35,6 +50,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Resolve package version
+        id: package-version
+        shell: pwsh
+        run: |
+          $config = Get-Content apps/web/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $releaseVersion = [string]$config.version
+          if ($releaseVersion -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid Tauri package version: $releaseVersion"
+          }
+          "release-version=$releaseVersion" >> $env:GITHUB_OUTPUT
+          "release-slug=$($releaseVersion.Replace('.', '-'))" >> $env:GITHUB_OUTPUT
+
+      - name: Check Windows installer version before packaging
+        shell: pwsh
+        run: python scripts/check-windows-installer-acceptance-version.py
 
       - uses: actions/setup-node@v4
         with:
@@ -93,40 +124,259 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-      - name: Upload complete Windows installer (MSI and external CABs)
+      # A previous 2.8 GB upload lost an external CAB after extraction.
+      # Split five or six CABs into bounded artifacts; never omit a generated cabinet.
+      - name: Verify CAB partition matches the packaged 1.0.3 installer
+        shell: pwsh
+        run: |
+          $folder = 'apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi'
+          $actual = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File |
+            Select-Object -ExpandProperty Name | Sort-Object)
+          # WiX can emit five or six external cabinets as dependency sizes change.
+          # Verify contiguous names; the clean-install runner checks the MSI Media
+          # table against every downloaded CAB before attempting installation.
+          if ($actual.Count -notin @(5, 6)) {
+            throw "Installer CAB count needs review: found $($actual.Count) cabinets."
+          }
+          $expected = @(1..$actual.Count | ForEach-Object { "rv$_.cab" })
+          if (($actual -join ',') -ne ($expected -join ',')) {
+            throw "Installer CAB partition needs review: found $($actual -join ', ')."
+          }
+          $msi = @(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File)
+          if ($msi.Count -ne 1) {
+            throw 'Expected exactly one MSI before artifact upload.'
+          }
+          # GitHub artifact upload previously lost a CAB when the compressed
+          # archive was too large. Fail closed if any intended part reaches 2 GiB.
+          $lastPartitionCabs = @($actual | Where-Object { $_ -in @('rv5.cab', 'rv6.cab') })
+          $partitions = @(
+            @{ Name = 'Part-1'; Files = @($msi[0].Name, 'rv1.cab', 'rv2.cab', 'build-provenance.json') }
+            @{ Name = 'Part-2'; Files = @('rv3.cab', 'rv4.cab') }
+            @{ Name = 'Part-3'; Files = $lastPartitionCabs }
+          )
+          foreach ($part in $partitions) {
+            [long]$bytes = 0
+            foreach ($filename in $part.Files) {
+              $item = Join-Path $folder $filename
+              if (-not (Test-Path -LiteralPath $item -PathType Leaf)) {
+                throw "Missing installer partition member: $filename"
+              }
+              $bytes += (Get-Item -LiteralPath $item).Length
+            }
+            if ($bytes -ge 2GB) {
+              throw "$($part.Name) is $bytes bytes; keep upload partitions below 2 GiB."
+            }
+            Write-Host "$($part.Name): $bytes bytes"
+          }
+
+      - name: Upload Windows installer MSI and CABs 1-2
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-Windows-Installer
+          name: ReefVision-Windows-Installer-Part-1
           path: |
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
-            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv1.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv2.cab
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/build-provenance.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer CABs 3-4
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-Windows-Installer-Part-2
+          path: |
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv3.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv4.cab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer CABs 5-6 (sixth optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-Windows-Installer-Part-3
+          path: |
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv5.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv6.cab
           if-no-files-found: error
           retention-days: 14
 
   # Separate, disposable Windows runner: do not validate an MSI only on its build machine.
   windows-clean-install-acceptance:
-    name: Install, launch, persist and uninstall 1.0.2 on fresh Windows
+    name: Fresh install, upgrade, launch, persist and uninstall ${{ needs.build-windows-installer.outputs.release-version }} on disposable Windows
     runs-on: windows-latest
     needs: build-windows-installer
-    timeout-minutes: 75
+    timeout-minutes: 120
+    env:
+      REEFVISION_RELEASE_VERSION: ${{ needs.build-windows-installer.outputs.release-version }}
+      REEFVISION_RELEASE_SLUG: ${{ needs.build-windows-installer.outputs.release-slug }}
+      REEFVISION_PREVIOUS_RELEASE_VERSION: "1.0.2"
+      REEFVISION_PREVIOUS_RELEASE_SOURCE_COMMIT: "8d5d10e06b831859cd6e208a7a564780c5f2bd5a"
+      REEFVISION_PREVIOUS_PROVENANCE_SHA256: "d20a3df535a0be4f2eadcf6d3e512d1487bc161645e698790505a9c860c2bb60"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Retrieve exact MSI and its external CABs
+      - name: Retrieve exact MSI and all external CABs
         uses: actions/download-artifact@v4
         with:
-          name: ReefVision-Windows-Installer
-          path: ${{ runner.temp }}/reefvision-1-0-2-installer
+          pattern: ReefVision-Windows-Installer-Part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/reefvision-${{ needs.build-windows-installer.outputs.release-slug }}-installer
+
+      - name: Retrieve and verify the published previous-release installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $previousVersion = $env:REEFVISION_PREVIOUS_RELEASE_VERSION
+          $previousSourceCommit = $env:REEFVISION_PREVIOUS_RELEASE_SOURCE_COMMIT
+          $previousProvenanceHash = $env:REEFVISION_PREVIOUS_PROVENANCE_SHA256
+          if ($previousVersion -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid previous release version: $previousVersion"
+          }
+          if ($previousSourceCommit -notmatch '^[0-9a-f]{40}$') {
+            throw "Invalid previous release source commit: $previousSourceCommit"
+          }
+          if ($previousProvenanceHash -notmatch '^[0-9a-f]{64}$') {
+            throw 'Invalid previous release provenance hash.'
+          }
+          $previousFolder = Join-Path $env:RUNNER_TEMP "reefvision-previous-$($previousVersion.Replace('.', '-'))-installer"
+          New-Item -ItemType Directory -Path $previousFolder -Force | Out-Null
+          gh release download "v$previousVersion" `
+            --pattern "ReefVision_${previousVersion}_x64_en-US.msi" `
+            --pattern 'rv*.cab' `
+            --pattern 'build-provenance.json' `
+            --dir $previousFolder
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not download the published ReefVision $previousVersion installer set."
+          }
+
+          $previousProvenancePath = Join-Path $previousFolder 'build-provenance.json'
+          $previousActualProvenanceHash = (Get-FileHash -LiteralPath $previousProvenancePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($previousActualProvenanceHash -ne $previousProvenanceHash) {
+            throw 'Published previous-release provenance SHA256 does not match the audited manifest.'
+          }
+          $previousProvenance = Get-Content -LiteralPath $previousProvenancePath -Raw | ConvertFrom-Json
+          if ($previousProvenance.version -ne $previousVersion) {
+            throw "Previous provenance version $($previousProvenance.version) does not match $previousVersion."
+          }
+          if ($previousProvenance.source_commit -ne $previousSourceCommit) {
+            throw "Previous provenance source commit $($previousProvenance.source_commit) is not the audited release commit."
+          }
+          if ($previousProvenance.source_tree_clean -ne $true -or $previousProvenance.msi_verified -ne $true) {
+            throw 'Previous installer provenance is not clean and MSI-verified.'
+          }
+
+          $previousManifestByName = @{}
+          foreach ($entry in @($previousProvenance.files)) {
+            $previousName = [string]$entry.name
+            $previousExpectedHash = ([string]$entry.sha256).ToLowerInvariant()
+            if ($previousName -notmatch '^(?:ReefVision_\d+\.\d+\.\d+_x64_en-US\.msi|rv[1-9]\d*\.cab)$') {
+              throw "Unsafe previous-release payload name: $previousName"
+            }
+            if ($previousExpectedHash -notmatch '^[0-9a-f]{64}$') {
+              throw "Invalid previous-release SHA256 for $previousName."
+            }
+            if ($previousManifestByName.ContainsKey($previousName)) {
+              throw "Duplicate previous-release payload entry: $previousName"
+            }
+            $previousManifestByName[$previousName] = $previousExpectedHash
+          }
+          $previousPayload = @(Get-ChildItem -LiteralPath $previousFolder -File | Where-Object Name -ne 'build-provenance.json')
+          if ($previousManifestByName.Count -ne $previousPayload.Count) {
+            throw "Previous provenance declares $($previousManifestByName.Count) payloads but download contains $($previousPayload.Count)."
+          }
+          foreach ($previousItem in $previousPayload) {
+            if (-not $previousManifestByName.ContainsKey($previousItem.Name)) {
+              throw "Previous payload is absent from provenance: $($previousItem.Name)"
+            }
+            $previousExpectedHash = $previousManifestByName[$previousItem.Name]
+            $previousActualHash = (Get-FileHash -LiteralPath $previousItem.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($previousActualHash -ne $previousExpectedHash) {
+              throw "Previous payload SHA256 mismatch for $($previousItem.Name)."
+            }
+          }
+          $previousMsi = Join-Path $previousFolder "ReefVision_${previousVersion}_x64_en-US.msi"
+          $previousCabs = @(Get-ChildItem -LiteralPath $previousFolder -Filter '*.cab' -File)
+          if (-not (Test-Path -LiteralPath $previousMsi -PathType Leaf) -or $previousCabs.Count -ne 5) {
+            throw 'Published previous-release installer set must contain one expected MSI and five CAB files.'
+          }
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $database = $installer.OpenDatabase($previousMsi, 0)
+          $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
+          $versionView.Execute()
+          $versionRecord = $versionView.Fetch()
+          if ($null -eq $versionRecord -or $versionRecord.StringData(1) -ne $previousVersion) {
+            throw "Previous MSI ProductVersion must match $previousVersion."
+          }
+          $versionView.Close()
 
       - name: Verify MSI-declared cabinet payload before any install
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
+          $releaseVersion = $env:REEFVISION_RELEASE_VERSION
+          $releaseSlug = $env:REEFVISION_RELEASE_SLUG
+          if ($releaseVersion -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid build-job release version: $releaseVersion"
+          }
+          if ($releaseSlug -ne $releaseVersion.Replace('.', '-')) {
+            throw "Invalid build-job release slug: $releaseSlug"
+          }
+          $folder = Join-Path $env:RUNNER_TEMP "reefvision-$releaseSlug-installer"
           $msi = @(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File)
           $cabs = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File)
-          if ($msi.Count -ne 1 -or $msi[0].Name -ne 'ReefVision_1.0.2_x64_en-US.msi') {
-            throw 'Expected exactly the ReefVision 1.0.2 MSI.'
+          $expectedMsiName = "ReefVision_${releaseVersion}_x64_en-US.msi"
+          if ($msi.Count -ne 1 -or $msi[0].Name -ne $expectedMsiName) {
+            throw "Expected exactly $expectedMsiName."
+          }
+
+          $provenancePath = Join-Path $folder 'build-provenance.json'
+          if (-not (Test-Path -LiteralPath $provenancePath -PathType Leaf)) {
+            throw 'Installer artifact is missing build-provenance.json.'
+          }
+          $provenance = Get-Content -LiteralPath $provenancePath -Raw | ConvertFrom-Json
+          if ($provenance.version -ne $releaseVersion) {
+            throw "Provenance version $($provenance.version) does not match $releaseVersion."
+          }
+          if ($provenance.source_commit -ne $env:GITHUB_SHA) {
+            throw "Provenance source commit $($provenance.source_commit) does not match workflow source $env:GITHUB_SHA."
+          }
+          if ($provenance.source_tree_clean -ne $true) {
+            throw 'Installer provenance reports a dirty source tree.'
+          }
+          if ($provenance.msi_verified -ne $true) {
+            throw 'Installer provenance does not report successful MSI verification.'
+          }
+
+          $manifestByName = @{}
+          foreach ($entry in @($provenance.files)) {
+            $name = [string]$entry.name
+            $expectedHash = ([string]$entry.sha256).ToLowerInvariant()
+            if ($name -notmatch '^(?:ReefVision_\d+\.\d+\.\d+_x64_en-US\.msi|rv[1-9]\d*\.cab)$') {
+              throw "Unsafe or unsupported provenance payload name: $name"
+            }
+            if ($expectedHash -notmatch '^[0-9a-f]{64}$') {
+              throw "Invalid provenance SHA256 for $name."
+            }
+            if ($manifestByName.ContainsKey($name)) {
+              throw "Duplicate provenance payload entry: $name"
+            }
+            $manifestByName[$name] = $expectedHash
+          }
+          $payload = @($msi) + $cabs
+          if ($manifestByName.Count -ne $payload.Count) {
+            throw "Provenance declares $($manifestByName.Count) payloads but artifact contains $($payload.Count)."
+          }
+          foreach ($item in $payload) {
+            if (-not $manifestByName.ContainsKey($item.Name)) {
+              throw "Payload is absent from provenance: $($item.Name)"
+            }
+            if ($item.Length -le 0) { throw "Empty installer file: $($item.Name)" }
+            $actualHash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actualHash -ne $manifestByName[$item.Name]) {
+              throw "Provenance SHA256 mismatch for $($item.Name)."
+            }
+            Write-Host "$($item.Name) SHA256=$actualHash"
           }
 
           # Windows Installer Media is authoritative; cabinet count depends on
@@ -136,8 +386,8 @@ jobs:
           $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
           $versionView.Execute()
           $versionRecord = $versionView.Fetch()
-          if ($null -eq $versionRecord -or $versionRecord.StringData(1) -ne '1.0.2') {
-            throw 'MSI ProductVersion must be 1.0.2.'
+          if ($null -eq $versionRecord -or $versionRecord.StringData(1) -ne $releaseVersion) {
+            throw "MSI ProductVersion must match derived release version $releaseVersion."
           }
           $versionView.Close()
 
@@ -166,17 +416,16 @@ jobs:
           }
           Write-Host "MSI references $($requiredCabs.Count) external CAB files, all present."
 
-          foreach ($item in @($msi) + $cabs) {
-            if ($item.Length -le 0) { throw "Empty installer file: $($item.Name)" }
-            $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
-            Write-Host "$($item.Name) SHA256=$hash"
-          }
-
-      - name: Test isolated MSI installation without developer runtimes on PATH
+      - name: Test candidate-only fresh install and audited previous-release upgrade
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
-          $msi = Join-Path $folder 'ReefVision_1.0.2_x64_en-US.msi'
+          $releaseVersion = $env:REEFVISION_RELEASE_VERSION
+          $releaseSlug = $env:REEFVISION_RELEASE_SLUG
+          $folder = Join-Path $env:RUNNER_TEMP "reefvision-$releaseSlug-installer"
+          $msi = Join-Path $folder "ReefVision_${releaseVersion}_x64_en-US.msi"
+          $previousVersion = $env:REEFVISION_PREVIOUS_RELEASE_VERSION
+          $previousFolder = Join-Path $env:RUNNER_TEMP "reefvision-previous-$($previousVersion.Replace('.', '-'))-installer"
+          $previousMsi = Join-Path $previousFolder "ReefVision_${previousVersion}_x64_en-US.msi"
           # The runner may contain development tools, but the installed desktop
           # must function without any Python, Node.js, or Rust executable on PATH.
           $env:PATH = @(
@@ -193,14 +442,21 @@ jobs:
           }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
-            -AcceptanceRoot 'C:\reefvision-1-0-2-disposable-acceptance' `
-            -SkipUpgrade -DisposableTest -KeepArtifacts -LiveSam2Acceptance
+            -AcceptanceRoot "C:\reefvision-$releaseSlug-fresh-install-acceptance" `
+            -SkipUpgrade `
+            -DisposableTest -KeepArtifacts
+          & ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath $msi `
+            -PreviousInstallerPath $previousMsi `
+            -PreviousInstallerSupportsIsolatedAcceptance `
+            -AcceptanceRoot "C:\reefvision-$releaseSlug-upgrade-acceptance" `
+            -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-1.0.2-Windows-Clean-Install-Evidence
+          name: ReefVision-${{ needs.build-windows-installer.outputs.release-version }}-Windows-Fresh-Install-And-Upgrade-Evidence
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log

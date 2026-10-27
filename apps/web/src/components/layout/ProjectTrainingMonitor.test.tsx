@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../../api/client";
+import * as runtime from "../../runtime";
 import { ProjectTrainingMonitor } from "./ProjectTrainingMonitor";
 
 vi.mock("../../api/client", async (importOriginal) => ({
@@ -104,6 +105,116 @@ afterEach(() => {
 });
 
 describe("ProjectTrainingMonitor", () => {
+  it("opens the active run in a desktop PowerShell monitor", async () => {
+    vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+      apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+      dataDir: "C:/ReefVision",
+      desktopMode: true,
+    });
+    const open = vi
+      .spyOn(runtime, "openDesktopTrainingConsole")
+      .mockResolvedValue(undefined);
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Training Console" }),
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledWith("run-active"));
+  });
+
+  it("serializes rapid console clicks and allows retry after a launcher error", async () => {
+    vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+      apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+      dataDir: "C:/ReefVision",
+      desktopMode: true,
+    });
+    let rejectFirst: (error: Error) => void = () => {
+      throw new Error("The first console launch was never started");
+    };
+    const open = vi
+      .spyOn(runtime, "openDesktopTrainingConsole")
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectFirst = reject;
+          }),
+      )
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    // Dispatch both clicks before React flushes the disabled-button state.
+    // A synchronous guard must prevent launching two PowerShell processes.
+    act(() => {
+      const button = screen.getByRole("button", {
+        name: "Open Training Console",
+      });
+      button.click();
+      button.click();
+    });
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith("run-active");
+
+    await act(async () => {
+      rejectFirst(new Error("PowerShell unavailable"));
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "PowerShell unavailable",
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Training Console" }),
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it.each(["completed", "failed"] as const)(
+    "opens the read-only PowerShell monitor for %s runs",
+    async (status) => {
+      vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+        apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+        dataDir: "C:/ReefVision",
+        desktopMode: true,
+      });
+      const open = vi
+        .spyOn(runtime, "openDesktopTrainingConsole")
+        .mockResolvedValue(undefined);
+      vi.mocked(api.getTrainingRuns).mockResolvedValue([
+        { ...completedRun, status },
+      ]);
+
+      renderMonitor();
+      await screen.findByText("Swiftia detector completed");
+      expect(
+        screen.queryByRole("button", { name: "Cancel run" }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Open Training Console" }),
+      );
+      await waitFor(() => expect(open).toHaveBeenCalledWith("run-completed"));
+    },
+  );
+
+  it("does not offer a PowerShell launcher in browser mode", async () => {
+    vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+      apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+      dataDir: "C:/ReefVision",
+      desktopMode: false,
+    });
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([completedRun]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector completed");
+    expect(
+      screen.queryByRole("button", { name: "Open Training Console" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows active canonical training progress, metrics, and provenance", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
 
@@ -121,6 +232,68 @@ describe("ProjectTrainingMonitor", () => {
         name: "Swiftia detector progress",
       }),
     ).toHaveAttribute("value", "2");
+  });
+
+  it("shows real box, cls and dfl losses from epoch history before other metrics", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        metrics: {
+          "metrics/mAP50(B)": 0.8123,
+          "metrics/precision(B)": 0.902,
+          "train/box_loss": 0.5, // Stale summary must not replace epoch 2.
+          "train/cls_loss": 9.9,
+          "train/dfl_loss": Number.NaN,
+        },
+        metrics_history: {
+          "train/box_loss": [0.8, 0.6],
+          "train/cls_loss": [1.5, 1.2],
+          "train/dfl_loss": [1.1, 0.9],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    expect(screen.getByText("train box loss")).toBeInTheDocument();
+    expect(screen.getByText("train cls loss")).toBeInTheDocument();
+    expect(screen.getByText("train dfl loss")).toBeInTheDocument();
+    expect(screen.getByText("0.6")).toBeInTheDocument();
+    expect(screen.getByText("1.2")).toBeInTheDocument();
+    expect(screen.queryByText("0.5")).not.toBeInTheDocument();
+    expect(screen.queryByText("9.9")).not.toBeInTheDocument();
+    expect(screen.getByText("0.9")).toBeInTheDocument();
+    expect(screen.getByText("0.8123")).toBeInTheDocument();
+    expect(screen.getByText("0.902")).toBeInTheDocument();
+  });
+
+  it("keeps the last finite box, cls and dfl losses during partial epochs", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        metrics: { "train/box_loss": 0.99 },
+        metrics_history: {
+          "train/box_loss": [0.4, 0.25, Number.NaN],
+          "train/cls_loss": [0.7, 0, Number.POSITIVE_INFINITY],
+          "train/dfl_loss": [0.3, 0.12, Number.NaN],
+          "train/seg_loss": [Number.NaN],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    expect(screen.getByText("train box loss")).toBeInTheDocument();
+    expect(screen.getByText("train cls loss")).toBeInTheDocument();
+    expect(screen.getByText("train dfl loss")).toBeInTheDocument();
+    expect(screen.getByText("0.25")).toBeInTheDocument();
+    expect(screen.queryByText("0.99")).not.toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText("0.12")).toBeInTheDocument();
+    expect(screen.queryByText("train seg loss")).not.toBeInTheDocument();
+    expect(screen.queryByText("NaN")).not.toBeInTheDocument();
   });
 
   it("cancels through the existing training-run API and updates the shared cache", async () => {

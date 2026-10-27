@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
+import { getRuntimeContext, openDesktopTrainingConsole } from "../../runtime";
 
 import {
   cancelTrainingRun,
@@ -20,12 +21,49 @@ function metricLabel(value: string): string {
 }
 
 function metricEntries(run: TrainingRun): Array<[string, number]> {
-  return Object.entries(run.metrics)
-    .filter(
-      (entry): entry is [string, number] =>
-        typeof entry[1] === "number" && Number.isFinite(entry[1]),
-    )
-    .slice(0, 2);
+  // Training summaries can lag behind per-epoch history. Prefer the last
+  // finite observed loss for live box/cls/dfl reporting, while keeping the
+  // summary authoritative for non-training metrics such as validation mAP.
+  const latest = new Map<string, number>();
+  for (const [key, values] of Object.entries(run.metrics_history ?? {})) {
+    if (!Array.isArray(values)) continue;
+    // An in-progress epoch can append a missing or non-finite sample before
+    // the next loss is available. Retain the last real observation instead
+    // of making the box/cls/dfl metric disappear from the live monitor.
+    for (let index = values.length - 1; index >= 0; index -= 1) {
+      const value = values[index];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        latest.set(key, value);
+        break;
+      }
+    }
+  }
+  for (const [key, value] of Object.entries(run.metrics ?? {})) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      if (!key.startsWith("train/") || !latest.has(key)) {
+        latest.set(key, value);
+      }
+    }
+  }
+
+  const preferred = [
+    "train/box_loss",
+    "train/cls_loss",
+    "train/dfl_loss",
+    "train/seg_loss",
+    "train/loss",
+    "metrics/mAP50(B)",
+    "metrics/mAP50(M)",
+    "metrics/mAP50-95(B)",
+    "metrics/mAP50-95(M)",
+  ];
+  const priority = (key: string) => {
+    const index = preferred.indexOf(key);
+    return index < 0 ? preferred.length : index;
+  };
+  return [...latest.entries()]
+    .sort(([left], [right]) => priority(left) - priority(right))
+    .slice(0, 5);
 }
 
 function metricValue(value: number): string {
@@ -38,6 +76,27 @@ function metricValue(value: number): string {
 
 export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
+  const [openingRunId, setOpeningRunId] = useState<string | null>(null);
+  // React state updates are batched; block rapid duplicate clicks synchronously
+  // so one run never launches multiple external PowerShell monitors.
+  const consoleOpening = useRef(false);
+  const [terminalError, setTerminalError] = useState<string | null>(null);
+  const showPowerShell = getRuntimeContext().desktopMode;
+
+  async function openConsole(runId: string) {
+    if (consoleOpening.current) return;
+    consoleOpening.current = true;
+    setOpeningRunId(runId);
+    setTerminalError(null);
+    try {
+      await openDesktopTrainingConsole(runId);
+    } catch (error) {
+      setTerminalError(error instanceof Error ? error.message : String(error));
+    } finally {
+      consoleOpening.current = false;
+      setOpeningRunId(null);
+    }
+  }
 
   const runsQuery = useQuery({
     queryKey: ["training_runs", projectId],
@@ -205,6 +264,19 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                   <p className="form-error">{run.error_message}</p>
                 )}
 
+                {showPowerShell && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={openingRunId !== null}
+                    onClick={() => void openConsole(run.id)}
+                  >
+                    {openingRunId === run.id
+                      ? "Opening Console…"
+                      : "Open Training Console"}
+                  </button>
+                )}
+
                 {canCancel && (
                   <button
                     type="button"
@@ -233,6 +305,12 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
             );
           })}
         </div>
+      )}
+
+      {terminalError && (
+        <p className="form-error" role="alert">
+          {terminalError}
+        </p>
       )}
 
       {cancelMutation.error && (

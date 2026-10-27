@@ -167,7 +167,7 @@ def test_release_version_checker_rejects_disagreement(tmp_path: Path) -> None:
     checker = load_script("check-release-version.py")
     root = Path(__file__).resolve().parents[4]
     versions = checker.check_versions(root)
-    assert set(versions.values()) == {"1.0.2"}
+    assert set(versions.values()) == {checker.EXPECTED_VERSION}
     for relative in (
         "package.json",
         "pyproject.toml",

@@ -51,6 +51,10 @@ def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
     }
     if item.keypoints is not None:
         payload["keypoints"] = [list(point) for point in item.keypoints]
+    if item.mask_polygons is not None:
+        payload["mask_polygons"] = [
+            [list(point) for point in polygon] for polygon in item.mask_polygons
+        ]
     if item.pose_observations is not None:
         payload["pose_observations"] = [
             observation.model_dump(mode="json") for observation in item.pose_observations
@@ -92,6 +96,12 @@ class VideoTrackService:
                     raise ValidationError(
                         "Pose keypoints cannot extend outside the source video bounds"
                     )
+            for polygon in keyframe.mask_polygons or []:
+                for point_x, point_y in polygon:
+                    if point_x > video.width_px or point_y > video.height_px:
+                        raise ValidationError(
+                            "Segmentation polygons cannot extend outside the source video bounds"
+                        )
             for observation in keyframe.pose_observations or []:
                 if observation.x > video.width_px or observation.y > video.height_px:
                     raise ValidationError(

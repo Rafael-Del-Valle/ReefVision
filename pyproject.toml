@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reefvision"
-version = "1.0.2"
+version = "1.0.3"
 description = "Local-first scientific image annotation and computer vision platform"
 readme = "README.md"
 requires-python = ">=3.11"

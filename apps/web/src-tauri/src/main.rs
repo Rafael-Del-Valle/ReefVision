@@ -149,6 +149,160 @@ fn desktop_context(state: State<'_, DesktopState>) -> DesktopContext {
     state.context.clone()
 }
 
+// Only accept opaque run IDs. Never pass filesystem paths or arbitrary commands
+// from the webview to the desktop shell.
+fn valid_training_run_id(run_id: &str) -> bool {
+    !run_id.is_empty()
+        && run_id.len() <= 72
+        && run_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+#[tauri::command]
+fn open_training_console(state: State<'_, DesktopState>, run_id: String) -> Result<(), String> {
+    if !valid_training_run_id(&run_id) {
+        return Err("Invalid training run ID".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // The source is the trusted loopback URL from desktop startup, not
+        // frontend input. PowerShell performs read-only status queries.
+        let url = format!("{}/training-runs/{}", state.context.api_base_url, run_id);
+        let script = format!("$url = '{}'; ", url)
+            + r#"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+# User-supplied run names, metric labels, and error messages are not
+# terminal commands. Strip ANSI/C1 escape strings and invisible controls
+# from displayed fields only; do not modify persisted run provenance.
+function Format-SafeText {
+  param([AllowNull()][object]$Value)
+  if ($null -eq $Value) { return '' }
+  $text = [string]$Value
+  $text = [regex]::Replace($text, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\|$)', '')
+  $text = [regex]::Replace($text, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
+  $text = [regex]::Replace($text, '(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]', '')
+  $text = [regex]::Replace($text, '\x1b[ -/]*[@-_]', '')
+  $text = [regex]::Replace($text, '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]', ' ')
+  return $text
+}
+function Test-FiniteMetricValue {
+  param([AllowNull()][object]$Value)
+  if ($null -eq $Value -or $Value -is [bool] -or $Value -is [string] -or $Value -isnot [System.ValueType]) {
+    return $false
+  }
+  try {
+    $number = [Convert]::ToDouble($Value, [Globalization.CultureInfo]::InvariantCulture)
+  } catch {
+    return $false
+  }
+  return -not [double]::IsNaN($number) -and -not [double]::IsInfinity($number)
+}
+Write-Host 'ReefVision training monitor (read-only). Close this window to stop monitoring.'
+while ($true) {
+  try {
+    $run = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10
+    Clear-Host
+    Write-Host ('ReefVision - {0}' -f (Format-SafeText $run.run_name))
+    Write-Host ('Status: {0} | Stage: {1}' -f (Format-SafeText $run.status), (Format-SafeText $run.stage))
+    Write-Host ('Epoch: {0} / {1}' -f (Format-SafeText $run.progress_epoch), (Format-SafeText $run.progress_total_epochs))
+    # Some training providers persist losses as epoch histories, while
+    # others include the newest values in the summary metrics object.
+    # Show both without inventing unavailable fields.
+    # Summary metrics may lag behind the current epoch. Load them first;
+    # where both sources have a value, the latest persisted epoch history
+    # wins so box/cls/dfl losses reflect the actual training progression.
+    $latestMetrics = @{}
+    if ($null -ne $run.metrics) {
+      foreach ($metric in $run.metrics.PSObject.Properties) {
+        if (Test-FiniteMetricValue -Value $metric.Value) {
+          $latestMetrics[$metric.Name] = $metric.Value
+        }
+      }
+    }
+    if ($null -ne $run.metrics_history) {
+      foreach ($series in $run.metrics_history.PSObject.Properties) {
+        $values = @($series.Value)
+        for ($index = $values.Count - 1; $index -ge 0; $index -= 1) {
+          if (Test-FiniteMetricValue -Value $values[$index]) {
+            $latestMetrics[$series.Name] = $values[$index]
+            break
+          }
+        }
+      }
+    }
+    $trainingLosses = @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss', 'train/loss')
+    $validationLosses = @('val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss', 'val/loss')
+    if (@($trainingLosses | Where-Object { $latestMetrics.ContainsKey($_) }).Count -gt 0) {
+      Write-Host ''
+      Write-Host 'Training losses'
+      foreach ($key in $trainingLosses) {
+        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key])) }
+      }
+    }
+    if (@($validationLosses | Where-Object { $latestMetrics.ContainsKey($_) }).Count -gt 0) {
+      Write-Host ''
+      Write-Host 'Validation losses'
+      foreach ($key in $validationLosses) {
+        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key])) }
+      }
+    }
+    $otherMetrics = @($latestMetrics.Keys | Where-Object {
+      $_ -notin ($trainingLosses + $validationLosses) -and $_ -ne 'epoch' -and $_ -ne 'time'
+    } | Sort-Object)
+    if ($otherMetrics.Count -gt 0) {
+      Write-Host ''
+      Write-Host 'Other model metrics'
+      foreach ($key in $otherMetrics) {
+        Write-Host ('  {0,-30} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]))
+      }
+    }
+    # The API reads only the persisted run log, with path confinement and a
+    # bounded tail. This console never opens a training process or writes logs.
+    try {
+      $tail = Invoke-RestMethod -Uri ($url + '/logs/tail') -Method Get -TimeoutSec 5
+      if ($tail.available -and $tail.text) {
+        Write-Host ''
+        Write-Host 'Training job log (last 20 lines, read-only)'
+        $logLines = @($tail.text -split '\r?\n' | Where-Object { $_ -ne '' })
+        foreach ($line in ($logLines | Select-Object -Last 20)) {
+          # Training logs are untrusted terminal text, just like run metadata.
+          # Sanitize the displayed copy; never rewrite persisted log bytes.
+          Write-Host (Format-SafeText $line)
+        }
+      } else {
+        Write-Host 'No persisted training job log available yet.'
+      }
+    } catch {
+      Write-Host 'Training job log unavailable (status/metrics remain live).'
+    }
+    if ($run.error_message) { Write-Host ('Error: {0}' -f (Format-SafeText $run.error_message)) }
+    if ($run.status -in @('completed', 'failed', 'cancelled')) {
+      Write-Host 'Run ended. This window can now be closed.'
+      break
+    }
+  } catch {
+    Write-Host ('Waiting for ReefVision training status: {0}' -f (Format-SafeText $_.Exception.Message))
+  }
+  Start-Sleep -Seconds 2
+}
+"#;
+        Command::new("powershell.exe")
+            .args(["-NoProfile", "-NoExit", "-Command", &script])
+            .spawn()
+            .map_err(|error| format!("Could not open PowerShell training monitor: {error}"))?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err("The external PowerShell training monitor is available on Windows only".to_string())
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn focus_existing_instance_window() {
     let window_title: Vec<u16> = OsStr::new("ReefVision")
@@ -515,7 +669,7 @@ fn main() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![desktop_context])
+        .invoke_handler(tauri::generate_handler![desktop_context, open_training_console])
         .setup(|app| {
             let data_dir = resolve_desktop_data_dir(app.handle())?;
             let handle = app.handle().clone();
@@ -570,6 +724,17 @@ fn main() {
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
+
+    #[test]
+    fn training_console_accepts_only_opaque_run_ids() {
+        assert!(valid_training_run_id("b530769c-2a79-4d44-a36e-61d988d5fa78"));
+        assert!(valid_training_run_id("run-1"));
+        assert!(!valid_training_run_id(""));
+        assert!(!valid_training_run_id("not a run"));
+        assert!(!valid_training_run_id("foo'; Remove-Item C:"));
+        assert!(!valid_training_run_id("../escape"));
+        assert!(!valid_training_run_id(&"a".repeat(73)));
+    }
 
     #[derive(Clone)]
     struct FakeProcessState {

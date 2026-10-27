@@ -9,6 +9,7 @@ import {
   updateImage,
   type AnnotationStatus,
   type ImageImportReport,
+  type ImagePage,
   type Project,
   type ProjectImageListItem,
 } from "../../api/client";
@@ -27,6 +28,19 @@ import {
   writeGalleryPreference,
   type GalleryNavigationAction,
 } from "./galleryNavigation";
+
+// Thumbnail jobs complete asynchronously after import. Recheck the image page
+// for a limited time without polling failed or abandoned jobs indefinitely.
+export function galleryPendingThumbnailRefetchMs(
+  page: { items: Array<{ thumbnail_path: string | null }> } | undefined,
+  successfulLoads: number,
+): number | false {
+  return page?.items.some((item) => !item.thumbnail_path) &&
+    successfulLoads > 0 &&
+    successfulLoads <= 12
+    ? 5000
+    : false;
+}
 
 const statuses: { value: AnnotationStatus | ""; label: string }[] = [
   { value: "", label: "All statuses" },
@@ -56,11 +70,24 @@ function ImageCard({
     image.annotation_status,
   );
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const thumbnailVersion = image.thumbnail_path
+    ? encodeURIComponent(image.thumbnail_path)
+    : null;
+  const thumbnailUrl = thumbnailVersion
+    ? `${imageThumbnailUrl(image.id)}&rv_thumb=${thumbnailVersion}`
+    : null;
 
   useEffect(() => {
     setGroupKey(image.group_key ?? "");
     setStatus(image.annotation_status);
   }, [image]);
+
+  // A thumbnail job can finish after an earlier 404. Retry only when its
+  // persisted path changes; ordinary query refreshes must not retry a
+  // permanently broken thumbnail on every render.
+  useEffect(() => {
+    setThumbnailFailed(false);
+  }, [image.thumbnail_path]);
 
   const update = useMutation({
     mutationFn: () =>
@@ -89,9 +116,9 @@ function ImageCard({
       }}
     >
       <div className="thumbnail-frame">
-        {image.thumbnail_path && !thumbnailFailed ? (
+        {thumbnailUrl && !thumbnailFailed ? (
           <img
-            src={imageThumbnailUrl(image.id)}
+            src={thumbnailUrl}
             alt={`Thumbnail of ${image.original_filename}`}
             loading="lazy"
             decoding="async"
@@ -206,12 +233,20 @@ function focusedImageUrl(
   imageId: string,
   useThumbnail: boolean,
   retry: number,
+  thumbnailPath?: string | null,
 ): string {
   const original = useThumbnail
     ? imageThumbnailUrl(imageId)
     : imageDisplayUrl(imageId);
-  if (retry === 0) return original;
-  return `${original}${original.includes("?") ? "&" : "?"}rv_retry=${retry}`;
+  const retried =
+    retry === 0
+      ? original
+      : `${original}${original.includes("?") ? "&" : "?"}rv_retry=${retry}`;
+  // A background thumbnail job may replace a failed file at the same API
+  // endpoint. Version the request by its persisted path to avoid a cached 404.
+  return useThumbnail && thumbnailPath
+    ? `${retried}${retried.includes("?") ? "&" : "?"}rv_thumb=${encodeURIComponent(thumbnailPath)}`
+    : retried;
 }
 
 /**
@@ -221,22 +256,122 @@ function focusedImageUrl(
 function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   const [phase, setPhase] = useState<PreviewLoadPhase>("loading");
   const [retry, setRetry] = useState(0);
+  const attemptedThumbnailPath = useRef<string | null>(null);
+  const imageElement = useRef<HTMLImageElement | null>(null);
+  const canvasElement = useRef<HTMLDivElement | null>(null);
   const thumbnail =
     phase === "thumbnail-loading" || phase === "thumbnail-loaded";
   const waiting = phase === "loading" || phase === "thumbnail-loading";
+  // A changed thumbnail path is a new image request. Give it its own DOM
+  // element so late events from the previous rendition cannot affect it.
+  const requestKind = thumbnail
+    ? `thumbnail:${image.thumbnail_path ?? ""}`
+    : "original";
 
-  function handleLoad() {
-    setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+  useEffect(() => {
+    const canvas = canvasElement.current;
+    if (!canvas) return;
+    // Gallery media is a fixed preview, not a zoomable annotation canvas.
+    // WebView2 otherwise scrolls the document under the cursor and makes the
+    // first image appear to shift or partially change while it is loading.
+    // Use a non-passive native listener so preventDefault works in WebView2.
+    const containPreviewWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) return;
+      if (
+        (!Number.isFinite(event.deltaX) || event.deltaX === 0) &&
+        (!Number.isFinite(event.deltaY) || event.deltaY === 0)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    canvas.addEventListener("wheel", containPreviewWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", containPreviewWheel);
+  }, []);
+
+  useEffect(() => {
+    if (!waiting) return;
+    // A cached WebView2 image can already be decoded before its load handler
+    // runs. Reveal those pixels instead of leaving a false loading overlay.
+    const element = imageElement.current;
+    if (
+      element?.complete &&
+      element.naturalWidth > 0 &&
+      element.naturalHeight > 0
+    ) {
+      setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+    }
+  }, [image.id, retry, thumbnail, waiting]);
+
+  useEffect(() => {
+    if (!waiting) return;
+    // Some Windows WebView2 media requests stall without either a load or an
+    // error event. Never leave the first image obscured indefinitely.
+    const timer = window.setTimeout(() => {
+      setPhase((current) => {
+        // A decoded image may have missed the load event after the first
+        // effect. Check again before treating the media request as failed.
+        const element = imageElement.current;
+        if (
+          element?.complete &&
+          element.naturalWidth > 0 &&
+          element.naturalHeight > 0
+        ) {
+          return current === "thumbnail-loading"
+            ? "thumbnail-loaded"
+            : "loaded";
+        }
+        if (current === "loading") {
+          return image.thumbnail_path ? "thumbnail-loading" : "error";
+        }
+        return current === "thumbnail-loading" ? "error" : current;
+      });
+    }, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [image.thumbnail_path, phase, waiting]);
+
+  useEffect(() => {
+    if (phase === "thumbnail-loading" && image.thumbnail_path) {
+      attemptedThumbnailPath.current = image.thumbnail_path;
+    }
+    // A background thumbnail can replace a failed or already displayed
+    // rendition. Reset its loading state only when the path actually changes:
+    // refreshing the same path must never create an endless retry loop.
+    if (
+      (phase === "error" || phase === "thumbnail-loaded") &&
+      image.thumbnail_path &&
+      attemptedThumbnailPath.current !== image.thumbnail_path
+    ) {
+      attemptedThumbnailPath.current = image.thumbnail_path;
+      setPhase("thumbnail-loading");
+    }
+  }, [image.thumbnail_path, phase]);
+
+  function handleLoad(event: { currentTarget: HTMLImageElement }) {
+    // The load event is sufficient to reveal the image. In some WebView2
+    // versions decode() can remain pending even after a successful load,
+    // leaving the first image obscured by a perpetual loading indicator.
+    // Keyed previews and the connection check reject stale image events.
+    if (event.currentTarget.isConnected) {
+      setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+    }
   }
 
-  function handleError() {
-    setPhase(
-      thumbnail || !image.thumbnail_path ? "error" : "thumbnail-loading",
-    );
+  function handleError(event: { currentTarget: HTMLImageElement }) {
+    // A stale request can report an error after Retry replaced its <img>.
+    // Never let that event obscure newer, successfully decoded pixels.
+    if (!event.currentTarget.isConnected) return;
+    setPhase((current) => {
+      if (current === "loading") {
+        return image.thumbnail_path ? "thumbnail-loading" : "error";
+      }
+      return current === "thumbnail-loading" ? "error" : current;
+    });
   }
 
   return (
-    <div className="rv-media-canvas">
+    <div ref={canvasElement} className="rv-media-canvas">
       {phase === "error" ? (
         <div className="rv-media-load-error" role="alert">
           <strong>Image could not be displayed</strong>
@@ -264,15 +399,50 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
                 : "Loading full-resolution image..."}
             </p>
           )}
+          {waiting && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                // WebView2 can stall without an error event. Allow the user
+                // to bypass the watchdog without mutating image data.
+                setRetry((current) => current + 1);
+                setPhase("loading");
+              }}
+            >
+              Retry loading image
+            </button>
+          )}
           {phase === "thumbnail-loaded" && (
-            <p role="status" className="rv-media-load-warning">
-              Full-resolution image unavailable. Showing a thumbnail preview;
-              source annotations are unchanged.
-            </p>
+            <>
+              <p role="status" className="rv-media-load-warning">
+                Full-resolution image unavailable. Showing a thumbnail preview;
+                source annotations are unchanged.
+              </p>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  // A transient WebView2/source failure should not strand the
+                  // gallery on a low-resolution preview. Retry only the media
+                  // request; never modify the original or annotations.
+                  setRetry((current) => current + 1);
+                  setPhase("loading");
+                }}
+              >
+                Retry full-resolution image
+              </button>
+            </>
           )}
           <img
-            key={`${retry}:${thumbnail ? "thumbnail" : "original"}`}
-            src={focusedImageUrl(image.id, thumbnail, retry)}
+            ref={imageElement}
+            key={`${retry}:${requestKind}`}
+            src={focusedImageUrl(
+              image.id,
+              thumbnail,
+              retry,
+              image.thumbnail_path,
+            )}
             alt={`Focused project image: ${image.original_filename}`}
             decoding="async"
             onLoad={handleLoad}
@@ -284,23 +454,36 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   );
 }
 
-export function Gallery({
-  project,
-  onOpenAnnotation,
-  onInferenceSelectionChange,
-  onFocusedImageChange,
-}: {
+type GalleryProps = {
   project: Project;
   onOpenAnnotation?: (imageId: string) => void;
   onInferenceSelectionChange?: (imageIds: string[]) => void;
   onFocusedImageChange?: (imageId: string | null) => void;
-}) {
+};
+
+// Switching projects must discard the previous project's viewport, import
+// state, and image focus. A keyed inner gallery also restores each project's
+// own saved page and focus without leaking them into the next project.
+export function Gallery(props: GalleryProps) {
+  return <GalleryContent key={props.project.id} {...props} />;
+}
+
+function GalleryContent({
+  project,
+  onOpenAnnotation,
+  onInferenceSelectionChange,
+  onFocusedImageChange,
+}: GalleryProps) {
   const queryClient = useQueryClient();
   const folderInput = useRef<HTMLInputElement | null>(null);
+  // A second picker event can fire before React rerenders the pending state.
+  // Keep imports serialized so progress and per-file reports cannot race.
+  const importInFlight = useRef(false);
   const initialPreference = useRef(
     readGalleryPreference(window.localStorage, project.id),
   );
   const activeThumbnail = useRef<HTMLButtonElement | null>(null);
+  const filmstripRef = useRef<HTMLDivElement | null>(null);
   const [page, setPage] = useState(initialPreference.current.page);
   const [pageDraft, setPageDraft] = useState(
     String(initialPreference.current.page),
@@ -340,8 +523,13 @@ export function Gallery({
     }
   }, []);
 
-  const images = useQuery({
+  const images = useQuery<ImagePage>({
     queryKey: ["images", project.id, page, filters, sortBy],
+    refetchInterval: (query) =>
+      galleryPendingThumbnailRefetchMs(
+        query.state.data,
+        query.state.dataUpdateCount,
+      ),
     queryFn: ({ signal }) =>
       getImages(
         project.id,
@@ -399,7 +587,10 @@ export function Gallery({
       setPage(1);
       await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
     },
-    onSettled: () => setImportProgress(null),
+    onSettled: () => {
+      importInFlight.current = false;
+      setImportProgress(null);
+    },
   });
 
   useEffect(() => {
@@ -439,8 +630,10 @@ export function Gallery({
   }
 
   function acceptFiles(fileList: FileList | null) {
+    if (importInFlight.current) return;
     const selected = Array.from(fileList ?? []);
     if (selected.length) {
+      importInFlight.current = true;
       importer.mutate(selected);
     }
   }
@@ -473,12 +666,57 @@ export function Gallery({
   }, [focusedImage, page, project.id, wrapNavigation]);
 
   useEffect(() => {
-    if (typeof activeThumbnail.current?.scrollIntoView === "function") {
-      activeThumbnail.current.scrollIntoView({
-        block: "nearest",
-        inline: "nearest",
-      });
+    const filmstrip = filmstripRef.current;
+    const thumbnail = activeThumbnail.current;
+    if (!filmstrip || !thumbnail) return;
+    // Only move the horizontal strip, not the surrounding image viewport.
+    const strip = filmstrip.getBoundingClientRect();
+    const active = thumbnail.getBoundingClientRect();
+    if (active.left < strip.left) {
+      filmstrip.scrollLeft += active.left - strip.left;
+    } else if (active.right > strip.right) {
+      filmstrip.scrollLeft += active.right - strip.right;
     }
+  }, [focusedImage?.id]);
+
+  useEffect(() => {
+    const filmstrip = filmstripRef.current;
+    if (!filmstrip) return;
+
+    // A vertical mouse wheel should browse the horizontal thumbnail strip,
+    // not scroll the page and partially displace the focused image.
+    // A non-passive native listener is needed to suppress WebView2's default
+    // document scrolling; React wheel listeners can be passive at the root.
+    const handleWheel = (event: WheelEvent) => {
+      // Preserve native browser zoom gestures on both Windows and macOS.
+      if (event.ctrlKey || event.metaKey) return;
+      const delta =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY;
+      if (!Number.isFinite(delta) || delta === 0) return;
+      // Even when all thumbnails fit, wheel input must not scroll the
+      // surrounding document and partially displace the focused image.
+      event.preventDefault();
+      event.stopPropagation();
+      if (filmstrip.scrollWidth <= filmstrip.clientWidth) return;
+      const multiplier =
+        event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? filmstrip.clientWidth
+            : 1;
+      filmstrip.scrollLeft = Math.max(
+        0,
+        Math.min(
+          filmstrip.scrollWidth - filmstrip.clientWidth,
+          filmstrip.scrollLeft + delta * multiplier,
+        ),
+      );
+    };
+
+    filmstrip.addEventListener("wheel", handleWheel, { passive: false });
+    return () => filmstrip.removeEventListener("wheel", handleWheel);
   }, [focusedImage?.id]);
 
   useEffect(
@@ -597,9 +835,14 @@ export function Gallery({
             <input
               className="visually-hidden"
               type="file"
-              accept=".jpg,.jpeg,.png,.tif,.tiff,.webp"
+              disabled={importer.isPending}
+              accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
-              onChange={(event) => acceptFiles(event.target.files)}
+              onChange={(event) => {
+                acceptFiles(event.currentTarget.files);
+                // Permit retrying the same camera file after a failed import.
+                event.currentTarget.value = "";
+              }}
             />
           </label>
           <label className="button-label secondary-label">
@@ -608,9 +851,14 @@ export function Gallery({
               ref={folderInput}
               className="visually-hidden"
               type="file"
-              accept=".jpg,.jpeg,.png,.tif,.tiff,.webp"
+              disabled={importer.isPending}
+              accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
-              onChange={(event) => acceptFiles(event.target.files)}
+              onChange={(event) => {
+                acceptFiles(event.currentTarget.files);
+                // Permit retrying the same camera file after a failed import.
+                event.currentTarget.value = "";
+              }}
             />
           </label>
         </div>
@@ -690,6 +938,7 @@ export function Gallery({
             </div>
 
             <div
+              ref={filmstripRef}
               className="rv-media-filmstrip"
               role="list"
               aria-label="Nearby images"
@@ -712,7 +961,13 @@ export function Gallery({
                   <span className="rv-filmstrip-thumbnail">
                     {image.thumbnail_path ? (
                       <img
-                        src={imageThumbnailUrl(image.id)}
+                        key={image.thumbnail_path}
+                        src={focusedImageUrl(
+                          image.id,
+                          true,
+                          0,
+                          image.thumbnail_path,
+                        )}
                         alt=""
                         loading="lazy"
                         decoding="async"
@@ -871,6 +1126,15 @@ export function Gallery({
         >
           Clear selection
         </button>
+        {images.data?.items.some((item) => !item.thumbnail_path) && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void images.refetch()}
+          >
+            Refresh pending thumbnails
+          </button>
+        )}
       </div>
 
       {images.isPending && (

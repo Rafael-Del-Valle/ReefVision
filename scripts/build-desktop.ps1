@@ -94,10 +94,10 @@ function Build-ReefVisionSplitCabinetMsi {
 
 $TauriConfigPath = Join-Path $Root "apps\web\src-tauri\tauri.conf.json"
 $TauriConfig = Get-Content -LiteralPath $TauriConfigPath -Raw | ConvertFrom-Json
-if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.0.2/backend/' -ne 'backend/') {
+if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.0.3/backend/' -ne 'backend/') {
     throw "Tauri must map the complete weight-free release backend directory to backend/."
 }
-if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.0.2/bundled-models/' -ne 'bundled-models/') {
+if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.0.3/bundled-models/' -ne 'bundled-models/') {
     throw "Tauri must package the weight-free manifest as bundled-models/."
 }
 
@@ -108,11 +108,11 @@ if (-not (Test-Path ".venv" -PathType Container)) {
 $VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
 $BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
 $ModelCatalog = Join-Path $Root "config\model_catalog.json"
-$BundledModels = Join-Path $Root ".desktop\release-1.0.2\bundled-models"
+$BundledModels = Join-Path $Root ".desktop\release-1.0.3\bundled-models"
 
 $ModelAuditScript = Join-Path $PSScriptRoot "audit-model-downloadability.py"
 
-Write-ReefVisionStep "Checking ReefVision 1.0.2 public versions"
+Write-ReefVisionStep "Checking ReefVision 1.0.3 public versions"
 & $VenvPython (Join-Path $PSScriptRoot "check-release-version.py")
 if ($LASTEXITCODE -ne 0) { throw "Release version consistency check failed." }
 
@@ -129,7 +129,7 @@ if ($LASTEXITCODE -ne 0) { throw "Staged model resource audit failed." }
 
 & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple
 
-$ReleaseBackend = Join-Path $Root ".desktop\release-1.0.2\backend"
+$ReleaseBackend = Join-Path $Root ".desktop\release-1.0.3\backend"
 & $VenvPython $ModelAuditScript --catalog $ModelCatalog --bundle-root $BundledModels --runtime-root $ReleaseBackend
 if ($LASTEXITCODE -ne 0) { throw "Release backend contains prohibited model assets." }
 
@@ -215,7 +215,7 @@ foreach ($GeneratedCab in $GeneratedCabFiles) {
     Write-Host "External cabinet output: $DestinationCab" -ForegroundColor Green
 }
 
-$StagedCatalog = Join-Path $Root ".desktop\release-1.0.2\backend\reefvision-api\_internal\config\model_catalog.json"
+$StagedCatalog = Join-Path $Root ".desktop\release-1.0.3\backend\reefvision-api\_internal\config\model_catalog.json"
 if (-not (Test-Path $StagedCatalog -PathType Leaf)) {
     throw "Desktop packaging lost the required Model Hub catalog: $StagedCatalog"
 }

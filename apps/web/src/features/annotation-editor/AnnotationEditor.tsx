@@ -396,6 +396,13 @@ export function AnnotationEditor({
     queryFn: ({ signal }) => getAnnotationSession(currentImageId, signal),
     refetchOnWindowFocus: false,
   });
+  const fullImageReady =
+    sessionQuery.data?.image.id === currentImageId &&
+    imagePreload?.imageId === currentImageId &&
+    imagePreload.retry === fullImageRetry &&
+    imagePreload.phase === "loaded";
+  const thumbnailOnlyPreview =
+    Boolean(sessionQuery.data?.image.thumbnail_path) && !fullImageReady;
   const visibilityQuery = useQuery({
     queryKey: ["class-visibility", project.id],
     queryFn: ({ signal }) => getClassVisibilityBundle(project.id, signal),
@@ -570,24 +577,43 @@ export function AnnotationEditor({
     }
     const preloader = new window.Image();
     let cancelled = false;
+    let decodeFallback: number | null = null;
+    let loadWatchdog: number | null = null;
+    let fallbackActivated = false;
     const retry = fullImageRetry;
     setImagePreload({ imageId, retry, phase: "loading" });
     preloader.decoding = "async";
     preloader.onload = () => {
+      if (cancelled) return;
+      if (loadWatchdog !== null) window.clearTimeout(loadWatchdog);
+      loadWatchdog = null;
       if (typeof preloader.decode !== "function") {
+        setImagePreload({ imageId, retry, phase: "loaded" });
+        return;
+      }
+      // WebView2 can fire load but leave decode() pending indefinitely.
+      // Reveal a successfully loaded image after a bounded grace period.
+      decodeFallback = window.setTimeout(() => {
+        decodeFallback = null;
+        fallbackActivated = true;
         if (!cancelled) {
           setImagePreload({ imageId, retry, phase: "loaded" });
         }
-        return;
-      }
+      }, 3_000);
       void preloader.decode().then(
         () => {
+          if (decodeFallback !== null) window.clearTimeout(decodeFallback);
+          decodeFallback = null;
           if (!cancelled) {
             setImagePreload({ imageId, retry, phase: "loaded" });
           }
         },
         () => {
-          if (!cancelled) {
+          if (decodeFallback !== null) window.clearTimeout(decodeFallback);
+          decodeFallback = null;
+          // A late rejection must not hide an image already revealed after
+          // its successful load event.
+          if (!cancelled && !fallbackActivated) {
             setImagePreload({ imageId, retry, phase: "failed" });
           }
         },
@@ -595,12 +621,27 @@ export function AnnotationEditor({
     };
     preloader.onerror = () => {
       if (!cancelled) {
+        if (loadWatchdog !== null) window.clearTimeout(loadWatchdog);
+        loadWatchdog = null;
+        if (decodeFallback !== null) window.clearTimeout(decodeFallback);
+        decodeFallback = null;
         setImagePreload({ imageId, retry, phase: "failed" });
       }
     };
+    // WebView2 can stall before dispatching either load or error. Bound that
+    // state independently of decode() so a thumbnail can never masquerade as
+    // a reviewable full-resolution image indefinitely.
+    loadWatchdog = window.setTimeout(() => {
+      loadWatchdog = null;
+      if (!cancelled) {
+        setImagePreload({ imageId, retry, phase: "failed" });
+      }
+    }, 30_000);
     preloader.src = annotationImageSource(imageId, null, true, retry);
     return () => {
       cancelled = true;
+      if (loadWatchdog !== null) window.clearTimeout(loadWatchdog);
+      if (decodeFallback !== null) window.clearTimeout(decodeFallback);
       preloader.onload = null;
       preloader.onerror = null;
     };
@@ -625,7 +666,7 @@ export function AnnotationEditor({
     }
     globalThis.addEventListener("resize", updateSize);
     return () => globalThis.removeEventListener("resize", updateSize);
-  }, []);
+  }, [sessionQuery.data?.image.id]);
 
   const imageSize = useMemo(() => {
     if (!sessionQuery.data) {
@@ -1236,6 +1277,10 @@ export function AnnotationEditor({
 
   const acceptPredictionMutation = useMutation({
     mutationFn: (proposal: PredictionProposal) => {
+      if (thumbnailOnlyPreview)
+        throw new Error(
+          "Load the full-resolution image before reviewing predictions.",
+        );
       if (isDirty(stateRef.current))
         throw new Error(
           "Save your annotation edits before accepting predictions.",
@@ -1363,6 +1408,10 @@ export function AnnotationEditor({
       action: "accept" | "reject";
       selected: boolean;
     }) => {
+      if (thumbnailOnlyPreview)
+        throw new Error(
+          "Load the full-resolution image before reviewing predictions.",
+        );
       if (action === "accept" && isDirty(stateRef.current))
         throw new Error(
           "Save your annotation edits before accepting predictions.",
@@ -1669,6 +1718,12 @@ export function AnnotationEditor({
   }, [copySelection, pasteClipboard]);
 
   const saveNow = useCallback((): Promise<boolean> => {
+    if (thumbnailOnlyPreview) {
+      setShortcutMessage(
+        "Load the full-resolution image before saving annotation changes.",
+      );
+      return Promise.resolve(false);
+    }
     if (savePromiseRef.current) {
       return savePromiseRef.current;
     }
@@ -1716,7 +1771,7 @@ export function AnnotationEditor({
       });
     savePromiseRef.current = promise;
     return promise;
-  }, [project.id, queryClient]);
+  }, [project.id, queryClient, thumbnailOnlyPreview]);
 
   const flushPendingSave = useCallback(async (): Promise<boolean> => {
     if (savePromiseRef.current) {
@@ -1729,7 +1784,7 @@ export function AnnotationEditor({
   }, [saveNow]);
 
   useEffect(() => {
-    if (!sessionQuery.data || interaction) {
+    if (!sessionQuery.data || interaction || thumbnailOnlyPreview) {
       return;
     }
     if (!dirty || state.saveState === "saving") {
@@ -1739,7 +1794,14 @@ export function AnnotationEditor({
       void saveNow();
     }, 700);
     return () => window.clearTimeout(timeoutId);
-  }, [dirty, interaction, saveNow, sessionQuery.data, state.saveState]);
+  }, [
+    dirty,
+    interaction,
+    saveNow,
+    sessionQuery.data,
+    state.saveState,
+    thumbnailOnlyPreview,
+  ]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -2444,7 +2506,7 @@ export function AnnotationEditor({
   const preloadIsCurrent =
     imagePreload?.imageId === image.id &&
     imagePreload?.retry === fullImageRetry;
-  const fullImageLoaded = preloadIsCurrent && imagePreload?.phase === "loaded";
+  const fullImageLoaded = fullImageReady;
   const fullImageFailed = preloadIsCurrent && imagePreload?.phase === "failed";
   const fullImageLoading =
     !preloadIsCurrent || imagePreload?.phase === "loading";
@@ -2582,6 +2644,7 @@ export function AnnotationEditor({
           <button
             type="button"
             className="secondary"
+            disabled={thumbnailOnlyPreview}
             onClick={() => void saveNow()}
           >
             Save now
@@ -2653,6 +2716,7 @@ export function AnnotationEditor({
             <label>
               Annotation status
               <select
+                disabled={thumbnailOnlyPreview}
                 value={state.document.annotation_status}
                 onChange={(event) =>
                   commitDocument({
@@ -2916,6 +2980,7 @@ export function AnnotationEditor({
                 type="button"
                 className="secondary"
                 disabled={
+                  thumbnailOnlyPreview ||
                   visiblePredictions.length === 0 ||
                   predictionStatusFilter !== "pending" ||
                   bulkReviewMutation.isPending
@@ -2940,6 +3005,7 @@ export function AnnotationEditor({
                 type="button"
                 className="secondary"
                 disabled={
+                  thumbnailOnlyPreview ||
                   !selectedPredictionIds.length ||
                   predictionStatusFilter !== "pending" ||
                   bulkReviewMutation.isPending
@@ -2962,6 +3028,7 @@ export function AnnotationEditor({
                 type="button"
                 className="secondary"
                 disabled={
+                  thumbnailOnlyPreview ||
                   visiblePredictions.length === 0 ||
                   predictionStatusFilter !== "pending" ||
                   bulkReviewMutation.isPending
@@ -3628,6 +3695,7 @@ export function AnnotationEditor({
                   position={selectedPredictionPosition + 1}
                   total={visiblePredictions.length}
                   busy={
+                    thumbnailOnlyPreview ||
                     acceptPredictionMutation.isPending ||
                     rejectPredictionMutation.isPending ||
                     promptAssistMutation.isPending
@@ -3776,9 +3844,16 @@ export function AnnotationEditor({
             </p>
           )}
           {fullImageLoading && (
-            <p role="status" className="rv-media-load-status">
-              Loading full-resolution image...
-            </p>
+            <div className="rv-media-load-status" role="status">
+              <p>Loading full-resolution image...</p>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setFullImageRetry((value) => value + 1)}
+              >
+                Retry loading full-resolution image
+              </button>
+            </div>
           )}
           {fullImageFailed && (
             <div className="rv-media-load-error" role="alert">
@@ -3862,6 +3937,7 @@ export function AnnotationEditor({
                       <button
                         type="button"
                         disabled={
+                          thumbnailOnlyPreview ||
                           acceptPredictionMutation.isPending ||
                           rejectPredictionMutation.isPending ||
                           !(
@@ -3880,6 +3956,7 @@ export function AnnotationEditor({
                         type="button"
                         className="secondary"
                         disabled={
+                          thumbnailOnlyPreview ||
                           acceptPredictionMutation.isPending ||
                           rejectPredictionMutation.isPending
                         }

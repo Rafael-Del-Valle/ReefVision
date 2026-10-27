@@ -82,6 +82,24 @@ class VideoTrackKeyframe(BaseModel):
         default=None,
         max_length=1000,
     )
+    mask_polygons: list[list[tuple[FiniteFloat, FiniteFloat]]] | None = Field(
+        default=None,
+        max_length=30,
+    )
+
+    @field_validator("mask_polygons")
+    @classmethod
+    def validate_mask_polygons(
+        cls, value: list[list[tuple[FiniteFloat, FiniteFloat]]] | None
+    ) -> list[list[tuple[FiniteFloat, FiniteFloat]]] | None:
+        if value is None:
+            return None
+        for polygon in value:
+            if len(polygon) < 3 or len(polygon) > 20000:
+                raise ValueError("Mask polygons require 3-20000 vertices")
+            if any(x < 0 or y < 0 for x, y in polygon):
+                raise ValueError("Mask polygon coordinates must be nonnegative")
+        return value
 
     @field_validator("bbox")
     @classmethod
@@ -219,12 +237,28 @@ class VideoFrameSpatialMetricsResponse(BaseModel):
 
 class VideoTrackingCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
+    tracking_mode: Literal["auto", "detect", "segment", "hybrid"] = "auto"
+    segmentation_model_id: str | None = Field(default=None, min_length=1, max_length=36)
+    hybrid_match_iou: float = Field(default=0.5, gt=0, le=1)
     tracker: str = Field(default="bytetrack.yaml", min_length=1, max_length=200)
     confidence: float = Field(default=0.25, ge=0, le=1)
     iou: float = Field(default=0.5, ge=0, le=1)
     device: str = Field(default="auto", min_length=1, max_length=60)
     minimum_track_frames: int = Field(default=2, ge=1, le=1000000)
     link_detections: bool = True
+
+    @model_validator(mode="after")
+    def validate_tracking_mode(self) -> VideoTrackingCreateRequest:
+        if self.tracking_mode == "hybrid":
+            if not self.segmentation_model_id:
+                raise ValueError("Hybrid tracking requires a segmentation model")
+            if self.segmentation_model_id == self.model_id:
+                raise ValueError("Hybrid tracking requires two different models")
+            if not self.link_detections:
+                raise ValueError("Hybrid tracking requires linking across frames")
+        elif self.segmentation_model_id is not None:
+            raise ValueError("A secondary segmentation model is only valid in hybrid mode")
+        return self
 
 
 class AnnotatedVideoOverlayOptions(BaseModel):
@@ -272,6 +306,8 @@ class VideoTrackingRunResponse(BaseModel):
     stage: str
     tracker: str
     model_id: str | None
+    tracking_mode: Literal["auto", "detect", "segment", "hybrid"] = "auto"
+    segmentation_model_id: str | None = None
     link_detections: bool
     confidence: float
     iou: float

@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import * as runtime from "../../runtime";
 
 import type { TrainingRun } from "../../api/client";
 import { TrainingRunDetail } from "./TrainingRunDetail";
@@ -81,6 +83,30 @@ const run: TrainingRun = {
 };
 
 describe("TrainingRunDetail", () => {
+  it("requests the live PowerShell monitor through the desktop runtime helper", async () => {
+    vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+      apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+      dataDir: "C:/ReefVision",
+      desktopMode: true,
+    });
+    const openConsole = vi
+      .spyOn(runtime, "openDesktopTrainingConsole")
+      .mockResolvedValue(undefined);
+    render(
+      <TrainingRunDetail
+        run={{ ...run, status: "training" }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Training Console" }),
+    );
+    await waitFor(() => expect(openConsole).toHaveBeenCalledWith("run-1"));
+    vi.restoreAllMocks();
+  });
+
   it("shows the actual best epoch, task metrics, checkpoints, artifacts, and provenance", () => {
     render(
       <TrainingRunDetail
@@ -103,5 +129,50 @@ describe("TrainingRunDetail", () => {
     expect(
       screen.getByRole("button", { name: "Register best detector" }),
     ).toBeEnabled();
+  });
+
+  it("shows every available detection, segmentation, and validation metric", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          task: "segment",
+          metrics_history: {
+            epoch: [1, 2],
+            "train/box_loss": [1.2, 0.9],
+            "train/seg_loss": [1.1, 0.8],
+            "train/cls_loss": [0.7, 0.5],
+            "train/dfl_loss": [0.6, 0.4],
+            "metrics/mAP50-95(M)": [0.2, 0.3],
+            "val/box_loss": [1.0, 0.8],
+            "val/seg_loss": [0.9, 0.7],
+            "val/cls_loss": [0.6, 0.4],
+            "val/dfl_loss": [0.5, 0.3],
+          },
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", { name: /train box loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train seg loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train cls loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train dfl loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /val seg loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /val dfl loss across 2 epochs/i }),
+    ).toBeInTheDocument();
   });
 });

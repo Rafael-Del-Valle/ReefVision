@@ -1,5 +1,12 @@
 Set-StrictMode -Version Latest
 
+function ConvertTo-ReefVisionVersionString {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    # Windows Installer COM may pad StringData values with spaces. Keep the
+    # release comparison semantic while discarding transport-only padding.
+    return $Value.Trim()
+}
+
 function Invoke-ReefVisionIsolatedEnvironment {
     param(
         [Parameter(Mandatory = $true)][string]$DataRoot,
@@ -77,6 +84,25 @@ function Test-ReefVisionPathWithin {
     return $candidate.StartsWith($boundary, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+# Reject existing junctions/symbolic links anywhere in the acceptance-root
+# ancestry. GetFullPath only normalizes lexical segments; it does not resolve
+# reparse points, so a seemingly disposable path could redirect into real data.
+function Assert-ReefVisionNoReparseAncestors {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $current = Resolve-ReefVisionAcceptancePath $Path
+    while ($current) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Acceptance root traverses a junction or symbolic link: $current"
+            }
+        }
+        $parent = Split-Path -Parent $current
+        if (-not $parent -or $parent -ieq $current) { break }
+        $current = $parent
+    }
+}
+
 function Assert-ReefVisionSafeAcceptanceRoot {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -114,6 +140,7 @@ function Assert-ReefVisionSafeAcceptanceRoot {
     if (Test-ReefVisionPathWithin -Path $DefaultDataRoot -Parent $resolved) {
         throw "Acceptance root may not contain the normal ReefVision data directory: $DefaultDataRoot"
     }
+    Assert-ReefVisionNoReparseAncestors -Path $resolved
     return $resolved
 }
 
@@ -142,6 +169,71 @@ function Write-ReefVisionEvidenceReport {
     $parent = Split-Path -Parent $Path
     New-Item -ItemType Directory -Path $parent -Force | Out-Null
     $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+# Decode actual camera bytes rather than accepting a nonempty display response.
+# Scientific annotation coordinates remain in the original camera raster frame.
+function Assert-ReefVisionCameraRaster {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$Bytes,
+        [Parameter(Mandatory = $true)][ValidateSet('image/jpeg', 'image/png')][string]$ContentType,
+        [Parameter(Mandatory = $true)][int]$ExpectedWidth,
+        [Parameter(Mandatory = $true)][int]$ExpectedHeight
+    )
+    if ($Bytes.Length -eq 0 -or $ExpectedWidth -le 0 -or $ExpectedHeight -le 0) {
+        throw 'Camera raster bytes and expected dimensions must be nonempty and positive.'
+    }
+    Add-Type -AssemblyName System.Drawing
+    $stream = [System.IO.MemoryStream]::new([byte[]]$Bytes, $false)
+    try {
+        $raster = [System.Drawing.Image]::FromStream($stream, $false, $true)
+        try {
+            $expectedFormat = if ($ContentType -eq 'image/jpeg') {
+                [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid
+            } else {
+                [System.Drawing.Imaging.ImageFormat]::Png.Guid
+            }
+            if ($raster.RawFormat.Guid -ne $expectedFormat) {
+                throw "Camera raster encoding does not match declared $ContentType."
+            }
+            if ($raster.Width -ne $ExpectedWidth -or $raster.Height -ne $ExpectedHeight) {
+                throw "Camera raster dimensions $($raster.Width)x$($raster.Height) differ from original source frame ${ExpectedWidth}x${ExpectedHeight}."
+            }
+            return [pscustomobject]@{
+                width = [int]$raster.Width
+                height = [int]$raster.Height
+                media_type = $ContentType
+            }
+        } finally { $raster.Dispose() }
+    } finally { $stream.Dispose() }
+}
+
+
+# A camera image must render identically before and after an installed desktop
+# restart. Matching dimensions alone would miss changed pixels or re-encoding.
+# This deliberately requires byte-for-byte stability of the display response;
+# no source camera bytes are modified by this check.
+function Assert-ReefVisionStableCameraDisplay {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$InitialBytes,
+        [Parameter(Mandatory = $true)][byte[]]$RestartBytes,
+        [Parameter(Mandatory = $true)][string]$InitialContentType,
+        [Parameter(Mandatory = $true)][string]$RestartContentType
+    )
+    if ($InitialBytes.Length -eq 0 -or $RestartBytes.Length -eq 0) {
+        throw 'Camera display bytes must be nonempty before and after restart.'
+    }
+    if ($InitialContentType -cne $RestartContentType) {
+        throw 'Camera display media type changed after desktop restart.'
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $before = [BitConverter]::ToString($sha.ComputeHash($InitialBytes)).Replace('-', '')
+        $after = [BitConverter]::ToString($sha.ComputeHash($RestartBytes)).Replace('-', '')
+    } finally { $sha.Dispose() }
+    if ($before -cne $after) {
+        throw 'Camera display bytes changed after desktop restart despite matching dimensions.'
+    }
 }
 
 function Get-ReefVisionInstalledRegistrations {

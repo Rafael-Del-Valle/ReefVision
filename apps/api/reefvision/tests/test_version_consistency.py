@@ -7,7 +7,7 @@ from pathlib import Path
 
 from reefvision import __version__
 
-EXPECTED_VERSION = "1.0.2"
+EXPECTED_VERSION = "1.0.3"
 
 
 def test_authoritative_version_sources_match_release_line() -> None:
@@ -65,3 +65,22 @@ def test_authoritative_version_sources_match_release_line() -> None:
 
     assert authoritative_versions
     assert set(authoritative_versions.values()) == {EXPECTED_VERSION}
+
+
+def test_desktop_staging_paths_match_tauri_version() -> None:
+    """Prevent Windows build scripts from staging resources for an older release."""
+    root = Path(__file__).resolve().parents[4]
+    tauri_config = json.loads(
+        (root / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    )
+    expected_stage = f"release-{tauri_config['version']}"
+    resources = tauri_config["bundle"]["resources"]
+    assert resources, "The packaged Windows backend resources must be declared"
+    assert all(expected_stage in path for path in resources)
+
+    for script_name in ("build-desktop.ps1", "build-desktop-backend.ps1"):
+        script = (root / "scripts" / script_name).read_text(encoding="utf-8")
+        stages = set(re.findall(r"release-\d+\.\d+\.\d+", script))
+        assert stages == {expected_stage}, (
+            f"{script_name} stages {sorted(stages)!r}; expected {expected_stage}"
+        )
