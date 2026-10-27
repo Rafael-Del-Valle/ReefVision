@@ -179,7 +179,5 @@ def test_saved_workflow_rejects_conflicting_levels_without_artifact(
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
-    assert "conflicting experimental unit types" in (
-        detail.json()["run"]["error_message"].lower()
-    )
+    assert "conflicting experimental unit types" in detail.json()["run"]["error_message"].lower()
     assert all(row["data_type"] != artifact_type for row in detail.json()["artifacts"])
