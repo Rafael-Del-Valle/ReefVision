@@ -208,6 +208,34 @@ function Assert-ReefVisionCameraRaster {
     } finally { $stream.Dispose() }
 }
 
+
+# A camera image must render identically before and after an installed desktop
+# restart. Matching dimensions alone would miss changed pixels or re-encoding.
+# This deliberately requires byte-for-byte stability of the display response;
+# no source camera bytes are modified by this check.
+function Assert-ReefVisionStableCameraDisplay {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$InitialBytes,
+        [Parameter(Mandatory = $true)][byte[]]$RestartBytes,
+        [Parameter(Mandatory = $true)][string]$InitialContentType,
+        [Parameter(Mandatory = $true)][string]$RestartContentType
+    )
+    if ($InitialBytes.Length -eq 0 -or $RestartBytes.Length -eq 0) {
+        throw 'Camera display bytes must be nonempty before and after restart.'
+    }
+    if ($InitialContentType -cne $RestartContentType) {
+        throw 'Camera display media type changed after desktop restart.'
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $before = [BitConverter]::ToString($sha.ComputeHash($InitialBytes)).Replace('-', '')
+        $after = [BitConverter]::ToString($sha.ComputeHash($RestartBytes)).Replace('-', '')
+    } finally { $sha.Dispose() }
+    if ($before -cne $after) {
+        throw 'Camera display bytes changed after desktop restart despite matching dimensions.'
+    }
+}
+
 function Get-ReefVisionInstalledRegistrations {
     $roots = @(
         'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
