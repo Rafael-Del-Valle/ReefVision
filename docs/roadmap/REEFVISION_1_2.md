@@ -2562,3 +2562,30 @@ links do not establish biological independence or scientifically verified
 longitudinal growth. Latest-head CI, scientist-reviewed datasets, independent
 migration reconciliation and native installed Windows acceptance remain
 release blockers; no release-ready claim is made.
+
+## Population CSV row-width integrity and CI repair (2026-10-27)
+
+The preceding 1.2 head `1b850bbe173b179be7313aa63f30c0303b20c0f9`
+completed **16 of 19** GitHub Actions workflows successfully. CI, Pose
+Workflow Validation and ReefVision 1.0 Acceptance all failed at the **same
+Ruff format diff** in `test_ecology_population_export_1_2.py`: collapse the
+`source_declared_experimental_unit_count` string conversion to one line.
+The exact formatter-requested change has been applied.
+
+The shared `ecology_population_csv_export` Workflow Builder renderer and
+standalone `population.csv` endpoint now enforce the declared CSV column
+count **for every experimental-unit and population-stratum row** before
+writing it. A later schema edit that adds or removes a header column without
+updating both row serializers must fail closed rather than silently shift
+scientific fields, omit the review gate, or mislabel replicate denominators.
+The schema remains `ecology-population-export-0004`, with one centralized
+version constant; this is a compatibility-preserving integrity check.
+
+Two parameterized regressions deliberately shorten and extend the header
+contract and require a `ValidationError` rather than a malformed CSV.
+Existing API/saved-workflow byte-parity, source-fingerprint recheck,
+project ownership, review-gate and independent-unit safeguards remain
+applicable. Source code and test changes are pushed, but latest-head CI,
+installed Windows GUI/installer validation, authenticated longitudinal
+observations, migration reconciliation and independent ecological review
+are still required. **1.2 is NOT RELEASE-READY.**
