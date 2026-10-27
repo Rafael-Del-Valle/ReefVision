@@ -74,6 +74,10 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "target_meters_per_mesh_unit": 1.0,
         "source_relative_scale_uncertainty": 0.1,
         "target_relative_scale_uncertainty": 0.1,
+        "source_calibration_method": "ruler",
+        "target_calibration_method": "ruler",
+        "source_calibration_evidence": "Field ruler not yet reviewed",
+        "target_calibration_evidence": "Field ruler not yet reviewed",
         "source_to_target_transform_m": _rigid_transform(),
         "source_centroid_position_error_bound_m": 0.01,
         "target_centroid_position_error_bound_m": 0.02,
@@ -213,6 +217,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert "registration_geometry_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_calibration_scale_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_scale_uncertainty_binding_unavailable" not in expected["qc_warnings"]
+    assert "registration_calibration_provenance_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_project_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_observation_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_timepoint_binding_unavailable" not in expected["qc_warnings"]
