@@ -656,9 +656,7 @@ def test_three_metric_two_parent_cycle_cannot_invent_consistent_lineage(
 def test_overlapping_two_parent_chain_retains_feasible_unverified_summaries() -> None:
     """An even chain is feasible; never assert a specific parent assignment."""
     rows = [
-        _partial_metric_roster(
-            "box_width", ["fragment-A", "fragment-B"], ["parent-A", "parent-B"]
-        ),
+        _partial_metric_roster("box_width", ["fragment-A", "fragment-B"], ["parent-A", "parent-B"]),
         _partial_metric_roster(
             "box_height", ["fragment-B", "fragment-C"], ["parent-A", "parent-B"]
         ),
@@ -699,6 +697,7 @@ def test_parent_feasibility_handles_large_augmenting_chain_without_recursion() -
     options[organisms[-1]] = {parents[0]}
     assert _full_parent_roster_feasible(organisms, parents, options)
     assert not _full_parent_roster_feasible(organisms, parents[:-1], options)
+
 
 @pytest.mark.parametrize("reverse_order", [False, True])
 def test_three_parent_overlaps_require_one_global_lineage(reverse_order: bool) -> None:
@@ -757,3 +756,41 @@ def test_three_parent_overlaps_preserve_feasible_unverified_lineage(
     assert all(row.declared_unit_count == 1 for row in summaries)
     assert all(row.independent_unit_inference_allowed is False for row in summaries)
     assert all(row.review_gate == "scientist_review_required" for row in summaries)
+
+
+@pytest.mark.parametrize("reverse_order", [False, True])
+def test_disconnected_rosters_cannot_hide_impossible_three_parent_lineage(
+    reverse_order: bool,
+) -> None:
+    """Unrelated tanks must not consume the exact-search budget of a bad colony."""
+    rows = [
+        _partial_metric_roster(
+            "box_width",
+            ["fragment-A", "fragment-C", "fragment-E"],
+            ["parent-P", "parent-S", "parent-T"],
+        ),
+        _partial_metric_roster(
+            "box_height",
+            ["fragment-A", "fragment-D", "fragment-E"],
+            ["parent-P", "parent-S", "parent-T"],
+        ),
+        _partial_metric_roster(
+            "mask_projected_area",
+            ["fragment-C", "fragment-D", "fragment-E"],
+            ["parent-P", "parent-S", "parent-T"],
+        ),
+    ]
+    for index in range(22):
+        control = _partial_metric_roster(
+            "box_width",
+            [f"control-fragment-{index}"],
+            [f"control-parent-{index}"],
+        )
+        rows.append(
+            control.model_copy(update={"experimental_unit_id": f"control-tank-{index}"})
+        )
+    assert len(rows) == 25
+    if reverse_order:
+        rows.reverse()
+    with pytest.raises(ValidationError, match="jointly impossible across metrics"):
+        summarize_projected_population_summaries(rows)
