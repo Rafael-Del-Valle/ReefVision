@@ -162,7 +162,9 @@ def test_unbounded_or_ambiguous_requests_rejected(patch):
         "nan_latitude",
         "infinite_longitude",
         "nan_depth",
+        "huge_integer_depth",
         "nan_value",
+        "huge_integer_value",
         "string_value",
         "boolean_depth",
     ],
@@ -186,8 +188,12 @@ def test_invalid_provider_grid_never_persists_scientific_records(
         raw["samples"][0]["longitude"] = float("inf")
     elif damage == "nan_depth":
         raw["samples"][0]["depth_m"] = float("nan")
+    elif damage == "huge_integer_depth":
+        raw["samples"][0]["depth_m"] = 10**1000
     elif damage == "nan_value":
         raw["samples"][0]["value"] = float("nan")
+    elif damage == "huge_integer_value":
+        raw["samples"][0]["value"] = 10**1000
     elif damage == "string_value":
         raw["samples"][0]["value"] = "3.0"
     elif damage == "boolean_depth":
