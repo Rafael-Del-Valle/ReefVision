@@ -77,6 +77,76 @@ def _full_parent_roster_feasible(
     return True
 
 
+def _assert_joint_full_parent_rosters(
+    full_parent_rosters: list[tuple[tuple[str, ...], tuple[str, ...]]],
+    possible_parents_by_organism: dict[str, set[str]],
+) -> None:
+    """Check small overlapping full rosters as one constrained lineage system.
+
+    Individual row matching and pair-graph checks are necessary but not
+    sufficient for three-parent overlaps. This bounded exact search rejects
+    only proven contradictions; larger or budget-exhausted systems remain
+    unverified and subject to scientist review, never inferred parentage.
+    """
+    if len(full_parent_rosters) < 2 or len(full_parent_rosters) > 24:
+        return
+    organisms = sorted({organism for roster, _ in full_parent_rosters for organism in roster})
+    if len(organisms) > 12:
+        return
+    membership = {
+        organism: [
+            (roster, parents)
+            for roster, parents in full_parent_rosters
+            if organism in roster
+        ]
+        for organism in organisms
+    }
+    ordered = sorted(
+        organisms,
+        key=lambda organism: (
+            len(possible_parents_by_organism[organism]),
+            -len(membership[organism]),
+            organism,
+        ),
+    )
+    assigned: dict[str, str] = {}
+    visits = 0
+
+    def feasible(index: int) -> bool | None:
+        nonlocal visits
+        visits += 1
+        if visits > 10000:
+            return None
+        if index == len(ordered):
+            return True
+        organism = ordered[index]
+        for parent in sorted(possible_parents_by_organism[organism]):
+            assigned[organism] = parent
+            if all(
+                _full_parent_roster_feasible(
+                    roster,
+                    parents,
+                    {
+                        member: {assigned[member]}
+                        if member in assigned
+                        else possible_parents_by_organism[member]
+                        for member in roster
+                    },
+                )
+                for roster, parents in membership[organism]
+            ):
+                outcome = feasible(index + 1)
+                if outcome is True or outcome is None:
+                    return outcome
+            del assigned[organism]
+        return False
+
+    if feasible(0) is False:
+        raise ValidationError(
+            "Projected parent-colony assignments are jointly impossible across metrics"
+        )
+
+
 def _assert_joint_two_parent_rosters(
     full_parent_rosters: list[tuple[tuple[str, ...], tuple[str, ...]]],
     possible_parents_by_organism: dict[str, set[str]],
@@ -116,7 +186,8 @@ def _assert_joint_two_parent_rosters(
                         pending.append(neighbor)
                     elif previous == colors[organism]:
                         raise ValidationError(
-                            "Projected parent-colony assignments are jointly impossible across metrics"
+                            "Projected parent-colony assignments are jointly "
+                            "impossible across metrics"
                         )
             if not any(
                 all(
@@ -754,6 +825,7 @@ def summarize_projected_population_summaries(
 
     # Cross-metric pair constraints must also admit one global parent assignment.
     _assert_joint_two_parent_rosters(full_parent_rosters, possible_parents_by_organism)
+    _assert_joint_full_parent_rosters(full_parent_rosters, possible_parents_by_organism)
 
     results: list[EcologyProjectedPopulationSummary] = []
     for (unit_type, metric, unit, window), records in sorted(groups.items()):
