@@ -120,7 +120,6 @@ def test_malformed_calibration_method_and_empty_evidence_are_rejected() -> None:
         MeshRegistrationEvidence.model_validate(evidence)
 
 
-
 @pytest.mark.parametrize(
     "field",
     [
