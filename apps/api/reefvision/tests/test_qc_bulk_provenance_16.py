@@ -45,6 +45,7 @@ def test_keyed_retry_rejects_foreign_project_audit_without_mutation(
         assert len(events) == 2
         assert {event.review_queue_item_id for event in events} == set(item_ids)
         original_project_id = events[0].project_id
+        corrupted_item_id = events[0].review_queue_item_id
         assert original_project_id != unrelated_project["id"]
         if legacy_layout:
             # Pre-registry 1.6 batches stored UUIDv5 for every selected item.
@@ -53,14 +54,32 @@ def test_keyed_retry_rejects_foreign_project_audit_without_mutation(
         events[0].project_id = unrelated_project["id"]
         session.commit()
 
-    event_urls = [
-        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in item_ids
-    ]
-    original_history = [client.get(event_url).json() for event_url in event_urls]
+    event_urls = {
+        item_id: f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+        for item_id in item_ids
+    }
+    # A corrupted item's history must fail closed (HTTP 409), not return a
+    # partial 200 page. Healthy sibling histories remain independently readable.
+    for item_id, event_url in event_urls.items():
+        history = client.get(event_url)
+        if item_id == corrupted_item_id:
+            assert history.status_code == 409, history.text
+        else:
+            assert history.status_code == 200, history.text
+            assert history.json()["total"] == 1
+
     retry = client.post(url, json=payload)
     assert retry.status_code == 409, retry.text
-    assert [client.get(event_url).json() for event_url in event_urls] == original_history
-    assert all(history["total"] == 1 for history in original_history)
+    with app.state.session_factory() as session:
+        persisted_events = list(
+            session.scalars(
+                select(ReviewQueueItemEvent).where(ReviewQueueItemEvent.review_queue_id == queue_id)
+            )
+        )
+        assert len(persisted_events) == 2
+        assert {event.review_queue_item_id for event in persisted_events} == set(item_ids)
+        assert sum(event.project_id == unrelated_project["id"] for event in persisted_events) == 1
+        assert {event.actor for event in persisted_events} == {"researcher one"}
 
     with app.state.session_factory() as session:
         record = session.get(ReviewQueueBulkRequestRecord, request_id)
@@ -92,7 +111,11 @@ def test_keyed_retry_rejects_foreign_project_audit_without_mutation(
     assert recovered.status_code == 200, recovered.text
     assert recovered.json()["changed_count"] == 0
     assert recovered.json()["requires_researcher_review"] is True
-    assert all(client.get(event_url).json()["total"] == 1 for event_url in event_urls)
+    for event_url in event_urls.values():
+        restored_history = client.get(event_url)
+        assert restored_history.status_code == 200, restored_history.text
+        assert restored_history.json()["total"] == 1
+        assert restored_history.json()["requires_researcher_review"] is True
 
 
 def test_keyed_retry_rejects_audit_event_reassigned_to_another_queue(
