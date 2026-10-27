@@ -68,10 +68,19 @@ centroid-to-RMS ratio, even if a syntactically valid rigid matrix is present.
 The submitted transform, review attribution, and transform-level rotation and
 translation diagnostics remain available for audit, with explicit
 `registered_surface_centroid_comparison_withheld_disputed_alignment` QC.
+The same withholding now applies to an independent `inconclusive`
+registration decision: uncertain alignment must not yield apparent centroid
+movement or caller-bound intervals. Its distinct QC code is
+`registered_surface_centroid_comparison_withheld_inconclusive_alignment`.
+Original per-observation surface measurements, registration evidence, and
+transform-level diagnostics remain available for review. A missing review
+continues to be flagged as provisional rather than treated as a rejection.
+
 This safeguard applies identically to the standalone endpoint and persisted,
 executable typed Workflow Builder graphs. A supporting review still does not
 verify registration or biological movement. Regression coverage saves and
-executes a disputed-review graph and checks exact standalone artifact parity.
+executes disputed and inconclusive review graphs and checks exact standalone
+artifact parity.
 
 Registration evidence without a transform remains valid for backward
 compatibility and adds `registration_transform_unavailable`. Existing
