@@ -765,7 +765,6 @@ def test_pose_workflow_rejects_falsy_non_object_resource_limits_from_verified_tr
         )
 
 
-
 def test_pose_workflow_rejects_lossy_random_seeds_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
@@ -787,7 +786,9 @@ def test_pose_workflow_rejects_lossy_random_seeds_from_verified_truth(
     for invalid_seed in (True, False, -1, 2.5, "2.5", "invalid"):
         with (
             app.state.session_factory() as session,
-            pytest.raises(ValidationError, match="random_seed must be a non-negative integer"),
+            pytest.raises(
+                ValidationError, match="random_seed must be a non-negative integer"
+            ),
         ):
             create_pose_workflow_training_result(
                 session,
