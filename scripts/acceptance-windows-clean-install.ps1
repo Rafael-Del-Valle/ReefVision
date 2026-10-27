@@ -326,6 +326,8 @@ try {
         if ($cameraMetadata.media_type -ne 'image/jpeg' -or $cameraMetadata.width_px -le 0 -or $cameraMetadata.height_px -le 0) {
             throw 'Real camera JPEG lost its media type or source-pixel dimensions.'
         }
+        # Validate the decoded source raster against the API's scientific pixel frame.
+        $null = Assert-ReefVisionCameraRaster -Bytes $cameraBytes -ContentType 'image/jpeg' -ExpectedWidth ([int]$cameraMetadata.width_px) -ExpectedHeight ([int]$cameraMetadata.height_px)
         $cameraHttp = [System.Net.Http.HttpClient]::new()
         try {
             $storedBytes = $cameraHttp.GetByteArrayAsync("$api/images/$cameraId/content").GetAwaiter().GetResult()
@@ -345,6 +347,9 @@ try {
                 }
                 $displayBytes = $displayResponse.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
                 if ($displayBytes.Length -eq 0) { throw 'Real camera JPEG display returned no pixels.' }
+                # A nonempty HTTP response is insufficient: verify decodable pixels,
+                # the declared media type, and unchanged annotation coordinates.
+                $null = Assert-ReefVisionCameraRaster -Bytes ([byte[]]$displayBytes) -ContentType $displayType -ExpectedWidth ([int]$cameraMetadata.width_px) -ExpectedHeight ([int]$cameraMetadata.height_px)
                 $orientation = $null
                 $exifProperty = $cameraMetadata.metadata_json.PSObject.Properties['exif']
                 if ($null -ne $exifProperty -and $null -ne $exifProperty.Value) {
