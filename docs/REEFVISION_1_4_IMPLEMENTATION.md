@@ -52,6 +52,28 @@ matching attacker-controlled hash offers no security guarantee. Saved
 workflows continue to retain the submitted bounded input payload and
 measurement provenance under existing local project persistence.
 
+## Imported point-cloud byte-exact replay guard (provisional)
+
+The project-scoped standalone ASCII PLY point-cloud preview and executable,
+typed, saved `point_cloud_preview` Workflow Builder node now accept optional
+`expected_source_payload_sha256`. This must be the lowercase SHA-256 digest of
+the exact UTF-8 PLY text submitted to the local API. A changed source, including
+a comment-only edit that leaves parsed XYZ coordinates identical, fails closed:
+the API rejects the measurement and a saved workflow run fails without
+emitting a point-cloud measurement artifact. Raw XYZ arrays cannot claim an
+imported PLY file binding.
+
+The point-cloud provenance now includes `source_payload_sha256`,
+`source_payload_size_bytes`, and `source_payload_integrity_checked`.
+The preexisting `source_text_sha256` remains for compatibility. An unbound
+legacy PLY request still works but reports `source_payload_integrity_checked=false`;
+raw XYZ arrays have null source-file fields. These digests cover the **submitted
+text**, not independently observed bytes from a filesystem; a caller-controlled
+digest is not authentication. Matching content does not verify specimen identity,
+scale calibration, registration, biological branch lengths, or independent
+review. This guard is a prerequisite for future durable asset versioning,
+**not** an implementation of persistent 3D asset ingestion.
+
 ## Scale-only surface-area bounds (provisional)
 
 The standalone mesh API and saved `mesh_surface_preview` Workflow Builder
