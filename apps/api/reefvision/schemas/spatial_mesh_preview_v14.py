@@ -120,6 +120,17 @@ class MeshRegistrationEvidence(BaseModel):
     target_relative_scale_uncertainty: StrictFloat | None = Field(
         default=None, ge=0, le=1, allow_inf_nan=False
     )
+    # Method and supporting evidence can be revised while geometry, scale,
+    # and uncertainty remain identical. Bind both source calibration records
+    # to prevent silently reusing registration after that provenance revision.
+    source_calibration_method: Literal[
+        "ruler", "photogrammetry_control", "instrument", "other"
+    ] | None = None
+    target_calibration_method: Literal[
+        "ruler", "photogrammetry_control", "instrument", "other"
+    ] | None = None
+    source_calibration_evidence: str | None = Field(default=None, min_length=1, max_length=2_000)
+    target_calibration_evidence: str | None = Field(default=None, min_length=1, max_length=2_000)
     # Optional caller-supplied rigid source-to-target transform in meters.
     # Structural validity does not establish correct alignment or review.
     source_to_target_transform_m: list[list[StrictFloat]] | None = None
@@ -150,6 +161,16 @@ class MeshRegistrationEvidence(BaseModel):
             self.target_relative_scale_uncertainty is None
         ):
             raise ValueError("Registration scale uncertainty binding requires both values")
+        calibration_records = (
+            self.source_calibration_method,
+            self.target_calibration_method,
+            self.source_calibration_evidence,
+            self.target_calibration_evidence,
+        )
+        if any(value is not None for value in calibration_records) and not all(
+            value is not None for value in calibration_records
+        ):
+            raise ValueError("Registration calibration provenance binding requires all four fields")
         review_fields = (
             self.independent_reviewer_id,
             self.independent_review_decision,
