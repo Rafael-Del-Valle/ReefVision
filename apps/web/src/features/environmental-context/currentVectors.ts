@@ -52,6 +52,8 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       !Number.isFinite(row.location.longitude) ||
       Math.abs(row.location.longitude) > 180 ||
       row.depth_m == null ||
+      !Number.isFinite(row.depth_m) ||
+      row.depth_m < 0 ||
       !row.depth_reference ||
       row.normalized_unit !== "m/s" ||
       !Number.isFinite(row.normalized_value) ||
