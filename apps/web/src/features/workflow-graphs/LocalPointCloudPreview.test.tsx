@@ -112,6 +112,43 @@ describe("LocalPointCloudPreview", () => {
     ).toBeInTheDocument();
   });
 
+  it("pins selected chord endpoints only after explicit display opt-in", async () => {
+    vi.mocked(previewLocalPointCloudFile).mockResolvedValue({
+      measurement_status: "caller_supplied_unverified",
+    });
+    render(<LocalPointCloudPreview projectId="reef-project" />);
+    fireEvent.change(screen.getByLabelText("Point-cloud file"), {
+      target: { files: [new File(["ply"], "reef.ply")] },
+    });
+    fireEvent.change(screen.getByLabelText("Chord start source point index"), {
+      target: { value: "100" },
+    });
+    fireEvent.change(screen.getByLabelText("Chord end source point index"), {
+      target: { value: "511" },
+    });
+    const checkbox = screen.getByRole("checkbox", {
+      name: /Keep selected chord endpoints visible/,
+    });
+    expect(checkbox).not.toBeChecked();
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Preview point cloud" }));
+    expect(
+      await screen.findByText("Provisional point-cloud viewer"),
+    ).toBeInTheDocument();
+    expect(previewLocalPointCloudFile).toHaveBeenCalledWith(
+      "reef-project",
+      expect.any(File),
+      expect.objectContaining({ calibration_method: "ruler" }),
+      [[100, 511]],
+      true,
+    );
+    fireEvent.click(checkbox);
+    expect(
+      screen.queryByText("Provisional point-cloud viewer"),
+    ).not.toBeInTheDocument();
+  });
+
   it("requires both source indices before sending a chord request", async () => {
     render(<LocalPointCloudPreview projectId="reef-project" />);
     fireEvent.change(screen.getByLabelText("Point-cloud file"), {
