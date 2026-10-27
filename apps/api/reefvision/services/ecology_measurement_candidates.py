@@ -273,6 +273,10 @@ def summarize_sampling_date_qc(
     # inherit a dated copy's timepoint without scientist review.
     source_content_missing_times: set[str] = set()
     for candidate in candidates:
+        # SHA-256 hex is case-insensitive. Preserve raw source declarations in
+        # fingerprints, but compare canonical digests to detect reimported
+        # photographs even when a saved artifact uses uppercase hex.
+        content_digest = candidate.image_sha256.casefold()
         captured = candidate.capture_timestamp_utc
         aware = (
             candidate.capture_time_status == "timezone_aware"
@@ -282,15 +286,15 @@ def summarize_sampling_date_qc(
         )
         utc_instant = captured.astimezone(UTC).isoformat() if aware and captured else None
         source_image_metadata.setdefault(candidate.image_id, set()).add(
-            (candidate.image_sha256, candidate.capture_time_status, utc_instant)
+            (content_digest, candidate.capture_time_status, utc_instant)
         )
         if utc_instant is None:
-            source_content_missing_times.add(candidate.image_sha256)
+            source_content_missing_times.add(content_digest)
             continue
         utc_date = utc_instant[:10]
         source_image_dates.setdefault(candidate.image_id, set()).add(utc_date)
-        source_content_dates.setdefault(candidate.image_sha256, set()).add(utc_date)
-        source_content_instants.setdefault(candidate.image_sha256, set()).add(utc_instant)
+        source_content_dates.setdefault(content_digest, set()).add(utc_date)
+        source_content_instants.setdefault(content_digest, set()).add(utc_instant)
 
     groups: dict[tuple[str, str], list[EcologyMeasurementCandidate]] = {}
     for candidate in candidates:
@@ -325,9 +329,9 @@ def summarize_sampling_date_qc(
         )
         reused_image_sha256 = sorted(
             {
-                record.image_sha256
+                record.image_sha256.casefold()
                 for record in records
-                if len(source_content_dates.get(record.image_sha256, set())) > 1
+                if len(source_content_dates.get(record.image_sha256.casefold(), set())) > 1
             }
         )
         conflicting_source_image_ids = sorted(
@@ -339,12 +343,12 @@ def summarize_sampling_date_qc(
         )
         conflicting_source_image_sha256 = sorted(
             {
-                record.image_sha256
+                record.image_sha256.casefold()
                 for record in records
-                if len(source_content_instants.get(record.image_sha256, set())) > 1
+                if len(source_content_instants.get(record.image_sha256.casefold(), set())) > 1
                 or (
-                    record.image_sha256 in source_content_missing_times
-                    and bool(source_content_instants.get(record.image_sha256))
+                    record.image_sha256.casefold() in source_content_missing_times
+                    and bool(source_content_instants.get(record.image_sha256.casefold()))
                 )
             }
         )

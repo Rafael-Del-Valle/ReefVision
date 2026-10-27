@@ -2832,3 +2832,29 @@ require verification, as do authenticated scientist-reviewed measurements,
 registered experimental-design acceptance, 1.1 migration reconciliation,
 real ecological datasets, and installed Windows MSI/GUI checks. Neither
 1.2 nor 1.3 is release-ready.
+
+## Case-insensitive source photograph digest QC (2026-10-27)
+
+SHA-256 hexadecimal casing is not biological evidence: a photograph reimported
+with an uppercase content digest is the same source as its lowercase digest.
+The source-linked sampling-date QC now compares case-folded image-content
+digests for cross-series reused-photo dates, inconsistent capture instants,
+missing-versus-dated acquisition metadata, and same-ID metadata consistency.
+QC reports canonical lowercase digest identifiers, but source candidate fields
+and raw source fingerprints retain their original spelling for provenance.
+Legitimate multi-organism observations from the same photograph at the same
+UTC instant remain eligible as provisional date-series candidates.
+
+Focused regressions cover uppercase reimports across dates, legitimate
+same-instant offsets, same-image-ID aliases, undated reimports, and rehydration
+from an executed saved Workflow Builder source artifact. The standalone
+measurement API and executable Workflow Builder share this QC kernel; the
+persisted-workflow test does **not** constitute scientist review or a verified
+growth workflow. Existing `linked_unverified` evidence and
+`scientist_review_required` gates remain unchanged. The preceding head
+`c4f716400568a893a326daf99d022e682c6065bf` completed 16/19
+PR-triggered workflows; three backend failures were the same Ruff format
+difference in `test_ecology_projected_series_csv_1_2.py`, corrected here.
+Exact new-head CI, migration reconciliation, independently reviewed
+longitudinal measurements, and installed Windows acceptance remain pending.
+**1.2 is NOT RELEASE-READY; 1.3 is not started.**
