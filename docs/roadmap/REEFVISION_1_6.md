@@ -1265,3 +1265,23 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   must pass. Independent 1.1/1.6 Alembic 0038 reconciliation, real Windows
   MSI upgrade/rollback and interactive installed GUI, and representative
   biological-data acceptance remain outstanding. No merge or release.
+
+## 2026-10-27 — Revision 0041 NULL-safe reviewer request identity (Track D)
+
+- Audited the actual 0038 review-event migration and the existing 0041
+  read-only migration preflight. The named two-column UNIQUE constraint
+  alone does not prevent duplicate request identities in SQLite when
+  either key column permits NULL; both columns are NOT NULL in real 0038.
+- The 0041 startup preflight now rejects nullable `review_queue_item_id`
+  or `client_request_id` even if the correct named UNIQUE exists.
+  It performs no schema changes, stamping or researcher-data mutation.
+- Added two forged-0041 SQLite regression cases preserving original data,
+  corrected the valid 0041 migration fixture, and aligned the desktop
+  synthetic 0041 fixture with real migration nullability.
+- Existing QC review APIs and executable saved `qc_review_queue` Workflow
+  Builder node remain unchanged; this protects their persisted reviewer
+  event idempotency during startup. Independent local SQLAlchemy/SQLite
+  inspector probes passed all three nullable/nonnullable cases.
+- **Acceptance remains HOLD:** full exact-head CI, 1.1/1.6 Alembic 0038
+  collision reconciliation, native Windows MSI/installed GUI and
+  representative biological-data validation are still required.
