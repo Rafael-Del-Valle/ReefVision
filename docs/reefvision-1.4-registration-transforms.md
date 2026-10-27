@@ -212,3 +212,29 @@ specimen identity, or biological movement. Independent human review and
 scientific validation remain required; `coordinate_registration_verified`
 stays `false`.
 
+## Calibration uncertainty revision binding
+
+The optional paired
+`registration_evidence.source_relative_scale_uncertainty` and
+`target_relative_scale_uncertainty` fields bind registration evidence to the
+**scale-uncertainty estimates** used when the two mesh previews were created.
+Both are finite JSON floating-point values in [0, 1] and must be supplied
+together. The comparison rejects stale registration evidence if either bound
+estimate no longer matches the corresponding preview provenance, even when
+the geometry SHA-256 and central meters-per-mesh-unit calibration are unchanged.
+The comparison also revalidates mutated Pydantic evidence instances.
+
+Older evidence without either uncertainty binding remains readable and
+produces `registration_scale_uncertainty_binding_unavailable` QC. This is
+backward-compatible, but legacy evidence must not be mistaken for bound
+calibration evidence. An uncertainty revision changes the interpretation of
+longitudinal scale intervals; the recorded evidence must be reconsidered.
+These caller-supplied consistency bindings do **not** verify uncertainty
+estimation, physical calibration, registration, specimen identity, or coral
+growth. The original source and target calibration estimates remain in the
+preview provenance, and `calibration_verified` remains false.
+
+Standalone longitudinal analysis and persisted executable typed Workflow
+Builder graphs use the same comparison engine. Regression coverage includes
+matching bindings in a saved workflow, stale uncertainty revisions, partial
+and malformed evidence, mutated model instances, and legacy compatibility.
