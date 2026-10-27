@@ -39,6 +39,18 @@ def test_comment_and_assignment_persist(client: TestClient) -> None:
     )
     assert assignment.status_code == 201, assignment.text
     assert client.get(url).json()["current_assignee"] == "reviewer-two"
+    # Pagination changes only the visible events, never the queue-wide
+    # assignment state or total. Empty pages must still retain both.
+    second_page = client.get(url, params={"page": 2, "page_size": 1})
+    assert second_page.status_code == 200, second_page.text
+    assert second_page.json()["total"] == 2
+    assert [event["event_type"] for event in second_page.json()["items"]] == ["assign"]
+    assert second_page.json()["current_assignee"] == "reviewer-two"
+    empty_page = client.get(url, params={"page": 3, "page_size": 1})
+    assert empty_page.status_code == 200, empty_page.text
+    assert empty_page.json()["total"] == 2
+    assert empty_page.json()["items"] == []
+    assert empty_page.json()["current_assignee"] == "reviewer-two"
     assert (
         client.post(
             url,
