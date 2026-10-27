@@ -534,8 +534,7 @@ def compare_mesh_observations(
                 "Centroid separation bounds require a transform and all three error bounds"
             )
             if isinstance(exc, ValidationError) and any(
-                error["type"] == "value_error"
-                and error["msg"] == f"Value error, {bounds_error}"
+                error["type"] == "value_error" and error["msg"] == f"Value error, {bounds_error}"
                 for error in exc.errors(include_url=False)
             ):
                 raise ValueError(bounds_error) from exc
@@ -628,14 +627,22 @@ def compare_mesh_observations(
                 ):
                     raise ValueError("Surface centroid must be three finite coordinates")
                 centroids.append(centroid)
-            # A disputed alignment cannot support even a provisional
-            # transformed-centroid comparison. Preserve the submitted matrix
-            # and its diagnostics for audit, but withhold derived offsets,
+            # Disputed or inconclusive alignment cannot support even a
+            # provisional transformed-centroid comparison. Preserve the matrix
+            # and diagnostics for audit, but withhold derived offsets,
             # separations, uncertainty intervals, and RMS ratios.
-            if registration.independent_review_decision == "disputes_alignment":
-                warnings.append(
-                    "registered_surface_centroid_comparison_withheld_disputed_alignment"
-                )
+            if registration.independent_review_decision in (
+                "disputes_alignment",
+                "inconclusive",
+            ):
+                if registration.independent_review_decision == "disputes_alignment":
+                    warnings.append(
+                        "registered_surface_centroid_comparison_withheld_disputed_alignment"
+                    )
+                else:
+                    warnings.append(
+                        "registered_surface_centroid_comparison_withheld_inconclusive_alignment"
+                    )
             elif any(centroid is None for centroid in centroids):
                 warnings.append("registered_surface_centroid_comparison_unavailable")
             else:
