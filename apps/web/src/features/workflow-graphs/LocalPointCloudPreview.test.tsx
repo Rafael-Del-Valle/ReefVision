@@ -132,7 +132,9 @@ describe("LocalPointCloudPreview", () => {
     expect(checkbox).not.toBeChecked();
     fireEvent.click(checkbox);
     expect(checkbox).toBeChecked();
-    fireEvent.click(screen.getByRole("button", { name: "Preview point cloud" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview point cloud" }),
+    );
     expect(
       await screen.findByText("Provisional point-cloud viewer"),
     ).toBeInTheDocument();
