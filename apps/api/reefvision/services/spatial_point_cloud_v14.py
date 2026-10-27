@@ -129,23 +129,28 @@ def measure_point_cloud_preview(
         raise ValueError("preserve_axis_extrema_in_preview must be a boolean")
     if not isinstance(preserve_measured_chord_endpoints_in_preview, bool):
         raise ValueError("preserve_measured_chord_endpoints_in_preview must be a boolean")
+    if type(meters_per_unit) not in (int, float) or not 0 < meters_per_unit <= 1_000_000:
+        raise ValueError("meters_per_unit must be a finite numeric value within bounds")
     scale = float(meters_per_unit)
-    if not isfinite(scale) or not 0 < scale <= 1_000_000:
+    if not isfinite(scale):
         raise ValueError("meters_per_unit must be finite and within bounds")
     if calibration_method not in {"ruler", "photogrammetry_control", "instrument", "other"}:
         raise ValueError("A supported calibration_method is required")
     if not isinstance(calibration_evidence, str) or not calibration_evidence.strip():
         raise ValueError("Calibration evidence is required")
     if relative_scale_uncertainty is not None and (
-        not isfinite(relative_scale_uncertainty) or not 0 <= relative_scale_uncertainty <= 1
+        type(relative_scale_uncertainty) not in (int, float)
+        or not 0 <= relative_scale_uncertainty <= 1
+        or not isfinite(relative_scale_uncertainty)
     ):
-        raise ValueError("relative_scale_uncertainty must be between 0 and 1")
+        raise ValueError("relative_scale_uncertainty must be a finite numeric value between 0 and 1")
     vertices: list[tuple[float, float, float]] = []
     for point in points:
-        if len(point) != 3 or any(
-            not isfinite(float(v)) or abs(float(v)) > 1_000_000_000 for v in point
+        if not isinstance(point, (list, tuple)) or len(point) != 3 or any(
+            type(v) not in (int, float) or abs(v) > 1_000_000_000 or not isfinite(v)
+            for v in point
         ):
-            raise ValueError("Every point requires three bounded finite coordinates")
+            raise ValueError("Every point requires three bounded finite numeric coordinates")
         vertices.append((float(point[0]), float(point[1]), float(point[2])))
     # Selected point-pair chords refer to original input order, not branches.
     selected_chords: list[dict[str, Any]] = []
