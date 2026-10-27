@@ -146,7 +146,9 @@ def test_valid_integer_mesh_geometry_retains_saved_workflow_parity(client: TestC
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item for item in detail.json()["artifacts"] if item["data_type"] == "mesh_measurement_preview"
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"]["surface_area_m2"] == standalone["surface_area_m2"]
     assert artifact["payload_json"]["provenance"] == standalone["provenance"]
