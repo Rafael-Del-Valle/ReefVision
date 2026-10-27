@@ -79,6 +79,28 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
     """Reject silent CSV column misalignment before emitting a science row."""
     if len(values) != len(_COLUMNS):
         raise ValidationError("Ecological population CSV column count does not match schema")
+    if len(set(_COLUMNS)) != len(_COLUMNS):
+        raise ValidationError("Ecological population CSV has duplicate column names")
+    row = dict(zip(_COLUMNS, values, strict=True))
+    if (
+        row["source_fingerprint_rechecked"] != "true"
+        or row["evidence_level"] != "linked_unverified"
+        or row["review_gate"] != "scientist_review_required"
+        or row["independent_unit_inference_allowed"] != "false"
+    ):
+        raise ValidationError("Ecological population CSV cannot claim verified evidence or inference")
+    declared = row["declared_unit_count"]
+    organisms = row["contributing_organism_count"]
+    if type(declared) is not int or type(organisms) is not int:
+        raise ValidationError("Ecological population CSV denominators must be integer counts")
+    if row["row_type"] == "declared_unit":
+        if declared not in (0, 1) or (declared == 0 and organisms != 0) or organisms < 0:
+            raise ValidationError("Ecological population CSV invalid declared-unit denominator")
+    elif row["row_type"] == "population_stratum":
+        if declared < 1 or organisms < declared:
+            raise ValidationError("Ecological population CSV invalid population denominator")
+    else:
+        raise ValidationError("Ecological population CSV row type is invalid")
     writer.writerow(values)
 
 
@@ -156,7 +178,7 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
                 "false",
                 row.evidence_level,
                 row.review_gate,
-            )
+            ),
         )
 
     for population_row in sorted(
@@ -199,6 +221,6 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
                 "false",
                 population_row.evidence_level,
                 population_row.review_gate,
-            )
+            ),
         )
     return output.getvalue()
