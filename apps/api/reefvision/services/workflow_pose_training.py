@@ -353,6 +353,18 @@ def _completed_workflow_pose_training_run(
         ):
             raise ValidationError("Recovered pose-training node dataset identity changed")
 
+        # Replaying a completed node must preserve the frozen dataset digests
+        # and exact landmark schema identity, not just its dataset IDs.
+        if (
+            snapshot.get("pose_training_dataset_manifest_sha256") != dataset.manifest_sha256
+            or snapshot.get("pose_validation_dataset_manifest_sha256")
+            != (validation_dataset.manifest_sha256 if validation_dataset else None)
+            or snapshot.get("pose_schema_id") != dataset.pose_schema_id
+            or snapshot.get("pose_schema_revision") != dataset.pose_schema_revision
+            or snapshot.get("pose_schema_content_hash") != dataset.pose_schema_content_hash
+        ):
+            raise ValidationError("Recovered pose-training node frozen provenance changed")
+
         if candidate.split_manifest_sha256 != split_manifest_sha256:
             raise ValidationError("Recovered pose-training node split manifest changed")
 
