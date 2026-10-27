@@ -89,6 +89,14 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       row.provenance.source,
       row.provenance.dataset_id,
       row.provenance.model_version,
+      // Do not combine components calculated using different scientific methods,
+      // processing settings, resolutions or source endpoints, even if their
+      // provider, dataset, coordinates and acquisition timestamp match.
+      row.provenance.source_url ?? null,
+      row.provenance.method ?? null,
+      row.provenance.spatial_resolution_m ?? null,
+      row.provenance.temporal_resolution_s ?? null,
+      row.provenance.processing_parameters ?? null,
       // Components from separate acquisitions must not form a synthetic current.
       row.provenance.acquired_at,
       row.environmental_cache_key,
