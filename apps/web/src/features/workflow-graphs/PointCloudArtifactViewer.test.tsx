@@ -437,4 +437,80 @@ describe("PointCloudArtifactViewer", () => {
       "Selected chord endpoints visible",
     );
   });
+  it("inspects calibrated source coordinates and scale-only intervals without changing saved data", () => {
+    const artifact = {
+      ...validArtifact,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 0.2,
+      },
+      preview_point_scale_intervals_m: [
+        [[0, 0], [0, 0], [0, 0]],
+        [[0.8, 1.2], [0, 0], [0, 0]],
+        [[0, 0], [0.8, 1.2], [0, 0]],
+      ],
+    };
+    const before = JSON.stringify(artifact);
+    render(<PointCloudArtifactViewer artifact={artifact} />);
+    fireEvent.click(screen.getByRole("button", { name: "Inspect source point 1" }));
+    expect(screen.getByText(/Source point 1 \(unverified source frame\)/)).toHaveTextContent(
+      "x=1.00000 m",
+    );
+    expect(screen.getByText(/Scale-only coordinate intervals:/)).toHaveTextContent(
+      "x [0.800000, 1.20000] m",
+    );
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "Inspect source point 2" }),
+      { key: "Enter" },
+    );
+    expect(screen.getByText(/Source point 2 \(unverified source frame\)/)).toHaveTextContent(
+      "y [0.800000, 1.20000] m",
+    );
+    expect(JSON.stringify(artifact)).toBe(before);
+  });
+
+  it("rejects stale or malformed saved scale intervals but retains legacy previews", () => {
+    const validIntervals = [
+      [[0, 0], [0, 0], [0, 0]],
+      [[0.8, 1.2], [0, 0], [0, 0]],
+      [[0, 0], [0.8, 1.2], [0, 0]],
+    ];
+    const base = {
+      ...validArtifact,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 0.2,
+      },
+    };
+    expect(
+      parsePointCloudRenderArtifact({
+        ...base,
+        preview_point_scale_intervals_m: validIntervals,
+      }),
+    ).not.toBeNull();
+    for (const intervals of [
+      [[0, 0]],
+      [[[0, 0], [0, 0], [0, 0]]],
+      [...validIntervals.slice(0, 2), [[0, 0], [0.9, 1.2], [0, 0]]],
+      [...validIntervals.slice(0, 2), [[0, 0], [1.2, 0.8], [0, 0]]],
+      [...validIntervals.slice(0, 2), [[0, 0], [Number.NaN, 1.2], [0, 0]]],
+    ]) {
+      expect(
+        parsePointCloudRenderArtifact({
+          ...base,
+          preview_point_scale_intervals_m: intervals,
+        }),
+      ).toBeNull();
+    }
+    expect(
+      parsePointCloudRenderArtifact({
+        ...validArtifact,
+        preview_point_scale_intervals_m: validIntervals,
+      }),
+    ).toBeNull();
+    expect(parsePointCloudRenderArtifact(validArtifact)).not.toBeNull();
+    render(<PointCloudArtifactViewer artifact={validArtifact} />);
+    fireEvent.click(screen.getByRole("button", { name: "Inspect source point 0" }));
+    expect(screen.getByText(/Scale uncertainty unavailable/)).toBeInTheDocument();
+  });
 });
