@@ -353,7 +353,9 @@ describe("Gallery", () => {
     renderGallery();
     await screen.findByText("No images yet");
     const fileInput = screen.getByLabelText("Import files") as HTMLInputElement;
-    const folderInput = screen.getByLabelText("Import folder") as HTMLInputElement;
+    const folderInput = screen.getByLabelText(
+      "Import folder",
+    ) as HTMLInputElement;
     await userEvent.upload(
       fileInput,
       new File(["first"], "first.JPEG", { type: "image/jpeg" }),
