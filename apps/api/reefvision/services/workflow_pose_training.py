@@ -783,9 +783,21 @@ def create_pose_workflow_training_result(
         )
     )
 
-    random_seed = (
-        int(parameters["random_seed"]) if parameters.get("random_seed") is not None else None
-    )
+    # A coerced boolean, fractional float, or negative seed changes the
+    # scientist's requested random state (or can crash before a job exists).
+    # Preserve the legacy decimal-string input without silently truncating it.
+    raw_seed = parameters.get("random_seed")
+    if raw_seed is None:
+        random_seed = None
+    elif isinstance(raw_seed, bool) or not (
+        isinstance(raw_seed, int)
+        or (isinstance(raw_seed, str) and raw_seed.strip().isdigit())
+    ):
+        raise ValidationError("Pose training random_seed must be a non-negative integer")
+    else:
+        random_seed = int(raw_seed)
+        if random_seed < 0:
+            raise ValidationError("Pose training random_seed must be a non-negative integer")
 
     resource_limits = parameters.get("resource_limits")
     if resource_limits is None:
