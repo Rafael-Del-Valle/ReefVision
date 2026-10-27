@@ -414,6 +414,12 @@ def _completed_workflow_pose_training_run(
         if candidate.status == "completed":
             return candidate
 
+        # Workflow retries must not start a second training job while the
+        # original child run is queued or executing. Failed/cancelled attempts
+        # may be retried, but an active run still owns this workflow node.
+        if candidate.status not in {"failed", "cancelled"}:
+            raise ValidationError("Pose-training workflow node already has an active child run")
+
     return None
 
 
