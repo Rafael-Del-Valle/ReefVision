@@ -9,6 +9,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from reefvision.domain.ecology_lineage_policy import (
+    canonical_declared_unit_type,
+    ecological_unit_types_equivalent,
+)
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.scientific_provenance import ScientificInputProvenance
 
@@ -131,13 +135,17 @@ class LongitudinalAnalysisRequest(BaseModel):
             for item in self.observations
             if item.experimental_unit_type is not None
         }
-        if len(declared) > 1:
-            raise ValueError("Observations declare conflicting experimental unit types")
         if declared:
-            only = next(iter(declared))
-            if self.experimental_unit_type is not None and self.experimental_unit_type != only:
+            canonical = canonical_declared_unit_type(declared)
+            if canonical is None:
+                raise ValueError("Observations declare conflicting experimental unit types")
+            if self.experimental_unit_type is not None and not ecological_unit_types_equivalent(
+                self.experimental_unit_type, canonical
+            ):
                 raise ValueError("Request and observations disagree on experimental unit type")
-            self.experimental_unit_type = only
+            # An explicit request label is retained; mixed aliases without one
+            # resolve to a deterministic biological level (e.g. "tank").
+            self.experimental_unit_type = self.experimental_unit_type or canonical
         return self
 
 
