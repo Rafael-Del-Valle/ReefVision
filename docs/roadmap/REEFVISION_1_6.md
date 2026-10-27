@@ -1134,3 +1134,32 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   This documentation commit does not constitute a CI pass. Full exact-head
   tests, independent 1.1/1.6 migration lineage, Windows installed-GUI,
   MSI upgrade/rollback and representative scientific acceptance remain **HOLD**.
+
+## 2026-10-27 — Track D SQLite FK-on backend regression repair (HOLD)
+
+- Inspected PR #77 and issue #76, branch isolation, exact-head CI at
+  `09f71bb8` and the prior full backend pytest run at `a88ab290`.
+  The current 20-run matrix completed 17 successful and three Ruff-format
+  failures, all pointing to a single QC test dictionary comprehension.
+  The earlier full backend run reported 40 failures, 1,348 passes and
+  32 skips. Most failures traced to two FK-on insertion-order defects.
+- Backup creation now flushes the parent `Job` before inserting its
+  `BackupRecord`, retaining one transaction and SQLite FK enforcement.
+  Pose Active Learning scientist verification now flushes the
+  `PoseLandmarkCorrection` before setting the candidate's
+  `correction_id` FK, preserving explicit human review and provenance.
+- Expanded existing standalone backup and pose review regressions to
+  check enabled SQLite foreign keys, valid parent records and no
+  `PRAGMA foreign_key_check` violations. Existing saved Workflow Builder
+  pose training/review and QC tests remain in the full backend suite;
+  no new workflow semantics, graph artifacts or approval bypasses.
+- Applied the exact CI-requested Ruff formatting for
+  `test_qc_bulk_provenance_16.py`. Isolated SQLAlchemy reproductions
+  of both parent-before-child flush orders passed (2/2); these are
+  **not** repository test results. Exact new-head CI, Ruff, pytest,
+  Windows installed-GUI/MSI, migration/backward compatibility and
+  representative scientific acceptance remain unverified.
+- Independent 1.1/1.6 Alembic revision `0038` conflict remains open.
+  No unmerged branch integration, schema rewrite, model download,
+  automatic scientific approval, asset deletion, merge or release.
+  **1.6 release HOLD; 1.7 and revised 1.8 untouched.**
