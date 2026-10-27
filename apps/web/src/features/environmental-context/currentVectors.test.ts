@@ -174,3 +174,35 @@ it("excludes rejected, superseded, duplicate or mismatched coordinates", () => {
   ).toEqual([]);
   expect(currentVectors([east, { ...north, location: null }])).toEqual([]);
 });
+
+it("pairs current components only within one scientific subject and frame", () => {
+  const subject = {
+    video_id: "00000000-0000-4000-8000-000000000001",
+    frame_index: 0,
+    track_id: "00000000-0000-4000-8000-000000000002",
+  };
+  const east = component("current_eastward_velocity", 3, { subject });
+  const north = component("current_northward_velocity", 4, { subject });
+  expect(currentVectors([east, north])).toHaveLength(1);
+  for (const other of [
+    { ...subject, frame_index: 1 },
+    { ...subject, track_id: "00000000-0000-4000-8000-000000000003" },
+    { ...subject, video_id: "00000000-0000-4000-8000-000000000004" },
+  ]) {
+    expect(currentVectors([east, { ...north, subject: other }])).toEqual([]);
+  }
+  expect(currentVectors([east, { ...north, subject: {} }])).toEqual([]);
+});
+
+it("retains independent currents for different subjects at the same grid cell", () => {
+  const first = { image_id: "00000000-0000-4000-8000-000000000005" };
+  const second = { image_id: "00000000-0000-4000-8000-000000000006" };
+  const rows = [
+    component("current_eastward_velocity", 3, { id: "east-a", subject: first }),
+    component("current_northward_velocity", 4, { id: "north-a", subject: first }),
+    component("current_eastward_velocity", 5, { id: "east-b", subject: second }),
+    component("current_northward_velocity", 12, { id: "north-b", subject: second }),
+  ];
+  expect(currentVectors(rows).map((vector) => vector.speed)).toEqual([5, 13]);
+  expect(currentVectors([rows[0], rows[3]])).toEqual([]);
+});
