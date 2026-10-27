@@ -107,11 +107,12 @@ def _quantity(variable: str, unit: str, standard_name: str) -> tuple[str, str]:
 
 def _finite_number(value: Any) -> bool:
     """Reject non-finite and nonnumeric provider values before scientific persistence."""
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except (OverflowError, ValueError):
+        return False
 
 
 def parse_copernicus(
@@ -140,8 +141,7 @@ def parse_copernicus(
                 datetime.fromisoformat(sample["observed_at"].replace("Z", "+00:00"))
             )
             if not all(
-                _finite_number(sample[field])
-                for field in ("longitude", "latitude", "depth_m")
+                _finite_number(sample[field]) for field in ("longitude", "latitude", "depth_m")
             ):
                 raise ValueError("Non-finite or nonnumeric Copernicus grid coordinates")
             if sample["value"] is not None and not _finite_number(sample["value"]):
