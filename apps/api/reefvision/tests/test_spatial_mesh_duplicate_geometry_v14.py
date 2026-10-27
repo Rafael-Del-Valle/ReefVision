@@ -43,9 +43,7 @@ def test_direct_service_rejects_duplicate_triangle_coordinates() -> None:
         },
         {
             "obj_text": (
-                "v 0 0 0\nv 1 0 0\nv 0 1 0\n"
-                "v 0 0 0\nv 1 0 0\nv 0 1 0\n"
-                "f 1 2 3\nf 4 6 5\n"
+                "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\nf 4 6 5\n"
             ),
         },
     ],
@@ -55,11 +53,7 @@ def test_standalone_rejects_duplicate_geometry(
     client: TestClient, geometry: dict[str, Any]
 ) -> None:
     project_id = str(create_project(client, "Duplicate triangle guard")["id"])
-    params = {
-        key: value
-        for key, value in DUPLICATED.items()
-        if key not in {"vertices", "faces"}
-    }
+    params = {key: value for key, value in DUPLICATED.items() if key not in {"vertices", "faces"}}
     response = client.post(
         f"/api/v1/projects/{project_id}/spatial/mesh-preview",
         json={**params, **geometry},
