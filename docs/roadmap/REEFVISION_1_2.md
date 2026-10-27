@@ -2799,3 +2799,36 @@ Existing executable Workflow Builder source/export nodes share the corrected
 kernel and persisted evidence contract; full exact-head CI, real ecological
 data, migration reconciliation and installed Windows GUI acceptance remain
 release blockers.
+
+
+## Capture-time evidence consistency and bidirectional offset tests (2026-10-27)
+
+The previous head `cee8e64841c7692e92a823dbb13540de52777b2d`
+completed **16/19** PR-triggered GitHub Actions workflows. The three
+backend failures all stopped at Ruff formatting, not scientific test failures:
+`ecology_measurement_candidates.py` and
+`test_ecology_projected_series_csv_1_2.py` were the two unformatted files.
+The formatter-requested edits have been applied.
+
+Source-linked projected measurement candidates now fail schema revalidation
+when `capture_time_status="timezone_aware"` lacks a timezone-aware
+timestamp, or when `missing` / `timezone_missing` contradictorily carries
+a timestamp. This prevents an imported or saved source record from claiming
+both dated and undated acquisition evidence. Existing valid undated
+(`timezone_missing` with no timestamp) artifacts remain readable; no
+historical record is silently promoted to verified evidence.
+
+The UTC elapsed-time regression now checks both spring-forward **47-hour**
+and fall-back **49-hour** real intervals across two local calendar days,
+including projected rates, source fingerprint rechecks and reproducible CSV
+serialization. The standalone source-linked measurement API and existing
+executable, persisted Workflow Builder measurement/report nodes use the
+same typed schema and UTC calculation kernel. No new node, migration, or
+environmental data store was introduced. Existing review gates remain
+`scientist_review_required` and evidence remains `linked_unverified`.
+
+**Release HOLD:** exact-head CI and saved-workflow compatibility still
+require verification, as do authenticated scientist-reviewed measurements,
+registered experimental-design acceptance, 1.1 migration reconciliation,
+real ecological datasets, and installed Windows MSI/GUI checks. Neither
+1.2 nor 1.3 is release-ready.
