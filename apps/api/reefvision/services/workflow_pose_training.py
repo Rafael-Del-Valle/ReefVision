@@ -357,6 +357,16 @@ def _completed_workflow_pose_training_run(
         ):
             raise ValidationError("Recovered pose-training node dataset identity changed")
 
+        # The frozen seed identity is scientific provenance, even when the
+        # registered model and its bytes still validate independently.
+        if (
+            snapshot.get("initialization_mode")
+            != ("registered_model" if seed_model else "random")
+            or snapshot.get("seed_model_id") != (seed_model.id if seed_model else None)
+            or snapshot.get("seed_model_sha256") != (seed_model.sha256 if seed_model else None)
+        ):
+            raise ValidationError("Recovered pose-training node seed provenance changed")
+
         # Replaying a completed node must preserve the frozen dataset digests
         # and exact landmark schema identity, not just its dataset IDs.
         if (
