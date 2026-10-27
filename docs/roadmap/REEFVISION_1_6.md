@@ -1285,3 +1285,20 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - **Acceptance remains HOLD:** full exact-head CI, 1.1/1.6 Alembic 0038
   collision reconciliation, native Windows MSI/installed GUI and
   representative biological-data validation are still required.
+
+### 2026-10-27 — Saved QC Workflow Builder input-artifact integrity (Track D)
+
+- The executable `qc_review_queue` adapter now checks the original persisted
+  `project_reference` JSON against its stored SHA-256 **before** creating or
+  reusing a queue. This prevents a modified upstream project-source artifact
+  from silently driving an interrupted retry, even if its `project_id` remains
+  unchanged. The check is read-only and never accepts model annotations or
+  overwrites a researcher's review state.
+- Added two standalone negative-path tests (modified payload and modified
+  checksum) plus saved-graph retry regressions for both forms of tampering,
+  followed by restoration/reuse of the original queue.
+- Commits: `7c604a83`, `fb3cd51b`, `96fe720a`. Validation: remote
+  source read-back and line-length audit; full backend, lint, type and CI
+  results are **not yet verified** for this head. Existing 1.1/1.6 Alembic
+  revision collision and native Windows MSI/installed-GUI acceptance remain
+  release blockers. No merge, tag, deployment or user-data mutation.
