@@ -118,7 +118,7 @@ def list_review_events(
     page: int,
     page_size: int,
 ) -> ReviewQueueEventsPage:
-    item = _scope(session, queue_id, item_id)
+    _scope(session, queue_id, item_id)
     filters = [ReviewQueueItemEvent.review_queue_item_id == item_id]
     total = (
         session.scalar(select(func.count()).select_from(ReviewQueueItemEvent).where(*filters)) or 0
