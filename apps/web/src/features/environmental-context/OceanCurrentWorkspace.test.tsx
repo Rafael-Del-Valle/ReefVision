@@ -110,6 +110,7 @@ it("opens cached currents with time, depth and provenance", async () => {
   expect(screen.getByText(/36.9° toward true north/)).toBeInTheDocument();
   expect(screen.getByText(/stale_offline/)).toBeInTheDocument();
   expect(screen.getByText(/Modeled.*synthetic.*202601/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Export current vector summary CSV" })).toBeEnabled();
   expect(
     screen.getByText(
       /East component uncertainty: 0\.250 m\/s \(standard deviation\)/,
