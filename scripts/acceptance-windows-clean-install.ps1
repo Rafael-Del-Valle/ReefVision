@@ -364,7 +364,8 @@ try {
         if ((Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash -cne $cameraHashBefore) {
             throw 'Camera acceptance modified the original fixture on disk.'
         }
-        $report.camera_jpeg = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend accepted $cameraName ($($cameraMetadata.width_px)x$($cameraMetadata.height_px)); source SHA256 $cameraHashBefore unchanged; display served as $displayType. GUI/WebView2 acceptance remains manual."
+        # Do not mark the camera acceptance PASS until it survives desktop restart.
+        # A successful initial import alone does not establish durable media storage.
     }
     $session = Invoke-RestMethod "$api/images/$imageId/annotations"
     $annotationId = [guid]::NewGuid().ToString()
@@ -546,6 +547,37 @@ try {
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
+    if ($CameraFixturePath) {
+        # Validate media persistence independently of the in-memory import response.
+        # This also covers an MSI upgrade when a previous installer was supplied.
+        $persistedCamera = Invoke-RestMethod "$api/images/$cameraId"
+        if ($persistedCamera.media_type -ne 'image/jpeg' -or
+            [int]$persistedCamera.width_px -ne [int]$cameraMetadata.width_px -or
+            [int]$persistedCamera.height_px -ne [int]$cameraMetadata.height_px) {
+            throw 'Camera metadata changed or disappeared after packaged desktop restart.'
+        }
+        $cameraRestartHttp = [System.Net.Http.HttpClient]::new()
+        try {
+            $persistedCameraBytes = $cameraRestartHttp.GetByteArrayAsync("$api/images/$cameraId/content").GetAwaiter().GetResult()
+            $persistedHash = [BitConverter]::ToString([System.Security.Cryptography.SHA256]::HashData([byte[]]$persistedCameraBytes)).Replace('-', '')
+            if ($persistedHash -cne $cameraHashBefore) {
+                throw 'Camera JPEG original bytes changed or disappeared after desktop restart.'
+            }
+            $restartDisplayResponse = $cameraRestartHttp.GetAsync("$api/images/$cameraId/display").GetAwaiter().GetResult()
+            try {
+                if (-not $restartDisplayResponse.IsSuccessStatusCode) {
+                    throw 'Camera JPEG display endpoint failed after desktop restart.'
+                }
+                $restartDisplayType = [string]$restartDisplayResponse.Content.Headers.ContentType.MediaType
+                $restartDisplayBytes = $restartDisplayResponse.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+                $null = Assert-ReefVisionCameraRaster -Bytes ([byte[]]$restartDisplayBytes) -ContentType $restartDisplayType -ExpectedWidth ([int]$cameraMetadata.width_px) -ExpectedHeight ([int]$cameraMetadata.height_px)
+            } finally { $restartDisplayResponse.Dispose() }
+        } finally { $cameraRestartHttp.Dispose() }
+        if ((Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash -cne $cameraHashBefore) {
+            throw 'Camera fixture changed on disk during restart acceptance.'
+        }
+        $report.camera_jpeg = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend accepted and persisted $cameraName ($($cameraMetadata.width_px)x$($cameraMetadata.height_px)) across desktop restart; original SHA256 $cameraHashBefore unchanged; display decoded as $restartDisplayType. GUI/WebView2 acceptance remains manual."
+    }
     if ($LiveSam2Acceptance) {
         $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
         if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
