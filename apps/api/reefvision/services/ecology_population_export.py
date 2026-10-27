@@ -91,7 +91,12 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
         raise ValidationError("Ecological population CSV cannot claim verified evidence or inference")
     declared = row["declared_unit_count"]
     organisms = row["contributing_organism_count"]
-    if type(declared) is not int or type(organisms) is not int:
+    if (
+        not isinstance(declared, int)
+        or isinstance(declared, bool)
+        or not isinstance(organisms, int)
+        or isinstance(organisms, bool)
+    ):
         raise ValidationError("Ecological population CSV denominators must be integer counts")
     if row["row_type"] == "declared_unit":
         if declared not in (0, 1) or (declared == 0 and organisms != 0) or organisms < 0:
