@@ -162,7 +162,11 @@ def measure_point_cloud_preview(
     selected_chords: list[dict[str, Any]] = []
     selected_endpoint_indices: set[int] = set()
     seen_point_pairs: set[tuple[int, int]] = set()
+    seen_endpoint_geometry: set[
+        tuple[tuple[float, float, float], tuple[float, float, float]]
+    ] = set()
     repeated_selected_point_pairs = False
+    repeated_selected_endpoint_geometry = False
     if point_index_pairs is not None:
         if not isinstance(point_index_pairs, list) or len(point_index_pairs) > 32:
             raise ValueError("At most 32 point-index pairs are supported")
@@ -183,10 +187,18 @@ def measure_point_cloud_preview(
             chord_qc_warnings: list[str] = []
             # Reversing a chord does not make an independent measurement.
             unordered_pair = (min(pair), max(pair))
-            if unordered_pair in seen_point_pairs:
+            repeated_pair = unordered_pair in seen_point_pairs
+            if repeated_pair:
                 chord_qc_warnings.append("repeated_point_pair")
                 repeated_selected_point_pairs = True
             seen_point_pairs.add(unordered_pair)
+            # Distinct source indices can refer to the same XYZ chord.
+            # Compare unordered coordinates without altering ordered fingerprints.
+            unordered_geometry = (min(endpoints), max(endpoints))
+            if not repeated_pair and unordered_geometry in seen_endpoint_geometry:
+                chord_qc_warnings.append("repeated_endpoint_geometry")
+                repeated_selected_endpoint_geometry = True
+            seen_endpoint_geometry.add(unordered_geometry)
             if endpoints[0] == endpoints[1]:
                 chord_qc_warnings.append("coincident_endpoint_coordinates")
             selected_chords.append(
@@ -358,6 +370,11 @@ def measure_point_cloud_preview(
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
             + (["preview_omits_selected_chord_endpoints"] if omitted_chord_endpoints else [])
             + (["repeated_selected_point_pairs"] if repeated_selected_point_pairs else [])
+            + (
+                ["repeated_selected_endpoint_geometry"]
+                if repeated_selected_endpoint_geometry
+                else []
+            )
         ),
         "measurement_status": "caller_supplied_unverified",
         "provenance": {
