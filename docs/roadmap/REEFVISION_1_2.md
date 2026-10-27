@@ -2720,3 +2720,33 @@ exact import split reported by the runner. The new head still requires
 exact-head CI, representative real-image ecological acceptance, migration
 reconciliation with 1.1, scientist review, and installed Windows GUI/installer
 checks. **1.2 is NOT RELEASE-READY; 1.3 remains unstarted.**
+
+
+## 2026-10-27 — Compact technical-replicate unit labels and exact-head CI repair
+
+The preceding Track B head `60996e4bc784130e79b32500613b666aabbff760`
+completed **16/19** GitHub Actions workflows. The three backend failures
+(CI, Pose Workflow Validation and ReefVision 1.0 Acceptance) shared two
+Ruff format differences in `test_ecology_identity_registry_1_2.py` and
+`test_ecology_unit_type_aliases_1_2.py`; the exact runner-requested
+formatting changes have been applied.
+
+The shared experimental-unit validator now rejects common **camel-case and
+separator-free technical observation labels**, including `VideoFrame`,
+`poseKeypoint`, `trackingTracklet`, `segmentationMask`, `modelPrediction`,
+`boundingBox`, `imagePatch`, `videoframe` and `segmentationmask`.
+Previously, a separator-free label could evade the token-based technical
+replicate check and be declared a biological independent unit. This remains
+a conservative label-level safeguard, **not experimental-design verification**.
+
+Focused regression coverage checks the shared policy, project-owned identity
+registry import/revalidation, standalone longitudinal and paired-count APIs,
+and persisted executable Workflow Builder runs. Invalid sampling declarations
+must fail without a successful ecological analysis or registry artifact;
+valid tank/colony/organism/site declarations, typed ports, provenance,
+review gates and existing schema versions are unchanged. No new migration,
+model weights, environmental context, or verified-dataset promotion is added.
+
+**Validation pending:** exact-head CI, independent biological-study review,
+1.1 migration reconciliation and installed Windows GUI/installer checks.
+**1.2 is NOT RELEASE-READY; 1.3 remains unstarted.**
