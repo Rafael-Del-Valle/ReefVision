@@ -569,6 +569,34 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
         assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # The artifact manifest is itself returned to downstream Workflow Builder
+    # nodes; a corrupted copy must not be mistaken for frozen provenance.
+    for field, corrupt_value in (
+        ("pose_training_dataset_id", "substituted-frozen-dataset"),
+        ("pose_split_manifest_sha256", "0" * 64),
+        ("pose_split_manifest", {"schema_version": "tampered"}),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_manifest = dict(persisted.artifact_manifest_json or {})
+            persisted.artifact_manifest_json = {
+                **original_manifest,
+                field: corrupt_value,
+            }
+            session.commit()
+
+        with pytest.raises(ValidationError, match="artifact provenance changed"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     checkpoint = resolve_managed_project_path(test_settings, result["result_checkpoint_path"])
     checkpoint.write_bytes(b"changed-after-scientist-verified-pose-training")
     with pytest.raises(ValidationError, match="checkpoint checksum changed"):
