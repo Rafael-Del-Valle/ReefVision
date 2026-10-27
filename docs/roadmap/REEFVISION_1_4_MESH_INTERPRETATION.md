@@ -395,3 +395,23 @@ The standalone endpoint and persisted typed Workflow Builder graphs share
 the same validation and provisional provenance; regression coverage checks
 cross-project rejection, legacy QC, mutated evidence, and saved artifact parity.
 
+
+### Machine-readable registration-review withholding provenance (Track C)
+
+Longitudinal mesh artifacts now retain two explicit Boolean provenance flags:
+`registered_centroid_comparison_withheld_due_to_registration_dispute` and
+`registered_centroid_comparison_withheld_due_to_inconclusive_registration_review`.
+They distinguish an independent review that **disputes** alignment from one
+that cannot determine alignment. A supporting review, an absent review, and
+missing registration evidence leave both flags `false`; none of these states
+constitutes verified registration. A disputed or inconclusive decision sets
+its corresponding flag to `true` and withholds transformed-centroid offsets,
+separations, associated caller-bound intervals, and RMS ratios as `null`.
+The original mesh measurements, transform diagnostics, reviewer attribution,
+and QC warnings remain available for audit.
+
+These flags describe why a derived diagnostic was withheld, **not** whether
+coral movement was absent or the registration was scientifically validated.
+Standalone analysis and saved executable typed Workflow Builder graphs share
+the same comparison engine; regression assertions verify the flags and full
+persisted-artifact parity for supported, disputed, and inconclusive reviews.
