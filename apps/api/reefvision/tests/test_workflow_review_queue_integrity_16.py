@@ -355,6 +355,35 @@ def test_versioned_queue_rejects_resigned_unknown_scoring_formula(
         validate_saved_queue_snapshot(queue, items)
 
 
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("review_below_confidence", -0.01),
+        ("review_below_confidence", 1.01),
+        ("review_below_confidence", True),
+        ("review_below_confidence", "0.5"),
+        ("ruleset_version", ""),
+        ("ruleset_version", None),
+        ("ruleset_version", False),
+    ],
+)
+def test_v2_rejects_resigned_invalid_qc_selection_provenance(
+    field: str, invalid_value: object
+) -> None:
+    """A matching digest cannot legitimize invalid QC selection metadata."""
+    queue, items = snapshot()
+    queue.configuration_json[field] = invalid_value
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+        }
+    )
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
 def test_unversioned_legacy_formula_remains_readable_with_matching_digest() -> None:
     """Do not retroactively reject historical unversioned research queues."""
     queue, items = snapshot()
