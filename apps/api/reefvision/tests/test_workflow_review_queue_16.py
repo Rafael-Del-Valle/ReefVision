@@ -72,7 +72,7 @@ def test_qc_queue_adapter_rejects_modified_project_source_artifact(corruption: s
             settings=cast(Settings, None),
             project_id="project-one",
             parameters={},
-            inputs={"project": [source]},
+            inputs={"project": [cast(WorkflowArtifact, source)]},
         )
 
 
