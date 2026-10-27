@@ -406,6 +406,48 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             )
         saved_queue.configuration_json = original_config
         session.flush()
+        # The executable saved graph must reject an impossible confidence
+        # gate even when a modified scoring-provenance digest is re-signed.
+        # Neither the review history nor the original QC scores are rewritten.
+        original_checksums = dict(saved_queue.input_checksums_json)
+        saved_queue.configuration_json = {
+            **original_config,
+            "review_below_confidence": 1.25,
+        }
+        saved_queue.input_checksums_json = {
+            **original_checksums,
+            "scoring_provenance_sha256": canonical_json_sha256(
+                {
+                    "formula_id": saved_queue.formula_id,
+                    "formula_version": saved_queue.formula_version,
+                    "configuration": saved_queue.configuration_json,
+                }
+            ),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        saved_queue.configuration_json = original_config
+        saved_queue.input_checksums_json = original_checksums
+        session.flush()
+        assert (
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )[0]["payload"]["queue_id"]
+            == result["queue_id"]
+        )
         # The saved workflow must also reject altered scoring provenance,
         # even when the original item scores and scope checksum are intact.
         original_formula_version = saved_queue.formula_version
