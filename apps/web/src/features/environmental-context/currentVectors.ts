@@ -56,17 +56,18 @@ function canonicalJsonValue(value: unknown): unknown {
 // Copernicus records use different variable names/units for uo and vo, but
 // all shared grid/run metadata must agree before constructing one vector.
 // Otherwise two ensemble members or revised grids could form a false current.
+const COMPONENT_METADATA_FIELDS = new Set([
+  "provider_variable",
+  "provider_unit",
+  "standard_name",
+]);
 function sharedSourceMetadata(row: ScientificRecord): unknown {
   const metadata = row.provenance.source_metadata;
   if (!metadata) return null;
-  return canonicalJsonValue(
-    Object.fromEntries(
-      Object.entries(metadata).filter(
-        ([key]) =>
-          !["provider_variable", "provider_unit", "standard_name"].includes(key),
-      ),
-    ),
+  const sharedEntries = Object.entries(metadata).filter(
+    ([key]) => !COMPONENT_METADATA_FIELDS.has(key),
   );
+  return canonicalJsonValue(Object.fromEntries(sharedEntries));
 }
 export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
   const groups = new Map<
