@@ -89,6 +89,16 @@ Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/classes"')) '
 Assert-True ($acceptanceScript.Contains("selection_kind -eq 'builtin_architecture'")) 'Catalog selection_kind must match the current API.'
 Assert-True (-not $acceptanceScript.Contains("selection_kind -eq 'architecture'")) 'Legacy architecture selection kind must not be used.'
 Assert-True ($acceptanceScript.Contains('external_annotation_imports = New-ReefVisionEvidenceResult')) 'Installed backend COCO/YOLO evidence must be reported.'
+# The installed-MSI test can exercise a real camera file when supplied.
+# It must remain optional and must verify immutable source bytes as well as
+# the display endpoint; a synthetic PNG does not establish camera acceptance.
+Assert-True ($acceptanceScript.Contains('[string]$CameraFixturePath')) 'Real camera fixture option is missing.'
+Assert-True ($acceptanceScript.Contains("camera_jpeg = if ($CameraFixturePath)")) 'Missing camera fixture must be reported as SKIPPED, never PASS.'
+Assert-True ($acceptanceScript.Contains("-ContentType 'image/jpeg'")) 'Camera acceptance must submit actual JPEG media type.'
+Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/content')) 'Camera acceptance must retrieve the persisted original bytes.'
+Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/display')) 'Camera acceptance must exercise the installed display endpoint.'
+Assert-True ($acceptanceScript.Contains('source SHA256 $cameraHashBefore unchanged')) 'Camera acceptance must record source integrity evidence.'
+
 Assert-True ($acceptanceScript.Contains('function Import-AcceptanceAnnotations')) 'Windows acceptance must use a real multipart annotation import.'
 Assert-True ($acceptanceScript.Contains('cocoResult.boxes_imported -ne 1')) 'COCO imported box acceptance is missing.'
 Assert-True ($acceptanceScript.Contains('yoloResult.boxes_imported -ne 1')) 'YOLO imported box acceptance is missing.'
