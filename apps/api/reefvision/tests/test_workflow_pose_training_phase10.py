@@ -39,6 +39,7 @@ from reefvision.services.workflow_runtime_adapters import (
 from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
+from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_training_datasets_phase9 import (
     _verified_round,
 )
@@ -456,6 +457,32 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     reused = retry_completed_node()
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
+
+    # The recovered child job must still belong to this project's saved run.
+    # Exercise a real persisted job against a second valid project, then
+    # restore it to verify that the original frozen result remains reusable.
+    foreign_project = create_project(client, "Phase 10 foreign job ownership")
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        original_project_id = child_job.project_id
+        child_job.project_id = str(foreign_project["id"])
+        session.commit()
+
+    with pytest.raises(ValidationError, match="job project ownership changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        child_job.project_id = original_project_id
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
     # A real API-frozen, scientist-reviewed pose dataset underlies this run.
     # Corrupt only the persisted child-run snapshot and verify that replay
