@@ -75,10 +75,20 @@ def _add_native_review_table(
             if stamped_revision == "0041"
             else ""
         )
+        request_item_decl = (
+            "review_queue_item_id TEXT NOT NULL"
+            if stamped_revision == "0041"
+            else "review_queue_item_id TEXT"
+        )
+        request_key_decl = (
+            "client_request_id TEXT NOT NULL"
+            if stamped_revision == "0041"
+            else "client_request_id TEXT"
+        )
         connection.execute(
             "CREATE TABLE review_queue_item_events ("
-            "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
-            "project_id TEXT, client_request_id TEXT, "
+            f"id TEXT PRIMARY KEY, review_queue_id TEXT, {request_item_decl}, "
+            f"project_id TEXT, {request_key_decl}, "
             f"{event_type_decl}, actor TEXT, "
             f"comment TEXT, assignee TEXT, created_at TEXT{event_type_check}{request_identity})"
         )
