@@ -190,3 +190,27 @@ index-pair deduplication. Both the standalone API and executable persisted
 `point_cloud_preview` Workflow Builder node use the same rule, with saved
 artifact parity regression coverage. No calibration, organism identity,
 anatomical branch length, or human verification is inferred.
+
+
+## Repeated XYZ chord geometry QC (October 27, 2026)
+
+Point-cloud scans may contain multiple **different original point indices** with
+identical XYZ coordinates. Repeated source-index pair checks alone cannot
+recognize that two selected chords trace the same unordered geometric endpoints.
+The shared scientific measurement service now compares exact unordered endpoint
+coordinate pairs within each request. A subsequent chord with the same geometry
+but a different unordered source-index pair receives the per-chord
+`repeated_endpoint_geometry` warning, and the result receives
+`repeated_selected_endpoint_geometry`. Exact or reversed repeats of the
+**same source-index pair** continue to receive `repeated_point_pair` instead;
+the warnings distinguish source-index reuse from duplicated reconstruction
+geometry. The first geometric occurrence is retained unflagged.
+
+This check is deliberately exact (not tolerance-based): nearby points may
+represent different anatomy, and no spatial clustering or branch inference is
+attempted. Distances, scale-only uncertainty, original point indices,
+ordered-endpoint geometry fingerprints, full-cloud geometry fingerprints, and
+provenance remain unchanged. The standalone API and executable, persisted typed
+Workflow Builder graph share the implementation and regression coverage.
+Neither warning verifies coral identity, calibration, surface area, anatomical
+branch length, or independent biological replicates; human review is required.
