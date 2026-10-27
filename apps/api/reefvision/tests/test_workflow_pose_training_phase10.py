@@ -513,6 +513,34 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
         assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # The persisted training run must agree with the scientist-frozen dataset
+    # and the recorded validation policy, not just its workflow snapshot.
+    for field, corrupt_value, error in (
+        ("dataset_manifest_sha256", "0" * 64, "dataset checksum changed"),
+        (
+            "evaluation_config_json",
+            {"validation_mode": "separate_frozen_pose_dataset"},
+            "validation mode changed",
+        ),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_value = getattr(persisted, field)
+            setattr(persisted, field, corrupt_value)
+            session.commit()
+
+        with pytest.raises(ValidationError, match=error):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            setattr(persisted, field, original_value)
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     checkpoint = resolve_managed_project_path(test_settings, result["result_checkpoint_path"])
     checkpoint.write_bytes(b"changed-after-scientist-verified-pose-training")
     with pytest.raises(ValidationError, match="checkpoint checksum changed"):
