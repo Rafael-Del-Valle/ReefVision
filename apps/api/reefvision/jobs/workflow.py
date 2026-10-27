@@ -251,6 +251,8 @@ def process_workflow_run_job(
         # digest: Pydantic may discard unknown keys during model validation.
         if (
             graph_record.project_id != run.project_id
+            or graph_record.graph_key != graph.graph_id
+            or graph_record.schema_version != graph.schema_version
             or graph_record.graph_sha256 != run.graph_sha256
             or canonical_json_sha256(graph_record.graph_json) != graph_record.graph_sha256
         ):
