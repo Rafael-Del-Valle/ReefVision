@@ -569,10 +569,14 @@ describe("Gallery", () => {
     const requested: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = new URL(String(input), "http://localhost");
-      const other = url.pathname.includes(`/projects/${otherProject.id}/images`);
+      const other = url.pathname.includes(
+        `/projects/${otherProject.id}/images`,
+      );
       const first = url.pathname.includes(`/projects/${project.id}/images`);
       if (!other && !first) throw new Error(`Unexpected request ${url}`);
-      requested.push(`${other ? otherProject.id : project.id}:${url.searchParams.get("page")}`);
+      requested.push(
+        `${other ? otherProject.id : project.id}:${url.searchParams.get("page")}`,
+      );
       return jsonResponse({
         items: other ? [otherImage] : [image],
         total: other ? 25 : 1,
@@ -582,7 +586,10 @@ describe("Gallery", () => {
       });
     });
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const onFocusedImageChange = vi.fn();
     const renderFor = (selectedProject: Project) => (
@@ -617,8 +624,9 @@ describe("Gallery", () => {
     expect(requested).toContain("project-1:1");
     expect(
       JSON.parse(
-        window.localStorage.getItem(`reefvision.gallery.${otherProject.id}.v1`) ??
-          "{}",
+        window.localStorage.getItem(
+          `reefvision.gallery.${otherProject.id}.v1`,
+        ) ?? "{}",
       ),
     ).toMatchObject({ imageId: otherImage.id, page: 2, wrap: true });
   });
