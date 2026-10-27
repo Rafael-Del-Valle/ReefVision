@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class EcologyMeasurementCandidate(BaseModel):
@@ -30,6 +30,17 @@ class EcologyMeasurementCandidate(BaseModel):
     capture_time_status: Literal["timezone_aware", "missing", "timezone_missing"]
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+    @model_validator(mode="after")
+    def consistent_capture_time_evidence(self) -> EcologyMeasurementCandidate:
+        """Never treat contradictory acquisition metadata as a dated observation."""
+        timestamp = self.capture_timestamp_utc
+        if self.capture_time_status == "timezone_aware":
+            if timestamp is None or timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                raise ValueError("Timezone-aware capture status requires an aware timestamp")
+        elif timestamp is not None:
+            raise ValueError("Undated capture status cannot carry a timestamp")
+        return self
 
 
 class EcologyMeasurementExclusion(BaseModel):
@@ -210,10 +221,13 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
     # Optional additions: older saved Workflow Builder artifacts remain readable.
     source_image_evidence_sha256: str | None = None
     source_annotation_evidence_sha256: str | None = None
-    source_fingerprint_contract: Literal[
-        "ecology-measurement-candidates-0018",
-        "ecology-measurement-candidates-0019",
-    ] | None = None
+    source_fingerprint_contract: (
+        Literal[
+            "ecology-measurement-candidates-0018",
+            "ecology-measurement-candidates-0019",
+        ]
+        | None
+    ) = None
     candidates: list[EcologyMeasurementCandidate] = Field(default_factory=list)
     candidate_count: int = 0
     sampling_date_qc: list[EcologySamplingDateQC] = Field(default_factory=list)
