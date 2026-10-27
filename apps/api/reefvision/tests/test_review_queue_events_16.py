@@ -196,9 +196,7 @@ def test_coordination_retries_and_history_reject_foreign_provenance(
     # identifier differs from the corrupted event's idempotency key.
     with app.state.session_factory() as session:
         event_count = (
-            session.query(ReviewQueueItemEvent)
-            .filter_by(review_queue_item_id=item["id"])
-            .count()
+            session.query(ReviewQueueItemEvent).filter_by(review_queue_item_id=item["id"]).count()
         )
         assert event_count == 1
 
