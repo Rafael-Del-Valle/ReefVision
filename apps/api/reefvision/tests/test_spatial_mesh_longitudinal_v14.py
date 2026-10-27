@@ -12,10 +12,12 @@ from fastapi.testclient import TestClient
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.spatial_mesh_preview_v14 import (
+    MeshPreviewRequest,
     MeshRegistrationEvidence,
     MeshReidentificationEvidence,
 )
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
+from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.services.workflow_mesh_v14 import execute_mesh_longitudinal_comparison
 from reefvision.tests.test_annotations import create_project
 
@@ -68,6 +70,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "target_observation_id": "survey-2",
         "source_observed_at_utc": "2026-10-01T12:00:00Z",
         "target_observed_at_utc": "2026-10-02T07:00:00-05:00",
+        "source_meters_per_mesh_unit": 1.0,
+        "target_meters_per_mesh_unit": 1.0,
         "source_to_target_transform_m": _rigid_transform(),
         "source_centroid_position_error_bound_m": 0.01,
         "target_centroid_position_error_bound_m": 0.02,
@@ -205,6 +209,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "caller_supplied_unverified"
     )
     assert "registration_geometry_binding_unavailable" not in expected["qc_warnings"]
+    assert "registration_calibration_scale_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_project_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_observation_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_timepoint_binding_unavailable" not in expected["qc_warnings"]
@@ -630,29 +635,13 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     ):
         assert combined[field] is None
     provenance = combined["provenance"]
-    assert (
-        provenance[
-            "longitudinal_change_withheld_due_to_inconclusive_identity_review"
-        ]
-        is True
-    )
-    assert (
-        provenance[
-            "registered_centroid_comparison_withheld_due_to_registration_dispute"
-        ]
-        is True
-    )
+    assert provenance["longitudinal_change_withheld_due_to_inconclusive_identity_review"] is True
+    assert provenance["registered_centroid_comparison_withheld_due_to_registration_dispute"] is True
     assert provenance["specimen_identity_verified"] is False
     assert provenance["coordinate_registration_verified"] is False
     combined_warnings = combined["qc_warnings"]
-    assert (
-        "longitudinal_change_withheld_inconclusive_specimen_identity"
-        in combined_warnings
-    )
-    assert (
-        "registered_surface_centroid_comparison_withheld_disputed_alignment"
-        in combined_warnings
-    )
+    assert "longitudinal_change_withheld_inconclusive_specimen_identity" in combined_warnings
+    assert "registered_surface_centroid_comparison_withheld_disputed_alignment" in combined_warnings
     graph["graph_id"] = "mesh-longitudinal-combined-review-v14"
     graph["nodes"][3]["parameters"]["registration_evidence"] = combined_registration
     graph["nodes"][3]["parameters"]["reidentification_evidence"] = combined_identity
@@ -677,6 +666,64 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert combined_artifact["payload_json"] == combined
     assert len(combined_artifact["payload_sha256"]) == 64
+
+
+def test_registration_scale_binding_rejects_recalibrated_geometry() -> None:
+    """A geometry hash cannot authorize reuse of a meter-valued transform."""
+    before_payload = {
+        **_mesh("first", "2026-10-01T12:00:00Z", 1),
+        "coordinate_frame_id": "survey-local",
+    }
+    after_payload = {
+        **_mesh("second", "2026-10-02T12:00:00Z", 2),
+        "coordinate_frame_id": "survey-local",
+    }
+    before = preview_from_request(MeshPreviewRequest.model_validate(before_payload))
+    after = preview_from_request(MeshPreviewRequest.model_validate(after_payload))
+    before["project_id"] = "study-1"
+    after["project_id"] = "study-1"
+    evidence = {
+        "source_frame_id": "survey-local",
+        "target_frame_id": "survey-local",
+        "method": "landmark",
+        "rms_residual_m": 0.01,
+        "correspondence_count": 6,
+        "evidence_note": "Provisional registration bound to original scales",
+        "source_geometry_sha256": before["provenance"]["geometry_sha256"],
+        "target_geometry_sha256": after["provenance"]["geometry_sha256"],
+        "source_meters_per_mesh_unit": 1.0,
+        "target_meters_per_mesh_unit": 1.0,
+        "source_to_target_transform_m": _rigid_transform(),
+    }
+    original = compare_mesh_observations(before, after, evidence)
+    assert "registration_calibration_scale_binding_unavailable" not in original["qc_warnings"]
+    assert original["provenance"]["registration_evidence"] == evidence
+
+    recalibrated_payload = {**after_payload, "meters_per_unit": 2.0}
+    recalibrated = preview_from_request(
+        MeshPreviewRequest.model_validate(recalibrated_payload)
+    )
+    recalibrated["project_id"] = "study-1"
+    assert (
+        recalibrated["provenance"]["geometry_sha256"]
+        == after["provenance"]["geometry_sha256"]
+    )
+    with pytest.raises(ValueError, match="must match both calibration scales"):
+        compare_mesh_observations(before, recalibrated, evidence)
+    with pytest.raises(ValueError, match="requires both scales"):
+        MeshRegistrationEvidence.model_validate(
+            {**evidence, "target_meters_per_mesh_unit": None}
+        )
+
+    # Older registrations remain readable but cannot masquerade as scale-bound.
+    legacy = {
+        key: value
+        for key, value in evidence.items()
+        if key not in ("source_meters_per_mesh_unit", "target_meters_per_mesh_unit")
+    }
+    legacy_result = compare_mesh_observations(before, recalibrated, legacy)
+    assert "registration_calibration_scale_binding_unavailable" in legacy_result["qc_warnings"]
+    assert legacy_result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
 
 
 @pytest.mark.parametrize(
