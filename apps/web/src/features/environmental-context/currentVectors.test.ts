@@ -419,10 +419,10 @@ it("exports selected current vectors with units, source IDs and explicit uncerta
 
 it("neutralizes spreadsheet formulas in imported provenance without changing numeric signs", () => {
   const east = component("current_eastward_velocity", -2, {
-    provenance: { ...component("x", 0).provenance, source: "=1+1" },
+    provenance: { ...component("x", 0).provenance, source: " \t=1+1" },
   });
   const north = component("current_northward_velocity", 0, {
-    provenance: { ...component("x", 0).provenance, source: "=1+1" },
+    provenance: { ...component("x", 0).provenance, source: " \t=1+1" },
   });
   const csv = currentVectorsCsv(currentVectors([east, north]), {
     cacheKey: "+formula",
@@ -430,7 +430,7 @@ it("neutralizes spreadsheet formulas in imported provenance without changing num
     fetchedAt: "2026-04-04T00:00:00Z",
     expiresAt: "2026-04-05T00:00:00Z",
   });
-  expect(csv).toContain('"\'=1+1"');
+  expect(csv).toContain('"\' \t=1+1"');
   expect(csv).toContain('"\'+formula"');
   expect(csv).toContain('"-2"');
   expect(csv).toContain('"-79.5"');
