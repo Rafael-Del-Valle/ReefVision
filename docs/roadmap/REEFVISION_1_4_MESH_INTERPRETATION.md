@@ -466,3 +466,15 @@ schemas used by persisted Workflow Builder execution; existing saved-workflow
 artifact-parity regressions continue to cover valid attributed evidence.
 Nonblank text is an auditability requirement, **not** proof that the supporting
 material exists, was independently reviewed, or establishes biological change.
+
+### Point-cloud calibration audit parity (Track C)
+
+The point-cloud request contract now rejects calibration evidence made entirely
+of whitespace, matching the mesh request and the underlying point-cloud
+measurement engine. This applies to standalone project preview endpoints and
+saved executable `point_cloud_preview` Workflow Builder graphs. A regression
+covers request validation, direct scientific-service rejection, and a persisted
+graph that must fail without emitting a scientific measurement artifact when its
+calibration evidence is blank. Existing valid saved-graph artifact parity tests
+remain in place. Nonblank evidence remains caller-supplied and **unverified**;
+this does not certify scale, geometry, specimen identity, or branch length.
