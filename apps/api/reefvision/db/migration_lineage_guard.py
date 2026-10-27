@@ -151,6 +151,26 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "and reconcile without rewriting reviewer history."
             )
 
+    # The 0041 review lineage relies on per-item request IDs being unique
+    # for idempotent researcher comments and assignments. A forged or
+    # incomplete migration stamp must not silently admit duplicate events,
+    # even when the newer bulk-request registry itself is valid.
+    if revision == "0041":
+        unique_constraints = inspector.get_unique_constraints(_REVIEW_TABLE)
+        has_request_identity = any(
+            constraint.get("name") == "uq_review_queue_item_event_request"
+            and constraint.get("column_names")
+            == ["review_queue_item_id", "client_request_id"]
+            for constraint in unique_constraints
+        )
+        if not has_request_identity:
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic revision 0041 collision: "
+                "missing or altered review-event idempotency UNIQUE constraint. "
+                "Preserve the database and reviewer history; reconcile with a "
+                "reviewed data-preserving migration, never by stamping."
+            )
+
     # SQL CHECK constraints do not reject NULL in SQLite. An event_type
     # column that became nullable would allow untyped audit events despite
     # an otherwise correct named allowlist. The original 0038 migration
