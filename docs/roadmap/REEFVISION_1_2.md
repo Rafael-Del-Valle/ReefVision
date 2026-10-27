@@ -2346,3 +2346,28 @@ against small exhaustive-assignment reference cases, but full repository
 Ruff/mypy/pytest and new-head CI must independently pass. Scientific review,
 authenticated observations, migration reconciliation, and installed Windows
 GUI/installer acceptance remain outstanding. **1.2 is NOT RELEASE-READY.**
+
+## Component-scoped cross-metric lineage feasibility (2026-10-26)
+
+The bounded exact parent-roster validator now checks **each connected
+organism-roster component independently**. Previously, more than 24 full
+parent rosters anywhere in the project caused the global check to return
+without inspecting even a small, proven-impossible lineage subset. Unrelated
+tanks/organisms therefore could hide a contradiction in a three-parent
+overlap. Identical roster constraints are deduplicated before budgeting.
+Each connected component still respects the existing 12-organism,
+24-distinct-roster, 10,000-search-state limits; exceeding those limits is
+**unverified**, not proof of feasibility. No parent assignment is inferred.
+
+The existing standalone projected-population API and persisted, typed
+Workflow Builder measurement-candidate source share this calculation.
+Added order-independent scientific regressions with 25 full rosters:
+three mutually contradictory overlapping rosters and 22 unrelated control
+tanks. Also corrected the exact Ruff formatting reported by predecessor
+head `e63c9c947b40d84e90fb01dbb21826a04b159845` (16/19 workflows
+successful, three stopped at Ruff format). New-head backend/Workflow Builder
+tests and CI must pass before acceptance. No migration, verified-dataset
+promotion, environmental subsystem, model download, or release is introduced.
+All results remain `linked_unverified`, `scientist_review_required`,
+with independent-unit inference prohibited. Installed Windows GUI,
+migration reconciliation and independent scientific review remain required.
