@@ -593,12 +593,21 @@ def compare_mesh_observations(
             warnings.append("registration_scale_uncertainty_binding_unavailable")
         elif registration.source_relative_scale_uncertainty != first.get(
             "relative_scale_uncertainty"
-        ):
-            raise ValueError("Registration evidence must match both scale uncertainties")
-        elif registration.target_relative_scale_uncertainty != second.get(
+        ) or registration.target_relative_scale_uncertainty != second.get(
             "relative_scale_uncertainty"
         ):
             raise ValueError("Registration evidence must match both scale uncertainties")
+        # An unchanged scale/uncertainty does not imply unchanged calibration
+        # provenance. Keep legacy registrations readable but explicitly flagged.
+        if registration.source_calibration_method is None:
+            warnings.append("registration_calibration_provenance_binding_unavailable")
+        elif (
+            registration.source_calibration_method != first.get("calibration_method")
+            or registration.target_calibration_method != second.get("calibration_method")
+            or registration.source_calibration_evidence != first.get("calibration_evidence")
+            or registration.target_calibration_evidence != second.get("calibration_evidence")
+        ):
+            raise ValueError("Registration evidence must match both calibration provenance records")
         registration_record = registration.model_dump(mode="json", exclude_none=True)
         if registration.registration_operator_id is None:
             warnings.append("registration_operator_attribution_unavailable")
