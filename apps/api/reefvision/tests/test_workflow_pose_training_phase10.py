@@ -540,6 +540,40 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
         assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # Altering or removing the snapshot schema marker must not downgrade a
+    # current scientist-verified run into unchecked legacy checkpoint replay.
+    for version, expected_error in (
+        ("pose-workflow-training-snapshot-9999", "snapshot schema changed"),
+        (None, "checkpoint provenance is missing"),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_snapshot = dict(persisted.draft_snapshot_json or {})
+            original_manifest = dict(persisted.artifact_manifest_json or {})
+            tampered_snapshot = dict(original_snapshot)
+            tampered_manifest = dict(original_manifest)
+            if version is None:
+                tampered_snapshot.pop("schema_version")
+                tampered_manifest.pop("result_checkpoint_sha256")
+            else:
+                tampered_snapshot["schema_version"] = version
+            persisted.draft_snapshot_json = tampered_snapshot
+            persisted.artifact_manifest_json = tampered_manifest
+            session.commit()
+
+        with pytest.raises(ValidationError, match=expected_error):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.draft_snapshot_json = original_snapshot
+            persisted.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # The persisted training run must agree with the scientist-frozen dataset
     # and the recorded validation policy, not just its workflow snapshot.
     for field, corrupt_value, error in (
