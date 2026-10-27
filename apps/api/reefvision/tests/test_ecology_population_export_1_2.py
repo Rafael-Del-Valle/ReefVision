@@ -55,6 +55,52 @@ def test_population_csv_fails_closed_on_header_row_drift(
         exporter.render_ecology_population_csv(source)
 
 
+def test_population_csv_rejects_duplicate_column_names(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same-length schema drift must not create ambiguous scientific fields."""
+    source = _dated_artifact(client)
+    columns = list(exporter._COLUMNS)
+    columns[-1] = columns[0]
+    monkeypatch.setattr(exporter, "_COLUMNS", tuple(columns))
+    with pytest.raises(ValidationError, match="duplicate column"):
+        exporter.render_ecology_population_csv(source)
+
+
+@pytest.mark.parametrize(
+    ("field", "forged_value", "error"),
+    [
+        ("source_fingerprint_rechecked", "false", "verified evidence or inference"),
+        ("evidence_level", "verified", "verified evidence or inference"),
+        ("review_gate", "approved", "verified evidence or inference"),
+        ("independent_unit_inference_allowed", "true", "verified evidence or inference"),
+        ("declared_unit_count", 2, "declared-unit denominator"),
+        ("contributing_organism_count", -1, "declared-unit denominator"),
+        ("row_type", "synthetic_replicate", "row type"),
+    ],
+)
+def test_population_csv_refuses_invalid_scientific_row_before_writing(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    forged_value: object,
+    error: str,
+) -> None:
+    """Export guards also apply if future serializers accidentally mislabel rows."""
+    source = _dated_artifact(client)
+    original = exporter._write_checked_row
+
+    def corrupt_first_row(writer: Any, values: tuple[object, ...]) -> None:
+        corrupted = list(values)
+        corrupted[exporter._COLUMNS.index(field)] = forged_value
+        original(writer, tuple(corrupted))
+
+    monkeypatch.setattr(exporter, "_write_checked_row", corrupt_first_row)
+    with pytest.raises(ValidationError, match=error):
+        exporter.render_ecology_population_csv(source)
+
+
 def test_population_csv_preserves_excluded_units_and_api_parity(client: TestClient) -> None:
     project_id, _ = _source(client)
     base = f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
