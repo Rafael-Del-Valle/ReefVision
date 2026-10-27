@@ -152,14 +152,19 @@ it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
     expect(
       currentVectors([{ ...east, location }, { ...north, location }]),
     ).toEqual([]);
+    expect(currentVectors([east, { ...north, location }])).toEqual([]);
+    expect(currentVectors([{ ...east, location }, north])).toEqual([]);
   }
 });
 it("excludes rejected, superseded, duplicate or mismatched coordinates", () => {
   const east = component("current_eastward_velocity", 3);
   const north = component("current_northward_velocity", 4);
-  expect(currentVectors([east, { ...east, id: "duplicate" }, north])).toEqual(
-    [],
-  );
+  const duplicateVectors = currentVectors([
+    east,
+    { ...east, id: "duplicate" },
+    north,
+  ]);
+  expect(duplicateVectors).toEqual([]);
   expect(currentVectors([east, { ...north, qc: "rejected" }])).toEqual([]);
   expect(
     currentVectors([east, { ...north, environmental_snapshot_current: false }]),
