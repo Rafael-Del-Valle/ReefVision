@@ -175,7 +175,9 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["provenance"]["after_coordinate_frame_id"] == "survey-local"
     assert expected["provenance"]["coordinate_registration_verified"] is False
     assert (
-        expected["provenance"]["registered_centroid_comparison_withheld_due_to_registration_dispute"]
+        expected["provenance"][
+            "registered_centroid_comparison_withheld_due_to_registration_dispute"
+        ]
         is False
     )
     assert (
@@ -591,6 +593,77 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert inconclusive_artifact["payload_json"] == inconclusive_result
     assert len(inconclusive_artifact["payload_sha256"]) == 64
+
+    # Independent identity and registration objections can coexist. Neither
+    # review may erase the other's QC reason or resurrect a derived estimate.
+    combined_registration = {
+        **registration_evidence,
+        "independent_review_decision": "disputes_alignment",
+        "independent_review_note": "Registration control points do not agree",
+    }
+    combined_identity = {
+        **reidentification_evidence,
+        "independent_review_decision": "inconclusive",
+        "independent_review_note": "Cannot confirm the colony from available images",
+    }
+    combined_response = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={
+            "before": before,
+            "after": after,
+            "registration_evidence": combined_registration,
+            "reidentification_evidence": combined_identity,
+        },
+    )
+    assert combined_response.status_code == 200, combined_response.text
+    combined = combined_response.json()
+    assert combined["before_surface_area_m2"] == pytest.approx(0.5)
+    assert combined["after_surface_area_m2"] == pytest.approx(1.0)
+    assert combined["registration_translation_magnitude_m"] == pytest.approx(0.1)
+    for field in (
+        "delta_surface_area_m2",
+        "relative_surface_area_change_percent",
+        "delta_surface_area_scale_interval_m2",
+        "average_surface_area_change_m2_per_day",
+        "registered_surface_centroid_separation_m",
+        "registered_surface_centroid_separation_caller_bound_interval_m",
+    ):
+        assert combined[field] is None
+    provenance = combined["provenance"]
+    assert provenance["longitudinal_change_withheld_due_to_inconclusive_identity_review"]
+    assert provenance["registered_centroid_comparison_withheld_due_to_registration_dispute"]
+    assert provenance["specimen_identity_verified"] is False
+    assert provenance["coordinate_registration_verified"] is False
+    assert "longitudinal_change_withheld_inconclusive_specimen_identity" in combined[
+        "qc_warnings"
+    ]
+    assert "registered_surface_centroid_comparison_withheld_disputed_alignment" in combined[
+        "qc_warnings"
+    ]
+    graph["graph_id"] = "mesh-longitudinal-combined-review-v14"
+    graph["nodes"][3]["parameters"]["registration_evidence"] = combined_registration
+    graph["nodes"][3]["parameters"]["reidentification_evidence"] = combined_identity
+    combined_saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert combined_saved.status_code == 201, combined_saved.text
+    combined_run = client.post(
+        f"{base}/workflow-runs",
+        json={"graph_record_id": combined_saved.json()["id"]},
+    )
+    assert combined_run.status_code == 202, combined_run.text
+    assert process_workflow_run_job(
+        app.state.settings,
+        app.state.session_factory,
+        str(combined_run.json()["job_id"]),
+    )
+    combined_detail = client.get(f"/api/v1/workflow-runs/{combined_run.json()['id']}")
+    assert combined_detail.status_code == 200, combined_detail.text
+    combined_artifact = next(
+        item
+        for item in combined_detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert combined_artifact["payload_json"] == combined
+    assert len(combined_artifact["payload_sha256"]) == 64
 
 
 @pytest.mark.parametrize(
