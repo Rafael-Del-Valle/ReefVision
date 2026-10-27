@@ -134,6 +134,10 @@ def test_population_csv_rejects_resigned_or_legacy_unreviewed_science(
         {"shared_parent_colony_keys": ["forged-shared-parent"]},
         {"design_review_blockers": []},
         {"sample_sd_unit_absolute_change": 2.0},
+        {"mean_unit_percent_change": 12345.0},
+        {"experimental_unit_ids": ["tank-A", "forged-tank-B"]},
+        {"parent_colony_keys": ["forged-parent"]},
+        {"units_missing_parent_colony": ["tank-A"]},
     ],
 )
 def test_population_csv_rejects_resigned_forged_replication_evidence(
@@ -143,13 +147,11 @@ def test_population_csv_rejects_resigned_forged_replication_evidence(
     """Re-signing a CSV source cannot manufacture independent replicates.
 
     The one-unit fixture must retain its actual unit/organism denominators,
-    lack of estimable sample SD, and scientist-review design blockers.
+    lack of estimable sample SD, true unit roster/parent lineage, and review blockers.
     """
     source = _dated_artifact(client)
     assert source.projected_population_summaries[0].declared_unit_count == 1
-    altered_summary = source.projected_population_summaries[0].model_copy(
-        update=forged_fields
-    )
+    altered_summary = source.projected_population_summaries[0].model_copy(update=forged_fields)
     forged = _resign_derived_evidence(
         source.model_copy(update={"projected_population_summaries": [altered_summary]})
     )
