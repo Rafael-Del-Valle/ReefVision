@@ -212,8 +212,9 @@ def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
         assert record is not None
         original_graph = dict(record.graph_json)
         original_sha = record.graph_sha256
+        original_schema_version = record.schema_version
 
-    for mutation in ("foreign_project", "changed_digest", "ignored_extra_json"):
+    for mutation in ("foreign_project", "changed_digest", "ignored_extra_json", "changed_schema"):
         queued = client.post(
             f"/api/v1/projects/{project_id}/workflow-runs",
             json={"graph_record_id": record_id},
@@ -226,6 +227,8 @@ def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
                 record.project_id = str(other_project["id"])
             elif mutation == "changed_digest":
                 record.graph_sha256 = "0" * 64
+            elif mutation == "changed_schema":
+                record.schema_version = "altered-after-queue"
             else:
                 # Unknown JSON fields are discarded by Pydantic, so a
                 # normalized graph hash alone cannot detect this change.
@@ -253,6 +256,7 @@ def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
             assert record is not None
             record.project_id = project_id
             record.graph_sha256 = original_sha
+            record.schema_version = original_schema_version
             record.graph_json = original_graph
             session.commit()
 
