@@ -270,10 +270,7 @@ def measure_point_cloud_preview(
         if slots == 1:
             selected = [candidates[len(candidates) // 2]]
         elif slots > 1:
-            selected = [
-                candidates[i * (len(candidates) - 1) // (slots - 1)]
-                for i in range(slots)
-            ]
+            selected = [candidates[i * (len(candidates) - 1) // (slots - 1)] for i in range(slots)]
         else:
             selected = []
         preview_indices = sorted(protected | set(selected))
