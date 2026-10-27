@@ -31,6 +31,8 @@ class PointCloudPreviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> PointCloudPreviewRequest:
+        if not self.calibration_evidence.strip():
+            raise ValueError("Point-cloud calibration evidence cannot be blank")
         if (self.ply_text is None) == (self.points is None):
             raise ValueError("Provide exactly one of vertex-only ASCII PLY or XYZ points")
         return self
