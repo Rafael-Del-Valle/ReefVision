@@ -248,6 +248,7 @@ def test_compact_technical_unit_rejected_by_api_and_saved_workflow(
     assert detail.json()["run"]["status"] == "failed"
     assert all(row["data_type"] != artifact_type for row in detail.json()["artifacts"])
 
+
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
 def test_camel_case_mixed_biological_levels_fail_standalone_and_saved_workflow(
     client: TestClient, kind: str
