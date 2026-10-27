@@ -2283,3 +2283,30 @@ full-repository tests are unavailable in the current runner. All outputs remain
 `linked_unverified` with `scientist_review_required`. Complete CI, migration
 reconciliation, representative scientific acceptance, and installed Windows
 GUI/installer validation remain outstanding. This is not a release claim.
+
+
+## Cross-metric two-parent cycle integrity (2026-10-26)
+
+The projected population calculator now rejects a previously undetected
+contradiction in **overlapping full two-organism/two-parent rosters**. Each
+metric-specific row could individually admit a one-to-one parent assignment
+while three rows jointly formed an impossible odd cycle (A differs from B,
+B differs from C, and A differs from C with only two candidate parents).
+The new iterative, per-parent-pair constraint graph checks connected
+components for a consistent two-coloring and candidate-parent domains.
+Feasible chains remain descriptive and unverified; no actual organism-to-parent
+assignment is inferred or written. This is an additional conservative check,
+**not** a complete solver for arbitrary larger overlapping lineage rosters.
+
+The change reuses the existing projected population calculator, source-linked
+standalone endpoint, and executable/persisted
+`ecology_identity_registry_source` Workflow Builder node. Focused regression
+tests cover the impossible three-metric cycle in either input order and a
+feasible overlapping chain. Previously validated exact-head CI for
+`e4507bf4fe2e2fd5916f5d799615207506e13b11` completed **19/19 successful**
+Actions workflows; tests on this new head still require GitHub CI.
+All projected population outputs remain `linked_unverified`,
+`scientist_review_required`, and
+`independent_unit_inference_allowed=false`. This change does not authenticate
+biological lineage, supply verified longitudinal growth, reconcile migrations,
+or satisfy physical Windows/scientific acceptance.
