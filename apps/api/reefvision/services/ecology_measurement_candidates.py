@@ -93,14 +93,12 @@ def _assert_joint_full_parent_rosters(
     organisms = sorted({organism for roster, _ in full_parent_rosters for organism in roster})
     if len(organisms) > 12:
         return
-    membership = {
-        organism: [
-            (roster, parents)
-            for roster, parents in full_parent_rosters
-            if organism in roster
-        ]
-        for organism in organisms
+    membership: dict[str, list[tuple[tuple[str, ...], tuple[str, ...]]]] = {
+        organism: [] for organism in organisms
     }
+    for roster, parents in full_parent_rosters:
+        for organism in roster:
+            membership[organism].append((roster, parents))
     ordered = sorted(
         organisms,
         key=lambda organism: (
