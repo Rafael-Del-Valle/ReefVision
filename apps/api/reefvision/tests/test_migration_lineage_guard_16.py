@@ -441,7 +441,9 @@ def test_revision_0041_requires_global_bulk_request_registry() -> None:
             text(
                 f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
                 "CONSTRAINT ck_review_queue_item_event_type "
-                f"CHECK (event_type IN ({allowed})))"
+                f"CHECK (event_type IN ({allowed})), "
+                "CONSTRAINT uq_review_queue_item_event_request "
+                "UNIQUE (review_queue_item_id, client_request_id))"
             )
         )
         with pytest.raises(RuntimeError, match="bulk request registry"):
@@ -457,6 +459,63 @@ def test_revision_0041_requires_global_bulk_request_registry() -> None:
         )
         assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+    engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "unique_sql",
+    [
+        "",
+        ", UNIQUE (review_queue_item_id, client_request_id)",
+        ", CONSTRAINT renamed_request UNIQUE (review_queue_item_id, client_request_id)",
+        ", CONSTRAINT uq_review_queue_item_event_request "
+        "UNIQUE (review_queue_id, client_request_id)",
+    ],
+)
+def test_revision_0041_rejects_unsafe_event_idempotency_without_writes(
+    unique_sql: str,
+) -> None:
+    """A forged 0041 marker must not allow duplicate reviewer request IDs."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0041')"))
+        connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO preserved VALUES ('original observations')"))
+        allowed = (
+            "'comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return', 'triage_complete'"
+        )
+        connection.execute(
+            text(
+                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
+                "CONSTRAINT ck_review_queue_item_event_type "
+                f"CHECK (event_type IN ({allowed})){unique_sql})"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO review_queue_item_events (id, event_type) "
+                "VALUES ('original-event', 'comment')"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE review_queue_bulk_requests ("
+                "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+                "project_id TEXT NOT NULL, action TEXT NOT NULL, "
+                "actor TEXT NOT NULL, reason TEXT, item_ids_json TEXT NOT NULL, "
+                f"created_at TEXT NOT NULL{_REVIEW_QUEUE_FK}{_PROJECT_FK})"
+            )
+        )
+        with pytest.raises(RuntimeError, match="review-event idempotency"):
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+        assert connection.scalar(text("SELECT value FROM preserved")) == "original observations"
+        assert (
+            connection.scalar(text("SELECT id FROM review_queue_item_events"))
+            == "original-event"
+        )
     engine.dispose()
 
 
