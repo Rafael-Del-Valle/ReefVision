@@ -117,6 +117,39 @@ def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
     )
 
 
+
+def _valid_v3_signal_normalization(item: Any) -> bool:
+    """Reproduce the frozen v3 normalization from persisted raw QC signals.
+
+    A re-signed checksum and internally consistent score do not establish that
+    the recorded normalized values were actually derived from raw evidence.
+    Check only immutable saved values, never live annotations or review state.
+    """
+    raw = item.signal_values_json
+    normalized = item.normalized_signals_json
+    if not isinstance(raw, dict) or not isinstance(normalized, dict):
+        return False
+    for signal_id in V3_SUPPORTED_SIGNALS:
+        value = raw.get(signal_id)
+        if not _finite_scientific_number(value):
+            return False
+        if signal_id == "pending_proposals":
+            # The generator records a nonnegative integer count as a float,
+            # saturating its priority signal at ten pending proposals.
+            if value < 0 or value % 1 != 0:
+                return False
+            expected = min(value / 10.0, 1.0)
+        else:
+            # All remaining v3 signals are already bounded proportions,
+            # confidences, binary flags or normalized QC severity scores.
+            if not 0 <= value <= 1:
+                return False
+            expected = value
+        if normalized.get(signal_id) != expected:
+            return False
+    return True
+
+
 def queue_item_evidence_sha256(items: Sequence[Any]) -> str:
     """Digest immutable scientific queue evidence, excluding mutable reviewer decisions.
 
@@ -285,6 +318,8 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         if integrity_version in SUPPORTED_INTEGRITY_VERSIONS and not _valid_v2_score_explanation(
             item, weights
         ):
+            raise invalid
+        if integrity_version == "qc-review-queue-v3" and not _valid_v3_signal_normalization(item):
             raise invalid
         scores[item.image_id] = item.score
         ranks.add(item.rank_position)
