@@ -151,6 +151,43 @@ function Write-ReefVisionEvidenceReport {
     $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
+# Decode actual camera bytes rather than accepting a nonempty display response.
+# Scientific annotation coordinates remain in the original camera raster frame.
+function Assert-ReefVisionCameraRaster {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$Bytes,
+        [Parameter(Mandatory = $true)][ValidateSet('image/jpeg', 'image/png')][string]$ContentType,
+        [Parameter(Mandatory = $true)][int]$ExpectedWidth,
+        [Parameter(Mandatory = $true)][int]$ExpectedHeight
+    )
+    if ($Bytes.Length -eq 0 -or $ExpectedWidth -le 0 -or $ExpectedHeight -le 0) {
+        throw 'Camera raster bytes and expected dimensions must be nonempty and positive.'
+    }
+    Add-Type -AssemblyName System.Drawing
+    $stream = [System.IO.MemoryStream]::new([byte[]]$Bytes, $false)
+    try {
+        $raster = [System.Drawing.Image]::FromStream($stream, $false, $true)
+        try {
+            $expectedFormat = if ($ContentType -eq 'image/jpeg') {
+                [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid
+            } else {
+                [System.Drawing.Imaging.ImageFormat]::Png.Guid
+            }
+            if ($raster.RawFormat.Guid -ne $expectedFormat) {
+                throw "Camera raster encoding does not match declared $ContentType."
+            }
+            if ($raster.Width -ne $ExpectedWidth -or $raster.Height -ne $ExpectedHeight) {
+                throw "Camera raster dimensions $($raster.Width)x$($raster.Height) differ from original source frame ${ExpectedWidth}x${ExpectedHeight}."
+            }
+            return [pscustomobject]@{
+                width = [int]$raster.Width
+                height = [int]$raster.Height
+                media_type = $ContentType
+            }
+        } finally { $raster.Dispose() }
+    } finally { $stream.Dispose() }
+}
+
 function Get-ReefVisionInstalledRegistrations {
     $roots = @(
         'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
