@@ -700,20 +700,13 @@ def test_registration_scale_binding_rejects_recalibrated_geometry() -> None:
     assert original["provenance"]["registration_evidence"] == evidence
 
     recalibrated_payload = {**after_payload, "meters_per_unit": 2.0}
-    recalibrated = preview_from_request(
-        MeshPreviewRequest.model_validate(recalibrated_payload)
-    )
+    recalibrated = preview_from_request(MeshPreviewRequest.model_validate(recalibrated_payload))
     recalibrated["project_id"] = "study-1"
-    assert (
-        recalibrated["provenance"]["geometry_sha256"]
-        == after["provenance"]["geometry_sha256"]
-    )
+    assert recalibrated["provenance"]["geometry_sha256"] == after["provenance"]["geometry_sha256"]
     with pytest.raises(ValueError, match="must match both calibration scales"):
         compare_mesh_observations(before, recalibrated, evidence)
     with pytest.raises(ValueError, match="requires both scales"):
-        MeshRegistrationEvidence.model_validate(
-            {**evidence, "target_meters_per_mesh_unit": None}
-        )
+        MeshRegistrationEvidence.model_validate({**evidence, "target_meters_per_mesh_unit": None})
 
     # Older registrations remain readable but cannot masquerade as scale-bound.
     legacy = {
