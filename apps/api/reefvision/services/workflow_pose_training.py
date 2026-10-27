@@ -462,6 +462,28 @@ def _reused_pose_training_result(
     # as the original scientific result. Legacy runs without a recorded digest
     # remain readable; newly completed runs always persist one below.
     frozen_checkpoint = dict(run.artifact_manifest_json or {})
+    # This manifest is returned to downstream workflow nodes. Verify its
+    # dataset and split lineage against the already-validated frozen snapshot.
+    expected_artifact_lineage = {
+        "pose_training_dataset_id": dataset.id,
+        "pose_validation_dataset_id": (
+            validation_dataset.id if validation_dataset is not None else None
+        ),
+        "pose_schema_id": dataset.pose_schema_id,
+        "pose_schema_revision": dataset.pose_schema_revision,
+        "pose_schema_content_hash": dataset.pose_schema_content_hash,
+        "pose_split_manifest_sha256": run.split_manifest_sha256,
+    }
+    if any(
+        frozen_checkpoint.get(key) != value
+        for key, value in expected_artifact_lineage.items()
+    ):
+        raise ValidationError("Recovered pose-training artifact provenance changed")
+    if frozen_checkpoint.get("pose_split_manifest") != dict(
+        run.draft_snapshot_json or {}
+    ).get("split_manifest"):
+        raise ValidationError("Recovered pose-training artifact provenance changed")
+
     expected_sha256 = frozen_checkpoint.get("result_checkpoint_sha256")
     expected_path = frozen_checkpoint.get("result_checkpoint_path")
     if expected_sha256 is not None and expected_sha256 != checkpoint_sha256:
