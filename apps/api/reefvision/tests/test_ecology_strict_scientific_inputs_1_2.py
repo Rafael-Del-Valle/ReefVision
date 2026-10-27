@@ -75,6 +75,33 @@ def test_paired_counts_reject_coerced_measurements(
     assert response.status_code == 422, response.text
 
 
+@pytest.mark.parametrize("field", ["reference_count", "model_count"])
+@pytest.mark.parametrize("value", [0.5, 1.25, 10.01])
+def test_paired_counts_reject_fractional_organisms(
+    client: TestClient, field: str, value: float
+) -> None:
+    pairs = paired_observations()
+    pairs[0][field] = value
+    payload = {"pairs": pairs, "reference_kind": "human_consensus"}
+    with pytest.raises(SchemaValidationError, match="whole numbers"):
+        PairedCountComparisonRequest.model_validate(payload)
+    response = client.post("/api/v1/ecology/paired-count-comparison", json=payload)
+    assert response.status_code == 422, response.text
+
+
+def test_paired_counts_accept_integral_json_floats(client: TestClient) -> None:
+    pairs = paired_observations()
+    pairs[0]["reference_count"] = 10.0
+    pairs[0]["model_count"] = 12.0
+    response = client.post(
+        "/api/v1/ecology/paired-count-comparison",
+        json={"pairs": pairs, "reference_kind": "human_consensus"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["evidence_level"] == "caller_supplied_unverified"
+    assert response.json()["paired_differences"][0]["reference_count"] == 10.0
+
+
 @pytest.mark.parametrize(
     ("level", "field", "value"),
     [
@@ -116,7 +143,15 @@ def test_valid_zero_remains_unverified(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize(
-    "kind", ["longitudinal", "paired", "source_claim", "longitudinal_string", "paired_string"]
+    "kind",
+    [
+        "longitudinal",
+        "paired",
+        "source_claim",
+        "longitudinal_string",
+        "paired_string",
+        "paired_fractional",
+    ],
 )
 def test_saved_workflow_rejects_invalid_scientific_input(client: TestClient, kind: str) -> None:
     project = create_project(client, f"Strict ecological input {kind}")
@@ -133,9 +168,12 @@ def test_saved_workflow_rejects_invalid_scientific_input(client: TestClient, kin
         forbidden_artifact = "longitudinal_analysis"
     else:
         graph = cast(dict[str, Any], paired_graph())
-        graph["nodes"][1]["parameters"]["pairs"][0]["model_count"] = (
-            "12" if kind == "paired_string" else True
-        )
+        invalid_count: object = True
+        if kind == "paired_string":
+            invalid_count = "12"
+        elif kind == "paired_fractional":
+            invalid_count = 12.5
+        graph["nodes"][1]["parameters"]["pairs"][0]["model_count"] = invalid_count
         forbidden_artifact = "paired_count_comparison"
 
     saved = client.post(
