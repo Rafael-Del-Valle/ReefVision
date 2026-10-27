@@ -347,6 +347,10 @@ def _completed_workflow_pose_training_run(
         ):
             continue
 
+        snapshot_version = snapshot.get("schema_version")
+        if snapshot_version not in (None, "pose-workflow-training-snapshot-0001"):
+            raise ValidationError("Recovered pose-training node snapshot schema changed")
+
         if (
             snapshot.get("pose_training_dataset_id") != dataset.id
             or snapshot.get("pose_validation_dataset_id") != expected_validation_id
@@ -486,9 +490,12 @@ def _reused_pose_training_result(
     # New workflow-created training runs always persist both fields. Missing
     # metadata must not turn a verified checkpoint into an unchecked legacy
     # replay; only older snapshots may use the backwards-compatible fallback.
-    if dict(run.draft_snapshot_json or {}).get(
-        "schema_version"
-    ) == "pose-workflow-training-snapshot-0001" and (
+    snapshot = dict(run.draft_snapshot_json or {})
+    is_current_snapshot = (
+        snapshot.get("schema_version") == "pose-workflow-training-snapshot-0001"
+        or "pose_training_dataset_manifest_sha256" in snapshot
+    )
+    if is_current_snapshot and (
         not isinstance(expected_sha256, str)
         or not expected_sha256
         or not isinstance(expected_path, str)
