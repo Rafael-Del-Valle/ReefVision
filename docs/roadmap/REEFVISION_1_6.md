@@ -1181,3 +1181,31 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - Release remains HOLD pending exact-head CI, 1.1/1.6 migration reconciliation,
   native Windows interactive GUI and MSI upgrade/rollback, and real scientific
   dataset acceptance.
+
+
+## 2026-10-27 — Track D QC selection-provenance integrity and CI repair (HOLD)
+
+- Inspected isolated draft PR #77, master issue #76, 1.6 code and existing
+  saved executable `qc_review_queue` tests before changing anything.
+  Predecessor `7a2d79dd` completed **17/20** GitHub Actions workflows:
+  backend CI, pose backend and 1.0 acceptance failed at the same Ruff
+  `SIM102` nested-`if` warning in the snapshot validator; Windows Desktop
+  Build and the other 16 workflows passed.
+- Fixed the exact `SIM102` diagnostic without changing formula identity.
+  Also closed a separate v2 integrity gap: re-signed saved QC configuration
+  cannot set a nonnumeric, boolean, negative or above-one
+  `review_below_confidence`, or an empty/non-string QC ruleset version.
+  This enforces the original API selection contract during **saved workflow
+  replay**, not only at creation. Historical unversioned queues retain their
+  previous compatibility path; mutable researcher decisions remain untouched.
+- Added seven standalone re-signed-provenance negative regressions and an
+  executable saved-graph regression that rejects an invalid re-signed
+  confidence gate, restores the original snapshot and successfully replays
+  the same typed `review_queue_reference` under researcher-review controls.
+- Production/test commits: `bbcfa190`, `18c16433`, `37ee49e1`.
+  Remote GitHub source read-back and exact-head CI remain to be checked.
+  No local repository checkout or Ruff/pytest run was possible because this
+  runtime cannot resolve `github.com`; no test pass is claimed here.
+- **Release HOLD:** full new-head CI, independent 1.1/1.6 Alembic `0038`
+  compatibility, native installed-GUI, MSI upgrade/rollback and representative
+  biological-data validation remain outstanding. 1.7 and revised 1.8 untouched.
