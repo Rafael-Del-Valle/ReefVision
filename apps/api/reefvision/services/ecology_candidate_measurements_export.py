@@ -75,14 +75,11 @@ def render_ecology_measurements_csv(response: EcologyMeasurementCandidatesRespon
     if report is None:
         raise ValidationError("Ecological candidate report is missing")
     qc_by_series = {
-        (row.organism_key, row.metric): row.qc_status
-        for row in response.sampling_date_qc
+        (row.organism_key, row.metric): row.qc_status for row in response.sampling_date_qc
     }
     rows = []
     for candidate in response.candidates:
-        capture_utc = _utc_capture(
-            candidate.capture_timestamp_utc, candidate.capture_time_status
-        )
+        capture_utc = _utc_capture(candidate.capture_timestamp_utc, candidate.capture_time_status)
         qc_status = qc_by_series.get((candidate.organism_key, candidate.metric))
         if qc_status is None:
             raise ValidationError("Ecological measurement lacks a source QC decision")
