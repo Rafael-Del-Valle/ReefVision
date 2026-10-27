@@ -540,6 +540,34 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
         assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # The real registered seed's frozen identity must not be silently
+    # relabeled during completed-node replay, even with intact model bytes.
+    for field, corrupt_value in (
+        ("initialization_mode", "random"),
+        ("seed_model_id", "substituted-seed-model"),
+        ("seed_model_sha256", "0" * 64),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_snapshot = dict(persisted.draft_snapshot_json or {})
+            persisted.draft_snapshot_json = {
+                **original_snapshot,
+                field: corrupt_value,
+            }
+            session.commit()
+
+        with pytest.raises(ValidationError, match="seed provenance changed"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.draft_snapshot_json = original_snapshot
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # Altering or removing the snapshot schema marker must not downgrade a
     # current scientist-verified run into unchecked legacy checkpoint replay.
     for version, expected_error in (
