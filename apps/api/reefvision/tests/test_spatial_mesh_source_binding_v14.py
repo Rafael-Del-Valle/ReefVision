@@ -39,9 +39,7 @@ def _graph(parameters: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _run_saved_mesh(
-    client: TestClient, project_id: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _run_saved_mesh(client: TestClient, project_id: str, params: dict[str, Any]) -> dict[str, Any]:
     base = f"/api/v1/projects/{project_id}"
     saved = client.post(f"{base}/workflow-graphs", json={"graph": _graph(params)})
     assert saved.status_code == 201, saved.text
@@ -81,9 +79,7 @@ def test_matching_source_binding_persists_through_standalone_and_saved_workflow(
         "expected_source_payload_sha256": digest,
     }
     direct = preview_from_request(MeshPreviewRequest.model_validate(params))
-    standalone = client.post(
-        f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params
-    )
+    standalone = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert direct["provenance"] == expected["provenance"]
@@ -125,18 +121,14 @@ def test_modified_obj_source_is_rejected_even_when_parsed_geometry_is_unchanged(
     }
     with pytest.raises(ValueError, match="source SHA-256 does not match"):
         preview_from_request(MeshPreviewRequest.model_validate(params))
-    response = client.post(
-        f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params
-    )
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
     assert response.status_code == 400, response.text
     assert "source SHA-256 does not match" in response.text
 
     detail = _run_saved_mesh(client, project_id, params)
     assert detail["completed"] is False
     assert detail["run"]["status"] == "failed"
-    assert not any(
-        item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"]
-    )
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
 
 
 @pytest.mark.parametrize("bad_hash", ["A" * 64, "0" * 63, "x" * 64])
