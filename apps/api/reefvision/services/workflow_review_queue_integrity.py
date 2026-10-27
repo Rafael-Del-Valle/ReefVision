@@ -153,9 +153,11 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     integrity_version = checksums.get("integrity_schema_version")
     if integrity_version is not None and integrity_version != "qc-review-queue-v2":
         raise invalid
-    if integrity_version == "qc-review-queue-v2":
-        if (queue.formula_id, queue.formula_version) != V2_SUPPORTED_FORMULA:
-            raise invalid
+    if (
+        integrity_version == "qc-review-queue-v2"
+        and (queue.formula_id, queue.formula_version) != V2_SUPPORTED_FORMULA
+    ):
+        raise invalid
     if integrity_version == "qc-review-queue-v2" and (
         "scoring_provenance_sha256" not in checksums or "item_evidence_sha256" not in checksums
     ):
@@ -165,6 +167,25 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # compatibility while requiring internally consistent scoring metadata.
     # Newly generated queues include a digest so edits to the formula,
     # ruleset, thresholds or weights cannot silently change retry provenance.
+    # The v2 scoring contract also requires valid selection provenance.
+    # Re-signing a digest must not authorize a nonphysical confidence gate
+    # or an absent QC ruleset. Historical unversioned queues are untouched.
+    if integrity_version == "qc-review-queue-v2":
+        threshold = configuration.get("review_below_confidence")
+        ruleset = configuration.get("ruleset_version")
+        if (
+            type(ruleset) is not str
+            or not ruleset.strip()
+            or (
+                threshold is not None
+                and (
+                    type(threshold) not in (int, float)
+                    or not isfinite(threshold)
+                    or not 0 <= threshold <= 1
+                )
+            )
+        ):
+            raise invalid
     weights = configuration.get("weights")
     if (
         not isinstance(queue.formula_id, str)
