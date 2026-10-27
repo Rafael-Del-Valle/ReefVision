@@ -420,15 +420,19 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m",
     ):
         assert inconclusive_result[field] is None
-    assert inconclusive_result["registration_translation_magnitude_m"] == pytest.approx(0.1)
-    assert inconclusive_result["before_surface_area_m2"] == expected["before_surface_area_m2"]
-    assert inconclusive_result["after_surface_area_m2"] == expected["after_surface_area_m2"]
-    assert inconclusive_result["provenance"]["registration_evidence"] == inconclusive_registration
-    assert inconclusive_result["provenance"]["coordinate_registration_verified"] is False
-    assert "registration_independent_review_inconclusive" in inconclusive_result["qc_warnings"]
+    assert inconclusive_result["registration_translation_magnitude_m"] == pytest.approx(
+        0.1
+    )
+    assert inconclusive_result["before_surface_area_m2"] == pytest.approx(0.5)
+    assert inconclusive_result["after_surface_area_m2"] == pytest.approx(1.0)
+    inconclusive_provenance = inconclusive_result["provenance"]
+    assert inconclusive_provenance["registration_evidence"] == inconclusive_registration
+    assert inconclusive_provenance["coordinate_registration_verified"] is False
+    inconclusive_warnings = inconclusive_result["qc_warnings"]
+    assert "registration_independent_review_inconclusive" in inconclusive_warnings
     assert (
         "registered_surface_centroid_comparison_withheld_inconclusive_alignment"
-        in inconclusive_result["qc_warnings"]
+        in inconclusive_warnings
     )
     graph["graph_id"] = "mesh-longitudinal-inconclusive-registration-v14"
     graph["nodes"][3]["parameters"]["registration_evidence"] = inconclusive_registration
@@ -440,9 +444,12 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert inconclusive_run.status_code == 202, inconclusive_run.text
     assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(inconclusive_run.json()["job_id"])
+        app.state.settings,
+        app.state.session_factory,
+        str(inconclusive_run.json()["job_id"]),
     )
-    inconclusive_detail = client.get(f"/api/v1/workflow-runs/{inconclusive_run.json()['id']}")
+    inconclusive_run_id = inconclusive_run.json()["id"]
+    inconclusive_detail = client.get(f"/api/v1/workflow-runs/{inconclusive_run_id}")
     assert inconclusive_detail.status_code == 200, inconclusive_detail.text
     inconclusive_artifact = next(
         item
