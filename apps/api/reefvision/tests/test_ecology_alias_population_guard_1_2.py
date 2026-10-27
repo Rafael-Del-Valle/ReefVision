@@ -630,7 +630,6 @@ def test_partial_parent_roster_does_not_require_invented_distinct_parents() -> N
     assert all(row.review_gate == "scientist_review_required" for row in summaries)
 
 
-
 @pytest.mark.parametrize("reverse_order", [False, True])
 def test_three_metric_two_parent_cycle_cannot_invent_consistent_lineage(
     reverse_order: bool,
