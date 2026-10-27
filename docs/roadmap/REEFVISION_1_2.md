@@ -2440,3 +2440,21 @@ parent-colony disclosures, contributor denominators and mean changes).
 Existing standalone API and saved-workflow CSV parity tests remain in
 place. The changes are **not** accepted until exact-head CI passes; no
 local full-repository or installed Windows acceptance was performed.
+
+## Population CSV re-signed replication-evidence regression (2026-10-27)
+
+The exact-head CI audit at `d47b4292` found 16/19 successful workflows;
+CI, Pose Workflow Validation and ReefVision 1.0 Acceptance all failed on
+Ruff formatting of the same population CSV scientific parity test. The test
+formatting was corrected without weakening the underlying assertions.
+
+Five parameterized regression cases now independently re-sign a tampered
+population artifact and require the existing source-derived consistency
+checks to reject inflated declared-unit and organism denominators, fabricated
+shared-parent lineage, removed scientific design-review blockers, and an
+invented sample standard deviation for a single declared experimental unit.
+These checks apply to the shared CSV renderer used by the standalone API and
+the persisted Workflow Builder export. They **do not** verify biological
+independence, convert linked candidates into reviewed growth observations,
+or allow inferential statistics. The exact new-head CI, scientist review,
+migration reconciliation and native Windows acceptance remain release gates.
