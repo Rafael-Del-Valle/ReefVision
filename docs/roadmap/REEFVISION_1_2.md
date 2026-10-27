@@ -2458,3 +2458,17 @@ the persisted Workflow Builder export. They **do not** verify biological
 independence, convert linked candidates into reviewed growth observations,
 or allow inferential statistics. The exact new-head CI, scientist review,
 migration reconciliation and native Windows acceptance remain release gates.
+
+## Population export provenance regression hardening (2026-10-27)
+
+The population CSV acceptance suite now checks nine re-signed forged scientific
+summaries rather than five, including fabricated independent-unit IDs, parent
+colony lineage, missing-parent declarations and percent-change means. The
+existing renderer re-derives population aggregates from source-linked candidates
+and rejects these mutations despite a recalculated fingerprint. This is
+regression coverage for an existing safeguard, **not** verification of source
+identity, biological independence, or scientist approval. The same renderer is
+used by the standalone CSV API and the executable persisted Workflow Builder
+node. Corrected the Ruff formatting error in this test file reported by the
+previous exact-head CI; latest-head CI and installed Windows acceptance are
+still required before any release-ready declaration.
