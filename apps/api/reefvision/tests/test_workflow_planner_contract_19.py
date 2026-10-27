@@ -155,6 +155,7 @@ def test_corrupt_saved_verified_pose_graph_finishes_as_failed(
             WorkflowRunCreateRequest(graph_record_id=str(saved.json()["id"])),
         )
 
+
 def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
