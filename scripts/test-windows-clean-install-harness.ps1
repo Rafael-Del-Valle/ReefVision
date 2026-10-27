@@ -93,7 +93,7 @@ Assert-True ($acceptanceScript.Contains('external_annotation_imports = New-ReefV
 # It must remain optional and must verify immutable source bytes as well as
 # the display endpoint; a synthetic PNG does not establish camera acceptance.
 Assert-True ($acceptanceScript.Contains('[string]$CameraFixturePath')) 'Real camera fixture option is missing.'
-Assert-True ($acceptanceScript.Contains("camera_jpeg = if ($CameraFixturePath)")) 'Missing camera fixture must be reported as SKIPPED, never PASS.'
+Assert-True ($acceptanceScript.Contains('camera_jpeg = if ($CameraFixturePath)')) 'Missing camera fixture must be reported as SKIPPED, never PASS.'
 Assert-True ($acceptanceScript.Contains("-ContentType 'image/jpeg'")) 'Camera acceptance must submit actual JPEG media type.'
 Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/content')) 'Camera acceptance must retrieve the persisted original bytes.'
 Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/display')) 'Camera acceptance must exercise the installed display endpoint.'
