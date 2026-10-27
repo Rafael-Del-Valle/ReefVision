@@ -27,6 +27,22 @@ def _scope(session: Session, queue_id: str, item_id: str) -> ReviewQueueItem:
         raise ConflictError("Review item does not belong to this queue")
     if queue.status != "complete":
         raise ConflictError("Review queue is not ready for coordination")
+    # Refuse new coordination writes as well as reads when prior reviewer
+    # evidence has been moved across project/queue boundaries. Otherwise a
+    # fresh request key could append to a scientifically inconsistent history.
+    foreign_event_id = session.scalar(
+        select(ReviewQueueItemEvent.id)
+        .where(
+            ReviewQueueItemEvent.review_queue_item_id == item_id,
+            (
+                (ReviewQueueItemEvent.review_queue_id != queue_id)
+                | (ReviewQueueItemEvent.project_id != item.project_id)
+            ),
+        )
+        .limit(1)
+    )
+    if foreign_event_id is not None:
+        raise ConflictError("Review event provenance does not match its queue")
     return item
 
 
@@ -103,21 +119,6 @@ def list_review_events(
     page_size: int,
 ) -> ReviewQueueEventsPage:
     item = _scope(session, queue_id, item_id)
-    # Fail closed if a persisted event has been reassigned to another queue or
-    # project. Filtering it out would silently hide reviewer audit evidence.
-    foreign_event_id = session.scalar(
-        select(ReviewQueueItemEvent.id)
-        .where(
-            ReviewQueueItemEvent.review_queue_item_id == item_id,
-            (
-                (ReviewQueueItemEvent.review_queue_id != queue_id)
-                | (ReviewQueueItemEvent.project_id != item.project_id)
-            ),
-        )
-        .limit(1)
-    )
-    if foreign_event_id is not None:
-        raise ConflictError("Review event provenance does not match its queue")
     filters = [ReviewQueueItemEvent.review_queue_item_id == item_id]
     total = (
         session.scalar(select(func.count()).select_from(ReviewQueueItemEvent).where(*filters)) or 0
