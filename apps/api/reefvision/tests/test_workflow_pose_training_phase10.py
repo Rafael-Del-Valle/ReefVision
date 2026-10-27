@@ -473,9 +473,10 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         retry_completed_node()
 
     with app.state.session_factory() as session:
-        assert session.scalars(
+        matching_runs = session.scalars(
             select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
-        ).all() == [result["training_run_id"]]
+        ).all()
+        assert matching_runs == [result["training_run_id"]]
         persisted = session.get(TrainingRun, result["training_run_id"])
         assert persisted is not None and persisted.job_id is not None
         child_job = session.get(Job, persisted.job_id)
