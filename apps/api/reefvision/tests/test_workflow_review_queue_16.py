@@ -141,6 +141,18 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     rejected_comment_retry = client.post(event_url, json=comment_payload)
     assert rejected_comment_retry.status_code == 409, rejected_comment_retry.text
     assert client.get(event_url).status_code == 409
+    # Even an unrelated new comment must not append evidence to a saved
+    # Workflow Builder review queue while prior provenance is inconsistent.
+    blocked_new_comment = client.post(
+        event_url,
+        json={
+            "client_request_id": str(uuid4()),
+            "event_type": "comment",
+            "actor": "researcher",
+            "comment": "Second review note while history is corrupted",
+        },
+    )
+    assert blocked_new_comment.status_code == 409, blocked_new_comment.text
     with app.state.session_factory() as session:
         event = session.get(ReviewQueueItemEvent, comment.json()["id"])
         assert event is not None
