@@ -111,6 +111,15 @@ class MeshRegistrationEvidence(BaseModel):
     target_meters_per_mesh_unit: StrictFloat | None = Field(
         default=None, gt=0, le=1_000_000, allow_inf_nan=False
     )
+    # A revised calibration uncertainty changes the interpretation of
+    # longitudinal intervals without changing the mesh or its central scale.
+    # These optional paired values bind the registration to that QC revision.
+    source_relative_scale_uncertainty: StrictFloat | None = Field(
+        default=None, ge=0, le=1, allow_inf_nan=False
+    )
+    target_relative_scale_uncertainty: StrictFloat | None = Field(
+        default=None, ge=0, le=1, allow_inf_nan=False
+    )
     # Optional caller-supplied rigid source-to-target transform in meters.
     # Structural validity does not establish correct alignment or review.
     source_to_target_transform_m: list[list[StrictFloat]] | None = None
@@ -137,6 +146,10 @@ class MeshRegistrationEvidence(BaseModel):
             raise ValueError("Registration geometry binding requires both SHA-256 fingerprints")
         if (self.source_meters_per_mesh_unit is None) != (self.target_meters_per_mesh_unit is None):
             raise ValueError("Registration calibration scale binding requires both scales")
+        if (self.source_relative_scale_uncertainty is None) != (
+            self.target_relative_scale_uncertainty is None
+        ):
+            raise ValueError("Registration scale uncertainty binding requires both values")
         review_fields = (
             self.independent_reviewer_id,
             self.independent_review_decision,
