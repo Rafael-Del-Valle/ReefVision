@@ -85,17 +85,29 @@ def test_population_csv_carries_rechecked_source_lineage_for_all_rows(
     """Both excluded and population rows expose the source audit chain."""
     source = _dated_artifact(client)
     rows = _rows(render_ecology_population_csv(source))
-    assert {row["export_schema_version"] for row in rows} == {
-        "ecology-population-export-0002"
-    }
+    assert {row["export_schema_version"] for row in rows} == {"ecology-population-export-0003"}
     assert {row["row_type"] for row in rows} == {"declared_unit", "population_stratum"}
+    report = source.candidate_report
+    assert report is not None
     expected = {
         "source_fingerprint_rechecked": "true",
+        "source_fingerprint_contract": source.source_fingerprint_contract,
+        "source_candidate_count": str(source.candidate_count),
+        "source_image_count": str(report.source_image_count),
+        "source_organism_count": str(report.source_organism_count),
+        "source_excluded_count": str(report.excluded_source_count),
         "source_registry_history_sha256": source.source_registry_history_sha256 or "",
         "source_image_evidence_sha256": source.source_image_evidence_sha256 or "",
         "source_annotation_evidence_sha256": source.source_annotation_evidence_sha256 or "",
         "source_calibration_evidence_sha256": source.source_calibration_evidence_sha256 or "",
     }
+    # Two source observations describe one organism in one declared tank.
+    # They must not become two independent biological replicates in CSV.
+    assert source.candidate_count == 2
+    assert report.source_image_count == 2
+    assert report.source_organism_count == 1
+    population = next(row for row in rows if row["row_type"] == "population_stratum")
+    assert population["declared_unit_count"] == "1"
     for row in rows:
         for field, value in expected.items():
             assert row[field] == value
