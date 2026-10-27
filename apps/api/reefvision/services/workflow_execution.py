@@ -253,7 +253,10 @@ class WorkflowExecutionService:
         # A saved revision may have been altered since it was persisted. Reject
         # structurally valid but modified graphs before queueing a run whose
         # pinned provenance would otherwise fail only after dequeue.
-        if canonical_json_sha256(graph.model_dump(mode="json")) != record.graph_sha256:
+        if (
+            canonical_json_sha256(record.graph_json) != record.graph_sha256
+            or canonical_json_sha256(graph.model_dump(mode="json")) != record.graph_sha256
+        ):
             raise ValidationError(
                 "Workflow graph revision checksum no longer matches saved contents"
             )
