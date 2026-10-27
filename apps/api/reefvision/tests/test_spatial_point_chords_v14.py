@@ -321,8 +321,9 @@ def test_coincident_chord_qc_summary_is_preserved_in_saved_workflow(
         for item in detail.json()["artifacts"]
         if item["data_type"] == "point_cloud_measurement_preview"
     )
-    assert artifact["payload_json"]["selected_point_chord_qc_summary"] == (
-        expected["selected_point_chord_qc_summary"]
+    assert (
+        artifact["payload_json"]["selected_point_chord_qc_summary"]
+        == (expected["selected_point_chord_qc_summary"])
     )
     assert artifact["payload_json"]["selected_point_chords"] == chords
     assert artifact["payload_json"]["qc_warnings"] == expected["qc_warnings"]
