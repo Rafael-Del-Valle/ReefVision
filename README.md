@@ -119,12 +119,16 @@ For research using ReefVision, record the application version, model and checkpo
 
 ### Open-source software license
 
-ReefVision's original source code and project documentation are available under the [MIT License](LICENSE).
+**ReefVision is licensed under the [GNU Affero General Public License, version 3 only (AGPL-3.0-only)](LICENSE).**
 
-Copyright (c) 2026 Rafael Del Valle.
+Copyright (C) 2026 Rafael Del Valle.
 
-The MIT License allows researchers, nonprofit organizations, and commercial teams to use, modify, and redistribute the licensed software, including in other projects, provided the copyright and license notices are retained. Contributors and downstream users are not required to publish their modifications. ReefVision remains an independently maintained project; the license does not transfer ownership of the original code.
+The AGPL-3.0 allows academic, nonprofit, personal, and commercial use. It also permits copying, modifying, and redistributing covered software under its conditions. When distributing a covered version, distributors must satisfy applicable source-code, copyright-notice, and license obligations; section 13 also addresses modified versions used to provide remote network access. ReefVision remains an independently maintained project, and licensing the code does not transfer its copyright.
 
-**Research data and third-party material:** This software license does **not** grant rights to coral or wildlife photographs and videos, annotations, research datasets, model checkpoints or weights, third-party dependencies, or materials owned by others. Such items are subject to their respective owners' terms and permissions. Availability of the software's source code should not be interpreted as permission to redistribute research data or third-party content.
+**Software versus scientific data:** This license applies to ReefVision code and original project documentation where ReefVision's copyright holder has the rights to grant it. It does **not** automatically license independently owned coral or wildlife photographs and videos, research datasets, annotations, model checkpoints or weights, or third-party materials. Their owners' terms and permissions still apply.
+
+**Third-party components:** Ultralytics, SLEAP-related software, and all other external dependencies retain their own licenses and copyright notices. The ReefVision license does not override those licenses. Redistribution of bundled application installers must meet all applicable third-party requirements; check the exact versions and dependency notices before a new release.
+
+**Previously licensed copies:** ReefVision versions or code copies previously provided under MIT retain the rights granted under that license. This change does not retroactively revoke those permissions.
 
 For contributions, see [CONTRIBUTING.md](CONTRIBUTING.md).

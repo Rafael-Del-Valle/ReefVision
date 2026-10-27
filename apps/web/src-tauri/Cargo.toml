@@ -3,7 +3,7 @@ name = "reefvision-desktop"
 version = "1.0.2"
 description = "ReefVision desktop shell"
 authors = ["Rafael Del Valle"]
-license = "MIT"
+license = "AGPL-3.0-only"
 edition = "2021"
 
 [build-dependencies]
