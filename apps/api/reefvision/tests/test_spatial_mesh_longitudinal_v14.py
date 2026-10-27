@@ -722,7 +722,6 @@ def test_registration_scale_binding_rejects_recalibrated_geometry() -> None:
     assert legacy_result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
 
 
-
 def test_registration_uncertainty_binding_rejects_reestimated_calibration() -> None:
     """A changed uncertainty estimate invalidates evidence even at identical scale."""
     before_payload = {
