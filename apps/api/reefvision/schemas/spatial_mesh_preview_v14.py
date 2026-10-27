@@ -301,8 +301,7 @@ class MeshReidentificationEvidence(BaseModel):
         if (self.before_observed_at_utc is None) != (self.after_observed_at_utc is None):
             raise ValueError("Reidentification timepoint binding requires both UTC timestamps")
         if not self.evidence_note.strip() or (
-            self.independent_review_note is not None
-            and not self.independent_review_note.strip()
+            self.independent_review_note is not None and not self.independent_review_note.strip()
         ):
             raise ValueError("Reidentification evidence and review notes cannot be blank")
         review_fields = (
