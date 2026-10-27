@@ -359,9 +359,9 @@ def _completed_workflow_pose_training_run(
 
         # The frozen seed identity is scientific provenance, even when the
         # registered model and its bytes still validate independently.
+        expected_seed_mode = "registered_model" if seed_model else "random"
         if (
-            snapshot.get("initialization_mode")
-            != ("registered_model" if seed_model else "random")
+            snapshot.get("initialization_mode") != expected_seed_mode
             or snapshot.get("seed_model_id") != (seed_model.id if seed_model else None)
             or snapshot.get("seed_model_sha256") != (seed_model.sha256 if seed_model else None)
         ):
