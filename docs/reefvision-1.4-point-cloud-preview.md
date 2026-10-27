@@ -118,8 +118,9 @@ example, strict request validation and saved-workflow parity.
 
 For scans larger than the 512-point display budget, the default deterministic
 index sample can omit original point indices used by an explicitly selected
-straight-line chord. The new optional request/workflow parameter
-`preserve_measured_chord_endpoints_in_preview: true` pins both original
+straight-line chord. The local ASCII PLY file picker now exposes an explicit checkbox; the
+same option is available as the request/workflow parameter
+`preserve_measured_chord_endpoints_in_preview: true`, which pins both original
 source indices of every validated `point_index_pairs` selection into the
 bounded preview (up to 32 pairs, at most 64 endpoints). The existing
 `preserve_axis_extrema_in_preview` flag can be combined with this option.
