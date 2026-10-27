@@ -635,6 +635,12 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     # and the recorded validation policy, not just its workflow snapshot.
     for field, corrupt_value, error in (
         ("dataset_manifest_sha256", "0" * 64, "dataset checksum changed"),
+        ("initial_checkpoint_source", "scratch", "seed model changed"),
+        (
+            "resolved_model_asset_id",
+            "builtin_architecture:yolo11n-pose.yaml",
+            "seed model changed",
+        ),
         ("provider_id", "corrupted-provider", "configuration changed"),
         (
             "evaluation_config_json",
