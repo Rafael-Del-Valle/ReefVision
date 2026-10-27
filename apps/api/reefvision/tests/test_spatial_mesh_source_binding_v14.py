@@ -114,10 +114,10 @@ def test_modified_obj_source_is_rejected_even_when_parsed_geometry_is_unchanged(
     assert changed_obj != OBJ
     original = preview_from_request(MeshPreviewRequest(**COMMON, obj_text=OBJ))
     modified = preview_from_request(MeshPreviewRequest(**COMMON, obj_text=changed_obj))
-    assert original["provenance"]["geometry_sha256"] == modified["provenance"]["geometry_sha256"]
-    assert original["provenance"]["source_payload_sha256"] != (
-        modified["provenance"]["source_payload_sha256"]
-    )
+    before = original["provenance"]
+    after = modified["provenance"]
+    assert before["geometry_sha256"] == after["geometry_sha256"]
+    assert before["source_payload_sha256"] != after["source_payload_sha256"]
     params = {
         **COMMON,
         "obj_text": changed_obj,
@@ -161,8 +161,7 @@ def test_indexed_triangles_cannot_claim_imported_file_binding() -> None:
 
 def test_legacy_import_without_expected_hash_remains_unbound() -> None:
     result = preview_from_request(MeshPreviewRequest(**COMMON, obj_text=OBJ))
-    assert result["provenance"]["source_payload_sha256"] == hashlib.sha256(
-        OBJ.encode("utf-8")
-    ).hexdigest()
+    expected_sha = hashlib.sha256(OBJ.encode("utf-8")).hexdigest()
+    assert result["provenance"]["source_payload_sha256"] == expected_sha
     assert result["provenance"]["source_payload_integrity_checked"] is False
     assert result["measurement_status"] == "caller_supplied_unverified"
