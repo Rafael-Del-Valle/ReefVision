@@ -255,10 +255,11 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                 Export current vector summary CSV
               </button>
               <p>
-                Summary export includes the selected time/depth, component record
-                IDs, units, cache provenance and known component uncertainties.
-                Derived speed/bearing uncertainty is not estimated. Original
-                scientific records remain the authoritative source.
+                Summary export includes the selected time/depth, component
+                record IDs, units, cache provenance and known component
+                uncertainties. Derived speed/bearing uncertainty is not
+                estimated. Original scientific records remain the authoritative
+                source.
               </p>
               {vectors.length === 0 && (
                 <p role="status">
