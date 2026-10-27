@@ -159,8 +159,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         unique_constraints = inspector.get_unique_constraints(_REVIEW_TABLE)
         has_request_identity = any(
             constraint.get("name") == "uq_review_queue_item_event_request"
-            and constraint.get("column_names")
-            == ["review_queue_item_id", "client_request_id"]
+            and constraint.get("column_names") == ["review_queue_item_id", "client_request_id"]
             for constraint in unique_constraints
         )
         if not has_request_identity:
