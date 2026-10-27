@@ -123,8 +123,15 @@ Assert-True ($acceptanceScript.Contains('camera_jpeg = if ($CameraFixturePath)')
 Assert-True ($acceptanceScript.Contains("-ContentType 'image/jpeg'")) 'Camera acceptance must submit actual JPEG media type.'
 Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/content')) 'Camera acceptance must retrieve the persisted original bytes.'
 Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/display')) 'Camera acceptance must exercise the installed display endpoint.'
-Assert-True (($acceptanceScript -split 'Assert-ReefVisionCameraRaster').Count -eq 3) 'Camera acceptance must decode and validate both original and display rasters.'
-Assert-True ($acceptanceScript.Contains('source SHA256 $cameraHashBefore unchanged')) 'Camera acceptance must record source integrity evidence.'
+Assert-True (($acceptanceScript -split 'Assert-ReefVisionCameraRaster').Count -eq 4) 'Camera acceptance must decode the original, initial display, and restarted display rasters.'
+Assert-True ($acceptanceScript.Contains('$persistedCamera = Invoke-RestMethod "$api/images/$cameraId"')) 'Camera metadata must be checked after desktop restart.'
+Assert-True ($acceptanceScript.Contains('Camera JPEG original bytes changed or disappeared after desktop restart.')) 'Camera original SHA-256 must be rechecked after restart.'
+Assert-True ($acceptanceScript.Contains('Camera JPEG display endpoint failed after desktop restart.')) 'Camera display must be fetched again after restart.'
+Assert-True ($acceptanceScript.Contains('source SHA256 $cameraHashBefore unchanged') -or $acceptanceScript.Contains('original SHA256 $cameraHashBefore unchanged')) 'Camera source SHA-256 must be recorded.'
+$cameraRestartIndex = $acceptanceScript.IndexOf('$persistedCamera = Invoke-RestMethod "$api/images/$cameraId"')
+$cameraPassIndex = $acceptanceScript.IndexOf('$report.camera_jpeg = New-ReefVisionEvidenceResult -Status ''PASS''')
+Assert-True ($cameraRestartIndex -ge 0 -and $cameraPassIndex -gt $cameraRestartIndex) 'Camera PASS must be deferred until after restart validation.'
+Assert-True ($acceptanceScript.Contains('original SHA256 $cameraHashBefore unchanged')) 'Camera acceptance must record original SHA-256 integrity evidence.'
 
 Assert-True ($acceptanceScript.Contains('function Import-AcceptanceAnnotations')) 'Windows acceptance must use a real multipart annotation import.'
 Assert-True ($acceptanceScript.Contains('cocoResult.boxes_imported -ne 1')) 'COCO imported box acceptance is missing.'
