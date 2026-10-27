@@ -170,6 +170,25 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "reviewed data-preserving migration, never by stamping."
             )
 
+    # SQLite UNIQUE permits repeated NULL identities. A forged 0041 stamp
+    # with nullable request keys could bypass reviewer-event idempotency even
+    # when the named two-column UNIQUE constraint exists. The actual 0038
+    # migration declares both fields NOT NULL; inspect without altering data.
+    if revision == "0041":
+        event_identity_columns = {column["name"]: column for column in review_columns}
+        nullable_event_identity = sorted(
+            name
+            for name in ("review_queue_item_id", "client_request_id")
+            if event_identity_columns[name].get("nullable", True)
+        )
+        if nullable_event_identity:
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic revision 0041 collision: "
+                "nullable review-event idempotency identity columns "
+                f"{nullable_event_identity}. Preserve reviewer history and "
+                "reconcile through a reviewed data-preserving migration."
+            )
+
     # SQL CHECK constraints do not reject NULL in SQLite. An event_type
     # column that became nullable would allow untyped audit events despite
     # an otherwise correct named allowlist. The original 0038 migration
