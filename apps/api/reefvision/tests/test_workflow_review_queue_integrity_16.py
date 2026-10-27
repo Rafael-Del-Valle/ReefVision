@@ -328,7 +328,6 @@ def test_versioned_queue_fails_closed_when_provenance_digest_is_missing(missing_
         validate_saved_queue_snapshot(queue, items)
 
 
-
 @pytest.mark.parametrize(
     ("formula_id", "formula_version"),
     [
