@@ -90,12 +90,16 @@ def test_population_csv_stratum_fields_match_typed_scientific_summary(
     )
     assert population["metric"] == summary.metric
     assert population["experimental_unit_type"] == summary.experimental_unit_type
-    assert json.loads(population["experimental_unit_ids_json"]) == (\n        summary.experimental_unit_ids\n    )
+    assert json.loads(population["experimental_unit_ids_json"]) == (
+        summary.experimental_unit_ids
+    )
     assert json.loads(population["physical_units_json"]) == [summary.unit]
     assert json.loads(population["sampling_windows_utc_json"]) == [
         summary.sampling_window_utc
     ]
-    assert json.loads(population["parent_colony_keys_json"]) == (\n        summary.parent_colony_keys\n    )
+    assert json.loads(population["parent_colony_keys_json"]) == (
+        summary.parent_colony_keys
+    )
     assert json.loads(population["shared_parent_colony_keys_json"]) == (
         summary.shared_parent_colony_keys
     )
