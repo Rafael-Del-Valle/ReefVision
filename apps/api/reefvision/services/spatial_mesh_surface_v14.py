@@ -117,9 +117,7 @@ def measure_mesh_preview(
             not isinstance(vertex, (list, tuple))
             or len(vertex) != 3
             or any(
-                type(value) not in (int, float)
-                or not isfinite(value)
-                or abs(value) > 1_000_000_000
+                type(value) not in (int, float) or not isfinite(value) or abs(value) > 1_000_000_000
                 for value in vertex
             )
         ):
@@ -136,6 +134,7 @@ def measure_mesh_preview(
         return face_index
 
     seen_faces: set[tuple[int, int, int]] = set()
+    seen_geometry_faces: set[tuple[tuple[float, float, float], ...]] = set()
     raw_area = 0.0
     face_areas: list[float] = []
     degenerate = 0
@@ -152,6 +151,12 @@ def measure_mesh_preview(
         if key in seen_faces:
             raise ValueError("Duplicate triangles would double-count surface area")
         seen_faces.add(key)
+        # Different vertex indices may refer to identical XYZ positions. Such
+        # triangles would still double-count reconstructed surface area.
+        geometry_key = tuple(sorted(points[index] for index in face))
+        if geometry_key in seen_geometry_faces:
+            raise ValueError("Duplicate triangle geometry would double-count surface area")
+        seen_geometry_faces.add(geometry_key)
         area = spatial_mesh_measurements.triangle_area(
             points[face[0]], points[face[1]], points[face[2]]
         )
