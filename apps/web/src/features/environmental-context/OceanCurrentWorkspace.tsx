@@ -6,6 +6,7 @@ import { getVideoGeoreferencedObservations } from "../video/videoGeoreferencedOb
 import {
   currentComponentUncertaintyText,
   currentVectors,
+  currentVectorsCsv,
   vectorColor,
 } from "./currentVectors";
 import {
@@ -228,6 +229,35 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                   </span>
                 ))}
               </div>
+              <button
+                type="button"
+                disabled={vectors.length === 0}
+                onClick={() => {
+                  if (!dataset.data || vectors.length === 0) return;
+                  const csv = currentVectorsCsv(vectors, {
+                    cacheKey,
+                    cacheStatus: dataset.data.cache_status,
+                    fetchedAt: dataset.data.fetched_at,
+                    expiresAt: dataset.data.expires_at,
+                  });
+                  const url = URL.createObjectURL(
+                    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+                  );
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = "reefvision-current-vectors.csv";
+                  link.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                Export current vector summary CSV
+              </button>
+              <p>
+                Summary export includes the selected time/depth, component record
+                IDs, units, cache provenance and known component uncertainties.
+                Derived speed/bearing uncertainty is not estimated. Original
+                scientific records remain the authoritative source.
+              </p>
               {vectors.length === 0 && (
                 <p role="status">
                   Current vectors unavailable: this time/depth has no unique
