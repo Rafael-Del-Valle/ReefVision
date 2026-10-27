@@ -19,7 +19,10 @@ from reefvision.db.models import (
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.workflow_review_queue_integrity import queue_item_evidence_sha256
+from reefvision.services.workflow_review_queue_integrity import (
+    queue_item_evidence_sha256,
+    validate_saved_queue_snapshot,
+)
 from reefvision.services.workflow_runtime_adapters import execute_runtime_adapter
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project, import_one
@@ -425,7 +428,14 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             ),
         }
         session.flush()
+        # The snapshot validator must reject an invalid re-signed scientific
+        # threshold even when the saved workflow's earlier parameter-equality
+        # guard would reject the retry first.
         with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            validate_saved_queue_snapshot(saved_queue, [saved_item])
+        # Workflow replay must independently fail closed before any mutation;
+        # its earlier retry-parameter guard is the expected error surface.
+        with pytest.raises(ValidationError, match="retry parameters changed"):
             execute_runtime_adapter(
                 "qc_review_queue",
                 session=session,
