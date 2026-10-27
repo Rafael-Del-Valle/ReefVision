@@ -2776,3 +2776,26 @@ no schema migration, external model, environmental store or verified-dataset
 promotion is introduced. New-head CI and scientist-reviewed real-image
 ecological acceptance, 1.1 migration reconciliation and native Windows
 installer/GUI validation remain outstanding. **1.2 is NOT RELEASE-READY.**
+
+
+## UTC elapsed-time correction for projected endpoint rates (2026-10-27)
+
+The source-linked projected endpoint kernel now orders captures by their **UTC
+instants** and calculates elapsed days after converting both endpoints to UTC.
+Subtracting two local datetimes that share a timezone object can otherwise
+ignore a daylight-saving offset transition, changing projected change-per-day
+by an hour while retaining apparently valid sampling dates. A portable
+synthetic-offset regression covers a 47-hour interval spanning two local
+calendar days, the derived slope, signed source CSV rechecks, and the unchanged
+`linked_unverified` scientist-review gate.
+
+The source fingerprint algorithm advances from
+`ecology-measurement-candidates-0018` to `0019`. The response schema still
+**deserializes prior 0018 artifacts**, but old calculated rates are not silently
+re-signed or promoted; source/derived integrity checks remain mandatory.
+This is a correctness fix for provisional projected geometry, **not** verified
+biological growth, independent replication or an accepted longitudinal study.
+Existing executable Workflow Builder source/export nodes share the corrected
+kernel and persisted evidence contract; full exact-head CI, real ecological
+data, migration reconciliation and installed Windows GUI acceptance remain
+release blockers.

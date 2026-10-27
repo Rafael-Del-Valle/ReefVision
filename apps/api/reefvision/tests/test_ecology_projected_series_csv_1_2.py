@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, tzinfo
 from io import StringIO
 
 import pytest
@@ -105,6 +105,91 @@ def _dated_artifact(client: TestClient) -> EcologyMeasurementCandidatesResponse:
         }
     )
 
+
+
+class _SyntheticSeasonalTimezone(tzinfo):
+    """Portable test timezone with a spring offset change; no OS tzdata needed."""
+
+    def utcoffset(self, dt: datetime | None) -> timedelta:
+        if dt is None:
+            return timedelta(hours=-5)
+        return timedelta(hours=-4 if (dt.month, dt.day) >= (3, 8) else -5)
+
+    def dst(self, dt: datetime | None) -> timedelta:
+        return timedelta(0)
+
+    def tzname(self, dt: datetime | None) -> str:
+        return "synthetic-seasonal-offset"
+
+
+def test_projected_endpoint_elapsed_time_uses_utc_across_offset_change(
+    client: TestClient,
+) -> None:
+    """Wall-clock subtraction misses one real elapsed hour across the shift."""
+    original = _dated_artifact(client)
+    local = _SyntheticSeasonalTimezone()
+    first_local = datetime(2026, 3, 7, 12, tzinfo=local)
+    last_local = datetime(2026, 3, 9, 12, tzinfo=local)
+    assert (last_local - first_local).total_seconds() / 86400 == 2
+
+    candidates = [
+        original.candidates[0].model_copy(
+            update={"capture_timestamp_utc": first_local}
+        ),
+        original.candidates[1].model_copy(
+            update={"capture_timestamp_utc": last_local}
+        ),
+    ]
+    qc = summarize_sampling_date_qc(candidates)
+    assert [row.qc_status for row in qc] == ["date_series_candidate"]
+    changes = summarize_projected_endpoint_changes(candidates, qc)
+    assert len(changes) == 1
+    change = changes[0]
+    assert change.baseline_capture_timestamp_utc == datetime(2026, 3, 7, 17, tzinfo=UTC)
+    assert change.final_capture_timestamp_utc == datetime(2026, 3, 9, 16, tzinfo=UTC)
+    assert change.elapsed_days == pytest.approx(47 / 24)
+    assert change.projected_absolute_change_per_day == pytest.approx(2 / (47 / 24))
+
+    # The same source/derived evidence must survive signed export rechecks.
+    visits = summarize_projected_visit_coverage(candidates)
+    units = summarize_projected_unit_summaries(candidates, changes)
+    population = summarize_projected_population_summaries(units)
+    signed = _resign_derived_evidence(
+        original.model_copy(
+            update={
+                "candidates": candidates,
+                "sampling_date_qc": qc,
+                "projected_visit_coverage": visits,
+                "projected_endpoint_changes": changes,
+                "projected_unit_summaries": units,
+                "projected_population_summaries": population,
+            }
+        )
+    )
+    row = next(csv.DictReader(StringIO(render_ecology_series_qc_csv(signed))))
+    assert float(row["elapsed_days"]) == pytest.approx(47 / 24)
+    assert float(row["projected_absolute_change_per_day"]) == pytest.approx(
+        2 / (47 / 24)
+    )
+    assert row["review_gate"] == "scientist_review_required"
+    assert row["evidence_level"] == "linked_unverified"
+
+
+def test_prior_candidate_fingerprint_contract_remains_deserializable(
+    client: TestClient,
+) -> None:
+    """Old saved unverified artifacts remain readable without relabeling evidence."""
+    current = _dated_artifact(client)
+    legacy = current.model_copy(
+        update={"source_fingerprint_contract": "ecology-measurement-candidates-0018"}
+    )
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(
+        legacy.model_dump(mode="json")
+    )
+    assert parsed.source_fingerprint_contract == "ecology-measurement-candidates-0018"
+    assert all(
+        row.review_gate == "scientist_review_required" for row in parsed.candidates
+    )
 
 def test_series_export_matches_api_and_saved_workflow(client: TestClient) -> None:
     project_id, _ = _source(client)

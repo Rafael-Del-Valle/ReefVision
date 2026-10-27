@@ -8,7 +8,7 @@ to scientist review. No predictions or unreviewed source masks are accepted.
 from __future__ import annotations
 
 import math
-from datetime import UTC
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -474,6 +474,20 @@ def summarize_projected_visit_coverage(
     return coverage
 
 
+def _projected_utc_order_key(
+    candidate: EcologyMeasurementCandidate,
+) -> tuple[datetime, str, str]:
+    """Sort endpoints by actual UTC instant, including timezone offset changes."""
+    capture = candidate.capture_timestamp_utc
+    if capture is None or capture.tzinfo is None or capture.utcoffset() is None:
+        raise ValidationError("Projected endpoint series requires dated source images")
+    return (
+        capture.astimezone(UTC),
+        candidate.image_id,
+        candidate.annotation_evidence_id,
+    )
+
+
 def summarize_projected_endpoint_changes(
     candidates: list[EcologyMeasurementCandidate],
     sampling_date_qc: list[EcologySamplingDateQC],
@@ -506,18 +520,16 @@ def summarize_projected_endpoint_changes(
             continue
         records = sorted(
             groups[(audit.organism_key, audit.metric)],
-            key=lambda row: (
-                row.capture_timestamp_utc,
-                row.image_id,
-                row.annotation_evidence_id,
-            ),
+            key=_projected_utc_order_key,
         )
         first, last = records[0], records[-1]
         start = first.capture_timestamp_utc
         end = last.capture_timestamp_utc
         if start is None or end is None:
             raise ValidationError("Projected endpoint series requires dated source images")
-        elapsed_days = (end - start).total_seconds() / 86400
+        start_utc = start.astimezone(UTC)
+        end_utc = end.astimezone(UTC)
+        elapsed_days = (end_utc - start_utc).total_seconds() / 86400
         if not math.isfinite(elapsed_days) or elapsed_days <= 0:
             raise ValidationError("Projected endpoint change is nonfinite or unordered")
         difference = last.value - first.value
@@ -543,8 +555,8 @@ def summarize_projected_endpoint_changes(
                 experimental_unit_type=first.experimental_unit_type,
                 experimental_unit_id=first.experimental_unit_id,
                 unit=first.unit,
-                baseline_capture_timestamp_utc=start.astimezone(UTC),
-                final_capture_timestamp_utc=end.astimezone(UTC),
+                baseline_capture_timestamp_utc=start_utc,
+                final_capture_timestamp_utc=end_utc,
                 baseline_image_id=first.image_id,
                 final_image_id=last.image_id,
                 baseline_annotation_evidence_id=first.annotation_evidence_id,
@@ -1080,7 +1092,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0018",
+                "algorithm_version": "ecology-measurement-candidates-0019",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
@@ -1101,7 +1113,7 @@ class EcologyMeasurementCandidateService:
             source_calibration_evidence_sha256=snapshot.calibration_evidence_sha256,
             source_image_evidence_sha256=snapshot.image_evidence_sha256,
             source_annotation_evidence_sha256=snapshot.annotation_evidence_sha256,
-            source_fingerprint_contract="ecology-measurement-candidates-0018",
+            source_fingerprint_contract="ecology-measurement-candidates-0019",
             candidates=candidates,
             candidate_count=len(candidates),
             sampling_date_qc=sampling_date_qc,
