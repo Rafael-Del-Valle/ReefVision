@@ -130,7 +130,10 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
         return False
     for signal_id in V3_SUPPORTED_SIGNALS:
         value = raw.get(signal_id)
-        if not _finite_scientific_number(value):
+        # Narrow the persisted JSON value to a real numeric type for both
+        # runtime validation and strict static typing. bool is an int subclass
+        # but must never count as a biological observation.
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not isfinite(value):
             return False
         if signal_id == "pending_proposals":
             # The generator records a nonnegative integer count as a float,
