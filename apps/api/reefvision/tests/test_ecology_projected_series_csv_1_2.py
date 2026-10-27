@@ -107,7 +107,7 @@ def _dated_artifact(client: TestClient) -> EcologyMeasurementCandidatesResponse:
 
 
 class _SyntheticSeasonalTimezone(tzinfo):
-    """Portable test timezone with a spring offset change; no OS tzdata needed."""
+    """Portable spring/fall offset shifts without host tzdata."""
 
     def utcoffset(self, dt: datetime | None) -> timedelta:
         if dt is None:
@@ -153,7 +153,9 @@ def test_projected_endpoint_elapsed_time_uses_utc_across_offset_change(
     assert change.baseline_capture_timestamp_utc == first_local.astimezone(UTC)
     assert change.final_capture_timestamp_utc == last_local.astimezone(UTC)
     assert change.elapsed_days == pytest.approx(expected_hours / 24)
-    assert change.projected_absolute_change_per_day == pytest.approx(2 / (expected_hours / 24))
+    assert change.projected_absolute_change_per_day == pytest.approx(
+        2 / (expected_hours / 24)
+    )
 
     # The same source/derived evidence must survive signed export rechecks.
     visits = summarize_projected_visit_coverage(candidates)
