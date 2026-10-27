@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 type Vec3 = [number, number, number];
 type RGB = [number, number, number];
+type PointScaleIntervals = [[number, number], [number, number], [number, number]];
 
 interface PointChord {
   point_indices: [number, number];
@@ -14,6 +15,7 @@ interface PointCloudRenderArtifact {
   points: Vec3[];
   indices: number[];
   colors: RGB[] | null;
+  pointScaleIntervals: PointScaleIntervals[] | null;
   target: Vec3;
   radius: number;
   totalCount: number;
@@ -43,6 +45,23 @@ function isRGB(value: unknown): value is RGB {
         Number.isInteger(channel) &&
         channel >= 0 &&
         channel <= 255,
+    )
+  );
+}
+
+function isPointScaleIntervals(value: unknown): value is PointScaleIntervals {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every(
+      (bounds) =>
+        Array.isArray(bounds) &&
+        bounds.length === 2 &&
+        bounds.every(
+          (coordinate) =>
+            typeof coordinate === "number" && Number.isFinite(coordinate),
+        ) &&
+        bounds[0] <= bounds[1],
     )
   );
 }
@@ -92,6 +111,7 @@ export function parsePointCloudRenderArtifact(
   const points = data.preview_points_in_source_frame_m;
   const indices = data.preview_point_indices;
   const colors = data.preview_point_colors_rgb_uint8;
+  const rawPointScaleIntervals = data.preview_point_scale_intervals_m;
   const min = data.axis_aligned_min_in_source_frame_m;
   const max = data.axis_aligned_max_in_source_frame_m;
   const totalCount = data.point_count;
@@ -149,6 +169,47 @@ export function parsePointCloudRenderArtifact(
     )
   ) {
     return null;
+  }
+  // Scale-only intervals belong to the original sampled point order, never
+  // to sorted render order. Fail closed on malformed or stale saved intervals.
+  // Historical artifacts without this optional field remain displayable.
+  if (rawPointScaleIntervals != null) {
+    const uncertainty = (provenance as Record<string, unknown>)
+      .relative_scale_uncertainty;
+    if (
+      typeof uncertainty !== "number" ||
+      !Number.isFinite(uncertainty) ||
+      uncertainty < 0 ||
+      uncertainty > 1 ||
+      !Array.isArray(rawPointScaleIntervals) ||
+      rawPointScaleIntervals.length !== points.length ||
+      !rawPointScaleIntervals.every(isPointScaleIntervals)
+    ) {
+      return null;
+    }
+    for (let index = 0; index < points.length; index += 1) {
+      for (let axis = 0; axis < 3; axis += 1) {
+        const coordinate = (points as Vec3[])[index][axis];
+        const expected = [
+          coordinate * (1 - uncertainty),
+          coordinate * (1 + uncertainty),
+        ].sort((a, b) => a - b);
+        const actual = (rawPointScaleIntervals as PointScaleIntervals[])[index][
+          axis
+        ];
+        if (
+          actual.some(
+            (value, bound) =>
+              Math.abs(value - expected[bound]) >
+              16 *
+                Number.EPSILON *
+                Math.max(1, Math.abs(value), Math.abs(expected[bound])),
+          )
+        ) {
+          return null;
+        }
+      }
+    }
   }
   // A coverage verdict without its omitted-extrema list is not auditable.
   // Older artifacts omit both fields and remain explicitly unassessed.
@@ -302,6 +363,10 @@ export function parsePointCloudRenderArtifact(
     points: points as Vec3[],
     indices: indices as number[],
     colors: colors as RGB[] | null,
+    pointScaleIntervals:
+      rawPointScaleIntervals == null
+        ? null
+        : (rawPointScaleIntervals as PointScaleIntervals[]),
     target,
     radius,
     totalCount: totalCount as number,
@@ -345,6 +410,19 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
   const [yaw, setYaw] = useState(30);
   const [pitch, setPitch] = useState(20);
   const [zoom, setZoom] = useState(1);
+  const [selectedSourceIndex, setSelectedSourceIndex] = useState<number | null>(
+    null,
+  );
+  const selectedDisplayIndex =
+    cloud?.indices.indexOf(selectedSourceIndex ?? -1) ?? -1;
+  const selectedPoint =
+    cloud && selectedDisplayIndex >= 0
+      ? cloud.points[selectedDisplayIndex]
+      : null;
+  const selectedIntervals =
+    cloud && selectedDisplayIndex >= 0
+      ? cloud.pointScaleIntervals?.[selectedDisplayIndex]
+      : null;
   const displayPoints = useMemo(() => {
     if (!cloud) return [];
     return cloud.points
@@ -389,6 +467,17 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
           <circle
             key={point.sourceIndex}
             data-source-point-index={point.sourceIndex}
+            role="button"
+            tabIndex={0}
+            aria-label={`Inspect source point ${point.sourceIndex}`}
+            aria-pressed={selectedSourceIndex === point.sourceIndex}
+            onClick={() => setSelectedSourceIndex(point.sourceIndex)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setSelectedSourceIndex(point.sourceIndex);
+              }
+            }}
             cx={point.x}
             cy={point.y}
             r={3}
@@ -404,6 +493,21 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
           </circle>
         ))}
       </svg>
+      <p className="annotation-helper" aria-live="polite">
+        {selectedPoint && selectedSourceIndex !== null
+          ? `Source point ${selectedSourceIndex} (unverified source frame): ${selectedPoint
+              .map((coordinate, axis) => `${["x", "y", "z"][axis]}=${coordinate.toPrecision(6)} m`)
+              .join(", ")}. ${selectedIntervals
+              ? `Scale-only coordinate intervals: ${selectedIntervals
+                  .map(
+                    (bounds, axis) =>
+                      `${["x", "y", "z"][axis]} [${bounds[0].toPrecision(6)}, ${bounds[1].toPrecision(6)}] m`,
+                  )
+                  .join("; ")}.`
+              : "Scale uncertainty unavailable."} Not registration or anatomical verification.
+          `
+          : "Select a displayed source point to inspect calibrated coordinates and scale-only uncertainty."}
+      </p>
       <div className="feature-grid">
         <label>
           Point yaw
