@@ -2421,3 +2421,22 @@ the exact new HEAD's CI, focused saved-workflow and backend tests complete.
 Real authenticated longitudinal scientific review, migration reconciliation,
 and installed Windows GUI/installer checks remain outstanding.
 **ReefVision 1.2 is NOT RELEASE-READY.**
+
+## Population CSV strict typing and export parity (2026-10-27)
+
+The previous 1.2 head `2be50971` completed 16/19 workflows successfully.
+CI, Pose Workflow Validation, and ReefVision 1.0 Acceptance all failed
+at strict mypy on 14 errors in `ecology_population_export.py`. The CSV
+renderer had reused the same `row` loop variable for two distinct
+Pydantic result types, causing mypy to treat population strata as
+per-unit summaries. The population loop now has a distinct typed variable,
+and the optional experimental-unit type is normalized to an empty string
+only at the CSV identifier boundary. This does not change scientific
+inference, the underlying model, the persisted workflow node, or review gates.
+
+A focused regression asserts that exported population-stratum fields
+match the typed source summary (including unit IDs, sampling windows,
+parent-colony disclosures, contributor denominators and mean changes).
+Existing standalone API and saved-workflow CSV parity tests remain in
+place. The changes are **not** accepted until exact-head CI passes; no
+local full-repository or installed Windows acceptance was performed.
