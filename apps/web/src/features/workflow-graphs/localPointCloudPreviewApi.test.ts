@@ -98,6 +98,22 @@ describe("previewLocalPointCloudFile", () => {
     expect(body.ply_text).toBe(ply);
   });
 
+  it("opts into bounded chord endpoint display without changing scientific inputs", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ measurement_status: "caller_supplied_unverified" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const file = localFile("reef.ply", new TextEncoder().encode(ply));
+    await previewLocalPointCloudFile("project", file, calibration, [[0, 1]], true);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.preserve_measured_chord_endpoints_in_preview).toBe(true);
+    expect(body.point_index_pairs).toEqual([[0, 1]]);
+    expect(body.ply_text).toBe(ply);
+    expect(body.calibration_evidence).toBe(calibration.calibration_evidence);
+  });
+
   it("rejects invalid source point pairs before any network request", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
