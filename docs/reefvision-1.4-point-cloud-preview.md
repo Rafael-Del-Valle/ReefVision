@@ -259,3 +259,27 @@ zero and absent uncertainty, plus standalone/saved-graph parity for both direct
 XYZ points and imported ASCII PLY. The sampled uncertainty field is optional
 display/scientific-review metadata, not a replacement for persistent 3D assets,
 anatomical landmarks, or calibrated biological surface/branch measurements.
+
+## Interactive sampled-point inspection (October 27, 2026)
+
+The read-only point-cloud viewer now allows mouse or keyboard selection of
+displayed source-index points. The inspection readout reports calibrated XYZ
+coordinates in the **unregistered source frame** and, when supplied, signed
+scale-only coordinate intervals. The viewer preserves original source indices
+despite depth sorting and does not modify saved workflow artifacts or scientific
+measurements. When the selected point is not present in a new display sample,
+no stale coordinates are shown.
+
+The viewer validates the optional per-point intervals against the associated
+calibrated coordinates and the provenance relative scale uncertainty. Invalid,
+misaligned, nonfinite, inverted or contradictory intervals fail closed instead
+of appearing as verified positions. Legacy saved artifacts without interval
+metadata remain viewable and explicitly report unknown scale uncertainty.
+The same viewer is used for standalone and persisted Workflow Builder preview
+results; frontend regressions cover mouse/keyboard inspection, source-index
+alignment, immutable artifacts and malformed saved evidence.
+
+This is **not** spatial registration, calibration verification, anatomical
+landmark identification, coral condition assessment, or persistent 3D storage.
+A source-index selection is a display inspection, not a scientist-verified
+biological annotation.
