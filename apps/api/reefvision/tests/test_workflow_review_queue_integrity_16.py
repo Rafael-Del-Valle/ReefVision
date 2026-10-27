@@ -758,7 +758,9 @@ def test_v3_accepts_real_pending_count_normalization(pending_count: float) -> No
     for item in items:
         item.signal_values_json["pending_proposals"] = pending_count
         item.normalized_signals_json["pending_proposals"] = normalized
-        part = next(part for part in item.score_breakdown_json if part["signal_id"] == "pending_proposals")
+        part = next(
+            part for part in item.score_breakdown_json if part["signal_id"] == "pending_proposals"
+        )
         part["raw_value"] = pending_count
         part["normalized_value"] = normalized
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
