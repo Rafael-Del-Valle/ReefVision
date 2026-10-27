@@ -163,7 +163,9 @@ def test_chord_endpoint_pinning_preserves_full_cloud_science() -> None:
     )
     assert 511 in default["preview_omitted_selected_chord_endpoint_indices"]
     assert default["preview_selected_chord_endpoints_covered"] is False
+    assert "preview_omits_selected_chord_endpoints" in default["qc_warnings"]
     assert pinned["preview_selected_chord_endpoints_covered"] is True
+    assert "preview_omits_selected_chord_endpoints" not in pinned["qc_warnings"]
     assert pinned["preview_omitted_selected_chord_endpoint_indices"] == []
     assert pinned["preview_sampling_strategy"] == "uniform_index_chord_endpoints_preserving"
     indices = pinned["preview_point_indices"]
@@ -219,19 +221,28 @@ def test_combined_extrema_and_chord_pinning_retains_even_source_coverage() -> No
     assert result["provenance"]["calibration_verified"] is False
 
 
-def test_chord_endpoint_pinning_saved_workflow_parity(client: TestClient) -> None:
+@pytest.mark.parametrize("pin_endpoints", [False, True])
+def test_chord_endpoint_pinning_saved_workflow_parity(
+    client: TestClient, pin_endpoints: bool
+) -> None:
     project_id = str(create_project(client, "Point cloud pinned chords")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = {
         **_params(),
         "preserve_axis_extrema_in_preview": False,
-        "preserve_measured_chord_endpoints_in_preview": True,
+        "preserve_measured_chord_endpoints_in_preview": pin_endpoints,
         "point_index_pairs": [[100, 511]],
     }
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    assert expected["preview_selected_chord_endpoints_covered"] is True
+    assert expected["preview_selected_chord_endpoints_covered"] is pin_endpoints
+    assert ("preview_omits_selected_chord_endpoints" in expected["qc_warnings"]) is (
+        not pin_endpoints
+    )
+    assert expected["preview_omitted_selected_chord_endpoint_indices"] == (
+        [] if pin_endpoints else [511]
+    )
     invalid = client.post(
         f"{base}/spatial/point-cloud-preview",
         json={**params, "preserve_measured_chord_endpoints_in_preview": "true"},
