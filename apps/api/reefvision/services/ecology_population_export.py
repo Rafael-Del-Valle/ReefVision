@@ -24,6 +24,11 @@ _COLUMNS = (
     "project_id",
     "source_input_sha256",
     "report_sha256",
+    "source_fingerprint_rechecked",
+    "source_registry_history_sha256",
+    "source_image_evidence_sha256",
+    "source_annotation_evidence_sha256",
+    "source_calibration_evidence_sha256",
     "row_type",
     "metric",
     "experimental_unit_type",
@@ -77,6 +82,13 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
     output = StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(_COLUMNS)
+    source_provenance = (
+        "true",
+        response.source_registry_history_sha256 or "",
+        response.source_image_evidence_sha256 or "",
+        response.source_annotation_evidence_sha256 or "",
+        response.source_calibration_evidence_sha256 or "",
+    )
     for row in sorted(
         response.projected_unit_summaries,
         key=lambda item: (
@@ -88,10 +100,11 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
         eligible = row.unit_status == "candidate"
         writer.writerow(
             (
-                "ecology-population-export-0001",
+                "ecology-population-export-0002",
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
+                *source_provenance,
                 "declared_unit",
                 row.metric,
                 _csv_identifier(row.experimental_unit_type or ""),
@@ -129,10 +142,11 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
     ):
         writer.writerow(
             (
-                "ecology-population-export-0001",
+                "ecology-population-export-0002",
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
+                *source_provenance,
                 "population_stratum",
                 population_row.metric,
                 _csv_identifier(population_row.experimental_unit_type or ""),
