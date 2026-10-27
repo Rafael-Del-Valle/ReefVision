@@ -394,6 +394,64 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert disputed_artifact["payload_json"] == disputed_result
     assert len(disputed_artifact["payload_sha256"]) == 64
 
+    # An inconclusive registration review also withholds transformed-centroid
+    # results. A lack of reviewer confidence is not positive alignment evidence.
+    inconclusive_registration = {
+        **registration_evidence,
+        "independent_review_decision": "inconclusive",
+        "independent_review_note": "Insufficient common landmarks to assess alignment",
+    }
+    inconclusive_response = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={
+            "before": before,
+            "after": after,
+            "registration_evidence": inconclusive_registration,
+            "reidentification_evidence": reidentification_evidence,
+        },
+    )
+    assert inconclusive_response.status_code == 200, inconclusive_response.text
+    inconclusive_result = inconclusive_response.json()
+    for field in (
+        "registered_surface_centroid_offset_target_frame_m",
+        "registered_surface_centroid_separation_m",
+        "registered_centroid_separation_to_registration_rms_ratio",
+        "registered_surface_centroid_separation_caller_bound_interval_m",
+        "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m",
+    ):
+        assert inconclusive_result[field] is None
+    assert inconclusive_result["registration_translation_magnitude_m"] == pytest.approx(0.1)
+    assert inconclusive_result["before_surface_area_m2"] == expected["before_surface_area_m2"]
+    assert inconclusive_result["after_surface_area_m2"] == expected["after_surface_area_m2"]
+    assert inconclusive_result["provenance"]["registration_evidence"] == inconclusive_registration
+    assert inconclusive_result["provenance"]["coordinate_registration_verified"] is False
+    assert "registration_independent_review_inconclusive" in inconclusive_result["qc_warnings"]
+    assert (
+        "registered_surface_centroid_comparison_withheld_inconclusive_alignment"
+        in inconclusive_result["qc_warnings"]
+    )
+    graph["graph_id"] = "mesh-longitudinal-inconclusive-registration-v14"
+    graph["nodes"][3]["parameters"]["registration_evidence"] = inconclusive_registration
+    inconclusive_saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert inconclusive_saved.status_code == 201, inconclusive_saved.text
+    inconclusive_run = client.post(
+        f"{base}/workflow-runs",
+        json={"graph_record_id": inconclusive_saved.json()["id"]},
+    )
+    assert inconclusive_run.status_code == 202, inconclusive_run.text
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(inconclusive_run.json()["job_id"])
+    )
+    inconclusive_detail = client.get(f"/api/v1/workflow-runs/{inconclusive_run.json()['id']}")
+    assert inconclusive_detail.status_code == 200, inconclusive_detail.text
+    inconclusive_artifact = next(
+        item
+        for item in inconclusive_detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert inconclusive_artifact["payload_json"] == inconclusive_result
+    assert len(inconclusive_artifact["payload_sha256"]) == 64
+
     # An independently disputed specimen match must withhold organism-change
     # estimates even when the spatial registration itself is not disputed.
     disputed_identity = {
