@@ -2472,3 +2472,33 @@ used by the standalone CSV API and the executable persisted Workflow Builder
 node. Corrected the Ruff formatting error in this test file reported by the
 previous exact-head CI; latest-head CI and installed Windows acceptance are
 still required before any release-ready declaration.
+
+## Population CSV auditable source lineage (2026-10-27)
+
+The existing project-owned `population.csv` endpoint and executable,
+persisted `ecology_population_csv_export` Workflow Builder node now emit
+CSV schema `ecology-population-export-0002`. Each declared-unit and
+population-stratum row includes an explicit
+`source_fingerprint_rechecked=true` flag and the source registry-history,
+image-evidence, annotation-evidence and calibration-evidence SHA-256
+references. This makes the previously implicit audit chain visible in
+exported research tables and retains byte-for-byte standalone/saved-workflow
+CSV parity. Optional unavailable legacy evidence hashes are exported as
+empty cells, never invented identifiers. The renderer still rejects
+non-recheckable legacy source contracts.
+
+A focused regression checks both row types and their exact source hash
+values, then alters a calibration-evidence digest without re-signing the
+source and requires fail-closed fingerprint validation. The previous head
+`8486c37d` completed **16/19 GitHub Actions workflows**; CI, Pose
+Workflow Validation and ReefVision 1.0 Acceptance all stopped at the same
+Ruff extra-blank-line error in the population CSV test. This increment
+also removes that exact formatting defect. Latest-head CI and native
+Windows GUI/installer acceptance remain unverified.
+
+The added hash references prove reproducible linkage only, **not** human
+review, calibrated growth accuracy, authenticated organism identity, or
+independent biological replication. All results remain
+`linked_unverified` / `scientist_review_required`, with independent-unit
+inference prohibited. No new migration, environmental subsystem, model
+download, branch merge, tag or release is introduced.
