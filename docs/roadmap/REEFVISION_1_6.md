@@ -1209,3 +1209,29 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - **Release HOLD:** full new-head CI, independent 1.1/1.6 Alembic `0038`
   compatibility, native installed-GUI, MSI upgrade/rollback and representative
   biological-data validation remain outstanding. 1.7 and revised 1.8 untouched.
+
+## 2026-10-27 — Track D saved QC replay guard versus scientific validator (HOLD)
+
+- Audited draft PR #77, master issue #76, isolated 1.6 branch, the v2 QC
+  integrity validator, the saved executable Workflow Builder regression, and
+  both failed GitHub Actions backend logs at predecessor `5e2c3c30`.
+  **18/20 workflows succeeded**; CI and ReefVision 1.0 Acceptance each ran
+  1,403 passing backend tests, 1 failing test and 32 skips. The sole failure
+  was a regression's expected exception message, not a silent QC acceptance.
+- The saved workflow's retry-parameter equality guard correctly rejects a
+  modified threshold *before* the v2 snapshot integrity validator runs.
+  Strengthened the regression to explicitly invoke the snapshot validator
+  on a re-signed impossible threshold (1.25) and assert its integrity failure,
+  then independently assert the saved-workflow adapter's earlier retry guard.
+  The test restores the original scientific configuration and verifies that
+  the same saved typed QC queue remains reusable with researcher review.
+- Test commit `1306fb4f6ab82a45ad564beb4ed742b31fe3d46d` was pushed and
+  independently read back (blob `a2e082769e8a2404fe07ed497a014f87d3159456`).
+  No production scoring, user annotations, audit history or workflow data
+  were changed. Exact-head CI had not registered at initial read-back; no
+  new passing test claim is made.
+- **Release HOLD:** new-head CI, independent 1.1/1.6 Alembic migration
+  collision, Windows interactive installed-GUI and MSI upgrade/rollback,
+  and representative scientific acceptance remain unresolved. No merge,
+  release, deployment, pretrained download or branch blending. 1.7/1.8
+  remain unchanged.
