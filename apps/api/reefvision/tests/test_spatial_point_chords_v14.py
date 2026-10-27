@@ -152,7 +152,9 @@ def test_repeated_unordered_point_chords_are_flagged_in_saved_workflow(
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
