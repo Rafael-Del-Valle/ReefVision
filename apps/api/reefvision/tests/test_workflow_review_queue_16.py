@@ -165,16 +165,13 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
         },
     )
     assert blocked_bulk.status_code == 409, blocked_bulk.text
-    unchanged_item = client.get(
-        f"/api/v1/review-queues/{result['queue_id']}/items"
-    ).json()["items"][0]
+    unchanged_item = client.get(f"/api/v1/review-queues/{result['queue_id']}/items").json()[
+        "items"
+    ][0]
     assert unchanged_item["review_state"] == "pending"
     with app.state.session_factory() as session:
         assert (
-            session.query(ReviewQueueItemEvent)
-            .filter_by(review_queue_item_id=item_id)
-            .count()
-            == 1
+            session.query(ReviewQueueItemEvent).filter_by(review_queue_item_id=item_id).count() == 1
         )
     with app.state.session_factory() as session:
         event = session.get(ReviewQueueItemEvent, comment.json()["id"])
