@@ -60,6 +60,18 @@ _TECHNICAL_REPLICATES = frozenset(
         "thumbnails",
         "subimage",
         "subimages",
+        "keypoint",
+        "keypoints",
+        "tracklet",
+        "tracklets",
+        "heatmap",
+        "heatmaps",
+        "polygon",
+        "polygons",
+        "screenshot",
+        "screenshots",
+        "subframe",
+        "subframes",
     }
 )
 
