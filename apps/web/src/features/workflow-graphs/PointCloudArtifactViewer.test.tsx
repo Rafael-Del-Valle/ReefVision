@@ -355,14 +355,31 @@ describe("PointCloudArtifactViewer", () => {
       "Source-axis extrema coverage unassessed",
     );
   });
+  it("rejects unpaired source-axis coverage verdicts without inventing omissions", () => {
+    for (const verdict of [true, false, null, "true"]) {
+      expect(
+        parsePointCloudRenderArtifact({
+          ...validArtifact,
+          preview_axis_extrema_covered: verdict,
+        }),
+      ).toBeNull();
+    }
+    expect(
+      parsePointCloudRenderArtifact({
+        ...validArtifact,
+        preview_omitted_axis_extrema: [],
+      }),
+    ).toBeNull();
+    // Historical artifacts without either field remain displayable as unassessed.
+    expect(parsePointCloudRenderArtifact(validArtifact)).not.toBeNull();
+  });
+
   it("shows omitted measured source endpoints without changing the full-cloud chord", () => {
     const artifact = {
       ...validArtifact,
       point_count: 513,
       preview_point_indices: [0, 256, 512],
-      selected_point_chords: [
-        { point_indices: [0, 2], chord_distance_m: 1 },
-      ],
+      selected_point_chords: [{ point_indices: [0, 2], chord_distance_m: 1 }],
       preview_omitted_selected_chord_endpoint_indices: [2],
       preview_selected_chord_endpoints_covered: false,
     };
@@ -380,9 +397,7 @@ describe("PointCloudArtifactViewer", () => {
   it("validates endpoint coverage against original source indices and retains legacy previews", () => {
     const artifact = {
       ...validArtifact,
-      selected_point_chords: [
-        { point_indices: [0, 2], chord_distance_m: 1 },
-      ],
+      selected_point_chords: [{ point_indices: [0, 2], chord_distance_m: 1 }],
       preview_omitted_selected_chord_endpoint_indices: [],
       preview_selected_chord_endpoints_covered: true,
     };
@@ -422,5 +437,4 @@ describe("PointCloudArtifactViewer", () => {
       "Selected chord endpoints visible",
     );
   });
-
 });
