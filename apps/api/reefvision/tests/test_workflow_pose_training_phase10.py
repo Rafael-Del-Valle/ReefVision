@@ -642,6 +642,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
             "seed model changed",
         ),
         ("provider_id", "corrupted-provider", "configuration changed"),
+        ("resource_limits_json", {"max_gpu_memory_mb": 1024}, "configuration changed"),
         (
             "evaluation_config_json",
             {"validation_mode": "separate_frozen_pose_dataset"},
