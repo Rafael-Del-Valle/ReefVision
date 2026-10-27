@@ -454,17 +454,26 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   );
 }
 
-export function Gallery({
-  project,
-  onOpenAnnotation,
-  onInferenceSelectionChange,
-  onFocusedImageChange,
-}: {
+type GalleryProps = {
   project: Project;
   onOpenAnnotation?: (imageId: string) => void;
   onInferenceSelectionChange?: (imageIds: string[]) => void;
   onFocusedImageChange?: (imageId: string | null) => void;
-}) {
+};
+
+// Switching projects must discard the previous project's viewport, import
+// state, and image focus. A keyed inner gallery also restores each project's
+// own saved page and focus without leaking them into the next project.
+export function Gallery(props: GalleryProps) {
+  return <GalleryContent key={props.project.id} {...props} />;
+}
+
+function GalleryContent({
+  project,
+  onOpenAnnotation,
+  onInferenceSelectionChange,
+  onFocusedImageChange,
+}: GalleryProps) {
   const queryClient = useQueryClient();
   const folderInput = useRef<HTMLInputElement | null>(null);
   // A second picker event can fire before React rerenders the pending state.
