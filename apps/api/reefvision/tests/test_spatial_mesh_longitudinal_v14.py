@@ -72,6 +72,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "target_observed_at_utc": "2026-10-02T07:00:00-05:00",
         "source_meters_per_mesh_unit": 1.0,
         "target_meters_per_mesh_unit": 1.0,
+        "source_relative_scale_uncertainty": 0.1,
+        "target_relative_scale_uncertainty": 0.1,
         "source_to_target_transform_m": _rigid_transform(),
         "source_centroid_position_error_bound_m": 0.01,
         "target_centroid_position_error_bound_m": 0.02,
@@ -210,6 +212,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert "registration_geometry_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_calibration_scale_binding_unavailable" not in expected["qc_warnings"]
+    assert "registration_scale_uncertainty_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_project_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_observation_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_timepoint_binding_unavailable" not in expected["qc_warnings"]
@@ -717,6 +720,72 @@ def test_registration_scale_binding_rejects_recalibrated_geometry() -> None:
     legacy_result = compare_mesh_observations(before, recalibrated, legacy)
     assert "registration_calibration_scale_binding_unavailable" in legacy_result["qc_warnings"]
     assert legacy_result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+
+
+def test_registration_uncertainty_binding_rejects_reestimated_calibration() -> None:
+    """A changed uncertainty estimate invalidates evidence even at identical scale."""
+    before_payload = {
+        **_mesh("first", "2026-10-01T12:00:00Z", 1),
+        "coordinate_frame_id": "survey-local",
+    }
+    after_payload = {
+        **_mesh("second", "2026-10-02T12:00:00Z", 2),
+        "coordinate_frame_id": "survey-local",
+    }
+    before = preview_from_request(MeshPreviewRequest.model_validate(before_payload))
+    after = preview_from_request(MeshPreviewRequest.model_validate(after_payload))
+    before["project_id"] = "study-1"
+    after["project_id"] = "study-1"
+    evidence = {
+        "source_frame_id": "survey-local",
+        "target_frame_id": "survey-local",
+        "method": "landmark",
+        "rms_residual_m": 0.01,
+        "correspondence_count": 6,
+        "evidence_note": "Provisional registration with calibration QC binding",
+        "source_meters_per_mesh_unit": 1.0,
+        "target_meters_per_mesh_unit": 1.0,
+        "source_relative_scale_uncertainty": 0.1,
+        "target_relative_scale_uncertainty": 0.1,
+    }
+    original = compare_mesh_observations(before, after, evidence)
+    assert "registration_scale_uncertainty_binding_unavailable" not in original["qc_warnings"]
+    assert original["provenance"]["registration_evidence"] == evidence
+
+    revised_payload = {**after_payload, "relative_scale_uncertainty": 0.2}
+    revised = preview_from_request(MeshPreviewRequest.model_validate(revised_payload))
+    revised["project_id"] = "study-1"
+    assert revised["provenance"]["geometry_sha256"] == after["provenance"]["geometry_sha256"]
+    assert revised["provenance"]["meters_per_mesh_unit"] == 1.0
+    with pytest.raises(ValueError, match="must match both scale uncertainties"):
+        compare_mesh_observations(before, revised, evidence)
+    with pytest.raises(ValueError, match="requires both values"):
+        MeshRegistrationEvidence.model_validate(
+            {**evidence, "target_relative_scale_uncertainty": None}
+        )
+    with pytest.raises(ValueError):
+        MeshRegistrationEvidence.model_validate(
+            {**evidence, "target_relative_scale_uncertainty": True}
+        )
+
+    mutated = MeshRegistrationEvidence.model_validate(evidence)
+    mutated.target_relative_scale_uncertainty = 0.2
+    with pytest.raises(ValueError, match="must match both scale uncertainties"):
+        compare_mesh_observations(before, after, mutated)
+
+    # Older registrations remain readable, but cannot claim QC revision binding.
+    legacy = {
+        key: value
+        for key, value in evidence.items()
+        if key not in (
+            "source_relative_scale_uncertainty",
+            "target_relative_scale_uncertainty",
+        )
+    }
+    legacy_result = compare_mesh_observations(before, revised, legacy)
+    assert "registration_scale_uncertainty_binding_unavailable" in legacy_result["qc_warnings"]
+    assert legacy_result["provenance"]["calibration_verified"] is False
 
 
 @pytest.mark.parametrize(
