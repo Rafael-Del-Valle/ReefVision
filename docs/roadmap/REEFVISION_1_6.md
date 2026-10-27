@@ -1302,3 +1302,18 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   results are **not yet verified** for this head. Existing 1.1/1.6 Alembic
   revision collision and native Windows MSI/installed-GUI acceptance remain
   release blockers. No merge, tag, deployment or user-data mutation.
+
+## 2026-10-27 — Actionable first-run onboarding (Track D)
+
+- First-run help now opens the existing local class manager, QC review queue,
+  saved Workflow Builder, or System status workspace.
+- Project-only navigation is disabled until a project is selected. System
+  status remains available without a project. Navigating closes the help
+  overlay for the session without writing the permanent-dismissal preference.
+- Frontend regressions cover workflow navigation, dismissal semantics, disabled
+  project controls and project-independent system access.
+- This is a UI navigation improvement, not a new scientific-analysis node.
+  The existing typed executable `qc_review_queue` and standalone/saved-run
+  regression contracts remain intact.
+- Release HOLD: exact-head CI, Windows installed GUI and MSI upgrade/rollback,
+  1.1/1.6 Alembic revision-0038 reconciliation, and representative science tests.

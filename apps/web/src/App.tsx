@@ -1079,6 +1079,12 @@ function ReefVisionMainApp() {
       {showOnboarding && (
         <OnboardingModal
           version={health.data?.version ?? applicationVersion}
+          hasProject={Boolean(selectedProject)}
+          onNavigate={(destination) => {
+            setEditorLaunch(null);
+            if (destination === "system") setSelectedProjectId(null);
+            setActiveView(destination);
+          }}
           onClose={() => setShowOnboarding(false)}
           onDismissPermanently={dismissOnboardingPermanently}
         />

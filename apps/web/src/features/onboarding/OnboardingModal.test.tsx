@@ -14,6 +14,8 @@ function OnboardingHarness() {
       {open && (
         <OnboardingModal
           version="1.6"
+          hasProject={true}
+          onNavigate={vi.fn()}
           onClose={() => setOpen(false)}
           onDismissPermanently={() => setOpen(false)}
         />
@@ -67,6 +69,8 @@ describe("onboarding local usability", () => {
     render(
       <OnboardingModal
         version="1.6"
+        hasProject={true}
+        onNavigate={vi.fn()}
         onClose={vi.fn()}
         onDismissPermanently={vi.fn()}
       />,
@@ -80,10 +84,63 @@ describe("onboarding local usability", () => {
     expect(document.activeElement).toBe(close);
   });
 
+  it("opens saved workflows without permanently dismissing onboarding", () => {
+    const onNavigate = vi.fn();
+    const onClose = vi.fn();
+    const onDismissPermanently = vi.fn();
+    render(
+      <OnboardingModal
+        version="1.6"
+        hasProject={true}
+        onNavigate={onNavigate}
+        onClose={onClose}
+        onDismissPermanently={onDismissPermanently}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Workflow Builder" }),
+    );
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith("workflows");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onDismissPermanently).not.toHaveBeenCalled();
+  });
+
+  it("disables project-only links until a project is selected", () => {
+    const onNavigate = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <OnboardingModal
+        version="1.6"
+        hasProject={false}
+        onNavigate={onNavigate}
+        onClose={onClose}
+        onDismissPermanently={vi.fn()}
+      />,
+    );
+    for (const name of [
+      "Open class manager",
+      "Open QC review",
+      "Open Workflow Builder",
+    ]) {
+      const button = screen.getByRole("button", { name });
+      expect(button.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(button);
+    }
+    expect(screen.getByText(/Select a project to open class/)).toBeTruthy();
+    expect(onNavigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Open System status" }));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith("system");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("describes reviewed QC and saved workflows", () => {
     render(
       <OnboardingModal
         version="1.6"
+        hasProject={true}
+        onNavigate={vi.fn()}
         onClose={vi.fn()}
         onDismissPermanently={vi.fn()}
       />,

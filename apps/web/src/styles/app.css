@@ -303,6 +303,15 @@ button:disabled {
   gap: 0.85rem;
   margin: 1rem 0 1.25rem;
 }
+.onboarding-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.onboarding-card-actions button {
+  max-width: 100%;
+}
 .class-panel {
   padding: 1.3rem;
 }

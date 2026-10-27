@@ -1,13 +1,23 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
+export type OnboardingDestination =
+  | "classes"
+  | "review_queue"
+  | "workflows"
+  | "system";
+
 interface OnboardingModalProps {
   version: string;
+  hasProject: boolean;
+  onNavigate: (destination: OnboardingDestination) => void;
   onClose: () => void;
   onDismissPermanently: () => void;
 }
 
 export function OnboardingModal({
   version,
+  hasProject,
+  onNavigate,
   onClose,
   onDismissPermanently,
 }: OnboardingModalProps) {
@@ -40,6 +50,11 @@ export function OnboardingModal({
       if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, []);
+
+  function navigateTo(destination: OnboardingDestination) {
+    onNavigate(destination);
+    onClose();
+  }
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {
@@ -118,6 +133,35 @@ export function OnboardingModal({
               and provenance; queue rankings never approve model predictions or
               replace researcher verification.
             </p>
+            {!hasProject && (
+              <p>Select a project to open class, QC, or workflow tools.</p>
+            )}
+            <div className="onboarding-card-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={!hasProject}
+                onClick={() => navigateTo("classes")}
+              >
+                Open class manager
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={!hasProject}
+                onClick={() => navigateTo("review_queue")}
+              >
+                Open QC review
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={!hasProject}
+                onClick={() => navigateTo("workflows")}
+              >
+                Open Workflow Builder
+              </button>
+            </div>
           </article>
           <article className="onboarding-card">
             <h3>Recovery and support</h3>
@@ -126,6 +170,15 @@ export function OnboardingModal({
               location, log paths, and redacted diagnostics bundles. Keep a
               verified backup before moving research data to another computer.
             </p>
+            <div className="onboarding-card-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => navigateTo("system")}
+              >
+                Open System status
+              </button>
+            </div>
           </article>
         </div>
 
