@@ -53,6 +53,21 @@ function canonicalJsonValue(value: unknown): unknown {
   }
   return value;
 }
+// Copernicus records use different variable names/units for uo and vo, but
+// all shared grid/run metadata must agree before constructing one vector.
+// Otherwise two ensemble members or revised grids could form a false current.
+function sharedSourceMetadata(row: ScientificRecord): unknown {
+  const metadata = row.provenance.source_metadata;
+  if (!metadata) return null;
+  return canonicalJsonValue(
+    Object.fromEntries(
+      Object.entries(metadata).filter(
+        ([key]) =>
+          !["provider_variable", "provider_unit", "standard_name"].includes(key),
+      ),
+    ),
+  );
+}
 export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
   const groups = new Map<
     string,
@@ -112,6 +127,7 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       row.provenance.spatial_resolution_m ?? null,
       row.provenance.temporal_resolution_s ?? null,
       canonicalJsonValue(row.provenance.processing_parameters ?? null),
+      sharedSourceMetadata(row),
       // Components from separate acquisitions must not form a synthetic current.
       row.provenance.acquired_at,
       row.environmental_cache_key,
