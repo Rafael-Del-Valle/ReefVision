@@ -56,9 +56,7 @@ def _case(
         ("tank", "custom study block", False),
     ],
 )
-def test_biological_sampling_level_alias_policy(
-    first: str, second: str, equivalent: bool
-) -> None:
+def test_biological_sampling_level_alias_policy(first: str, second: str, equivalent: bool) -> None:
     assert ecological_unit_types_equivalent(first, second) is equivalent
 
 
@@ -83,9 +81,7 @@ def test_standalone_aliases_do_not_split_one_physical_tank(
 
 
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
-def test_alias_inputs_remain_distinguishable_in_provenance(
-    client: TestClient, kind: str
-) -> None:
+def test_alias_inputs_remain_distinguishable_in_provenance(client: TestClient, kind: str) -> None:
     path, payload, _, _ = _case(kind)
     first = client.post(path, json=payload)
     assert first.status_code == 200, first.text
@@ -102,9 +98,7 @@ def test_alias_inputs_remain_distinguishable_in_provenance(
 
 
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
-def test_incompatible_sampling_levels_still_fail_closed(
-    client: TestClient, kind: str
-) -> None:
+def test_incompatible_sampling_levels_still_fail_closed(client: TestClient, kind: str) -> None:
     path, payload, _, _ = _case(kind, conflicting=True)
     response = client.post(path, json=payload)
     assert response.status_code == (422 if kind == "longitudinal" else 400)
