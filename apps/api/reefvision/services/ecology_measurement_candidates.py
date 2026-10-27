@@ -77,11 +77,11 @@ def _full_parent_roster_feasible(
     return True
 
 
-def _assert_joint_full_parent_rosters(
+def _assert_joint_full_parent_component(
     full_parent_rosters: list[tuple[tuple[str, ...], tuple[str, ...]]],
     possible_parents_by_organism: dict[str, set[str]],
 ) -> None:
-    """Check small overlapping full rosters as one constrained lineage system.
+    """Check one bounded connected set of overlapping parent rosters.
 
     Individual row matching and pair-graph checks are necessary but not
     sufficient for three-parent overlaps. This bounded exact search rejects
@@ -142,6 +142,42 @@ def _assert_joint_full_parent_rosters(
     if feasible(0) is False:
         raise ValidationError(
             "Projected parent-colony assignments are jointly impossible across metrics"
+        )
+
+
+def _assert_joint_full_parent_rosters(
+    full_parent_rosters: list[tuple[tuple[str, ...], tuple[str, ...]]],
+    possible_parents_by_organism: dict[str, set[str]],
+) -> None:
+    """Check small overlapping components even when the total roster is large.
+
+    Unrelated organisms have no shared lineage variable, so their constraints
+    can be checked independently. Deduplicate identical rosters before applying
+    the per-component 12-organism/24-roster search budget; otherwise unrelated
+    or repeated observations could suppress detection of a proven contradiction.
+    Large individual components still remain unverified, not asserted feasible.
+    """
+    unique_rosters = sorted(set(full_parent_rosters))
+    by_organism: dict[str, set[int]] = {}
+    for index, (organisms, _) in enumerate(unique_rosters):
+        for organism in organisms:
+            by_organism.setdefault(organism, set()).add(index)
+
+    remaining = set(range(len(unique_rosters)))
+    while remaining:
+        pending = [min(remaining)]
+        component: set[int] = set()
+        while pending:
+            index = pending.pop()
+            if index in component:
+                continue
+            component.add(index)
+            remaining.discard(index)
+            for organism in unique_rosters[index][0]:
+                pending.extend(by_organism[organism] - component)
+        _assert_joint_full_parent_component(
+            [unique_rosters[index] for index in sorted(component)],
+            possible_parents_by_organism,
         )
 
 
