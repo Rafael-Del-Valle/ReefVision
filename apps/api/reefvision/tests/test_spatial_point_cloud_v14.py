@@ -7,8 +7,10 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.spatial_point_cloud_v14 import PointCloudPreviewRequest
 from reefvision.services.spatial_point_cloud_v14 import (
     measure_point_cloud_preview,
     parse_ascii_ply_points,
@@ -71,6 +73,60 @@ def test_bad_ply_rejected(bad: str) -> None:
             calibration_method="ruler",
             calibration_evidence="Unreviewed ruler",
         )
+
+
+@pytest.mark.parametrize("blank", [" ", " \\t\\n "])
+def test_blank_point_cloud_calibration_evidence_rejected_across_entrypoints(
+    client: TestClient, blank: str
+) -> None:
+    invalid = {**PARAMS, "calibration_evidence": blank}
+    with pytest.raises(PydanticValidationError, match="cannot be blank"):
+        PointCloudPreviewRequest.model_validate(invalid)
+    with pytest.raises(ValueError, match="Calibration evidence is required"):
+        measure_point_cloud_preview(
+            points=[[0.0, 0.0, 0.0]],
+            meters_per_unit=0.01,
+            calibration_method="ruler",
+            calibration_evidence=blank,
+        )
+
+    project_id = str(create_project(client, "Point cloud calibration audit")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=invalid)
+    assert standalone.status_code == 422, standalone.text
+
+    graph = {
+        "graph_id": "point-cloud-blank-calibration-v14",
+        "name": "Reject unreviewable point-cloud calibration",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": invalid},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "point_cloud_measurement_preview"
+        for artifact in detail.json()["artifacts"]
+    )
 
 
 def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
