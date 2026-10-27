@@ -318,6 +318,81 @@ describe("Gallery", () => {
     await waitFor(() => expect(importCalls).toHaveBeenCalledTimes(2));
   });
 
+  it("serializes camera imports across file and folder pickers", async () => {
+    let resolveFirstImport!: (response: Response) => void;
+    const firstImport = new Promise<Response>((resolve) => {
+      resolveFirstImport = resolve;
+    });
+    const importedFilenames: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 24,
+          pages: 0,
+        });
+      }
+      if (url.endsWith(`/projects/${project.id}/imports/images`)) {
+        const files = (init?.body as FormData).getAll("files") as File[];
+        importedFilenames.push(...files.map((file) => file.name));
+        if (importedFilenames.length === 1) return firstImport;
+        return jsonResponse({
+          project_id: project.id,
+          successful: [],
+          duplicates: [],
+          unsupported: [],
+          failed: [],
+        });
+      }
+      throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderGallery();
+    await screen.findByText("No images yet");
+    const fileInput = screen.getByLabelText("Import files") as HTMLInputElement;
+    const folderInput = screen.getByLabelText("Import folder") as HTMLInputElement;
+    await userEvent.upload(
+      fileInput,
+      new File(["first"], "first.JPEG", { type: "image/jpeg" }),
+    );
+    await waitFor(() => expect(importedFilenames).toEqual(["first.JPEG"]));
+    expect(fileInput).toBeDisabled();
+    expect(folderInput).toBeDisabled();
+
+    // Even a synthetic change event before a pending-state rerender must not
+    // launch another mutation or overwrite the first import's progress.
+    fireEvent.change(folderInput, {
+      target: {
+        files: [new File(["second"], "second.jpg", { type: "image/jpeg" })],
+      },
+    });
+    expect(importedFilenames).toEqual(["first.JPEG"]);
+
+    await act(async () => {
+      resolveFirstImport(
+        jsonResponse({
+          project_id: project.id,
+          successful: [],
+          duplicates: [],
+          unsupported: [],
+          failed: [],
+        }),
+      );
+    });
+    await waitFor(() => expect(fileInput).not.toBeDisabled());
+    expect(folderInput).not.toBeDisabled();
+    await userEvent.upload(
+      fileInput,
+      new File(["second"], "second.jpg", { type: "image/jpeg" }),
+    );
+    await waitFor(() =>
+      expect(importedFilenames).toEqual(["first.JPEG", "second.jpg"]),
+    );
+  });
+
   it("jumps directly to a requested page with global newest-first ordering", async () => {
     const requestedPages: number[] = [];
     const fetchMock = vi
