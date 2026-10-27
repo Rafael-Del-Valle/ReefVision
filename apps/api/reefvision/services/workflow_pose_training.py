@@ -362,6 +362,8 @@ def _completed_workflow_pose_training_run(
             or snapshot.get("pose_schema_id") != dataset.pose_schema_id
             or snapshot.get("pose_schema_revision") != dataset.pose_schema_revision
             or snapshot.get("pose_schema_content_hash") != dataset.pose_schema_content_hash
+            or not isinstance(snapshot.get("split_manifest"), dict)
+            or canonical_json_sha256(snapshot["split_manifest"]) != split_manifest_sha256
         ):
             raise ValidationError("Recovered pose-training node frozen provenance changed")
 

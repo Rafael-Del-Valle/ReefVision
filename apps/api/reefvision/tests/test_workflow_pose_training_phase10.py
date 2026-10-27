@@ -463,6 +463,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     for field, corrupt_value in (
         ("pose_training_dataset_manifest_sha256", "0" * 64),
         ("pose_schema_id", "corrupted-schema-id"),
+        ("split_manifest", {"schema_version": "tampered"}),
     ):
         with app.state.session_factory() as session:
             persisted = session.get(TrainingRun, result["training_run_id"])
