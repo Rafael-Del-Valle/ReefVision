@@ -102,6 +102,15 @@ class MeshRegistrationEvidence(BaseModel):
     # This is a consistency binding, not proof of alignment or identity.
     source_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     target_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    # The same reconstruction may be recalibrated without changing its geometry
+    # hash. Pairwise scale bindings prevent reusing a meter-valued transform
+    # against a newly scaled mesh; these remain unverified caller evidence.
+    source_meters_per_mesh_unit: StrictFloat | None = Field(
+        default=None, gt=0, le=1_000_000, allow_inf_nan=False
+    )
+    target_meters_per_mesh_unit: StrictFloat | None = Field(
+        default=None, gt=0, le=1_000_000, allow_inf_nan=False
+    )
     # Optional caller-supplied rigid source-to-target transform in meters.
     # Structural validity does not establish correct alignment or review.
     source_to_target_transform_m: list[list[StrictFloat]] | None = None
@@ -126,6 +135,10 @@ class MeshRegistrationEvidence(BaseModel):
             raise ValueError("Registration timepoint binding requires both UTC timestamps")
         if (self.source_geometry_sha256 is None) != (self.target_geometry_sha256 is None):
             raise ValueError("Registration geometry binding requires both SHA-256 fingerprints")
+        if (self.source_meters_per_mesh_unit is None) != (
+            self.target_meters_per_mesh_unit is None
+        ):
+            raise ValueError("Registration calibration scale binding requires both scales")
         review_fields = (
             self.independent_reviewer_id,
             self.independent_review_decision,
