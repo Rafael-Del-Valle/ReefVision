@@ -67,15 +67,28 @@ def test_measurement_csv_preserves_all_source_links_and_saved_workflow_parity(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in workflow["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
-    persisted = EcologyMeasurementCandidatesResponse.model_validate(
-        artifacts[0]["payload_json"]
-    )
+    persisted = EcologyMeasurementCandidatesResponse.model_validate(artifacts[0]["payload_json"])
     assert render_ecology_measurements_csv(persisted) == csv_response.text
+
+
+def test_measurement_csv_is_stable_under_qc_series_permutation(
+    client: TestClient,
+) -> None:
+    """Equivalent QC ordering must not change a reproducible source CSV."""
+    project_id, _ = _source(client)
+    path = f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    response = client.get(path)
+    assert response.status_code == 200, response.text
+    payload = EcologyMeasurementCandidatesResponse.model_validate(response.json())
+    assert len(payload.sampling_date_qc) > 1
+    original = render_ecology_measurements_csv(payload)
+    permuted = payload.model_copy(
+        update={"sampling_date_qc": list(reversed(payload.sampling_date_qc))}
+    )
+    assert render_ecology_measurements_csv(permuted) == original
 
 
 def test_measurement_csv_rejects_modified_source_even_if_qc_counts_unchanged(
@@ -196,9 +209,7 @@ def test_executable_saved_workflow_exports_typed_unverified_csv(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in detail.json()["artifacts"]
-        if row["data_type"] == "ecology_measurement_csv"
+        row for row in detail.json()["artifacts"] if row["data_type"] == "ecology_measurement_csv"
     ]
     assert len(artifacts) == 1
     payload = artifacts[0]["payload_json"]
@@ -208,16 +219,13 @@ def test_executable_saved_workflow_exports_typed_unverified_csv(
     assert payload["evidence_level"] == "linked_unverified"
     assert payload["review_gate"] == "scientist_review_required"
     standalone = client.get(
-        f"/api/v1/projects/{project_id}/ecology/"
-        "calibrated-measurement-candidates/measurements.csv"
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates/measurements.csv"
     )
     assert standalone.status_code == 200, standalone.text
     assert payload["csv_text"] == standalone.text
 
     # An exported unverified CSV is not a verified-dataset input.
-    graph["nodes"].append(
-        {"node_id": "dataset", "node_type": "dataset_version_create"}
-    )
+    graph["nodes"].append({"node_id": "dataset", "node_type": "dataset_version_create"})
     graph["edges"].append(
         {
             "edge_id": "csv-to-verified",
@@ -227,12 +235,7 @@ def test_executable_saved_workflow_exports_typed_unverified_csv(
             "target_port_id": "reviewed",
         }
     )
-    invalid = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph
-    )
+    invalid = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph)
     assert invalid.status_code == 200, invalid.text
     assert invalid.json()["valid"] is False
-    assert any(
-        issue["code"] == "incompatible_port_types"
-        for issue in invalid.json()["issues"]
-    )
+    assert any(issue["code"] == "incompatible_port_types" for issue in invalid.json()["issues"])
