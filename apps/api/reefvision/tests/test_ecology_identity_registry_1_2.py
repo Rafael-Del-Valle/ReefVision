@@ -278,7 +278,17 @@ def test_saved_identity_source_rejects_scientist_supplied_parameters(
 
 
 @pytest.mark.parametrize(
-    "technical_type", ["video_frame", "pose_keypoint", "tracking_tracklet"]
+    "technical_type",
+    [
+        "video_frame",
+        "pose_keypoint",
+        "tracking_tracklet",
+        "VideoFrame",
+        "poseKeypoint",
+        "segmentationMask",
+        "videoframe",
+        "segmentationmask",
+    ],
 )
 def test_imported_technical_unit_cannot_enter_registry_or_saved_workflow(
     client: TestClient, technical_type: str
