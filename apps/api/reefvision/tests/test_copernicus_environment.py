@@ -151,7 +151,22 @@ def test_unbounded_or_ambiguous_requests_rejected(patch):
         CopernicusRequest.model_validate(payload)
 
 
-@pytest.mark.parametrize("damage", ["outside", "unit", "direction", "duplicate", "version"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "outside",
+        "unit",
+        "direction",
+        "duplicate",
+        "version",
+        "nan_latitude",
+        "infinite_longitude",
+        "nan_depth",
+        "nan_value",
+        "string_value",
+        "boolean_depth",
+    ],
+)
 def test_invalid_provider_grid_never_persists_scientific_records(
     client, test_settings, monkeypatch, damage
 ):
@@ -165,6 +180,18 @@ def test_invalid_provider_grid_never_persists_scientific_records(
         raw["samples"][0]["standard_name"] = "sea_water_x_velocity"
     elif damage == "duplicate":
         raw["samples"].append(deepcopy(raw["samples"][0]))
+    elif damage == "nan_latitude":
+        raw["samples"][0]["latitude"] = float("nan")
+    elif damage == "infinite_longitude":
+        raw["samples"][0]["longitude"] = float("inf")
+    elif damage == "nan_depth":
+        raw["samples"][0]["depth_m"] = float("nan")
+    elif damage == "nan_value":
+        raw["samples"][0]["value"] = float("nan")
+    elif damage == "string_value":
+        raw["samples"][0]["value"] = "3.0"
+    elif damage == "boolean_depth":
+        raw["samples"][0]["depth_m"] = True
     else:
         raw["dataset_version"] = "different"
     with client.app.state.session_factory() as session, pytest.raises(ValidationError):
