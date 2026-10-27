@@ -246,8 +246,10 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                   const link = document.createElement("a");
                   link.href = url;
                   link.download = "reefvision-current-vectors.csv";
+                  document.body.append(link);
                   link.click();
-                  URL.revokeObjectURL(url);
+                  link.remove();
+                  window.setTimeout(() => URL.revokeObjectURL(url), 0);
                 }}
               >
                 Export current vector summary CSV
