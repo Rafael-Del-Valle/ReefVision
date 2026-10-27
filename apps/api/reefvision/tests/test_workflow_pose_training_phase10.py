@@ -513,7 +513,6 @@ def test_pose_training_can_require_separate_validation_truth(
         )
 
 
-
 def test_pose_validation_rejects_second_verified_round_from_same_video(
     client: TestClient,
     test_settings: Settings,
