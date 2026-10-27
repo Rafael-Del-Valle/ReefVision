@@ -168,6 +168,4 @@ def test_saved_workflow_population_csv_matches_standalone_and_blocks_promotion(
     invalid = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph)
     assert invalid.status_code == 200
     assert invalid.json()["valid"] is False
-    assert any(
-        issue["code"] == "incompatible_port_types" for issue in invalid.json()["issues"]
-    )
+    assert any(issue["code"] == "incompatible_port_types" for issue in invalid.json()["issues"])
