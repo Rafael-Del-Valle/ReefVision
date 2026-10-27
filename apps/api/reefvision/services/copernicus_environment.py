@@ -128,18 +128,27 @@ def parse_copernicus(
     samples = raw.get("samples")
     if not isinstance(samples, list) or not 1 <= len(samples) <= MAX_SAMPLES:
         raise ValidationError("Copernicus response must contain 1 to 5000 samples")
+    dataset_metadata = raw.get("dataset_metadata", {})
+    coordinate_resolution = raw.get("coordinate_resolution", {})
+    if not isinstance(dataset_metadata, dict) or not isinstance(coordinate_resolution, dict):
+        raise ValidationError("Copernicus provider metadata must be JSON objects")
     records = []
     missing = 0
     seen = set()
     for sample in samples:
         try:
+            if not isinstance(sample, dict):
+                raise ValueError("Grid sample must be a JSON object")
             variable = sample["variable"]
-            if variable not in request.variables:
+            if not isinstance(variable, str) or variable not in request.variables:
                 raise ValueError("Unexpected variable")
+            if not isinstance(sample["unit"], str) or not isinstance(sample["standard_name"], str):
+                raise ValueError("Provider units and standard_name must be strings")
             name, unit = _quantity(variable, sample["unit"], sample["standard_name"])
-            time = utc_timestamp(
-                datetime.fromisoformat(sample["observed_at"].replace("Z", "+00:00"))
-            )
+            observed_at = sample["observed_at"]
+            if not isinstance(observed_at, str):
+                raise ValueError("Provider observation timestamp must be a string")
+            time = utc_timestamp(datetime.fromisoformat(observed_at.replace("Z", "+00:00")))
             if not all(
                 _finite_number(sample[field]) for field in ("longitude", "latitude", "depth_m")
             ):
@@ -183,9 +192,7 @@ def parse_copernicus(
                             "model_version": request.dataset_version,
                             "acquired_at": acquired_at,
                             "method": "copernicus_rectilinear_grid_no_interpolation",
-                            "temporal_resolution_s": raw.get("coordinate_resolution", {}).get(
-                                "time"
-                            ),
+                            "temporal_resolution_s": coordinate_resolution.get("time"),
                             "processing_parameters": request.model_dump(
                                 mode="json", exclude={"offline", "refresh"}
                             ),
@@ -194,8 +201,8 @@ def parse_copernicus(
                                 "provider_unit": sample["unit"],
                                 "standard_name": sample["standard_name"],
                                 "toolbox_version": raw.get("toolbox_version"),
-                                "dataset": raw.get("dataset_metadata", {}),
-                                "coordinate_resolution": raw.get("coordinate_resolution", {}),
+                                "dataset": dataset_metadata,
+                                "coordinate_resolution": coordinate_resolution,
                             },
                         },
                     }
