@@ -765,6 +765,60 @@ def test_pose_workflow_rejects_falsy_non_object_resource_limits_from_verified_tr
         )
 
 
+
+def test_pose_workflow_rejects_lossy_random_seeds_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Use an API-frozen scientist-reviewed dataset, not a synthetic manifest.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+    for invalid_seed in (True, False, -1, 2.5, "2.5", "invalid"):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="random_seed must be a non-negative integer"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={**parameters, "random_seed": invalid_seed},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+
+    # Zero is a legitimate reproducible seed, not a missing configuration.
+    with app.state.session_factory() as session:
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={**parameters, "random_seed": 0},
+            processor=_fake_pose_processor,
+        )
+    assert result["random_seed"] == 0
+
+
 def test_pose_training_can_require_separate_validation_truth(
     client: TestClient,
     test_settings: Settings,
