@@ -661,7 +661,7 @@ def _v3_snapshot():
 
 def test_v3_scientific_signal_contract_matches_queue_generator_schema():
     """The frozen v3 formula must enumerate every generated scoring input."""
-    assert V3_SUPPORTED_SIGNALS == set(ReviewScoreWeights.model_fields)
+    assert set(ReviewScoreWeights.model_fields) == V3_SUPPORTED_SIGNALS
     queue, items = _v3_snapshot()
     validate_saved_queue_snapshot(queue, items)
     items[0].review_state = "completed"
