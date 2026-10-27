@@ -150,6 +150,14 @@ export function parsePointCloudRenderArtifact(
   ) {
     return null;
   }
+  // A coverage verdict without its omitted-extrema list is not auditable.
+  // Older artifacts omit both fields and remain explicitly unassessed.
+  if (
+    (omittedExtrema === undefined) !==
+    (data.preview_axis_extrema_covered === undefined)
+  ) {
+    return null;
+  }
   // Newer artifacts carry source-axis coverage QC; legacy artifacts are unassessed.
   if (
     omittedExtrema !== undefined &&
