@@ -21,8 +21,9 @@ function metricLabel(value: string): string {
 }
 
 function metricEntries(run: TrainingRun): Array<[string, number]> {
-  // Providers may publish losses only in epoch history. Prefer the latest
-  // actual observation; a finite summary metric takes precedence if present.
+  // Training summaries can lag behind per-epoch history. Prefer the last
+  // finite observed loss for live box/cls/dfl reporting, while keeping the
+  // summary authoritative for non-training metrics such as validation mAP.
   const latest = new Map<string, number>();
   for (const [key, values] of Object.entries(run.metrics_history ?? {})) {
     if (!Array.isArray(values)) continue;
@@ -39,7 +40,9 @@ function metricEntries(run: TrainingRun): Array<[string, number]> {
   }
   for (const [key, value] of Object.entries(run.metrics ?? {})) {
     if (typeof value === "number" && Number.isFinite(value)) {
-      latest.set(key, value);
+      if (!key.startsWith("train/") || !latest.has(key)) {
+        latest.set(key, value);
+      }
     }
   }
 
