@@ -2650,3 +2650,41 @@ a review or calibration gate. Exact new-head CI, authenticated organism
 identity, independently reviewed measurements/design, migration reconciliation,
 and installed Windows GUI/installer acceptance remain outstanding.
 **ReefVision 1.2 is NOT RELEASE-READY.**
+
+
+## 2026-10-27 — Canonical experimental-unit aliases for exploratory analyses
+
+The exploratory longitudinal and paired human–model count analyses now accept
+known **equivalent biological sampling-level labels** across observations:
+`tank`, `aquarium`, `aquaria` and `Tank-level` describe the same declared
+tank-level design. Previously, one physical tank could be rejected as mixed
+unit types merely because individual observation records used these aliases.
+Without an explicit request label, mixed known aliases resolve to the
+deterministic canonical biological level; a compatible explicitly supplied
+request label is retained. Existing homogeneous inputs preserve their
+original response label and provenance algorithm version.
+
+The shared `ecology_lineage_policy` helper also recognizes equivalent
+organism/fragment, colony/colonies and site/transect levels. **Different
+biological levels, unrecognized differing study-specific labels and
+technical image/frame/camera unit declarations still fail closed.** Organism
+membership and parent-colony constraints continue to operate on the
+unchanged experimental-unit IDs, so a tank is not counted twice because
+of spelling. Raw per-observation labels remain in the canonical input
+fingerprint, allowing a source-declaration correction to change provenance.
+
+Both standalone APIs and their existing executable, typed, persisted
+`ecology_longitudinal_analysis` and `ecology_paired_count_comparison`
+Workflow Builder nodes use the same scientific policy. New regressions cover
+known aliases, explicit request aliases, source fingerprint differences,
+incompatible-level rejection, saved-workflow artifact parity, and fail-closed
+workflow execution. No new workflow node, migration, environmental context,
+external model weights or verified-dataset promotion is introduced.
+
+**Evidence limitation:** this normalizes researcher-entered *labels*, not
+biological independence, true tank assignment, reviewed identity, calibrated
+growth or authenticated study design. Results remain
+`caller_supplied_unverified`; paired counts retain
+`requires_source_verification`. The new commit needs exact-head CI, real
+ecological data/scientist acceptance, 1.1 migration reconciliation and
+installed Windows GUI/installer testing. **1.2 is NOT RELEASE-READY.**
