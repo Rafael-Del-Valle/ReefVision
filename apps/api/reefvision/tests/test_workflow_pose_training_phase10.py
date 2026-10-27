@@ -513,6 +513,77 @@ def test_pose_training_can_require_separate_validation_truth(
         )
 
 
+
+def test_pose_validation_rejects_second_verified_round_from_same_video(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze two independently reviewed rounds via the real API, but reuse
+    # the same source video. Separate dataset IDs cannot prevent video leakage.
+    project, training = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, str(training["id"]))
+        assert frozen is not None
+        item = frozen.manifest_json["items"][0]
+        video_id = item["video_id"]
+        track_id = item["video_track_id"]
+
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/pose-active-learning-rounds",
+        json={
+            "name": "Independent review, same source video",
+            "video_id": video_id,
+            "track_ids": [track_id],
+            "selection_unit": "frame",
+            "requested_size": 1,
+            "minimum_frame_spacing": 1,
+        },
+    )
+    assert created.status_code == 201, created.text
+    round_id = created.json()["id"]
+    candidate_response = client.get(
+        f"/api/v1/pose-active-learning-rounds/{round_id}/candidates"
+    )
+    assert candidate_response.status_code == 200, candidate_response.text
+    candidate_id = candidate_response.json()[0]["id"]
+    reviewed = client.put(
+        f"/api/v1/pose-active-learning-candidates/{candidate_id}/review",
+        json={"action": "verify", "reviewed_by": "scientist"},
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    frozen_validation = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_id}/training-dataset",
+        json={"name": "Validation from reused source video", "created_by": "scientist"},
+    )
+    assert frozen_validation.status_code == 201, frozen_validation.text
+    validation = frozen_validation.json()
+    assert validation["id"] != training["id"]
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="independent source videos"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": training["id"],
+                "manifest_sha256": training["manifest_sha256"],
+            },
+            validation_dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": validation["id"],
+                "manifest_sha256": validation["manifest_sha256"],
+            },
+            parameters={"training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+
+
 def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
     client: TestClient,
     test_settings: Settings,
