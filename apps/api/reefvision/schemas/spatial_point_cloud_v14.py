@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, Field, StrictBool, StrictInt, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    Field,
+    StrictBool,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 
 class PointCloudPreviewRequest(BaseModel):
@@ -29,6 +37,25 @@ class PointCloudPreviewRequest(BaseModel):
     point_index_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=32)
     preserve_axis_extrema_in_preview: StrictBool = False
     preserve_measured_chord_endpoints_in_preview: StrictBool = False
+
+    @field_validator("meters_per_unit", "relative_scale_uncertainty", mode="before")
+    @classmethod
+    def calibration_numbers_are_not_coerced(cls, value: object) -> object:
+        # Pydantic otherwise converts True to 1.0 and numeric strings to floats.
+        if value is not None and type(value) not in (int, float):
+            raise ValueError("Calibration values must be JSON numbers, not booleans or strings")
+        return value
+
+    @field_validator("points", mode="before")
+    @classmethod
+    def xyz_numbers_are_not_coerced(cls, value: object) -> object:
+        if isinstance(value, list):
+            for point in value:
+                if isinstance(point, list) and any(
+                    type(coordinate) not in (int, float) for coordinate in point
+                ):
+                    raise ValueError("XYZ coordinates must be JSON numbers")
+        return value
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> PointCloudPreviewRequest:
