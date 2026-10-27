@@ -53,6 +53,7 @@ def test_population_csv_preserves_excluded_units_and_api_parity(client: TestClie
     assert all(row["row_type"] == "declared_unit" for row in rows)
     assert all(row["unit_status"] == "missing_unit_declaration" for row in rows)
     assert all(row["declared_unit_count"] == "0" for row in rows)
+    assert all(row["source_declared_experimental_unit_count"] == "0" for row in rows)
     assert all(row["mean_absolute_change"] == "" for row in rows)
     assert all(row["independent_unit_inference_allowed"] == "false" for row in rows)
     assert all(row["review_gate"] == "scientist_review_required" for row in rows)
@@ -85,7 +86,7 @@ def test_population_csv_carries_rechecked_source_lineage_for_all_rows(
     """Both excluded and population rows expose the source audit chain."""
     source = _dated_artifact(client)
     rows = _rows(render_ecology_population_csv(source))
-    assert {row["export_schema_version"] for row in rows} == {"ecology-population-export-0003"}
+    assert {row["export_schema_version"] for row in rows} == {"ecology-population-export-0004"}
     assert {row["row_type"] for row in rows} == {"declared_unit", "population_stratum"}
     report = source.candidate_report
     assert report is not None
@@ -96,6 +97,11 @@ def test_population_csv_carries_rechecked_source_lineage_for_all_rows(
         "source_image_count": str(report.source_image_count),
         "source_organism_count": str(report.source_organism_count),
         "source_excluded_count": str(report.excluded_source_count),
+        "source_declared_experimental_unit_count": str(
+            report.declared_experimental_unit_count
+        ),
+        "source_date_qc_pass_series_count": str(report.date_qc_pass_series_count),
+        "source_excluded_series_count": str(report.excluded_series_count),
         "source_registry_history_sha256": source.source_registry_history_sha256 or "",
         "source_image_evidence_sha256": source.source_image_evidence_sha256 or "",
         "source_annotation_evidence_sha256": source.source_annotation_evidence_sha256 or "",
@@ -108,6 +114,9 @@ def test_population_csv_carries_rechecked_source_lineage_for_all_rows(
     assert report.source_organism_count == 1
     population = next(row for row in rows if row["row_type"] == "population_stratum")
     assert population["declared_unit_count"] == "1"
+    assert population["source_declared_experimental_unit_count"] == "1"
+    assert population["source_date_qc_pass_series_count"] == "1"
+    assert population["source_excluded_series_count"] == "0"
     for row in rows:
         for field, value in expected.items():
             assert row[field] == value

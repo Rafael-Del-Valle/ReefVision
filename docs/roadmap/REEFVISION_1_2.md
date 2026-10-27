@@ -2533,3 +2533,32 @@ organism identity, biological independence, calibrated growth, or scientist
 review. New-head CI, authenticated longitudinal measurements, migration
 reconciliation, independent ecological acceptance, and installed Windows
 GUI/installer validation remain outstanding. **1.2 is NOT RELEASE-READY.**
+
+## Population CSV source-versus-analytic denominators and strict typing (2026-10-27)
+
+At prior head `faa80976720905e18586c89c872bb3dd22e96ccb`, 16/19 GitHub
+Actions workflows succeeded. CI, Pose Workflow Validation and 1.0 Acceptance
+failed at the same strict-mypy invariant-list error in the CSV serializer:
+`list[Literal[...]]` could not be passed to `_array(list[str])`.
+The serializer now accepts covariant `Sequence[str]` without casting or
+loosening the typed ecological summary schema.
+
+The existing standalone population CSV API and executable, persisted
+`ecology_population_csv_export` Workflow Builder node share schema
+`ecology-population-export-0004`, adding independently rechecked source
+`source_declared_experimental_unit_count`,
+`source_date_qc_pass_series_count` and `source_excluded_series_count`
+columns to every row. These describe *source design declarations and
+organism/metric QC series*, not eligible independent statistical replicates.
+They are intentionally distinct from row-level `declared_unit_count`:
+excluded units do not contribute to analytic means. Regression assertions
+check the values and the two-image/one-organism/one-tank denominator boundary.
+Previously exported CSV consumers must account for the new schema version.
+
+No migration, new workflow node, external provider or model weights are added.
+All outputs remain `linked_unverified`, `scientist_review_required`, and
+`independent_unit_inference_allowed=false`. Source registry and annotation
+links do not establish biological independence or scientifically verified
+longitudinal growth. Latest-head CI, scientist-reviewed datasets, independent
+migration reconciliation and native installed Windows acceptance remain
+release blockers; no release-ready claim is made.

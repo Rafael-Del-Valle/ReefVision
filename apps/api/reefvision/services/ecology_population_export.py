@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Sequence
 from io import StringIO
 
 from reefvision.domain.errors import ValidationError
@@ -30,6 +31,9 @@ _COLUMNS = (
     "source_image_count",
     "source_organism_count",
     "source_excluded_count",
+    "source_declared_experimental_unit_count",
+    "source_date_qc_pass_series_count",
+    "source_excluded_series_count",
     "source_registry_history_sha256",
     "source_image_evidence_sha256",
     "source_annotation_evidence_sha256",
@@ -60,7 +64,7 @@ _COLUMNS = (
 )
 
 
-def _array(values: list[str]) -> str:
+def _array(values: Sequence[str]) -> str:
     return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -94,6 +98,9 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
         report.source_image_count,
         report.source_organism_count,
         report.excluded_source_count,
+        report.declared_experimental_unit_count,
+        report.date_qc_pass_series_count,
+        report.excluded_series_count,
         response.source_registry_history_sha256 or "",
         response.source_image_evidence_sha256 or "",
         response.source_annotation_evidence_sha256 or "",
@@ -110,7 +117,7 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
         eligible = row.unit_status == "candidate"
         writer.writerow(
             (
-                "ecology-population-export-0003",
+                "ecology-population-export-0004",
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
@@ -152,7 +159,7 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
     ):
         writer.writerow(
             (
-                "ecology-population-export-0003",
+                "ecology-population-export-0004",
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
