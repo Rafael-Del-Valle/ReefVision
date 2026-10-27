@@ -27,6 +27,11 @@ class MeshPreviewRequest(BaseModel):
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
     relative_scale_uncertainty: StrictFloat | StrictInt | None = Field(default=None, ge=0, le=1)
     source_label: str | None = Field(default=None, max_length=200)
+    # Optional replay guard for imported source bytes (OBJ/PLY UTF-8 or decoded GLB).
+    # Matching bytes do not establish calibration, specimen identity or human review.
+    expected_source_payload_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     specimen_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
@@ -54,6 +59,8 @@ class MeshPreviewRequest(BaseModel):
                 raise ValueError("Use OBJ, PLY, GLB, or indexed triangles, not a mixture")
         elif self.vertices is None or self.faces is None:
             raise ValueError("Indexed triangles require vertices and faces")
+        if self.expected_source_payload_sha256 is not None and not supplied_text:
+            raise ValueError("Source SHA-256 binding requires an imported OBJ, PLY, or GLB file")
         if self.surface_path_vertex_pairs is not None:
             for pair in self.surface_path_vertex_pairs:
                 if len(pair) != 2 or pair[0] == pair[1] or any(index < 0 for index in pair):
