@@ -148,7 +148,10 @@ def test_coincident_point_indices_have_explicit_chord_qc() -> None:
         relative_scale_uncertainty=0.1,
         point_index_pairs=[[0, 1], [0, 2]],
     )
-    assert result["qc_warnings"] == ["duplicate_points_present"]
+    assert result["qc_warnings"] == [
+        "duplicate_points_present",
+        "coincident_selected_chord_endpoints",
+    ]
     coincident, distinct = result["selected_point_chords"]
     assert coincident["point_indices"] == [0, 1]
     assert coincident["chord_distance_m"] == 0
