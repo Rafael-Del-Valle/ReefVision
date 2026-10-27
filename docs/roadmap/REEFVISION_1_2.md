@@ -2310,3 +2310,39 @@ All projected population outputs remain `linked_unverified`,
 `independent_unit_inference_allowed=false`. This change does not authenticate
 biological lineage, supply verified longitudinal growth, reconcile migrations,
 or satisfy physical Windows/scientific acceptance.
+
+## Bounded exact cross-metric three-parent lineage feasibility (2026-10-26)
+
+The existing projected ecological population boundary now detects a previously
+missed *global* contradiction across overlapping **fully enumerated** parent
+rosters of three or more organisms. Three metric-specific triples may each
+admit a one-to-one organism/parent assignment, while their combined constraints
+require four fragments to have four distinct parents drawn from only three.
+The existing per-roster matching and two-parent bipartite checks alone could
+not reject that contradiction.
+
+A deterministic, bounded exact constraint search now checks the combined
+full-roster system when there are at most 12 distinct organisms and 24 full
+rosters. It forward-checks every partial assignment against the existing
+iterative matching algorithm and rejects **only proven infeasible** systems.
+Systems beyond those bounds, or exhausting 10,000 search states, remain
+**unverified**, not falsely declared impossible or scientifically verified.
+No inferred organism-to-parent assignments are persisted or exposed. Partially
+known parent rosters still cannot assert a unique mapping.
+
+Regression tests cover an impossible overlapping three-parent system and a
+feasible system in both input orders. Existing source-derived standalone
+endpoint and executable/persisted typed Workflow Builder share the updated
+population calculation and continue to require scientist review; no new
+workflow node or migration is needed. All results remain
+`linked_unverified`, `scientist_review_required`, with independent-unit
+inference disabled.
+
+**CI repair:** predecessor `899440e9ec2183687946e9e6fb87a08a57abbf04`
+completed 16/19 GitHub Actions workflows; all three failed at the same
+Ruff E501 long string in the two-parent guard. That exact formatting error
+was corrected in this increment. The bounded solver was separately checked
+against small exhaustive-assignment reference cases, but full repository
+Ruff/mypy/pytest and new-head CI must independently pass. Scientific review,
+authenticated observations, migration reconciliation, and installed Windows
+GUI/installer acceptance remain outstanding. **1.2 is NOT RELEASE-READY.**
