@@ -174,7 +174,10 @@ def measure_mesh_preview(
             incidents.append((face_index, a < b))
     # Accumulate all nonnegative triangle areas with compensated summation.
     # Display sampling and tessellation QC must not redefine the full mesh area.
-    raw_area = fsum(face_areas)
+    try:
+        raw_area = fsum(face_areas)
+    except OverflowError as exc:
+        raise ValueError("Mesh triangle area overflowed") from exc
     area_m2 = raw_area * scale * scale
     if not isfinite(area_m2):
         raise ValueError("Calibrated area overflowed")
