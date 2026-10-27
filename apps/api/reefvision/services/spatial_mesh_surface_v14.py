@@ -172,9 +172,20 @@ def measure_mesh_preview(
             if incidents:
                 parents[root(face_index)] = root(incidents[0][0])
             incidents.append((face_index, a < b))
+    # Accumulate all nonnegative triangle areas with compensated summation.
+    # Display sampling and tessellation QC must not redefine the full mesh area.
+    raw_area = fsum(face_areas)
     area_m2 = raw_area * scale * scale
     if not isfinite(area_m2):
         raise ValueError("Calibrated area overflowed")
+    # These describe mesh tessellation concentration, not independent
+    # biological observations or a calibrated reconstruction error model.
+    area_shares = [area / raw_area for area in face_areas] if raw_area > 0 else []
+    largest_triangle_area_fraction = max(area_shares) if area_shares else None
+    area_share_squares = fsum(share * share for share in area_shares)
+    area_weighted_effective_triangle_count = (
+        1.0 / area_share_squares if area_share_squares > 0 else None
+    )
     referenced_indices = {index for face in faces for index in face}
     referenced_points = [points[index] for index in sorted(referenced_indices)]
     unreferenced_vertex_count = len(points) - len(referenced_points)
@@ -519,6 +530,8 @@ def measure_mesh_preview(
         "area_weighted_surface_centroid_m": centroid_m,
         "area_weighted_centroid_scale_uncertainty_m": centroid_uncertainty_m,
         "face_count": len(faces),
+        "largest_triangle_area_fraction": largest_triangle_area_fraction,
+        "area_weighted_effective_triangle_count": area_weighted_effective_triangle_count,
         **display_geometry,
         "preview_sampled_surface_area_m2": sampled_raw_area * scale * scale,
         "preview_surface_area_fraction": sampled_raw_area / raw_area if raw_area > 0 else None,
