@@ -101,6 +101,18 @@ try {
     Assert-True ($jpegRaster.width -eq 7 -and $jpegRaster.height -eq 5) 'JPEG source raster dimensions were not decoded.'
     $pngRaster = Assert-ReefVisionCameraRaster -Bytes $cameraPngBytes -ContentType 'image/png' -ExpectedWidth 7 -ExpectedHeight 5
     Assert-True ($pngRaster.media_type -eq 'image/png') 'PNG display raster was not decoded.'
+    Assert-ReefVisionStableCameraDisplay -InitialBytes $cameraPngBytes -RestartBytes ([byte[]]$cameraPngBytes.Clone()) -InitialContentType 'image/png' -RestartContentType 'image/png'
+    Assert-True $true 'Identical camera display bytes must remain valid after restart.'
+    Assert-Throws { Assert-ReefVisionStableCameraDisplay -InitialBytes $cameraPngBytes -RestartBytes $cameraPngBytes -InitialContentType 'image/png' -RestartContentType 'image/jpeg' } 'Camera display media type changes must fail.'
+    $changedPngStream = [System.IO.MemoryStream]::new()
+    try {
+        $cameraBitmap.SetPixel(0, 0, [System.Drawing.Color]::Red)
+        $cameraBitmap.Save($changedPngStream, [System.Drawing.Imaging.ImageFormat]::Png)
+        $changedPngBytes = [byte[]]$changedPngStream.ToArray()
+        $null = Assert-ReefVisionCameraRaster -Bytes $changedPngBytes -ContentType 'image/png' -ExpectedWidth 7 -ExpectedHeight 5
+        Assert-Throws { Assert-ReefVisionStableCameraDisplay -InitialBytes $cameraPngBytes -RestartBytes $changedPngBytes -InitialContentType 'image/png' -RestartContentType 'image/png' } 'Valid same-sized camera rasters with changed pixels must fail.'
+    } finally { $changedPngStream.Dispose() }
+    Assert-Throws { Assert-ReefVisionStableCameraDisplay -InitialBytes $cameraPngBytes -RestartBytes ([byte[]]@()) -InitialContentType 'image/png' -RestartContentType 'image/png' } 'Empty restarted display must fail.'
     Assert-Throws { Assert-ReefVisionCameraRaster -Bytes $cameraJpegBytes -ContentType 'image/png' -ExpectedWidth 7 -ExpectedHeight 5 | Out-Null } 'JPEG bytes must not pass as PNG.'
     Assert-Throws { Assert-ReefVisionCameraRaster -Bytes $cameraPngBytes -ContentType 'image/jpeg' -ExpectedWidth 7 -ExpectedHeight 5 | Out-Null } 'PNG bytes must not pass as JPEG.'
     Assert-Throws { Assert-ReefVisionCameraRaster -Bytes $cameraJpegBytes -ContentType 'image/jpeg' -ExpectedWidth 5 -ExpectedHeight 7 | Out-Null } 'Rotated or transposed scientific source dimensions must fail.'
@@ -148,6 +160,9 @@ Assert-True ($acceptanceScript.Contains('source SHA256 $cameraHashBefore unchang
 $cameraRestartIndex = $acceptanceScript.IndexOf('$persistedCamera = Invoke-RestMethod "$api/images/$cameraId"')
 $cameraPassIndex = $acceptanceScript.IndexOf('$report.camera_jpeg = New-ReefVisionEvidenceResult -Status ''PASS''')
 Assert-True ($cameraRestartIndex -ge 0 -and $cameraPassIndex -gt $cameraRestartIndex) 'Camera PASS must be deferred until after restart validation.'
+$displayStableIndex = $acceptanceScript.IndexOf('Assert-ReefVisionStableCameraDisplay -InitialBytes')
+Assert-True ($displayStableIndex -gt $cameraRestartIndex -and $cameraPassIndex -gt $displayStableIndex) 'Camera PASS must require stable display bytes after restart.'
+Assert-True ($acceptanceScript.Contains('display SHA-256 unchanged across restart')) 'Camera evidence must record stable display integrity.'
 Assert-True ($acceptanceScript.Contains('original SHA256 $cameraHashBefore unchanged')) 'Camera acceptance must record original SHA-256 integrity evidence.'
 
 Assert-True ($acceptanceScript.Contains('function Import-AcceptanceAnnotations')) 'Windows acceptance must use a real multipart annotation import.'
