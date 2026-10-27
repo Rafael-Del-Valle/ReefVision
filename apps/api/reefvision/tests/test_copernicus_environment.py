@@ -167,6 +167,12 @@ def test_unbounded_or_ambiguous_requests_rejected(patch):
         "huge_integer_value",
         "string_value",
         "boolean_depth",
+        "null_observed_at",
+        "null_unit",
+        "null_standard_name",
+        "non_object_sample",
+        "non_object_dataset_metadata",
+        "non_object_coordinate_resolution",
     ],
 )
 def test_invalid_provider_grid_never_persists_scientific_records(
@@ -198,6 +204,18 @@ def test_invalid_provider_grid_never_persists_scientific_records(
         raw["samples"][0]["value"] = "3.0"
     elif damage == "boolean_depth":
         raw["samples"][0]["depth_m"] = True
+    elif damage == "null_observed_at":
+        raw["samples"][0]["observed_at"] = None
+    elif damage == "null_unit":
+        raw["samples"][0]["unit"] = None
+    elif damage == "null_standard_name":
+        raw["samples"][0]["standard_name"] = None
+    elif damage == "non_object_sample":
+        raw["samples"][0] = None
+    elif damage == "non_object_dataset_metadata":
+        raw["dataset_metadata"] = []
+    elif damage == "non_object_coordinate_resolution":
+        raw["coordinate_resolution"] = None
     else:
         raw["dataset_version"] = "different"
     with client.app.state.session_factory() as session, pytest.raises(ValidationError):
