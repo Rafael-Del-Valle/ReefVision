@@ -174,6 +174,16 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["provenance"]["before_coordinate_frame_id"] == "survey-local"
     assert expected["provenance"]["after_coordinate_frame_id"] == "survey-local"
     assert expected["provenance"]["coordinate_registration_verified"] is False
+    assert (
+        expected["provenance"]["registered_centroid_comparison_withheld_due_to_registration_dispute"]
+        is False
+    )
+    assert (
+        expected["provenance"][
+            "registered_centroid_comparison_withheld_due_to_inconclusive_registration_review"
+        ]
+        is False
+    )
     assert expected["provenance"]["registration_evidence"] == registration_evidence
     assert "registration_independent_review_recorded_not_alignment_verification" in warnings
     assert "registration_evidence_requires_independent_review" not in warnings
@@ -368,6 +378,18 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert disputed_result["registration_translation_magnitude_m"] == pytest.approx(0.1)
     assert disputed_result["provenance"]["registration_evidence"] == disputed_evidence
     assert disputed_result["provenance"]["coordinate_registration_verified"] is False
+    assert (
+        disputed_result["provenance"][
+            "registered_centroid_comparison_withheld_due_to_registration_dispute"
+        ]
+        is True
+    )
+    assert (
+        disputed_result["provenance"][
+            "registered_centroid_comparison_withheld_due_to_inconclusive_registration_review"
+        ]
+        is False
+    )
     assert "registration_independent_review_disputes_alignment" in disputed_result["qc_warnings"]
     assert (
         "registered_surface_centroid_comparison_withheld_disputed_alignment"
@@ -420,14 +442,24 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m",
     ):
         assert inconclusive_result[field] is None
-    assert inconclusive_result["registration_translation_magnitude_m"] == pytest.approx(
-        0.1
-    )
+    assert inconclusive_result["registration_translation_magnitude_m"] == pytest.approx(0.1)
     assert inconclusive_result["before_surface_area_m2"] == pytest.approx(0.5)
     assert inconclusive_result["after_surface_area_m2"] == pytest.approx(1.0)
     inconclusive_provenance = inconclusive_result["provenance"]
     assert inconclusive_provenance["registration_evidence"] == inconclusive_registration
     assert inconclusive_provenance["coordinate_registration_verified"] is False
+    assert (
+        inconclusive_provenance[
+            "registered_centroid_comparison_withheld_due_to_inconclusive_registration_review"
+        ]
+        is True
+    )
+    assert (
+        inconclusive_provenance[
+            "registered_centroid_comparison_withheld_due_to_registration_dispute"
+        ]
+        is False
+    )
     inconclusive_warnings = inconclusive_result["qc_warnings"]
     assert "registration_independent_review_inconclusive" in inconclusive_warnings
     assert (
