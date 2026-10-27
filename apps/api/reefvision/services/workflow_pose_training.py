@@ -370,6 +370,18 @@ def _completed_workflow_pose_training_run(
         if candidate.split_manifest_sha256 != split_manifest_sha256:
             raise ValidationError("Recovered pose-training node split manifest changed")
 
+        if candidate.dataset_manifest_sha256 != dataset.manifest_sha256:
+            raise ValidationError("Recovered pose-training node dataset checksum changed")
+
+        expected_validation_mode = (
+            "separate_frozen_pose_dataset" if validation_dataset is not None else "none"
+        )
+        if (
+            dict(candidate.evaluation_config_json or {}).get("validation_mode")
+            != expected_validation_mode
+        ):
+            raise ValidationError("Recovered pose-training node validation mode changed")
+
         if candidate.initial_checkpoint_model_id != (
             seed_model.id if seed_model else None
         ) or candidate.resolved_model_checksum != (seed_model.sha256 if seed_model else None):
