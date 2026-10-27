@@ -153,6 +153,29 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
         },
     )
     assert blocked_new_comment.status_code == 409, blocked_new_comment.text
+    # The same saved, typed QC reference must not be triaged by a new bulk
+    # request while its manually reviewed audit history has foreign provenance.
+    blocked_bulk = client.post(
+        f"/api/v1/review-queues/{result['queue_id']}/items/bulk",
+        json={
+            "item_ids": [item_id],
+            "action": "start",
+            "actor": "workflow reviewer",
+            "client_request_id": str(uuid4()),
+        },
+    )
+    assert blocked_bulk.status_code == 409, blocked_bulk.text
+    unchanged_item = client.get(
+        f"/api/v1/review-queues/{result['queue_id']}/items"
+    ).json()["items"][0]
+    assert unchanged_item["review_state"] == "pending"
+    with app.state.session_factory() as session:
+        assert (
+            session.query(ReviewQueueItemEvent)
+            .filter_by(review_queue_item_id=item_id)
+            .count()
+            == 1
+        )
     with app.state.session_factory() as session:
         event = session.get(ReviewQueueItemEvent, comment.json()["id"])
         assert event is not None
