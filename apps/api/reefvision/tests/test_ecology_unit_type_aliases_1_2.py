@@ -15,8 +15,6 @@ from reefvision.tests.test_ecology_longitudinal_lineage_1_2 import _rows
 from reefvision.tests.test_workflow_ecology_1_2 import _graph as longitudinal_graph
 from reefvision.tests.test_workflow_model_agreement_1_2 import (
     _graph as paired_graph,
-)
-from reefvision.tests.test_workflow_model_agreement_1_2 import (
     _pairs,
 )
 
