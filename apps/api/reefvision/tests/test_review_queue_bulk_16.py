@@ -51,9 +51,7 @@ def test_bulk_triage_rejects_corrupt_history_before_new_audit_writes(
     other_queue_id, _ = _queue_with_two_images(client)
     foreign_project = create_project(client, "Foreign bulk audit scope")
     url = f"/api/v1/review-queues/{queue_id}/items/bulk"
-    event_urls = [
-        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in ids
-    ]
+    event_urls = [f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in ids]
     started = client.post(url, json={"item_ids": [ids[0]], "action": "start"})
     assert started.status_code == 200, started.text
     event_id = client.get(event_urls[0]).json()["items"][0]["id"]
@@ -88,6 +86,10 @@ def test_bulk_triage_rejects_corrupt_history_before_new_audit_writes(
         ids[1]: "pending",
     }
     with app.state.session_factory() as session:
+        # Failed keyed batches must not reserve their idempotency key or
+        # create a request registry entry before reviewer provenance passes.
+        if keyed:
+            assert session.get(ReviewQueueBulkRequestRecord, payload["client_request_id"]) is None
         events = list(
             session.scalars(
                 select(ReviewQueueItemEvent).where(
