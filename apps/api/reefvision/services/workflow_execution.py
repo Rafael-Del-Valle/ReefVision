@@ -131,6 +131,8 @@ class WorkflowExecutionService:
         for record in records:
             if (
                 not isinstance(record.graph_json, dict)
+                or record.graph_key != record.graph_json.get("graph_id")
+                or record.schema_version != record.graph_json.get("schema_version")
                 or canonical_json_sha256(record.graph_json) != record.graph_sha256
             ):
                 raise ConflictError("Workflow graph revision checksum failed")
@@ -167,6 +169,8 @@ class WorkflowExecutionService:
         for revision in revisions:
             if (
                 not isinstance(revision.graph_json, dict)
+                or revision.graph_key != revision.graph_json.get("graph_id")
+                or revision.schema_version != revision.graph_json.get("schema_version")
                 or canonical_json_sha256(revision.graph_json) != revision.graph_sha256
             ):
                 raise ConflictError("Workflow graph revision checksum failed")
@@ -208,8 +212,10 @@ class WorkflowExecutionService:
         if (
             graph is None
             or graph.project_id != run.project_id
-            or graph.graph_sha256 != run.graph_sha256
             or not isinstance(graph.graph_json, dict)
+            or graph.graph_key != graph.graph_json.get("graph_id")
+            or graph.schema_version != graph.graph_json.get("schema_version")
+            or graph.graph_sha256 != run.graph_sha256
             or canonical_json_sha256(graph.graph_json) != run.graph_sha256
         ):
             raise ConflictError("Workflow graph provenance checksum failed")
@@ -254,7 +260,9 @@ class WorkflowExecutionService:
         # structurally valid but modified graphs before queueing a run whose
         # pinned provenance would otherwise fail only after dequeue.
         if (
-            canonical_json_sha256(record.graph_json) != record.graph_sha256
+            record.graph_key != graph.graph_id
+            or record.schema_version != graph.schema_version
+            or canonical_json_sha256(record.graph_json) != record.graph_sha256
             or canonical_json_sha256(graph.model_dump(mode="json")) != record.graph_sha256
         ):
             raise ValidationError(
