@@ -100,9 +100,7 @@ def test_population_csv_carries_rechecked_source_lineage_for_all_rows(
         for field, value in expected.items():
             assert row[field] == value
 
-    tampered = source.model_copy(
-        update={"source_calibration_evidence_sha256": "0" * 64}
-    )
+    tampered = source.model_copy(update={"source_calibration_evidence_sha256": "0" * 64})
     with pytest.raises(ValidationError, match="source input fingerprint"):
         render_ecology_population_csv(tampered)
 
