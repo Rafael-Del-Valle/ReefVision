@@ -112,6 +112,7 @@ def extend_mesh_registry(
                 "points": None,
                 "point_index_pairs": None,
                 "preserve_axis_extrema_in_preview": False,
+                "preserve_measured_chord_endpoints_in_preview": False,
                 "relative_scale_uncertainty": None,
                 "source_label": None,
                 "specimen_id": None,
