@@ -279,6 +279,38 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert restored_resave.status_code == 201, restored_resave.text
     assert restored_resave.json()["id"] == graph_record["id"]
 
+    # A matching JSON digest must not authenticate altered revision metadata.
+    # Schema identity is part of the frozen scientific workflow lineage.
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowGraphRecord, graph_record["id"])
+        assert persisted is not None
+        original_schema_version = persisted.schema_version
+        persisted.schema_version = "altered-after-save"
+        session.commit()
+
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 409
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="Workflow graph revision checksum failed"),
+    ):
+        WorkflowExecutionService(session).list_graphs(project_id)
+    metadata_resave = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert metadata_resave.status_code == 409, metadata_resave.text
+    metadata_queue = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": graph_record["id"]},
+    )
+    assert metadata_queue.status_code == 400, metadata_queue.text
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowGraphRecord, graph_record["id"])
+        assert persisted is not None
+        persisted.schema_version = original_schema_version
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
+
     # An intact latest revision must not conceal an older corrupted revision.
     # Both revisions reference the real frozen scientist-verified pose dataset.
     second_graph = {**graph, "name": "Verified pose dataset lineage (revision 2)"}
