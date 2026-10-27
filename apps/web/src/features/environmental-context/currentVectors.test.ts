@@ -139,6 +139,34 @@ it("never combines mismatched depth, time, acquisition or source", () => {
     ).toEqual([]);
   }
 });
+it("pairs current components only with matching processing provenance", () => {
+  const provenance = {
+    ...component("x", 0).provenance,
+    source_url: "https://example.org/model",
+    method: "rectilinear_grid_no_interpolation",
+    spatial_resolution_m: 100,
+    temporal_resolution_s: 3600,
+    processing_parameters: { interpolation: "none" },
+  };
+  const east = component("current_eastward_velocity", 3, { provenance });
+  const north = component("current_northward_velocity", 4, { provenance });
+  expect(currentVectors([east, north])).toHaveLength(1);
+
+  for (const difference of [
+    { source_url: "https://example.org/another-model" },
+    { method: "interpolated" },
+    { spatial_resolution_m: 200 },
+    { temporal_resolution_s: 7200 },
+    { processing_parameters: { interpolation: "linear" } },
+  ]) {
+    expect(
+      currentVectors([
+        east,
+        { ...north, provenance: { ...provenance, ...difference } },
+      ]),
+    ).toEqual([]);
+  }
+});
 it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
   const east = component("current_eastward_velocity", 3);
   const north = component("current_northward_velocity", 4);
