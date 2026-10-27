@@ -17,6 +17,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
 from reefvision.schemas.workflow_graphs import WorkflowPortDefinition
+from reefvision.services import ecology_population_export as exporter
 from reefvision.services.ecology_population_export import render_ecology_population_csv
 from reefvision.tests.test_ecology_projected_series_csv_1_2 import (
     _dated_artifact,
@@ -46,8 +47,6 @@ def test_population_csv_fails_closed_on_header_row_drift(
     column_delta: int,
 ) -> None:
     """Never emit misaligned scientific CSV when the export schema drifts."""
-    from reefvision.services import ecology_population_export as exporter
-
     source = _dated_artifact(client)
     columns = exporter._COLUMNS
     altered = columns[:-1] if column_delta < 0 else (*columns, "unexpected_column")
