@@ -120,12 +120,15 @@ def measure_point_cloud_preview(
     source_label: str | None = None,
     point_index_pairs: list[list[int]] | None = None,
     preserve_axis_extrema_in_preview: bool = False,
+    preserve_measured_chord_endpoints_in_preview: bool = False,
 ) -> dict[str, Any]:
     """Report point extents, not surface area, organism size, or branch length."""
     if not 1 <= len(points) <= MAX_VERTICES:
         raise ValueError("Point-cloud size outside preview bounds")
     if not isinstance(preserve_axis_extrema_in_preview, bool):
         raise ValueError("preserve_axis_extrema_in_preview must be a boolean")
+    if not isinstance(preserve_measured_chord_endpoints_in_preview, bool):
+        raise ValueError("preserve_measured_chord_endpoints_in_preview must be a boolean")
     scale = float(meters_per_unit)
     if not isfinite(scale) or not 0 < scale <= 1_000_000:
         raise ValueError("meters_per_unit must be finite and within bounds")
@@ -146,6 +149,7 @@ def measure_point_cloud_preview(
         vertices.append((float(point[0]), float(point[1]), float(point[2])))
     # Selected point-pair chords refer to original input order, not branches.
     selected_chords: list[dict[str, Any]] = []
+    selected_endpoint_indices: set[int] = set()
     if point_index_pairs is not None:
         if not isinstance(point_index_pairs, list) or len(point_index_pairs) > 32:
             raise ValueError("At most 32 point-index pairs are supported")
@@ -158,6 +162,7 @@ def measure_point_cloud_preview(
                 or pair[0] == pair[1]
             ):
                 raise ValueError("Point pair requires two distinct in-range integer indices")
+            selected_endpoint_indices.update(pair)
             endpoints = [vertices[pair[0]], vertices[pair[1]]]
             chord_m = dist(*endpoints) * scale
             # Different indices can still identify identical XYZ coordinates.
@@ -249,10 +254,30 @@ def measure_point_cloud_preview(
             )
         }
     )
-    if preserve_axis_extrema_in_preview and len(vertices) > preview_count:
-        protected = set(extrema_indices) | {0, len(vertices) - 1}
-        retained = [index for index in preview_indices if index not in protected]
-        preview_indices = sorted(protected | set(retained[: preview_count - len(protected)]))
+    pin_chords = preserve_measured_chord_endpoints_in_preview and bool(selected_endpoint_indices)
+    if (preserve_axis_extrema_in_preview or pin_chords) and len(vertices) > preview_count:
+        protected = {0, len(vertices) - 1}
+        if preserve_axis_extrema_in_preview:
+            protected.update(extrema_indices)
+        if pin_chords:
+            protected.update(selected_endpoint_indices)
+        # Fill remaining slots evenly across the entire source index range.
+        # Taking the first N candidates biases the sample toward early rows.
+        candidates = [index for index in range(len(vertices)) if index not in protected]
+        slots = preview_count - len(protected)
+        if slots < 0 or slots > len(candidates):
+            raise ValueError("Protected point indices exceed the display budget")
+        if slots == 1:
+            selected = [candidates[len(candidates) // 2]]
+        elif slots > 1:
+            selected = [
+                candidates[i * (len(candidates) - 1) // (slots - 1)]
+                for i in range(slots)
+            ]
+        else:
+            selected = []
+        preview_indices = sorted(protected | set(selected))
+    omitted_chord_endpoints = sorted(selected_endpoint_indices - set(preview_indices))
     # A uniform index sample may hide the actual extent of a coral scan.
     # Compare raw source-axis extrema before scaling to avoid float rounding.
     # This is display QC, not registration or biological completeness.
@@ -274,10 +299,16 @@ def measure_point_cloud_preview(
         "preview_point_indices": preview_indices,
         "preview_extrema_source_indices": extrema_indices,
         "preview_sampling_strategy": (
-            "uniform_index_extrema_preserving"
+            "uniform_index_extrema_and_chord_endpoints_preserving"
+            if preserve_axis_extrema_in_preview and pin_chords
+            else "uniform_index_extrema_preserving"
             if preserve_axis_extrema_in_preview
+            else "uniform_index_chord_endpoints_preserving"
+            if pin_chords
             else "uniform_index"
         ),
+        "preview_omitted_selected_chord_endpoint_indices": omitted_chord_endpoints,
+        "preview_selected_chord_endpoints_covered": not omitted_chord_endpoints,
         "preview_omitted_axis_extrema": preview_omitted_axis_extrema,
         "preview_axis_extrema_covered": not preview_omitted_axis_extrema,
         "preview_points_in_source_frame_m": preview_points,
@@ -344,6 +375,9 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         source_label=payload.source_label,
         point_index_pairs=payload.point_index_pairs,
         preserve_axis_extrema_in_preview=payload.preserve_axis_extrema_in_preview,
+        preserve_measured_chord_endpoints_in_preview=(
+            payload.preserve_measured_chord_endpoints_in_preview
+        ),
     )
     result["preview_point_colors_rgb_uint8"] = (
         [point_colors[i] for i in result["preview_point_indices"]] if point_colors else None
