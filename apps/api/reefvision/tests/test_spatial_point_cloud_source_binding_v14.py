@@ -52,9 +52,7 @@ def _graph(parameters: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _run_saved_cloud(
-    client: TestClient, project_id: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _run_saved_cloud(client: TestClient, project_id: str, params: dict[str, Any]) -> dict[str, Any]:
     base = f"/api/v1/projects/{project_id}"
     saved = client.post(f"{base}/workflow-graphs", json={"graph": _graph(params)})
     assert saved.status_code == 201, saved.text
@@ -108,9 +106,7 @@ def test_changed_ply_comment_rejected_despite_identical_geometry(
 ) -> None:
     project_id = str(create_project(client, "Stale point-cloud PLY")["id"])
     original = preview_point_cloud_from_request(PointCloudPreviewRequest(**_params(PLY)))
-    changed = preview_point_cloud_from_request(
-        PointCloudPreviewRequest(**_params(COMMENTED_PLY))
-    )
+    changed = preview_point_cloud_from_request(PointCloudPreviewRequest(**_params(COMMENTED_PLY)))
     assert original["provenance"]["geometry_sha256"] == changed["provenance"]["geometry_sha256"]
     assert (
         original["provenance"]["source_payload_sha256"]
@@ -128,9 +124,7 @@ def test_changed_ply_comment_rejected_despite_identical_geometry(
     saved = _run_saved_cloud(client, project_id, params)
     assert saved["completed"] is False
     assert saved["run"]["status"] == "failed"
-    assert not any(
-        a["data_type"] == "point_cloud_measurement_preview" for a in saved["artifacts"]
-    )
+    assert not any(a["data_type"] == "point_cloud_measurement_preview" for a in saved["artifacts"])
 
 
 @pytest.mark.parametrize("invalid_sha", ["A" * 64, "0" * 63, "x" * 64])
