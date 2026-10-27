@@ -133,7 +133,9 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
         # Narrow the persisted JSON value to a real numeric type for both
         # runtime validation and strict static typing. bool is an int subclass
         # but must never count as a biological observation.
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or not isfinite(value):
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False
+        if not isfinite(value):
             return False
         if signal_id == "pending_proposals":
             # The generator records a nonnegative integer count as a float,
