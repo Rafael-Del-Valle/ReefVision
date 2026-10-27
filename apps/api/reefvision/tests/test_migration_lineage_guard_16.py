@@ -513,8 +513,7 @@ def test_revision_0041_rejects_unsafe_event_idempotency_without_writes(
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
         assert connection.scalar(text("SELECT value FROM preserved")) == "original observations"
         assert (
-            connection.scalar(text("SELECT id FROM review_queue_item_events"))
-            == "original-event"
+            connection.scalar(text("SELECT id FROM review_queue_item_events")) == "original-event"
         )
     engine.dispose()
 
