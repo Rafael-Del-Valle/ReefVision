@@ -29,6 +29,29 @@ installed desktop/GPU/scientific acceptance. A separate bounded ASCII PLY
 point-cloud preview and interactive viewer already exist, but their transient
 visualization and chord measurements do not establish verified anatomy.
 
+## Imported mesh byte-exact replay guard (provisional)
+
+OBJ, ASCII PLY, and GLB mesh-preview requests may optionally provide
+`expected_source_payload_sha256`, a lowercase 64-character SHA-256 digest
+of the exact source file bytes. For OBJ/PLY the digest covers the submitted
+UTF-8 text; for GLB it covers the decoded binary, **not** its base64 encoding.
+If the supplied source does not match the expected digest, the standalone API
+rejects the request and the saved executable `mesh_surface_preview` Workflow
+Builder run fails without emitting a mesh measurement artifact. This also
+catches byte changes that leave parsed geometry unchanged, such as OBJ
+whitespace edits. The typed node exposes the same optional parameter.
+
+The result provenance reports `source_payload_integrity_checked=true`
+only when an expected digest was provided and matched. Older requests remain
+valid, with the field `false`. Direct indexed-triangle requests cannot claim
+an imported-file binding. This is a **source-content consistency check**,
+not persistent asset ingestion, authentication, independent calibration
+verification, coordinate registration, or specimen identification. Hashes
+must be supplied from a trustworthy local asset record to be useful; a
+matching attacker-controlled hash offers no security guarantee. Saved
+workflows continue to retain the submitted bounded input payload and
+measurement provenance under existing local project persistence.
+
 ## Scale-only surface-area bounds (provisional)
 
 The standalone mesh API and saved `mesh_surface_preview` Workflow Builder
