@@ -342,6 +342,7 @@ export async function previewLocalPointCloudFile(
   file: File,
   calibration: MeshPreviewCalibration,
   pointIndexPairs?: Array<[number, number]>,
+  preserveMeasuredChordEndpoints = false,
 ): Promise<Record<string, unknown>> {
   if (file.name.split(".").pop()?.toLowerCase() !== "ply") {
     throw new Error("Choose a vertex-only ASCII PLY point-cloud file.");
@@ -411,6 +412,9 @@ export async function previewLocalPointCloudFile(
         source_label: file.name,
         ...(pointIndexPairs?.length
           ? { point_index_pairs: pointIndexPairs }
+          : {}),
+        ...(preserveMeasuredChordEndpoints
+          ? { preserve_measured_chord_endpoints_in_preview: true }
           : {}),
       }),
     },
