@@ -401,6 +401,24 @@ function projectPoint(
   return { x: 280 + rotatedX * scale, y: 200 - rotatedY * scale, depth };
 }
 
+function formatSourcePoint(point: Vec3): string {
+  return point
+    .map(
+      (coordinate, axis) =>
+        `${["x", "y", "z"][axis]}=${coordinate.toPrecision(6)} m`,
+    )
+    .join(", ");
+}
+
+function formatScaleIntervals(intervals: PointScaleIntervals): string {
+  return intervals
+    .map(
+      (bounds, axis) =>
+        `${["x", "y", "z"][axis]} [${bounds[0].toPrecision(6)}, ${bounds[1].toPrecision(6)}] m`,
+    )
+    .join("; ");
+}
+
 /** Read-only orthographic preview of sampled points in unregistered source coordinates. */
 export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
   const cloud = useMemo(
@@ -495,17 +513,11 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
       </svg>
       <p className="annotation-helper" aria-live="polite">
         {selectedPoint && selectedSourceIndex !== null
-          ? `Source point ${selectedSourceIndex} (unverified source frame): ${selectedPoint
-              .map((coordinate, axis) => `${["x", "y", "z"][axis]}=${coordinate.toPrecision(6)} m`)
-              .join(", ")}. ${selectedIntervals
-              ? `Scale-only coordinate intervals: ${selectedIntervals
-                  .map(
-                    (bounds, axis) =>
-                      `${["x", "y", "z"][axis]} [${bounds[0].toPrecision(6)}, ${bounds[1].toPrecision(6)}] m`,
-                  )
-                  .join("; ")}.`
-              : "Scale uncertainty unavailable."} Not registration or anatomical verification.
-          `
+          ? `Source point ${selectedSourceIndex} (unverified source frame): ${formatSourcePoint(selectedPoint)}. ${
+              selectedIntervals
+                ? `Scale-only coordinate intervals: ${formatScaleIntervals(selectedIntervals)}.`
+                : "Scale uncertainty unavailable."
+            } Not registration or anatomical verification.`
           : "Select a displayed source point to inspect calibrated coordinates and scale-only uncertainty."}
       </p>
       <div className="feature-grid">
