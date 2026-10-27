@@ -153,3 +153,18 @@ omission. Older persisted previews without these fields remain readable, with
 endpoint display coverage explicitly marked **unassessed**. This is a visual
 completeness check only: even when every endpoint is displayed, neither the
 chord nor its calibration becomes human-verified or an anatomical branch length.
+
+## Omitted selected-chord endpoint QC (October 27, 2026)
+
+When the 512-point display sample omits either original source index of a selected
+point-pair chord, the measurement result now adds the machine-readable
+`preview_omits_selected_chord_endpoints` warning to `qc_warnings`, alongside
+`preview_omitted_selected_chord_endpoint_indices` and
+`preview_selected_chord_endpoints_covered=false`. Opting into endpoint pinning
+keeps selected indices visible within the same bounded preview budget and clears
+this warning when all are covered. A hidden endpoint does **not** invalidate the
+full-input chord calculation, but its distance cannot be independently checked
+from the decimated display alone. Direct-service tests and standalone-versus-
+saved typed Workflow Builder regressions cover both omission and pinning. These
+warnings do not verify calibration, registration, coral identity or biological
+branch length; they preserve an explicit human-review limitation.
