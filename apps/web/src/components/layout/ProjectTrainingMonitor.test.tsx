@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -122,6 +122,55 @@ describe("ProjectTrainingMonitor", () => {
       screen.getByRole("button", { name: "Open Training Console" }),
     );
     await waitFor(() => expect(open).toHaveBeenCalledWith("run-active"));
+  });
+
+  it("serializes rapid console clicks and allows retry after a launcher error", async () => {
+    vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+      apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+      dataDir: "C:/ReefVision",
+      desktopMode: true,
+    });
+    let rejectFirst: (error: Error) => void = () => {
+      throw new Error("The first console launch was never started");
+    };
+    const open = vi
+      .spyOn(runtime, "openDesktopTrainingConsole")
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectFirst = reject;
+          }),
+      )
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    // Dispatch both clicks before React flushes the disabled-button state.
+    // A synchronous guard must prevent launching two PowerShell processes.
+    act(() => {
+      const button = screen.getByRole("button", {
+        name: "Open Training Console",
+      });
+      button.click();
+      button.click();
+    });
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith("run-active");
+
+    await act(async () => {
+      rejectFirst(new Error("PowerShell unavailable"));
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "PowerShell unavailable",
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Training Console" }),
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it.each(["completed", "failed"] as const)(
