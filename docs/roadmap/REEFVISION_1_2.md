@@ -2502,3 +2502,34 @@ independent biological replication. All results remain
 `linked_unverified` / `scientist_review_required`, with independent-unit
 inference prohibited. No new migration, environmental subsystem, model
 download, branch merge, tag or release is introduced.
+
+## Population CSV source-denominator audit and exact-head CI repair (2026-10-27)
+
+The predecessor 1.2 head `4b0dd8217b354c80c86cf8e8c9981c304afb21ef`
+completed **16/19** GitHub Actions workflows. CI, Pose Workflow Validation,
+and ReefVision 1.0 Acceptance stopped at the same Ruff formatting failure
+in `test_ecology_population_export_1_2.py` (a three-line set literal). The
+exact formatter-requested one-line form is applied here.
+
+The existing standalone `population.csv` endpoint and executable, persisted,
+typed `ecology_population_csv_export` Workflow Builder node now expose the
+source fingerprint contract and source candidate/image/organism/exclusion
+counts alongside the already rechecked registry, image, annotation and
+calibration evidence digests. The export schema is explicitly advanced to
+`ecology-population-export-0003`; previous `0002` column consumers must
+account for the new columns. Source denominators are **not** statistical
+replicate counts: a regression checks that two source images of one organism
+in one tank still yield exactly one declared experimental unit. The existing
+standalone and saved-workflow byte-parity and verified-dataset-port rejection
+tests remain applicable. No new workflow type, migration or environmental
+provider is introduced.
+
+The source report's candidate/image/organism/exclusion denominators are
+revalidated by the shared series-QC exporter before rendering, so altered
+counts fail closed rather than being silently displayed as scientific facts.
+All outputs remain `linked_unverified`, `scientist_review_required`, and
+`independent_unit_inference_allowed=false`. These counts do **not** certify
+organism identity, biological independence, calibrated growth, or scientist
+review. New-head CI, authenticated longitudinal measurements, migration
+reconciliation, independent ecological acceptance, and installed Windows
+GUI/installer validation remain outstanding. **1.2 is NOT RELEASE-READY.**
