@@ -736,16 +736,12 @@ def test_v3_integrity_marker_cannot_be_accidentally_downgraded():
         ("rejection_rate", 1.2),
     ],
 )
-def test_v3_rejects_resigned_false_raw_normalization(
-    signal_id: str, altered_raw: float
-) -> None:
+def test_v3_rejects_resigned_false_raw_normalization(signal_id: str, altered_raw: float) -> None:
     """A re-signed, score-consistent snapshot cannot invent raw QC evidence."""
     queue, items = _v3_snapshot()
     item = items[0]
     item.signal_values_json[signal_id] = altered_raw
-    part = next(
-        part for part in item.score_breakdown_json if part["signal_id"] == signal_id
-    )
+    part = next(part for part in item.score_breakdown_json if part["signal_id"] == signal_id)
     part["raw_value"] = altered_raw
     # The old v2 check sees internally consistent breakdown, score and
     # checksum; only v3's scientific normalization rule detects this edit.
@@ -762,11 +758,7 @@ def test_v3_accepts_real_pending_count_normalization(pending_count: float) -> No
     for item in items:
         item.signal_values_json["pending_proposals"] = pending_count
         item.normalized_signals_json["pending_proposals"] = normalized
-        part = next(
-            part
-            for part in item.score_breakdown_json
-            if part["signal_id"] == "pending_proposals"
-        )
+        part = next(part for part in item.score_breakdown_json if part["signal_id"] == "pending_proposals")
         part["raw_value"] = pending_count
         part["normalized_value"] = normalized
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
