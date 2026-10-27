@@ -432,9 +432,14 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
   const [yaw, setYaw] = useState(30);
   const [pitch, setPitch] = useState(20);
   const [zoom, setZoom] = useState(1);
-  const [selectedSourceIndex, setSelectedSourceIndex] = useState<number | null>(
-    null,
-  );
+  // A source index is only meaningful within the artifact that was inspected.
+  // Do not carry a selection into a replacement reconstruction with reused indices.
+  const [selection, setSelection] = useState<{
+    artifact: unknown;
+    sourceIndex: number;
+  } | null>(null);
+  const selectedSourceIndex =
+    selection?.artifact === artifact ? selection.sourceIndex : null;
   const selectedDisplayIndex =
     cloud?.indices.indexOf(selectedSourceIndex ?? -1) ?? -1;
   const selectedPoint =
@@ -493,11 +498,11 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
             tabIndex={0}
             aria-label={`Inspect source point ${point.sourceIndex}`}
             aria-pressed={selectedSourceIndex === point.sourceIndex}
-            onClick={() => setSelectedSourceIndex(point.sourceIndex)}
+            onClick={() => setSelection({ artifact, sourceIndex: point.sourceIndex })}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                setSelectedSourceIndex(point.sourceIndex);
+                setSelection({ artifact, sourceIndex: point.sourceIndex });
               }
             }}
             cx={point.x}
