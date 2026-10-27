@@ -8,7 +8,9 @@ from types import SimpleNamespace
 import pytest
 
 from reefvision.domain.errors import ValidationError
+from reefvision.schemas.review_queues import ReviewScoreWeights
 from reefvision.services.workflow_review_queue_integrity import (
+    V3_SUPPORTED_SIGNALS,
     queue_item_evidence_sha256,
     validate_saved_queue_snapshot,
 )
@@ -610,3 +612,111 @@ def test_v2_rejects_resigned_zero_total_weight_even_when_scores_agree():
     # Historical unversioned queues remain readable without rewriting data.
     queue.input_checksums_json.pop("integrity_schema_version")
     validate_saved_queue_snapshot(queue, items)
+
+
+def _v3_snapshot():
+    """Create a coherent synthetic v3 snapshot with all 13 frozen QC inputs."""
+    queue, items = snapshot()
+    weights = {signal: 0.0 for signal in V3_SUPPORTED_SIGNALS}
+    weights["low_mean_confidence"] = 1.0
+    queue.configuration_json["weights"] = weights
+    for item in items:
+        original = item.normalized_signals_json["signal"]
+        raw = {signal: 0.0 for signal in V3_SUPPORTED_SIGNALS}
+        raw["low_mean_confidence"] = original
+        item.weights_json = dict(weights)
+        item.signal_values_json = raw
+        item.normalized_signals_json = dict(raw)
+        item.score_breakdown_json = sorted(
+            [
+                {
+                    "signal_id": signal,
+                    "label": signal,
+                    "raw_value": value,
+                    "normalized_value": round(value, 6),
+                    "weight": weights[signal],
+                    "contribution": round(value * weights[signal] * 100, 2),
+                    "description": "Synthetic QC priority contribution",
+                }
+                for signal, value in raw.items()
+            ],
+            key=lambda part: (-part["contribution"], part["signal_id"]),
+        )
+    queue.input_checksums_json["integrity_schema_version"] = "qc-review-queue-v3"
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+            "integrity_schema_version": "qc-review-queue-v3",
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    return queue, items
+
+
+def test_v3_scientific_signal_contract_matches_queue_generator_schema():
+    """The frozen v3 formula must enumerate every generated scoring input."""
+    assert V3_SUPPORTED_SIGNALS == set(ReviewScoreWeights.model_fields)
+    queue, items = _v3_snapshot()
+    validate_saved_queue_snapshot(queue, items)
+    items[0].review_state = "completed"
+    validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize("corruption", ["invented_signal", "omitted_signal"])
+def test_v3_rejects_resigned_coherent_signal_set_changes(corruption):
+    """A complete re-sign of plausible scores cannot redefine the formula."""
+    queue, items = _v3_snapshot()
+    if corruption == "invented_signal":
+        queue.configuration_json["weights"]["invented_biological_signal"] = 0.0
+        for item in items:
+            item.weights_json["invented_biological_signal"] = 0.0
+            item.signal_values_json["invented_biological_signal"] = 0.0
+            item.normalized_signals_json["invented_biological_signal"] = 0.0
+            item.score_breakdown_json.append(
+                {
+                    "signal_id": "invented_biological_signal",
+                    "label": "Unapproved biological signal",
+                    "raw_value": 0.0,
+                    "normalized_value": 0.0,
+                    "weight": 0.0,
+                    "contribution": 0.0,
+                    "description": "Unreviewed scoring component",
+                }
+            )
+            item.score_breakdown_json.sort(
+                key=lambda part: (-part["contribution"], part["signal_id"])
+            )
+    else:
+        queue.configuration_json["weights"].pop("stale_review_state")
+        for item in items:
+            item.weights_json.pop("stale_review_state")
+            item.signal_values_json.pop("stale_review_state")
+            item.normalized_signals_json.pop("stale_review_state")
+            item.score_breakdown_json = [
+                part
+                for part in item.score_breakdown_json
+                if part["signal_id"] != "stale_review_state"
+            ]
+    # Both digests are recomputed. All remaining numeric scores, ranks,
+    # review states and the scientific summary are internally consistent.
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+            "integrity_schema_version": "qc-review-queue-v3",
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_v3_integrity_marker_cannot_be_accidentally_downgraded():
+    """Changing the schema marker alone must invalidate its versioned digest."""
+    queue, items = _v3_snapshot()
+    queue.input_checksums_json["integrity_schema_version"] = "qc-review-queue-v2"
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
