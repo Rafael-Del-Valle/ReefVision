@@ -233,3 +233,29 @@ distances, uncertainty intervals, calibration provenance, or provisional
 verification. The standalone endpoint and saved executable typed Workflow
 Builder graph use the same calculation, with regression checks for identical
 saved-artifact summaries and provenance.
+
+## Sampled preview-point scale uncertainty (October 27, 2026)
+
+The point-cloud preview now returns `preview_point_scale_intervals_m` for each
+displayed XYZ point, aligned exactly with `preview_point_indices` and
+`preview_points_in_source_frame_m`. Each point contains three signed
+`[minimum, maximum]` coordinate intervals in meters. The same positive
+scale-factor bounds are applied to the corresponding source-frame coordinate;
+negative values are sorted so the lower limit remains first. Zero coordinates
+retain zero-width intervals. An explicitly supplied uncertainty of zero yields
+`[coordinate, coordinate]`, whereas unknown uncertainty yields `null` for
+the entire field.
+
+These intervals propagate **only caller-supplied relative scale uncertainty**.
+They are not per-point reconstruction error bars, spatial-registration
+uncertainties, biological confidence intervals, or validated positions in a
+geographic coordinate system. Display decimation does not affect the underlying
+full-resolution point measurements. Calibration remains unverified and the
+measurement status remains `caller_supplied_unverified`.
+
+The standalone endpoint and executable persisted `point_cloud_preview`
+Workflow Builder node use the same engine. Regression coverage checks signed,
+zero and absent uncertainty, plus standalone/saved-graph parity for both direct
+XYZ points and imported ASCII PLY. The sampled uncertainty field is optional
+display/scientific-review metadata, not a replacement for persistent 3D assets,
+anatomical landmarks, or calibrated biological surface/branch measurements.
