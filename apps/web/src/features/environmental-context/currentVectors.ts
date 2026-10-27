@@ -179,3 +179,91 @@ export function vectorColor(speed: number): string {
         ? "#b66b0a"
         : "#ca2639";
 }
+
+/**
+ * Export only the selected, QC-compatible vector summaries. This is not a
+ * substitute for the immutable component records, whose IDs are included for
+ * reproducibility. Missing uncertainty is blank, never interpreted as zero.
+ */
+export interface CurrentVectorCsvContext {
+  cacheKey: string;
+  cacheStatus: string;
+  fetchedAt: string;
+  expiresAt: string;
+}
+const CURRENT_CSV_COLUMNS = [
+  "east_record_id",
+  "north_record_id",
+  "observed_at_utc",
+  "latitude_deg",
+  "longitude_deg",
+  "depth_m",
+  "east_velocity_m_per_s",
+  "north_velocity_m_per_s",
+  "speed_m_per_s",
+  "bearing_deg_true_north",
+  "east_uncertainty_m_per_s",
+  "east_uncertainty_kind",
+  "north_uncertainty_m_per_s",
+  "north_uncertainty_kind",
+  "source_kind",
+  "source",
+  "dataset_id",
+  "model_version",
+  "cache_key",
+  "cache_status",
+  "cache_fetched_at_utc",
+  "cache_expires_at_utc",
+  "derived_uncertainty_status",
+] as const;
+
+function currentCsvCell(value: string | number | null | undefined): string {
+  if (value == null) return "";
+  // Provenance text can originate from external datasets. Quote CSV control
+  // characters and neutralize spreadsheet formula injection without changing
+  // numeric measurements (including negative coordinates and velocities).
+  const raw = String(value);
+  const safe =
+    typeof value === "string" && /^[\\s]*[=+@-]/.test(raw)
+      ? "'" + raw
+      : raw;
+  return '"' + safe.replaceAll('"', '""') + '"';
+}
+
+export function currentVectorsCsv(
+  vectors: CurrentVector[],
+  context: CurrentVectorCsvContext,
+): string {
+  const lines = [...vectors]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((vector) =>
+      [
+        vector.recordIds[0],
+        vector.recordIds[1],
+        vector.observedAt,
+        vector.latitude,
+        vector.longitude,
+        vector.depthM,
+        vector.east,
+        vector.north,
+        vector.speed,
+        vector.bearing,
+        vector.eastUncertainty?.value,
+        vector.eastUncertainty?.kind,
+        vector.northUncertainty?.value,
+        vector.northUncertainty?.kind,
+        vector.sourceKind,
+        vector.source,
+        vector.dataset,
+        vector.modelVersion,
+        context.cacheKey,
+        context.cacheStatus,
+        context.fetchedAt,
+        context.expiresAt,
+        "not_estimated",
+      ]
+        .map(currentCsvCell)
+        .join(","),
+    );
+  return [CURRENT_CSV_COLUMNS.join(","), ...lines].join("\r\n") + "\r\n";
+}
