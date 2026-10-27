@@ -117,4 +117,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance and the [develo
 
 For research using ReefVision, record the application version, model and checkpoint used, dataset version, and how model outputs were reviewed. A formal software citation has not yet been published.
 
-The repository is public, but it does not currently contain a software license. Please do not assume that public access grants permission to redistribute or reuse the code until a license is added.
+### Open-source software license
+
+ReefVision's original source code and project documentation are available under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Rafael Del Valle.
+
+The MIT License allows researchers, nonprofit organizations, and commercial teams to use, modify, and redistribute the licensed software, including in other projects, provided the copyright and license notices are retained. Contributors and downstream users are not required to publish their modifications. ReefVision remains an independently maintained project; the license does not transfer ownership of the original code.
+
+**Research data and third-party material:** This software license does **not** grant rights to coral or wildlife photographs and videos, annotations, research datasets, model checkpoints or weights, third-party dependencies, or materials owned by others. Such items are subject to their respective owners' terms and permissions. Availability of the software's source code should not be interpreted as permission to redistribute research data or third-party content.
+
+For contributions, see [CONTRIBUTING.md](CONTRIBUTING.md).
