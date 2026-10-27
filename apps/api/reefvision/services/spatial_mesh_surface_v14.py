@@ -807,12 +807,12 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         source_label=payload.source_label,
         surface_path_vertex_pairs=payload.surface_path_vertex_pairs,
     )
+    source_sha256 = hashlib.sha256(source_bytes).hexdigest() if source_bytes is not None else None
+    source_byte_count = len(source_bytes) if source_bytes is not None else None
     result["provenance"].update(
         source_format=source_format,
-        source_payload_sha256=hashlib.sha256(source_bytes).hexdigest()
-        if source_bytes is not None
-        else None,
-        source_payload_size_bytes=len(source_bytes) if source_bytes is not None else None,
+        source_payload_sha256=source_sha256,
+        source_payload_size_bytes=source_byte_count,
     )
     observed_at_utc = (
         payload.observed_at_utc.astimezone(UTC).isoformat().replace("+00:00", "Z")
