@@ -222,6 +222,67 @@ it("pairs identical nested processing settings regardless of JSON object key ord
     ]),
   ).toEqual([]);
 });
+it("rejects mismatched model-run source metadata while allowing uo/vo names", () => {
+  const base = component("current_eastward_velocity", 3).provenance;
+  const east = component("current_eastward_velocity", 3, {
+    provenance: {
+      ...base,
+      source_metadata: {
+        provider_variable: "uo",
+        provider_unit: "m s-1",
+        standard_name: "eastward_sea_water_velocity",
+        dataset: { run: "r1", member: 0 },
+        coordinate_resolution: { time: 3600, latitude: 0.25 },
+      },
+    },
+  });
+  const north = component("current_northward_velocity", 4, {
+    provenance: {
+      ...base,
+      source_metadata: {
+        coordinate_resolution: { latitude: 0.25, time: 3600 },
+        dataset: { member: 0, run: "r1" },
+        standard_name: "northward_sea_water_velocity",
+        provider_unit: "m/s",
+        provider_variable: "vo",
+      },
+    },
+  });
+  expect(currentVectors([east, north])).toHaveLength(1);
+  expect(currentVectors([north, east])).toHaveLength(1);
+
+  for (const incompatible of [
+    { dataset: { run: "r2", member: 0 } },
+    { coordinate_resolution: { time: 7200, latitude: 0.25 } },
+    { ensemble_member: "different-member" },
+  ]) {
+    expect(
+      currentVectors([
+        east,
+        {
+          ...north,
+          provenance: {
+            ...north.provenance,
+            source_metadata: {
+              ...north.provenance.source_metadata,
+              ...incompatible,
+            },
+          },
+        },
+      ]),
+    ).toEqual([]);
+  }
+  expect(
+    currentVectors([
+      east,
+      {
+        ...north,
+        provenance: { ...north.provenance, source_metadata: undefined },
+      },
+    ]),
+  ).toEqual([]);
+});
+
 it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
   const east = component("current_eastward_velocity", 3);
   const north = component("current_northward_velocity", 4);
