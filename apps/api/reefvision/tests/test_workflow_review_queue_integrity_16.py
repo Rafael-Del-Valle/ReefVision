@@ -401,9 +401,13 @@ def test_unversioned_legacy_formula_remains_readable_with_matching_digest() -> N
     validate_saved_queue_snapshot(queue, items)
 
 
-def test_rejects_unknown_saved_queue_integrity_version():
+@pytest.mark.parametrize(
+    "integrity_version",
+    ["unknown-version", {"version": "v3"}, ["v3"], True],
+)
+def test_rejects_unknown_saved_queue_integrity_version(integrity_version):
     queue, items = snapshot()
-    queue.input_checksums_json["integrity_schema_version"] = "unknown-version"
+    queue.input_checksums_json["integrity_schema_version"] = integrity_version
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
 
