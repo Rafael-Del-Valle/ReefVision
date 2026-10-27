@@ -705,15 +705,18 @@ def test_three_parent_overlaps_require_one_global_lineage(reverse_order: bool) -
     """Three locally feasible triples form an impossible four-fragment clique."""
     rows = [
         _partial_metric_roster(
-            "box_width", ["fragment-A", "fragment-C", "fragment-E"],
+            "box_width",
+            ["fragment-A", "fragment-C", "fragment-E"],
             ["parent-P", "parent-S", "parent-T"],
         ),
         _partial_metric_roster(
-            "box_height", ["fragment-A", "fragment-D", "fragment-E"],
+            "box_height",
+            ["fragment-A", "fragment-D", "fragment-E"],
             ["parent-P", "parent-S", "parent-T"],
         ),
         _partial_metric_roster(
-            "mask_projected_area", ["fragment-C", "fragment-D", "fragment-E"],
+            "mask_projected_area",
+            ["fragment-C", "fragment-D", "fragment-E"],
             ["parent-P", "parent-S", "parent-T"],
         ),
     ]
@@ -732,15 +735,18 @@ def test_three_parent_overlaps_preserve_feasible_unverified_lineage(
     """Distinct metric rosters may have one consistent, unasserted mapping."""
     rows = [
         _partial_metric_roster(
-            "box_width", ["fragment-A", "fragment-C", "fragment-E"],
+            "box_width",
+            ["fragment-A", "fragment-C", "fragment-E"],
             ["parent-P", "parent-S", "parent-T"],
         ),
         _partial_metric_roster(
-            "box_height", ["fragment-A", "fragment-D", "fragment-E"],
+            "box_height",
+            ["fragment-A", "fragment-D", "fragment-E"],
             ["parent-P", "parent-Q", "parent-S"],
         ),
         _partial_metric_roster(
-            "mask_projected_area", ["fragment-C", "fragment-D", "fragment-E"],
+            "mask_projected_area",
+            ["fragment-C", "fragment-D", "fragment-E"],
             ["parent-Q", "parent-S", "parent-T"],
         ),
     ]
