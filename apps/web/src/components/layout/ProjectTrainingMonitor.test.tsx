@@ -192,7 +192,8 @@ describe("ProjectTrainingMonitor", () => {
         metrics: {
           "metrics/mAP50(B)": 0.8123,
           "metrics/precision(B)": 0.902,
-          "train/box_loss": 0.5,
+          "train/box_loss": 0.5, // Stale summary must not replace epoch 2.
+          "train/cls_loss": 9.9,
           "train/dfl_loss": Number.NaN,
         },
         metrics_history: {
@@ -209,8 +210,10 @@ describe("ProjectTrainingMonitor", () => {
     expect(screen.getByText("train box loss")).toBeInTheDocument();
     expect(screen.getByText("train cls loss")).toBeInTheDocument();
     expect(screen.getByText("train dfl loss")).toBeInTheDocument();
-    expect(screen.getByText("0.5")).toBeInTheDocument();
+    expect(screen.getByText("0.6")).toBeInTheDocument();
     expect(screen.getByText("1.2")).toBeInTheDocument();
+    expect(screen.queryByText("0.5")).not.toBeInTheDocument();
+    expect(screen.queryByText("9.9")).not.toBeInTheDocument();
     expect(screen.getByText("0.9")).toBeInTheDocument();
     expect(screen.getByText("0.8123")).toBeInTheDocument();
     expect(screen.getByText("0.902")).toBeInTheDocument();
@@ -220,7 +223,7 @@ describe("ProjectTrainingMonitor", () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([
       {
         ...activeRun,
-        metrics: { "train/box_loss": Number.NaN },
+        metrics: { "train/box_loss": 0.99 },
         metrics_history: {
           "train/box_loss": [0.4, 0.25, Number.NaN],
           "train/cls_loss": [0.7, 0, Number.POSITIVE_INFINITY],
@@ -237,6 +240,7 @@ describe("ProjectTrainingMonitor", () => {
     expect(screen.getByText("train cls loss")).toBeInTheDocument();
     expect(screen.getByText("train dfl loss")).toBeInTheDocument();
     expect(screen.getByText("0.25")).toBeInTheDocument();
+    expect(screen.queryByText("0.99")).not.toBeInTheDocument();
     expect(screen.getByText("0")).toBeInTheDocument();
     expect(screen.getByText("0.12")).toBeInTheDocument();
     expect(screen.queryByText("train seg loss")).not.toBeInTheDocument();
