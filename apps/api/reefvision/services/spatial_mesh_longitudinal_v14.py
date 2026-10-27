@@ -505,6 +505,8 @@ def compare_mesh_observations(
     # reference. This is a QC diagnostic only: axis-aligned extents depend on
     # reconstruction orientation and cannot certify registration accuracy.
     registration_record = None
+    registration_disputed = False
+    registration_inconclusive = False
     registration_residual_to_smaller_extent_ratio = None
     registration_translation_magnitude_m = None
     registration_rotation_angle_degrees = None
@@ -587,8 +589,10 @@ def compare_mesh_observations(
                 raise ValueError("Independent registration review predates the later observation")
             warnings.append("registration_independent_review_recorded_not_alignment_verification")
             if registration.independent_review_decision == "disputes_alignment":
+                registration_disputed = True
                 warnings.append("registration_independent_review_disputes_alignment")
             elif registration.independent_review_decision == "inconclusive":
+                registration_inconclusive = True
                 warnings.append("registration_independent_review_inconclusive")
         warnings.append("registration_residual_requires_independent_review")
         warnings.append("registration_transform_and_accuracy_not_verified")
@@ -894,6 +898,12 @@ def compare_mesh_observations(
             "after_calibration_evidence": second.get("calibration_evidence"),
             "specimen_identity_verified": False,
             "coordinate_registration_verified": False,
+            "registered_centroid_comparison_withheld_due_to_registration_dispute": (
+                registration_disputed
+            ),
+            "registered_centroid_comparison_withheld_due_to_inconclusive_registration_review": (
+                registration_inconclusive
+            ),
             "observation_metadata_verified": False,
             "calibration_verified": False,
             "scale_uncertainty_only": (
