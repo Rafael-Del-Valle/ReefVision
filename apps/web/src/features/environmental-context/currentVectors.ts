@@ -38,6 +38,21 @@ export function currentComponentUncertaintyText(
     ? `${component} component uncertainty: ${uncertainty.value.toFixed(3)} m/s (${uncertainty.kind.replaceAll("_", " ")})`
     : `${component} component uncertainty: unknown`;
 }
+// Processing parameters are JSON objects: property insertion order has no
+// scientific meaning. Canonicalize nested keys so equivalent acquisitions
+// pair even when imported/exported JSON orders the same fields differently.
+// Array order remains significant; do not silently rewrite provider settings.
+function canonicalJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJsonValue);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([key, item]) => [key, canonicalJsonValue(item)]),
+    );
+  }
+  return value;
+}
 export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
   const groups = new Map<
     string,
@@ -96,7 +111,7 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       row.provenance.method ?? null,
       row.provenance.spatial_resolution_m ?? null,
       row.provenance.temporal_resolution_s ?? null,
-      row.provenance.processing_parameters ?? null,
+      canonicalJsonValue(row.provenance.processing_parameters ?? null),
       // Components from separate acquisitions must not form a synthetic current.
       row.provenance.acquired_at,
       row.environmental_cache_key,
