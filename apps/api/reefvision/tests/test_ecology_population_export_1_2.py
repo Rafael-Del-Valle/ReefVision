@@ -39,6 +39,23 @@ def _rows(value: str) -> list[dict[str, str]]:
     return list(csv.DictReader(StringIO(value)))
 
 
+@pytest.mark.parametrize("column_delta", [-1, 1])
+def test_population_csv_fails_closed_on_header_row_drift(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    column_delta: int,
+) -> None:
+    """Never emit misaligned scientific CSV when the export schema drifts."""
+    from reefvision.services import ecology_population_export as exporter
+
+    source = _dated_artifact(client)
+    columns = exporter._COLUMNS
+    altered = columns[:-1] if column_delta < 0 else (*columns, "unexpected_column")
+    monkeypatch.setattr(exporter, "_COLUMNS", altered)
+    with pytest.raises(ValidationError, match="column count"):
+        exporter.render_ecology_population_csv(source)
+
+
 def test_population_csv_preserves_excluded_units_and_api_parity(client: TestClient) -> None:
     project_id, _ = _source(client)
     base = f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
@@ -97,9 +114,7 @@ def test_population_csv_carries_rechecked_source_lineage_for_all_rows(
         "source_image_count": str(report.source_image_count),
         "source_organism_count": str(report.source_organism_count),
         "source_excluded_count": str(report.excluded_source_count),
-        "source_declared_experimental_unit_count": str(
-            report.declared_experimental_unit_count
-        ),
+        "source_declared_experimental_unit_count": str(report.declared_experimental_unit_count),
         "source_date_qc_pass_series_count": str(report.date_qc_pass_series_count),
         "source_excluded_series_count": str(report.excluded_series_count),
         "source_registry_history_sha256": source.source_registry_history_sha256 or "",
