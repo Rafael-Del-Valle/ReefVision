@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -86,6 +87,18 @@ def test_identity_rejects_cross_project_parents_and_technical_units(
         experimental_unit_id="frame-9",
     )
     assert invalid.status_code == 422, invalid.text
+    for index, technical_type in enumerate(
+        ("pose_keypoint", "tracking_tracklet", "segmentation_polygon"), start=1
+    ):
+        rejected = _register(
+            client,
+            first,
+            f"fragment-technical-{index}",
+            "fragment",
+            experimental_unit_type=technical_type,
+            experimental_unit_id=f"technical-{index}",
+        )
+        assert rejected.status_code == 422, rejected.text
     incomplete = _register(client, first, "fragment-3", "fragment", experimental_unit_id="tank-1")
     assert incomplete.status_code == 422, incomplete.text
     self_parent = _register(client, first, "fragment-4", "fragment", parent_colony_key="fragment-4")
@@ -264,8 +277,11 @@ def test_saved_identity_source_rejects_scientist_supplied_parameters(
     )
 
 
+@pytest.mark.parametrize(
+    "technical_type", ["video_frame", "pose_keypoint", "tracking_tracklet"]
+)
 def test_imported_technical_unit_cannot_enter_registry_or_saved_workflow(
-    client: TestClient,
+    client: TestClient, technical_type: str
 ) -> None:
     project_id = str(create_project(client, "Imported technical unit integrity")["id"])
     created = _register(
@@ -285,8 +301,8 @@ def test_imported_technical_unit_cannot_enter_registry_or_saved_workflow(
                 organism_key="fragment-technical",
                 revision=2,
                 kind="fragment",
-                experimental_unit_type="video_frame",
-                experimental_unit_id="frame-1",
+                experimental_unit_type=technical_type,
+                experimental_unit_id="technical-1",
                 reason="Simulated imported technical pseudoreplicate",
             )
         )
