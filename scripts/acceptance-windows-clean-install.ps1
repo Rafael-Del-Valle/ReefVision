@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)][string]$InstallerPath,
     [Parameter(Mandatory = $true)][string]$AcceptanceRoot,
     [string]$PreviousInstallerPath = '',
+    [string]$CameraFixturePath = '',
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
     [switch]$DisposableTest,
     [switch]$PlanOnly,
@@ -26,6 +27,15 @@ if ([System.IO.Path]::GetExtension($InstallerPath) -ine '.msi') { throw 'Install
 if ($PreviousInstallerPath) {
     $PreviousInstallerPath = (Resolve-Path -LiteralPath $PreviousInstallerPath).Path
     if ([System.IO.Path]::GetExtension($PreviousInstallerPath) -ine '.msi') { throw 'PreviousInstallerPath must identify an MSI.' }
+}
+if ($CameraFixturePath) {
+    $CameraFixturePath = (Resolve-Path -LiteralPath $CameraFixturePath).Path
+    if ([System.IO.Path]::GetExtension($CameraFixturePath) -notin @('.jpg', '.jpeg', '.jpe', '.jfif', '.jfi', '.jif')) {
+        throw 'CameraFixturePath must identify a JPEG camera image (.jpg/.jpeg or a recognized JPEG alias).'
+    }
+    if (-not (Test-Path -LiteralPath $CameraFixturePath -PathType Leaf)) {
+        throw 'CameraFixturePath must identify an existing file.'
+    }
 }
 if ($PreviousInstallerPath -and -not $PreviousInstallerSupportsIsolatedAcceptance) {
     throw 'A previous MSI may be exercised only when -PreviousInstallerSupportsIsolatedAcceptance confirms that it honors the marker-gated acceptance data root. This prevents an older desktop from touching normal ReefVision user data.'
@@ -77,6 +87,7 @@ $report = [ordered]@{
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     external_annotation_imports = New-ReefVisionEvidenceResult
+    camera_jpeg = if ($CameraFixturePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real camera JPEG fixture not supplied' }
     confidence_review = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real pending prediction review not requested' }
     project_persistence = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
@@ -161,7 +172,8 @@ function Import-AcceptanceImage(
     [string]$Url,
     [byte[]]$ImageBytes = $null,
     [string]$Filename = 'acceptance.png',
-    [string]$RelativePath = 'synthetic/acceptance.png'
+    [string]$RelativePath = 'synthetic/acceptance.png',
+    [string]$ContentType = 'image/png'
 ) {
     Add-Type -AssemblyName System.Net.Http
     $png = if ($null -ne $ImageBytes) { $ImageBytes } else { [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=') }
@@ -169,7 +181,7 @@ function Import-AcceptanceImage(
     $form = New-Object System.Net.Http.MultipartFormDataContent
     try {
         $file = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$png)
-        $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('image/png')
+        $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse($ContentType)
         $form.Add($file, 'files', $Filename)
         $form.Add((New-Object System.Net.Http.StringContent($RelativePath)), 'relative_paths')
         $response = $client.PostAsync($Url, $form).GetAwaiter().GetResult()
@@ -298,6 +310,52 @@ try {
     $report.model_policy = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "$($Architectures.Count) architectures; zero pretrained/downloadable models; zero cached weights; isolated provider caches."
     $import = Import-AcceptanceImage "$api/projects/$projectId/imports/images"
     $imageId = $import.successful[0].image_id
+    if ($CameraFixturePath) {
+        # Optional physical acceptance fixture: only the disposable installed
+        # backend receives the camera file. Never rewrite or EXIF-transpose it.
+        # This is backend evidence, not a substitute for interactive WebView2 QA.
+        $cameraHashBefore = (Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash
+        $cameraBytes = [System.IO.File]::ReadAllBytes($CameraFixturePath)
+        $cameraName = [System.IO.Path]::GetFileName($CameraFixturePath)
+        $cameraImport = Import-AcceptanceImage -Url "$api/projects/$projectId/imports/images" -ImageBytes $cameraBytes -Filename $cameraName -RelativePath "camera/$cameraName" -ContentType 'image/jpeg'
+        if (@($cameraImport.successful).Count -ne 1) {
+            throw "Real camera JPEG did not import exactly once: $($cameraImport | ConvertTo-Json -Depth 5 -Compress)"
+        }
+        $cameraId = $cameraImport.successful[0].image_id
+        $cameraMetadata = Invoke-RestMethod "$api/images/$cameraId"
+        if ($cameraMetadata.media_type -ne 'image/jpeg' -or $cameraMetadata.width_px -le 0 -or $cameraMetadata.height_px -le 0) {
+            throw 'Real camera JPEG lost its media type or source-pixel dimensions.'
+        }
+        $cameraHttp = [System.Net.Http.HttpClient]::new()
+        try {
+            $storedBytes = $cameraHttp.GetByteArrayAsync("$api/images/$cameraId/content").GetAwaiter().GetResult()
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $storedHash = [BitConverter]::ToString($sha.ComputeHash([byte[]]$storedBytes)).Replace('-', '')
+            } finally { $sha.Dispose() }
+            if ($storedHash -cne $cameraHashBefore) {
+                throw 'Installed backend modified the original camera JPEG bytes.'
+            }
+            $displayResponse = $cameraHttp.GetAsync("$api/images/$cameraId/display").GetAwaiter().GetResult()
+            try {
+                if (-not $displayResponse.IsSuccessStatusCode) { throw 'Real camera JPEG display endpoint failed.' }
+                $displayType = [string]$displayResponse.Content.Headers.ContentType.MediaType
+                if ($displayType -notin @('image/jpeg', 'image/png')) {
+                    throw "Real camera JPEG display has an unsupported content type: $displayType"
+                }
+                $displayBytes = $displayResponse.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+                if ($displayBytes.Length -eq 0) { throw 'Real camera JPEG display returned no pixels.' }
+                $orientation = $cameraMetadata.metadata_json.exif.Orientation
+                if ($null -ne $orientation -and [string]$orientation -ne '1' -and $displayType -ne 'image/png') {
+                    throw 'EXIF-oriented camera JPEG must use an unrotated PNG display rendition.'
+                }
+            } finally { $displayResponse.Dispose() }
+        } finally { $cameraHttp.Dispose() }
+        if ((Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash -cne $cameraHashBefore) {
+            throw 'Camera acceptance modified the original fixture on disk.'
+        }
+        $report.camera_jpeg = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend accepted $cameraName ($($cameraMetadata.width_px)x$($cameraMetadata.height_px)); source SHA256 $cameraHashBefore unchanged; display served as $displayType. GUI/WebView2 acceptance remains manual."
+    }
     $session = Invoke-RestMethod "$api/images/$imageId/annotations"
     $annotationId = [guid]::NewGuid().ToString()
     $annotationBody = @{
