@@ -388,7 +388,8 @@ def _completed_workflow_pose_training_run(
             raise ValidationError("Recovered pose-training seed model changed")
 
         if (
-            candidate.architecture != architecture
+            candidate.provider_id != "ultralytics"
+            or candidate.architecture != architecture
             or candidate.device != device
             or candidate.precision != precision
             or candidate.random_seed != random_seed
