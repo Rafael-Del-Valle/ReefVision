@@ -457,6 +457,34 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
 
+    # A real API-frozen, scientist-reviewed pose dataset underlies this run.
+    # Corrupt only the persisted child-run snapshot and verify that replay
+    # cannot silently return its checkpoint with falsified dataset lineage.
+    for field, corrupt_value in (
+        ("pose_training_dataset_manifest_sha256", "0" * 64),
+        ("pose_schema_id", "corrupted-schema-id"),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_snapshot = dict(persisted.draft_snapshot_json or {})
+            persisted.draft_snapshot_json = {
+                **original_snapshot,
+                field: corrupt_value,
+            }
+            session.commit()
+
+        with pytest.raises(ValidationError, match="frozen provenance changed"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.draft_snapshot_json = original_snapshot
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     checkpoint = resolve_managed_project_path(test_settings, result["result_checkpoint_path"])
     checkpoint.write_bytes(b"changed-after-scientist-verified-pose-training")
     with pytest.raises(ValidationError, match="checkpoint checksum changed"):
