@@ -118,7 +118,7 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
             )
         )
 
-    for row in sorted(
+    for population_row in sorted(
         response.projected_population_summaries,
         key=lambda item: (
             item.experimental_unit_type,
@@ -134,28 +134,28 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
                 response.input_sha256,
                 report.report_sha256,
                 "population_stratum",
-                row.metric,
-                _csv_identifier(row.experimental_unit_type),
+                population_row.metric,
+                _csv_identifier(population_row.experimental_unit_type or ""),
                 "",
-                _array(row.experimental_unit_ids),
+                _array(population_row.experimental_unit_ids),
                 "eligible_declared_units_only",
-                _array([row.unit]),
-                _array([row.sampling_window_utc]),
+                _array([population_row.unit]),
+                _array([population_row.sampling_window_utc]),
                 _array([]),
                 _array([]),
-                _array(row.parent_colony_keys),
-                _array(row.shared_parent_colony_keys),
-                _array(row.units_missing_parent_colony),
-                _array(row.design_review_blockers),
-                row.declared_unit_count,
-                row.contributing_organism_count,
-                row.mean_unit_absolute_change,
-                row.mean_unit_percent_change,
-                _number(row.sample_sd_unit_absolute_change),
-                _number(row.sample_sd_unit_percent_change),
+                _array(population_row.parent_colony_keys),
+                _array(population_row.shared_parent_colony_keys),
+                _array(population_row.units_missing_parent_colony),
+                _array(population_row.design_review_blockers),
+                population_row.declared_unit_count,
+                population_row.contributing_organism_count,
+                population_row.mean_unit_absolute_change,
+                population_row.mean_unit_percent_change,
+                _number(population_row.sample_sd_unit_absolute_change),
+                _number(population_row.sample_sd_unit_percent_change),
                 "false",
-                row.evidence_level,
-                row.review_gate,
+                population_row.evidence_level,
+                population_row.review_gate,
             )
         )
     return output.getvalue()
