@@ -77,6 +77,61 @@ def _full_parent_roster_feasible(
     return True
 
 
+
+def _assert_joint_two_parent_rosters(
+    full_parent_rosters: list[tuple[tuple[str, ...], tuple[str, ...]]],
+    possible_parents_by_organism: dict[str, set[str]],
+) -> None:
+    """Reject impossible cycles in overlapping two-parent aggregate rosters.
+
+    A full two-organism/two-parent row asserts different parents for its two
+    organisms. Each connected component with the same parent pair therefore
+    needs a consistent two-coloring. Checking each row's matching separately
+    misses odd cycles across width, height and area metrics. This does not
+    infer an organism's parent or solve arbitrary larger lineage constraints.
+    """
+    pair_graphs: dict[tuple[str, str], dict[str, set[str]]] = {}
+    for organisms, parents in full_parent_rosters:
+        if len(organisms) != 2 or len(parents) != 2:
+            continue
+        graph = pair_graphs.setdefault(parents, {})
+        first, second = organisms
+        graph.setdefault(first, set()).add(second)
+        graph.setdefault(second, set()).add(first)
+
+    for parents, graph in sorted(pair_graphs.items()):
+        colors: dict[str, int] = {}
+        for start in sorted(graph):
+            if start in colors:
+                continue
+            colors[start] = 0
+            component: list[str] = []
+            pending = [start]
+            while pending:
+                organism = pending.pop()
+                component.append(organism)
+                for neighbor in sorted(graph[organism]):
+                    previous = colors.get(neighbor)
+                    if previous is None:
+                        colors[neighbor] = 1 - colors[organism]
+                        pending.append(neighbor)
+                    elif previous == colors[organism]:
+                        raise ValidationError(
+                            "Projected parent-colony assignments are jointly impossible across metrics"
+                        )
+            if not any(
+                all(
+                    parents[colors[organism] ^ orientation]
+                    in possible_parents_by_organism[organism]
+                    for organism in component
+                )
+                for orientation in (0, 1)
+            ):
+                raise ValidationError(
+                    "Projected parent-colony assignments are jointly impossible across metrics"
+                )
+
+
 def _source_sampling_level(unit_type: str | None) -> str | None:
     """Canonicalize biological aliases without laundering technical replicates.
 
@@ -697,6 +752,9 @@ def summarize_projected_population_summaries(
             raise ValidationError(
                 "Projected organism parent-colony assignments are jointly impossible across metrics"
             )
+
+    # Cross-metric pair constraints must also admit one global parent assignment.
+    _assert_joint_two_parent_rosters(full_parent_rosters, possible_parents_by_organism)
 
     results: list[EcologyProjectedPopulationSummary] = []
     for (unit_type, metric, unit, window), records in sorted(groups.items()):
