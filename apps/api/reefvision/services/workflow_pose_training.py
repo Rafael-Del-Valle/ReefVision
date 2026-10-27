@@ -413,6 +413,11 @@ def _reused_pose_training_result(
     if job is None or job.status != "succeeded" or run.status != "completed":
         raise ValidationError("Recovered pose training is not durably complete")
 
+    # A completed child job must still belong to the training run's project.
+    # Corrupted job ownership must never authorize replay of its checkpoint.
+    if job.project_id != run.project_id:
+        raise ValidationError("Recovered pose training job project ownership changed")
+
     checkpoint = resolve_managed_project_path(
         settings,
         run.result_checkpoint_path,
