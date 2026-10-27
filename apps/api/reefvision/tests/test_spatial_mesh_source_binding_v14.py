@@ -39,7 +39,9 @@ def _graph(parameters: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _run_saved_mesh(client: TestClient, project_id: str, params: dict[str, Any]) -> dict[str, Any]:
+def _run_saved_mesh(
+    client: TestClient, project_id: str, params: dict[str, Any]
+) -> dict[str, Any]:
     base = f"/api/v1/projects/{project_id}"
     saved = client.post(f"{base}/workflow-graphs", json={"graph": _graph(params)})
     assert saved.status_code == 201, saved.text
