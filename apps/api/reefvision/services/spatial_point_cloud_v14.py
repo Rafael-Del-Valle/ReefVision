@@ -143,7 +143,9 @@ def measure_point_cloud_preview(
         or not 0 <= relative_scale_uncertainty <= 1
         or not isfinite(relative_scale_uncertainty)
     ):
-        raise ValueError("relative_scale_uncertainty must be a finite numeric value between 0 and 1")
+        raise ValueError(
+            "relative_scale_uncertainty must be a finite numeric value between 0 and 1"
+        )
     vertices: list[tuple[float, float, float]] = []
     for point in points:
         if not isinstance(point, (list, tuple)) or len(point) != 3 or any(
