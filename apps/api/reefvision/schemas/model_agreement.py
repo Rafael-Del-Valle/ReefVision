@@ -63,6 +63,8 @@ class PairedCountObservation(BaseModel):
     def finite_count(cls, value: float) -> float:
         if not math.isfinite(value):
             raise ValueError("Counts must be finite")
+        if not value.is_integer():
+            raise ValueError("Paired organism counts must be whole numbers, not fractions")
         return value
 
 
