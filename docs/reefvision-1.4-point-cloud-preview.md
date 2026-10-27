@@ -143,3 +143,13 @@ landmark. Chords remain unverified Euclidean distances, never inferred coral
 branch lengths or geodesics. The flag does not create persistent point-cloud
 assets, establish calibration or registration, or promote model output to
 verified biological evidence. Existing requests retain their default behavior.
+
+The interactive point-cloud viewer now reports whether selected source-index
+chord endpoints are actually present in the bounded display sample. It
+cross-checks the reported omitted indices against the saved chord selections
+and sampled source indices; contradictory, duplicated, missing-pair, or
+incorrectly marked coverage metadata fails closed instead of hiding a display
+omission. Older persisted previews without these fields remain readable, with
+endpoint display coverage explicitly marked **unassessed**. This is a visual
+completeness check only: even when every endpoint is displayed, neither the
+chord nor its calibration becomes human-verified or an anatomical branch length.
