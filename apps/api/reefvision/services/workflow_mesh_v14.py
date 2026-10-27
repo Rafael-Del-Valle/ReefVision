@@ -66,6 +66,7 @@ def extend_mesh_registry(
                 "faces": None,
                 "relative_scale_uncertainty": None,
                 "source_label": None,
+                "expected_source_payload_sha256": None,
                 "specimen_id": None,
                 "observation_id": None,
                 "observed_at_utc": None,
@@ -78,6 +79,7 @@ def extend_mesh_registry(
                 "Uses the same bounded preview engine as the standalone API.",
                 "Geometry and calibration remain caller_supplied_unverified.",
                 "This is not a persistent 3D asset importer or full mesh viewer.",
+                "Optional source SHA-256 binding rejects changed OBJ/PLY/GLB bytes on replay.",
                 "Optional edge routes are not biologically verified branch lengths.",
             ],
         )
