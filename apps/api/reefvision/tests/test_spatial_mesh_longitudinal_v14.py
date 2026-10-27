@@ -637,15 +637,21 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         is True
     )
     assert (
-        provenance["registered_centroid_comparison_withheld_due_to_registration_dispute"]
+        provenance[
+            "registered_centroid_comparison_withheld_due_to_registration_dispute"
+        ]
         is True
     )
     assert provenance["specimen_identity_verified"] is False
     assert provenance["coordinate_registration_verified"] is False
     combined_warnings = combined["qc_warnings"]
-    assert "longitudinal_change_withheld_inconclusive_specimen_identity" in combined_warnings
-    assert "registered_surface_centroid_comparison_withheld_disputed_alignment" in (
-        combined_warnings
+    assert (
+        "longitudinal_change_withheld_inconclusive_specimen_identity"
+        in combined_warnings
+    )
+    assert (
+        "registered_surface_centroid_comparison_withheld_disputed_alignment"
+        in combined_warnings
     )
     graph["graph_id"] = "mesh-longitudinal-combined-review-v14"
     graph["nodes"][3]["parameters"]["registration_evidence"] = combined_registration
