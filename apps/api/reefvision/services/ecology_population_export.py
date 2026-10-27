@@ -10,6 +10,7 @@ import csv
 import json
 from collections.abc import Sequence
 from io import StringIO
+from typing import Any
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_measurement_candidates import (
@@ -19,6 +20,8 @@ from reefvision.services.ecology_candidate_report_export import (
     _csv_identifier,
     render_ecology_series_qc_csv,
 )
+
+_EXPORT_SCHEMA_VERSION = "ecology-population-export-0004"
 
 _COLUMNS = (
     "export_schema_version",
@@ -72,6 +75,13 @@ def _number(value: float | None) -> float | str:
     return "" if value is None else value
 
 
+def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
+    """Reject silent CSV column misalignment before emitting a science row."""
+    if len(values) != len(_COLUMNS):
+        raise ValidationError("Ecological population CSV column count does not match schema")
+    writer.writerow(values)
+
+
 def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse) -> str:
     """Recheck all source and derived science before emitting unit-balanced results.
 
@@ -115,9 +125,10 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
         ),
     ):
         eligible = row.unit_status == "candidate"
-        writer.writerow(
+        _write_checked_row(
+            writer,
             (
-                "ecology-population-export-0004",
+                _EXPORT_SCHEMA_VERSION,
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
@@ -157,9 +168,10 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
             item.sampling_window_utc,
         ),
     ):
-        writer.writerow(
+        _write_checked_row(
+            writer,
             (
-                "ecology-population-export-0004",
+                _EXPORT_SCHEMA_VERSION,
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
