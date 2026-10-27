@@ -345,7 +345,12 @@ try {
                 }
                 $displayBytes = $displayResponse.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
                 if ($displayBytes.Length -eq 0) { throw 'Real camera JPEG display returned no pixels.' }
-                $orientation = $cameraMetadata.metadata_json.exif.Orientation
+                $orientation = $null
+                $exifProperty = $cameraMetadata.metadata_json.PSObject.Properties['exif']
+                if ($null -ne $exifProperty -and $null -ne $exifProperty.Value) {
+                    $orientationProperty = $exifProperty.Value.PSObject.Properties['Orientation']
+                    if ($null -ne $orientationProperty) { $orientation = $orientationProperty.Value }
+                }
                 if ($null -ne $orientation -and [string]$orientation -ne '1' -and $displayType -ne 'image/png') {
                     throw 'EXIF-oriented camera JPEG must use an unrotated PNG display rendition.'
                 }
