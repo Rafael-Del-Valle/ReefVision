@@ -183,7 +183,9 @@ def test_older_database_revision_still_invokes_alembic_upgrade(
         calls.append(target)
         # The desktop now checks the post-upgrade revision and lineage.
         # Model a successful migration rather than a no-op mock.
-        _add_native_review_table(settings.resolved_data_dir / "reefvision.db", revision=current_head)
+        _add_native_review_table(
+            settings.resolved_data_dir / "reefvision.db", revision=current_head
+        )
 
     monkeypatch.setattr(
         command,
