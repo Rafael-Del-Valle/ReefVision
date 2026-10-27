@@ -19,6 +19,26 @@ from reefvision.storage.datasets import canonical_json_sha256
 # contract. A future scoring algorithm must receive a new integrity version,
 # not merely a newly computed checksum on an old saved workflow.
 V2_SUPPORTED_FORMULA = ("review_priority_v1", "1.0.0")
+SUPPORTED_INTEGRITY_VERSIONS = frozenset({"qc-review-queue-v2", "qc-review-queue-v3"})
+# Frozen scientific inputs for v3. A future scoring formula must introduce a
+# new version rather than silently adding or dropping biological/QC signals.
+V3_SUPPORTED_SIGNALS = frozenset(
+    {
+        "low_mean_confidence",
+        "low_min_confidence",
+        "pending_proposals",
+        "rejection_rate",
+        "count_disagreement",
+        "unresolved_qc_severity",
+        "rare_class_presence",
+        "edited_acceptance_rate",
+        "unreviewed_state",
+        "missing_group_metadata",
+        "incomplete_provenance",
+        "recent_import",
+        "stale_review_state",
+    }
+)
 
 
 def _finite_scientific_number(value: Any) -> bool:
@@ -151,14 +171,14 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # Queues written with the v2 contract must retain both independent
     # digests. Older unversioned queues remain readable without a migration.
     integrity_version = checksums.get("integrity_schema_version")
-    if integrity_version is not None and integrity_version != "qc-review-queue-v2":
+    if integrity_version is not None and integrity_version not in SUPPORTED_INTEGRITY_VERSIONS:
         raise invalid
     if (
-        integrity_version == "qc-review-queue-v2"
+        integrity_version in SUPPORTED_INTEGRITY_VERSIONS
         and (queue.formula_id, queue.formula_version) != V2_SUPPORTED_FORMULA
     ):
         raise invalid
-    if integrity_version == "qc-review-queue-v2" and (
+    if integrity_version in SUPPORTED_INTEGRITY_VERSIONS and (
         "scoring_provenance_sha256" not in checksums or "item_evidence_sha256" not in checksums
     ):
         raise invalid
@@ -170,7 +190,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # The v2 scoring contract also requires valid selection provenance.
     # Re-signing a digest must not authorize a nonphysical confidence gate
     # or an absent QC ruleset. Historical unversioned queues are untouched.
-    if integrity_version == "qc-review-queue-v2":
+    if integrity_version in SUPPORTED_INTEGRITY_VERSIONS:
         threshold = configuration.get("review_below_confidence")
         ruleset = configuration.get("ruleset_version")
         if (
@@ -204,15 +224,21 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         )
     ):
         raise invalid
+    # v3 freezes the complete set of formula inputs. A re-signed checksum
+    # must not permit adding an invented signal or omitting a known one.
+    # Historical v2 queues retain their original compatibility contract.
+    if integrity_version == "qc-review-queue-v3" and set(weights) != V3_SUPPORTED_SIGNALS:
+        raise invalid
     scoring_digest = checksums.get("scoring_provenance_sha256")
     if scoring_digest is not None:
-        expected_scoring_digest = canonical_json_sha256(
-            {
-                "formula_id": queue.formula_id,
-                "formula_version": queue.formula_version,
-                "configuration": configuration,
-            }
-        )
+        scoring_payload: dict[str, Any] = {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": configuration,
+        }
+        if integrity_version == "qc-review-queue-v3":
+            scoring_payload["integrity_schema_version"] = integrity_version
+        expected_scoring_digest = canonical_json_sha256(scoring_payload)
         if (
             not isinstance(scoring_digest, str)
             or len(scoring_digest) != 64
@@ -256,7 +282,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             raise invalid
         # Versioned snapshots must preserve both finite scientific evidence
         # and its deterministic per-signal/aggregate score explanation.
-        if integrity_version == "qc-review-queue-v2" and not _valid_v2_score_explanation(
+        if integrity_version in SUPPORTED_INTEGRITY_VERSIONS and not _valid_v2_score_explanation(
             item, weights
         ):
             raise invalid
