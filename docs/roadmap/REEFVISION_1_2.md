@@ -2396,3 +2396,28 @@ No p-values or statistical inference are emitted. Registered unit labels and
 source calibrations still require independent scientist verification. No new
 migration or 1.1 environmental subsystem is introduced. Exact-head CI,
 installed-Windows acceptance and full scoped 1.2 review remain outstanding.
+
+## Population CSV workflow type and CI integration repair (2026-10-27)
+
+The previous 1.2 HEAD `9360c2512759323844d27a0cb9e421a9a3625c98`
+completed **15 of 19** GitHub Actions workflows. Three backend workflows
+stopped at Ruff formatting of the new population CSV response header. The
+Milestone 10 workflow suite separately reported **22 failed, 21 passed**:
+the population export node registered `ecology_population_csv` but the strict
+`WorkflowDataType` union did not include that artifact type. Node-registry
+construction therefore failed across unrelated saved-workflow tests.
+
+This increment registers `ecology_population_csv` in the shared strict
+workflow type contract, applies the exact Ruff-required response-header format,
+and adds a regression that constructs a typed population CSV output port.
+The existing source-to-export Workflow Builder node, persisted artifact,
+standalone CSV endpoint, provenance recheck, project ownership and
+scientist-review gate are preserved; no duplicate ecological/environmental
+store or migration is added. The output remains `linked_unverified` and cannot
+be promoted directly to a verified dataset.
+
+The fixes are source-reviewed and pushed, **not yet accepted as passing** until
+the exact new HEAD's CI, focused saved-workflow and backend tests complete.
+Real authenticated longitudinal scientific review, migration reconciliation,
+and installed Windows GUI/installer checks remain outstanding.
+**ReefVision 1.2 is NOT RELEASE-READY.**
