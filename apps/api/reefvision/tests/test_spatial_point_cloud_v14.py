@@ -75,7 +75,7 @@ def test_bad_ply_rejected(bad: str) -> None:
         )
 
 
-@pytest.mark.parametrize("blank", [" ", " \\t\\n "])
+@pytest.mark.parametrize("blank", [" ", " \t\n "])
 def test_blank_point_cloud_calibration_evidence_rejected_across_entrypoints(
     client: TestClient, blank: str
 ) -> None:
