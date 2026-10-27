@@ -84,6 +84,25 @@ function Test-ReefVisionPathWithin {
     return $candidate.StartsWith($boundary, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+# Reject existing junctions/symbolic links anywhere in the acceptance-root
+# ancestry. GetFullPath only normalizes lexical segments; it does not resolve
+# reparse points, so a seemingly disposable path could redirect into real data.
+function Assert-ReefVisionNoReparseAncestors {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $current = Resolve-ReefVisionAcceptancePath $Path
+    while ($current) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Acceptance root traverses a junction or symbolic link: $current"
+            }
+        }
+        $parent = Split-Path -Parent $current
+        if (-not $parent -or $parent -ieq $current) { break }
+        $current = $parent
+    }
+}
+
 function Assert-ReefVisionSafeAcceptanceRoot {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -121,6 +140,7 @@ function Assert-ReefVisionSafeAcceptanceRoot {
     if (Test-ReefVisionPathWithin -Path $DefaultDataRoot -Parent $resolved) {
         throw "Acceptance root may not contain the normal ReefVision data directory: $DefaultDataRoot"
     }
+    Assert-ReefVisionNoReparseAncestors -Path $resolved
     return $resolved
 }
 
