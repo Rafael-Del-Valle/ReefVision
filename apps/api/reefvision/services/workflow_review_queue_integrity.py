@@ -171,10 +171,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # Queues written with the v2 contract must retain both independent
     # digests. Older unversioned queues remain readable without a migration.
     integrity_version = checksums.get("integrity_schema_version")
-    if (
-        integrity_version is not None
-        and integrity_version not in SUPPORTED_INTEGRITY_VERSIONS
-    ):
+    if integrity_version is not None and integrity_version not in SUPPORTED_INTEGRITY_VERSIONS:
         raise invalid
     if (
         integrity_version in SUPPORTED_INTEGRITY_VERSIONS
