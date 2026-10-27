@@ -129,6 +129,9 @@ _ACTIONS: dict[str, str] = {
     "ecology_identity_registry_source": (
         "Snapshot versioned project-owned organism identities; scientist review remains required."
     ),
+    "ecology_population_csv_export": (
+        "Export unverified, unit-balanced ecological population summaries with QC exclusions."
+    ),
     "ecology_measurement_csv_export": (
         "Export source-linked projected measurements with rechecked QC; "
         "retain unverified evidence and scientist review."

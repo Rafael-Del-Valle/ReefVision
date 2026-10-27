@@ -682,6 +682,43 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
     )
 
+    registry["ecology_population_csv_export"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_population_csv_export",
+        display_name="Export Ecological Population Summary CSV",
+        category="Scientific analysis",
+        description=(
+            "Export QC-eligible declared-unit means and excluded-unit reasons "
+            "without claiming biological independence or verified growth."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="candidates",
+                display_name="Unverified ecological measurement candidates",
+                accepted_types=["ecology_measurement_candidates"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="csv",
+                display_name="Unverified unit and population summary CSV",
+                accepted_types=["ecology_population_csv"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Rechecks source fingerprints and all derived QC, endpoints and unit means.",
+            "Exports excluded units with blank means and zero contributing replicates.",
+            "Never asserts independent samples, verified growth or statistical inference.",
+            "Persists the same CSV and provenance as the standalone endpoint.",
+            "Cannot feed verified-dataset ports without an independent review gate.",
+        ],
+    )
+
     registry["ecology_measurement_csv_export"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_measurement_csv_export",
         display_name="Export Ecological Source Measurements CSV",

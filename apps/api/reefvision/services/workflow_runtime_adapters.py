@@ -47,6 +47,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "ecology_longitudinal_analysis",
     "ecology_identity_registry_source",
     "ecology_measurement_csv_export",
+    "ecology_population_csv_export",
     "ecology_paired_count_comparison",
 }
 
@@ -889,6 +890,49 @@ def _ecology_measurement_csv_export(
     ]
 
 
+def _ecology_population_csv_export(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.schemas.ecology_measurement_candidates import (
+        EcologyMeasurementCandidatesResponse,
+    )
+    from reefvision.services.ecology_population_export import render_ecology_population_csv
+
+    del session, settings
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    if set(parameters) - runtime_keys:
+        raise ValidationError("Ecological population CSV export accepts no parameters")
+    source = EcologyMeasurementCandidatesResponse.model_validate(
+        _single_payload(inputs, "candidates")
+    )
+    if source.project_id != project_id:
+        raise ValidationError("Ecological population export requires current project sources")
+    csv_text = render_ecology_population_csv(source)
+    report = source.candidate_report
+    if report is None:
+        raise ValidationError("Ecological candidate report is missing")
+    return [
+        {
+            "port_id": "csv",
+            "data_type": "ecology_population_csv",
+            "payload": {
+                "schema_version": "ecology-population-export-0001",
+                "project_id": project_id,
+                "source_input_sha256": source.input_sha256,
+                "report_sha256": report.report_sha256,
+                "source_fingerprint_rechecked": True,
+                "csv_text": csv_text,
+                "evidence_level": "linked_unverified",
+                "review_gate": "scientist_review_required",
+            },
+        }
+    ]
+
+
 def _ecology_longitudinal_analysis(
     session: Session,
     settings: Settings,
@@ -977,6 +1021,7 @@ _ADAPTERS = {
     "ecology_longitudinal_analysis": _ecology_longitudinal_analysis,
     "ecology_identity_registry_source": _ecology_identity_registry_source,
     "ecology_measurement_csv_export": _ecology_measurement_csv_export,
+    "ecology_population_csv_export": _ecology_population_csv_export,
     "ecology_paired_count_comparison": _ecology_paired_count_comparison,
 }
 

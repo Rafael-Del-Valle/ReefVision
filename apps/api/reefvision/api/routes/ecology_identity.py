@@ -32,6 +32,7 @@ from reefvision.services.ecology_candidate_report_export import render_ecology_s
 from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.services.ecology_identity_history_export import render_ecology_identity_history_csv
 from reefvision.services.ecology_measurement_candidates import EcologyMeasurementCandidateService
+from reefvision.services.ecology_population_export import render_ecology_population_csv
 
 router = APIRouter(tags=["ecological monitoring"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -81,6 +82,21 @@ def export_ecology_source_measurements(project_id: str, session: DbSession) -> R
         media_type="text/csv",
         headers={
             "Content-Disposition": 'attachment; filename="reefvision-ecology-measurements.csv"'
+        },
+    )
+
+
+@router.get(
+    "/projects/{project_id}/ecology/calibrated-measurement-candidates/population.csv",
+)
+def export_ecology_population_summaries(project_id: str, session: DbSession) -> Response:
+    """Rechecked, unverified declared-unit and population summary CSV."""
+    response = EcologyMeasurementCandidateService(session).candidates(project_id)
+    return Response(
+        content=render_ecology_population_csv(response),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="reefvision-ecology-population.csv"'
         },
     )
 

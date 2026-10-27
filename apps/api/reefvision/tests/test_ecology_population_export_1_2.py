@@ -1,0 +1,168 @@
+"""Ecological unit/population CSV: science, API and persisted workflow parity."""
+
+from __future__ import annotations
+
+import csv
+import json
+from io import StringIO
+from typing import Any, cast
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from reefvision.domain.errors import ValidationError
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.ecology_measurement_candidates import (
+    EcologyMeasurementCandidatesResponse,
+)
+from reefvision.services.ecology_population_export import render_ecology_population_csv
+from reefvision.tests.test_ecology_projected_series_csv_1_2 import _dated_artifact
+from reefvision.tests.test_ecology_projected_visit_coverage_1_2 import _source
+
+
+def _rows(value: str) -> list[dict[str, str]]:
+    return list(csv.DictReader(StringIO(value)))
+
+
+def test_population_csv_preserves_excluded_units_and_api_parity(client: TestClient) -> None:
+    project_id, _ = _source(client)
+    base = f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    response = client.get(base)
+    exported = client.get(base + "/population.csv")
+    assert response.status_code == exported.status_code == 200
+    typed = EcologyMeasurementCandidatesResponse.model_validate(response.json())
+    assert render_ecology_population_csv(typed) == exported.text
+    rows = _rows(exported.text)
+    assert len(rows) == len(typed.projected_unit_summaries)
+    assert rows
+    assert all(row["row_type"] == "declared_unit" for row in rows)
+    assert all(row["unit_status"] == "missing_unit_declaration" for row in rows)
+    assert all(row["declared_unit_count"] == "0" for row in rows)
+    assert all(row["mean_absolute_change"] == "" for row in rows)
+    assert all(row["independent_unit_inference_allowed"] == "false" for row in rows)
+    assert all(row["review_gate"] == "scientist_review_required" for row in rows)
+
+
+def test_population_csv_reports_declared_unit_weighting_without_inference(
+    client: TestClient,
+) -> None:
+    source = _dated_artifact(client)
+    rows = _rows(render_ecology_population_csv(source))
+    assert len(rows) == 2
+    unit = next(row for row in rows if row["row_type"] == "declared_unit")
+    population = next(row for row in rows if row["row_type"] == "population_stratum")
+    assert unit["unit_status"] == "candidate"
+    assert unit["declared_unit_count"] == "1"
+    assert population["declared_unit_count"] == "1"
+    assert population["contributing_organism_count"] == "1"
+    assert float(population["mean_absolute_change"]) == pytest.approx(2)
+    assert population["sample_sd_unit_absolute_change"] == ""
+    assert "single_declared_unit" in json.loads(population["design_review_blockers_json"])
+    assert population["independent_unit_inference_allowed"] == "false"
+    assert population["evidence_level"] == "linked_unverified"
+
+
+def test_population_csv_rejects_resigned_or_legacy_unreviewed_science(
+    client: TestClient,
+) -> None:
+    source = _dated_artifact(client)
+    tampered = source.model_copy(deep=True)
+    tampered.projected_population_summaries[0].mean_unit_absolute_change = 999
+    with pytest.raises(ValidationError, match="Projected population summaries"):
+        render_ecology_population_csv(tampered)
+    legacy = source.model_copy(update={"source_fingerprint_contract": None})
+    with pytest.raises(ValidationError, match="recheckable source"):
+        render_ecology_population_csv(legacy)
+
+
+def test_saved_workflow_population_csv_matches_standalone_and_blocks_promotion(
+    client: TestClient,
+) -> None:
+    project_id, _ = _source(client)
+    registry = client.get("/api/v1/workflow-graphs/node-registry")
+    assert registry.status_code == 200
+    node = next(
+        row for row in registry.json() if row["node_type"] == "ecology_population_csv_export"
+    )
+    assert node["executable"] is True
+    assert node["input_ports"][0]["accepted_types"] == ["ecology_measurement_candidates"]
+    assert node["output_ports"][0]["accepted_types"] == ["ecology_population_csv"]
+
+    graph: dict[str, Any] = {
+        "graph_id": "ecology-population-csv-1-2",
+        "name": "Review unverified ecological population strata",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
+            {"node_id": "export", "node_type": "ecology_population_csv_export"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            },
+            {
+                "edge_id": "candidate-export",
+                "source_node_id": "identity",
+                "source_port_id": "measurement_candidates",
+                "target_node_id": "export",
+                "target_port_id": "candidates",
+            },
+        ],
+    }
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings,
+        app.state.session_factory,
+        str(queued.json()["job_id"]),
+    ) is True
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in detail.json()["artifacts"] if row["data_type"] == "ecology_population_csv"
+    ]
+    assert len(artifacts) == 1
+    payload = artifacts[0]["payload_json"]
+    standalone = client.get(
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates/population.csv"
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert payload["csv_text"] == standalone.text
+    assert payload["source_fingerprint_rechecked"] is True
+    assert payload["evidence_level"] == "linked_unverified"
+    assert payload["review_gate"] == "scientist_review_required"
+
+    graph["nodes"].append({"node_id": "dataset", "node_type": "dataset_version_create"})
+    graph["edges"].append(
+        {
+            "edge_id": "csv-to-verified",
+            "source_node_id": "export",
+            "source_port_id": "csv",
+            "target_node_id": "dataset",
+            "target_port_id": "reviewed",
+        }
+    )
+    invalid = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph)
+    assert invalid.status_code == 200
+    assert invalid.json()["valid"] is False
+    assert any(
+        issue["code"] == "incompatible_port_types" for issue in invalid.json()["issues"]
+    )

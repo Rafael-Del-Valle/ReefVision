@@ -2371,3 +2371,28 @@ promotion, environmental subsystem, model download, or release is introduced.
 All results remain `linked_unverified`, `scientist_review_required`,
 with independent-unit inference prohibited. Installed Windows GUI,
 migration reconciliation and independent scientific review remain required.
+
+## Unit-balanced projected population CSV (2026-10-26)
+
+The source-linked candidate service now supports a reproducible
+`GET /api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates/population.csv`
+export. It includes both eligible and excluded **declared experimental-unit**
+rows, with explicit missing-follow-up and sampling-window exclusion reasons,
+plus stratified population rows weighted equally by eligible declared units.
+Physical units, parent-colony reuse, design-review blockers, QC, source/report
+SHA-256 hashes and the scientist-review gate are retained. Excluded units
+have blank means and zero contributors; single-unit strata have no sample SD.
+
+The executable `ecology_population_csv_export` Workflow Builder node accepts
+typed `ecology_measurement_candidates` and persists a typed
+`ecology_population_csv` artifact with identical bytes to the standalone
+endpoint. The shared renderer independently rechecks the complete source
+fingerprint and all derived summaries; legacy non-recheckable artifacts fail
+closed. It cannot connect directly to verified-dataset ports.
+
+**Scientific limitation:** these are projected 2D geometry descriptions, not
+verified coral growth, survival, population abundance or independent replicates.
+No p-values or statistical inference are emitted. Registered unit labels and
+source calibrations still require independent scientist verification. No new
+migration or 1.1 environmental subsystem is introduced. Exact-head CI,
+installed-Windows acceptance and full scoped 1.2 review remain outstanding.
