@@ -12,11 +12,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.domain.errors import ValidationError
-from reefvision.schemas.workflow_graphs import WorkflowPortDefinition
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
+from reefvision.schemas.workflow_graphs import WorkflowPortDefinition
 from reefvision.services.ecology_population_export import render_ecology_population_csv
 from reefvision.tests.test_ecology_projected_series_csv_1_2 import _dated_artifact
 from reefvision.tests.test_ecology_projected_visit_coverage_1_2 import _source
