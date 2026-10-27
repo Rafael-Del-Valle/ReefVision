@@ -604,11 +604,9 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
             persisted = session.get(TrainingRun, result["training_run_id"])
             assert persisted is not None
             original_manifest = dict(persisted.artifact_manifest_json or {})
-            persisted.artifact_manifest_json = {
-                key: value
-                for key, value in original_manifest.items()
-                if key != missing_field
-            }
+            tampered_manifest = dict(original_manifest)
+            tampered_manifest.pop(missing_field)
+            persisted.artifact_manifest_json = tampered_manifest
             session.commit()
 
         with pytest.raises(ValidationError, match="checkpoint provenance is missing"):
