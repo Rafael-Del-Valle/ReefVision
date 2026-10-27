@@ -19,7 +19,7 @@ from reefvision.storage.datasets import canonical_json_sha256
 # contract. A future scoring algorithm must receive a new integrity version,
 # not merely a newly computed checksum on an old saved workflow.
 V2_SUPPORTED_FORMULA = ("review_priority_v1", "1.0.0")
-SUPPORTED_INTEGRITY_VERSIONS = frozenset({"qc-review-queue-v2", "qc-review-queue-v3"})
+SUPPORTED_INTEGRITY_VERSIONS = ("qc-review-queue-v2", "qc-review-queue-v3")
 # Frozen scientific inputs for v3. A future scoring formula must introduce a
 # new version rather than silently adding or dropping biological/QC signals.
 V3_SUPPORTED_SIGNALS = frozenset(
@@ -171,7 +171,10 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # Queues written with the v2 contract must retain both independent
     # digests. Older unversioned queues remain readable without a migration.
     integrity_version = checksums.get("integrity_schema_version")
-    if integrity_version is not None and integrity_version not in SUPPORTED_INTEGRITY_VERSIONS:
+    if (
+        integrity_version is not None
+        and integrity_version not in SUPPORTED_INTEGRITY_VERSIONS
+    ):
         raise invalid
     if (
         integrity_version in SUPPORTED_INTEGRITY_VERSIONS
