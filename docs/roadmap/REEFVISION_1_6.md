@@ -1092,3 +1092,24 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
 - **Not accepted:** new-head CI and new regression execution, independent
   1.1/1.6 Alembic 0038 collision, native installed Windows GUI/MSI upgrade
   and rollback, real-image scientific acceptance. Release **HOLD**.
+
+## 2026-10-26 — QC event history lint gate and pagination regression (Track D)
+
+- Inspected exact predecessor `260fe394` CI: 20/20 Actions completed,
+  17 successful and three backend failures (CI, Pose Workflow Validation,
+  ReefVision 1.0 Acceptance), all reporting Ruff F841 at
+  `review_queue_events.py:121` (unused `item` local).
+- Removed only the unused binding in paginated history. The `_scope()` call
+  still runs before any query, so corrupt cross-project/queue event history
+  remains fail-closed for every page, including empty pages.
+- Expanded the existing standalone API regression: valid paginated reviewer
+  events retain queue-wide `total` and `current_assignee` even when the
+  requested page is empty. This does not modify annotations, QC decisions,
+  reviewer history, migrations or saved Workflow Builder artifacts.
+- Verified changed source blobs via GitHub read-back. New exact-head Ruff,
+  backend, frontend, E2E, migration, scientific and Windows acceptance results
+  are pending; no local full checkout/Ruff/Windows GUI is available.
+- The existing typed, persisted executable `qc_review_queue` Workflow Builder
+  node and saved-workflow regressions are preserved. Independent 1.1/1.6
+  Alembic `0038` collision, installed Windows MSI upgrade/rollback and
+  real-image scientific acceptance remain blockers. **Release HOLD.**
