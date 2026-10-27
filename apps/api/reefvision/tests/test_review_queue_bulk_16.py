@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import cast
 from uuid import UUID, uuid4, uuid5
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -38,6 +39,85 @@ def _queue_with_two_images(client: TestClient) -> tuple[str, list[str]]:
     ids = [item["id"] for item in response.json()["items"]]
     assert len(ids) == 2
     return queue_id, ids
+
+
+@pytest.mark.parametrize("tampered_field", ["project_id", "review_queue_id"])
+@pytest.mark.parametrize("keyed", [False, True])
+def test_bulk_triage_rejects_corrupt_history_before_new_audit_writes(
+    client: TestClient, tampered_field: str, keyed: bool
+) -> None:
+    """New bulk keys and unkeyed requests must not bypass reviewer provenance."""
+    queue_id, ids = _queue_with_two_images(client)
+    other_queue_id, _ = _queue_with_two_images(client)
+    foreign_project = create_project(client, "Foreign bulk audit scope")
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    event_urls = [
+        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events" for item_id in ids
+    ]
+    started = client.post(url, json={"item_ids": [ids[0]], "action": "start"})
+    assert started.status_code == 200, started.text
+    event_id = client.get(event_urls[0]).json()["items"][0]["id"]
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        event = session.get(ReviewQueueItemEvent, event_id)
+        assert event is not None
+        original_scope = getattr(event, tampered_field)
+        setattr(
+            event,
+            tampered_field,
+            foreign_project["id"] if tampered_field == "project_id" else other_queue_id,
+        )
+        session.commit()
+
+    payload = {
+        "item_ids": ids,
+        "action": "skip",
+        "reason": "Scientist must inspect polyp boundary",
+        "actor": "local reviewer",
+    }
+    if keyed:
+        payload["client_request_id"] = str(uuid4())
+    rejected = client.post(url, json=payload)
+    assert rejected.status_code == 409, rejected.text
+    assert client.get(event_urls[0]).status_code == 409
+    assert client.get(event_urls[1]).status_code == 200
+    listing = client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"]
+    assert {item["id"]: item["review_state"] for item in listing} == {
+        ids[0]: "in_progress",
+        ids[1]: "pending",
+    }
+    with app.state.session_factory() as session:
+        events = list(
+            session.scalars(
+                select(ReviewQueueItemEvent).where(
+                    ReviewQueueItemEvent.review_queue_item_id.in_(ids)
+                )
+            )
+        )
+        assert len(events) == 1
+        assert events[0].id == event_id
+
+    # An unaffected sibling can still be triaged; the guard is item-scoped.
+    sibling = client.post(url, json={"item_ids": [ids[1]], "action": "start"})
+    assert sibling.status_code == 200, sibling.text
+    with app.state.session_factory() as session:
+        event = session.get(ReviewQueueItemEvent, event_id)
+        assert event is not None
+        assert getattr(event, tampered_field) != original_scope
+        setattr(event, tampered_field, original_scope)
+        session.commit()
+
+    recovered = client.post(url, json=payload)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["changed_count"] == 2
+    assert recovered.json()["requires_researcher_review"] is True
+    assert {item["review_state"] for item in recovered.json()["items"]} == {"skipped"}
+    for event_url in event_urls:
+        history = client.get(event_url)
+        assert history.status_code == 200, history.text
+        assert history.json()["total"] == 2
+        assert history.json()["requires_researcher_review"] is True
 
 
 def test_bulk_review_triage_is_idempotent_and_does_not_verify_annotations(
