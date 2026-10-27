@@ -504,3 +504,7 @@ a `point_cloud_measurement_preview` artifact. Valid point clouds remain
 provisional: this input-integrity check does not verify ruler measurements,
 specimen identity, coordinate registration, surface area, or biological branch
 length, and no local model checkpoints are transmitted or modified.
+
+## Strict scientific numeric inputs (October 27, 2026)
+
+Mesh measurement inputs supplied as indexed triangles now reject Boolean values and numeric strings for XYZ vertex coordinates, meters-per-unit calibration, and relative scale uncertainty. Integer and floating-point JSON numbers remain accepted (including integer zero for a declared zero relative scale uncertainty). Both the standalone mesh-preview API and the persisted executable `mesh_surface_preview` Workflow Builder node use the same strict request schema, and the underlying measurement service independently rejects coerced values. Invalid saved graphs fail without emitting a mesh measurement artifact. This prevents a Boolean such as `true` from silently becoming a 1-meter scale or vertex coordinate, or a text field from becoming a numeric scientific observation. Existing OBJ/PLY/GLB import parsing remains separate and continues to validate its own geometry format. This input-integrity safeguard does not independently verify calibration, source geometry, organism identity, or anatomical branch length.
