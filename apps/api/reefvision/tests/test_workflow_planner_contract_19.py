@@ -265,3 +265,40 @@ def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
         assert detail.json()["run"]["status"] == "failed"
         assert detail.json()["run"]["error_message"] == "Workflow graph provenance checksum failed"
         assert detail.json()["artifacts"] == []
+
+    # A queued job cannot be reassigned to another project and then execute
+    # the original project's frozen scientific workflow. Preserve the run's
+    # readable failure record after restoring the corrupted job ownership.
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": record_id},
+    )
+    assert queued.status_code == 202, queued.text
+    with app.state.session_factory() as session:
+        job = session.get(Job, str(queued.json()["job_id"]))
+        assert job is not None
+        job.project_id = str(other_project["id"])
+        session.commit()
+
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    with app.state.session_factory() as session:
+        job = session.get(Job, str(queued.json()["job_id"]))
+        assert job is not None
+        assert job.status == "failed"
+        assert job.error_message == "Workflow job project ownership no longer matches run"
+        assert job.completed_at is not None
+        job.project_id = project_id
+        session.commit()
+
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert detail.json()["run"]["error_message"] == "Workflow job project ownership no longer matches run"
+    assert detail.json()["artifacts"] == []
