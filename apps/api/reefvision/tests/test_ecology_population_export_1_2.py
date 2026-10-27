@@ -126,7 +126,6 @@ def test_population_csv_rejects_resigned_or_legacy_unreviewed_science(
         render_ecology_population_csv(legacy)
 
 
-
 @pytest.mark.parametrize(
     "forged_fields",
     [
