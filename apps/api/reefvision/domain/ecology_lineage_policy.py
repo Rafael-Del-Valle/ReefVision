@@ -51,6 +51,33 @@ def classify_ecological_unit_level(experimental_unit_type: str | None) -> str | 
     return next(iter(declared_levels), None)
 
 
+def ecological_unit_types_equivalent(left: str, right: str) -> bool:
+    """Compare declared sampling levels without authenticating study design.
+
+    Known biological aliases (tank/aquarium, colony/colonies, etc.) are
+    equivalent. Unknown study-specific labels must match exactly; mixed
+    biological levels still fail closed.
+    """
+    left_level = classify_ecological_unit_level(left)
+    right_level = classify_ecological_unit_level(right)
+    return left == right or (left_level is not None and left_level == right_level)
+
+
+def canonical_declared_unit_type(labels: Iterable[str]) -> str | None:
+    """Choose a deterministic display level for compatible declarations.
+
+    Preserve the original label for homogeneous inputs to avoid changing
+    existing output contracts. Mixed known aliases use the canonical level;
+    None signals conflicting or unrecognized mixed declarations.
+    """
+    unique = sorted(set(labels))
+    if not unique:
+        return None
+    if any(not ecological_unit_types_equivalent(unique[0], label) for label in unique[1:]):
+        return None
+    return unique[0] if len(unique) == 1 else classify_ecological_unit_level(unique[0])
+
+
 def validate_declared_lineage(
     records: Iterable[DeclaredLineageRecord], *, experimental_unit_type: str | None
 ) -> None:
