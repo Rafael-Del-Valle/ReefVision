@@ -57,3 +57,24 @@ original revision rows and event data when rejecting an invalid schema.
 These are read-only checks. They do **not** reconcile 1.1's colliding 0038,
 upgrade an installed database, or authorize a release. Full exact-head CI,
 Windows installed-GUI and installer migration/rollback acceptance remain required.
+
+
+## 2026-10-27 — 0041 reviewer-event idempotency constraint
+
+A valid `0041` migration must retain the named
+`uq_review_queue_item_event_request` UNIQUE constraint on
+`(review_queue_item_id, client_request_id)`. A forged or incomplete 0041
+schema without that exact identity contract could admit duplicate comment,
+assignment, or triage audit events for the same researcher request, even
+when the global bulk-request registry is intact. The online migration
+preflight now rejects missing, renamed, and incorrectly scoped uniqueness
+without writing to the database. Earlier 0038–0040 historical installations
+retain their existing compatibility checks.
+
+Parameterized SQLite regressions cover four invalid uniqueness variants,
+preserve an existing event and unrelated scientific observation on rejection,
+and keep a correctly named 0041 schema accepted. The saved executable
+`qc_review_queue` Workflow Builder retains its typed review-required
+reference and unchanged retry behavior. This is **not** a reconciliation of
+the independent 1.1/1.6 revision-0038 collision; installed Windows upgrade,
+rollback, GUI, and representative biological-data acceptance remain required.
