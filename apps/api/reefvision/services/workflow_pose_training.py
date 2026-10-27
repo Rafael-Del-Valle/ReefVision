@@ -483,6 +483,20 @@ def _reused_pose_training_result(
 
     expected_sha256 = frozen_checkpoint.get("result_checkpoint_sha256")
     expected_path = frozen_checkpoint.get("result_checkpoint_path")
+    # New workflow-created training runs always persist both fields. Missing
+    # metadata must not turn a verified checkpoint into an unchecked legacy
+    # replay; only older snapshots may use the backwards-compatible fallback.
+    if (
+        dict(run.draft_snapshot_json or {}).get("schema_version")
+        == "pose-workflow-training-snapshot-0001"
+        and (
+            not isinstance(expected_sha256, str)
+            or not expected_sha256
+            or not isinstance(expected_path, str)
+            or not expected_path
+        )
+    ):
+        raise ValidationError("Recovered pose-training checkpoint provenance is missing")
     if expected_sha256 is not None and expected_sha256 != checkpoint_sha256:
         raise ValidationError("Recovered pose-training checkpoint checksum changed")
     if expected_path is not None and expected_path != run.result_checkpoint_path:
