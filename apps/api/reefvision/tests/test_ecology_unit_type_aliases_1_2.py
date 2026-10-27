@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.domain.ecology_lineage_policy import ecological_unit_types_equivalent
+from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_ecology_longitudinal_lineage_1_2 import _rows
@@ -141,9 +142,7 @@ def test_saved_workflow_alias_parity_preserves_review_gate(
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        row for row in detail.json()["artifacts"] if row["data_type"] == artifact_type
-    )
+    artifact = next(row for row in detail.json()["artifacts"] if row["data_type"] == artifact_type)
     stored = artifact["payload_json"]
     assert stored["project_id"] == project_id
     assert stored["experimental_unit_type"] == standalone.json()["experimental_unit_type"]
@@ -182,4 +181,65 @@ def test_saved_workflow_rejects_conflicting_levels_without_artifact(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert "conflicting experimental unit types" in detail.json()["run"]["error_message"].lower()
+    assert all(row["data_type"] != artifact_type for row in detail.json()["artifacts"])
+
+
+@pytest.mark.parametrize(
+    "technical_type",
+    [
+        "VideoFrame",
+        "poseKeypoint",
+        "trackingTracklet",
+        "segmentationMask",
+        "modelPrediction",
+        "boundingBox",
+        "imagePatch",
+        "videoframe",
+        "segmentationmask",
+        "trackingtracklet",
+    ],
+)
+def test_compact_technical_units_cannot_be_biological_replicates(technical_type: str) -> None:
+    with pytest.raises(ValueError, match="technical replicates"):
+        require_ecological_unit_type(technical_type)
+
+
+@pytest.mark.parametrize("kind", ["longitudinal", "paired"])
+@pytest.mark.parametrize("technical_type", ["VideoFrame", "segmentationmask", "poseKeypoint"])
+def test_compact_technical_unit_rejected_by_api_and_saved_workflow(
+    client: TestClient, kind: str, technical_type: str
+) -> None:
+    path, payload, graph, artifact_type = _case(kind)
+    rows_key = "observations" if kind == "longitudinal" else "pairs"
+    rows = payload[rows_key]
+    for row in rows:
+        row["experimental_unit_type"] = technical_type
+    graph["nodes"][1]["parameters"][rows_key] = rows
+
+    standalone = client.post(path, json=payload)
+    assert standalone.status_code == 422, standalone.text
+
+    project_id = str(create_project(client, f"Technical sampling unit {kind} {technical_type}")["id"])
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
     assert all(row["data_type"] != artifact_type for row in detail.json()["artifacts"])
