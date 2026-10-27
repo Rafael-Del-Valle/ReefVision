@@ -2625,3 +2625,28 @@ for that case and retains population-recomputation assertions for the other
 eight forged-aggregate cases. The exporter and its standalone API and saved
 Workflow Builder execution remain unchanged; no scientific verification or
 release-readiness is implied. Re-run exact-head CI before claiming success.
+
+## 2026-10-27 — Paired-count whole-organism input integrity
+
+The preceding 1.2 head `219d523d800e7f74f36553beeaa442f246a868d6`
+completed **19/19 PR-triggered GitHub Actions workflows successfully**.
+That CI success is a development gate, not release or scientific acceptance.
+
+The shared `PairedCountObservation` contract now rejects finite fractional
+human-reference or model **organism counts** (for example, 10.5 polyps).
+Nonnegative integral JSON numbers, including `10` and `10.0`, remain
+accepted; the prior finite-large-value regression is unchanged. The check
+runs through the same Pydantic schema for the standalone paired-count API
+and the executable persisted `ecology_paired_count_comparison` Workflow
+Builder node. This prevents fractional count estimates from being presented
+as literal organism counts without changing descriptive statistics,
+source/provenance fingerprints for valid inputs, or the typed workflow ports.
+
+New focused tests exercise both count fields through schema and HTTP 422,
+integral floating-point compatibility, and fail-closed saved-workflow
+execution without a successful comparison artifact. All outputs remain
+`caller_supplied_unverified` and require source verification; this is **not**
+a review or calibration gate. Exact new-head CI, authenticated organism
+identity, independently reviewed measurements/design, migration reconciliation,
+and installed Windows GUI/installer acceptance remain outstanding.
+**ReefVision 1.2 is NOT RELEASE-READY.**
