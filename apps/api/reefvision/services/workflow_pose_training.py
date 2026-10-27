@@ -396,9 +396,21 @@ def _completed_workflow_pose_training_run(
         ):
             raise ValidationError("Recovered pose-training node validation mode changed")
 
-        if candidate.initial_checkpoint_model_id != (
-            seed_model.id if seed_model else None
-        ) or candidate.resolved_model_checksum != (seed_model.sha256 if seed_model else None):
+        # The persisted run's seed source and asset identity are returned to
+        # downstream science nodes. They must agree with the registered seed,
+        # not merely its checkpoint ID and checksum.
+        expected_checkpoint_source = "registered_model" if seed_model else "scratch"
+        expected_model_asset_id = (
+            f"registered_model:{seed_model.id}"
+            if seed_model
+            else f"builtin_architecture:{architecture}"
+        )
+        if (
+            candidate.initial_checkpoint_source != expected_checkpoint_source
+            or candidate.initial_checkpoint_model_id != (seed_model.id if seed_model else None)
+            or candidate.resolved_model_asset_id != expected_model_asset_id
+            or candidate.resolved_model_checksum != (seed_model.sha256 if seed_model else None)
+        ):
             raise ValidationError("Recovered pose-training seed model changed")
 
         if (
