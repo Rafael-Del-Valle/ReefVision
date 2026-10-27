@@ -92,14 +92,17 @@ def test_source_bytes_and_parsed_geometry_have_separate_fingerprints() -> None:
     obj = preview_from_request(MeshPreviewRequest(**COMMON, obj_text=OBJ))
     ply = preview_from_request(MeshPreviewRequest(**COMMON, ply_text=PLY))
     obj_whitespace = preview_from_request(
-        MeshPreviewRequest(**COMMON, obj_text=OBJ.replace("v 2 0 0\\n", "v 2 0 0  \\n"))
+        MeshPreviewRequest(**COMMON, obj_text=OBJ.replace("v 2 0 0\n", "v 2 0 0  \n"))
     )
-    assert obj["provenance"]["geometry_sha256"] == ply["provenance"]["geometry_sha256"]
-    assert obj["provenance"]["geometry_sha256"] == obj_whitespace["provenance"]["geometry_sha256"]
-    assert obj["provenance"]["source_payload_sha256"] != ply["provenance"]["source_payload_sha256"]
+    obj_provenance = obj["provenance"]
+    ply_provenance = ply["provenance"]
+    whitespace_provenance = obj_whitespace["provenance"]
+    assert obj_provenance["geometry_sha256"] == ply_provenance["geometry_sha256"]
+    assert obj_provenance["geometry_sha256"] == whitespace_provenance["geometry_sha256"]
+    assert obj_provenance["source_payload_sha256"] != ply_provenance["source_payload_sha256"]
     assert (
-        obj["provenance"]["source_payload_sha256"]
-        != obj_whitespace["provenance"]["source_payload_sha256"]
+        obj_provenance["source_payload_sha256"]
+        != whitespace_provenance["source_payload_sha256"]
     )
 
 
