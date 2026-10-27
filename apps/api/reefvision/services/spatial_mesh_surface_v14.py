@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from collections import Counter
@@ -776,15 +777,23 @@ def measure_mesh_preview(
 
 
 def preview_from_request(payload: Any) -> dict[str, Any]:
+    # Preserve a byte-exact content identity for future project-scoped imports.
+    # This identifies caller-supplied source bytes, not a stored or verified asset.
+    source_bytes: bytes | None = None
     if payload.obj_text is not None:
         vertices, faces = spatial_mesh_obj_v14.parse_obj_triangles(payload.obj_text)
         source_format = "obj"
+        source_bytes = payload.obj_text.encode("utf-8")
     elif payload.ply_text is not None:
         vertices, faces = spatial_mesh_ply_v14.parse_ply_triangles(payload.ply_text)
         source_format = "ply_ascii"
+        source_bytes = payload.ply_text.encode("utf-8")
     elif payload.glb_base64 is not None:
         vertices, faces = spatial_mesh_glb_v14.parse_glb_triangles(payload.glb_base64)
         source_format = "glb_2_0"
+        # The parser has already strictly validated and bounded the GLB bytes.
+        # Hash the decoded binary, never the transport base64 representation.
+        source_bytes = base64.b64decode(payload.glb_base64, validate=True)
     else:
         vertices, faces = payload.vertices, payload.faces
         source_format = "indexed_triangles"
@@ -798,7 +807,13 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         source_label=payload.source_label,
         surface_path_vertex_pairs=payload.surface_path_vertex_pairs,
     )
-    result["provenance"]["source_format"] = source_format
+    result["provenance"].update(
+        source_format=source_format,
+        source_payload_sha256=hashlib.sha256(source_bytes).hexdigest()
+        if source_bytes is not None
+        else None,
+        source_payload_size_bytes=len(source_bytes) if source_bytes is not None else None,
+    )
     observed_at_utc = (
         payload.observed_at_utc.astimezone(UTC).isoformat().replace("+00:00", "Z")
         if payload.observed_at_utc is not None
