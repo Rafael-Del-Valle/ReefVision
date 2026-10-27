@@ -467,6 +467,9 @@ export function Gallery({
 }) {
   const queryClient = useQueryClient();
   const folderInput = useRef<HTMLInputElement | null>(null);
+  // A second picker event can fire before React rerenders the pending state.
+  // Keep imports serialized so progress and per-file reports cannot race.
+  const importInFlight = useRef(false);
   const initialPreference = useRef(
     readGalleryPreference(window.localStorage, project.id),
   );
@@ -575,7 +578,10 @@ export function Gallery({
       setPage(1);
       await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
     },
-    onSettled: () => setImportProgress(null),
+    onSettled: () => {
+      importInFlight.current = false;
+      setImportProgress(null);
+    },
   });
 
   useEffect(() => {
@@ -615,8 +621,10 @@ export function Gallery({
   }
 
   function acceptFiles(fileList: FileList | null) {
+    if (importInFlight.current) return;
     const selected = Array.from(fileList ?? []);
     if (selected.length) {
+      importInFlight.current = true;
       importer.mutate(selected);
     }
   }
@@ -818,6 +826,7 @@ export function Gallery({
             <input
               className="visually-hidden"
               type="file"
+              disabled={importer.isPending}
               accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
               onChange={(event) => {
@@ -833,6 +842,7 @@ export function Gallery({
               ref={folderInput}
               className="visually-hidden"
               type="file"
+              disabled={importer.isPending}
               accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
               onChange={(event) => {
