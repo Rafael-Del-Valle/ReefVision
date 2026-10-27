@@ -23,6 +23,9 @@ class PointCloudPreviewRequest(BaseModel):
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
     relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
     source_label: str | None = Field(default=None, max_length=200)
+    # Optional byte-exact replay guard for the submitted ASCII PLY text.
+    # A matching digest does not verify calibration or specimen identity.
+    expected_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     specimen_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
@@ -63,4 +66,6 @@ class PointCloudPreviewRequest(BaseModel):
             raise ValueError("Point-cloud calibration evidence cannot be blank")
         if (self.ply_text is None) == (self.points is None):
             raise ValueError("Provide exactly one of vertex-only ASCII PLY or XYZ points")
+        if self.expected_source_payload_sha256 is not None and self.ply_text is None:
+            raise ValueError("Source SHA-256 binding requires an imported ASCII PLY point cloud")
         return self
