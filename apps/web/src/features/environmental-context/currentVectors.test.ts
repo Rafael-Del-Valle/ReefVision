@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import {
   currentComponentUncertaintyText,
   currentVectors,
+  currentVectorsCsv,
 } from "./currentVectors";
 import type { ScientificRecord } from "./environmentalContextApi";
 function component(
@@ -375,4 +376,62 @@ it("retains independent currents for different subjects at the same grid cell", 
   ];
   expect(currentVectors(rows).map((vector) => vector.speed)).toEqual([5, 13]);
   expect(currentVectors([rows[0], rows[3]])).toEqual([]);
+});
+
+it("exports selected current vectors with units, source IDs and explicit uncertainty limits", () => {
+  const vectors = currentVectors([
+    component("current_eastward_velocity", -3, {
+      id: "east-1",
+      normalized_uncertainty: 0,
+      uncertainty: { value: 0, kind: "bound" },
+      provenance: {
+        ...component("x", 0).provenance,
+        source: 'Model "A", =danger',
+      },
+    }),
+    component("current_northward_velocity", 4, {
+      id: "north-1",
+      provenance: {
+        ...component("x", 0).provenance,
+        source: 'Model "A", =danger',
+      },
+    }),
+  ]);
+  const context = {
+    cacheKey: "cache-123",
+    cacheStatus: "stale_offline",
+    fetchedAt: "2026-04-04T00:00:00Z",
+    expiresAt: "2026-04-05T00:00:00Z",
+  };
+  const csv = currentVectorsCsv(vectors, context);
+  const [header, data] = csv.trimEnd().split("\r\n");
+  expect(header.split(",")).toContain("bearing_deg_true_north");
+  expect(header.split(",")).toContain("derived_uncertainty_status");
+  expect(data).toContain('"east-1","north-1"');
+  expect(data).toContain('"-3","4","5"');
+  expect(data).toContain('"0","bound"');
+  expect(data).toContain('"stale_offline"');
+  expect(data).toContain('"not_estimated"');
+  expect(data).toContain('"Model ""A"", =danger"');
+  expect(csv.endsWith("\r\n")).toBe(true);
+  expect(currentVectorsCsv([], context).split("\r\n")).toHaveLength(2);
+});
+
+it("neutralizes spreadsheet formulas in imported provenance without changing numeric signs", () => {
+  const east = component("current_eastward_velocity", -2, {
+    provenance: { ...component("x", 0).provenance, source: "=1+1" },
+  });
+  const north = component("current_northward_velocity", 0, {
+    provenance: { ...component("x", 0).provenance, source: "=1+1" },
+  });
+  const csv = currentVectorsCsv(currentVectors([east, north]), {
+    cacheKey: "+formula",
+    cacheStatus: "fresh",
+    fetchedAt: "2026-04-04T00:00:00Z",
+    expiresAt: "2026-04-05T00:00:00Z",
+  });
+  expect(csv).toContain('"\'=1+1"');
+  expect(csv).toContain('"\'+formula"');
+  expect(csv).toContain('"-2"');
+  expect(csv).toContain('"-79.5"');
 });
