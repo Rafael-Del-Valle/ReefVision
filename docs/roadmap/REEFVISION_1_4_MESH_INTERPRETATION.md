@@ -508,3 +508,23 @@ length, and no local model checkpoints are transmitted or modified.
 ## Strict scientific numeric inputs (October 27, 2026)
 
 Mesh measurement inputs supplied as indexed triangles now reject Boolean values and numeric strings for XYZ vertex coordinates, meters-per-unit calibration, and relative scale uncertainty. Integer and floating-point JSON numbers remain accepted (including integer zero for a declared zero relative scale uncertainty). Both the standalone mesh-preview API and the persisted executable `mesh_surface_preview` Workflow Builder node use the same strict request schema, and the underlying measurement service independently rejects coerced values. Invalid saved graphs fail without emitting a mesh measurement artifact. This prevents a Boolean such as `true` from silently becoming a 1-meter scale or vertex coordinate, or a text field from becoming a numeric scientific observation. Existing OBJ/PLY/GLB import parsing remains separate and continues to validate its own geometry format. This input-integrity safeguard does not independently verify calibration, source geometry, organism identity, or anatomical branch length.
+
+## Duplicate geometric triangle rejection (Track C)
+
+The mesh measurement service now rejects **exactly coincident triangles even when
+the importer assigns them different vertex indices or reverses winding**.
+Index-only duplicate checks were insufficient: duplicate OBJ/PLY/GLB vertices
+could otherwise cause the same reconstructed surface to be counted twice.
+Each face is compared using its three sorted, uncalibrated XYZ coordinates,
+without a tolerance, spatial welding, or mutation of the source geometry.
+The existing duplicate-index check remains in place.
+
+The standalone mesh-preview API and persisted executable `mesh_surface_preview`
+Workflow Builder node share this fail-closed calculation. Rejected geometry
+must not produce a mesh measurement artifact. Distinct triangles that happen
+to share vertices or coordinate positions remain eligible, with their
+independent topology QC retained. The rule does **not** detect partially
+overlapping triangles, reconstruction folds, or near-duplicate coordinates;
+those require separate reconstruction review. This is an area-integrity
+safeguard, not proof of coral tissue completeness, organism identity,
+calibration validity, or anatomical branch length.
