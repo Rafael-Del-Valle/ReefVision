@@ -2612,3 +2612,16 @@ or independent-unit inference was introduced. All output remains
 `linked_unverified` and `scientist_review_required`; exact-head CI,
 scientific dataset validation, 1.1 migration reconciliation, and installed
 Windows GUI acceptance remain release blockers.
+
+## 2026-10-27 — CI regression: forged missing-parent declarations
+
+The `aa2c978b` exact-head CI run passed Ruff, mypy, 1,577 backend tests,
+and 17 of 19 workflows, but one parameterized population-export test
+incorrectly expected every re-signed forged aggregate to fail at the
+population-recomputation guard. A forged `units_missing_parent_colony` entry
+is rejected earlier by the candidate report's source-total fingerprint
+integrity guard. The regression now asserts the specific earlier rejection
+for that case and retains population-recomputation assertions for the other
+eight forged-aggregate cases. The exporter and its standalone API and saved
+Workflow Builder execution remain unchanged; no scientific verification or
+release-readiness is implied. Re-run exact-head CI before claiming success.
