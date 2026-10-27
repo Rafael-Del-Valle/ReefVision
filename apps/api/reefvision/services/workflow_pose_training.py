@@ -520,16 +520,12 @@ def create_pose_workflow_training_result(
     # Distinct frozen records are not independent validation truth if they
     # contain frames from the same source video (even different frames/tracks).
     if validation_dataset is not None:
-        training_videos = {
-            str(item["video_sha256"]) for item in dataset.manifest_json["items"]
-        }
+        training_videos = {str(item["video_sha256"]) for item in dataset.manifest_json["items"]}
         validation_videos = {
             str(item["video_sha256"]) for item in validation_dataset.manifest_json["items"]
         }
         if training_videos & validation_videos:
-            raise ValidationError(
-                "Pose validation dataset must use independent source videos"
-            )
+            raise ValidationError("Pose validation dataset must use independent source videos")
 
     if (
         validation_dataset is not None
