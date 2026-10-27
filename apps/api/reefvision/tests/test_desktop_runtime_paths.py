@@ -67,12 +67,20 @@ def _add_native_review_table(
             else ""
         )
         event_type_decl = "event_type TEXT" if nullable_event_type else "event_type TEXT NOT NULL"
+        # Revision 0041 requires the same named idempotency constraint as the
+        # real audit migration. A bare synthetic stamp must not bypass it.
+        request_identity = (
+            ", CONSTRAINT uq_review_queue_item_event_request "
+            "UNIQUE (review_queue_item_id, client_request_id)"
+            if stamped_revision == "0041"
+            else ""
+        )
         connection.execute(
             "CREATE TABLE review_queue_item_events ("
             "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
             "project_id TEXT, client_request_id TEXT, "
             f"{event_type_decl}, actor TEXT, "
-            f"comment TEXT, assignee TEXT, created_at TEXT{event_type_check})"
+            f"comment TEXT, assignee TEXT, created_at TEXT{event_type_check}{request_identity})"
         )
         if stamped_revision == "0041":
             # Synthetic schema identity must include the real 0041 registry
