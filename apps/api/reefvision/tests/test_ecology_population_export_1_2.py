@@ -55,6 +55,8 @@ def test_population_csv_reports_declared_unit_weighting_without_inference(
     assert unit["unit_status"] == "candidate"
     assert unit["declared_unit_count"] == "1"
     assert population["declared_unit_count"] == "1"
+    assert json.loads(population["experimental_unit_ids_json"]) == ["tank-A"]
+    assert json.loads(population["organism_keys_json"]) == []
     assert population["contributing_organism_count"] == "1"
     assert float(population["mean_absolute_change"]) == pytest.approx(2)
     assert population["sample_sd_unit_absolute_change"] == ""
