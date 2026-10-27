@@ -38,6 +38,30 @@ The automated CI suite is necessary but cannot establish the following installed
 
 RTX 3090 GPU acceptance is **DEFERRED** until hardware is operational; it is not implied by CPU testing or CI. Do not mark the release ready while any required acceptance gate is unverified.
 
+### Optional installed-MSI real camera JPEG evidence
+
+On an **owner-approved disposable Windows VM only**, the clean-install acceptance
+script now accepts `-CameraFixturePath` for a local representative camera JPEG.
+Example (do not run on a machine with an existing ReefVision installation):
+
+```powershell
+.\scripts\acceptance-windows-clean-install.ps1 `
+  -InstallerPath 'C:\staging\ReefVision_1.0.3_x64_en-US.msi' `
+  -AcceptanceRoot 'C:\reefvision-clean-acceptance' `
+  -DisposableTest `
+  -CameraFixturePath 'C:\camera-fixtures\DSC_0001.JPEG'
+```
+
+The optional test imports the file into the isolated installed backend,
+checks its reported source-pixel dimensions, compares its original SHA-256
+with the bytes served by the API, verifies the source file is unchanged,
+and requests the display rendition (requiring PNG for non-neutral EXIF
+orientation). The evidence report records `camera_jpeg: PASS` only after
+these checks; omitting the fixture records `SKIPPED`. This does **not**
+establish interactive WebView2 behavior, thumbnail alignment, or coverage
+of every camera codec/alias. Keep those gates **UNVERIFIED** until physically
+tested. Do not use private camera imagery in CI or upload it externally.
+
 ### Training console acceptance details
 
 For each CPU run, capture the immutable training run ID, start/end UTC timestamps, model configuration and locally registered checkpoint identity. Confirm the external PowerShell process only polls a loopback read-only endpoint, rejects malformed run IDs, and does not spawn a second training process. Compare epoch and box/classification/distribution-focal loss values against the original job log at matching steps; distinguish absent metrics from zero values. Close the console during an active epoch and verify the training PID, status transitions, checkpoints and final metrics remain unchanged. Repeat for completed, failed, and unavailable-terminal cases. Do not claim GPU acceptance from this CPU exercise.
