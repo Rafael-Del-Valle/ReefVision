@@ -1235,3 +1235,33 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   and representative scientific acceptance remain unresolved. No merge,
   release, deployment, pretrained download or branch blending. 1.7/1.8
   remain unchanged.
+
+## 2026-10-27 — Versioned QC scoring-signal identity contract (Track D)
+
+- Audited the existing class/visibility features, standalone QC generator,
+  persisted executable `qc_review_queue` Workflow Builder node, v2 snapshot
+  validator, and prior 1.0–1.5 scope before editing. Prior isolated 1.6
+  commit `9745300c` passed **20/20** GitHub Actions workflows.
+- Found a scientific interpretation gap: v2 checks deterministic arithmetic,
+  but a coherent, re-signed snapshot could add a fictitious scoring signal or
+  omit a zero-weighted known signal while retaining a plausible priority.
+- **Newly generated** queues use `qc-review-queue-v3`. The v3 validator freezes
+  all 13 `review_priority_v1` input identities and includes the integrity
+  schema version in the scoring provenance digest. The generator and saved
+  Workflow Builder retry share the same validator; typed
+  `review_queue_reference`, dimensionless scores, persisted runs, manual
+  researcher review, retry semantics and mutable reviewer history remain.
+- **Existing v2 and unversioned saved queues are not rewritten.** They retain
+  their historical compatibility contract; the stronger input-set check is
+  forward-only. Checksums detect accidental or inconsistent edits, not a
+  malicious actor who can rewrite all records and digests.
+- Added standalone v3 positive/negative regressions for a coherent 13-signal
+  snapshot, invented/omitted signals with re-signed scoring and evidence
+  digests, and a changed version marker. The saved executable Workflow Builder
+  regression asserts v3 generation and rejects an invented signal on replay
+  before restoration. No pretrained weights, network service or scientific
+  approval is introduced.
+- **Release HOLD:** new exact-head CI and standalone/saved-workflow tests
+  must pass. Independent 1.1/1.6 Alembic 0038 reconciliation, real Windows
+  MSI upgrade/rollback and interactive installed GUI, and representative
+  biological-data acceptance remain outstanding. No merge or release.
