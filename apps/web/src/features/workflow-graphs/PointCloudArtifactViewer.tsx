@@ -19,6 +19,7 @@ interface PointCloudRenderArtifact {
   totalCount: number;
   chords: PointChord[];
   omittedExtrema: string[] | null;
+  omittedChordEndpoints: number[] | null;
 }
 
 function isVec3(value: unknown): value is Vec3 {
@@ -96,6 +97,9 @@ export function parsePointCloudRenderArtifact(
   const totalCount = data.point_count;
   const rawChords = data.selected_point_chords;
   const omittedExtrema = data.preview_omitted_axis_extrema;
+  const omittedChordEndpoints =
+    data.preview_omitted_selected_chord_endpoint_indices;
+  const chordEndpointsCovered = data.preview_selected_chord_endpoints_covered;
   const provenance = data.provenance;
   // A point-cloud preview is provisional geometry, never verified biology.
   // Reject contradictory saved metadata instead of displaying a misleading artifact.
@@ -190,6 +194,31 @@ export function parsePointCloudRenderArtifact(
     return null;
   }
   const chords: PointChord[] = Array.isArray(rawChords) ? rawChords : [];
+  // New artifacts must describe exactly which measured source endpoints were
+  // lost to display sampling. Legacy artifacts have unassessed coverage.
+  if (
+    (omittedChordEndpoints === undefined) !==
+    (chordEndpointsCovered === undefined)
+  ) {
+    return null;
+  }
+  if (omittedChordEndpoints !== undefined) {
+    const expectedOmissions = [
+      ...new Set(chords.flatMap((chord) => chord.point_indices)),
+    ]
+      .filter((index) => !(indices as number[]).includes(index))
+      .sort((a, b) => a - b);
+    if (
+      !Array.isArray(omittedChordEndpoints) ||
+      omittedChordEndpoints.length !== expectedOmissions.length ||
+      !omittedChordEndpoints.every(
+        (index, position) => index === expectedOmissions[position],
+      ) ||
+      chordEndpointsCovered !== (expectedOmissions.length === 0)
+    ) {
+      return null;
+    }
+  }
   // When both original endpoints survive display sampling, cross-check the
   // reported chord against their calibrated coordinates. Never infer an
   // unsampled endpoint from a visualization-only point subset.
@@ -271,6 +300,10 @@ export function parsePointCloudRenderArtifact(
     chords,
     omittedExtrema:
       omittedExtrema === undefined ? null : (omittedExtrema as string[]),
+    omittedChordEndpoints:
+      omittedChordEndpoints === undefined
+        ? null
+        : (omittedChordEndpoints as number[]),
   };
 }
 
@@ -429,6 +462,13 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
           : cloud.omittedExtrema.length > 0
             ? ` · Display omits source-axis extrema: ${cloud.omittedExtrema.join(", ")}`
             : " · Source-axis extrema represented"}
+        {cloud.chords.length > 0
+          ? cloud.omittedChordEndpoints === null
+            ? " · Chord endpoint display coverage unassessed"
+            : cloud.omittedChordEndpoints.length > 0
+              ? ` · Display omits selected chord endpoints: ${cloud.omittedChordEndpoints.join(", ")}`
+              : " · Selected chord endpoints visible"
+          : ""}
       </p>
     </section>
   );
