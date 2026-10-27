@@ -724,3 +724,50 @@ def test_v3_integrity_marker_cannot_be_accidentally_downgraded():
     queue.input_checksums_json["integrity_schema_version"] = "qc-review-queue-v2"
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize(
+    ("signal_id", "altered_raw"),
+    [
+        ("low_mean_confidence", 0.1),
+        ("pending_proposals", 5.0),
+        ("pending_proposals", -1.0),
+        ("pending_proposals", 1.5),
+        ("rejection_rate", 1.2),
+    ],
+)
+def test_v3_rejects_resigned_false_raw_normalization(
+    signal_id: str, altered_raw: float
+) -> None:
+    """A re-signed, score-consistent snapshot cannot invent raw QC evidence."""
+    queue, items = _v3_snapshot()
+    item = items[0]
+    item.signal_values_json[signal_id] = altered_raw
+    part = next(
+        part for part in item.score_breakdown_json if part["signal_id"] == signal_id
+    )
+    part["raw_value"] = altered_raw
+    # The old v2 check sees internally consistent breakdown, score and
+    # checksum; only v3's scientific normalization rule detects this edit.
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize("pending_count", [0.0, 5.0, 10.0, 15.0])
+def test_v3_accepts_real_pending_count_normalization(pending_count: float) -> None:
+    """Valid raw counts saturate at ten without rewriting reviewer history."""
+    queue, items = _v3_snapshot()
+    normalized = min(pending_count / 10.0, 1.0)
+    for item in items:
+        item.signal_values_json["pending_proposals"] = pending_count
+        item.normalized_signals_json["pending_proposals"] = normalized
+        part = next(
+            part
+            for part in item.score_breakdown_json
+            if part["signal_id"] == "pending_proposals"
+        )
+        part["raw_value"] = pending_count
+        part["normalized_value"] = normalized
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    validate_saved_queue_snapshot(queue, items)
