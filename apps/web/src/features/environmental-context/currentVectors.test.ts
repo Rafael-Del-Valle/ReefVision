@@ -80,9 +80,9 @@ it("keeps missing, zero and invalid component uncertainties distinct", () => {
     value: 0,
     kind: "standard_error",
   });
-  expect(
-    currentComponentUncertaintyText("East", unknown.eastUncertainty),
-  ).toBe("East component uncertainty: unknown");
+  expect(currentComponentUncertaintyText("East", unknown.eastUncertainty)).toBe(
+    "East component uncertainty: unknown",
+  );
   const invalid = currentVectors([
     component("current_eastward_velocity", 3, {
       normalized_uncertainty: -1,
@@ -150,7 +150,10 @@ it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
   ];
   for (const location of invalidLocations) {
     expect(
-      currentVectors([{ ...east, location }, { ...north, location }]),
+      currentVectors([
+        { ...east, location },
+        { ...north, location },
+      ]),
     ).toEqual([]);
     expect(currentVectors([east, { ...north, location }])).toEqual([]);
     expect(currentVectors([{ ...east, location }, north])).toEqual([]);
