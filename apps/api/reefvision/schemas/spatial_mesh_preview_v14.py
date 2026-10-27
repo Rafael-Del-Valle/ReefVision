@@ -135,9 +135,7 @@ class MeshRegistrationEvidence(BaseModel):
             raise ValueError("Registration timepoint binding requires both UTC timestamps")
         if (self.source_geometry_sha256 is None) != (self.target_geometry_sha256 is None):
             raise ValueError("Registration geometry binding requires both SHA-256 fingerprints")
-        if (self.source_meters_per_mesh_unit is None) != (
-            self.target_meters_per_mesh_unit is None
-        ):
+        if (self.source_meters_per_mesh_unit is None) != (self.target_meters_per_mesh_unit is None):
             raise ValueError("Registration calibration scale binding requires both scales")
         review_fields = (
             self.independent_reviewer_id,
