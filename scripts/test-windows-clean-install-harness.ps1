@@ -43,6 +43,23 @@ Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $Root -RepositoryRoot 
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $defaultData -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Normal app-data root must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Split-Path -Parent $defaultData) -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Parent of normal app-data root must be rejected.'
 
+# Lexical containment is insufficient: a junction beneath a disposable path
+# could redirect MSI install/cleanup operations into non-disposable user data.
+$junctionRoot = Join-Path $env:TEMP ('reefvision-reparse-' + [guid]::NewGuid().ToString('N'))
+$junctionTarget = Join-Path $junctionRoot 'target'
+$junctionPath = Join-Path $junctionRoot 'junction'
+New-Item -ItemType Directory -Path $junctionTarget -Force | Out-Null
+try {
+    New-Item -ItemType Junction -Path $junctionPath -Target $junctionTarget -ErrorAction Stop | Out-Null
+    Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $junctionPath -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Junction acceptance root must be rejected.'
+    Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $junctionPath 'nested') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Nested path through junction must be rejected.'
+    Assert-True (Test-Path -LiteralPath $junctionTarget -PathType Container) 'Junction safety check modified its target.'
+} finally {
+    # Directory.Delete on a junction removes the link itself, never the target.
+    if ([System.IO.Directory]::Exists($junctionPath)) { [System.IO.Directory]::Delete($junctionPath) }
+    if ([System.IO.Directory]::Exists($junctionRoot)) { [System.IO.Directory]::Delete($junctionRoot, $true) }
+}
+
 $arguments = New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -InstallRoot 'C:\rv-test\install' -LogPath 'C:\rv-test\install.log'
 Assert-True ($arguments[0] -eq '/i') 'Install command does not use /i.'
 Assert-True (($arguments -join ' ') -match 'INSTALLDIR=') 'Install command omitted isolated INSTALLDIR.'
