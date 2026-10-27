@@ -2589,3 +2589,26 @@ applicable. Source code and test changes are pushed, but latest-head CI,
 installed Windows GUI/installer validation, authenticated longitudinal
 observations, migration reconciliation and independent ecological review
 are still required. **1.2 is NOT RELEASE-READY.**
+
+## Population CSV scientific-row fail-closed validation (2026-10-27)
+
+The shared population CSV serializer now rejects duplicate CSV column names,
+invalid row kinds, non-integer or contradictory experimental-unit/organism
+denominators, and any attempt to label exported rows as verified or inferential.
+A declared-unit row may represent zero excluded units or one eligible unit;
+a population stratum must have at least one declared unit and at least one
+contributing organism per eligible unit. The exporter also retains the
+previous exact 40-column count contract. These guards run identically for
+the standalone population CSV API and the persisted executable
+`ecology_population_csv_export` Workflow Builder node.
+
+Eight focused regression scenarios exercise duplicate header names and
+forged scientific-row fields before CSV emission. The previous head
+`f729bd7b4bb06a8461e49561509ad4df6e7cc496` completed 16/19
+GitHub Actions workflows; three backend failures all traced to Ruff's
+required trailing commas in `ecology_population_export.py`. Those two
+formatting differences were corrected in this increment. No new migration
+or independent-unit inference was introduced. All output remains
+`linked_unverified` and `scientist_review_required`; exact-head CI,
+scientific dataset validation, 1.1 migration reconciliation, and installed
+Windows GUI acceptance remain release blockers.
