@@ -1319,6 +1319,10 @@ class PoseActiveLearningService:
             actor=request.reviewed_by,
         )
         self.session.add(correction)
+        # The verified candidate references this correction by FK. Persist the
+        # correction before updating the candidate, in the same transaction.
+        # Otherwise the ORM may issue UPDATE before INSERT with SQLite FKs ON.
+        self.session.flush()
 
         candidate.review_status = "verified"
         candidate.verified_track_revision = track.revision
