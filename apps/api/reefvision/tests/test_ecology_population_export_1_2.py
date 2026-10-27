@@ -18,7 +18,10 @@ from reefvision.schemas.ecology_measurement_candidates import (
 )
 from reefvision.schemas.workflow_graphs import WorkflowPortDefinition
 from reefvision.services.ecology_population_export import render_ecology_population_csv
-from reefvision.tests.test_ecology_projected_series_csv_1_2 import _dated_artifact
+from reefvision.tests.test_ecology_projected_series_csv_1_2 import (
+    _dated_artifact,
+    _resign_derived_evidence,
+)
 from reefvision.tests.test_ecology_projected_visit_coverage_1_2 import _source
 
 
@@ -90,29 +93,19 @@ def test_population_csv_stratum_fields_match_typed_scientific_summary(
     )
     assert population["metric"] == summary.metric
     assert population["experimental_unit_type"] == summary.experimental_unit_type
-    assert json.loads(population["experimental_unit_ids_json"]) == (
-        summary.experimental_unit_ids
-    )
+    assert json.loads(population["experimental_unit_ids_json"]) == (summary.experimental_unit_ids)
     assert json.loads(population["physical_units_json"]) == [summary.unit]
-    assert json.loads(population["sampling_windows_utc_json"]) == [
-        summary.sampling_window_utc
-    ]
-    assert json.loads(population["parent_colony_keys_json"]) == (
-        summary.parent_colony_keys
-    )
+    assert json.loads(population["sampling_windows_utc_json"]) == [summary.sampling_window_utc]
+    assert json.loads(population["parent_colony_keys_json"]) == (summary.parent_colony_keys)
     assert json.loads(population["shared_parent_colony_keys_json"]) == (
         summary.shared_parent_colony_keys
     )
     assert json.loads(population["units_missing_parent_colony_json"]) == (
         summary.units_missing_parent_colony
     )
-    assert json.loads(population["design_review_blockers_json"]) == (
-        summary.design_review_blockers
-    )
+    assert json.loads(population["design_review_blockers_json"]) == (summary.design_review_blockers)
     assert int(population["declared_unit_count"]) == summary.declared_unit_count
-    assert int(population["contributing_organism_count"]) == (
-        summary.contributing_organism_count
-    )
+    assert int(population["contributing_organism_count"]) == (summary.contributing_organism_count)
     assert float(population["mean_absolute_change"]) == pytest.approx(
         summary.mean_unit_absolute_change
     )
@@ -131,6 +124,38 @@ def test_population_csv_rejects_resigned_or_legacy_unreviewed_science(
     legacy = source.model_copy(update={"source_fingerprint_contract": None})
     with pytest.raises(ValidationError, match="recheckable source"):
         render_ecology_population_csv(legacy)
+
+
+
+@pytest.mark.parametrize(
+    "forged_fields",
+    [
+        {"declared_unit_count": 2},
+        {"contributing_organism_count": 2},
+        {"shared_parent_colony_keys": ["forged-shared-parent"]},
+        {"design_review_blockers": []},
+        {"sample_sd_unit_absolute_change": 2.0},
+    ],
+)
+def test_population_csv_rejects_resigned_forged_replication_evidence(
+    client: TestClient,
+    forged_fields: dict[str, Any],
+) -> None:
+    """Re-signing a CSV source cannot manufacture independent replicates.
+
+    The one-unit fixture must retain its actual unit/organism denominators,
+    lack of estimable sample SD, and scientist-review design blockers.
+    """
+    source = _dated_artifact(client)
+    assert source.projected_population_summaries[0].declared_unit_count == 1
+    altered_summary = source.projected_population_summaries[0].model_copy(
+        update=forged_fields
+    )
+    forged = _resign_derived_evidence(
+        source.model_copy(update={"projected_population_summaries": [altered_summary]})
+    )
+    with pytest.raises(ValidationError, match="Projected population summaries"):
+        render_ecology_population_csv(forged)
 
 
 def test_saved_workflow_population_csv_matches_standalone_and_blocks_promotion(
