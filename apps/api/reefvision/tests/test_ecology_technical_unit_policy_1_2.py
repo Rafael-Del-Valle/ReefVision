@@ -36,6 +36,12 @@ from reefvision.tests.test_workflow_model_agreement_1_2 import (
         "model_prediction",
         "augmented_view",
         "keyframe",
+        "pose_keypoint",
+        "tracking_tracklet",
+        "prediction_heatmap",
+        "segmentation_polygon",
+        "screenshot",
+        "subframe",
     ],
 )
 def test_technical_unit_is_rejected_in_both_schema_contracts(
@@ -74,7 +80,10 @@ def test_technical_unit_is_rejected_in_both_schema_contracts(
         PairedCountComparisonRequest(reference_kind="human_consensus", pairs=pairs)
 
 
-@pytest.mark.parametrize("technical_type", ["image", "roi", "model_prediction"])
+@pytest.mark.parametrize(
+    "technical_type",
+    ["image", "roi", "model_prediction", "pose_keypoint", "tracking_tracklet"],
+)
 @pytest.mark.parametrize(
     ("node_type", "artifact_type"),
     [
