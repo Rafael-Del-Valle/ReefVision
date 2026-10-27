@@ -7,7 +7,11 @@ from copy import deepcopy
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from reefvision.schemas.spatial_mesh_preview_v14 import MeshRegistrationEvidence
+from reefvision.schemas.spatial_mesh_preview_v14 import (
+    MeshPreviewRequest,
+    MeshRegistrationEvidence,
+    MeshReidentificationEvidence,
+)
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 
 
@@ -114,6 +118,72 @@ def test_malformed_calibration_method_and_empty_evidence_are_rejected() -> None:
     evidence["target_calibration_evidence"] = ""
     with pytest.raises(PydanticValidationError):
         MeshRegistrationEvidence.model_validate(evidence)
+
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "evidence_note",
+        "source_calibration_evidence",
+        "target_calibration_evidence",
+        "independent_review_note",
+    ],
+)
+def test_registration_rejects_whitespace_only_audit_evidence(field: str) -> None:
+    evidence = _evidence()
+    if field == "independent_review_note":
+        evidence.update(
+            registration_operator_id="operator-1",
+            independent_reviewer_id="reviewer-2",
+            independent_review_decision="supports_alignment",
+        )
+    evidence[field] = " \t "
+    with pytest.raises(PydanticValidationError, match="cannot be blank"):
+        MeshRegistrationEvidence.model_validate(evidence)
+    before, after = _observations()
+    with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
+        compare_mesh_observations(before, after, registration_evidence=evidence)
+
+
+def test_mutated_registration_note_is_revalidated_before_comparison() -> None:
+    before, after = _observations()
+    evidence = MeshRegistrationEvidence.model_validate(_evidence())
+    evidence.evidence_note = " \t "
+    with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
+        compare_mesh_observations(before, after, registration_evidence=evidence)
+
+
+@pytest.mark.parametrize("field", ["evidence_note", "independent_review_note"])
+def test_reidentification_rejects_whitespace_only_audit_evidence(field: str) -> None:
+    evidence = {
+        "before_observation_id": "scan-1",
+        "after_observation_id": "scan-2",
+        "method": "visual_morphology",
+        "observer_id": "observer-1",
+        "evidence_note": "Unverified visual morphology",
+    }
+    if field == "independent_review_note":
+        evidence.update(
+            independent_reviewer_id="reviewer-2",
+            independent_review_decision="supports_match",
+        )
+    evidence[field] = " \t "
+    with pytest.raises(PydanticValidationError, match="cannot be blank"):
+        MeshReidentificationEvidence.model_validate(evidence)
+
+
+def test_preview_rejects_whitespace_only_calibration_evidence() -> None:
+    with pytest.raises(PydanticValidationError, match="cannot be blank"):
+        MeshPreviewRequest.model_validate(
+            {
+                "vertices": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                "faces": [[0, 1, 2]],
+                "meters_per_unit": 1.0,
+                "calibration_method": "ruler",
+                "calibration_evidence": " \t ",
+            }
+        )
 
 
 def test_legacy_registration_without_provenance_binding_is_flagged() -> None:

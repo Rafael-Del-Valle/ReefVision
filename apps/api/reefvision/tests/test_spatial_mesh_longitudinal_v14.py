@@ -782,7 +782,8 @@ def test_registration_uncertainty_binding_rejects_reestimated_calibration() -> N
     legacy = {
         key: value
         for key, value in evidence.items()
-        if key not in (
+        if key
+        not in (
             "source_relative_scale_uncertainty",
             "target_relative_scale_uncertainty",
         )

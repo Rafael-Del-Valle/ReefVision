@@ -44,6 +44,8 @@ class MeshPreviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
+        if not self.calibration_evidence.strip():
+            raise ValueError("Mesh calibration evidence cannot be blank")
         supplied_text = sum(
             value is not None for value in (self.obj_text, self.ply_text, self.glb_base64)
         )
@@ -123,12 +125,12 @@ class MeshRegistrationEvidence(BaseModel):
     # Method and supporting evidence can be revised while geometry, scale,
     # and uncertainty remain identical. Bind both source calibration records
     # to prevent silently reusing registration after that provenance revision.
-    source_calibration_method: Literal[
-        "ruler", "photogrammetry_control", "instrument", "other"
-    ] | None = None
-    target_calibration_method: Literal[
-        "ruler", "photogrammetry_control", "instrument", "other"
-    ] | None = None
+    source_calibration_method: (
+        Literal["ruler", "photogrammetry_control", "instrument", "other"] | None
+    ) = None
+    target_calibration_method: (
+        Literal["ruler", "photogrammetry_control", "instrument", "other"] | None
+    ) = None
     source_calibration_evidence: str | None = Field(default=None, min_length=1, max_length=2_000)
     target_calibration_evidence: str | None = Field(default=None, min_length=1, max_length=2_000)
     # Optional caller-supplied rigid source-to-target transform in meters.
@@ -171,6 +173,14 @@ class MeshRegistrationEvidence(BaseModel):
             value is not None for value in calibration_records
         ):
             raise ValueError("Registration calibration provenance binding requires all four fields")
+        for audit_note in (
+            self.evidence_note,
+            self.independent_review_note,
+            self.source_calibration_evidence,
+            self.target_calibration_evidence,
+        ):
+            if audit_note is not None and not audit_note.strip():
+                raise ValueError("Registration audit evidence and review notes cannot be blank")
         review_fields = (
             self.independent_reviewer_id,
             self.independent_review_decision,
@@ -290,6 +300,11 @@ class MeshReidentificationEvidence(BaseModel):
             raise ValueError("Reidentification geometry binding requires both SHA-256 fingerprints")
         if (self.before_observed_at_utc is None) != (self.after_observed_at_utc is None):
             raise ValueError("Reidentification timepoint binding requires both UTC timestamps")
+        if not self.evidence_note.strip() or (
+            self.independent_review_note is not None
+            and not self.independent_review_note.strip()
+        ):
+            raise ValueError("Reidentification evidence and review notes cannot be blank")
         review_fields = (
             self.independent_reviewer_id,
             self.independent_review_decision,

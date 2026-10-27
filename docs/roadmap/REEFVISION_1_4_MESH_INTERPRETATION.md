@@ -455,3 +455,14 @@ or malformed quartets are rejected. The standalone longitudinal API and saved,
 typed Workflow Builder graph use the same comparison engine, and a saved-workflow
 regression exercises a fully bound registration. No calibration, spatial
 alignment, organism identity, or biological growth is marked verified.
+
+### Nonblank scientific audit evidence (Track C)
+
+Mesh previews now reject calibration evidence containing only whitespace.
+Pairwise registration and provisional reidentification records likewise reject
+whitespace-only evidence notes, independent-review notes, and paired calibration
+references. This validation applies to standalone analysis and the same typed
+schemas used by persisted Workflow Builder execution; existing saved-workflow
+artifact-parity regressions continue to cover valid attributed evidence.
+Nonblank text is an auditability requirement, **not** proof that the supporting
+material exists, was independently reviewed, or establishes biological change.
