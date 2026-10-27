@@ -115,6 +115,7 @@ def extend_mesh_registry(
                 "point_index_pairs": None,
                 "preserve_axis_extrema_in_preview": False,
                 "preserve_measured_chord_endpoints_in_preview": False,
+                "expected_source_payload_sha256": None,
                 "relative_scale_uncertainty": None,
                 "source_label": None,
                 "specimen_id": None,
@@ -129,6 +130,7 @@ def extend_mesh_registry(
                 "Calibration and coordinate registration remain unverified.",
                 "No surface area or biological branch length is inferred.",
                 "Selected point-pair chords are not biological branch lengths.",
+                "Optional source SHA-256 binding rejects changed ASCII PLY bytes on replay.",
                 "Not a persistent asset importer or interactive viewer.",
             ],
         )
