@@ -112,3 +112,33 @@ calibration and specimen identity remain explicitly unverified. Scientists
 should compare the original scan with the preview before accepting biological
 interpretations. Regression coverage includes a 513-point hidden-extreme
 example, strict request validation and saved-workflow parity.
+
+
+## Optional measured-chord endpoint preservation (October 27, 2026)
+
+For scans larger than the 512-point display budget, the default deterministic
+index sample can omit original point indices used by an explicitly selected
+straight-line chord. The new optional request/workflow parameter
+`preserve_measured_chord_endpoints_in_preview: true` pins both original
+source indices of every validated `point_index_pairs` selection into the
+bounded preview (up to 32 pairs, at most 64 endpoints). The existing
+`preserve_axis_extrema_in_preview` flag can be combined with this option.
+The sampler reserves first/last source indices and any requested protected
+indices, then fills remaining slots evenly over the **entire** unprotected
+source index range rather than favoring early file rows.
+
+The result records `preview_omitted_selected_chord_endpoint_indices` and
+`preview_selected_chord_endpoints_covered`, so a default/legacy sampling
+decision remains auditable. The sampling strategy identifies chord-only,
+extrema-only, combined, or default uniform-index selection. The opt-in
+changes **display indices only**: calibrated full-input extents, source
+geometry hashes, original-index chord distances, and scale-only uncertainty
+remain unchanged. Standalone API and saved executable typed Workflow Builder
+graphs use the same service; scientific regression tests cover both, including
+512-point limits and distributed source-index coverage.
+
+An endpoint shown in the interactive viewer is **not** a reviewed anatomical
+landmark. Chords remain unverified Euclidean distances, never inferred coral
+branch lengths or geodesics. The flag does not create persistent point-cloud
+assets, establish calibration or registration, or promote model output to
+verified biological evidence. Existing requests retain their default behavior.
