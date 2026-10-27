@@ -26,6 +26,7 @@ function LocalPointCloudPreviewSession({
   const [uncertainty, setUncertainty] = useState("");
   const [firstPointIndex, setFirstPointIndex] = useState("");
   const [secondPointIndex, setSecondPointIndex] = useState("");
+  const [pinChordEndpoints, setPinChordEndpoints] = useState(false);
   const [artifact, setArtifact] = useState<Record<string, unknown> | null>(
     null,
   );
@@ -55,19 +56,28 @@ function LocalPointCloudPreviewSession({
       const pointIndexPairs: Array<[number, number]> | undefined = hasFirst
         ? [[Number(firstPointIndex), Number(secondPointIndex)]]
         : undefined;
-      const result = await previewLocalPointCloudFile(
-        projectId,
-        file,
-        {
-          meters_per_unit: Number(scale),
-          calibration_method: "ruler",
-          calibration_evidence: evidence,
-          coordinate_frame_id: coordinateFrame || undefined,
-          relative_scale_uncertainty:
-            uncertainty.trim() === "" ? null : Number(uncertainty),
-        },
-        pointIndexPairs,
-      );
+      const calibration = {
+        meters_per_unit: Number(scale),
+        calibration_method: "ruler" as const,
+        calibration_evidence: evidence,
+        coordinate_frame_id: coordinateFrame || undefined,
+        relative_scale_uncertainty:
+          uncertainty.trim() === "" ? null : Number(uncertainty),
+      };
+      const result = pinChordEndpoints
+        ? await previewLocalPointCloudFile(
+            projectId,
+            file,
+            calibration,
+            pointIndexPairs,
+            true,
+          )
+        : await previewLocalPointCloudFile(
+            projectId,
+            file,
+            calibration,
+            pointIndexPairs,
+          );
       if (version === requestVersion.current) setArtifact(result);
     } catch (reason) {
       if (version === requestVersion.current) {
@@ -184,12 +194,24 @@ function LocalPointCloudPreviewSession({
             }}
           />
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={pinChordEndpoints}
+            onChange={(event) => {
+              setPinChordEndpoints(event.target.checked);
+              invalidatePreview();
+            }}
+          />
+          Keep selected chord endpoints visible in the sampled point preview
+        </label>
       </div>
       <p className="muted-copy">
         Optional point-pair chord is straight-line distance between original
         zero-based source indices, not anatomical branch length. The backend
-        checks indices against the full imported cloud. A source-frame label
-        does not establish verified spatial registration.
+        checks indices against the full imported cloud. Endpoint preservation
+        changes display sampling only, not biological measurement or review.
+        A source-frame label does not establish verified spatial registration.
       </p>
       <button
         type="button"
