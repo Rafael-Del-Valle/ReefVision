@@ -1,7 +1,10 @@
 """Review queue coordination integration checks."""
 
+from typing import cast
 from uuid import uuid4
 
+import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
@@ -169,6 +172,18 @@ def test_coordination_retries_and_history_reject_foreign_provenance(
     assert retry.status_code == 409, retry.text
     history = client.get(url)
     assert history.status_code == 409, history.text
+    # A different request key must not append fresh reviewer evidence to a
+    # queue whose existing coordination history has inconsistent provenance.
+    fresh_payload = {
+        "client_request_id": str(uuid4()),
+        "event_type": "comment",
+        "actor": "researcher",
+        "comment": "New independent review note",
+    }
+    blocked_fresh = client.post(url, json=fresh_payload)
+    assert blocked_fresh.status_code == 409, blocked_fresh.text
+    # The corruption guard must run before pagination, including empty pages.
+    assert client.get(url, params={"page": 2, "page_size": 1}).status_code == 409
 
     with app.state.session_factory() as session:
         event = session.get(ReviewQueueItemEvent, event_id)
@@ -186,6 +201,13 @@ def test_coordination_retries_and_history_reject_foreign_provenance(
     assert restored_history.status_code == 200, restored_history.text
     assert restored_history.json()["total"] == 1
     assert restored_history.json()["current_assignee"] == "reviewer-two"
+    # A previously blocked new key can now be committed exactly once.
+    fresh = client.post(url, json=fresh_payload)
+    assert fresh.status_code == 201, fresh.text
+    assert client.post(url, json=fresh_payload).json()["id"] == fresh.json()["id"]
+    final_history = client.get(url).json()
+    assert final_history["total"] == 2
+    assert final_history["current_assignee"] == "reviewer-two"
     annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
