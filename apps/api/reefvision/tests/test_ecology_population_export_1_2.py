@@ -74,7 +74,11 @@ def test_population_csv_rejects_duplicate_column_names(
         ("source_fingerprint_rechecked", "false", "verified evidence or inference"),
         ("evidence_level", "verified", "verified evidence or inference"),
         ("review_gate", "approved", "verified evidence or inference"),
-        ("independent_unit_inference_allowed", "true", "verified evidence or inference"),
+        (
+            "independent_unit_inference_allowed",
+            "true",
+            "verified evidence or inference",
+        ),
         ("declared_unit_count", 2, "declared-unit denominator"),
         ("contributing_organism_count", -1, "declared-unit denominator"),
         ("row_type", "synthetic_replicate", "row type"),
