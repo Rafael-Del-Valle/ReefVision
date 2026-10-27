@@ -100,6 +100,37 @@ def _add_native_review_table(
         connection.commit()
 
 
+def test_synthetic_0041_review_fixture_preserves_per_item_request_idempotency(
+    tmp_path: Path,
+) -> None:
+    """The desktop startup fixture must model the real 0041 audit identity."""
+    settings = _desktop_settings(tmp_path / "request-identity")
+    database = _stamp_database(settings, "0041")
+    _add_native_review_table(database)
+
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO review_queue_item_events "
+            "(id, review_queue_item_id, client_request_id, event_type) "
+            "VALUES ('first', 'item-a', 'request-1', 'comment')"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE constraint failed"):
+            connection.execute(
+                "INSERT INTO review_queue_item_events "
+                "(id, review_queue_item_id, client_request_id, event_type) "
+                "VALUES ('duplicate', 'item-a', 'request-1', 'comment')"
+            )
+        # Request identities are scoped to an item, not globally to a queue.
+        connection.execute(
+            "INSERT INTO review_queue_item_events "
+            "(id, review_queue_item_id, client_request_id, event_type) "
+            "VALUES ('other-item', 'item-b', 'request-1', 'comment')"
+        )
+        assert connection.execute(
+            "SELECT COUNT(*) FROM review_queue_item_events"
+        ).fetchone()[0] == 2
+
+
 def test_provider_runtime_dir_uses_desktop_data_dir_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
