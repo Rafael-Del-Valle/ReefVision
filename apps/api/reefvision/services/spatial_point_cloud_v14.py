@@ -167,6 +167,7 @@ def measure_point_cloud_preview(
     ] = set()
     repeated_selected_point_pairs = False
     repeated_selected_endpoint_geometry = False
+    coincident_selected_chord_count = 0
     if point_index_pairs is not None:
         if not isinstance(point_index_pairs, list) or len(point_index_pairs) > 32:
             raise ValueError("At most 32 point-index pairs are supported")
@@ -201,6 +202,7 @@ def measure_point_cloud_preview(
             seen_endpoint_geometry.add(unordered_geometry)
             if endpoints[0] == endpoints[1]:
                 chord_qc_warnings.append("coincident_endpoint_coordinates")
+                coincident_selected_chord_count += 1
             selected_chords.append(
                 {
                     "point_indices": list(pair),
@@ -341,6 +343,12 @@ def measure_point_cloud_preview(
         "preview_axis_extrema_covered": not preview_omitted_axis_extrema,
         "preview_points_in_source_frame_m": preview_points,
         "selected_point_chords": selected_chords,
+        "selected_point_chord_qc_summary": {
+            "requested_chords": len(selected_chords),
+            "distinct_source_index_pairs": len(seen_point_pairs),
+            "distinct_endpoint_geometries": len(seen_endpoint_geometry),
+            "coincident_endpoint_chords": coincident_selected_chord_count,
+        },
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_min_in_source_frame_m": bounds_min,
         "axis_aligned_max_in_source_frame_m": bounds_max,
@@ -370,6 +378,11 @@ def measure_point_cloud_preview(
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
             + (["preview_omits_selected_chord_endpoints"] if omitted_chord_endpoints else [])
             + (["repeated_selected_point_pairs"] if repeated_selected_point_pairs else [])
+            + (
+                ["coincident_selected_chord_endpoints"]
+                if coincident_selected_chord_count
+                else []
+            )
             + (
                 ["repeated_selected_endpoint_geometry"]
                 if repeated_selected_endpoint_geometry
