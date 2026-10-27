@@ -787,7 +787,9 @@ def create_pose_workflow_training_result(
         int(parameters["random_seed"]) if parameters.get("random_seed") is not None else None
     )
 
-    resource_limits = parameters.get("resource_limits") or {}
+    resource_limits = parameters.get("resource_limits")
+    if resource_limits is None:
+        resource_limits = {}
     if not isinstance(resource_limits, dict):
         raise ValidationError("Pose training resource_limits must be an object")
     resource_limits = dict(resource_limits)
