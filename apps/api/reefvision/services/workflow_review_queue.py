@@ -18,6 +18,7 @@ from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue_integrity import (
     validate_saved_queue_snapshot,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 
 
 def create_review_queue_workflow_artifact(
@@ -31,7 +32,16 @@ def create_review_queue_workflow_artifact(
     sources = inputs.get("project", [])
     if len(sources) != 1 or sources[0].data_type != "project_reference":
         raise ValidationError("QC Review Queue requires exactly one project reference")
-    if (sources[0].payload_json or {}).get("project_id") != project_id:
+    # A saved Workflow Builder retry must not trust a source reference whose
+    # persisted JSON was altered after its checksum was recorded. Verify this
+    # before queue creation or reuse; no research data is rewritten on failure.
+    source_payload = sources[0].payload_json
+    if (
+        not isinstance(source_payload, dict)
+        or sources[0].payload_sha256 != canonical_json_sha256(source_payload)
+    ):
+        raise ValidationError("QC Review Queue source artifact failed integrity validation")
+    if source_payload.get("project_id") != project_id:
         raise ValidationError("QC Review Queue received a foreign project reference")
 
     run_id = str(parameters.get("__workflow_run_id") or "")
