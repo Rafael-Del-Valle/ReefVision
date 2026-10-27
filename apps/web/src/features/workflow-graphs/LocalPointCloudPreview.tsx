@@ -210,8 +210,8 @@ function LocalPointCloudPreviewSession({
         Optional point-pair chord is straight-line distance between original
         zero-based source indices, not anatomical branch length. The backend
         checks indices against the full imported cloud. Endpoint preservation
-        changes display sampling only, not biological measurement or review.
-        A source-frame label does not establish verified spatial registration.
+        changes display sampling only, not biological measurement or review. A
+        source-frame label does not establish verified spatial registration.
       </p>
       <button
         type="button"
