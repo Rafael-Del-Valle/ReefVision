@@ -413,7 +413,7 @@ class ReviewQueueService:
                 }
             ),
             "item_count": len(items),
-            "integrity_schema_version": "qc-review-queue-v2",
+            "integrity_schema_version": "qc-review-queue-v3",
             # Preserve immutable scientific explanations, not mutable reviewer
             # state, across saved Workflow Builder retries.
             "item_evidence_sha256": queue_item_evidence_sha256(items),
@@ -425,6 +425,7 @@ class ReviewQueueService:
                     "formula_id": queue.formula_id,
                     "formula_version": queue.formula_version,
                     "configuration": queue.configuration_json,
+                    "integrity_schema_version": "qc-review-queue-v3",
                 }
             ),
         }
