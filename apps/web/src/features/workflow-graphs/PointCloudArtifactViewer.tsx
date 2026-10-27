@@ -2,7 +2,11 @@ import { useMemo, useState } from "react";
 
 type Vec3 = [number, number, number];
 type RGB = [number, number, number];
-type PointScaleIntervals = [[number, number], [number, number], [number, number]];
+type PointScaleIntervals = [
+  [number, number],
+  [number, number],
+  [number, number],
+];
 
 interface PointChord {
   point_indices: [number, number];
