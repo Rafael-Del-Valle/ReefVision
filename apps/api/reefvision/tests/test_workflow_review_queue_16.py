@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import cast
 from uuid import uuid4
 
@@ -9,7 +10,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from reefvision.config import Settings
 from reefvision.db.models import (
     ReviewQueue,
     ReviewQueueItem,
@@ -19,6 +22,7 @@ from reefvision.db.models import (
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.services.workflow_review_queue_integrity import (
     V3_SUPPORTED_SIGNALS,
     queue_item_evidence_sha256,
@@ -47,6 +51,29 @@ def _graph() -> dict[str, object]:
             }
         ],
     }
+
+
+@pytest.mark.parametrize("corruption", ["payload", "checksum"])
+def test_qc_queue_adapter_rejects_modified_project_source_artifact(corruption: str) -> None:
+    """A persisted source reference must retain its original payload digest."""
+    payload = {"project_id": "project-one"}
+    source = SimpleNamespace(
+        data_type="project_reference",
+        payload_json=dict(payload),
+        payload_sha256=canonical_json_sha256(payload),
+    )
+    if corruption == "payload":
+        source.payload_json = {**payload, "unreviewed_override": True}
+    else:
+        source.payload_sha256 = "0" * 64
+    with pytest.raises(ValidationError, match="source artifact failed integrity"):
+        create_review_queue_workflow_artifact(
+            session=cast(Session, None),
+            settings=cast(Settings, None),
+            project_id="project-one",
+            parameters={},
+            inputs={"project": [source]},
+        )
 
 
 def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient) -> None:
@@ -293,6 +320,36 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             "__workflow_run_id": run["id"],
             "__workflow_node_run_id": qc_node["id"],
         }
+        # Source references are immutable typed workflow evidence. Even when
+        # the project identity is unchanged, a modified payload or checksum
+        # must fail before an existing human-reviewed queue can be replayed.
+        original_source_payload = dict(source.payload_json)
+        original_source_digest = source.payload_sha256
+        source.payload_json = {**original_source_payload, "unreviewed_override": True}
+        session.flush()
+        with pytest.raises(ValidationError, match="source artifact failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        source.payload_json = original_source_payload
+        source.payload_sha256 = "0" * 64
+        session.flush()
+        with pytest.raises(ValidationError, match="source artifact failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        source.payload_sha256 = original_source_digest
+        session.flush()
         retry = execute_runtime_adapter(
             "qc_review_queue",
             session=session,
