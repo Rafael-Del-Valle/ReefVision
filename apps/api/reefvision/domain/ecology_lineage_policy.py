@@ -25,9 +25,12 @@ def classify_ecological_unit_level(experimental_unit_type: str | None) -> str | 
     Unknown study-specific units remain caller-declared and unverified.
     Ambiguous mixed-level labels fail closed for both analyses and registries.
     """
+    # A CamelCase label can otherwise hide mixed biological levels (TankColony).
+    # Keep the original declaration in provenance; normalize only for classification.
+    split_label = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", experimental_unit_type or "")
     words = {
         word
-        for word in re.findall(r"[a-z0-9]+", (experimental_unit_type or "").casefold())
+        for word in re.findall(r"[a-z0-9]+", split_label.casefold())
         if word not in {"experimental", "independent", "biological", "unit", "units", "level"}
     }
     declared_levels = {

@@ -2750,3 +2750,29 @@ model weights, environmental context, or verified-dataset promotion is added.
 **Validation pending:** exact-head CI, independent biological-study review,
 1.1 migration reconciliation and installed Windows GUI/installer checks.
 **1.2 is NOT RELEASE-READY; 1.3 remains unstarted.**
+
+## 2026-10-27 — CamelCase biological-unit classification and CI E501 repair
+
+The previous Track B head `345fe8823774165a5a70843958dd0f86253cc152`
+completed **16/19** PR-triggered GitHub Actions workflows. The three backend
+failures all stopped at the same Ruff E501 line-length error in
+`test_ecology_unit_type_aliases_1_2.py:222`; the long project-creation
+expression is now wrapped without changing test behavior.
+
+The shared lineage classifier now separates CamelCase biological unit labels
+before classifying their declared level. `TankLevel` and `ParentColony`
+resolve to their known tank and colony levels; previously, these were treated
+as unknown study-specific labels. More importantly, `TankColony` and
+`OrganismTank` now fail closed as **ambiguous mixed biological levels**,
+rather than bypassing the colony/organism pseudoreplication rules as an
+unrecognized single label. Raw declarations remain unchanged for source
+provenance. This is label-level QC, **not proof of experimental independence**.
+
+Focused tests cover alias equivalence, ambiguous lineage rejection, both
+standalone ecological APIs, and saved executable Workflow Builder failure
+without a successful scientific artifact. Existing typed ports, persisted
+provenance, review gates and unverified evidence classifications are retained;
+no schema migration, external model, environmental store or verified-dataset
+promotion is introduced. New-head CI and scientist-reviewed real-image
+ecological acceptance, 1.1 migration reconciliation and native Windows
+installer/GUI validation remain outstanding. **1.2 is NOT RELEASE-READY.**

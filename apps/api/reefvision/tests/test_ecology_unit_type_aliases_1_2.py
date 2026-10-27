@@ -52,6 +52,8 @@ def _case(
     [
         ("tank", "aquarium", True),
         ("Tank-level", "aquaria", True),
+        ("TankLevel", "aquarium", True),
+        ("ParentColony", "colony", True),
         ("colony", "colonies", True),
         ("organism", "fragment", True),
         ("site", "transect", True),
@@ -219,7 +221,9 @@ def test_compact_technical_unit_rejected_by_api_and_saved_workflow(
     standalone = client.post(path, json=payload)
     assert standalone.status_code == 422, standalone.text
 
-    project_id = str(create_project(client, f"Technical sampling unit {kind} {technical_type}")["id"])
+    project_id = str(
+        create_project(client, f"Technical sampling unit {kind} {technical_type}")["id"]
+    )
     saved = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
         json={"graph": graph, "create_new_revision": True},
@@ -242,4 +246,45 @@ def test_compact_technical_unit_rejected_by_api_and_saved_workflow(
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
+    assert all(row["data_type"] != artifact_type for row in detail.json()["artifacts"])
+
+@pytest.mark.parametrize("kind", ["longitudinal", "paired"])
+def test_camel_case_mixed_biological_levels_fail_standalone_and_saved_workflow(
+    client: TestClient, kind: str
+) -> None:
+    path, payload, graph, artifact_type = _case(kind)
+    rows_key = "observations" if kind == "longitudinal" else "pairs"
+    rows = payload[rows_key]
+    for row in rows:
+        row["experimental_unit_type"] = "TankColony"
+    graph["nodes"][1]["parameters"][rows_key] = rows
+
+    standalone = client.post(path, json=payload)
+    assert standalone.status_code in (400, 422), standalone.text
+    assert "ambiguous experimental_unit_type" in standalone.text.lower()
+
+    project_id = str(create_project(client, f"Mixed biological level {kind}")["id"])
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert "ambiguous experimental_unit_type" in detail.json()["run"]["error_message"].lower()
     assert all(row["data_type"] != artifact_type for row in detail.json()["artifacts"])

@@ -76,7 +76,10 @@ def test_organism_level_descriptors_cannot_merge_individuals(unit_type: str) -> 
         validate_declared_lineage(rows, experimental_unit_type=unit_type)
 
 
-@pytest.mark.parametrize("unit_type", ["colony/tank", "tank and site", "organism-colony"])
+@pytest.mark.parametrize(
+    "unit_type",
+    ["colony/tank", "tank and site", "organism-colony", "TankColony", "OrganismTank"],
+)
 def test_compound_biological_levels_are_rejected(unit_type: str) -> None:
     rows = [Pair("frag-A", "colony-1", "unit-1"), Pair("frag-B", "colony-2", "unit-1")]
     with pytest.raises(ValidationError, match="Ambiguous experimental_unit_type"):
