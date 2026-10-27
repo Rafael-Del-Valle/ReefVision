@@ -168,3 +168,25 @@ from the decimated display alone. Direct-service tests and standalone-versus-
 saved typed Workflow Builder regressions cover both omission and pinning. These
 warnings do not verify calibration, registration, coral identity or biological
 branch length; they preserve an explicit human-review limitation.
+
+
+## Repeated source-index chord QC (October 27, 2026)
+
+The shared point-cloud measurement engine now flags a selected point-index
+chord when its **unordered pair of original source indices** has already been
+measured in the same request. A reversed pair (such as `[1, 0]` following
+`[0, 1]`) and an exact repeat both receive the per-chord
+`repeated_point_pair` warning. The top-level
+`repeated_selected_point_pairs` QC warning signals that the selected
+measurement set contains repeated evidence. The first occurrence is retained
+without this warning, and the input order, endpoint geometry fingerprints,
+measured distances, and uncertainty intervals remain unchanged.
+
+This is an audit warning, not automatic deduplication: repeated chords must
+not be counted as independent branch segments or biological replicates.
+Distinct source indices that happen to share identical XYZ coordinates remain
+covered by the existing `coincident_endpoint_coordinates` warning, not by
+index-pair deduplication. Both the standalone API and executable persisted
+`point_cloud_preview` Workflow Builder node use the same rule, with saved
+artifact parity regression coverage. No calibration, organism identity,
+anatomical branch length, or human verification is inferred.
