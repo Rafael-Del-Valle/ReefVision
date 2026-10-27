@@ -484,6 +484,33 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # A successful child job must remain linked to the exact saved workflow
+    # node, not merely to a job with a matching project and success status.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        original_request = dict(child_job.request_json or {})
+        child_job.request_json = {
+            **original_request,
+            "workflow_node_run_id": "unrelated-node",
+        }
+        session.commit()
+
+    with pytest.raises(ValidationError, match="child job lineage changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        child_job.request_json = original_request
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # A real API-frozen, scientist-reviewed pose dataset underlies this run.
     # Corrupt only the persisted child-run snapshot and verify that replay
     # cannot silently return its checkpoint with falsified dataset lineage.
