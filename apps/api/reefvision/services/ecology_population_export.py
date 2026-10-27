@@ -99,23 +99,13 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
         or not isinstance(organisms, int)
         or isinstance(organisms, bool)
     ):
-        raise ValidationError(
-            "Ecological population CSV denominators must be integer counts"
-        )
+        raise ValidationError("Ecological population CSV denominators must be integer counts")
     if row["row_type"] == "declared_unit":
-        if (
-            declared not in (0, 1)
-            or (declared == 0 and organisms != 0)
-            or organisms < 0
-        ):
-            raise ValidationError(
-                "Ecological population CSV invalid declared-unit denominator"
-            )
+        if declared not in (0, 1) or (declared == 0 and organisms != 0) or organisms < 0:
+            raise ValidationError("Ecological population CSV invalid declared-unit denominator")
     elif row["row_type"] == "population_stratum":
         if declared < 1 or organisms < declared:
-            raise ValidationError(
-                "Ecological population CSV invalid population denominator"
-            )
+            raise ValidationError("Ecological population CSV invalid population denominator")
     else:
         raise ValidationError("Ecological population CSV row type is invalid")
     writer.writerow(values)
