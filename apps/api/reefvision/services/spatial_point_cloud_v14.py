@@ -378,11 +378,7 @@ def measure_point_cloud_preview(
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
             + (["preview_omits_selected_chord_endpoints"] if omitted_chord_endpoints else [])
             + (["repeated_selected_point_pairs"] if repeated_selected_point_pairs else [])
-            + (
-                ["coincident_selected_chord_endpoints"]
-                if coincident_selected_chord_count
-                else []
-            )
+            + (["coincident_selected_chord_endpoints"] if coincident_selected_chord_count else [])
             + (
                 ["repeated_selected_endpoint_geometry"]
                 if repeated_selected_endpoint_geometry
