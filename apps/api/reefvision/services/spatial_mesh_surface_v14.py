@@ -797,6 +797,13 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
     else:
         vertices, faces = payload.vertices, payload.faces
         source_format = "indexed_triangles"
+    source_sha256 = hashlib.sha256(source_bytes).hexdigest() if source_bytes is not None else None
+    expected_sha256 = payload.expected_source_payload_sha256
+    if expected_sha256 is not None:
+        if source_sha256 is None:
+            raise ValueError("Source SHA-256 binding requires an imported mesh file")
+        if source_sha256 != expected_sha256:
+            raise ValueError("Imported mesh source SHA-256 does not match expected source payload")
     result = measure_mesh_preview(
         vertices=vertices,
         faces=faces,
@@ -807,12 +814,12 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         source_label=payload.source_label,
         surface_path_vertex_pairs=payload.surface_path_vertex_pairs,
     )
-    source_sha256 = hashlib.sha256(source_bytes).hexdigest() if source_bytes is not None else None
     source_byte_count = len(source_bytes) if source_bytes is not None else None
     result["provenance"].update(
         source_format=source_format,
         source_payload_sha256=source_sha256,
         source_payload_size_bytes=source_byte_count,
+        source_payload_integrity_checked=expected_sha256 is not None,
     )
     observed_at_utc = (
         payload.observed_at_utc.astimezone(UTC).isoformat().replace("+00:00", "Z")
