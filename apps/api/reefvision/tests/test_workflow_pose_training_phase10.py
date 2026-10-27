@@ -724,6 +724,47 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         retry_completed_node()
 
 
+def test_pose_workflow_rejects_falsy_non_object_resource_limits_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze real scientist-reviewed pose annotations through the API.
+    # Invalid resource limits must fail before a training job is persisted.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    for invalid_limits in ([], "", 0, False):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="resource_limits must be an object"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                parameters={
+                    "initialization_mode": "random",
+                    "architecture": "yolo11n-pose.yaml",
+                    "training_config": {"epochs": 1},
+                    "resource_limits": invalid_limits,
+                },
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+
+
 def test_pose_training_can_require_separate_validation_truth(
     client: TestClient,
     test_settings: Settings,
