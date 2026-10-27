@@ -328,6 +328,49 @@ def test_versioned_queue_fails_closed_when_provenance_digest_is_missing(missing_
         validate_saved_queue_snapshot(queue, items)
 
 
+
+@pytest.mark.parametrize(
+    ("formula_id", "formula_version"),
+    [
+        ("unreviewed_scoring_formula", "1.0.0"),
+        ("review_priority_v1", "99.0.0"),
+    ],
+)
+def test_versioned_queue_rejects_resigned_unknown_scoring_formula(
+    formula_id: str, formula_version: str
+) -> None:
+    """A re-signed digest cannot authorize an unknown biological QC formula."""
+    queue, items = snapshot()
+    original_digest = queue.input_checksums_json["scoring_provenance_sha256"]
+    queue.formula_id = formula_id
+    queue.formula_version = formula_version
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+        }
+    )
+    assert queue.input_checksums_json["scoring_provenance_sha256"] != original_digest
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_unversioned_legacy_formula_remains_readable_with_matching_digest() -> None:
+    """Do not retroactively reject historical unversioned research queues."""
+    queue, items = snapshot()
+    queue.input_checksums_json.pop("integrity_schema_version")
+    queue.formula_version = "0.9.0"
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+        }
+    )
+    validate_saved_queue_snapshot(queue, items)
+
+
 def test_rejects_unknown_saved_queue_integrity_version():
     queue, items = snapshot()
     queue.input_checksums_json["integrity_schema_version"] = "unknown-version"

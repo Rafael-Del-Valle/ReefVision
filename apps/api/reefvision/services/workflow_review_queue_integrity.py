@@ -15,6 +15,11 @@ from typing import Any
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.datasets import canonical_json_sha256
 
+# V2 scientific explanations implement exactly this deterministic scoring
+# contract. A future scoring algorithm must receive a new integrity version,
+# not merely a newly computed checksum on an old saved workflow.
+V2_SUPPORTED_FORMULA = ("review_priority_v1", "1.0.0")
+
 
 def _finite_scientific_number(value: Any) -> bool:
     """Reject booleans, NaN and infinity in saved numeric QC evidence."""
@@ -148,6 +153,9 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     integrity_version = checksums.get("integrity_schema_version")
     if integrity_version is not None and integrity_version != "qc-review-queue-v2":
         raise invalid
+    if integrity_version == "qc-review-queue-v2":
+        if (queue.formula_id, queue.formula_version) != V2_SUPPORTED_FORMULA:
+            raise invalid
     if integrity_version == "qc-review-queue-v2" and (
         "scoring_provenance_sha256" not in checksums or "item_evidence_sha256" not in checksums
     ):

@@ -21,6 +21,7 @@ from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review_queue_integrity import queue_item_evidence_sha256
 from reefvision.services.workflow_runtime_adapters import execute_runtime_adapter
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -430,6 +431,43 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             inputs={"project": [source]},
         )
         assert restored[0]["payload"]["queue_id"] == result["queue_id"]
+        # Re-signing a persisted digest cannot silently switch the scientific
+        # scoring algorithm used by an executable saved workflow.
+        saved_queue.formula_version = "99.0.0"
+        saved_queue.input_checksums_json = {
+            **original_checksums,
+            "scoring_provenance_sha256": canonical_json_sha256(
+                {
+                    "formula_id": saved_queue.formula_id,
+                    "formula_version": saved_queue.formula_version,
+                    "configuration": saved_queue.configuration_json,
+                }
+            ),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        saved_queue.formula_version = original_formula_version
+        saved_queue.input_checksums_json = original_checksums
+        session.flush()
+        assert (
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )[0]["payload"]["queue_id"]
+            == result["queue_id"]
+        )
         # The saved scientific summary is independent of the scope checksum.
         # Reject tampering without changing reviewer decisions or live QC.
         original_summary = dict(saved_queue.summary_json)

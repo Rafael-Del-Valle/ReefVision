@@ -1163,3 +1163,21 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   No unmerged branch integration, schema rewrite, model download,
   automatic scientific approval, asset deletion, merge or release.
   **1.6 release HOLD; 1.7 and revised 1.8 untouched.**
+
+## 2026-10-27 — Versioned QC formula identity on saved-workflow retries
+
+- Audited the existing v2 scientific explanation validator and saved executable
+  `qc_review_queue` path after the previous branch passed all 20 Actions workflows.
+  A modified formula ID/version with a recomputed provenance checksum could
+  previously pass the snapshot's nonempty-string and digest checks, despite
+  the validator implementing only `review_priority_v1` version `1.0.0`.
+- V2 snapshots now fail closed on unknown scoring formula identity **even when
+  their scoring checksum is recomputed**. Future algorithms require a new
+  integrity-schema contract and explicit validation, not silent reinterpretation.
+- Standalone regressions cover re-signed formula ID/version changes and retain
+  compatibility for historical unversioned queues. The saved executable
+  Workflow Builder regression checks rejection and restoration without touching
+  scientific annotations, mutable reviewer decisions or audit events.
+- Release remains HOLD pending exact-head CI, 1.1/1.6 migration reconciliation,
+  native Windows interactive GUI and MSI upgrade/rollback, and real scientific
+  dataset acceptance.
