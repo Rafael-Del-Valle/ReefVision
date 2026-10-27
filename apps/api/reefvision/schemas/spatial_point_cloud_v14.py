@@ -28,6 +28,7 @@ class PointCloudPreviewRequest(BaseModel):
     )
     point_index_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=32)
     preserve_axis_extrema_in_preview: StrictBool = False
+    preserve_measured_chord_endpoints_in_preview: StrictBool = False
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> PointCloudPreviewRequest:
