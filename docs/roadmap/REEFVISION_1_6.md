@@ -1113,3 +1113,24 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   node and saved-workflow regressions are preserved. Independent 1.1/1.6
   Alembic `0038` collision, installed Windows MSI upgrade/rollback and
   real-image scientific acceptance remain blockers. **Release HOLD.**
+
+
+## 2026-10-26 — Track D QC failed-write atomicity and formatter repair
+
+- Audited the isolated 1.6 draft PR #77, issue #76, prior 1.0–1.5 scope, the
+  existing standalone review-event service and its saved Workflow Builder QC
+  queue integration. No duplicate feature or cross-version branch merge.
+- At predecessor `dc058d1904ed78bb66ad6fb474706c5fbb0e4800`, 17 of 20
+  GitHub Actions runs succeeded; three failed at Ruff format on two expressions
+  in `test_review_queue_events_16.py` (confirmed from exact job logs).
+- Corrected the two logged formatter discrepancies. Extended the standalone
+  cross-project/cross-queue corruption regression to assert that a rejected
+  fresh comment creates **zero additional persisted events**, and that recovery
+  preserves event ordering and the researcher-review requirement. The existing
+  saved executable `qc_review_queue` graph and typed review-required artifacts
+  remain unchanged and must continue passing their regression suite.
+- **Evidence:** test commit `f11312d3f9256cba28386b098997b0f66e61b713`;
+  remote test blob `52a8f7c9ba85dfd563a73059cc335d59f233b4d8` read back.
+  This documentation commit does not constitute a CI pass. Full exact-head
+  tests, independent 1.1/1.6 migration lineage, Windows installed-GUI,
+  MSI upgrade/rollback and representative scientific acceptance remain **HOLD**.
