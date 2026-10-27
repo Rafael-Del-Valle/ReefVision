@@ -20,12 +20,12 @@ class MeshPreviewRequest(BaseModel):
     obj_text: str | None = Field(default=None, max_length=256_000)
     ply_text: str | None = Field(default=None, max_length=256_000)
     glb_base64: str | None = Field(default=None, max_length=350_000)
-    vertices: list[list[float]] | None = Field(default=None, max_length=2_000)
+    vertices: list[list[StrictFloat | StrictInt]] | None = Field(default=None, max_length=2_000)
     faces: list[list[StrictInt]] | None = Field(default=None, max_length=4_000)
-    meters_per_unit: float = Field(gt=0, le=1_000_000)
+    meters_per_unit: StrictFloat | StrictInt = Field(gt=0, le=1_000_000)
     calibration_method: Literal["ruler", "photogrammetry_control", "instrument", "other"]
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
-    relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
+    relative_scale_uncertainty: StrictFloat | StrictInt | None = Field(default=None, ge=0, le=1)
     source_label: str | None = Field(default=None, max_length=200)
     specimen_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
