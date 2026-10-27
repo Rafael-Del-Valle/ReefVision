@@ -117,7 +117,6 @@ def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
     )
 
 
-
 def _valid_v3_signal_normalization(item: Any) -> bool:
     """Reproduce the frozen v3 normalization from persisted raw QC signals.
 
@@ -319,7 +318,9 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             item, weights
         ):
             raise invalid
-        if integrity_version == "qc-review-queue-v3" and not _valid_v3_signal_normalization(item):
+        if integrity_version == "qc-review-queue-v3" and not _valid_v3_signal_normalization(
+            item
+        ):
             raise invalid
         scores[item.image_id] = item.score
         ranks.add(item.rank_position)
