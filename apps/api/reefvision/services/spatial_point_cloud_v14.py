@@ -342,6 +342,11 @@ def measure_point_cloud_preview(
         "preview_omitted_axis_extrema": preview_omitted_axis_extrema,
         "preview_axis_extrema_covered": not preview_omitted_axis_extrema,
         "preview_points_in_source_frame_m": preview_points,
+        "preview_point_scale_intervals_m": (
+            [coordinate_scale_intervals(point) for point in preview_points]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "selected_point_chords": selected_chords,
         "selected_point_chord_qc_summary": {
             "requested_chords": len(selected_chords),
@@ -407,7 +412,9 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
     source_sha256 = hashlib.sha256(source_bytes).hexdigest() if source_bytes is not None else None
     expected_sha256 = payload.expected_source_payload_sha256
     if expected_sha256 is not None and source_sha256 != expected_sha256:
-        raise ValueError("Imported point-cloud source SHA-256 does not match expected source payload")
+        raise ValueError(
+            "Imported point-cloud source SHA-256 does not match expected source payload"
+        )
     point_colors: list[list[int]] = []
     if payload.ply_text is not None:
         points = parse_ascii_ply_points(payload.ply_text, colors_out=point_colors)
