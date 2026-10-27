@@ -699,3 +699,55 @@ def test_parent_feasibility_handles_large_augmenting_chain_without_recursion() -
     options[organisms[-1]] = {parents[0]}
     assert _full_parent_roster_feasible(organisms, parents, options)
     assert not _full_parent_roster_feasible(organisms, parents[:-1], options)
+
+@pytest.mark.parametrize("reverse_order", [False, True])
+def test_three_parent_overlaps_require_one_global_lineage(reverse_order: bool) -> None:
+    """Three locally feasible triples form an impossible four-fragment clique."""
+    rows = [
+        _partial_metric_roster(
+            "box_width", ["fragment-A", "fragment-C", "fragment-E"],
+            ["parent-P", "parent-S", "parent-T"],
+        ),
+        _partial_metric_roster(
+            "box_height", ["fragment-A", "fragment-D", "fragment-E"],
+            ["parent-P", "parent-S", "parent-T"],
+        ),
+        _partial_metric_roster(
+            "mask_projected_area", ["fragment-C", "fragment-D", "fragment-E"],
+            ["parent-P", "parent-S", "parent-T"],
+        ),
+    ]
+    if reverse_order:
+        rows.reverse()
+    # Every triple can be matched independently. All four fragments cannot
+    # simultaneously have distinct parents drawn from only three candidates.
+    with pytest.raises(ValidationError, match="jointly impossible across metrics"):
+        summarize_projected_population_summaries(rows)
+
+
+@pytest.mark.parametrize("reverse_order", [False, True])
+def test_three_parent_overlaps_preserve_feasible_unverified_lineage(
+    reverse_order: bool,
+) -> None:
+    """Distinct metric rosters may have one consistent, unasserted mapping."""
+    rows = [
+        _partial_metric_roster(
+            "box_width", ["fragment-A", "fragment-C", "fragment-E"],
+            ["parent-P", "parent-S", "parent-T"],
+        ),
+        _partial_metric_roster(
+            "box_height", ["fragment-A", "fragment-D", "fragment-E"],
+            ["parent-P", "parent-Q", "parent-S"],
+        ),
+        _partial_metric_roster(
+            "mask_projected_area", ["fragment-C", "fragment-D", "fragment-E"],
+            ["parent-Q", "parent-S", "parent-T"],
+        ),
+    ]
+    if reverse_order:
+        rows.reverse()
+    summaries = summarize_projected_population_summaries(rows)
+    assert len(summaries) == 3
+    assert all(row.declared_unit_count == 1 for row in summaries)
+    assert all(row.independent_unit_inference_allowed is False for row in summaries)
+    assert all(row.review_gate == "scientist_review_required" for row in summaries)
