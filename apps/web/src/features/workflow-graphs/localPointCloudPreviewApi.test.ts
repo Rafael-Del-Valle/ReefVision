@@ -105,7 +105,13 @@ describe("previewLocalPointCloudFile", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     const file = localFile("reef.ply", new TextEncoder().encode(ply));
-    await previewLocalPointCloudFile("project", file, calibration, [[0, 1]], true);
+    await previewLocalPointCloudFile(
+      "project",
+      file,
+      calibration,
+      [[0, 1]],
+      true,
+    );
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(init.body));
     expect(body.preserve_measured_chord_endpoints_in_preview).toBe(true);
