@@ -458,6 +458,34 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
 
+    # Simulate a worker retry while this same persisted child job is still
+    # training. Replaying the saved node must not queue a second GPU job.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        persisted.status = "training"
+        child_job.status = "running"
+        session.commit()
+
+    with pytest.raises(ValidationError, match="already has an active child run"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        assert session.scalars(
+            select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+        ).all() == [result["training_run_id"]]
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        persisted.status = "completed"
+        child_job.status = "succeeded"
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # The recovered child job must still belong to this project's saved run.
     # Exercise a real persisted job against a second valid project, then
     # restore it to verify that the original frozen result remains reusable.
