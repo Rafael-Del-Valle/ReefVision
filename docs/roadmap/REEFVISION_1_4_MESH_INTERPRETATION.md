@@ -81,6 +81,13 @@ registration, or calibration. All chords remain provisional straight-line
 distances, **not** anatomical coral branch lengths. The source-order geometry
 fingerprint is an audit aid, not an organism identity or a review decision.
 
+The viewer also requires source-axis extrema coverage to be recorded as a
+**paired** omission list and coverage verdict. A verdict without the list (or
+a list without its verdict) is rejected rather than interpreted as verified
+coverage. Older artifacts missing both fields remain readable with coverage
+explicitly unassessed. This display QC never changes full-cloud measurement,
+scientific verification status, or saved Workflow Builder provenance.
+
 ## Boundary-cycle topology QC
 
 The mesh engine now distinguishes **closed boundary-edge cycles** from
