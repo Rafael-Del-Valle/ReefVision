@@ -112,6 +112,12 @@ def test_modified_obj_source_is_rejected_even_when_parsed_geometry_is_unchanged(
     original_sha = hashlib.sha256(OBJ.encode("utf-8")).hexdigest()
     changed_obj = OBJ.replace("v 2 0 0\n", "v 2 0 0  \n")
     assert changed_obj != OBJ
+    original = preview_from_request(MeshPreviewRequest(**COMMON, obj_text=OBJ))
+    modified = preview_from_request(MeshPreviewRequest(**COMMON, obj_text=changed_obj))
+    assert original["provenance"]["geometry_sha256"] == modified["provenance"]["geometry_sha256"]
+    assert original["provenance"]["source_payload_sha256"] != (
+        modified["provenance"]["source_payload_sha256"]
+    )
     params = {
         **COMMON,
         "obj_text": changed_obj,
