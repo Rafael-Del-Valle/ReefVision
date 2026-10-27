@@ -750,8 +750,8 @@ def test_v3_rejects_resigned_false_raw_normalization(signal_id: str, altered_raw
         validate_saved_queue_snapshot(queue, items)
 
 
-@pytest.mark.parametrize("pending_count", [0.0, 5.0, 10.0, 15.0])
-def test_v3_accepts_real_pending_count_normalization(pending_count: float) -> None:
+@pytest.mark.parametrize("pending_count", [0, 5, 10, 15, 0.0, 5.0, 10.0, 15.0])
+def test_v3_accepts_real_pending_count_normalization(pending_count: int | float) -> None:
     """Valid raw counts saturate at ten without rewriting reviewer history."""
     queue, items = _v3_snapshot()
     normalized = min(pending_count / 10.0, 1.0)
