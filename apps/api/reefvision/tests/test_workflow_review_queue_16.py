@@ -510,6 +510,53 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             )[0]["payload"]["queue_id"]
             == result["queue_id"]
         )
+        # A re-signed false raw pending-proposal count must not survive a
+        # saved executable Workflow Builder retry, even if the score and
+        # normalized component remain internally consistent.
+        original_signals = dict(saved_item.signal_values_json)
+        original_breakdown = list(saved_item.score_breakdown_json)
+        original_checksums = dict(saved_queue.input_checksums_json)
+        assert saved_item.normalized_signals_json["pending_proposals"] == 0.0
+        saved_item.signal_values_json = {
+            **original_signals,
+            "pending_proposals": 5.0,
+        }
+        saved_item.score_breakdown_json = [
+            {**part, "raw_value": 5.0}
+            if part["signal_id"] == "pending_proposals"
+            else part
+            for part in original_breakdown
+        ]
+        saved_queue.input_checksums_json = {
+            **original_checksums,
+            "item_evidence_sha256": queue_item_evidence_sha256([saved_item]),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        assert saved_item.review_state == "completed"
+        saved_item.signal_values_json = original_signals
+        saved_item.score_breakdown_json = original_breakdown
+        saved_queue.input_checksums_json = original_checksums
+        session.flush()
+        assert (
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )[0]["payload"]["queue_id"]
+            == result["queue_id"]
+        )
         # The saved workflow must also reject altered scoring provenance,
         # even when the original item scores and scope checksum are intact.
         original_formula_version = saved_queue.formula_version
