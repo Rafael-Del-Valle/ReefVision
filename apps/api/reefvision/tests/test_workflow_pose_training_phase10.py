@@ -542,9 +542,7 @@ def test_pose_validation_rejects_second_verified_round_from_same_video(
     )
     assert created.status_code == 201, created.text
     round_id = created.json()["id"]
-    candidate_response = client.get(
-        f"/api/v1/pose-active-learning-rounds/{round_id}/candidates"
-    )
+    candidate_response = client.get(f"/api/v1/pose-active-learning-rounds/{round_id}/candidates")
     assert candidate_response.status_code == 200, candidate_response.text
     candidate_id = candidate_response.json()[0]["id"]
     reviewed = client.put(
