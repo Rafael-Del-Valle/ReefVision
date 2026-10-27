@@ -2688,3 +2688,35 @@ growth or authenticated study design. Results remain
 `requires_source_verification`. The new commit needs exact-head CI, real
 ecological data/scientist acceptance, 1.1 migration reconciliation and
 installed Windows GUI/installer testing. **1.2 is NOT RELEASE-READY.**
+
+## 2026-10-27 — Pose/tracklet technical-replicate pseudoreplication guard
+
+The shared ecological experimental-unit validator now also rejects
+`keypoint`, `tracklet`, `heatmap`, `polygon`, `screenshot`, and
+`subframe` (including plurals) as independent biological sampling-unit
+labels. Compound declarations such as `pose_keypoint`,
+`tracking_tracklet`, `prediction_heatmap`, and
+`segmentation_polygon` fail closed rather than inflating organism,
+colony, tank or site denominators with model/annotation-derived outputs.
+Real biological-unit declarations remain supported; this does **not**
+authenticate independence or the underlying study design.
+
+The validator is shared by the standalone longitudinal and paired-count
+schemas, the project-owned identity-registration API, imported registry
+revalidation, and their existing executable, persisted Workflow Builder
+nodes. Focused parameterized regressions cover schema rejection, identity
+writes, corrupted imported identity revisions, and saved-workflow failure
+without successful scientific artifacts. Existing typed ports, source
+fingerprints and `registered_unverified`/`caller_supplied_unverified`
+review gates remain unchanged. No database migration, duplicate 1.1
+environmental store, model download, or verified-dataset promotion is
+introduced.
+
+The preceding head `cd7109bcbd4588ab8b6192ac6046dd977fbdb29d`
+completed **16/19** GitHub Actions workflows. All three backend failures
+stopped at one Ruff I001 import-order error in
+`test_ecology_unit_type_aliases_1_2.py`; this iteration applies the
+exact import split reported by the runner. The new head still requires
+exact-head CI, representative real-image ecological acceptance, migration
+reconciliation with 1.1, scientist review, and installed Windows GUI/installer
+checks. **1.2 is NOT RELEASE-READY; 1.3 remains unstarted.**
