@@ -90,6 +90,8 @@ def measure_mesh_preview(
         or not 1 <= len(faces) <= spatial_mesh_obj_v14.MAX_FACES
     ):
         raise ValueError("Mesh preview vertex/face count is outside supported bounds")
+    if type(meters_per_unit) not in (int, float):
+        raise ValueError("meters_per_unit must be a real numeric value")
     scale = float(meters_per_unit)
     if not isfinite(scale) or not 0 < scale <= 1_000_000:
         raise ValueError("meters_per_unit must be finite, positive, and within bounds")
@@ -103,14 +105,23 @@ def measure_mesh_preview(
     if not isinstance(calibration_evidence, str) or not calibration_evidence.strip():
         raise ValueError("Calibration evidence must be provided")
     if relative_scale_uncertainty is not None and (
-        not isfinite(float(relative_scale_uncertainty)) or not 0 <= relative_scale_uncertainty <= 1
+        type(relative_scale_uncertainty) not in (int, float)
+        or not isfinite(relative_scale_uncertainty)
+        or not 0 <= relative_scale_uncertainty <= 1
     ):
         raise ValueError("relative_scale_uncertainty must be between 0 and 1")
 
     points: list[tuple[float, float, float]] = []
     for vertex in vertices:
-        if len(vertex) != 3 or any(
-            not isfinite(float(value)) or abs(float(value)) > 1_000_000_000 for value in vertex
+        if (
+            not isinstance(vertex, (list, tuple))
+            or len(vertex) != 3
+            or any(
+                type(value) not in (int, float)
+                or not isfinite(value)
+                or abs(value) > 1_000_000_000
+                for value in vertex
+            )
         ):
             raise ValueError("Each vertex must contain three bounded finite coordinates")
         points.append((float(vertex[0]), float(vertex[1]), float(vertex[2])))
