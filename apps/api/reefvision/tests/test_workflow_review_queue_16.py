@@ -20,6 +20,7 @@ from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review_queue_integrity import (
+    V3_SUPPORTED_SIGNALS,
     queue_item_evidence_sha256,
     validate_saved_queue_snapshot,
 )
@@ -63,6 +64,9 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     assert standalone.json()["item_count"] == 1
     assert len(standalone.json()["input_checksums_json"]["scoring_provenance_sha256"]) == 64
     assert len(standalone.json()["input_checksums_json"]["item_evidence_sha256"]) == 64
+    assert standalone.json()["input_checksums_json"]["integrity_schema_version"] == (
+        "qc-review-queue-v3"
+    )
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200, registry.text
@@ -115,6 +119,8 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     # The executable saved graph must persist a meaningful scoring
     # normalization, not merely a well-formed queue reference.
     persisted_weights = response.json()["configuration_json"]["weights"]
+    assert result["input_checksums"]["integrity_schema_version"] == "qc-review-queue-v3"
+    assert set(persisted_weights) == V3_SUPPORTED_SIGNALS
     assert sum(persisted_weights.values()) > 0
     assert all(value >= 0 for value in persisted_weights.values())
     assert len(response.json()["input_checksums_json"]["scoring_provenance_sha256"]) == 64
@@ -436,6 +442,52 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
         # Workflow replay must independently fail closed before any mutation;
         # its earlier retry-parameter guard is the expected error surface.
         with pytest.raises(ValidationError, match="retry parameters changed"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        saved_queue.configuration_json = original_config
+        saved_queue.input_checksums_json = original_checksums
+        session.flush()
+        assert (
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )[0]["payload"]["queue_id"]
+            == result["queue_id"]
+        )
+        # A persisted executable workflow must reject an invented biological
+        # scoring signal even if the configuration digest is recomputed.
+        # Historical v2 snapshots remain readable, but new v3 queues freeze
+        # the full formula input set and keep reviewer decisions untouched.
+        saved_queue.configuration_json = {
+            **original_config,
+            "weights": {
+                **original_config["weights"],
+                "unreviewed_species_bias": 0.0,
+            },
+        }
+        saved_queue.input_checksums_json = {
+            **original_checksums,
+            "scoring_provenance_sha256": canonical_json_sha256(
+                {
+                    "formula_id": saved_queue.formula_id,
+                    "formula_version": saved_queue.formula_version,
+                    "configuration": saved_queue.configuration_json,
+                    "integrity_schema_version": "qc-review-queue-v3",
+                }
+            ),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
             execute_runtime_adapter(
                 "qc_review_queue",
                 session=session,
