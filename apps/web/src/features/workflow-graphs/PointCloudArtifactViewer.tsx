@@ -498,7 +498,9 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
             tabIndex={0}
             aria-label={`Inspect source point ${point.sourceIndex}`}
             aria-pressed={selectedSourceIndex === point.sourceIndex}
-            onClick={() => setSelection({ artifact, sourceIndex: point.sourceIndex })}
+            onClick={() =>
+              setSelection({ artifact, sourceIndex: point.sourceIndex })
+            }
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
