@@ -403,6 +403,11 @@ def measure_point_cloud_preview(
 
 
 def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
+    source_bytes = payload.ply_text.encode("utf-8") if payload.ply_text is not None else None
+    source_sha256 = hashlib.sha256(source_bytes).hexdigest() if source_bytes is not None else None
+    expected_sha256 = payload.expected_source_payload_sha256
+    if expected_sha256 is not None and source_sha256 != expected_sha256:
+        raise ValueError("Imported point-cloud source SHA-256 does not match expected source payload")
     point_colors: list[list[int]] = []
     if payload.ply_text is not None:
         points = parse_ascii_ply_points(payload.ply_text, colors_out=point_colors)
@@ -440,11 +445,12 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         specimen_identity_verified=False,
         observation_metadata_verified=False,
     )
-    # Hash the received PLY text (including RGB) separately from XYZ geometry.
-    # This is not a digest of the original on-disk file or a verification mark.
-    result["provenance"]["source_text_sha256"] = (
-        hashlib.sha256(payload.ply_text.encode("utf-8")).hexdigest()
-        if payload.ply_text is not None
-        else None
+    # Hash the submitted UTF-8 PLY text (including RGB/comments) separately
+    # from parsed XYZ geometry. This is not proof of original on-disk bytes.
+    result["provenance"].update(
+        source_text_sha256=source_sha256,
+        source_payload_sha256=source_sha256,
+        source_payload_size_bytes=len(source_bytes) if source_bytes is not None else None,
+        source_payload_integrity_checked=expected_sha256 is not None,
     )
     return result
