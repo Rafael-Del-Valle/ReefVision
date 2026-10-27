@@ -786,9 +786,7 @@ def test_disconnected_rosters_cannot_hide_impossible_three_parent_lineage(
             [f"control-fragment-{index}"],
             [f"control-parent-{index}"],
         )
-        rows.append(
-            control.model_copy(update={"experimental_unit_id": f"control-tank-{index}"})
-        )
+        rows.append(control.model_copy(update={"experimental_unit_id": f"control-tank-{index}"}))
     assert len(rows) == 25
     if reverse_order:
         rows.reverse()
