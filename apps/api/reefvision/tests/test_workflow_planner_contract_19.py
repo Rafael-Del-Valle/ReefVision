@@ -155,6 +155,26 @@ def test_corrupt_saved_verified_pose_graph_finishes_as_failed(
             WorkflowRunCreateRequest(graph_record_id=str(saved.json()["id"])),
         )
 
+    # Unknown persisted keys are ignored by Pydantic. The queue endpoint must
+    # authenticate raw saved JSON, not only the normalized graph representation.
+    with app.state.session_factory() as session:
+        record = session.get(WorkflowGraphRecord, str(saved.json()["id"]))
+        assert record is not None
+        record.graph_json = {
+            **original_graph_json,
+            "unexpected_scientific_revision": "altered",
+        }
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="revision checksum"),
+    ):
+        WorkflowExecutionService(session).queue_run(
+            project_id,
+            WorkflowRunCreateRequest(graph_record_id=str(saved.json()["id"])),
+        )
+
 
 def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
     client: TestClient,
