@@ -151,9 +151,7 @@ def test_coordination_retries_and_history_reject_foreign_provenance(
 
     foreign_project = create_project(client, "Foreign coordination provenance")
     import_one(client, foreign_project["id"])
-    foreign_queue = client.post(
-        f"/api/v1/projects/{foreign_project['id']}/review-queues", json={}
-    )
+    foreign_queue = client.post(f"/api/v1/projects/{foreign_project['id']}/review-queues", json={})
     assert foreign_queue.status_code == 201, foreign_queue.text
 
     url = f"/api/v1/review-queues/{queue_id}/items/{item['id']}/events"
@@ -173,9 +171,7 @@ def test_coordination_retries_and_history_reject_foreign_provenance(
         assert event is not None
         original_scope = getattr(event, tampered_field)
         foreign_scope = (
-            foreign_project["id"]
-            if tampered_field == "project_id"
-            else foreign_queue.json()["id"]
+            foreign_project["id"] if tampered_field == "project_id" else foreign_queue.json()["id"]
         )
         setattr(event, tampered_field, foreign_scope)
         session.commit()
@@ -196,6 +192,15 @@ def test_coordination_retries_and_history_reject_foreign_provenance(
     assert blocked_fresh.status_code == 409, blocked_fresh.text
     # The corruption guard must run before pagination, including empty pages.
     assert client.get(url, params={"page": 2, "page_size": 1}).status_code == 409
+    # A failed fresh write must not append an event, even though its request
+    # identifier differs from the corrupted event's idempotency key.
+    with app.state.session_factory() as session:
+        event_count = (
+            session.query(ReviewQueueItemEvent)
+            .filter_by(review_queue_item_id=item["id"])
+            .count()
+        )
+        assert event_count == 1
 
     with app.state.session_factory() as session:
         event = session.get(ReviewQueueItemEvent, event_id)
@@ -219,6 +224,8 @@ def test_coordination_retries_and_history_reject_foreign_provenance(
     assert client.post(url, json=fresh_payload).json()["id"] == fresh.json()["id"]
     final_history = client.get(url).json()
     assert final_history["total"] == 2
+    assert [event["event_type"] for event in final_history["items"]] == ["assign", "comment"]
+    assert final_history["requires_researcher_review"] is True
     assert final_history["current_assignee"] == "reviewer-two"
     annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
