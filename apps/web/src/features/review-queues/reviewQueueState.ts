@@ -28,3 +28,17 @@ export function reviewQueueItemsQueryKey(
     modelId,
   ] as const;
 }
+
+/**
+ * Never fetch or expose review items for a queue outside the currently loaded
+ * project/dataset-version scope. A stale selected ID can survive project or
+ * scope navigation while React Query resolves the new queue list.
+ */
+export function scopedReviewQueueId(
+  selectedId: string,
+  queues: readonly { id: string }[] | undefined,
+): string {
+  return selectedId && queues?.some((queue) => queue.id === selectedId)
+    ? selectedId
+    : "";
+}

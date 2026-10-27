@@ -10,6 +10,14 @@ if (-not (Test-Path $helperPath -PathType Leaf)) {
     $helperPath = Join-Path $PSScriptRoot "lib\reefvision-commands.ps1"
 }
 . $helperPath
+$msiHelperPath = Join-Path $PSScriptRoot "reefvision-msi-update.ps1"
+if (-not (Test-Path -LiteralPath $msiHelperPath -PathType Leaf)) {
+    $msiHelperPath = Join-Path $PSScriptRoot "lib\reefvision-msi-update.ps1"
+}
+if (-not (Test-Path -LiteralPath $msiHelperPath -PathType Leaf)) {
+    throw "Missing ReefVision MSI update helper. Reinstall the managed command shortcuts."
+}
+. $msiHelperPath
 
 $Arguments = @($Arguments | Where-Object {
     $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_)
@@ -373,8 +381,8 @@ if ($null -eq $repoPath) {
 $expectedVersion = Assert-ReefVisionVersionConsistency -RepoPath $repoPath
 $dependencySignature = Get-UpdateDependencySignature -RepoPath $repoPath
 $config = Get-ReefVisionCommandConfig
-$nsisDir = Get-ReefVisionNsisDirectory -RepoPath $repoPath
-$latestInstaller = Get-ReefVisionLatestInstaller -RepoPath $repoPath -ExpectedVersion $expectedVersion
+$msiDir = Get-ReefVisionMsiDirectory -RepoPath $repoPath
+$latestInstaller = Get-ReefVisionLatestMsi -RepoPath $repoPath -ExpectedVersion $expectedVersion
 $installedDesktopPath = Resolve-ReefVisionInstalledDesktopPath
 $installedVersion = Get-ReefVisionExecutableVersion -ExecutablePath $installedDesktopPath
 $registeredInstall = Test-ReefVisionCurrentUserInstallRegistration
@@ -395,7 +403,7 @@ if ($showStatus) {
         installed_backend_bundle_present = $installedBackendBundlePresent
         latest_installer = if ($latestInstaller) { $latestInstaller.FullName } else { $null }
         latest_installer_written_at = if ($latestInstaller) { $latestInstaller.LastWriteTimeUtc } else { $null }
-        nsis_directory = $nsisDir
+        msi_directory = $msiDir
     } | ConvertTo-Json -Depth 4
     exit 0
 }
@@ -453,16 +461,7 @@ try {
     }
 
     if ($cleanBuild) {
-        $resolvedNsisDir = Resolve-Path -LiteralPath $nsisDir -ErrorAction SilentlyContinue
-        if ($null -ne $resolvedNsisDir -and $resolvedNsisDir.Path -like "$repoPath*") {
-            Write-ReefVisionCommandStep "Cleaning the NSIS bundle directory"
-            if (Test-Path $nsisDir -PathType Container) {
-                Remove-Item -LiteralPath $nsisDir -Recurse -Force
-            }
-        }
-        else {
-            throw "Refusing to clean an installer directory outside the configured repository: $nsisDir"
-        }
+        throw "--clean-build is disabled for MSI updates until artifact-only, ownership-verified cleanup is validated. No files were deleted."
     }
 
     if ($runTests) {
@@ -484,6 +483,10 @@ try {
         Save-ReefVisionCommandConfig -Config $config
     }
 
+    $expectedSourceCommit = (& git -C $repoPath rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $expectedSourceCommit -notmatch '^[0-9a-fA-F]{40}$') {
+        throw "Unable to resolve the checked-out ReefVision source commit."
+    }
     $installer = $null
     if (-not $installOnly) {
         $buildStartedAtUtc = (Get-Date).ToUniversalTime().AddSeconds(-1)
@@ -493,10 +496,12 @@ try {
             throw "The ReefVision desktop build failed."
         }
 
-        $installer = Get-ReefVisionFreshInstaller -RepoPath $repoPath -ExpectedVersion $expectedVersion -BuildStartedAtUtc $buildStartedAtUtc
+        $installer = Get-ReefVisionFreshMsi -RepoPath $repoPath -ExpectedVersion $expectedVersion -BuildStartedAtUtc $buildStartedAtUtc
         if ($null -eq $installer) {
             throw "No fresh ReefVision v$expectedVersion installer was produced by the completed build. Stale installers were rejected."
         }
+        # Includes --build-only: never cache an unverified MSI path.
+        $null = Assert-ReefVisionMsiPayload -InstallerPath $installer.FullName -RepoPath $repoPath -ExpectedVersion $expectedVersion -ExpectedCommit $expectedSourceCommit
 
         $installerSha = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
         $config = Get-ReefVisionCommandConfig
@@ -513,67 +518,54 @@ try {
     }
 
     if ($installOnly) {
-        if (-not [string]::IsNullOrWhiteSpace($config.last_installer_path) -and (Test-Path $config.last_installer_path -PathType Leaf)) {
-            $installer = Get-Item -LiteralPath $config.last_installer_path
+        # A fresh build or --build-only pins both the local path and its SHA-256.
+        # Never silently fall back to an unpinned MSI discovered by timestamp.
+        if ([string]::IsNullOrWhiteSpace([string]$config.last_installer_path)) {
+            throw "No pinned ReefVision MSI is available. Run update-reefvision --build-only first."
         }
-        elseif ($latestInstaller) {
-            $installer = $latestInstaller
-        }
-        else {
-            throw "No existing ReefVision v$expectedVersion installer is available for --install-only."
-        }
+        $installer = Assert-ReefVisionCachedMsi -InstallerPath ([string]$config.last_installer_path) -RepoPath $repoPath -ExpectedSha256 ([string]$config.last_installer_sha256)
     }
 
     if ($null -eq $installer) {
         throw "No ReefVision installer is available to install."
     }
 
-    if ($installer.Name -notlike "ReefVision_${expectedVersion}_*-setup.exe") {
-        throw "The selected installer does not match ReefVision v${expectedVersion}: $($installer.FullName)"
+    # Verify again before stopping the existing application.
+    $verifiedMsi = Assert-ReefVisionMsiPayload -InstallerPath $installer.FullName -RepoPath $repoPath -ExpectedVersion $expectedVersion -ExpectedCommit $expectedSourceCommit
+    Write-ReefVisionCommandNote "Verified MSI source commit: $($verifiedMsi.source_commit)"
+
+    # Preflight the MSI engine and a safe log destination before stopping the
+    # user's running desktop. Invalid paths must leave the application running.
+    $msiexec = Join-Path $env:SystemRoot 'System32\msiexec.exe'
+    if (-not (Test-Path -LiteralPath $msiexec -PathType Leaf)) {
+        throw "Windows Installer executable is unavailable: $msiexec"
     }
+    $logDir = Assert-ReefVisionMsiLogDirectory -LogDirectory (Get-ReefVisionCommandRuntimeDir)
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    $logPath = Join-Path $logDir ("msi-update-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N') + '.log')
 
     Write-ReefVisionCommandStep "Stopping running ReefVision processes"
     Stop-ReefVisionRunningProcesses
     Start-Sleep -Milliseconds 500
 
-    $portableSync = $null
-    $canRepairPortableInstall = (
-        -not [string]::IsNullOrWhiteSpace($portableInstallDirectory) -and
-        (Test-Path $portableInstallDirectory -PathType Container)
-    )
-
-    if ($canRepairPortableInstall) {
-        Write-ReefVisionCommandStep "Repairing the existing ReefVision app files"
-        if ($registeredInstall) {
-            Write-ReefVisionCommandNote "Refreshing the existing user-local ReefVision installation in place."
-        }
-        else {
-            Write-ReefVisionCommandNote "No registered current-user ReefVision installation was found. Updating the existing user-local app files in place."
-        }
-        $portableSync = Sync-ReefVisionPortableInstall -RepoPath $repoPath -ExpectedVersion $expectedVersion -InstallDirectory $portableInstallDirectory
+    # MSI owns installation and rollback. Never overwrite portable backend
+    # files or remove any existing user assets during the update.
+    $arguments = "/i `"$($installer.FullName)`" /passive /norestart /L*v `"$logPath`""
+    Write-ReefVisionCommandStep "Installing verified ReefVision MSI"
+    $process = Start-Process -FilePath $msiexec -ArgumentList $arguments -PassThru -Wait
+    if ($process.ExitCode -notin @(0, 3010)) {
+        throw "MSI installation failed with exit code $($process.ExitCode). See $logPath"
     }
-    else {
-        Write-ReefVisionCommandStep "Installing ReefVision"
-        $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -PassThru -Wait
-        if ($installProcess.ExitCode -ne 0) {
-            throw "The ReefVision installer exited with code $($installProcess.ExitCode)."
-        }
-
-        $installedDesktopPath = Resolve-ReefVisionInstalledDesktopPath
-        $installedVersion = Get-ReefVisionExecutableVersion -ExecutablePath $installedDesktopPath
-        $installedBackendBundlePresent = Test-ReefVisionInstalledBackendBundle -InstallDirectory $portableInstallDirectory
-        if (($installedVersion -ne $expectedVersion -or -not $installedBackendBundlePresent) -and -not [string]::IsNullOrWhiteSpace($portableInstallDirectory)) {
-            Write-ReefVisionCommandStep "Repairing ReefVision app files"
-            Write-ReefVisionCommandNote "Installer completed but the installed app files are incomplete or stale. Repairing the user-local app files directly."
-            $portableSync = Sync-ReefVisionPortableInstall -RepoPath $repoPath -ExpectedVersion $expectedVersion -InstallDirectory $portableInstallDirectory
-        }
+    Write-ReefVisionCommandNote "MSI log: $logPath"
+    if ($process.ExitCode -eq 3010) {
+        Write-Warning "MSI installation requires a Windows restart. Desktop version verification and relaunch are deferred until after reboot. See $logPath"
+        return
     }
-
-    if ($portableSync) {
-        Write-ReefVisionCommandNote "Desktop executable: $($portableSync.desktop_executable)"
-        Write-ReefVisionCommandNote "Installed version: $($portableSync.installed_version)"
+    $installedDesktopPath = Resolve-ReefVisionInstalledDesktopPath
+    $installedVersion = Get-ReefVisionExecutableVersion -ExecutablePath $installedDesktopPath
+    if ($installedVersion -notin @($expectedVersion, "$expectedVersion.0")) {
+        throw "MSI completed but installed desktop version is '$installedVersion' (expected '$expectedVersion'). See $logPath"
     }
-
     if (-not $noLaunch) {
         Write-ReefVisionCommandStep "Launching the updated ReefVision desktop app"
         & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoPath "scripts\start-reefvision.ps1") --no-wait

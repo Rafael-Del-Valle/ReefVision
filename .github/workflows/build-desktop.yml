@@ -32,9 +32,31 @@ jobs:
         shell: pwsh
         run: ./scripts/test-windows-clean-install-harness.ps1
 
+      - name: Reject unsafe ReefVision command installs before packaging
+        shell: pwsh
+        run: ./scripts/test-reefvision-command-preflight.ps1
+
+      - name: Validate MSI updater paths and junction protections
+        shell: pwsh
+        run: ./scripts/test-reefvision-msi-update.ps1
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Validate installed-Windows evidence policy regressions
+        shell: pwsh
+        run: python -m unittest discover -s scripts/tests -p test_validate_windows_acceptance_report.py -v
+
+      # Catch syntax regressions before installing large provider dependencies.
+      # compileall is standard-library-only and does not download model weights.
+      - name: Fail fast on backend Python syntax before packaging
+        shell: pwsh
+        run: |
+          python -m compileall -q apps/api/reefvision
+          if ($LASTEXITCODE -ne 0) {
+            throw "Backend Python syntax preflight failed; refusing installer bootstrap."
+          }
 
       - uses: actions/setup-node@v4
         with:
@@ -92,6 +114,16 @@ jobs:
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 7
+
+      - name: Verify MSI/CAB provenance and exact source commit before upload
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath 'apps/web/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).version
+          $bundle = 'apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi'
+          python scripts/validate_msi_provenance.py --directory $bundle --expected-version $version --expected-commit (git rev-parse HEAD)
+          if ($LASTEXITCODE -ne 0) {
+            throw 'MSI/CAB provenance validation failed; refusing artifact upload.'
+          }
 
       - name: Upload complete Windows installer (MSI and external CABs)
         uses: actions/upload-artifact@v4
@@ -191,10 +223,30 @@ jobs:
               throw "Unexpected developer runtime on isolated PATH: $cmd"
             }
           }
+          # Automatic PR checks must remain offline: pretrained checkpoints
+          # require explicit researcher approval, not a CI default.
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -AcceptanceRoot 'C:\reefvision-1-0-2-disposable-acceptance' `
-            -SkipUpgrade -DisposableTest -KeepArtifacts -LiveSam2Acceptance
+            -SkipUpgrade -DisposableTest -KeepArtifacts
+
+      # Passing msiexec or exiting the harness is not enough: independently
+      # verify every required installed-app gate, isolated migration state,
+      # MSI SHA-256 and explicit upgrade SKIPPED (not falsely accepted).
+      - name: Verify installed Windows acceptance evidence
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
+          $msi = Join-Path $folder 'ReefVision_1.0.2_x64_en-US.msi'
+          $reports = @(Get-ChildItem -Path '.artifacts' -Directory -Filter 'windows-clean-acceptance-*' |
+            ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'report.json') -ErrorAction SilentlyContinue })
+          if ($reports.Count -ne 1) {
+            throw "Expected exactly one installed-Windows acceptance report; found $($reports.Count)."
+          }
+          python scripts/validate_windows_acceptance_report.py --report $reports[0].FullName --expected-version 1.0.2 --expected-upgrade skipped --installer $msi
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Installed-Windows acceptance evidence verification failed.'
+          }
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()

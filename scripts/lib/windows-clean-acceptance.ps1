@@ -77,6 +77,40 @@ function Test-ReefVisionPathWithin {
     return $candidate.StartsWith($boundary, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+# Lexical containment is insufficient on Windows: a junction under an apparently
+# disposable path can resolve into an unrelated user's research directory.
+# Inspect existing ancestors as well as the requested path before any writes.
+function Assert-ReefVisionAcceptanceNoReparseAncestors {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $current = [System.IO.Path]::GetFullPath($Path)
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        $entry = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -ne $entry -and
+            ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Unsafe acceptance path crosses a symlink/junction: $current"
+        }
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $current) { break }
+        $current = $parent
+    }
+    return $true
+}
+
+# Run-root cleanup is allowed only for a tree without linked descendants.
+# Never recurse through a reparse point, even if the generated marker exists.
+function Assert-ReefVisionAcceptanceTreeNoReparsePoints {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    [void](Assert-ReefVisionAcceptanceNoReparseAncestors -Path $Path)
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        foreach ($entry in (Get-ChildItem -LiteralPath $Path -Force -Recurse -ErrorAction Stop)) {
+            if (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Unsafe acceptance cleanup contains a symlink/junction: $($entry.FullName)"
+            }
+        }
+    }
+    return $true
+}
+
 function Assert-ReefVisionSafeAcceptanceRoot {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -84,6 +118,7 @@ function Assert-ReefVisionSafeAcceptanceRoot {
         [Parameter(Mandatory = $true)][string]$DefaultDataRoot
     )
     $resolved = Resolve-ReefVisionAcceptancePath $Path
+    [void](Assert-ReefVisionAcceptanceNoReparseAncestors -Path $resolved)
     # A drive root itself is never a safe acceptance directory. Its ordinary
     # descendants, however, can be safe when they do not overlap any of the
     # narrower protected paths below (Windows, Program Files, user data, repo).
@@ -115,6 +150,59 @@ function Assert-ReefVisionSafeAcceptanceRoot {
         throw "Acceptance root may not contain the normal ReefVision data directory: $DefaultDataRoot"
     }
     return $resolved
+}
+
+
+# An MSI reinstall of the same ProductVersion is not evidence of a version
+# upgrade. Windows Installer compares only the three numeric MSI fields.
+function Assert-ReefVisionUpgradeVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$PreviousVersion,
+        [Parameter(Mandatory = $true)][string]$TargetVersion
+    )
+    foreach ($candidate in @($PreviousVersion, $TargetVersion)) {
+        if ($candidate -notmatch '^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,5})$') {
+            throw "Invalid MSI ProductVersion '$candidate'; expected major.minor.build."
+        }
+        $parts = @($candidate.Split('.') | ForEach-Object { [int]$_ })
+        if ($parts[0] -gt 255 -or $parts[1] -gt 255 -or $parts[2] -gt 65535) {
+            throw "Invalid MSI ProductVersion '$candidate'; numeric component exceeds Windows Installer limits."
+        }
+    }
+    if ([version]$TargetVersion -le [version]$PreviousVersion) {
+        throw "Refusing non-upgrade MSI acceptance: target $TargetVersion must exceed previous $PreviousVersion."
+    }
+    return $true
+}
+
+# COM methods may write extra null objects into the PowerShell success
+# pipeline. Keep the MSI version a scalar string: arrays corrupt JSON evidence
+# and make Windows Installer upgrade comparisons unreliable.
+function Assert-ReefVisionMsiVersionScalar {
+    param([AllowNull()][object]$Value)
+    if ($Value -isnot [string] -or $Value -notmatch '^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,5})$') {
+        throw 'MSI ProductVersion must be a single major.minor.build string.'
+    }
+    $parts = @($Value.Split('.') | ForEach-Object { [int]$_ })
+    if ($parts[0] -gt 255 -or $parts[1] -gt 255 -or $parts[2] -gt 65535) {
+        throw 'MSI ProductVersion exceeds Windows Installer numeric limits.'
+    }
+    return [string]$Value
+}
+
+function Get-ReefVisionMsiProductVersion {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($Path, 0)
+    $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
+    try {
+        [void]$view.Execute()
+        $record = $view.Fetch()
+        if ($null -eq $record) { throw "MSI has no ProductVersion: $Path" }
+        return (Assert-ReefVisionMsiVersionScalar -Value ([string]$record.StringData(1)))
+    } finally {
+        [void]$view.Close()
+    }
 }
 
 function New-ReefVisionMsiArguments {

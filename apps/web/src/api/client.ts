@@ -1291,6 +1291,55 @@ export interface ReviewQueueItemPage {
   pages: number;
 }
 
+export type ReviewQueueBulkAction = "start" | "skip" | "return" | "complete";
+
+export interface ReviewQueueBulkResponse {
+  queue_id: string;
+  action: ReviewQueueBulkAction;
+  changed_count: number;
+  items: ReviewQueueItem[];
+  requires_researcher_review: boolean;
+}
+
+export type ReviewQueueEventType =
+  | "comment"
+  | "assign"
+  | "unassign"
+  | "triage_start"
+  | "triage_skip"
+  | "triage_return"
+  | "triage_complete";
+
+export interface ReviewQueueEvent {
+  id: string;
+  review_queue_id: string;
+  review_queue_item_id: string;
+  project_id: string;
+  client_request_id: string;
+  event_type: ReviewQueueEventType;
+  actor: string;
+  comment: string | null;
+  assignee: string | null;
+  created_at: string;
+}
+
+export interface ReviewQueueEventsPage {
+  items: ReviewQueueEvent[];
+  total: number;
+  page: number;
+  page_size: number;
+  current_assignee: string | null;
+  requires_researcher_review: boolean;
+}
+
+export interface ReviewQueueEventCreate {
+  client_request_id: string;
+  event_type: "comment" | "assign" | "unassign";
+  actor: string;
+  comment?: string;
+  assignee?: string;
+}
+
 export type DatasetSplit = "train" | "validation" | "test" | "unassigned";
 export type DatasetSplitMethod = "none" | "manual" | "random" | "group_random";
 
@@ -2810,6 +2859,46 @@ export async function getReviewQueueItems(
     {
       signal,
     },
+  );
+}
+
+export async function bulkTriageReviewQueueItems(
+  queueId: string,
+  payload: {
+    item_ids: string[];
+    action: ReviewQueueBulkAction;
+    reason?: string;
+    actor?: string;
+    review_confirmed?: boolean;
+    client_request_id?: string;
+  },
+): Promise<ReviewQueueBulkResponse> {
+  return request<ReviewQueueBulkResponse>(
+    `/review-queues/${queueId}/items/bulk`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export async function getReviewQueueEvents(
+  queueId: string,
+  itemId: string,
+  page = 1,
+  signal?: AbortSignal,
+): Promise<ReviewQueueEventsPage> {
+  return request<ReviewQueueEventsPage>(
+    `/review-queues/${queueId}/items/${itemId}/events?page=${page}`,
+    { signal },
+  );
+}
+
+export async function addReviewQueueEvent(
+  queueId: string,
+  itemId: string,
+  payload: ReviewQueueEventCreate,
+): Promise<ReviewQueueEvent> {
+  return request<ReviewQueueEvent>(
+    `/review-queues/${queueId}/items/${itemId}/events`,
+    { method: "POST", body: JSON.stringify(payload) },
   );
 }
 

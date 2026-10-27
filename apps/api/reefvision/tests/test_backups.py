@@ -6,8 +6,10 @@ from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from reefvision.config import Settings
+from reefvision.db.models import BackupRecord, Job
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.worker import process_thumbnail_job
 
@@ -38,6 +40,26 @@ def create_completed_backup(
     assert process_backup_job(test_settings, factory, payload["job"]["id"])
     backup = client.get(f"/api/v1/backups/{payload['backup']['id']}").json()
     return payload, cast(dict[str, Any], backup)
+
+
+def test_backup_job_parent_is_persisted_before_fk_constrained_backup_record(
+    client: TestClient, test_settings: Settings
+) -> None:
+    """An actual backup job must survive with SQLite FK checks enabled."""
+    created, backup = create_completed_backup(client, test_settings)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        assert session.scalar(text("PRAGMA foreign_keys")) == 1
+        assert session.scalar(text("PRAGMA foreign_key_check")) is None
+        job = session.get(Job, created["job"]["id"])
+        record = session.get(BackupRecord, backup["id"])
+        assert job is not None
+        assert record is not None
+        assert job.job_type == "backup"
+        assert record.job_id == job.id
+        # Background jobs use "succeeded"; backup artifacts use "completed".
+        assert job.status == "succeeded"
+        assert record.status == "completed"
 
 
 def test_backup_job_creates_verified_managed_backup(

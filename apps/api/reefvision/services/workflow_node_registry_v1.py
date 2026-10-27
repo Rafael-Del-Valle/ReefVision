@@ -631,4 +631,41 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
     )
 
+    registry["qc_review_queue"] = WorkflowNodeDefinitionResponse(
+        node_type="qc_review_queue",
+        display_name="Generate QC Review Queue",
+        category="Human review",
+        description=(
+            "Rank project images using existing explainable QC scoring. "
+            "A review queue does not verify its observations."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="queue",
+                display_name="QC review queue",
+                accepted_types=["review_queue_reference"],
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={
+            "review_below_confidence": None,
+            "source_quality_control_run_id": None,
+        },
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Delegates to the existing persistent ReviewQueueService.",
+            "Priority scores are dimensionless, not probabilities.",
+            "Run/node identity prevents duplicate queues on retries.",
+            "Scientist review is required before accepting observations.",
+        ],
+    )
+
     return registry

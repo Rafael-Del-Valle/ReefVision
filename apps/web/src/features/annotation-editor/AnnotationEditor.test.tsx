@@ -702,6 +702,33 @@ describe("AnnotationEditor", () => {
     expect(viewport.getAttribute("transform")).toBe(middlePannedTransform);
   });
 
+  it("culls offscreen boxes while preserving the full object list and restores on reset", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+    const canvas = screen.getByTestId("annotation-canvas");
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      altKey: true,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, { clientX: -4000, clientY: -4000 });
+    fireEvent.pointerCancel(window);
+    expect(screen.queryByTestId("annotation-annotation-1")).toBeNull();
+    expect(
+      within(screen.getByRole("listbox", { name: "Objects" })).getAllByRole(
+        "option",
+      ),
+    ).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "Reset View" }));
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+  });
+
   it("offers actual-size and reset-view commands without changing annotations", async () => {
     mockBasicEditorRequests();
     renderEditor();

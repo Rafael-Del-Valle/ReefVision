@@ -8,7 +8,8 @@ param(
     [switch]$KeepArtifacts,
     [switch]$SkipUpgrade,
     [switch]$SkipUninstall,
-    [switch]$LiveSam2Acceptance
+    [switch]$LiveSam2Acceptance,
+    [switch]$ApprovedCheckpointDownload
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,6 +21,13 @@ if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
 }
 if ($DisposableTest -and $PlanOnly) { throw '-DisposableTest and -PlanOnly are mutually exclusive.' }
+
+# Live SAM acceptance obtains pretrained checkpoint weights over the network.
+# Require a separate, explicit approval switch even on disposable machines;
+# unattended PR workflows must never silently fetch weights.
+if ($LiveSam2Acceptance -and -not $ApprovedCheckpointDownload) {
+    throw 'Live SAM acceptance requires explicit -ApprovedCheckpointDownload researcher approval before fetching pretrained weights.'
+}
 
 $InstallerPath = (Resolve-Path -LiteralPath $InstallerPath).Path
 if ([System.IO.Path]::GetExtension($InstallerPath) -ine '.msi') { throw 'InstallerPath must identify an MSI.' }
@@ -39,8 +47,14 @@ $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
-$Version = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($InstallerPath, 0).OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
-$Version.Execute(); $VersionRecord = $Version.Fetch(); $ProductVersion = $VersionRecord.StringData(1)
+# Validate the entire function result, not just the COM record's value:
+# leaked PowerShell pipeline output must never enter evidence or upgrade checks.
+$ProductVersion = Assert-ReefVisionMsiVersionScalar -Value (Get-ReefVisionMsiProductVersion -Path $InstallerPath)
+$PreviousProductVersion = $null
+if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+    $PreviousProductVersion = Assert-ReefVisionMsiVersionScalar -Value (Get-ReefVisionMsiProductVersion -Path $PreviousInstallerPath)
+    [void](Assert-ReefVisionUpgradeVersion -PreviousVersion $PreviousProductVersion -TargetVersion $ProductVersion)
+}
 
 $report = [ordered]@{
     schema_version = 'reefvision-windows-clean-acceptance-1'
@@ -50,6 +64,7 @@ $report = [ordered]@{
     installer_path = $InstallerPath
     installer_sha256 = $InstallerHash
     previous_installer_path = if ($PreviousInstallerPath) { $PreviousInstallerPath } else { $null }
+    previous_installer_version = $PreviousProductVersion
     windows_version = [Environment]::OSVersion.VersionString
     architecture = $env:PROCESSOR_ARCHITECTURE
     acceptance_root = $AcceptanceRoot
@@ -59,11 +74,16 @@ $report = [ordered]@{
     shortcuts = New-ReefVisionEvidenceResult
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
+    migration = $null
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     external_annotation_imports = New-ReefVisionEvidenceResult
     confidence_review = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real pending prediction review not requested' }
     project_persistence = New-ReefVisionEvidenceResult
+    class_visibility_persistence = New-ReefVisionEvidenceResult
+    qc_review_coordination = New-ReefVisionEvidenceResult
+    qc_workflow_persistence = New-ReefVisionEvidenceResult
+    qc_workflow_replay = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
     upgrade = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
@@ -106,6 +126,44 @@ function Wait-BackendPort(
     }
     throw "Backend did not publish its port within $Seconds seconds: $Path"
 }
+# backend-port.txt is written before the packaged Uvicorn API is ready.
+# A successful port-file read is not sufficient after desktop restarts.
+function Wait-BackendApiReady(
+    [string]$ApiBaseUrl,
+    [System.Diagnostics.Process]$DesktopProcess,
+    [string]$BackendLogPath,
+    [int]$Seconds = 120
+) {
+    if ($ApiBaseUrl -notmatch '^http://127\.0\.0\.1:\d{1,5}/api/v1$') {
+        throw 'Backend readiness must use the installed loopback API.'
+    }
+    $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
+    $lastFailure = 'API did not respond'
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $DesktopProcess.Refresh()
+        if ($DesktopProcess.HasExited) {
+            $exitCode = try { $DesktopProcess.ExitCode } catch { 'unavailable' }
+            throw "Desktop exited before packaged API became ready (exit code: $exitCode)."
+        }
+        try {
+            $version = Invoke-RestMethod -Uri "$ApiBaseUrl/system/version" -TimeoutSec 3 -ErrorAction Stop
+            $migration = Invoke-RestMethod -Uri "$ApiBaseUrl/system/migrations/status" -TimeoutSec 3 -ErrorAction Stop
+            if ($version.application_version -and $migration.schema_status -eq 'up_to_date' -and
+                $migration.current_schema_revision -eq $migration.expected_schema_revision) {
+                return
+            }
+            $lastFailure = "API returned incomplete version or migration readiness: $($migration.schema_status)"
+        } catch {
+            $lastFailure = $_.Exception.Message
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    $logTail = if (Test-Path -LiteralPath $BackendLogPath -PathType Leaf) {
+        (Get-Content -LiteralPath $BackendLogPath -Tail 20 | Out-String).TrimEnd()
+    } else { '(backend log unavailable)' }
+    throw ("Packaged API was not ready after $Seconds seconds ($lastFailure). Backend log tail:" + [Environment]::NewLine + $logTail)
+}
+
 function Start-AcceptanceDesktop {
     $BackendPortPath = Join-Path $DataRoot 'runtime\backend-port.txt'
     Remove-Item -LiteralPath $BackendPortPath -Force -ErrorAction SilentlyContinue
@@ -250,8 +308,33 @@ try {
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    Wait-BackendApiReady -ApiBaseUrl $api -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $versionPayload = Invoke-RestMethod "$api/system/version"
     $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
+    # A healthy HTTP endpoint is not proof that the installed SQLite schema
+    # was migrated. Verify both its revision and its disposable data boundary
+    # before the first project write. Report only schema metadata, never rows.
+    $expectedDatabase = [System.IO.Path]::GetFullPath((Join-Path $DataRoot 'reefvision.db'))
+    $actualDatabase = if ($versionPayload.database_path) {
+        [System.IO.Path]::GetFullPath([string]$versionPayload.database_path)
+    } else { '' }
+    $databaseIsIsolated = [string]::Equals(
+        $actualDatabase, $expectedDatabase,
+        [System.StringComparison]::OrdinalIgnoreCase
+    )
+    $report.migration = [ordered]@{
+        schema_status = [string]$migrationPayload.schema_status
+        current_revision = [string]$migrationPayload.current_schema_revision
+        expected_revision = [string]$migrationPayload.expected_schema_revision
+        database_path_is_isolated = $databaseIsIsolated
+    }
+    if (-not $databaseIsIsolated) {
+        throw 'Packaged API database path escapes the disposable acceptance data root; refusing project writes.'
+    }
+    if ($migrationPayload.schema_status -ne 'up_to_date' -or
+        $migrationPayload.current_schema_revision -ne $migrationPayload.expected_schema_revision) {
+        throw "Packaged API schema is not migrated: status=$($migrationPayload.schema_status); current=$($migrationPayload.current_schema_revision); expected=$($migrationPayload.expected_schema_revision). Refusing project writes."
+    }
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
     $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
 
@@ -262,6 +345,28 @@ try {
     $projectId = $project.id
     $testClass = Invoke-RestMethod "$api/projects/$projectId/classes" -Method Post -ContentType 'application/json' -Body (@{class_index=0;name='Acceptance coral';display_color='#7A8C9D'} | ConvertTo-Json)
     if (-not $testClass.id) { throw 'Acceptance label class could not be created.' }
+    # 1.6 class visibility must persist in the installed, isolated backend,
+    # not just in source-tree API tests. A saved empty user preference
+    # intentionally overrides the project's nonempty default.
+    $visibilityUrl = "$api/projects/$projectId/class-visibility"
+    $defaultVisibility = Invoke-RestMethod "$visibilityUrl/defaults/annotations" -Method Put -ContentType 'application/json' -Body (@{
+        hidden_class_ids = @([string]$testClass.id)
+    } | ConvertTo-Json -Depth 4)
+    $userVisibility = Invoke-RestMethod "$visibilityUrl/preferences/annotations" -Method Put -ContentType 'application/json' -Body (@{
+        hidden_class_ids = @()
+    } | ConvertTo-Json -Depth 4)
+    $initialVisibility = Invoke-RestMethod $visibilityUrl
+    if (-not $defaultVisibility.saved -or -not $userVisibility.saved -or
+        $initialVisibility.project_id -ne $projectId -or
+        -not ([string]$initialVisibility.user_identity).StartsWith('local-user:') -or
+        -not $initialVisibility.project_defaults.annotations.saved -or
+        @($initialVisibility.project_defaults.annotations.hidden_class_ids).Count -ne 1 -or
+        $initialVisibility.project_defaults.annotations.hidden_class_ids[0] -ne $testClass.id -or
+        -not $initialVisibility.user_preferences.annotations.saved -or
+        @($initialVisibility.user_preferences.annotations.hidden_class_ids).Count -ne 0) {
+        throw 'Installed class visibility did not save a project default and explicit empty local-user override.'
+    }
+    $visibilityIdentity = [string]$initialVisibility.user_identity
     $Catalog = Invoke-RestMethod "$api/projects/$projectId/model-catalog"
     # Architecture entries use selection_kind=builtin_architecture;
     # category=architecture is a separate display grouping.
@@ -441,24 +546,293 @@ try {
 
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Previous installer upgraded to current installer.'
+        # msiexec exit 0 alone does not prove the newer desktop was installed.
+        # Keep upgrade unaccepted until the restarted API, registry and
+        # preserved scientific project are checked below.
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'MSI returned success; post-upgrade checks pending.'
     }
 
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    Wait-BackendApiReady -ApiBaseUrl $api -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
+    # The desktop chooses a fresh ephemeral loopback port on each launch.
+    # Never reuse the first launch's cached visibility URL after restart.
+    $persistedVisibility = Invoke-RestMethod "$api/projects/$projectId/class-visibility"
+    if ($persistedVisibility.project_id -ne $projectId -or
+        [string]$persistedVisibility.user_identity -ne $visibilityIdentity -or
+        -not $persistedVisibility.project_defaults.annotations.saved -or
+        @($persistedVisibility.project_defaults.annotations.hidden_class_ids).Count -ne 1 -or
+        $persistedVisibility.project_defaults.annotations.hidden_class_ids[0] -ne $testClass.id -or
+        -not $persistedVisibility.user_preferences.annotations.saved -or
+        @($persistedVisibility.user_preferences.annotations.hidden_class_ids).Count -ne 0) {
+        throw 'Installed class visibility project default, saved empty override, or local identity changed after restart/upgrade.'
+    }
+    $report.class_visibility_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Packaged API persisted project annotation default, explicit empty local-user override, and stable local identity across restart/upgrade.'
     if ($LiveSam2Acceptance) {
         $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
         if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
             throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
         }
     }
+    if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        $upgradedVersion = Invoke-RestMethod "$api/system/version"
+        $upgradedMigration = Invoke-RestMethod "$api/system/migrations/status"
+        $registrations = @(Get-ReefVisionInstalledRegistrations)
+        $upgradedDatabase = if ($upgradedVersion.database_path) {
+            [System.IO.Path]::GetFullPath([string]$upgradedVersion.database_path)
+        } else { '' }
+        if ([string]$upgradedVersion.application_version -ne $ProductVersion -or
+            $registrations.Count -ne 1 -or
+            [string]$registrations[0].DisplayVersion -ne $ProductVersion) {
+            throw "MSI upgrade did not expose expected version $ProductVersion through both API and Windows registration."
+        }
+        if (-not [string]::Equals($upgradedDatabase, $expectedDatabase, [System.StringComparison]::OrdinalIgnoreCase) -or
+            $upgradedMigration.schema_status -ne 'up_to_date' -or
+            $upgradedMigration.current_schema_revision -ne $upgradedMigration.expected_schema_revision) {
+            throw 'MSI upgrade changed the isolated database boundary or left migrations incomplete.'
+        }
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified version $PreviousProductVersion -> $ProductVersion through MSI, registry and packaged API; project and annotation retained; isolated schema current."
+    }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
+
+    # 1.6 packaged QC acceptance: exercise the actual installed API against
+    # disposable project media, not a source-tree TestClient or synthetic mock.
+    # Triage is manual coordination only; no prediction or annotation approval.
+    $qcQueue = Invoke-RestMethod "$api/projects/$projectId/review-queues" -Method Post -ContentType 'application/json' -Body '{}'
+    if ($qcQueue.project_id -ne $projectId -or [int]$qcQueue.item_count -lt 1) {
+        throw 'Installed QC review queue did not retain the disposable project scope.'
+    }
+    $qcPage = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items"
+    $qcMatches = @($qcPage.items | Where-Object { $_.image_id -eq $imageId })
+    if ($qcMatches.Count -ne 1) { throw 'Installed QC queue did not contain exactly one acceptance image.' }
+    $qcItemId = [string]$qcMatches[0].id
+    $qcEventsUrl = "$api/review-queues/$($qcQueue.id)/items/$qcItemId/events"
+    $qcCommentBody = @{
+        client_request_id = [guid]::NewGuid().ToString()
+        event_type = 'comment'
+        actor = 'disposable-lab-reviewer'
+        comment = 'Review synthetic annotation boundary'
+    } | ConvertTo-Json
+    $qcComment = Invoke-RestMethod $qcEventsUrl -Method Post -ContentType 'application/json' -Body $qcCommentBody
+    $qcCommentRetry = Invoke-RestMethod $qcEventsUrl -Method Post -ContentType 'application/json' -Body $qcCommentBody
+    if ($qcComment.id -ne $qcCommentRetry.id) { throw 'Installed QC comment retry duplicated the audit event.' }
+    $qcAssignBody = @{
+        client_request_id = [guid]::NewGuid().ToString()
+        event_type = 'assign'
+        actor = 'disposable-lab-reviewer'
+        assignee = 'disposable-reviewer-two'
+    } | ConvertTo-Json
+    $null = Invoke-RestMethod $qcEventsUrl -Method Post -ContentType 'application/json' -Body $qcAssignBody
+    $qcBulkUrl = "$api/review-queues/$($qcQueue.id)/items/bulk"
+    $qcSkipBody = @{
+        item_ids = @($qcItemId)
+        action = 'skip'
+        reason = 'Synthetic QC acceptance'
+        actor = 'disposable-lab-reviewer'
+    } | ConvertTo-Json
+    $qcSkipped = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcSkipBody
+    $qcSkipRetry = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcSkipBody
+    if ($qcSkipped.changed_count -ne 1 -or $qcSkipRetry.changed_count -ne 0 -or
+        $qcSkipped.requires_researcher_review -ne $true) {
+        throw 'Installed QC bulk skip was not guarded and retry-safe.'
+    }
+    $qcReturnBody = @{item_ids=@($qcItemId);action='return';actor='disposable-lab-reviewer'} | ConvertTo-Json
+    $qcReturned = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcReturnBody
+    $qcStartBody = @{item_ids=@($qcItemId);action='start';actor='disposable-lab-reviewer'} | ConvertTo-Json
+    $qcStarted = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcStartBody
+    if ($qcReturned.changed_count -ne 1 -or $qcStarted.changed_count -ne 1 -or
+        @($qcStarted.items)[0].review_state -ne 'in_progress') {
+        throw 'Installed QC bulk return/start transitions did not persist.'
+    }
+    # Exercise the real installed bulk-completion API with an explicit
+    # confirmation on disposable synthetic data. This completes review
+    # coordination only; it does not verify biological annotations.
+    $qcCompleteBody = @{
+        item_ids = @($qcItemId)
+        action = 'complete'
+        actor = 'disposable-lab-reviewer'
+        review_confirmed = $true
+    } | ConvertTo-Json
+    $qcCompleted = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcCompleteBody
+    $qcCompleteRetry = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcCompleteBody
+    if ($qcCompleted.changed_count -ne 1 -or $qcCompleteRetry.changed_count -ne 0 -or
+        @($qcCompleted.items)[0].review_state -ne 'completed' -or
+        -not @($qcCompleted.items)[0].completed_at -or
+        $qcCompleted.requires_researcher_review -ne $true) {
+        throw 'Installed QC bulk completion did not require reviewed state, preserve the review gate or retry idempotently.'
+    }
+    $qcHistory = Invoke-RestMethod $qcEventsUrl
+    $qcEventTypes = @($qcHistory.items | ForEach-Object { $_.event_type } | Sort-Object)
+    $qcCompleteEvents = @($qcHistory.items | Where-Object { $_.event_type -eq 'triage_complete' })
+    if ($qcHistory.total -ne 6 -or
+        ($qcEventTypes -join ',') -ne 'assign,comment,triage_complete,triage_return,triage_skip,triage_start' -or
+        $qcCompleteEvents.Count -ne 1 -or $qcCompleteEvents[0].actor -ne 'disposable-lab-reviewer' -or
+        $qcHistory.current_assignee -ne 'disposable-reviewer-two') {
+        throw 'Installed QC audit history or reviewer assignment is inconsistent.'
+    }
+    $qcAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
+    if (@($qcAnnotations.annotations | Where-Object { $_.id -eq $annotationId }).Count -ne 1) {
+        throw 'QC triage modified the original researcher annotation.'
+    }
+
+    # 1.6 Workflow Builder installed-package acceptance. The standalone QC API
+    # above is not evidence that saved typed graphs actually execute in the MSI.
+    # This uses the same project and a separate queue; it never approves a
+    # machine prediction or changes the original annotation.
+    $qcWorkflowGraph = @{
+        graph_id = "qc-review-queue-installed-$Token"
+        name = 'Installed QC review queue'
+        nodes = @(
+            @{ node_id = 'project'; node_type = 'project_source' },
+            @{ node_id = 'qc'; node_type = 'qc_review_queue' }
+        )
+        edges = @(
+            @{
+                edge_id = 'project-qc'
+                source_node_id = 'project'
+                source_port_id = 'project'
+                target_node_id = 'qc'
+                target_port_id = 'project'
+            }
+        )
+    }
+    $qcWorkflowPlan = Invoke-RestMethod "$api/projects/$projectId/workflow-graphs/plan" -Method Post -ContentType 'application/json' -Body ($qcWorkflowGraph | ConvertTo-Json -Depth 12)
+    if (-not $qcWorkflowPlan.valid -or -not $qcWorkflowPlan.executable) {
+        throw 'Installed Workflow Builder did not accept the typed project -> QC review graph.'
+    }
+    $qcWorkflowSaved = Invoke-RestMethod "$api/projects/$projectId/workflow-graphs" -Method Post -ContentType 'application/json' -Body (@{ graph = $qcWorkflowGraph } | ConvertTo-Json -Depth 12)
+    $qcWorkflowQueued = Invoke-RestMethod "$api/projects/$projectId/workflow-runs" -Method Post -ContentType 'application/json' -Body (@{ graph_record_id = $qcWorkflowSaved.id } | ConvertTo-Json)
+    if (-not $qcWorkflowQueued.id -or -not $qcWorkflowQueued.job_id) {
+        throw 'Installed Workflow Builder did not persist a queued QC graph run.'
+    }
+    $qcWorkflowDeadline = [DateTime]::UtcNow.AddSeconds(120)
+    do {
+        Start-Sleep -Milliseconds 500
+        $qcWorkflowJob = Invoke-RestMethod "$api/jobs/$($qcWorkflowQueued.job_id)"
+    } while ($qcWorkflowJob.status -in @('queued', 'running') -and [DateTime]::UtcNow -lt $qcWorkflowDeadline)
+    if ($qcWorkflowJob.status -ne 'succeeded') {
+        throw "Installed QC Workflow Builder job failed or timed out: $($qcWorkflowJob.status); $($qcWorkflowJob.error_message)"
+    }
+    $qcWorkflowDetail = Invoke-RestMethod "$api/workflow-runs/$($qcWorkflowQueued.id)"
+    $qcWorkflowArtifacts = @($qcWorkflowDetail.artifacts | Where-Object { $_.data_type -eq 'review_queue_reference' })
+    $qcWorkflowNodes = @($qcWorkflowDetail.nodes | Where-Object { $_.node_type -eq 'qc_review_queue' })
+    if ($qcWorkflowDetail.run.status -ne 'succeeded' -or $qcWorkflowArtifacts.Count -ne 1 -or
+        $qcWorkflowNodes.Count -ne 1 -or $qcWorkflowNodes[0].status -ne 'succeeded' -or
+        ([string]$qcWorkflowArtifacts[0].payload_sha256).Length -ne 64) {
+        throw 'Installed saved QC workflow did not persist a successful typed node and hashed output.'
+    }
+    $qcWorkflowPayload = $qcWorkflowArtifacts[0].payload_json
+    $qcWorkflowQueue = Invoke-RestMethod "$api/review-queues/$($qcWorkflowPayload.queue_id)"
+    if ($qcWorkflowPayload.project_id -ne $projectId -or
+        $qcWorkflowPayload.workflow_run_id -ne $qcWorkflowQueued.id -or
+        $qcWorkflowPayload.review_status -ne 'requires_researcher_review' -or
+        $qcWorkflowPayload.priority_score_unit -ne 'dimensionless' -or
+        $qcWorkflowQueue.project_id -ne $projectId -or
+        $qcWorkflowQueue.created_by -notlike 'workflow:*' -or
+        $qcWorkflowQueue.item_count -lt 1 -or
+        ([string]$qcWorkflowPayload.input_checksums.scoring_provenance_sha256).Length -ne 64 -or
+        ([string]$qcWorkflowPayload.input_checksums.item_evidence_sha256).Length -ne 64) {
+        throw 'Installed QC Workflow Builder lost project scope, scientific evidence or researcher-review gating.'
+    }
+    $qcWorkflowArtifactSha = [string]$qcWorkflowArtifacts[0].payload_sha256
+
+    # A second packaged-desktop restart proves QC coordination survives SQLite
+    # closure/reopen; the prior test already covered ordinary image persistence.
+    Stop-AcceptanceDesktop $desktop
+    $desktop = Start-AcceptanceDesktop
+    $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
+    $api = "http://127.0.0.1:$port/api/v1"
+    Wait-BackendApiReady -ApiBaseUrl $api -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
+    $qcPersistedQueue = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)"
+    $qcPersistedItems = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items"
+    $qcPersistedEvents = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items/$qcItemId/events"
+    $qcPersistedItem = @($qcPersistedItems.items | Where-Object { $_.id -eq $qcItemId })
+    if ($qcPersistedQueue.project_id -ne $projectId -or $qcPersistedItem.Count -ne 1 -or
+        $qcPersistedItem[0].review_state -ne 'completed' -or
+        -not $qcPersistedItem[0].completed_at -or
+        $qcPersistedEvents.total -ne 6 -or
+        $qcPersistedEvents.current_assignee -ne 'disposable-reviewer-two') {
+        throw 'QC queue, bulk triage, audit events or reviewer assignment did not survive desktop restart.'
+    }
+    $qcPersistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
+    if (@($qcPersistedAnnotations.annotations | Where-Object { $_.id -eq $annotationId }).Count -ne 1) {
+        throw 'Packaged QC review changed the researcher annotation across restart.'
+    }
+    $report.qc_review_coordination = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Installed API: scoped queue, idempotent comment/skip/completion, assignment, return/start/confirmed-complete, six durable audit events and unchanged annotation across desktop restart.'
+
+    # Verify saved graph, executed typed artifact, provenance digest and queue
+    # survive a full installed-desktop restart, not merely the in-process job.
+    $qcPersistedGraphs = @(Invoke-RestMethod "$api/projects/$projectId/workflow-graphs" | Where-Object { $_.id -eq $qcWorkflowSaved.id })
+    $qcPersistedWorkflow = Invoke-RestMethod "$api/workflow-runs/$($qcWorkflowQueued.id)"
+    $qcPersistedWorkflowArtifacts = @($qcPersistedWorkflow.artifacts | Where-Object { $_.data_type -eq 'review_queue_reference' })
+    $qcPersistedWorkflowQueue = Invoke-RestMethod "$api/review-queues/$($qcWorkflowPayload.queue_id)"
+    if ($qcPersistedGraphs.Count -ne 1 -or
+        $qcPersistedWorkflow.run.status -ne 'succeeded' -or
+        $qcPersistedWorkflowArtifacts.Count -ne 1 -or
+        $qcPersistedWorkflowArtifacts[0].payload_sha256 -ne $qcWorkflowArtifactSha -or
+        $qcPersistedWorkflowArtifacts[0].payload_json.queue_id -ne $qcWorkflowPayload.queue_id -or
+        $qcPersistedWorkflowArtifacts[0].payload_json.review_status -ne 'requires_researcher_review' -or
+        $qcPersistedWorkflowQueue.project_id -ne $projectId -or
+        $qcPersistedWorkflowQueue.item_count -ne $qcWorkflowQueue.item_count) {
+        throw 'Installed saved QC Workflow Builder graph, typed artifact, or review queue changed across restart.'
+    }
+    $report.qc_workflow_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed saved typed project -> QC graph, background execution, dimensionless scored queue and SHA-256 provenance persisted across restart; run $($qcWorkflowQueued.id), human review required."
+
+    # Re-execute the persisted graph from a new installed-desktop process.
+    # This is a new scientific run (never an implicit retry/approval of the
+    # original queue); unchanged source evidence must yield the same scoring
+    # digests, while run and queue identities remain distinct.
+    $qcReplayQueued = Invoke-RestMethod "$api/projects/$projectId/workflow-runs" -Method Post -ContentType 'application/json' -Body (@{ graph_record_id = $qcWorkflowSaved.id } | ConvertTo-Json)
+    if (-not $qcReplayQueued.id -or -not $qcReplayQueued.job_id -or
+        $qcReplayQueued.id -eq $qcWorkflowQueued.id) {
+        throw 'Installed saved QC workflow replay did not create a distinct persisted run.'
+    }
+    $qcReplayDeadline = [DateTime]::UtcNow.AddSeconds(120)
+    do {
+        Start-Sleep -Milliseconds 500
+        $qcReplayJob = Invoke-RestMethod "$api/jobs/$($qcReplayQueued.job_id)"
+    } while ($qcReplayJob.status -in @('queued', 'running') -and [DateTime]::UtcNow -lt $qcReplayDeadline)
+    if ($qcReplayJob.status -ne 'succeeded') {
+        throw "Installed saved QC workflow replay failed or timed out: $($qcReplayJob.status); $($qcReplayJob.error_message)"
+    }
+    $qcReplayDetail = Invoke-RestMethod "$api/workflow-runs/$($qcReplayQueued.id)"
+    $qcReplayArtifacts = @($qcReplayDetail.artifacts | Where-Object { $_.data_type -eq 'review_queue_reference' })
+    if ($qcReplayDetail.run.status -ne 'succeeded' -or $qcReplayArtifacts.Count -ne 1) {
+        throw 'Installed saved QC workflow replay did not persist exactly one typed queue artifact.'
+    }
+    $qcReplayPayload = $qcReplayArtifacts[0].payload_json
+    if ($qcReplayPayload.workflow_run_id -ne $qcReplayQueued.id -or
+        $qcReplayPayload.project_id -ne $projectId -or
+        $qcReplayPayload.queue_id -eq $qcWorkflowPayload.queue_id -or
+        $qcReplayPayload.review_status -ne 'requires_researcher_review' -or
+        $qcReplayPayload.priority_score_unit -ne 'dimensionless' -or
+        $qcReplayPayload.item_count -ne $qcWorkflowPayload.item_count -or
+        $qcReplayPayload.input_checksums.queue_scope_sha256 -ne $qcWorkflowPayload.input_checksums.queue_scope_sha256 -or
+        $qcReplayPayload.input_checksums.item_evidence_sha256 -ne $qcWorkflowPayload.input_checksums.item_evidence_sha256 -or
+        $qcReplayPayload.input_checksums.scoring_provenance_sha256 -ne $qcWorkflowPayload.input_checksums.scoring_provenance_sha256) {
+        throw 'Installed saved QC replay changed source evidence, scoring provenance, or researcher approval gate.'
+    }
+    $qcReplayQueue = Invoke-RestMethod "$api/review-queues/$($qcReplayPayload.queue_id)"
+    $qcReplayItems = Invoke-RestMethod "$api/review-queues/$($qcReplayPayload.queue_id)/items"
+    $qcOriginalAfterReplay = Invoke-RestMethod "$api/review-queues/$($qcWorkflowPayload.queue_id)"
+    $qcReviewEventsAfterReplay = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items/$qcItemId/events"
+    if ($qcReplayQueue.project_id -ne $projectId -or
+        $qcReplayQueue.created_by -notlike 'workflow:*' -or
+        $qcReplayQueue.item_count -ne @($qcReplayItems.items).Count -or
+        $qcOriginalAfterReplay.item_count -ne $qcWorkflowQueue.item_count -or
+        $qcReviewEventsAfterReplay.total -ne 6) {
+        throw 'Installed saved QC replay changed the original queue, manual audit history, or project scope.'
+    }
+    $report.qc_workflow_replay = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed saved graph re-executed after restart as distinct run $($qcReplayQueued.id), preserving immutable QC evidence digests, review gate, and original reviewer audit."
+
+
+
 
     $exchange = Invoke-RestMethod "$api/projects/$projectId/exchange-packages" -Method Post -ContentType 'application/json' -Body (@{include_media=$true;include_model_weights=$false;include_generated_artifacts=$true;notes='clean install acceptance'} | ConvertTo-Json)
     $jobId = $exchange.job_id
@@ -514,6 +888,7 @@ try {
     if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS') {
         $ExpectedRunRoot = [System.IO.Path]::GetFullPath((Join-Path $AcceptanceRoot "reefvision-clean-$Token"))
         if ([System.IO.Path]::GetFullPath($RunRoot) -ne $ExpectedRunRoot) { throw 'Refusing cleanup outside the generated acceptance run.' }
+        [void](Assert-ReefVisionAcceptanceTreeNoReparsePoints -Path $RunRoot)
         Remove-Item -LiteralPath $RunRoot -Recurse -Force
     }
 }

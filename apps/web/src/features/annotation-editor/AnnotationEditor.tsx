@@ -62,6 +62,11 @@ import {
   writeInternalAnnotationClipboard,
 } from "./annotationClipboard";
 import { deleteMaskAnnotations } from "./maskDocumentOperations";
+import {
+  cullViewportItems,
+  cullViewportMasks,
+  viewportImageBounds,
+} from "./viewportCulling";
 import { rasterMaskContentUrl } from "./rasterMaskApi";
 import {
   actualSizeTransform,
@@ -625,7 +630,7 @@ export function AnnotationEditor({
     }
     globalThis.addEventListener("resize", updateSize);
     return () => globalThis.removeEventListener("resize", updateSize);
-  }, []);
+  }, [sessionQuery.data?.image.id]);
 
   const imageSize = useMemo(() => {
     if (!sessionQuery.data) {
@@ -903,6 +908,25 @@ export function AnnotationEditor({
               !annotationHiddenClassSet.has(annotation.label_class_id),
           ),
     [annotationHiddenClassSet, hideAnnotations, renderedAnnotations],
+  );
+
+  // Viewport culling is display-only: never modify saved annotations, review
+  // queues, counts, selection, or bulk prediction acceptance semantics.
+  const viewportBounds = useMemo(
+    () => viewportImageBounds(currentView, containerSize),
+    [containerSize, currentView],
+  );
+  const viewportAnnotations = useMemo(
+    () => cullViewportItems(visibleAnnotations, viewportBounds),
+    [visibleAnnotations, viewportBounds],
+  );
+  const viewportPredictions = useMemo(
+    () => cullViewportItems(visiblePredictions, viewportBounds),
+    [visiblePredictions, viewportBounds],
+  );
+  const viewportMasks = useMemo(
+    () => cullViewportMasks(state.document.maskAnnotations, viewportBounds),
+    [state.document.maskAnnotations, viewportBounds],
   );
 
   const setSessionVisibilityOverride = useCallback(
@@ -3797,6 +3821,13 @@ export function AnnotationEditor({
               </button>
             </div>
           )}
+          <p className="annotation-helper" data-testid="viewport-render-count">
+            Viewport: {viewportAnnotations.length}/{visibleAnnotations.length}{" "}
+            boxes, {viewportPredictions.length}/{visiblePredictions.length}{" "}
+            proposals, {viewportMasks.length}/
+            {state.document.maskAnnotations.length} masks. All objects remain in
+            the saved document and review lists.
+          </p>
           <div className="annotation-canvas-frame" ref={viewportRef}>
             {learningOpen && (
               <ImprovePredictionsPanel
@@ -3972,7 +4003,7 @@ export function AnnotationEditor({
                     isolateSamReview &&
                     !refinement.pending
                   ) &&
-                  state.document.maskAnnotations.map((mask) => {
+                  viewportMasks.map((mask) => {
                     const labelClass = mask.label_class_id
                       ? labelClassesById.get(mask.label_class_id)
                       : null;
@@ -4063,7 +4094,7 @@ export function AnnotationEditor({
                   </filter>
                 </defs>
                 {showPredictions &&
-                  visiblePredictions.map((proposal) => {
+                  viewportPredictions.map((proposal) => {
                     const labelClass =
                       (proposal.label_class_id
                         ? labelClassesById.get(proposal.label_class_id)
@@ -4123,7 +4154,7 @@ export function AnnotationEditor({
                     );
                   })}
                 {!hideAnnotations &&
-                  visibleAnnotations.map((annotation) => {
+                  viewportAnnotations.map((annotation) => {
                     const labelClass = labelClassesById.get(
                       annotation.label_class_id,
                     );

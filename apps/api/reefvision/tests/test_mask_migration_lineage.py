@@ -9,7 +9,11 @@ def test_mask_migrations_form_one_linear_head() -> None:
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["0037"]
+    # Feature migrations may extend the chain, but divergent heads are invalid.
+    assert len(scripts.get_heads()) == 1
+    review_queue_events = scripts.get_revision("0038")
+    assert review_queue_events is not None
+    assert review_queue_events.down_revision == "0037"
     editable_masks = scripts.get_revision("0015")
     mask_datasets = scripts.get_revision("0016")
     segmentation_proposals = scripts.get_revision("0017")

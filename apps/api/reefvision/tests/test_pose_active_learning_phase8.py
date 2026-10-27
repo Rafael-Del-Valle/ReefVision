@@ -7,8 +7,14 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
-from reefvision.db.models import ModelRegistration, VideoTrack
+from reefvision.db.models import (
+    ModelRegistration,
+    PoseActiveLearningCandidate,
+    PoseLandmarkCorrection,
+    VideoTrack,
+)
 from reefvision.services import video_assets as video_assets_module
 from reefvision.tests.test_annotations import create_project
 
@@ -385,6 +391,19 @@ def test_pose_active_learning_editor_review_creates_verified_canonical_provenanc
     assert verified_payload["verified_track_revision"] == updated_track["revision"]
     assert len(verified_payload["verified_pose_sha256"]) == 64
     assert verified_payload["correction_id"] is not None
+
+    # The correction must exist before the candidate can reference it with
+    # SQLite foreign-key enforcement enabled; a verified result is auditable.
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        assert session.scalar(text("PRAGMA foreign_keys")) == 1
+        persisted = session.get(PoseActiveLearningCandidate, str(candidate["id"]))
+        correction = session.get(PoseLandmarkCorrection, verified_payload["correction_id"])
+        assert persisted is not None
+        assert correction is not None
+        assert persisted.correction_id == correction.id
+        assert correction.parent_video_track_id == track["id"]
+        assert session.scalar(text("PRAGMA foreign_key_check")) is None
 
     summary = client.get(f"/api/v1/video-tracks/{track['id']}/pose-temporal")
     assert summary.status_code == 200

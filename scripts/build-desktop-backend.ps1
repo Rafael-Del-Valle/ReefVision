@@ -374,6 +374,9 @@ $Arguments = @(
     "uvicorn.lifespan.on",
     "--hidden-import",
     "pydantic_core._pydantic_core",
+    # Alembic loads migrations/env.py dynamically; keep its lineage guard in the frozen API.
+    "--hidden-import",
+    "reefvision.db.migration_lineage_guard",
     "--add-data",
     "${AlembicIni};alembic",
     "--add-data",

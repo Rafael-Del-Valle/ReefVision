@@ -8,12 +8,15 @@ from sqlalchemy.orm import Session
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
 from reefvision.schemas.review_queues import (
+    ReviewQueueBulkRequest,
+    ReviewQueueBulkResponse,
     ReviewQueueCreateRequest,
     ReviewQueueItemPageResponse,
     ReviewQueueItemResponse,
     ReviewQueueItemSkipRequest,
     ReviewQueueResponse,
 )
+from reefvision.services.review_queue_bulk import bulk_triage_review_queue
 from reefvision.services.review_queues import ReviewQueueService
 
 router = APIRouter(tags=["review_queues"])
@@ -107,6 +110,19 @@ def list_review_queue_items(
         review_state=review_state,
         model_id=model_id,
     )
+
+
+@router.post(
+    "/review-queues/{queue_id}/items/bulk",
+    response_model=ReviewQueueBulkResponse,
+)
+def bulk_review_queue_items(
+    queue_id: str,
+    payload: ReviewQueueBulkRequest,
+    session: DbSession,
+) -> ReviewQueueBulkResponse:
+    """Manual operator triage, never automatic scientific approval."""
+    return bulk_triage_review_queue(session, queue_id, payload)
 
 
 @router.post("/review-queue-items/{item_id}/start", response_model=ReviewQueueItemResponse)
