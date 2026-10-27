@@ -143,6 +143,9 @@ describe("PointCloudArtifactViewer", () => {
       "not anatomical branch length",
     );
     expect(JSON.stringify(artifact)).toBe(before);
+    expect(screen.getByText(/Point coverage:/)).toHaveTextContent(
+      "Chord endpoint display coverage unassessed",
+    );
   });
 
   it("fails closed on contradictory point-pair indices or distances", () => {
@@ -352,4 +355,72 @@ describe("PointCloudArtifactViewer", () => {
       "Source-axis extrema coverage unassessed",
     );
   });
+  it("shows omitted measured source endpoints without changing the full-cloud chord", () => {
+    const artifact = {
+      ...validArtifact,
+      point_count: 513,
+      preview_point_indices: [0, 256, 512],
+      selected_point_chords: [
+        { point_indices: [0, 2], chord_distance_m: 1 },
+      ],
+      preview_omitted_selected_chord_endpoint_indices: [2],
+      preview_selected_chord_endpoints_covered: false,
+    };
+    const before = JSON.stringify(artifact);
+    render(<PointCloudArtifactViewer artifact={artifact} />);
+    expect(screen.getByText(/Point coverage:/)).toHaveTextContent(
+      "Display omits selected chord endpoints: 2",
+    );
+    expect(screen.getByText(/Source-point chord 0–2:/)).toHaveTextContent(
+      "1.0000 m",
+    );
+    expect(JSON.stringify(artifact)).toBe(before);
+  });
+
+  it("validates endpoint coverage against original source indices and retains legacy previews", () => {
+    const artifact = {
+      ...validArtifact,
+      selected_point_chords: [
+        { point_indices: [0, 2], chord_distance_m: 1 },
+      ],
+      preview_omitted_selected_chord_endpoint_indices: [],
+      preview_selected_chord_endpoints_covered: true,
+    };
+    expect(parsePointCloudRenderArtifact(artifact)).not.toBeNull();
+    for (const metadata of [
+      {
+        preview_omitted_selected_chord_endpoint_indices: [2],
+        preview_selected_chord_endpoints_covered: false,
+      },
+      {
+        preview_omitted_selected_chord_endpoint_indices: [2, 2],
+        preview_selected_chord_endpoints_covered: false,
+      },
+      {
+        preview_omitted_selected_chord_endpoint_indices: [1],
+        preview_selected_chord_endpoints_covered: false,
+      },
+      {
+        preview_omitted_selected_chord_endpoint_indices: [],
+        preview_selected_chord_endpoints_covered: false,
+      },
+      {
+        preview_omitted_selected_chord_endpoint_indices: "2",
+        preview_selected_chord_endpoints_covered: false,
+      },
+      {
+        preview_omitted_selected_chord_endpoint_indices: [2],
+        preview_selected_chord_endpoints_covered: undefined,
+      },
+    ]) {
+      expect(
+        parsePointCloudRenderArtifact({ ...artifact, ...metadata }),
+      ).toBeNull();
+    }
+    render(<PointCloudArtifactViewer artifact={artifact} />);
+    expect(screen.getByText(/Point coverage:/)).toHaveTextContent(
+      "Selected chord endpoints visible",
+    );
+  });
+
 });
