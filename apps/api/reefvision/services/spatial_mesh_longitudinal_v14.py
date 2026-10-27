@@ -582,11 +582,23 @@ def compare_mesh_observations(
         # Older unbound evidence remains readable with explicit QC.
         if registration.source_meters_per_mesh_unit is None:
             warnings.append("registration_calibration_scale_binding_unavailable")
-        elif (
-            registration.source_meters_per_mesh_unit != first.get("meters_per_mesh_unit")
-            or registration.target_meters_per_mesh_unit != second.get("meters_per_mesh_unit")
-        ):
+        elif registration.source_meters_per_mesh_unit != first.get(
+            "meters_per_mesh_unit"
+        ) or registration.target_meters_per_mesh_unit != second.get("meters_per_mesh_unit"):
             raise ValueError("Registration evidence must match both calibration scales")
+        # A calibration QC revision can alter uncertainty intervals without
+        # changing geometry or the central meters-per-unit conversion.
+        # Old registrations without this paired binding remain provisional.
+        if registration.source_relative_scale_uncertainty is None:
+            warnings.append("registration_scale_uncertainty_binding_unavailable")
+        elif registration.source_relative_scale_uncertainty != first.get(
+            "relative_scale_uncertainty"
+        ):
+            raise ValueError("Registration evidence must match both scale uncertainties")
+        elif registration.target_relative_scale_uncertainty != second.get(
+            "relative_scale_uncertainty"
+        ):
+            raise ValueError("Registration evidence must match both scale uncertainties")
         registration_record = registration.model_dump(mode="json", exclude_none=True)
         if registration.registration_operator_id is None:
             warnings.append("registration_operator_attribution_unavailable")
