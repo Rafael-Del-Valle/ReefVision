@@ -59,11 +59,11 @@ def _add_native_review_table(
         allowed_events = (
             "'comment', 'assign', 'unassign', 'triage_start', 'triage_skip', 'triage_return'"
         )
-        if stamped_revision == "0040":
+        if stamped_revision in {"0040", "0041"}:
             allowed_events += ", 'triage_complete'"
         event_type_check = (
             f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed_events}))"
-            if stamped_revision in {"0039", "0040"}
+            if stamped_revision in {"0039", "0040", "0041"}
             else ""
         )
         event_type_decl = "event_type TEXT" if nullable_event_type else "event_type TEXT NOT NULL"
@@ -74,6 +74,19 @@ def _add_native_review_table(
             f"{event_type_decl}, actor TEXT, "
             f"comment TEXT, assignee TEXT, created_at TEXT{event_type_check})"
         )
+        if stamped_revision == "0041":
+            # Synthetic schema identity must include the real 0041 registry
+            # contract, not just the 0040 review-event table.
+            connection.execute("CREATE TABLE projects (id TEXT PRIMARY KEY)")
+            connection.execute("CREATE TABLE review_queues (id TEXT PRIMARY KEY)")
+            connection.execute(
+                "CREATE TABLE review_queue_bulk_requests ("
+                "id TEXT PRIMARY KEY NOT NULL, "
+                "review_queue_id TEXT NOT NULL REFERENCES review_queues(id) ON DELETE RESTRICT, "
+                "project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT, "
+                "action TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT, "
+                "item_ids_json TEXT NOT NULL, created_at TEXT NOT NULL)"
+            )
         if revision is not None:
             connection.execute("UPDATE alembic_version SET version_num = ?", (revision,))
         connection.commit()
@@ -132,7 +145,7 @@ def test_current_database_revision_skips_alembic_upgrade(
     )
     # A bare 0038-0040 stamp is not a valid review-events database.
     # The desktop must validate schema identity even on its fast path.
-    if current_head in {"0038", "0039", "0040"}:
+    if current_head in {"0038", "0039", "0040", "0041"}:
         _add_native_review_table(database)
     before = database.read_bytes()
 
@@ -157,6 +170,12 @@ def test_older_database_revision_still_invokes_alembic_upgrade(
     settings = _desktop_settings(tmp_path / "older")
     _stamp_database(settings, "0034")
 
+    alembic_ini, migrations_dir = desktop.resolve_alembic_paths()
+    config = Config(str(alembic_ini))
+    config.set_main_option("script_location", str(migrations_dir))
+    current_head = ScriptDirectory.from_config(config).get_current_head()
+    assert current_head is not None
+
     calls: list[str] = []
 
     def record_upgrade(config, target: str) -> None:
@@ -164,7 +183,7 @@ def test_older_database_revision_still_invokes_alembic_upgrade(
         calls.append(target)
         # The desktop now checks the post-upgrade revision and lineage.
         # Model a successful migration rather than a no-op mock.
-        _add_native_review_table(settings.resolved_data_dir / "reefvision.db", revision="0040")
+        _add_native_review_table(settings.resolved_data_dir / "reefvision.db", revision=current_head)
 
     monkeypatch.setattr(
         command,
@@ -206,4 +225,21 @@ def test_current_0040_stamp_with_nullable_event_type_fails_closed(
     with pytest.raises(RuntimeError, match="event_type is nullable"):
         desktop.run_pending_migrations(settings)
 
+    assert database.read_bytes() == before
+
+
+def test_0041_stamp_without_bulk_registry_fails_closed_without_mutation(
+    tmp_path: Path,
+) -> None:
+    """A bare 0041 stamp cannot bypass its required QC request registry."""
+    settings = _desktop_settings(tmp_path / "missing-registry")
+    database = _stamp_database(settings, "0040")
+    _add_native_review_table(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE alembic_version SET version_num = '0041'")
+        connection.commit()
+
+    before = database.read_bytes()
+    with pytest.raises(RuntimeError, match="bulk request registry"):
+        desktop.run_pending_migrations(settings)
     assert database.read_bytes() == before
