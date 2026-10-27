@@ -68,6 +68,16 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
     if (!direction) continue;
     const key = JSON.stringify([
       row.project_id,
+      // A current component belongs to its scientific subject; matching grid
+      // coordinates alone must never combine separate tracked organisms.
+      row.subject?.image_id ?? null,
+      row.subject?.video_id ?? null,
+      row.subject?.frame_index ?? null,
+      row.subject?.track_id ?? null,
+      row.subject?.annotation_id ?? null,
+      row.subject?.mask_id ?? null,
+      row.subject?.prediction_id ?? null,
+      row.subject?.model_run_id ?? null,
       row.location.latitude,
       row.location.longitude,
       row.observed_at,
