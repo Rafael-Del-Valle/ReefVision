@@ -485,3 +485,22 @@ graph that must fail without emitting a scientific measurement artifact when its
 calibration evidence is blank. Existing valid saved-graph artifact parity tests
 remain in place. Nonblank evidence remains caller-supplied and **unverified**;
 this does not certify scale, geometry, specimen identity, or branch length.
+
+### Strict numeric provenance for point-cloud calibration and geometry (Track C)
+
+The point-cloud request schema and direct scientific measurement service now reject
+Boolean and numeric-string values for `meters_per_unit`,
+`relative_scale_uncertainty`, and XYZ point coordinates. Pydantic's ordinary
+float coercion would otherwise interpret `true` as `1.0`, potentially turning
+an accidental Boolean calibration or point coordinate into a plausible-looking
+physical measurement. Explicit JSON integers and floating-point numbers remain
+accepted; all existing finite-value and coordinate-range bounds still apply.
+ASCII PLY numeric tokens remain parsed as the PLY text format requires.
+
+A rejected request produces no scientific measurement. Regression coverage checks
+the direct service, standalone project API, and execution of persisted typed
+Workflow Builder graphs: invalid saved graph parameters fail without generating
+a `point_cloud_measurement_preview` artifact. Valid point clouds remain
+provisional: this input-integrity check does not verify ruler measurements,
+specimen identity, coordinate registration, surface area, or biological branch
+length, and no local model checkpoints are transmitted or modified.
