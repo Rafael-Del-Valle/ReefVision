@@ -159,6 +159,23 @@ it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
     expect(currentVectors([{ ...east, location }, north])).toEqual([]);
   }
 });
+it("rejects non-finite or negative current depth on either component", () => {
+  const east = component("current_eastward_velocity", 3);
+  const north = component("current_northward_velocity", 4);
+  const invalidDepths = [
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    -1,
+  ];
+  for (const depth_m of invalidDepths) {
+    expect(currentVectors([{ ...east, depth_m }, north])).toEqual([]);
+    expect(currentVectors([east, { ...north, depth_m }])).toEqual([]);
+  }
+  expect(currentVectors([{ ...east, depth_m: null }, north])).toEqual([]);
+  expect(currentVectors([east, { ...north, depth_m: null }])).toEqual([]);
+});
+
 it("excludes rejected, superseded, duplicate or mismatched coordinates", () => {
   const east = component("current_eastward_velocity", 3);
   const north = component("current_northward_velocity", 4);
