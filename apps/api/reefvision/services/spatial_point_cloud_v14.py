@@ -148,9 +148,13 @@ def measure_point_cloud_preview(
         )
     vertices: list[tuple[float, float, float]] = []
     for point in points:
-        if not isinstance(point, (list, tuple)) or len(point) != 3 or any(
-            type(v) not in (int, float) or abs(v) > 1_000_000_000 or not isfinite(v)
-            for v in point
+        if (
+            not isinstance(point, (list, tuple))
+            or len(point) != 3
+            or any(
+                type(v) not in (int, float) or abs(v) > 1_000_000_000 or not isfinite(v)
+                for v in point
+            )
         ):
             raise ValueError("Every point requires three bounded finite numeric coordinates")
         vertices.append((float(point[0]), float(point[1]), float(point[2])))
@@ -344,6 +348,11 @@ def measure_point_cloud_preview(
         "qc_warnings": (
             (["duplicate_points_present"] if unique_count < len(vertices) else [])
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
+            + (
+                ["preview_omits_selected_chord_endpoints"]
+                if omitted_chord_endpoints
+                else []
+            )
         ),
         "measurement_status": "caller_supplied_unverified",
         "provenance": {
