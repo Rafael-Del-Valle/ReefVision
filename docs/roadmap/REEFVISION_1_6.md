@@ -1068,3 +1068,27 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   Ruff formatter logs. GitHub source read-back and CI are required to verify
   this iteration; Windows installed-GUI/MSI upgrade, full scientific acceptance
   and the independent 1.1/1.6 Alembic lineage conflict remain blockers.
+
+## 2026-10-26 — QC coordination history fail-closed on fresh writes (Track D)
+
+- Preflight: isolated draft PR #77 at `af1d9a8c`, 20 exact-head
+  GitHub Actions completed: 17 successful, three backend failures
+  (CI, Pose, ReefVision 1.0 Acceptance). All three fail at Ruff F821
+  undefined `pytest`, `cast`, `FastAPI` in the newly added event test;
+  frontend and Windows Desktop Build succeeded.
+- Production gap: keyed retries and paginated history reads rejected
+  cross-project/queue reviewer events, but a **new** request key could
+  append fresh coordination evidence while earlier history was corrupted.
+  The common queue/item scope check now rejects both reads and new writes
+  before inserting audit events; it does not repair, hide or delete history.
+- Standalone API regression covers cross-project and cross-queue corruption,
+  blocked keyed retry, blocked new comment, empty-page history reads,
+  test-only restoration, successful idempotent retry and fresh comment.
+  The saved executable `qc_review_queue` Workflow Builder regression
+  also rejects a new comment while its persisted review history is tainted.
+- Repaired the exact missing imports reported by Ruff. No schema migration,
+  new pretrained models, automatic scientific approval, user-asset deletion
+  or cross-version branch changes.
+- **Not accepted:** new-head CI and new regression execution, independent
+  1.1/1.6 Alembic 0038 collision, native installed Windows GUI/MSI upgrade
+  and rollback, real-image scientific acceptance. Release **HOLD**.
