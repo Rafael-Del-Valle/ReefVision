@@ -79,6 +79,33 @@ def test_population_csv_reports_declared_unit_weighting_without_inference(
     assert population["evidence_level"] == "linked_unverified"
 
 
+def test_population_csv_carries_rechecked_source_lineage_for_all_rows(
+    client: TestClient,
+) -> None:
+    """Both excluded and population rows expose the source audit chain."""
+    source = _dated_artifact(client)
+    rows = _rows(render_ecology_population_csv(source))
+    assert {row["export_schema_version"] for row in rows} == {
+        "ecology-population-export-0002"
+    }
+    assert {row["row_type"] for row in rows} == {"declared_unit", "population_stratum"}
+    expected = {
+        "source_fingerprint_rechecked": "true",
+        "source_registry_history_sha256": source.source_registry_history_sha256 or "",
+        "source_image_evidence_sha256": source.source_image_evidence_sha256 or "",
+        "source_annotation_evidence_sha256": source.source_annotation_evidence_sha256 or "",
+        "source_calibration_evidence_sha256": source.source_calibration_evidence_sha256 or "",
+    }
+    for row in rows:
+        for field, value in expected.items():
+            assert row[field] == value
+
+    tampered = source.model_copy(
+        update={"source_calibration_evidence_sha256": "0" * 64}
+    )
+    with pytest.raises(ValidationError, match="source input fingerprint"):
+        render_ecology_population_csv(tampered)
+
 
 def test_population_csv_stratum_fields_match_typed_scientific_summary(
     client: TestClient,
