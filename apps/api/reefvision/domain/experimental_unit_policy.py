@@ -76,6 +76,25 @@ _TECHNICAL_REPLICATES = frozenset(
 )
 
 
+# Exporters and UI clients also use compact or camel-case technical labels.
+# Do not mistake these derived observations for biological experimental units.
+_COMPACT_TECHNICAL_REPLICATES = frozenset(
+    {
+        "videoframe",
+        "posekeypoint",
+        "trackingtracklet",
+        "segmentationmask",
+        "segmentationpolygon",
+        "modelprediction",
+        "boundingbox",
+        "imagepatch",
+        "imagecrop",
+        "cameraview",
+        "detectionbox",
+    }
+)
+
+
 def require_ecological_unit_type(value: str | None) -> str | None:
     """Validate declared units without asserting their biological independence.
 
@@ -90,8 +109,11 @@ def require_ecological_unit_type(value: str | None) -> str | None:
     cleaned = value.strip()
     if not cleaned:
         raise ValueError("Experimental unit type cannot be blank")
-    tokens = set(re.findall(r"[a-z0-9]+", cleaned.casefold()))
-    if tokens & _TECHNICAL_REPLICATES:
+    # Split lower-to-upper boundaries before case folding (e.g. VideoFrame).
+    # Explicit compact tokens also reject all-lowercase exports (videoframe).
+    words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", cleaned)
+    tokens = set(re.findall(r"[a-z0-9]+", words.casefold()))
+    if tokens & (_TECHNICAL_REPLICATES | _COMPACT_TECHNICAL_REPLICATES):
         raise ValueError(
             "Image, frame, camera and annotation records are technical replicates, "
             "not independent ecological experimental units"
