@@ -77,7 +77,6 @@ def _full_parent_roster_feasible(
     return True
 
 
-
 def _assert_joint_two_parent_rosters(
     full_parent_rosters: list[tuple[tuple[str, ...], tuple[str, ...]]],
     possible_parents_by_organism: dict[str, set[str]],
