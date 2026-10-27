@@ -434,3 +434,24 @@ comparison and executable persisted Workflow Builder graphs use the same
 validation and preserve evidence in provenance; tests cover a successful
 scale-bound saved workflow, stale-scale rejection with identical geometry,
 incomplete bindings, and flagged legacy evidence.
+
+
+### Calibration-provenance-bound registration evidence (Track C)
+
+A calibration can be reinterpreted without changing the imported triangles,
+meters-per-unit value, or numerical uncertainty. The registration evidence
+schema therefore accepts an optional **complete quartet**:
+`source_calibration_method`, `target_calibration_method`,
+`source_calibration_evidence`, and `target_calibration_evidence`.
+All four must be supplied together and must exactly match the corresponding
+mesh preview provenance. A revised method or supporting evidence string rejects
+reuse of a stale registration, even when both geometry fingerprints and scales
+remain unchanged. These strings are audit bindings, not evidence that the
+calibration itself is accurate.
+
+Legacy registrations without this quartet remain readable with the explicit
+`registration_calibration_provenance_binding_unavailable` QC warning. Partial
+or malformed quartets are rejected. The standalone longitudinal API and saved,
+typed Workflow Builder graph use the same comparison engine, and a saved-workflow
+regression exercises a fully bound registration. No calibration, spatial
+alignment, organism identity, or biological growth is marked verified.
