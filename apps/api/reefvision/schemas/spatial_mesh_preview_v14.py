@@ -29,9 +29,7 @@ class MeshPreviewRequest(BaseModel):
     source_label: str | None = Field(default=None, max_length=200)
     # Optional replay guard for imported source bytes (OBJ/PLY UTF-8 or decoded GLB).
     # Matching bytes do not establish calibration, specimen identity or human review.
-    expected_source_payload_sha256: str | None = Field(
-        default=None, pattern=r"^[0-9a-f]{64}$"
-    )
+    expected_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     specimen_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
