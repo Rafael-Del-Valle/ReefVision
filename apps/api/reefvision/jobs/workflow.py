@@ -213,6 +213,18 @@ def process_workflow_run_job(
             job.completed_at = _now()
             session.commit()
             return False
+        # A queued job and its run must remain in the same project. A stale
+        # or corrupted job ownership field must not execute another project's
+        # saved scientific workflow under the wrong job identity.
+        if job.project_id != run.project_id:
+            job.status = "failed"
+            job.error_message = "Workflow job project ownership no longer matches run"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
         graph_record = session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
         if graph_record is None:
             job.status = "failed"
