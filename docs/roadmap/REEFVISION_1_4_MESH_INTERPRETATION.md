@@ -528,3 +528,24 @@ overlapping triangles, reconstruction folds, or near-duplicate coordinates;
 those require separate reconstruction review. This is an area-integrity
 safeguard, not proof of coral tissue completeness, organism identity,
 calibration validity, or anatomical branch length.
+
+## Imported 3D source-byte provenance (Track C)
+
+The bounded OBJ, ASCII PLY, and GLB 2.0 mesh preview now records
+`provenance.source_payload_sha256` and `source_payload_size_bytes`.
+OBJ/PLY fingerprints use the exact caller-supplied UTF-8 text bytes; GLB
+fingerprints use the **decoded binary file**, not its base64 transport string.
+These byte-exact values complement `geometry_sha256`, which identifies the
+parsed indexed triangles. Two differently formatted source files can yield
+identical measured geometry but different source-byte fingerprints; whitespace
+changes to a valid OBJ likewise change the source fingerprint without changing
+its geometric measurements. For directly supplied indexed triangles, both
+source-file fields are explicitly `null` rather than inventing a file.
+
+The standalone mesh endpoint and persisted executable Workflow Builder node
+produce identical source fingerprints and provisional measurement provenance.
+The `test_spatial_mesh_source_fingerprint_v14.py` regression covers all
+three import formats, saved-graph execution, and indexed-triangle fallback.
+This is a reproducibility prerequisite for future project-scoped content-addressed
+asset imports, **not** persistent file storage, verified calibration, verified
+source acquisition, or an anatomical coral measurement.
