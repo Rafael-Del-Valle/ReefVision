@@ -431,6 +431,23 @@ def _reused_pose_training_result(
     if job.project_id != run.project_id:
         raise ValidationError("Recovered pose training job project ownership changed")
 
+    # The completed child job must still identify this exact frozen training
+    # run and saved workflow node. A substituted request cannot authorize
+    # replay of another node's checkpoint, even within the same project.
+    request = job.request_json
+    expected_validation_id = validation_dataset.id if validation_dataset is not None else None
+    if (
+        job.job_type != "training"
+        or not isinstance(request, dict)
+        or request.get("training_run_id") != run.id
+        or request.get("pose_training_dataset_id") != dataset.id
+        or request.get("pose_validation_dataset_id") != expected_validation_id
+        or request.get("created_by_workflow") is not True
+        or request.get("workflow_run_id") != workflow_run_id
+        or request.get("workflow_node_run_id") != workflow_node_run_id
+    ):
+        raise ValidationError("Recovered pose training child job lineage changed")
+
     checkpoint = resolve_managed_project_path(
         settings,
         run.result_checkpoint_path,
