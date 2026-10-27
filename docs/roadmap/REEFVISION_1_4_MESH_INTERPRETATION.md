@@ -415,3 +415,22 @@ coral movement was absent or the registration was scientifically validated.
 Standalone analysis and saved executable typed Workflow Builder graphs share
 the same comparison engine; regression assertions verify the flags and full
 persisted-artifact parity for supported, disputed, and inconclusive reviews.
+
+### Calibration-scale-bound registration evidence (Track C)
+
+A geometry SHA-256 fingerprint identifies reconstruction geometry, not the
+physical scale applied to it. An imported mesh can be recalibrated without
+changing its vertex/face fingerprint. Optional paired
+`source_meters_per_mesh_unit` and `target_meters_per_mesh_unit` values now
+bind a caller-supplied registration to the exact scale of each observation.
+Providing only one scale is invalid. A mismatch rejects the comparison rather
+than silently applying a meter-valued transform to recalibrated geometry.
+
+Legacy evidence without either scale remains readable, but emits
+`registration_calibration_scale_binding_unavailable` as scientific QC. These
+scale bindings are **caller-supplied consistency checks**, not verified
+calibration, accurate alignment, or proof of biological growth. Standalone
+comparison and executable persisted Workflow Builder graphs use the same
+validation and preserve evidence in provenance; tests cover a successful
+scale-bound saved workflow, stale-scale rejection with identical geometry,
+incomplete bindings, and flagged legacy evidence.
