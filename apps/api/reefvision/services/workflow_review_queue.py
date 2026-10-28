@@ -164,8 +164,7 @@ def create_review_queue_workflow_artifact(
             or saved_output.producer_port_id != "queue"
             or saved_output.data_type != "review_queue_reference"
             or not isinstance(saved_output.payload_json, dict)
-            or saved_output.payload_sha256
-            != canonical_json_sha256(saved_output.payload_json)
+            or saved_output.payload_sha256 != canonical_json_sha256(saved_output.payload_json)
             or saved_output.payload_json != payload
         ):
             raise ValidationError("QC review-queue saved output no longer matches its queue")
