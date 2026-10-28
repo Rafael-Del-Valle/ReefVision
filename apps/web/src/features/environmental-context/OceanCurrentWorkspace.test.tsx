@@ -107,9 +107,9 @@ it("opens cached currents with time, depth and provenance", async () => {
     target: { value: "cache" },
   });
   expect(await screen.findByText("5.000 m/s")).toBeInTheDocument();
-  expect(screen.getByRole("list", { name: "Current measurements" })).toHaveTextContent(
-    "36.9° toward true north",
-  );
+  expect(
+    screen.getByRole("list", { name: "Current measurements" }),
+  ).toHaveTextContent("36.9° toward true north");
   expect(screen.getByText(/stale_offline/)).toBeInTheDocument();
   expect(
     screen.getByRole("region", { name: "Current slice descriptive metrics" }),
@@ -186,6 +186,38 @@ it("filters unpaired times and separates depth datums", async () => {
   expect(screen.queryByText("5.000 m/s")).not.toBeInTheDocument();
   const datumLabel = screen.getByText(/32.5, -79.5 · 5 m/);
   expect(datumLabel).toHaveTextContent("(chart_datum)");
+});
+it("withholds descriptive metrics for incompatible source provenance", async () => {
+  const alternateSource = rows
+    .filter(
+      (row) =>
+        row.observed_at === "2026-04-03T00:00:00Z" && row.depth_m === 5,
+    )
+    .map((row) => ({
+      ...row,
+      id: `alternate-source-${row.id}`,
+      location: { latitude: 32.6, longitude: -79.6 },
+      provenance: { ...row.provenance, dataset_id: "different-model" },
+    }));
+  setup([...rows, ...alternateSource]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  expect(
+    await screen.findByText(/Descriptive current-slice metrics withheld/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("list", { name: "Current measurements" }).querySelectorAll(
+      "li",
+    ),
+  ).toHaveLength(2);
+  expect(
+    screen.queryByRole("region", { name: "Current slice descriptive metrics" }),
+  ).not.toBeInTheDocument();
 });
 it("explains caches with no QC-compatible current pair", async () => {
   setup([rows[0]]);

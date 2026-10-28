@@ -298,6 +298,13 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                   </p>
                 </section>
               )}
+              {vectors.length > 0 && !metrics && (
+                <p role="status">
+                  Descriptive current-slice metrics withheld: selected vectors
+                  have incompatible source or acquisition provenance. Review
+                  individual measurements rather than averaging across datasets.
+                </p>
+              )}
               {allVectors.length === 0 && (
                 <p role="status">
                   No QC-compatible paired eastward/northward currents in this
