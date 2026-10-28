@@ -158,7 +158,7 @@ it("only offers paired QC-compatible times and separates depth datums", async ()
   fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
     target: { value: "cache" },
   });
-  expect(await screen.findByText("5.000 m/s")).toBeInTheDocument();
+  await screen.findByRole("option", { name: "5 m (sea_surface)" });
   expect(screen.getByLabelText("Current time (UTC)")).toHaveValue(
     "2026-04-03T00:00:00Z",
   );
@@ -173,11 +173,17 @@ it("only offers paired QC-compatible times and separates depth datums", async ()
     screen.getByRole("option", { name: "5 m (sea_surface)" }),
   ).toBeInTheDocument();
   fireEvent.change(depthSelect, {
+    target: { value: JSON.stringify([5, "sea_surface"]) },
+  });
+  expect(screen.getByText("5.000 m/s")).toBeInTheDocument();
+  fireEvent.change(depthSelect, {
     target: { value: JSON.stringify([5, "chart_datum"]) },
   });
   expect(screen.getByText("10.000 m/s")).toBeInTheDocument();
   expect(screen.queryByText("5.000 m/s")).not.toBeInTheDocument();
-  expect(screen.getByText(/5 m \(chart_datum\)/)).toBeInTheDocument();
+  expect(screen.getByText(/32.5, -79.5 · 5 m/)).toHaveTextContent(
+    "(chart_datum)",
+  );
 });
 it("never presents an empty or failed cache as measured currents", async () => {
   const fetch = setup();
