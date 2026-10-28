@@ -29,6 +29,26 @@ installed desktop/GPU/scientific acceptance. A separate bounded ASCII PLY
 point-cloud preview and interactive viewer already exist, but their transient
 visualization and chord measurements do not establish verified anatomy.
 
+## Selected triangle geometric area inspection (provisional)
+
+The saved-workflow mesh viewer now computes a read-only area for the **selected
+sampled triangle**, directly from its three calibrated XYZ vertices in meters
+using half the 3D cross-product magnitude. This area is independent of yaw,
+pitch, zoom, and the orthographic SVG projection; a collinear triangle reports
+zero area. Numeric overflow is reported as unavailable rather than a plausible
+area. The calculation never modifies the persisted artifact or its source-face
+index, and frontend regression tests cover 3D orientation invariance and
+degenerate triangles.
+
+**This is not the full-resolution mesh surface-area measurement**. It is a
+single sampled-face geometric inspection aid, not a biological tissue surface,
+validated anatomical branch measurement, or independent calibration check.
+The display does not infer scale, reconstruction, registration, or sampling
+uncertainty; the shared standalone mesh API and executable persisted
+`mesh_surface_preview` Workflow Builder node remain authoritative for
+full-mesh provisional scientific measurements and scale-only intervals.
+Neither path automatically verifies the specimen or calibration.
+
 ## Imported mesh byte-exact replay guard (provisional)
 
 OBJ, ASCII PLY, and GLB mesh-preview requests may optionally provide
