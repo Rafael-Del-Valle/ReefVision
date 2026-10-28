@@ -880,6 +880,62 @@ def test_pose_training_can_require_separate_validation_truth(
         )
 
 
+    # A persisted Workflow Builder parameter must be an actual boolean:
+    # "false" is truthy in Python, while 0/[] previously became False.
+    for invalid_flag in ("false", "true", 0, 1, []):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(
+                ValidationError,
+                match="require_validation_dataset must be a boolean",
+            ),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                initial_model_payload={"model_id": model_id},
+                parameters={
+                    "require_validation_dataset": invalid_flag,
+                    "training_config": {"epochs": 1},
+                },
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+
+    # Explicit False remains valid and does not claim independent validation.
+    with app.state.session_factory() as session:
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            initial_model_payload={"model_id": model_id},
+            parameters={
+                "require_validation_dataset": False,
+                "training_config": {"epochs": 1},
+            },
+            processor=_fake_pose_processor,
+        )
+    assert result["validation_mode"] == "none"
+
+
 def test_pose_validation_rejects_second_verified_round_from_same_video(
     client: TestClient,
     test_settings: Settings,
