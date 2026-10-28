@@ -1237,6 +1237,7 @@ def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
             processor=_fake_pose_processor,
         )
 
+
 def test_pose_workflow_rejects_lossy_initialization_mode_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
