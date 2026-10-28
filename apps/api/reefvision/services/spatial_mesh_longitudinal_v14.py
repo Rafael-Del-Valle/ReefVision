@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from itertools import zip_longest
-from math import atan2, degrees, exp, fsum, hypot, isclose, isfinite, log
+from math import atan2, degrees, exp, fsum, hypot, isclose, isfinite, log, log2
 from re import fullmatch
 from typing import Any
 
@@ -566,6 +566,7 @@ def compare_mesh_observations(
     # distribution with zero makes the distance symmetric and defined even
     # when reconstructions contain different numbers of disconnected patches.
     ranked_patch_area_profile_distance = None
+    ranked_patch_area_jensen_shannon_divergence_bits = None
     if before_patch_distribution is not None and after_patch_distribution is not None:
         ranked_before = sorted(before["edge_connected_patch_surface_area_fractions"], reverse=True)
         ranked_after = sorted(after["edge_connected_patch_surface_area_fractions"], reverse=True)
@@ -576,6 +577,21 @@ def compare_mesh_observations(
         # All source fractions have been validated as finite and summing to
         # one. Clamp only tiny floating-point overshoot of the [0, 1] bound.
         ranked_patch_area_profile_distance = min(1.0, max(0.0, ranked_patch_area_profile_distance))
+        # Jensen-Shannon divergence (base-2, [0, 1]) detects changes in
+        # the ranked area distribution without claiming patch correspondence.
+        # Zero-area ranks contribute zero, including padded absent patches.
+        ranked_patch_area_jensen_shannon_divergence_bits = fsum(
+            0.5 * early * log2(early / midpoint) if early > 0 else 0.0
+            for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
+            for midpoint in ((early + late) / 2,)
+        ) + fsum(
+            0.5 * late * log2(late / midpoint) if late > 0 else 0.0
+            for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
+            for midpoint in ((early + late) / 2,)
+        )
+        ranked_patch_area_jensen_shannon_divergence_bits = min(
+            1.0, max(0.0, ranked_patch_area_jensen_shannon_divergence_bits)
+        )
     if patch_concentration_delta is None:
         warnings.append("patch_area_distribution_comparison_unavailable")
     else:
@@ -998,6 +1014,9 @@ def compare_mesh_observations(
         ),
         "delta_area_weighted_effective_patch_count": effective_patch_count_delta,
         "ranked_patch_area_profile_distance": ranked_patch_area_profile_distance,
+        "ranked_patch_area_jensen_shannon_divergence_bits": (
+            ranked_patch_area_jensen_shannon_divergence_bits
+        ),
         "reconstruction_face_count_ratio_after_to_before": face_count_ratio,
         "registration_residual_to_smaller_extent_ratio": (
             registration_residual_to_smaller_extent_ratio
@@ -1085,6 +1104,7 @@ def compare_mesh_observations(
             "delta_patch_area_concentration_index",
             "delta_area_weighted_effective_patch_count",
             "ranked_patch_area_profile_distance",
+            "ranked_patch_area_jensen_shannon_divergence_bits",
             "scale_normalized_surface_area_ratio_after_to_before",
             "scale_normalized_bounding_box_diagonal_ratio_after_to_before",
             "registered_surface_centroid_offset_target_frame_m",
