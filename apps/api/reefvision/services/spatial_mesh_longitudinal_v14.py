@@ -36,8 +36,14 @@ def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | N
         record.get("edge_connected_patch_area_concentration_index"),
         record.get("area_weighted_effective_patch_count"),
     )
+    patch_count = record.get("edge_connected_patch_count")
+    if patch_count is not None and (type(patch_count) is not int or patch_count < 1):
+        raise ValueError("Patch count must be a positive integer")
     if fractions is None:
-        if any(value is not None for value in stored):
+        if (
+            any(value is not None for value in stored)
+            or record.get("edge_connected_patch_surface_areas_m2") is not None
+        ):
             raise ValueError("Patch concentration requires source area fractions")
         return None
     if (
@@ -49,7 +55,6 @@ def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | N
         )
     ):
         raise ValueError("Patch area fractions must be a nonempty finite unit-range list")
-    patch_count = record.get("edge_connected_patch_count")
     if patch_count is not None and len(fractions) != patch_count:
         raise ValueError("Patch area fractions inconsistent with topology patch count")
     if not isclose(fsum(fractions), 1.0, rel_tol=1e-9, abs_tol=1e-9):
