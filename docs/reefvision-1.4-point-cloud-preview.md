@@ -283,3 +283,21 @@ This is **not** spatial registration, calibration verification, anatomical
 landmark identification, coral condition assessment, or persistent 3D storage.
 A source-index selection is a display inspection, not a scientist-verified
 biological annotation.
+
+## Mesh viewer provenance guard (October 27, 2026)
+
+The sampled-triangle viewer rejects saved display payloads that explicitly
+claim verified calibration, coordinate registration, specimen identity,
+observation metadata, or a measurement status other than
+`caller_supplied_unverified`. Contradictory or malformed supplied calibration
+provenance also fails closed. This prevents a preview-only surface from
+silently presenting incompatible scientific review claims. Existing legacy
+display artifacts that omit optional review metadata remain viewable and are
+still labeled provisional.
+
+This is a frontend scientific-integrity check, not a verification workflow:
+source-file fingerprints, human review, calibration and registration evidence
+must still be assessed independently. It does not change standalone mesh
+measurements or saved Workflow Builder execution and does not create
+persistent project-scoped 3D assets. Regression tests cover invalid claims,
+the fail-closed display, and legacy compatibility.
