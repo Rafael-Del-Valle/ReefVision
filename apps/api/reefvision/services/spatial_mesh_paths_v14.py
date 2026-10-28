@@ -68,11 +68,25 @@ def mesh_edge_paths(
         chord_m: float | None = None
         detour_ratio: float | None = None
         path_qc_warnings: list[str] | None = None
+        path_edge_lengths_m: list[float] | None = None
+        path_edge_length_scale_intervals_m: list[list[float]] | None = None
         if status == "connected":
             route = [end]
             while route[-1] != start:
                 route.append(parent[route[-1]])
             route.reverse()
+            # Preserve every traversed geometric edge for independent route
+            # inspection. These are mesh-edge distances, not coral centerlines.
+            path_edge_lengths_m = [
+                adjacency[a][b] * scale for a, b in pairwise(route)
+            ]
+            if any(not isfinite(length) for length in path_edge_lengths_m):
+                raise ValueError("Calibrated mesh path segment length overflowed")
+            if scale_uncertainty is not None:
+                path_edge_length_scale_intervals_m = [
+                    [length * (1 - scale_uncertainty), length * (1 + scale_uncertainty)]
+                    for length in path_edge_lengths_m
+                ]
             meters = shortest[end] * scale
             if not isfinite(meters):
                 raise ValueError("Calibrated mesh path length overflowed")
@@ -115,6 +129,8 @@ def mesh_edge_paths(
                 "end_vertex_index": end,
                 "status": status,
                 "path_vertex_indices": route,
+                "path_edge_lengths_m": path_edge_lengths_m,
+                "path_edge_length_scale_intervals_m": path_edge_length_scale_intervals_m,
                 "path_qc_warnings": path_qc_warnings,
                 "edge_count": len(route) - 1 if route is not None else None,
                 "length_m": meters,
