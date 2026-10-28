@@ -766,6 +766,7 @@ def test_v3_accepts_real_pending_count_normalization(pending_count: int | float)
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
     validate_saved_queue_snapshot(queue, items)
 
+
 @pytest.mark.parametrize(
     ("signal_id", "false_flag"),
     [
@@ -806,3 +807,47 @@ def test_v3_accepts_genuine_binary_qc_flags(signal_id: str, flag: int | float) -
         part["normalized_value"] = flag
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
     validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "scoring_weight",
+        "confidence_threshold",
+        "priority_score",
+        "raw_signal",
+        "normalized_signal",
+        "breakdown_value",
+        "summary_average",
+    ],
+)
+def test_saved_qc_snapshot_rejects_oversized_json_integer_without_overflow(
+    field: str,
+) -> None:
+    """A corrupted persisted JSON integer must fail closed, never raise OverflowError."""
+    queue, items = snapshot()
+    huge = 10**400  # Valid Python/JSON integer, but math.isfinite cannot convert it.
+    if field == "scoring_weight":
+        queue.configuration_json["weights"]["signal"] = huge
+    elif field == "confidence_threshold":
+        queue.configuration_json["review_below_confidence"] = huge
+    elif field == "priority_score":
+        items[0].score = huge
+    elif field == "raw_signal":
+        items[0].signal_values_json["signal"] = huge
+    elif field == "normalized_signal":
+        items[0].normalized_signals_json["signal"] = huge
+    elif field == "breakdown_value":
+        items[0].score_breakdown_json[0]["raw_value"] = huge
+    else:
+        queue.summary_json["average_score"] = huge
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_v3_saved_pending_count_rejects_oversized_integer_without_overflow() -> None:
+    """The frozen v3 count normalization also rejects unrepresentable JSON numbers."""
+    queue, items = _v3_snapshot()
+    items[0].signal_values_json["pending_proposals"] = 10**400
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
