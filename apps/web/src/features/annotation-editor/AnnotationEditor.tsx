@@ -4011,9 +4011,7 @@ export function AnnotationEditor({
                     const color = labelClass?.display_color ?? "#72dbc9";
                     const selected = state.selectedMaskIds.includes(mask.id);
 
-                    if (
-                      usesRasterMaskOverlay(mask)
-                    ) {
+                    if (usesRasterMaskOverlay(mask)) {
                       return (
                         <image
                           key={mask.id}
