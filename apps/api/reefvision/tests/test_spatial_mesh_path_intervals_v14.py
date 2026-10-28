@@ -25,11 +25,13 @@ def test_path_scale_intervals_survive_saved_workflow(client: TestClient) -> None
     assert connected["length_scale_interval_m"] == pytest.approx([0.009, 0.011])
     assert connected["endpoint_chord_scale_interval_m"] == pytest.approx([0.009, 0.011])
     assert connected["path_edge_lengths_m"] == pytest.approx([0.01])
+    assert connected["path_vertices_in_source_frame_m"] == [[0.0, 0.0, 0.0], [0.01, 0.0, 0.0]]
     assert connected["path_edge_length_scale_intervals_m"][0] == pytest.approx([0.009, 0.011])
     for route in expected[1:]:
         assert route["length_scale_interval_m"] is None
         assert route["endpoint_chord_scale_interval_m"] is None
         assert route["path_edge_lengths_m"] is None
+        assert route["path_vertices_in_source_frame_m"] is None
         assert route["path_edge_length_scale_intervals_m"] is None
 
     graph = {
@@ -89,6 +91,13 @@ def test_two_edge_route_retains_segment_geometry_and_uncertainty() -> None:
     assert route["status"] == "connected"
     assert route["path_vertex_indices"] in ([0, 1, 3], [0, 2, 3])
     assert route["path_edge_lengths_m"] == pytest.approx([0.1, 0.1])
+    expected_vertices = [
+        [coordinate * 0.1 for coordinate in vertex]
+        for vertex in ([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]][index]
+                       for index in route["path_vertex_indices"])
+    ]
+    assert route["path_vertices_in_source_frame_m"] == expected_vertices
+    assert len(route["path_vertices_in_source_frame_m"]) == route["edge_count"] + 1
     for interval in route["path_edge_length_scale_intervals_m"]:
         assert interval == pytest.approx([0.09, 0.11])
     assert sum(route["path_edge_lengths_m"]) == pytest.approx(route["length_m"])
