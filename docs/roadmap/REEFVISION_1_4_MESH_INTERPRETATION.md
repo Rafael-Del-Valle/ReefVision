@@ -602,3 +602,31 @@ typed, persisted Workflow Builder graph share the same comparison engine;
 `test_spatial_mesh_longitudinal_patch_concentration_v14.py` covers numeric
 examples, malformed source metadata, legacy fallback, disputed identity,
 and saved-workflow artifact parity.
+
+### Ranked patch-area profile distance across timepoints (Track C)
+
+The provisional longitudinal mesh comparison now includes
+`ranked_patch_area_profile_distance`, a dimensionless reconstruction-QC
+descriptor computed from the **complete-mesh** surface-area fractions of
+edge-connected patches. Each observation's fractions are independently sorted
+largest to smallest; missing ranks in the shorter list are padded with zero.
+The reported value is half the sum of absolute differences between ranks,
+bounded by 0 and 1. A value of 0 means identical *ranked area distributions*,
+not identical mesh geometry or specimen identity. For a change from patch
+fractions [0.75, 0.25] to [0.5, 0.5], the value is **0.25**. It is unchanged
+by patch index reordering or common calibration-scale changes.
+
+The calculation deliberately **does not match individual patches** across
+surveys. Changes can arise from occlusion, reconstruction quality, tessellation,
+mesh cleanup, or scan coverage rather than coral fragmentation or growth.
+The artifact carries `ranked_patch_area_profile_distance_not_patch_correspondence`
+as a QC warning and retains provisional human-review requirements. If either
+observation lacks a valid distribution, the distance is null; contradictory
+stored concentration or fraction metadata is rejected. A disputed or
+inconclusive independent specimen-identity review also withholds the distance
+while preserving each observation's original measurements. The standalone
+longitudinal API and executable, persisted typed Workflow Builder graph use
+the same engine; regression tests cover known fractions, patch-order
+invariance, different patch counts, missing legacy evidence, disputed identity,
+and complete saved-workflow artifact parity. No cloud processing or model
+checkpoint changes are involved.
