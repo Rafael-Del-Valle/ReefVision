@@ -407,6 +407,62 @@ class EcologyIdentityRegistryResponse(BaseModel):
         if self.snapshot_sha256.lower() != expected_snapshot:
             raise ValueError("Ecological registry identity snapshot fingerprint mismatch")
 
+        # Rehydrate the producer's signed image-link collection as well. The
+        # metadata-aware v2 digest freezes the source-image capture snapshot;
+        # v1 saved artifacts predate that field and can only use the old digest
+        # when *every* link is explicitly legacy-unfrozen.
+        if (
+            "image_evidence_links" in self.model_fields_set
+            and self.image_evidence_sha256 is not None
+        ):
+            image_rows = [
+                {
+                    "id": row.id,
+                    "organism_key": row.organism_key,
+                    "identity_revision": row.identity_revision,
+                    "image_id": row.image_id,
+                    "image_sha256": row.image_sha256,
+                    "source_metadata_sha256": row.source_metadata_sha256,
+                    "source_metadata_evidence_status": row.source_metadata_evidence_status,
+                    "reason": row.reason,
+                    "created_at": row.created_at.isoformat(),
+                }
+                for row in self.image_evidence_links
+            ]
+            expected_image = canonical_json_sha256(
+                {
+                    "algorithm_version": "ecology-image-evidence-0002",
+                    "project_id": self.project_id,
+                    "links": image_rows,
+                }
+            )
+            if self.image_evidence_sha256.lower() != expected_image:
+                legacy_rows = [
+                    {
+                        key: value
+                        for key, value in row.items()
+                        if key not in (
+                            "source_metadata_sha256",
+                            "source_metadata_evidence_status",
+                        )
+                    }
+                    for row in image_rows
+                ]
+                legacy_eligible = all(
+                    row.source_metadata_sha256 is None
+                    and row.source_metadata_evidence_status == "legacy_unfrozen"
+                    for row in self.image_evidence_links
+                )
+                expected_legacy = canonical_json_sha256(
+                    {
+                        "algorithm_version": "ecology-image-evidence-0001",
+                        "project_id": self.project_id,
+                        "links": legacy_rows,
+                    }
+                )
+                if not legacy_eligible or self.image_evidence_sha256.lower() != expected_legacy:
+                    raise ValueError("Ecological registry image evidence fingerprint mismatch")
+
         # Replay must not accept modified signed annotation/calibration links.
         # Missing digests on historical artifacts are not retroactively signed.
         if (
