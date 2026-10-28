@@ -97,4 +97,54 @@ describe("MeshArtifactViewer", () => {
       screen.getByText(/Calibration and coordinate registration/),
     ).toHaveTextContent("unverified");
   });
+  it("inspects source triangle vertices without changing the saved scientific artifact", () => {
+    const before = JSON.stringify(validArtifact);
+    render(<MeshArtifactViewer artifact={validArtifact} />);
+    const triangle = screen.getByRole("button", {
+      name: "Inspect source triangle 7",
+    });
+    expect(triangle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.keyDown(triangle, { key: "Enter" });
+    expect(triangle).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+    ).toHaveTextContent("vertex 2 (1.00000, 0.00000, 0.00000) m");
+    expect(
+      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+    ).toHaveTextContent("not an anatomical branch or verified surface");
+    expect(JSON.stringify(validArtifact)).toBe(before);
+  });
+
+  it("does not transfer a source triangle selection to another reconstruction", () => {
+    const { rerender } = render(
+      <MeshArtifactViewer artifact={validArtifact} />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect source triangle 7" }),
+    );
+    expect(
+      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+    ).toBeInTheDocument();
+    rerender(<MeshArtifactViewer artifact={{ ...validArtifact }} />);
+    expect(
+      screen.queryByText(/Source triangle 7 \\(unverified source frame\\)/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Select a displayed source triangle/),
+    ).toBeInTheDocument();
+  });
+
+  it("rejects duplicate source-face identities in a sampled mesh", () => {
+    expect(
+      parseMeshRenderArtifact({
+        ...validArtifact,
+        preview_faces_local_indices: [
+          [0, 1, 2],
+          [0, 2, 1],
+        ],
+        preview_face_indices: [7, 7],
+      }),
+    ).toBeNull();
+  });
+
 });
