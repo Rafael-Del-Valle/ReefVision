@@ -9,7 +9,6 @@ from math import dist, isfinite
 from typing import Any
 
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
-
 from reefvision.services.spatial_mesh_obj_v14 import MAX_VERTICES
 
 MAX_PLY_BYTES = 256_000
