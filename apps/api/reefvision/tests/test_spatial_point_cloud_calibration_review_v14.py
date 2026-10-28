@@ -62,7 +62,8 @@ def _reviewed_cloud(decision: str = "supports_scale") -> dict:
 def test_review_is_provisional_and_attributed(decision: str, warning: str | None) -> None:
     params = _reviewed_cloud(decision)
     result = preview_point_cloud_from_request(PointCloudPreviewRequest.model_validate(params))
-    assert result["provenance"]["calibration_review_evidence"] == params["calibration_review"]
+    for key, value in params["calibration_review"].items():
+        assert result["provenance"]["calibration_review_evidence"][key] == value
     assert result["provenance"]["calibration_verified"] is False
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert "independent_calibration_review_not_verification" in result["qc_warnings"]
@@ -144,17 +145,37 @@ def test_xyz_points_cannot_claim_imported_file_review() -> None:
         preview_point_cloud_from_request(PointCloudPreviewRequest.model_validate(params))
 
 
+def test_point_cloud_review_frame_binding_rejects_relabel_and_flags_legacy() -> None:
+    params = _reviewed_cloud()
+    params["coordinate_frame_id"] = "survey-local-A"
+    params["calibration_review"]["reviewed_coordinate_frame_id"] = "survey-local-A"
+    reviewed = preview_point_cloud_from_request(PointCloudPreviewRequest.model_validate(params))
+    assert reviewed["provenance"]["coordinate_registration_verified"] is False
+    assert "independent_calibration_review_coordinate_frame_unbound" not in reviewed["qc_warnings"]
+
+    relabeled = deepcopy(params)
+    relabeled["coordinate_frame_id"] = "survey-local-B"
+    with pytest.raises(ValueError, match="source coordinate frame"):
+        preview_point_cloud_from_request(PointCloudPreviewRequest.model_validate(relabeled))
+
+    legacy = deepcopy(params)
+    del legacy["calibration_review"]["reviewed_coordinate_frame_id"]
+    unbound = preview_point_cloud_from_request(PointCloudPreviewRequest.model_validate(legacy))
+    assert "independent_calibration_review_coordinate_frame_unbound" in unbound["qc_warnings"]
+    assert unbound["provenance"]["calibration_verified"] is False
+
+
 def test_reviewed_ply_standalone_and_saved_workflow_match(client: TestClient) -> None:
     project_id = str(create_project(client, "Independent point-cloud calibration QC")["id"])
     params = _reviewed_cloud("disputes_scale")
+    params["coordinate_frame_id"] = "survey-frame-1"
+    params["calibration_review"]["reviewed_coordinate_frame_id"] = "survey-frame-1"
     params["expected_source_payload_sha256"] = params["calibration_review"][
         "reviewed_source_payload_sha256"
     ]
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200, registry.text
-    node = next(
-        item for item in registry.json() if item["node_type"] == "point_cloud_preview"
-    )
+    node = next(item for item in registry.json() if item["node_type"] == "point_cloud_preview")
     assert "calibration_review" in node["optional_parameters"]
     response = client.post(
         f"/api/v1/projects/{project_id}/spatial/point-cloud-preview", json=params
@@ -182,6 +203,20 @@ def test_changed_reviewed_source_fails_saved_workflow(client: TestClient) -> Non
     assert saved["completed"] is False
     assert saved["run"]["status"] == "failed"
     assert not any(
-        item["data_type"] == "point_cloud_measurement_preview"
-        for item in saved["artifacts"]
+        item["data_type"] == "point_cloud_measurement_preview" for item in saved["artifacts"]
+    )
+
+
+def test_changed_reviewed_coordinate_frame_fails_saved_workflow(client: TestClient) -> None:
+    project_id = str(create_project(client, "Reject relabeled reviewed point cloud")["id"])
+    params = _reviewed_cloud()
+    params["coordinate_frame_id"] = "survey-frame-B"
+    params["calibration_review"]["reviewed_coordinate_frame_id"] = "survey-frame-A"
+    with pytest.raises(ValueError, match="source coordinate frame"):
+        preview_point_cloud_from_request(PointCloudPreviewRequest.model_validate(params))
+    saved = _run_saved_cloud(client, project_id, params)
+    assert saved["completed"] is False
+    assert saved["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "point_cloud_measurement_preview" for item in saved["artifacts"]
     )
