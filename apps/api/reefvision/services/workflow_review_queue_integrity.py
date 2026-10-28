@@ -248,10 +248,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             or not ruleset.strip()
             or (
                 threshold is not None
-                and (
-                    not _finite_scientific_number(threshold)
-                    or not 0 <= threshold <= 1
-                )
+                and (not _finite_scientific_number(threshold) or not 0 <= threshold <= 1)
             )
         ):
             raise invalid
@@ -358,10 +355,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         raise invalid
     expected_average = round(mean(scores.values()), 2) if scores else 0.0
     stored_average = summary.get("average_score")
-    if (
-        not _finite_scientific_number(stored_average)
-        or stored_average != expected_average
-    ):
+    if not _finite_scientific_number(stored_average) or stored_average != expected_average:
         raise invalid
 
     def matches_counts(field: str, expected: Counter[str]) -> bool:
