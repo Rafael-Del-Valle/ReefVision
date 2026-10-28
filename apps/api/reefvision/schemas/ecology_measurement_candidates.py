@@ -226,6 +226,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             "ecology-measurement-candidates-0018",
             "ecology-measurement-candidates-0019",
             "ecology-measurement-candidates-0020",
+            "ecology-measurement-candidates-0021",
         ]
         | None
     ) = None
