@@ -9,7 +9,10 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.schemas.spatial_point_cloud_v14 import PointCloudPreviewRequest
-from reefvision.services.spatial_point_cloud_v14 import preview_point_cloud_from_request
+from reefvision.services.spatial_point_cloud_v14 import (
+    parse_ascii_ply_points,
+    preview_point_cloud_from_request,
+)
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_spatial_point_cloud_source_binding_v14 import (
     _params,
@@ -136,7 +139,7 @@ def test_legacy_unbound_review_is_explicitly_flagged() -> None:
 def test_xyz_points_cannot_claim_imported_file_review() -> None:
     params = _reviewed_cloud()
     del params["ply_text"]
-    params["points"] = [[0, 0, 0], [1, 2, 3]]
+    params["points"] = parse_ascii_ply_points(PLY)
     with pytest.raises(ValueError, match="imported source bytes"):
         preview_point_cloud_from_request(PointCloudPreviewRequest.model_validate(params))
 
