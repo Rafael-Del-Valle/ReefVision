@@ -157,8 +157,9 @@ export function cullViewportMasks<
     if (mask == null) return false;
     // A polygon is rendered from points. Use their actual extents instead of
     // potentially stale bounds; a malformed polygon remains inspectable.
-    // Raster masks use pixel masks, so never infer their extent from points.
-    if (mask.geometry_kind !== "raster_mask" || mask.mask_path == null) {
+    // Raster masks use pixel bounds even if their mask_path is missing; stale
+    // imported vertices are never evidence that a raster mask is offscreen.
+    if (mask.geometry_kind !== "raster_mask") {
       if (mask.points != null) {
         const polygonBounds = polygonDisplayBounds(mask);
         return polygonBounds
