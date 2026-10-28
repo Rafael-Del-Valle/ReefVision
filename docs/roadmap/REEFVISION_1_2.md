@@ -2899,3 +2899,21 @@ calibration accuracy. Exact-head CI, authenticated scientist-reviewed
 longitudinal observations, registered study-design acceptance, 1.1 migration
 reconciliation, independent real-data review, and native Windows installer/GUI
 acceptance are still required. **1.2 is NOT RELEASE-READY; 1.3 has not started.**
+
+
+## Canonical biological-unit report denominators (2026-10-27)
+
+Source-linked candidate reports now count a physical declared biological unit
+once when a source series uses equivalent labels such as `tank` and
+`aquarium`. The count no longer inflates merely because a researcher corrected
+the spelling of the sampling level between captures. Original labels remain
+in the source fingerprint; this does **not** authenticate independence.
+The source fingerprint contract advances to
+`ecology-measurement-candidates-0021`. CSV rechecks use canonical unit counts
+only for 0021; historical signed 0018–0020 reports retain their original
+literal-label denominator and remain readable without silently rewriting
+research records. Focused tests cover aliases, legacy signed reports, forged
+re-signed denominators and existing saved-workflow evidence. Source-linked
+measurements remain `linked_unverified`, with scientist review required.
+Full CI, registered study designs, migrations and installed Windows GUI
+acceptance remain outstanding.
