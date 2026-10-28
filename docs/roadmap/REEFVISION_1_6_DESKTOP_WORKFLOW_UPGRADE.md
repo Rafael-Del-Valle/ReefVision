@@ -33,6 +33,12 @@ end-to-end API-level regression against a disposable on-disk database:
    same queue ID, scoring checksum, in-progress state, reviewer assignment,
    three audit events and no newly verified annotations. No second queue may
    be created for the original node-run identity.
+7. After the real upgrade and restart, persist a deliberately incorrect
+   scientific item-evidence digest in the existing queue. Require the
+   executable QC adapter to reject the interrupted replay without changing
+   the researcher's in-progress state. Restore the original digest, then
+   confirm two deterministic successful retries and unchanged audit history.
+   The test never recomputes model outputs or silently approves annotations.
 
 This test covers the **standalone manual review APIs** and the **saved
 executable Workflow Builder** on the same migrated installation. It is not
