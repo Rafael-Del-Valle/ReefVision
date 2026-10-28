@@ -24,3 +24,11 @@ This prevents a re-signed queue from claiming five pending proposals while retai
 ## Release blockers
 
 Exact-head GitHub Actions must finish successfully. 1.1/1.6 Alembic 0038 collision, native Windows installed-GUI and MSI upgrade/rollback checks, and representative biological dataset acceptance remain unresolved. This change is **not** a release-ready notification.
+
+## 2026-10-28 — human-readable explanation integrity
+
+The v3 contract now freezes the **researcher-facing labels and deterministic descriptions** for all 13 scoring signals, and checks that each item's short reason summary is derived from its original top-four ranked component contributions. The queue generator and saved-workflow validator share one label mapping. A local actor cannot merely change a score explanation to claim "Verified coral polyp detection," recompute the item digest, and have the saved workflow silently replay that false biological claim. Numeric score validation and explicit researcher approval remain independent requirements.
+
+Regression coverage includes three standalone re-signed negative cases (label, description, reason summary) and a persisted two-image `project_source → qc_review_queue` workflow that rejects a re-signed misleading label while retaining in-progress reviewer state, then replays the restored typed, dimensionless, review-required output. Existing v2/unversioned queues are not reinterpreted; no migration or live rescore is introduced.
+
+**Verification boundary:** Source read-back and static line-length checks were performed. Exact-head CI (Ruff, mypy, pytest, frontend/E2E) must pass before these tests can be described as passing. Windows installed-GUI/MSI, real biological-image validation and the 1.1/1.6 migration conflict remain HOLD. No automated biological verification or release is authorized.
