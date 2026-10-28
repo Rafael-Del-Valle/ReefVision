@@ -117,7 +117,21 @@ class ReviewQueueItemPageResponse(BaseModel):
     pages: int
 
 
-class ReviewQueueItemSkipRequest(BaseModel):
+class ReviewQueueItemActorRequest(BaseModel):
+    """Optional self-reported local reviewer label; never an authenticated identity."""
+
+    actor: str = Field(default="local_user", min_length=1, max_length=100)
+
+    @field_validator("actor")
+    @classmethod
+    def normalize_actor(cls, value: str) -> str:
+        actor = value.strip()
+        if not actor:
+            raise ValueError("Reviewer label cannot be blank")
+        return actor
+
+
+class ReviewQueueItemSkipRequest(ReviewQueueItemActorRequest):
     reason: str = Field(min_length=1, max_length=500)
 
 
