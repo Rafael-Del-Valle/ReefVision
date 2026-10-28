@@ -632,6 +632,8 @@ test("review-queue workflow preserves score context and item state transitions",
       exact: true,
     }),
   ).toBeVisible();
+  // A human reviewer label is required before QC triage can start.
+  await page.getByLabel("Single-item reviewer label").fill("reef-scientist");
   await page.getByRole("button", { name: "Start review" }).click();
   await expect(page.getByText("in_progress")).toBeVisible();
 

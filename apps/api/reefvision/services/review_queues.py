@@ -512,7 +512,12 @@ class ReviewQueueService:
         )
 
     def _record_single_item_triage(
-        self, item: ReviewQueueItem, *, action: str, actor: str = "local_user", reason: str | None = None
+        self,
+        item: ReviewQueueItem,
+        *,
+        action: str,
+        actor: str = "local_user",
+        reason: str | None = None,
     ) -> None:
         """Append server-generated state-transition evidence in the same transaction.
 

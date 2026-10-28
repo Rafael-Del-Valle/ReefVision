@@ -475,7 +475,9 @@ def test_revision_0041_rejects_nullable_event_request_identity_without_writes(
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
         connection.execute(text("INSERT INTO alembic_version VALUES ('0041')"))
         connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
-        connection.execute(text("INSERT INTO preserved VALUES ('original scientific observations')"))
+        connection.execute(
+            text("INSERT INTO preserved VALUES ('original scientific observations')")
+        )
         allowed = (
             "'comment', 'assign', 'unassign', 'triage_start', "
             "'triage_skip', 'triage_return', 'triage_complete'"
