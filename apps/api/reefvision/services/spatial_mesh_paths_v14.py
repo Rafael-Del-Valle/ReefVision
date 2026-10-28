@@ -69,12 +69,18 @@ def mesh_edge_paths(
         detour_ratio: float | None = None
         path_qc_warnings: list[str] | None = None
         path_edge_lengths_m: list[float] | None = None
+        path_vertices_in_source_frame_m: list[list[float]] | None = None
         path_edge_length_scale_intervals_m: list[list[float]] | None = None
         if status == "connected":
             route = [end]
             while route[-1] != start:
                 route.append(parent[route[-1]])
             route.reverse()
+            # Export the complete selected polyline even when render triangles
+            # are decimated. Coordinates retain unregistered source axes.
+            path_vertices_in_source_frame_m = [
+                [coordinate * scale for coordinate in points[index]] for index in route
+            ]
             # Preserve every traversed geometric edge for independent route
             # inspection. These are mesh-edge distances, not coral centerlines.
             path_edge_lengths_m = [adjacency[a][b] * scale for a, b in pairwise(route)]
@@ -127,6 +133,7 @@ def mesh_edge_paths(
                 "end_vertex_index": end,
                 "status": status,
                 "path_vertex_indices": route,
+                "path_vertices_in_source_frame_m": path_vertices_in_source_frame_m,
                 "path_edge_lengths_m": path_edge_lengths_m,
                 "path_edge_length_scale_intervals_m": path_edge_length_scale_intervals_m,
                 "path_qc_warnings": path_qc_warnings,
