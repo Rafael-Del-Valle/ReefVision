@@ -37,12 +37,24 @@ def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | N
         record.get("area_weighted_effective_patch_count"),
     )
     patch_count = record.get("edge_connected_patch_count")
-    if patch_count is not None and (type(patch_count) is not int or patch_count < 1):
-        raise ValueError("Patch count must be a positive integer")
+    if patch_count is not None and (type(patch_count) is not int or patch_count < 0):
+        raise ValueError("Patch count must be a nonnegative integer")
     if fractions is None:
-        if (
-            any(value is not None for value in stored)
-            or record.get("edge_connected_patch_surface_areas_m2") is not None
+        # Zero-area reconstructions have no defined area distribution, even
+        # when degenerate triangles produce one or more geometric patches.
+        # A valid modern zero-area preview records a zero for every patch;
+        # never mistake positive, missing, or malformed area evidence for it.
+        patch_areas = record.get("edge_connected_patch_surface_areas_m2")
+        if any(value is not None for value in stored):
+            raise ValueError("Patch concentration requires source area fractions")
+        if patch_areas is not None and (
+            not isinstance(patch_areas, list)
+            or (patch_count is not None and len(patch_areas) != patch_count)
+            or record.get("surface_area_m2") != 0
+            or any(
+                type(area) not in (int, float) or not isfinite(area) or area != 0
+                for area in patch_areas
+            )
         ):
             raise ValueError("Patch concentration requires source area fractions")
         return None
