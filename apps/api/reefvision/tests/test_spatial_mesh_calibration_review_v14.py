@@ -14,6 +14,8 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_spatial_mesh_cross_format_v14 import PLY
+from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 
 
 def _mesh() -> dict:
@@ -174,14 +176,37 @@ def test_legacy_mesh_without_review_remains_unverified() -> None:
     assert result["provenance"]["calibration_verified"] is False
 
 
-def test_saved_workflow_and_standalone_review_are_identical(client: TestClient) -> None:
+@pytest.mark.parametrize(
+    ("source_key", "source_value"),
+    [("obj_text", _OBJ_SOURCE), ("ply_text", PLY), ("glb_base64", make_glb())],
+    ids=["obj", "ascii-ply", "glb"],
+)
+def test_saved_workflow_and_standalone_review_are_identical(
+    client: TestClient, source_key: str, source_value: str
+) -> None:
     project_id = str(create_project(client, "Independent calibration review")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = _reviewed_imported_mesh()
+    if source_key != "obj_text":
+        params.pop("obj_text")
+        params[source_key] = source_value
+        review = params.pop("calibration_review")
+        measured = preview_from_request(MeshPreviewRequest.model_validate(params))
+        review["reviewed_geometry_sha256"] = measured["provenance"]["geometry_sha256"]
+        review["reviewed_source_payload_sha256"] = measured["provenance"]["source_payload_sha256"]
+        params["calibration_review"] = review
+    params["expected_source_payload_sha256"] = params["calibration_review"][
+        "reviewed_source_payload_sha256"
+    ]
     params["calibration_review"]["independent_review_decision"] = "disputes_scale"
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
+    assert expected["provenance"]["source_payload_integrity_checked"] is True
+    assert expected["provenance"]["source_payload_sha256"] == params[
+        "expected_source_payload_sha256"
+    ]
+    assert expected["provenance"]["calibration_verified"] is False
     graph = {
         "graph_id": "independent-calibration-review-v14",
         "name": "Provisional reviewed mesh",
