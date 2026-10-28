@@ -187,7 +187,7 @@ it("filters unpaired times and separates depth datums", async () => {
   const datumLabel = screen.getByText(/32.5, -79.5 · 5 m/);
   expect(datumLabel).toHaveTextContent("(chart_datum)");
 });
-it("withholds descriptive metrics for incompatible source provenance", async () => {
+it("withholds metrics across incompatible source provenance", async () => {
   const alternateSource = rows
     .filter(
       (row) =>
@@ -210,11 +210,8 @@ it("withholds descriptive metrics for incompatible source provenance", async () 
   expect(
     await screen.findByText(/Descriptive current-slice metrics withheld/),
   ).toBeInTheDocument();
-  expect(
-    screen.getByRole("list", { name: "Current measurements" }).querySelectorAll(
-      "li",
-    ),
-  ).toHaveLength(2);
+  const list = screen.getByRole("list", { name: "Current measurements" });
+  expect(list.querySelectorAll("li")).toHaveLength(2);
   expect(
     screen.queryByRole("region", { name: "Current slice descriptive metrics" }),
   ).not.toBeInTheDocument();
