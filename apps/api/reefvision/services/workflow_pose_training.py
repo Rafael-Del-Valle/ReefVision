@@ -656,12 +656,11 @@ def create_pose_workflow_training_result(
             "Pose validation dataset must use the same landmark schema as training truth"
         )
 
-    require_validation = bool(
-        parameters.get(
-            "require_validation_dataset",
-            False,
-        )
-    )
+    # A truthy string such as "false" must not silently change whether
+    # independent scientist-verified validation data is required.
+    require_validation = parameters.get("require_validation_dataset", False)
+    if not isinstance(require_validation, bool):
+        raise ValidationError("Pose require_validation_dataset must be a boolean")
 
     if require_validation and validation_dataset is None:
         raise ValidationError(
