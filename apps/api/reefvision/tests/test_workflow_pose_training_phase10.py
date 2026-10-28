@@ -1408,6 +1408,7 @@ def test_pose_workflow_rejects_lossy_architecture_from_verified_truth(
 
     assert result["architecture"] == "yolo11n-pose.yaml"
 
+
 def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
     client: TestClient,
     test_settings: Settings,
