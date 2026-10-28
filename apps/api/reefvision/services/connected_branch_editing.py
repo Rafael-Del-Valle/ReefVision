@@ -119,8 +119,22 @@ def _validate_graph(
             raise BranchEditError("Existing segment references an unknown graph node")
         if len(edge.pixels) < 2:
             raise BranchEditError("Existing segment has no measurable pixel path")
-        if edge.pixels[0] not in source.source_pixels or edge.pixels[-1] not in target.source_pixels:
+        if (
+            edge.pixels[0] not in source.source_pixels
+            or edge.pixels[-1] not in target.source_pixels
+        ):
             raise BranchEditError("Existing segment endpoints do not match their graph nodes")
+        if edge.is_cycle != (source.id == target.id):
+            raise BranchEditError("Existing segment cycle flag disagrees with graph-node identity")
+        # Only a true closed cycle may repeat its first pixel at the end.
+        # Otherwise revisiting a source pixel counts the same skeleton length twice.
+        unique_path = (
+            edge.pixels[:-1]
+            if edge.is_cycle and edge.pixels[0] == edge.pixels[-1]
+            else edge.pixels
+        )
+        if len(set(unique_path)) != len(unique_path):
+            raise BranchEditError("Existing segment revisits a pixel and double-counts its length")
         if any(
             max(abs(bx - ax), abs(by - ay)) != 1
             for (ax, ay), (bx, by) in pairwise(edge.pixels)
