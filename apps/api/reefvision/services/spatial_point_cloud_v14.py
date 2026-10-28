@@ -477,7 +477,9 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             review.reviewed_coordinate_frame_id is not None
             and review.reviewed_coordinate_frame_id != payload.coordinate_frame_id
         ):
-            raise ValueError("Point-cloud calibration review does not match source coordinate frame")
+            raise ValueError(
+                "Point-cloud calibration review does not match source coordinate frame"
+            )
         if (
             payload.coordinate_frame_id is not None
             and review.reviewed_coordinate_frame_id is None
