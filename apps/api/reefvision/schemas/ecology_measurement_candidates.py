@@ -36,7 +36,7 @@ class EcologyMeasurementCandidate(BaseModel):
     @classmethod
     def require_explicit_revision_integer(cls, value: object) -> int:
         """Preserve exact reviewed identity/annotation revision references."""
-        if type(value) is not int:
+        if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError("Evidence revision must be a positive JSON integer")
         return value
 
