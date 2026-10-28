@@ -731,6 +731,16 @@ export function AnnotationEditor({
       ),
     [allClassIds, sessionVisibilityOverrides, visibilityQuery.data],
   );
+  const segmentationVisibility = useMemo(
+    () =>
+      resolveClassVisibilityState(
+        "segmentation_overlays",
+        visibilityQuery.data,
+        sessionVisibilityOverrides,
+        allClassIds,
+      ),
+    [allClassIds, sessionVisibilityOverrides, visibilityQuery.data],
+  );
   const currentLayerVisibility = useMemo(
     () =>
       resolveClassVisibilityState(
@@ -812,6 +822,10 @@ export function AnnotationEditor({
   const predictionHiddenClassSet = useMemo(
     () => new Set(predictionVisibility.hiddenClassIds),
     [predictionVisibility.hiddenClassIds],
+  );
+  const segmentationHiddenClassSet = useMemo(
+    () => new Set(segmentationVisibility.hiddenClassIds),
+    [segmentationVisibility.hiddenClassIds],
   );
   const currentLayerHiddenClassSet = useMemo(
     () => new Set(currentLayerVisibility.hiddenClassIds),
@@ -925,9 +939,21 @@ export function AnnotationEditor({
     () => cullViewportItems(visiblePredictions, viewportBounds),
     [visiblePredictions, viewportBounds],
   );
+  // Segmentation visibility is display-only, like box and prediction
+  // visibility. Keep the full saved mask document and review state intact.
+  const visibleMasks = useMemo(
+    () =>
+      state.document.maskAnnotations.filter(
+        (mask) =>
+          mask != null &&
+          (!mask.label_class_id ||
+            !segmentationHiddenClassSet.has(mask.label_class_id)),
+      ),
+    [segmentationHiddenClassSet, state.document.maskAnnotations],
+  );
   const viewportMasks = useMemo(
-    () => cullViewportMasks(state.document.maskAnnotations, viewportBounds),
-    [state.document.maskAnnotations, viewportBounds],
+    () => cullViewportMasks(visibleMasks, viewportBounds),
+    [visibleMasks, viewportBounds],
   );
 
   const setSessionVisibilityOverride = useCallback(
