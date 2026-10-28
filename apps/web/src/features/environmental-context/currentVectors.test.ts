@@ -45,6 +45,16 @@ it("computes speed and true-north bearing from east/north components", () => {
   expect(vectors[0].speed).toBe(5);
   expect(vectors[0].bearing).toBeCloseTo(36.86989765);
 });
+it("rejects velocity components with the same immutable record ID", () => {
+  const east = component("current_eastward_velocity", 3, { id: "same-record" });
+  const north = component("current_northward_velocity", 4, {
+    id: "same-record",
+  });
+  expect(currentVectors([east, north])).toEqual([]);
+  expect(
+    currentVectors([east, { ...north, id: "different-record" }]),
+  ).toHaveLength(1);
+});
 it("preserves component uncertainty without deriving uncertainty", () => {
   const vectors = currentVectors([
     component("current_eastward_velocity", 3, {
