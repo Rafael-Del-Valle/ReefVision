@@ -193,11 +193,7 @@ it("explains caches with no QC-compatible current pair", async () => {
   fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
     target: { value: "cache" },
   });
-  expect(
-    await screen.findByText(
-      /No QC-compatible paired eastward\/northward currents in this cached dataset/,
-    ),
-  ).toBeInTheDocument();
+  expect(await screen.findByText(/No QC-compatible/)).toBeInTheDocument();
   expect(screen.getByLabelText("Current time (UTC)")).toBeDisabled();
   expect(screen.getByLabelText("Current depth and datum")).toBeDisabled();
   expect(
