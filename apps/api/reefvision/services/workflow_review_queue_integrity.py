@@ -41,6 +41,10 @@ V3_SIGNAL_LABELS = {
     "stale_review_state": "Stale review state",
 }
 V3_SUPPORTED_SIGNALS = frozenset(V3_SIGNAL_LABELS)
+# Frozen QC issue severity weights from the v3 queue generator. A saved
+# workflow must not label an issue as 'error' while scoring it as 'info'.
+# Changing these values requires a new scientific integrity version.
+V3_QC_SEVERITY_SCORES = {"info": 0.3, "warning": 0.6, "error": 1.0}
 
 
 def _finite_scientific_number(value: Any) -> bool:
@@ -216,18 +220,30 @@ def _valid_v3_scientific_references(item: Any) -> bool:
         if (
             not isinstance(values, list)
             or any(
-                type(value) is not str or not value or value != value.strip()
-                for value in values
+                type(value) is not str or not value or value != value.strip() for value in values
             )
             or values != sorted(set(values))
         ):
             return False
+    # The generator derives both fields from the same unresolved QC issues.
+    # A re-signed snapshot must not invent an issue with no severity, remove
+    # all issues while retaining severity, or misstate its deterministic weight.
+    severity = item.highest_qc_severity
+    issue_ids = item.related_issue_ids_json
+    raw_signals = item.signal_values_json
+    if (
+        (severity is None) != (len(issue_ids) == 0)
+        or severity not in (None, *V3_QC_SEVERITY_SCORES)
+        or not isinstance(raw_signals, dict)
+        or raw_signals.get("unresolved_qc_severity")
+        != V3_QC_SEVERITY_SCORES.get(severity, 0.0)
+    ):
+        return False
     checksum = getattr(item, "input_checksum", None)
     return (
         type(checksum) is str
         and len(checksum) == 64
         and all(char in "0123456789abcdef" for char in checksum)
-        and item.highest_qc_severity in (None, "info", "warning", "error")
     )
 
 
