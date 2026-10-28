@@ -17,6 +17,9 @@ export interface CurrentVector {
   sourceKind: string;
   dataset: string;
   modelVersion: string | null;
+  sourceAcquiredAt: string;
+  sourceUrl: string | null;
+  processingMethod: string | null;
   observedAt: string;
   depthM: number;
   depthReference: string;
@@ -170,6 +173,9 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       sourceKind: row.source_kind,
       dataset: row.provenance.dataset_id ?? "unspecified",
       modelVersion: row.provenance.model_version ?? null,
+      sourceAcquiredAt: row.provenance.acquired_at,
+      sourceUrl: row.provenance.source_url ?? null,
+      processingMethod: row.provenance.method ?? null,
       observedAt: row.observed_at,
       depthM: row.depth_m!,
       depthReference: row.depth_reference!,
@@ -223,6 +229,9 @@ const CURRENT_CSV_COLUMNS = [
   "source",
   "dataset_id",
   "model_version",
+  "source_acquired_at_utc",
+  "source_url",
+  "processing_method",
   "cache_key",
   "cache_status",
   "cache_fetched_at_utc",
@@ -270,6 +279,9 @@ export function currentVectorsCsv(
         vector.source,
         vector.dataset,
         vector.modelVersion,
+        vector.sourceAcquiredAt,
+        vector.sourceUrl,
+        vector.processingMethod,
         context.cacheKey,
         context.cacheStatus,
         context.fetchedAt,
