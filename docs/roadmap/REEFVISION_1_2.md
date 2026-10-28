@@ -3135,3 +3135,33 @@ CI, independent real-data scientist review, 1.1 migration reconciliation and
 physical Windows installer/GUI acceptance remain release blockers.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
 
+
+## Signed image-evidence replay integrity (2026-10-28)
+
+The existing standalone ecological identity registry and executable, persisted
+`ecology_identity_registry_source` Workflow Builder node now revalidate the
+producer's signed image-link collection when an `image_evidence_sha256`
+field is present. This includes source-image SHA-256, organism/revision
+attribution, acquisition metadata fingerprint, explicit frozen/legacy status,
+source identifiers, and original link notes. Changed saved-workflow image
+records or substituted collection fingerprints fail closed during Pydantic
+artifact rehydration; neither path can silently turn tampered source links
+into longitudinal measurement provenance.
+
+Historical signed `ecology-image-evidence-0001` artifacts remain readable
+**only** when all image links explicitly lack a frozen acquisition-metadata
+fingerprint. Modern `ecology-image-evidence-0002` signatures are preferred;
+modern links cannot bypass validation by claiming the legacy digest. Missing
+optional signatures on older artifacts are not retroactively authenticated.
+Regression coverage exercises standalone API versus executed saved-workflow
+parity, changed source hashes/notes/metadata digests, substituted signatures,
+legacy signed replay and modern legacy-unfrozen records. The preceding head
+`657de8009ec86286d8bcd3592316d336dba10428` completed 16/19 Actions;
+three backend jobs failed on one Ruff formatting violation, corrected in this
+iteration. Exact new-head CI, independent scientific review, migration
+reconciliation, and installed Windows GUI acceptance remain pending.
+
+**Boundary:** SHA-256 consistency is not independent authentication of source
+bytes, organism identity, calibration correctness, or scientist verification.
+All ecological evidence remains unverified and requires review. No merge,
+installer publication, or cross-version integration is authorized.
