@@ -74,7 +74,8 @@ def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | N
             raise ValueError("Patch surface areas exceed finite numeric range") from exc
         source_total = record.get("surface_area_m2")
         if (
-            type(source_total) not in (int, float)
+            not isinstance(source_total, (int, float))
+            or isinstance(source_total, bool)
             or not isfinite(source_total)
             or source_total <= 0
             or not isclose(area_total, source_total, rel_tol=1e-9, abs_tol=0.0)
