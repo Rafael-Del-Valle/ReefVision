@@ -275,7 +275,7 @@ def test_single_item_actor_labels_are_validated_and_persisted(client: TestClient
     assert started.json()["review_state"] == "in_progress"
     skipped = client.post(
         f"{action_url}/skip",
-        json={"reason": "Check branching", "actor": "field-reviewer"},
+        json={"reason": "  Check branching  ", "actor": "field-reviewer"},
     )
     assert skipped.status_code == 200, skipped.text
     returned = client.post(f"{action_url}/return", json={"actor": "  lab-reviewer  "})
