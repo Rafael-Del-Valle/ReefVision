@@ -134,6 +134,28 @@ def test_review_schema_fails_closed_on_invalid_attribution(field: str, value: ob
         MeshPreviewRequest.model_validate(payload)
 
 
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("independent_reviewer_id", "OPERATOR-1"),
+        ("independent_review_decision", "verified"),
+        ("independent_review_note", "   "),
+        ("reviewed_geometry_sha256", "not-a-digest"),
+        ("reviewed_meters_per_unit", -0.1),
+        ("reviewed_coordinate_frame_id", "invalid frame label"),
+    ],
+)
+def test_preconstructed_mesh_review_mutation_fails_closed(field: str, value: object) -> None:
+    request = MeshPreviewRequest.model_validate(_reviewed_mesh())
+    assert request.calibration_review is not None
+    # Assignment validation is intentionally not enabled on the shared schema.
+    # The service must not trust a model that was changed after initial parsing.
+    setattr(request.calibration_review, field, value)
+    with pytest.raises(PydanticValidationError):
+        preview_from_request(request)
+
+
 def test_reviewed_import_rejects_changed_bytes_with_identical_geometry() -> None:
     payload = _reviewed_imported_mesh()
     original = preview_from_request(MeshPreviewRequest.model_validate(payload))
