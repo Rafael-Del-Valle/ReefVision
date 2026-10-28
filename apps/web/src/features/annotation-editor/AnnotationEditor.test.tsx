@@ -900,7 +900,7 @@ describe("AnnotationEditor", () => {
   });
 
 
-  it("applies project segmentation visibility to masks without hiding boxes or changing records", async () => {
+  it("hides masks using project segmentation defaults", async () => {
     const baseMask = {
       id: "seg-mask-1",
       image_id: session.image.id,
@@ -967,17 +967,27 @@ describe("AnnotationEditor", () => {
       name: session.image.original_filename,
     });
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
-    expect(screen.queryByTestId("mask-annotation-seg-mask-1")).not.toBeInTheDocument();
-    expect(screen.getByTestId("mask-annotation-seg-mask-2")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mask-annotation-seg-mask-1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("mask-annotation-seg-mask-2"),
+    ).toBeInTheDocument();
 
     await userEvent.selectOptions(
       screen.getByTestId("class-visibility-layer"),
       "segmentation_overlays",
     );
-    expect(screen.queryByText(/stored now and will be applied/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/stored now and will be applied/i),
+    ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Show all" }));
-    expect(await screen.findByTestId("mask-annotation-seg-mask-1")).toBeInTheDocument();
-    expect(screen.getByTestId("mask-annotation-seg-mask-2")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("mask-annotation-seg-mask-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("mask-annotation-seg-mask-2"),
+    ).toBeInTheDocument();
 
     expect(sessionWithMasks.mask_annotations).toHaveLength(2);
     expect(sessionWithMasks.mask_counts_by_class).toHaveLength(2);
@@ -993,7 +1003,7 @@ describe("AnnotationEditor", () => {
     ).toBe(false);
   });
 
-  it("prefers personal segmentation visibility and restores it after a session override", async () => {
+  it("restores personal mask visibility after session overrides", async () => {
     const baseMask = {
       id: "user-mask-1",
       image_id: session.image.id,
@@ -1054,8 +1064,12 @@ describe("AnnotationEditor", () => {
     await screen.findByRole("heading", {
       name: session.image.original_filename,
     });
-    expect(screen.getByTestId("mask-annotation-user-mask-1")).toBeInTheDocument();
-    expect(screen.queryByTestId("mask-annotation-user-mask-2")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("mask-annotation-user-mask-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mask-annotation-user-mask-2"),
+    ).not.toBeInTheDocument();
     await userEvent.selectOptions(
       screen.getByTestId("class-visibility-layer"),
       "segmentation_overlays",
@@ -1067,10 +1081,18 @@ describe("AnnotationEditor", () => {
     await userEvent.click(
       within(classRow).getByRole("checkbox", { name: "Visible" }),
     );
-    expect(screen.queryByTestId("mask-annotation-user-mask-1")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Reset Session" }));
-    expect(await screen.findByTestId("mask-annotation-user-mask-1")).toBeInTheDocument();
-    expect(screen.queryByTestId("mask-annotation-user-mask-2")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mask-annotation-user-mask-1"),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Reset Session" }),
+    );
+    expect(
+      await screen.findByTestId("mask-annotation-user-mask-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mask-annotation-user-mask-2"),
+    ).not.toBeInTheDocument();
     expect(withMasks.mask_annotations).toHaveLength(2);
   });
 
