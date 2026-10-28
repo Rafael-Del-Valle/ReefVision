@@ -50,7 +50,7 @@ const rows = [0, 1].flatMap((hour) =>
     })),
   ),
 );
-function setup() {
+function setup(datasetRows = rows) {
   const fetch = vi.fn().mockImplementation((input: string) => {
     const path = new URL(input).pathname;
     if (path === "/api/v1/projects/project/environment/datasets")
@@ -62,7 +62,7 @@ function setup() {
               {
                 cache_key: "cache",
                 provider: "copernicus_marine",
-                record_count: rows.length,
+                record_count: datasetRows.length,
                 fetched_at: "2026-04-04T00:00:00Z",
                 expires_at: "2026-04-05T00:00:00Z",
               },
@@ -74,7 +74,7 @@ function setup() {
       return Promise.resolve(
         new Response(
           JSON.stringify({
-            items: rows,
+            items: datasetRows,
             cache_status: "stale_offline",
             fetched_at: "2026-04-04T00:00:00Z",
             expires_at: "2026-04-05T00:00:00Z",
@@ -126,11 +126,58 @@ it("opens cached currents with time, depth and provenance", async () => {
   });
   expect(await screen.findByText("2.000 m/s")).toBeInTheDocument();
   fireEvent.change(
-    screen.getByLabelText("Current depth (m; source datum shown per vector)"),
-    { target: { value: "10" } },
+    screen.getByLabelText("Current depth and datum"),
+    { target: { value: JSON.stringify([10, "sea_surface"]) } },
   );
   expect(screen.getByText(/32.5, -79.5 · 10 m/)).toBeInTheDocument();
   expect(screen.getByLabelText("Online basemap tiles")).not.toBeChecked();
+});
+it("only offers paired QC-compatible times and separates depth datums", async () => {
+  const earlierOrphan = {
+    ...rows[0],
+    id: "earlier-orphan",
+    observed_at: "2026-04-02T00:00:00Z",
+  };
+  const alternateDatum = rows
+    .filter(
+      (row) =>
+        row.observed_at === "2026-04-03T00:00:00Z" && row.depth_m === 5,
+    )
+    .map((row) => ({
+      ...row,
+      id: `alternate-${row.id}`,
+      depth_reference: "chart_datum",
+      value: row.value * 2,
+      normalized_value: row.normalized_value * 2,
+    }));
+  setup([earlierOrphan, ...rows, ...alternateDatum]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  expect(await screen.findByText("5.000 m/s")).toBeInTheDocument();
+  expect(screen.getByLabelText("Current time (UTC)")).toHaveValue(
+    "2026-04-03T00:00:00Z",
+  );
+  expect(
+    screen.queryByRole("option", { name: /2026-04-02/ }),
+  ).not.toBeInTheDocument();
+  const depthSelect = screen.getByLabelText("Current depth and datum");
+  expect(
+    screen.getByRole("option", { name: "5 m (chart_datum)" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("option", { name: "5 m (sea_surface)" }),
+  ).toBeInTheDocument();
+  fireEvent.change(depthSelect, {
+    target: { value: JSON.stringify([5, "chart_datum"]) },
+  });
+  expect(screen.getByText("10.000 m/s")).toBeInTheDocument();
+  expect(screen.queryByText("5.000 m/s")).not.toBeInTheDocument();
+  expect(screen.getByText(/5 m \(chart_datum\)/)).toBeInTheDocument();
 });
 it("never presents an empty or failed cache as measured currents", async () => {
   const fetch = setup();
