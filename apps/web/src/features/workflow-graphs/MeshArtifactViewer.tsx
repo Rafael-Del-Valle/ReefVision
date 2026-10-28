@@ -60,7 +60,8 @@ function parsePathPolylines(value: unknown): Vec3[][] {
       indices.length < 2 ||
       indices.length > 2000 ||
       !indices.every(
-        (index) => typeof index === "number" && Number.isInteger(index) && index >= 0,
+        (index) =>
+          typeof index === "number" && Number.isInteger(index) && index >= 0,
       ) ||
       new Set(indices).size !== indices.length ||
       !Array.isArray(coordinates) ||
@@ -343,7 +344,14 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
     return mesh.pathPolylines.map((vertices) =>
       vertices
         .map((vertex) =>
-          project(vertex, mesh.cameraTarget, mesh.cameraRadius, yaw, pitch, zoom),
+          project(
+            vertex,
+            mesh.cameraTarget,
+            mesh.cameraRadius,
+            yaw,
+            pitch,
+            zoom,
+          ),
         )
         .map((point) => `${point.x},${point.y}`)
         .join(" "),
