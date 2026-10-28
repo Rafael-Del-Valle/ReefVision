@@ -97,3 +97,24 @@ formatting at `test_desktop_real_migration_16.py:306` while frontend CI passed.
 This iteration replaces the multiline response expression and adds the
 repeat-startup regression; the new HEAD still requires full backend CI and
 native Windows verification. This is not a 1.1/1.6 migration reconciliation.
+
+## 2026-10-28 — Researcher visibility survives repeated foreign-0038 refusal
+
+The real desktop migration regression now creates a legacy 0037 project,
+a `Swiftia exserta` label class, a project-wide hidden-class default and
+an explicitly saved **empty** local researcher override before simulating
+the incompatible 1.1-style scientific 0038 stamp. It snapshots complete
+rows from both class-visibility tables before two rejected desktop startup
+attempts and requires exact row equality afterward, in addition to the
+existing complete SQLite schema catalog and scientific-record checks.
+An empty override must remain a saved preference, not be replaced by the
+project default. This is a non-destructive test using a disposable database.
+
+Exact-head CI run `40688832733` failed only at backend Ruff formatting in
+`test_desktop_real_migration_16.py`; frontend CI succeeded. The regression
+commit `0f6fa003` applies the formatter-reported changes and adds the
+visibility-preservation assertions. These assertions are **not yet verified
+by passing exact-head CI**. Windows MSI upgrade/rollback, installed-GUI,
+representative biological-data acceptance and independent 1.1/1.6
+revision-0038 reconciliation are still mandatory. Do not stamp or merge
+the conflicting migration histories.
