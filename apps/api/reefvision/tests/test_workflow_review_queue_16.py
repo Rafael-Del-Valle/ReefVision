@@ -78,7 +78,15 @@ def test_qc_queue_adapter_rejects_modified_project_source_artifact(corruption: s
 
 
 @pytest.mark.parametrize(
-    "corruption", ["wrong_port", "wrong_producer", "wrong_binding", "unfinished_producer"]
+    "corruption",
+    [
+        "wrong_port",
+        "wrong_producer",
+        "wrong_binding",
+        "unfinished_producer",
+        "missing_producer_output",
+        "substituted_producer_output",
+    ],
 )
 def test_qc_queue_adapter_requires_bound_completed_source(corruption: str) -> None:
     """Even a correctly signed source must belong to the saved graph edge."""
@@ -99,7 +107,10 @@ def test_qc_queue_adapter_requires_bound_completed_source(corruption: str) -> No
         input_artifact_ids_json=["artifact"],
     )
     producer = SimpleNamespace(
-        workflow_run_id="run", node_type="project_source", status="succeeded"
+        workflow_run_id="run",
+        node_type="project_source",
+        status="succeeded",
+        output_artifact_ids_json=["artifact"],
     )
     if corruption == "wrong_port":
         source.producer_port_id = "unreviewed_project"
@@ -107,8 +118,12 @@ def test_qc_queue_adapter_requires_bound_completed_source(corruption: str) -> No
         source.producer_node_run_id = "qc"
     elif corruption == "wrong_binding":
         node.input_artifact_ids_json = ["another-artifact"]
-    else:
+    elif corruption == "unfinished_producer":
         producer.status = "pending"
+    elif corruption == "missing_producer_output":
+        producer.output_artifact_ids_json = []
+    else:
+        producer.output_artifact_ids_json = ["another-artifact"]
 
     class ReadOnlySession:
         def get(self, model: object, identifier: str) -> object | None:
@@ -450,6 +465,24 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
                 inputs={"project": [source]},
             )
         producer.status = "succeeded"
+        session.flush()
+        # A signed source also must appear in the producing node's saved
+        # output list, not just claim that node as its producer.
+        original_outputs = list(producer.output_artifact_ids_json)
+        assert original_outputs == [source.id]
+        for substituted_outputs in ([], ["another-artifact"]):
+            producer.output_artifact_ids_json = substituted_outputs
+            session.flush()
+            with pytest.raises(ValidationError, match="producer or binding provenance"):
+                execute_runtime_adapter(
+                    "qc_review_queue",
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project["id"],
+                    parameters=params,
+                    inputs={"project": [source]},
+                )
+        producer.output_artifact_ids_json = original_outputs
         session.flush()
         retry = execute_runtime_adapter(
             "qc_review_queue",
