@@ -87,6 +87,7 @@ jobs:
         run: >-
           ./.venv/Scripts/python.exe -m pytest
           apps/api/reefvision/tests/test_desktop_runtime.py
+          apps/api/reefvision/tests/test_desktop_real_migration_16.py
           apps/api/reefvision/tests/test_model_install.py
           apps/api/reefvision/tests/test_bundled_models.py
 
