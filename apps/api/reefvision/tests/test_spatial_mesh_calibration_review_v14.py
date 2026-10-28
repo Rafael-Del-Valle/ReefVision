@@ -82,7 +82,8 @@ def test_review_is_recorded_without_certifying_calibration(
 ) -> None:
     payload = _reviewed_mesh(decision)
     result = preview_from_request(MeshPreviewRequest.model_validate(payload))
-    assert result["provenance"]["calibration_review_evidence"] == payload["calibration_review"]
+    for key, value in payload["calibration_review"].items():
+        assert result["provenance"]["calibration_review_evidence"][key] == value
     assert result["provenance"]["calibration_verified"] is False
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert "independent_calibration_review_not_verification" in result["qc_warnings"]
@@ -151,7 +152,8 @@ def test_reviewed_import_rejects_changed_bytes_with_identical_geometry() -> None
     )
     with pytest.raises(ValueError, match="imported source bytes"):
         preview_from_request(MeshPreviewRequest.model_validate(changed))
-    assert original["provenance"]["calibration_review_evidence"] == payload["calibration_review"]
+    for key, value in payload["calibration_review"].items():
+        assert original["provenance"]["calibration_review_evidence"][key] == value
     assert "independent_calibration_review_source_bytes_unbound" not in original["qc_warnings"]
 
 
@@ -168,6 +170,27 @@ def test_indexed_mesh_review_cannot_claim_imported_source_bytes() -> None:
     payload["calibration_review"]["reviewed_source_payload_sha256"] = "0" * 64
     with pytest.raises(ValueError, match="imported source bytes"):
         preview_from_request(MeshPreviewRequest.model_validate(payload))
+
+
+def test_review_is_bound_to_source_coordinate_frame_without_claiming_registration() -> None:
+    payload = _reviewed_mesh()
+    payload["coordinate_frame_id"] = "survey-local-A"
+    payload["calibration_review"]["reviewed_coordinate_frame_id"] = "survey-local-A"
+    reviewed = preview_from_request(MeshPreviewRequest.model_validate(payload))
+    assert reviewed["provenance"]["coordinate_frame_id"] == "survey-local-A"
+    assert reviewed["provenance"]["coordinate_registration_verified"] is False
+    assert "independent_calibration_review_coordinate_frame_unbound" not in reviewed["qc_warnings"]
+
+    relabeled = deepcopy(payload)
+    relabeled["coordinate_frame_id"] = "survey-local-B"
+    with pytest.raises(ValueError, match="source coordinate frame"):
+        preview_from_request(MeshPreviewRequest.model_validate(relabeled))
+
+    legacy = deepcopy(payload)
+    del legacy["calibration_review"]["reviewed_coordinate_frame_id"]
+    unbound = preview_from_request(MeshPreviewRequest.model_validate(legacy))
+    assert "independent_calibration_review_coordinate_frame_unbound" in unbound["qc_warnings"]
+    assert unbound["provenance"]["calibration_verified"] is False
 
 
 def test_legacy_mesh_without_review_remains_unverified() -> None:
@@ -199,6 +222,8 @@ def test_saved_workflow_and_standalone_review_are_identical(
         "reviewed_source_payload_sha256"
     ]
     params["calibration_review"]["independent_review_decision"] = "disputes_scale"
+    params["coordinate_frame_id"] = "survey-frame-1"
+    params["calibration_review"]["reviewed_coordinate_frame_id"] = "survey-frame-1"
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
@@ -261,4 +286,5 @@ def test_modified_review_does_not_mutate_original_measurement() -> None:
     revised["calibration_review"]["reviewed_geometry_sha256"] = "f" * 64
     with pytest.raises(ValueError, match="source geometry"):
         preview_from_request(MeshPreviewRequest.model_validate(revised))
-    assert baseline["provenance"]["calibration_review_evidence"] == payload["calibration_review"]
+    for key, value in payload["calibration_review"].items():
+        assert baseline["provenance"]["calibration_review_evidence"][key] == value
