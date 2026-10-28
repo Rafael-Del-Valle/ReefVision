@@ -1317,3 +1317,30 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   regression contracts remain intact.
 - Release HOLD: exact-head CI, Windows installed GUI and MSI upgrade/rollback,
   1.1/1.6 Alembic revision-0038 reconciliation, and representative science tests.
+
+
+## 2026-10-27 — Attributed single-item QC actions and explicit completion check
+
+- Audited existing class visibility, saved executable `qc_review_queue` workflow,
+  append-only review events, and standalone QC routes. Bulk triage already
+  accepts a self-reported reviewer label, but single-item actions previously
+  recorded every transition as `local_user`, losing useful audit context.
+- Start, complete, return and skip now accept an **optional** validated actor
+  label. Existing API clients without a body retain the `local_user` fallback;
+  no database migration, review history rewrite or workflow change is needed.
+  Each action and its actor-labeled event commit atomically. Blank/oversized
+  labels are rejected before state mutation.
+- The standalone dashboard requests a local reviewer label for individual
+  actions and asks for explicit human confirmation before marking a queue item
+  complete. Completion remains **queue bookkeeping only**: neither the API nor
+  Workflow Builder automatically approves model predictions or observations.
+- Added API regression for all four labeled transitions, invalid-label
+  atomicity and untouched annotations, plus frontend regression for required
+  label and canceled/confirmed completion. The saved executable Workflow
+  Builder QC node and its replay/retry tests remain unchanged and must pass
+  full CI after this commit.
+- Labels are **self-reported**, not authenticated identities. Exact-head
+  lint/type/backend/frontend/E2E, representative science, native Windows
+  installed-GUI and MSI upgrade/rollback acceptance are pending. Cross-version
+  1.1/1.6 Alembic revision-0038 reconciliation remains blocked on accepted
+  upstream integration. **DRAFT / HOLD; no release or approval.**
