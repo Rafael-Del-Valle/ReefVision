@@ -37,9 +37,13 @@ export function currentComponentUncertaintyText(
   component: "East" | "North",
   uncertainty: CurrentComponentUncertainty | null,
 ): string {
-  return uncertainty
-    ? `${component} component uncertainty: ${uncertainty.value.toFixed(3)} m/s (${uncertainty.kind.replaceAll("_", " ")})`
-    : `${component} component uncertainty: unknown`;
+  if (!uncertainty) return `${component} component uncertainty: unknown`;
+  // Fixed decimals can misrepresent a measured nonzero uncertainty as 0.000.
+  const magnitude =
+    uncertainty.value > 0 && uncertainty.value < 0.0005
+      ? uncertainty.value.toExponential(2)
+      : uncertainty.value.toFixed(3);
+  return `${component} component uncertainty: ${magnitude} m/s (${uncertainty.kind.replaceAll("_", " ")})`;
 }
 // Processing parameters are JSON objects: property insertion order has no
 // scientific meaning. Canonicalize nested keys so equivalent acquisitions
