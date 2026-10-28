@@ -935,7 +935,7 @@ describe("AnnotationEditor", () => {
         { label_class_id: "class-1", count: 1 },
         { label_class_id: "class-2", count: 1 },
       ],
-    } as AnnotationSession;
+    };
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input, init) => {
@@ -1034,7 +1034,7 @@ describe("AnnotationEditor", () => {
         baseMask,
         { ...baseMask, id: "user-mask-2", label_class_id: "class-2" },
       ],
-    } as AnnotationSession;
+    };
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (
