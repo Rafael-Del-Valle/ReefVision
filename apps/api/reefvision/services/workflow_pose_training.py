@@ -1040,6 +1040,24 @@ def create_pose_workflow_training_result(
 
         raise ValidationError("Pose training child job failed: " + detail)
 
+    # First execution must verify the same persisted child-job lineage as
+    # checkpoint reuse. A worker must not substitute another workflow node's
+    # successful job and expose its model as this node's scientific result.
+    request = job.request_json
+    if (
+        job.project_id != project_id
+        or job.job_type != "training"
+        or not isinstance(request, dict)
+        or request.get("training_run_id") != run.id
+        or request.get("pose_training_dataset_id") != dataset.id
+        or request.get("pose_validation_dataset_id")
+        != (validation_dataset.id if validation_dataset is not None else None)
+        or request.get("created_by_workflow") is not True
+        or request.get("workflow_run_id") != workflow_run_id
+        or request.get("workflow_node_run_id") != workflow_node_run_id
+    ):
+        raise ValidationError("Completed pose training child job lineage changed")
+
     if not run.result_checkpoint_path:
         raise ValidationError("Completed pose training did not produce a checkpoint")
 
