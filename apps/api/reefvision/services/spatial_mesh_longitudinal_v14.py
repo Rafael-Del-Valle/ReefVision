@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from itertools import zip_longest
 from math import atan2, degrees, exp, fsum, hypot, isclose, isfinite, log
 from re import fullmatch
 from typing import Any
@@ -39,9 +40,13 @@ def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | N
         if any(value is not None for value in stored):
             raise ValueError("Patch concentration requires source area fractions")
         return None
-    if not isinstance(fractions, list) or not fractions or any(
-        type(value) not in (int, float) or not isfinite(value) or not 0 <= value <= 1
-        for value in fractions
+    if (
+        not isinstance(fractions, list)
+        or not fractions
+        or any(
+            type(value) not in (int, float) or not isfinite(value) or not 0 <= value <= 1
+            for value in fractions
+        )
     ):
         raise ValueError("Patch area fractions must be a nonempty finite unit-range list")
     patch_count = record.get("edge_connected_patch_count")
@@ -520,10 +525,32 @@ def compare_mesh_observations(
         if before_patch_distribution is not None and after_patch_distribution is not None
         else None
     )
+    # Compare *ranked* patch-area fractions, not corresponding patch indices.
+    # Patches have no established cross-survey identity. Padding the shorter
+    # distribution with zero makes the distance symmetric and defined even
+    # when reconstructions contain different numbers of disconnected patches.
+    ranked_patch_area_profile_distance = None
+    if before_patch_distribution is not None and after_patch_distribution is not None:
+        ranked_before = sorted(
+            before["edge_connected_patch_surface_area_fractions"], reverse=True
+        )
+        ranked_after = sorted(
+            after["edge_connected_patch_surface_area_fractions"], reverse=True
+        )
+        ranked_patch_area_profile_distance = 0.5 * fsum(
+            abs(early - late)
+            for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
+        )
+        # All source fractions have been validated as finite and summing to
+        # one. Clamp only tiny floating-point overshoot of the [0, 1] bound.
+        ranked_patch_area_profile_distance = min(
+            1.0, max(0.0, ranked_patch_area_profile_distance)
+        )
     if patch_concentration_delta is None:
         warnings.append("patch_area_distribution_comparison_unavailable")
     else:
         warnings.append("patch_area_distribution_change_is_reconstruction_qc_not_fragmentation")
+        warnings.append("ranked_patch_area_profile_distance_not_patch_correspondence")
     # A change in triangle count changes the reconstruction sampling. This
     # dimensionless ratio is a QC descriptor, not biological growth evidence.
     early_faces = before_topology["face_count"]
@@ -940,6 +967,7 @@ def compare_mesh_observations(
             after_patch_distribution[1] if after_patch_distribution is not None else None
         ),
         "delta_area_weighted_effective_patch_count": effective_patch_count_delta,
+        "ranked_patch_area_profile_distance": ranked_patch_area_profile_distance,
         "reconstruction_face_count_ratio_after_to_before": face_count_ratio,
         "registration_residual_to_smaller_extent_ratio": (
             registration_residual_to_smaller_extent_ratio
@@ -1026,6 +1054,7 @@ def compare_mesh_observations(
         for key in (
             "delta_patch_area_concentration_index",
             "delta_area_weighted_effective_patch_count",
+            "ranked_patch_area_profile_distance",
             "scale_normalized_surface_area_ratio_after_to_before",
             "scale_normalized_bounding_box_diagonal_ratio_after_to_before",
             "registered_surface_centroid_offset_target_frame_m",
