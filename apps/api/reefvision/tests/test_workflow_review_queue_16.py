@@ -359,7 +359,15 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     assert completed.json()["changed_count"] == 1
     assert completed.json()["items"][0]["review_state"] == "completed"
     assert completed.json()["requires_researcher_review"] is True
-    assert client.post(f"/api/v1/review-queue-items/{item_id}/complete").status_code == 409
+    # A missing confirmation fails request validation before the state check;
+    # an explicitly confirmed second completion still conflicts with the
+    # completed item and must not append duplicate audit events.
+    assert client.post(f"/api/v1/review-queue-items/{item_id}/complete").status_code == 422
+    already_complete = client.post(
+        f"/api/v1/review-queue-items/{item_id}/complete",
+        json={"actor": "workflow reviewer", "review_confirmed": True},
+    )
+    assert already_complete.status_code == 409, already_complete.text
     history = client.get(event_url).json()
     assert history["total"] == 6
     assert history["items"][-2]["event_type"] == "triage_start"
