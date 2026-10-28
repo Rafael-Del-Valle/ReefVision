@@ -215,7 +215,10 @@ def _valid_v3_scientific_references(item: Any) -> bool:
         values = getattr(item, field, None)
         if (
             not isinstance(values, list)
-            or any(type(value) is not str or not value or value != value.strip() for value in values)
+            or any(
+                type(value) is not str or not value or value != value.strip()
+                for value in values
+            )
             or values != sorted(set(values))
         ):
             return False
