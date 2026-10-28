@@ -53,7 +53,9 @@ def test_linked_measurements_reject_coerced_numeric_values(bad_value: object) ->
     "bad_timestamp",
     [0, 1775203200, "1775203200", "2026-04-03", True],
 )
-def test_linked_measurements_reject_inferred_capture_times(bad_timestamp: object) -> None:
+def test_linked_measurements_reject_inferred_capture_times(
+    bad_timestamp: object,
+) -> None:
     payload = _candidate_payload()
     payload["capture_timestamp_utc"] = bad_timestamp
     with pytest.raises(SchemaValidationError, match="explicit ISO 8601"):
@@ -73,7 +75,9 @@ def test_linked_measurements_keep_explicit_offsets_and_undated_evidence() -> Non
     offset = EcologyMeasurementCandidate.model_validate(payload)
     assert offset.value == 3.0
     assert offset.capture_timestamp_utc is not None
-    assert offset.capture_timestamp_utc.astimezone(UTC) == baseline.capture_timestamp_utc
+    assert (
+        offset.capture_timestamp_utc.astimezone(UTC) == baseline.capture_timestamp_utc
+    )
 
     payload["capture_timestamp_utc"] = None
     payload["capture_time_status"] = "timezone_missing"
@@ -94,12 +98,16 @@ def test_saved_workflow_source_replay_rejects_coerced_measurements_and_epochs(
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
     artifacts = [
-        row for row in run["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
+        row
+        for row in run["artifacts"]
+        if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     saved = artifacts[0]["payload_json"]
     assert saved == response.json()
-    assert EcologyMeasurementCandidatesResponse.model_validate(saved).candidate_count > 0
+    assert (
+        EcologyMeasurementCandidatesResponse.model_validate(saved).candidate_count > 0
+    )
 
     for field, bad_value, error in (
         ("value", "3.2", "JSON number"),
