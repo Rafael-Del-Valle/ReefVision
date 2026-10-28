@@ -203,21 +203,26 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
         output = session.get(WorkflowArtifact, node.output_artifact_ids_json[0])
         assert output is not None
         original_payload = dict(output.payload_json)
-        output.payload_json = {**original_payload, "queue_id": "forged-queue"}
-        output.payload_sha256 = canonical_json_sha256(output.payload_json)
-        session.commit()
-        with pytest.raises(ValidationError, match="saved output no longer matches"):
-            create_review_queue_workflow_artifact(
-                session=session,
-                settings=app.state.settings,
-                project_id=project_id,
-                parameters={
-                    **dict(node.parameters_json or {}),
-                    "__workflow_run_id": run_id,
-                    "__workflow_node_run_id": node.id,
-                },
-                inputs={"project": [source]},
-            )
+        for field, forged_value in (
+            ("queue_id", "forged-queue"),
+            ("priority_score_unit", "polyps"),
+            ("review_status", "verified"),
+        ):
+            output.payload_json = {**original_payload, field: forged_value}
+            output.payload_sha256 = canonical_json_sha256(output.payload_json)
+            session.commit()
+            with pytest.raises(ValidationError, match="saved output no longer matches"):
+                create_review_queue_workflow_artifact(
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project_id,
+                    parameters={
+                        **dict(node.parameters_json or {}),
+                        "__workflow_run_id": run_id,
+                        "__workflow_node_run_id": node.id,
+                    },
+                    inputs={"project": [source]},
+                )
         output.payload_json = original_payload
         output.payload_sha256 = canonical_json_sha256(original_payload)
         session.commit()
