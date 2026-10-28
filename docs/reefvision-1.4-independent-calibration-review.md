@@ -1,0 +1,9 @@
+# ReefVision 1.4 — independent 3D calibration review and imported source identity
+
+A mesh_surface_preview request may include an independently attributed calibration_review record. The reviewer must differ from the calibration operator, including case-only variations of the identifier. Review decisions are supports_scale, disputes_scale, or inconclusive. All remain **caller-supplied, unverified** audit evidence: even supports_scale never changes calibration_verified=false or measurement_status=caller_supplied_unverified.
+
+The review binds to a geometry SHA-256, specimen/observation IDs, observation timestamp, calibration method, evidence, meters-per-unit, and relative scale uncertainty. It must not predate the observation. For imported OBJ, ASCII PLY, or GLB, the reviewer can additionally set reviewed_source_payload_sha256 to provenance.source_payload_sha256 from the inspected preview. This binds to the exact source bytes, including edits that preserve parsed geometry. GLB hashes decoded binary bytes, not base64 transport text. Mismatches fail closed.
+
+Legacy imported-file reviews without reviewed_source_payload_sha256 remain readable but carry independent_calibration_review_source_bytes_unbound QC warning. Indexed triangles have no imported source bytes and cannot claim this binding. This hash is not a persistent asset, a signature, proof of reviewer identity, or verified physical calibration. The separate expected_source_payload_sha256 request field guards replay independently.
+
+The standalone project-scoped spatial/mesh-preview endpoint and the saved executable typed mesh_surface_preview Workflow Builder node use the same analysis function. Tests cover source-byte edits preserving geometry, legacy warnings, invalid hashes, case-only reviewer/operator collisions, and saved-workflow parity. Persistent project assets, authenticated reviewers, validated branch lengths, and installed Windows acceptance remain outside this slice.

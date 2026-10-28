@@ -51,6 +51,22 @@ def _reviewed_mesh(decision: str = "supports_scale") -> dict:
     return payload
 
 
+_OBJ_SOURCE = "v 0 0 0\nv 2 0 0\nv 0 3 0\nf 1 2 3\n"
+
+
+def _reviewed_imported_mesh() -> dict:
+    payload = _mesh()
+    del payload["vertices"]
+    del payload["faces"]
+    payload["obj_text"] = _OBJ_SOURCE
+    measured = preview_from_request(MeshPreviewRequest.model_validate(payload))
+    review = deepcopy(_reviewed_mesh()["calibration_review"])
+    review["reviewed_geometry_sha256"] = measured["provenance"]["geometry_sha256"]
+    review["reviewed_source_payload_sha256"] = measured["provenance"]["source_payload_sha256"]
+    payload["calibration_review"] = review
+    return payload
+
+
 @pytest.mark.parametrize(
     ("decision", "extra_warning"),
     [
@@ -99,20 +115,51 @@ def test_review_rejects_stale_geometry_calibration_or_time(
     ("field", "value"),
     [
         ("independent_reviewer_id", "operator-1"),
+        ("independent_reviewer_id", "OPERATOR-1"),
         ("independent_review_note", " \t "),
         ("reviewed_calibration_evidence", " \t "),
         ("reviewed_meters_per_unit", True),
         ("reviewed_geometry_sha256", "not-a-sha"),
+        ("reviewed_source_payload_sha256", "not-a-sha"),
         ("unexpected_verification_claim", True),
     ],
 )
-def test_review_schema_fails_closed_on_invalid_attribution(
-    field: str, value: object
-) -> None:
+def test_review_schema_fails_closed_on_invalid_attribution(field: str, value: object) -> None:
     payload = _reviewed_mesh()
     payload["calibration_review"][field] = value
     with pytest.raises(PydanticValidationError):
         MeshPreviewRequest.model_validate(payload)
+
+
+def test_reviewed_import_rejects_changed_bytes_with_identical_geometry() -> None:
+    payload = _reviewed_imported_mesh()
+    original = preview_from_request(MeshPreviewRequest.model_validate(payload))
+    changed = deepcopy(payload)
+    changed["obj_text"] = _OBJ_SOURCE.replace("v 2 0 0\n", "v 2 0 0  \n")
+    unreviewed = deepcopy(changed)
+    del unreviewed["calibration_review"]
+    changed_preview = preview_from_request(MeshPreviewRequest.model_validate(unreviewed))
+    assert original["provenance"]["geometry_sha256"] == changed_preview["provenance"]["geometry_sha256"]
+    assert original["provenance"]["source_payload_sha256"] != changed_preview["provenance"]["source_payload_sha256"]
+    with pytest.raises(ValueError, match="imported source bytes"):
+        preview_from_request(MeshPreviewRequest.model_validate(changed))
+    assert original["provenance"]["calibration_review_evidence"] == payload["calibration_review"]
+    assert "independent_calibration_review_source_bytes_unbound" not in original["qc_warnings"]
+
+
+def test_legacy_import_review_without_byte_binding_is_flagged() -> None:
+    payload = _reviewed_imported_mesh()
+    del payload["calibration_review"]["reviewed_source_payload_sha256"]
+    result = preview_from_request(MeshPreviewRequest.model_validate(payload))
+    assert "independent_calibration_review_source_bytes_unbound" in result["qc_warnings"]
+    assert result["provenance"]["calibration_verified"] is False
+
+
+def test_indexed_mesh_review_cannot_claim_imported_source_bytes() -> None:
+    payload = _reviewed_mesh()
+    payload["calibration_review"]["reviewed_source_payload_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="imported source bytes"):
+        preview_from_request(MeshPreviewRequest.model_validate(payload))
 
 
 def test_legacy_mesh_without_review_remains_unverified() -> None:
@@ -124,7 +171,8 @@ def test_legacy_mesh_without_review_remains_unverified() -> None:
 def test_saved_workflow_and_standalone_review_are_identical(client: TestClient) -> None:
     project_id = str(create_project(client, "Independent calibration review")["id"])
     base = f"/api/v1/projects/{project_id}"
-    params = _reviewed_mesh("disputes_scale")
+    params = _reviewed_imported_mesh()
+    params["calibration_review"]["independent_review_decision"] = "disputes_scale"
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
@@ -182,6 +230,4 @@ def test_modified_review_does_not_mutate_original_measurement() -> None:
     revised["calibration_review"]["reviewed_geometry_sha256"] = "f" * 64
     with pytest.raises(ValueError, match="source geometry"):
         preview_from_request(MeshPreviewRequest.model_validate(revised))
-    assert baseline["provenance"]["calibration_review_evidence"] == payload[
-        "calibration_review"
-    ]
+    assert baseline["provenance"]["calibration_review_evidence"] == payload["calibration_review"]

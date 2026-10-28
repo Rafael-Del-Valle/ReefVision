@@ -32,6 +32,10 @@ class MeshCalibrationReviewEvidence(BaseModel):
     reviewed_at_utc: AwareDatetime
     # Bind the review to geometry and every scale-bearing calibration input.
     reviewed_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    # Optional byte-exact binding for imported OBJ, PLY, or GLB source files.
+    reviewed_source_payload_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     reviewed_specimen_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
@@ -40,9 +44,7 @@ class MeshCalibrationReviewEvidence(BaseModel):
     )
     reviewed_observed_at_utc: AwareDatetime | None = None
     reviewed_meters_per_unit: StrictFloat = Field(gt=0, le=1_000_000, allow_inf_nan=False)
-    reviewed_calibration_method: Literal[
-        "ruler", "photogrammetry_control", "instrument", "other"
-    ]
+    reviewed_calibration_method: Literal["ruler", "photogrammetry_control", "instrument", "other"]
     reviewed_calibration_evidence: str = Field(min_length=1, max_length=2_000)
     reviewed_relative_scale_uncertainty: StrictFloat | None = Field(
         default=None, ge=0, le=1, allow_inf_nan=False
@@ -50,7 +52,7 @@ class MeshCalibrationReviewEvidence(BaseModel):
 
     @model_validator(mode="after")
     def independent_review_is_attributed(self) -> MeshCalibrationReviewEvidence:
-        if self.calibration_operator_id == self.independent_reviewer_id:
+        if self.calibration_operator_id.casefold() == self.independent_reviewer_id.casefold():
             raise ValueError("Independent calibration reviewer must differ from operator")
         if not self.independent_review_note.strip():
             raise ValueError("Independent calibration review note cannot be blank")
