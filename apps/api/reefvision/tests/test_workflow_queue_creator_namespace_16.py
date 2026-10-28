@@ -11,8 +11,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -85,9 +87,7 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] and plan.json()["executable"]
-    saved = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     queued = client.post(
         f"/api/v1/projects/{project_id}/workflow-runs",
@@ -103,9 +103,7 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     references = [
-        item
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "review_queue_reference"
+        item for item in detail.json()["artifacts"] if item["data_type"] == "review_queue_reference"
     ]
     assert len(references) == 1
     original_id = references[0]["payload_json"]["queue_id"]
@@ -134,11 +132,10 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
     assert new_queue["id"] != original_id
     assert new_queue["created_by"] == "local_user"
     assert new_queue["regenerated_from_queue_id"] == original_id
-    assert new_queue["input_checksums_json"]["integrity_schema_version"] == (
-        "qc-review-queue-v3"
-    )
-    assert new_queue["source_quality_control_run_id"] == (
-        original.json()["source_quality_control_run_id"]
+    assert new_queue["input_checksums_json"]["integrity_schema_version"] == ("qc-review-queue-v3")
+    assert (
+        new_queue["source_quality_control_run_id"]
+        == (original.json()["source_quality_control_run_id"])
     )
 
     # Regeneration must not create ambiguous ownership for the saved run.
@@ -179,13 +176,76 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
         assert replay[0]["payload"]["review_status"] == "requires_researcher_review"
         assert replay[0]["payload"]["priority_score_unit"] == "dimensionless"
 
+        # A completed node cannot silently create a replacement queue when
+        # its original review evidence loses the internal ownership marker.
+        saved_queue = session.get(ReviewQueue, original_id)
+        assert saved_queue is not None
+        saved_queue.created_by = "local_user"
+        session.commit()
+        with pytest.raises(ValidationError, match="saved output no longer matches"):
+            create_review_queue_workflow_artifact(
+                session=session,
+                settings=app.state.settings,
+                project_id=project_id,
+                parameters={
+                    **dict(node.parameters_json or {}),
+                    "__workflow_run_id": run_id,
+                    "__workflow_node_run_id": node.id,
+                },
+                inputs={"project": [source]},
+            )
+        saved_queue.created_by = owner
+        session.commit()
+
+        # Re-signing an altered output digest is insufficient to redirect a
+        # completed node to another queue or invent new scientific evidence.
+        assert len(node.output_artifact_ids_json) == 1
+        output = session.get(WorkflowArtifact, node.output_artifact_ids_json[0])
+        assert output is not None
+        original_payload = dict(output.payload_json)
+        output.payload_json = {**original_payload, "queue_id": "forged-queue"}
+        output.payload_sha256 = canonical_json_sha256(output.payload_json)
+        session.commit()
+        with pytest.raises(ValidationError, match="saved output no longer matches"):
+            create_review_queue_workflow_artifact(
+                session=session,
+                settings=app.state.settings,
+                project_id=project_id,
+                parameters={
+                    **dict(node.parameters_json or {}),
+                    "__workflow_run_id": run_id,
+                    "__workflow_node_run_id": node.id,
+                },
+                inputs={"project": [source]},
+            )
+        output.payload_json = original_payload
+        output.payload_sha256 = canonical_json_sha256(original_payload)
+        session.commit()
+        restored = create_review_queue_workflow_artifact(
+            session=session,
+            settings=app.state.settings,
+            project_id=project_id,
+            parameters={
+                **dict(node.parameters_json or {}),
+                "__workflow_run_id": run_id,
+                "__workflow_node_run_id": node.id,
+            },
+            inputs={"project": [source]},
+        )
+        assert restored[0]["payload"]["queue_id"] == original_id
+        owned = session.scalars(
+            select(ReviewQueue).where(
+                ReviewQueue.project_id == project_id,
+                ReviewQueue.created_by == owner,
+            )
+        ).all()
+        assert [queue.id for queue in owned] == [original_id]
+
     history = client.get(events_url)
     assert history.status_code == 200, history.text
     assert history.json()["total"] == 1
     assert history.json()["items"][0]["id"] == comment.json()["id"]
     assert history.json()["requires_researcher_review"] is True
-    annotations = client.get(
-        f"/api/v1/images/{imported['successful'][0]['image_id']}/annotations"
-    )
+    annotations = client.get(f"/api/v1/images/{imported['successful'][0]['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
