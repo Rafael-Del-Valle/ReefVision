@@ -11,7 +11,6 @@ from math import dist, fsum, isfinite
 from typing import Any
 
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
-
 from reefvision.services import (
     spatial_mesh_boundary_v14,
     spatial_mesh_glb_v14,
