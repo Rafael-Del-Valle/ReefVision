@@ -78,3 +78,22 @@ and keep a correctly named 0041 schema accepted. The saved executable
 reference and unchanged retry behavior. This is **not** a reconciliation of
 the independent 1.1/1.6 revision-0038 collision; installed Windows upgrade,
 rollback, GUI, and representative biological-data acceptance remain required.
+
+## 2026-10-28 — Repeat-startup refusal and full schema preservation
+
+The real disposable SQLite 0037-to-foreign-0038 regression now runs the
+installed-desktop migration preflight **twice** against a simulated 1.1-style
+scientific/environmental schema. Both attempts must reject the conflicting
+revision before upgrade. The test compares the complete SQLite schema catalog
+(`sqlite_master` objects and definitions) before and after both attempts,
+in addition to checking the original scientific record, project ID, Alembic
+marker and absence of the 1.6 audit table. This prevents a partial schema
+mutation from being mistaken for a safe refusal during repeated application
+starts. The neighboring two-researcher visibility test now asserts the
+identity API request succeeds before interpreting its response.
+
+The preceding exact-head Actions run `40681784004` failed backend Ruff
+formatting at `test_desktop_real_migration_16.py:306` while frontend CI passed.
+This iteration replaces the multiline response expression and adds the
+repeat-startup regression; the new HEAD still requires full backend CI and
+native Windows verification. This is not a 1.1/1.6 migration reconciliation.
