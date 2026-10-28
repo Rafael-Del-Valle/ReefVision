@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError as SchemaValidationError
 
+from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
     EcologyMeasurementCandidatesResponse,
@@ -169,3 +170,46 @@ def test_saved_workflow_source_replay_rejects_coerced_measurements_and_epochs(
             tampered["candidates"][0]["capture_time_status"] = "timezone_aware"
         with pytest.raises(SchemaValidationError, match=error):
             EcologyMeasurementCandidatesResponse.model_validate(tampered)
+
+
+def test_saved_identity_registry_rejects_malformed_linked_evidence_hashes(
+    client: TestClient,
+) -> None:
+    """Typed standalone and persisted registry sources must reject forged hash formats.
+
+    These checks validate SHA-256 *syntax*, not the underlying file bytes,
+    scientist review, or authenticity of a replacement well-formed digest.
+    """
+    project_id, _ = _source(client)
+    standalone = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert standalone.status_code == 200, standalone.text
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    saved = artifacts[0]["payload_json"]
+    assert saved == standalone.json()
+    parsed = EcologyIdentityRegistryResponse.model_validate(saved)
+    assert parsed.evidence_level == "registered_unverified"
+    assert parsed.review_gate == "scientist_review_required"
+
+    for collection, field in (
+        ("image_evidence_links", "image_sha256"),
+        ("annotation_evidence_links", "annotation_sha256"),
+        ("calibration_evidence_links", "image_sha256"),
+        ("calibration_evidence_links", "calibration_sha256"),
+    ):
+        assert len(saved[collection]) == 1
+        for invalid in ("f" * 63, "g" * 64, True):
+            tampered = deepcopy(saved)
+            tampered[collection][0][field] = invalid
+            with pytest.raises(SchemaValidationError):
+                EcologyIdentityRegistryResponse.model_validate(tampered)
+
+        # Case is preserved for historical source provenance; syntax is valid.
+        mixed_case = deepcopy(saved)
+        mixed_case[collection][0][field] = "aB" * 32
+        rehydrated = EcologyIdentityRegistryResponse.model_validate(mixed_case)
+        assert getattr(getattr(rehydrated, collection)[0], field) == "aB" * 32
