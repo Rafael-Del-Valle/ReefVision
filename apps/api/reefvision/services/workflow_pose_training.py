@@ -313,6 +313,7 @@ def _completed_workflow_pose_training_run(
     seed_model: ModelRegistration | None,
     architecture: str,
     run_name: str,
+    notes: str | None,
     device: str,
     precision: str,
     random_seed: int | None,
@@ -421,6 +422,7 @@ def _completed_workflow_pose_training_run(
             candidate.provider_id != "ultralytics"
             or candidate.architecture != architecture
             or candidate.run_name != run_name
+            or candidate.notes != notes
             or candidate.device != device
             or candidate.precision != precision
             or candidate.random_seed != random_seed
@@ -812,6 +814,10 @@ def create_pose_workflow_training_result(
     if not run_name:
         raise ValidationError("Pose training run_name cannot be blank")
 
+    # Notes are persisted experiment context; changing them must not reuse
+    # an earlier completed workflow node under a different scientific label.
+    notes = str(parameters.get("notes")).strip() if parameters.get("notes") else None
+
     device = str(
         parameters.get(
             "device",
@@ -861,6 +867,7 @@ def create_pose_workflow_training_result(
         seed_model=seed_model,
         architecture=architecture,
         run_name=run_name,
+        notes=notes,
         device=device,
         precision=precision,
         random_seed=random_seed,
@@ -903,7 +910,7 @@ def create_pose_workflow_training_result(
         device=device,
         precision=precision,
         run_name=run_name,
-        notes=(str(parameters.get("notes")).strip() if parameters.get("notes") else None),
+        notes=notes,
         random_seed=random_seed,
         tiling_config_json={"mode": "none"},
         training_config_json=(training_config),
