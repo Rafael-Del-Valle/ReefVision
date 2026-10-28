@@ -54,6 +54,36 @@ def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | N
         raise ValueError("Patch area fractions inconsistent with topology patch count")
     if not isclose(fsum(fractions), 1.0, rel_tol=1e-9, abs_tol=1e-9):
         raise ValueError("Patch area fractions must sum to one")
+    # A ranked distribution must be derived from the actual full-mesh patch
+    # areas, not independently editable summary fractions. Older artifacts
+    # without per-patch areas remain readable but cannot gain this binding.
+    patch_areas = record.get("edge_connected_patch_surface_areas_m2")
+    if patch_areas is not None:
+        if (
+            not isinstance(patch_areas, list)
+            or len(patch_areas) != len(fractions)
+            or any(
+                type(area) not in (int, float) or not isfinite(area) or area < 0
+                for area in patch_areas
+            )
+        ):
+            raise ValueError("Patch surface areas must be finite nonnegative matching entries")
+        try:
+            area_total = fsum(patch_areas)
+        except OverflowError as exc:
+            raise ValueError("Patch surface areas exceed finite numeric range") from exc
+        source_total = record.get("surface_area_m2")
+        if (
+            type(source_total) not in (int, float)
+            or not isfinite(source_total)
+            or source_total <= 0
+            or not isclose(area_total, source_total, rel_tol=1e-9, abs_tol=0.0)
+            or any(
+                not isclose(area / source_total, fraction, rel_tol=1e-9, abs_tol=1e-12)
+                for area, fraction in zip(patch_areas, fractions, strict=True)
+            )
+        ):
+            raise ValueError("Patch surface areas contradict full-mesh area fractions")
     concentration = fsum(fraction * fraction for fraction in fractions)
     effective_count = 1.0 / concentration if concentration > 0 else float("inf")
     if not isfinite(effective_count):
@@ -531,21 +561,15 @@ def compare_mesh_observations(
     # when reconstructions contain different numbers of disconnected patches.
     ranked_patch_area_profile_distance = None
     if before_patch_distribution is not None and after_patch_distribution is not None:
-        ranked_before = sorted(
-            before["edge_connected_patch_surface_area_fractions"], reverse=True
-        )
-        ranked_after = sorted(
-            after["edge_connected_patch_surface_area_fractions"], reverse=True
-        )
+        ranked_before = sorted(before["edge_connected_patch_surface_area_fractions"], reverse=True)
+        ranked_after = sorted(after["edge_connected_patch_surface_area_fractions"], reverse=True)
         ranked_patch_area_profile_distance = 0.5 * fsum(
             abs(early - late)
             for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
         )
         # All source fractions have been validated as finite and summing to
         # one. Clamp only tiny floating-point overshoot of the [0, 1] bound.
-        ranked_patch_area_profile_distance = min(
-            1.0, max(0.0, ranked_patch_area_profile_distance)
-        )
+        ranked_patch_area_profile_distance = min(1.0, max(0.0, ranked_patch_area_profile_distance))
     if patch_concentration_delta is None:
         warnings.append("patch_area_distribution_comparison_unavailable")
     else:
