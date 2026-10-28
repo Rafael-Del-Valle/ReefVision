@@ -152,3 +152,29 @@ standalone mesh analysis and persisted, typed Workflow Builder artifacts;
 it does not modify either scientific artifact or saved graph.
 Frontend regression tests cover known geometry, rotation invariance,
 unknown versus zero uncertainty, invalid metadata, and immutability.
+
+### Selected triangle edge-length inspection (development)
+
+The saved-artifact viewer now reports the three sampled triangle edge lengths
+in source-vertex order (1–2, 2–3, 3–1), using calibrated 3D XYZ coordinates,
+not screen-space distances. When a caller supplies a relative scale bound
+`u`, each edge of nominal length `L` has a deterministic **scale-only**
+interval `[L(1-u), L(1+u)]`. For a 3–4–5 m triangle with `u=0.1`,
+the intervals are [2.7, 3.3], [4.5, 5.5], and [3.6, 4.4] m.
+
+These are *triangle-edge diagnostics*, **not** coral branch lengths,
+centerlines, anatomical landmarks, or validated tissue dimensions. The
+underlying mesh may be a bounded render-only sample; scientific full-mesh
+measurements must continue to use complete source geometry. Missing scale
+uncertainty is explicitly unknown rather than zero. Degenerate edges retain
+zero length, while nonfinite overflow suppresses misleading measurements.
+Yaw/pitch/zoom and triangle selection never modify the persisted artifact.
+The standalone mesh analysis endpoint and typed, saved Workflow Builder
+execution supply the same preview geometry and provenance to this read-only
+viewer; no new workflow node or persisted metric is claimed.
+
+Frontend regressions check known 3–4–5 geometry, scale-only intervals,
+camera invariance, zero-length edges, missing versus zero uncertainty,
+keyboard selection, and immutable scientific source data. Representative
+coral scans, independently verified calibration, persistent 3D asset storage,
+and installed Windows/GPU acceptance remain outstanding.
