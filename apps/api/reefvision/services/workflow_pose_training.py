@@ -506,9 +506,7 @@ def _reused_pose_training_result(
     # checkpoint digest. Reuse that result rather than hashing large weights
     # twice; completed-node retries always rehash the on-disk checkpoint.
     checkpoint_sha256, checkpoint_size = (
-        checkpoint_integrity
-        if checkpoint_integrity is not None
-        else hash_model_file(checkpoint)
+        checkpoint_integrity if checkpoint_integrity is not None else hash_model_file(checkpoint)
     )
 
     # Completed workflow retries must not silently relabel changed model bytes
