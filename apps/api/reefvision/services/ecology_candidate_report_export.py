@@ -178,8 +178,7 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
     source_organism_count = len({row.organism_key for row in response.candidates})
     declared_unit_count = count_declared_ecological_units(
         response.candidates,
-        canonicalize=response.source_fingerprint_contract
-        == "ecology-measurement-candidates-0021",
+        canonicalize=response.source_fingerprint_contract == "ecology-measurement-candidates-0021",
     )
     if (
         report.source_image_count != source_image_count
