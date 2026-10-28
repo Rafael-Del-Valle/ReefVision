@@ -262,7 +262,7 @@ describe("MeshArtifactViewer", () => {
       { key: "Enter" },
     );
     const inspection = screen.getByText(
-      /Source triangle 7 \\(unverified source frame\\)/,
+      /Source triangle 7 \(unverified source frame\)/,
     );
     expect(inspection).toHaveTextContent(
       "Selected preview triangle edge lengths (1–2, 2–3, 3–1): 3.00000, 5.00000, 4.00000 m",
@@ -294,12 +294,12 @@ describe("MeshArtifactViewer", () => {
       screen.getByRole("button", { name: "Inspect source triangle 7" }),
     );
     expect(
-      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+      screen.getByText(/Source triangle 7 \(unverified source frame\)/),
     ).toHaveTextContent(
       "Selected preview triangle edge lengths (1–2, 2–3, 3–1): 0.00000, 0.00000, 0.00000 m",
     );
     expect(
-      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+      screen.getByText(/Source triangle 7 \(unverified source frame\)/),
     ).toHaveTextContent("unknown (scale uncertainty not supplied)");
     rerender(
       <MeshArtifactViewer
@@ -316,7 +316,7 @@ describe("MeshArtifactViewer", () => {
       screen.getByRole("button", { name: "Inspect source triangle 7" }),
     );
     expect(
-      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+      screen.getByText(/Source triangle 7 \(unverified source frame\)/),
     ).toHaveTextContent(
       "Scale-only edge length intervals: [0.00000, 0.00000], [0.00000, 0.00000], [0.00000, 0.00000] m",
     );
