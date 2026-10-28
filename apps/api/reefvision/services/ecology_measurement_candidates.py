@@ -251,6 +251,31 @@ def _source_sampling_level(unit_type: str | None) -> str | None:
     return classify_ecological_unit_level(unit_type) or unit_type
 
 
+def count_declared_ecological_units(
+    candidates: list[EcologyMeasurementCandidate], *, canonicalize: bool
+) -> int:
+    """Count biological units, not alternative spellings of the same unit.
+
+    Legacy signed reports used literal labels. Keep that rule available for
+    verifying previously persisted reports without rewriting their evidence.
+    """
+    return len(
+        {
+            (
+                (
+                    classify_ecological_unit_level(row.experimental_unit_type)
+                    or row.experimental_unit_type
+                )
+                if canonicalize
+                else row.experimental_unit_type,
+                row.experimental_unit_id,
+            )
+            for row in candidates
+            if row.experimental_unit_type and row.experimental_unit_id
+        }
+    )
+
+
 def summarize_sampling_date_qc(
     candidates: list[EcologyMeasurementCandidate],
 ) -> list[EcologySamplingDateQC]:
@@ -1099,7 +1124,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0020",
+                "algorithm_version": "ecology-measurement-candidates-0021",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
@@ -1120,7 +1145,7 @@ class EcologyMeasurementCandidateService:
             source_calibration_evidence_sha256=snapshot.calibration_evidence_sha256,
             source_image_evidence_sha256=snapshot.image_evidence_sha256,
             source_annotation_evidence_sha256=snapshot.annotation_evidence_sha256,
-            source_fingerprint_contract="ecology-measurement-candidates-0020",
+            source_fingerprint_contract="ecology-measurement-candidates-0021",
             candidates=candidates,
             candidate_count=len(candidates),
             sampling_date_qc=sampling_date_qc,
@@ -1141,12 +1166,8 @@ class EcologyMeasurementCandidateService:
             "candidate_count": len(candidates),
             "source_image_count": len({row.image_id for row in candidates}),
             "source_organism_count": len({row.organism_key for row in candidates}),
-            "declared_experimental_unit_count": len(
-                {
-                    (row.experimental_unit_type, row.experimental_unit_id)
-                    for row in candidates
-                    if row.experimental_unit_type and row.experimental_unit_id
-                }
+            "declared_experimental_unit_count": count_declared_ecological_units(
+                candidates, canonicalize=True
             ),
             "date_qc_pass_series_count": sum(
                 row.qc_status == "date_series_candidate" for row in sampling_date_qc
