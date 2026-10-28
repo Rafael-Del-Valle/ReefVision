@@ -1389,3 +1389,20 @@ The individual `POST /api/v1/review-queue-items/{item_id}/complete` endpoint now
 The dashboard sends the confirmation only after the user confirms the action. The quick-review modal path now also asks for a reviewer label and explicit confirmation before submitting completion. Single-item skip reasons reject whitespace-only text and store trimmed evidence, consistent with bulk skip behavior. Completion is **QC queue bookkeeping only**: it does not verify annotations, accept predictions, or certify biological observations. Existing persisted reviewer events and saved `qc_review_queue` Workflow Builder runs remain untouched; the workflow node still requires researcher review.
 
 Backend API regressions cover missing/false/nonboolean confirmation, absence of state/event mutation, valid confirmed completion, legacy actor defaults, blank skip rejection, and trimmed skip audit evidence. Frontend regression checks that a confirmed action passes the explicit flag. **Acceptance pending:** exact-head CI, local full suite, saved-workflow regression rerun, Windows installed GUI/MSI upgrade/rollback, real biological-data review, and cross-version Alembic revision-0038 reconciliation. No merge, tag, release, or completion notice.
+
+## 2026-10-28 — Apply persisted segmentation class visibility in editor (Track D)
+
+- Existing 1.6 class-visibility API persisted `segmentation_overlays` preferences,
+  but the annotation editor marked that layer future-only and rendered every
+  saved polygon/raster mask regardless of project/user/session hidden classes.
+- The editor now resolves the existing segmentation visibility precedence and
+  filters **display-only** mask overlays before viewport culling. Project
+  defaults, personal preferences and temporary session overrides work without
+  rewriting saved masks, class counts, review state or Workflow Builder artifacts.
+  Unlabeled masks remain visible. The segmentation layer is now marked live in
+  the editor; box/prediction visibility remains independent.
+- Frontend regressions cover project defaults, independent box rendering,
+  personal-over-project precedence, session reset, no extra annotation fetch,
+  and no save request. Full Vitest/TypeScript/E2E and installed-Windows GUI
+  acceptance remain pending. No migration or new workflow node is appropriate
+  for a presentation-only visibility filter.
