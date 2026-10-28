@@ -84,13 +84,12 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
       });
     }
     return [...choices.values()].sort(
-      (a, b) =>
-        a.meters - b.meters || a.reference.localeCompare(b.reference),
+      (a, b) => a.meters - b.meters || a.reference.localeCompare(b.reference),
     );
   }, [allVectors, selectedTime]);
   const selectedDepth = depthChoices.some((choice) => choice.key === depth)
     ? depth
-    : (depthChoices[0]?.key ?? "");
+    : depthChoices[0]?.key || "";
   const vectors = useMemo(
     () =>
       allVectors.filter(
@@ -182,6 +181,7 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                 Current time (UTC)
                 <select
                   value={selectedTime ?? ""}
+                  disabled={times.length === 0}
                   onChange={(e) => setTime(e.target.value)}
                 >
                   {times.map((value) => (
@@ -195,6 +195,7 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                 Current depth and datum
                 <select
                   value={selectedDepth}
+                  disabled={depthChoices.length === 0}
                   onChange={(e) => setDepth(e.target.value)}
                 >
                   {depthChoices.map((choice) => (
@@ -275,10 +276,10 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                 speed/bearing uncertainty is not estimated. Original scientific
                 records remain the authoritative source.
               </p>
-              {vectors.length === 0 && (
+              {allVectors.length === 0 && (
                 <p role="status">
-                  Current vectors unavailable: this time/depth has no unique
-                  compatible east/north pair passing QC.
+                  No QC-compatible paired eastward/northward currents in this
+                  cached dataset.
                 </p>
               )}
               <OpenStreetMapView
