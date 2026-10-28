@@ -95,3 +95,23 @@ and `observation_metadata_verified` to `false`. Repeated specimen IDs must
 not be interpreted as confirmed re-identification, and temporal differences
 must not be presented as growth without reviewed registration, calibration,
 and identity evidence.
+
+## Disconnected-patch surface-area distribution
+
+The full-resolution mesh preview now reports
+`edge_connected_patch_surface_area_fractions` (in source-face patch order),
+`largest_surface_patch_index`, and `largest_surface_patch_area_fraction`.
+Each share is a patch's uncalibrated triangle-area sum divided by the entire
+mesh's triangle-area sum. A common positive scale cancels, so the shares do
+not change with calibration scale or its scale-only uncertainty. Tied patches
+select the earliest source-face patch deterministically. For an entirely
+zero-area reconstruction, fractions and largest-patch fields are `null`:
+there is no meaningful dominant surface. Display sampling is never used
+to calculate these fields.
+
+These metrics help flag detached reconstructed surfaces for human inspection.
+They do **not** identify coral colonies, prove tissue completeness, establish
+independent biological replicates, or estimate uncertainty from reconstruction
+or segmentation. The standalone endpoint and persisted, typed executable
+Workflow Builder node return the same provisional values; regression coverage
+includes scale invariance, zero-area and tied patches, and saved-workflow parity.
