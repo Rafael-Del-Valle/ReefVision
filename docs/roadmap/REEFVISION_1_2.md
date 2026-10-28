@@ -3327,3 +3327,21 @@ biological identity, verified experimental design, or real longitudinal growth
 claim follows from these previews. Migration reconciliation with 1.1 and
 installed Windows GUI/MSI scientific acceptance remain required.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Source graph path uniqueness and cycle consistency (2026-10-28)
+
+Connected coral branch previews now reject source segments that revisit an
+interior pixel, even when their stored length matches the inflated walk.
+The source graph also rejects a cycle flag that disagrees with its endpoint
+node identities. Legitimate closed cycles may repeat their start pixel exactly
+at the end; the non-destructive preview and source-length preservation remain
+supported. These checks run in the shared standalone API and executable,
+persisted `ecology_connected_branch_preview` Workflow Builder path, without
+promoting unreviewed geometry into verified measurements. Focused regression
+tests cover forged lengths, false cycle flags and valid closed loops.
+
+This increment also corrects the previous exact-head Ruff E501 failure at
+`connected_branch_editing.py:122`. The prior head `4ae68de8` had 16/19
+successful Actions workflows; the other three failed at Ruff. New-head CI,
+reviewed calibrated measurements, 1.1 migration reconciliation, and native
+Windows installer/GUI acceptance remain release gates.
