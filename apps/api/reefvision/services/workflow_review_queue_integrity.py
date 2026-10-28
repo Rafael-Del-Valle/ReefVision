@@ -43,7 +43,14 @@ V3_SUPPORTED_SIGNALS = frozenset(
 
 def _finite_scientific_number(value: Any) -> bool:
     """Reject booleans, NaN and infinity in saved numeric QC evidence."""
-    return type(value) in (int, float) and isfinite(value)
+    if type(value) not in (int, float):
+        return False
+    try:
+        return isfinite(value)
+    except OverflowError:
+        # Python cannot convert arbitrarily large JSON integers to a float.
+        # Treat malformed saved evidence as invalid, not an uncaught 500.
+        return False
 
 
 def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
@@ -135,7 +142,7 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
         # but must never count as a biological observation.
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             return False
-        if not isfinite(value):
+        if not _finite_scientific_number(value):
             return False
         if signal_id == "pending_proposals":
             # The generator records a nonnegative integer count as a float,
@@ -242,8 +249,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             or (
                 threshold is not None
                 and (
-                    type(threshold) not in (int, float)
-                    or not isfinite(threshold)
+                    not _finite_scientific_number(threshold)
                     or not 0 <= threshold <= 1
                 )
             )
@@ -260,8 +266,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         or any(
             not isinstance(signal, str)
             or not signal
-            or type(weight) not in (int, float)
-            or not isfinite(weight)
+            or not _finite_scientific_number(weight)
             or weight < 0
             for signal, weight in weights.items()
         )
@@ -318,8 +323,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             or item.weights_json != weights
             or type(item.rank_position) is not int
             or item.rank_position in ranks
-            or type(item.score) not in (int, float)
-            or not isfinite(item.score)
+            or not _finite_scientific_number(item.score)
             or not 0 <= item.score <= 100
         ):
             raise invalid
@@ -355,9 +359,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     expected_average = round(mean(scores.values()), 2) if scores else 0.0
     stored_average = summary.get("average_score")
     if (
-        not isinstance(stored_average, (int, float))
-        or isinstance(stored_average, bool)
-        or not isfinite(stored_average)
+        not _finite_scientific_number(stored_average)
         or stored_average != expected_average
     ):
         raise invalid
