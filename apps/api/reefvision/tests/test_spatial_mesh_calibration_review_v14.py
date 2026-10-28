@@ -134,7 +134,6 @@ def test_review_schema_fails_closed_on_invalid_attribution(field: str, value: ob
         MeshPreviewRequest.model_validate(payload)
 
 
-
 @pytest.mark.parametrize(
     ("field", "value"),
     [
