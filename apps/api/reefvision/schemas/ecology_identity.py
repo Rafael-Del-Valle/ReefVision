@@ -441,7 +441,8 @@ class EcologyIdentityRegistryResponse(BaseModel):
                     {
                         key: value
                         for key, value in row.items()
-                        if key not in (
+                        if key
+                        not in (
                             "source_metadata_sha256",
                             "source_metadata_evidence_status",
                         )
@@ -518,4 +519,74 @@ class EcologyIdentityRegistryResponse(BaseModel):
             if self.calibration_evidence_sha256.lower() != expected_calibration:
                 raise ValueError("Ecological registry calibration evidence fingerprint mismatch")
 
+        return self
+
+    @model_validator(mode="after")
+    def require_derived_design_audit_integrity(self) -> EcologyIdentityRegistryResponse:
+        """A saved workflow cannot conceal registered design or parent-unit warnings.
+
+        Derived flags are not signatures of scientific independence. Legacy
+        artifacts may omit the audits, but must remain explicitly unavailable.
+        """
+        # Runtime import avoids a schema/design-audit module import cycle.
+        from reefvision.services.ecology_identity_design_audit import (
+            derive_cross_unit_parent_details,
+            derive_ecology_design_changes,
+            derive_historical_cross_unit_parent_details,
+        )
+
+        if self.design_history_status == "history_unavailable":
+            if self.design_change_count or self.design_change_events:
+                raise ValueError("Unavailable ecological design audit contains events")
+        else:
+            if "identity_history" not in self.model_fields_set:
+                raise ValueError("Ecological design audit requires revision history")
+            changes = derive_ecology_design_changes(self.identity_history)
+            status = "design_changes_require_review" if changes else "no_design_changes_recorded"
+            if (
+                self.design_history_status != status
+                or self.design_change_count != len(changes)
+                or self.design_change_events != changes
+            ):
+                raise ValueError("Ecological design-change audit differs from identity history")
+
+        if self.cross_unit_parent_audit_status == "unavailable":
+            if self.cross_unit_shared_parent_colony_keys or self.cross_unit_parent_details:
+                raise ValueError("Unavailable ecological parent audit contains findings")
+        else:
+            details = derive_cross_unit_parent_details(self.identities)
+            keys = sorted({row.parent_colony_key for row in details})
+            status = "shared_parent_requires_review" if keys else "no_cross_unit_parent_reuse"
+            if (
+                self.cross_unit_parent_audit_status != status
+                or self.cross_unit_shared_parent_colony_keys != keys
+                or (
+                    "cross_unit_parent_details" in self.model_fields_set
+                    and self.cross_unit_parent_details != details
+                )
+            ):
+                raise ValueError("Ecological cross-unit parent audit differs from identities")
+
+        if self.historical_cross_unit_parent_audit_status == "unavailable":
+            if self.historical_cross_unit_parent_details:
+                raise ValueError("Unavailable ecological historical parent audit contains findings")
+        else:
+            if "identity_history" not in self.model_fields_set:
+                raise ValueError("Ecological historical parent audit requires revision history")
+            details = derive_historical_cross_unit_parent_details(self.identity_history)
+            status = (
+                "recorded_across_units_requires_review"
+                if details
+                else "no_recorded_cross_unit_parent_reuse"
+            )
+            if (
+                self.historical_cross_unit_parent_audit_status != status
+                or (
+                    "historical_cross_unit_parent_details" in self.model_fields_set
+                    and self.historical_cross_unit_parent_details != details
+                )
+            ):
+                raise ValueError(
+                    "Ecological historical parent audit differs from identity history"
+                )
         return self
