@@ -512,12 +512,12 @@ class ReviewQueueService:
         )
 
     def _record_single_item_triage(
-        self, item: ReviewQueueItem, *, action: str, reason: str | None = None
+        self, item: ReviewQueueItem, *, action: str, actor: str = "local_user", reason: str | None = None
     ) -> None:
         """Append server-generated state-transition evidence in the same transaction.
 
-        The existing single-item API has no authenticated actor field. Its
-        local_user label is not proof of reviewer identity or biological review.
+        Local actor labels are self-reported and do not authenticate a reviewer
+        or establish biological verification.
         """
         self.session.add(
             ReviewQueueItemEvent(
@@ -526,23 +526,23 @@ class ReviewQueueService:
                 project_id=item.project_id,
                 client_request_id=str(uuid4()),
                 event_type=f"triage_{action}",
-                actor="local_user",
+                actor=actor,
                 comment=reason,
             )
         )
 
-    def start_item(self, item_id: str) -> ReviewQueueItemResponse:
+    def start_item(self, item_id: str, *, actor: str = "local_user") -> ReviewQueueItemResponse:
         item = self._item(item_id)
         if item.review_state != "pending":
             raise ConflictError("Only pending queue items can be started")
         item.review_state = "in_progress"
         item.started_at = _utc_now()
-        self._record_single_item_triage(item, action="start")
+        self._record_single_item_triage(item, action="start", actor=actor)
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
 
-    def complete_item(self, item_id: str) -> ReviewQueueItemResponse:
+    def complete_item(self, item_id: str, *, actor: str = "local_user") -> ReviewQueueItemResponse:
         item = self._item(item_id)
         if item.review_state not in {"pending", "in_progress"}:
             raise ConflictError("Only pending or in-progress queue items can be completed")
@@ -550,7 +550,7 @@ class ReviewQueueService:
         if item.started_at is None:
             item.started_at = _utc_now()
         item.completed_at = _utc_now()
-        self._record_single_item_triage(item, action="complete")
+        self._record_single_item_triage(item, action="complete", actor=actor)
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
@@ -566,18 +566,20 @@ class ReviewQueueService:
         item.review_state = "skipped"
         item.skip_reason = request.reason
         item.completed_at = None
-        self._record_single_item_triage(item, action="skip", reason=request.reason)
+        self._record_single_item_triage(
+            item, action="skip", actor=request.actor, reason=request.reason
+        )
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
 
-    def return_item(self, item_id: str) -> ReviewQueueItemResponse:
+    def return_item(self, item_id: str, *, actor: str = "local_user") -> ReviewQueueItemResponse:
         item = self._item(item_id)
         if item.review_state != "skipped":
             raise ConflictError("Only skipped queue items can be returned to the queue")
         item.review_state = "pending"
         item.returned_at = _utc_now()
-        self._record_single_item_triage(item, action="return")
+        self._record_single_item_triage(item, action="return", actor=actor)
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
