@@ -222,6 +222,7 @@ def test_desktop_upgrade_from_0037_preserves_class_visibility_and_projects(
         )
         assert another.status_code == 201, another.text
         assert another.json()["id"] != project_id
+        post_upgrade_id = another.json()["id"]
 
     engine = create_database_engine(settings)
     try:
@@ -231,3 +232,14 @@ def test_desktop_upgrade_from_0037_preserves_class_visibility_and_projects(
             assert inspect(connection).has_table("review_queue_bulk_requests")
     finally:
         engine.dispose()
+
+    # Reopening again must not lose either legacy or post-upgrade writes.
+    run_pending_migrations(settings)
+    with TestClient(create_app(settings)) as client:
+        for preserved_id in (project_id, post_upgrade_id):
+            fetched = client.get(f"/api/v1/projects/{preserved_id}")
+            assert fetched.status_code == 200, fetched.text
+        visibility = client.get(f"/api/v1/projects/{project_id}/class-visibility")
+        assert visibility.status_code == 200, visibility.text
+        assert visibility.json()["user_preferences"]["annotations"]["saved"] is True
+        assert visibility.json()["user_preferences"]["annotations"]["hidden_class_ids"] == []
