@@ -113,11 +113,29 @@ def test_single_item_triage_persists_atomic_events(client: TestClient) -> None:
     assert len({event["client_request_id"] for event in history.json()["items"]}) == 3
     assert history.json()["current_assignee"] is None
 
-    completed = client.post(f"{state_url}/complete")
+    # Direct API calls must not bypass the dashboard's human confirmation.
+    for unconfirmed in (None, {}, {"review_confirmed": False}, {"review_confirmed": "true"}):
+        if unconfirmed is None:
+            denied = client.post(f"{state_url}/complete")
+        else:
+            denied = client.post(f"{state_url}/complete", json=unconfirmed)
+        assert denied.status_code == 422, denied.text
+        assert client.get(history_url).json()["total"] == 3
+        assert (
+            client.get(f"/api/v1/review-queues/{queue['id']}/items").json()["items"][0][
+                "review_state"
+            ]
+            == "pending"
+        )
+
+    completed = client.post(f"{state_url}/complete", json={"review_confirmed": True})
     assert completed.status_code == 200, completed.text
     assert completed.json()["review_state"] == "completed"
     assert completed.json()["completed_at"] is not None
-    assert client.post(f"{state_url}/complete").status_code == 409
+    assert (
+        client.post(f"{state_url}/complete", json={"review_confirmed": True}).status_code
+        == 409
+    )
     assert client.post(f"{state_url}/start").status_code == 409
     final_history = client.get(history_url).json()
     assert final_history["total"] == 4
@@ -262,7 +280,15 @@ def test_single_item_actor_labels_are_validated_and_persisted(client: TestClient
     assert skipped.status_code == 200, skipped.text
     returned = client.post(f"{action_url}/return", json={"actor": "  lab-reviewer  "})
     assert returned.status_code == 200, returned.text
-    completed = client.post(f"{action_url}/complete", json={"actor": "lab-reviewer"})
+    # Whitespace-only reasons are not meaningful review evidence.
+    invalid_reason = client.post(
+        f"{action_url}/skip", json={"reason": "  ", "actor": "field-reviewer"}
+    )
+    assert invalid_reason.status_code == 422, invalid_reason.text
+    completed = client.post(
+        f"{action_url}/complete",
+        json={"actor": "lab-reviewer", "review_confirmed": True},
+    )
     assert completed.status_code == 200, completed.text
     assert completed.json()["review_state"] == "completed"
 
