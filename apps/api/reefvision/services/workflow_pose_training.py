@@ -457,6 +457,7 @@ def _reused_pose_training_result(
     validation_dataset: PoseTrainingDataset | None,
     workflow_run_id: str | None,
     workflow_node_run_id: str | None,
+    checkpoint_integrity: tuple[str, int] | None = None,
 ) -> dict[str, Any]:
     """Recreate the workflow artifact from a completed persisted pose run."""
 
@@ -501,7 +502,14 @@ def _reused_pose_training_result(
     if not checkpoint.is_file():
         raise ValidationError("Recovered pose training checkpoint is missing")
 
-    checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
+    # First completion has already hashed these bytes while persisting the
+    # checkpoint digest. Reuse that result rather than hashing large weights
+    # twice; completed-node retries always rehash the on-disk checkpoint.
+    checkpoint_sha256, checkpoint_size = (
+        checkpoint_integrity
+        if checkpoint_integrity is not None
+        else hash_model_file(checkpoint)
+    )
 
     # Completed workflow retries must not silently relabel changed model bytes
     # as the original scientific result. Legacy runs without a recorded digest
@@ -1080,55 +1088,19 @@ def create_pose_workflow_training_result(
     }
     session.commit()
 
-    experiment = session.scalar(
-        select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
+    # Apply the same persisted child-job, frozen-artifact, and checkpoint
+    # provenance checks on first completion as on a saved-workflow retry.
+    # Never expose a worker-mutated manifest to downstream science nodes.
+    return _reused_pose_training_result(
+        session,
+        settings,
+        run=run,
+        dataset=dataset,
+        validation_dataset=validation_dataset,
+        workflow_run_id=workflow_run_id,
+        workflow_node_run_id=workflow_node_run_id,
+        checkpoint_integrity=(checkpoint_sha256, checkpoint_size),
     )
-
-    return {
-        "schema_version": ("workflow-training-result-0001"),
-        "project_id": project_id,
-        "created_by_workflow": True,
-        "workflow_run_id": (workflow_run_id),
-        "workflow_node_run_id": (workflow_node_run_id),
-        "training_run_id": run.id,
-        "training_job_id": job.id,
-        "training_draft_id": None,
-        "experiment_id": (experiment.id if experiment is not None else None),
-        "dataset_version_id": None,
-        "dataset_manifest_sha256": (run.dataset_manifest_sha256),
-        "split_manifest_sha256": (run.split_manifest_sha256),
-        "pose_training_dataset_id": (dataset.id),
-        "pose_validation_dataset_id": (
-            validation_dataset.id if validation_dataset is not None else None
-        ),
-        "pose_schema_id": (dataset.pose_schema_id),
-        "pose_schema_revision": (dataset.pose_schema_revision),
-        "pose_schema_content_hash": (dataset.pose_schema_content_hash),
-        "validation_mode": (split_manifest["validation_mode"]),
-        "task": run.task,
-        "provider_id": run.provider_id,
-        "architecture": run.architecture,
-        "initialization_mode": (
-            "registered_model" if run.initial_checkpoint_model_id else "random"
-        ),
-        "initial_checkpoint_source": (run.initial_checkpoint_source),
-        "initial_checkpoint_model_id": (run.initial_checkpoint_model_id),
-        "resolved_model_asset_id": (run.resolved_model_asset_id),
-        "resolved_model_checksum": (run.resolved_model_checksum),
-        "parameter_registry_version": (run.parameter_registry_version),
-        "device": run.device,
-        "precision": run.precision,
-        "run_name": run.run_name,
-        "random_seed": run.random_seed,
-        "metrics": dict(run.metrics_json or {}),
-        "metrics_history": dict(run.metrics_history_json or {}),
-        "warnings": list(run.warnings_json or []),
-        "artifact_manifest": dict(run.artifact_manifest_json or {}),
-        "logs_path": run.logs_path,
-        "result_checkpoint_path": (run.result_checkpoint_path),
-        "result_checkpoint_sha256": (checkpoint_sha256),
-        "result_checkpoint_size_bytes": (checkpoint_size),
-    }
 
 
 def execute_pose_model_training_adapter(
