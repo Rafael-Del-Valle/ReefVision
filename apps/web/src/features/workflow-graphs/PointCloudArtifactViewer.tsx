@@ -439,7 +439,9 @@ export function PointCloudArtifactViewer({ artifact }: { artifact: unknown }) {
     sourceIndex: number;
   } | null>(null);
   const selectedSourceIndex =
-    selection?.artifact === artifact ? selection.sourceIndex : null;
+    selection !== null && selection.artifact === artifact
+      ? selection.sourceIndex
+      : null;
   const selectedDisplayIndex =
     cloud?.indices.indexOf(selectedSourceIndex ?? -1) ?? -1;
   const selectedPoint =
