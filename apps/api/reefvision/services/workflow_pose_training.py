@@ -312,6 +312,7 @@ def _completed_workflow_pose_training_run(
     split_manifest_sha256: str,
     seed_model: ModelRegistration | None,
     architecture: str,
+    run_name: str,
     device: str,
     precision: str,
     random_seed: int | None,
@@ -419,6 +420,7 @@ def _completed_workflow_pose_training_run(
         if (
             candidate.provider_id != "ultralytics"
             or candidate.architecture != architecture
+            or candidate.run_name != run_name
             or candidate.device != device
             or candidate.precision != precision
             or candidate.random_seed != random_seed
@@ -824,6 +826,7 @@ def create_pose_workflow_training_result(
         split_manifest_sha256=(split_manifest_sha256),
         seed_model=seed_model,
         architecture=architecture,
+        run_name=run_name,
         device=device,
         precision=precision,
         random_seed=random_seed,
