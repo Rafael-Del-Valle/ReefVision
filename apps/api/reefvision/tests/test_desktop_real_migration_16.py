@@ -303,9 +303,9 @@ def test_legacy_upgrade_keeps_distinct_local_user_class_visibility(tmp_path: Pat
             json={"hidden_class_ids": []},
         )
         assert override_a.status_code == 200, override_a.text
-        identity_a = client.get(
-            f"/api/v1/projects/{project_id}/class-visibility"
-        ).json()["user_identity"]
+        identity_response = client.get(f"/api/v1/projects/{project_id}/class-visibility")
+        assert identity_response.status_code == 200, identity_response.text
+        identity_a = identity_response.json()["user_identity"]
 
     with TestClient(create_app(settings_b)) as client:
         initial = client.get(f"/api/v1/projects/{project_id}/class-visibility")
@@ -407,12 +407,33 @@ def test_desktop_rejects_foreign_0038_stamp_without_touching_science(
     finally:
         engine.dispose()
 
-    with pytest.raises(RuntimeError, match="Unsafe ReefVision Alembic revision 0038"):
-        run_pending_migrations(settings)
+    # The guard must be idempotently read-only, including repeated startup attempts.
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            schema_before = tuple(
+                tuple(row)
+                for row in connection.execute(
+                    text("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name")
+                )
+            )
+    finally:
+        engine.dispose()
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="Unsafe ReefVision Alembic revision 0038"):
+            run_pending_migrations(settings)
 
     engine = create_database_engine(settings)
     try:
         with engine.connect() as connection:
+            schema_after = tuple(
+                tuple(row)
+                for row in connection.execute(
+                    text("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name")
+                )
+            )
+            assert schema_after == schema_before
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0038"
             assert connection.scalar(
                 text("SELECT note FROM scientific_records WHERE id = 'original'")
