@@ -1236,3 +1236,63 @@ def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
             parameters={"training_config": {"epochs": 1}},
             processor=_fake_pose_processor,
         )
+
+def test_pose_workflow_rejects_lossy_initialization_mode_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The dataset was frozen through scientist review, not a synthetic manifest.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    for invalid_mode in (False, 0, [], {}, ""):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(
+                ValidationError,
+                match="initialization_mode must be random or registered_model",
+            ),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={
+                    "initialization_mode": invalid_mode,
+                    "training_config": {"epochs": 1},
+                },
+                processor=_fake_pose_processor,
+            )
+
+    # Even with a seed artifact, False must not silently select registered_model.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="initialization_mode must be"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            initial_model_payload={"model_id": "unused"},
+            parameters={"initialization_mode": False},
+            processor=_fake_pose_processor,
+        )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={"training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+    assert result["initialization_mode"] == "random"
