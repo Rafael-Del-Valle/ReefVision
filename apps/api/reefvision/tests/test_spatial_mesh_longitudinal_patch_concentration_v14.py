@@ -385,8 +385,7 @@ def test_subnormal_patch_fraction_divergence_is_not_falsely_zero(
         assert result["ranked_patch_area_profile_distance"] is None
         assert result["ranked_patch_area_jensen_shannon_divergence_bits"] is None
         assert (
-            "ranked_patch_area_profile_distance_below_numeric_resolution"
-            in result["qc_warnings"]
+            "ranked_patch_area_profile_distance_below_numeric_resolution" in result["qc_warnings"]
         )
         assert "ranked_patch_area_divergence_below_numeric_resolution" in result["qc_warnings"]
     else:
