@@ -76,9 +76,7 @@ def test_signed_design_warnings_cannot_be_hidden_in_saved_workflow(
     project_id, snapshot = _shared_parent_design(client)
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
-    artifacts = [
-        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
-    ]
+    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == snapshot
     assert EcologyIdentityRegistryResponse.model_validate(snapshot).review_gate == (
@@ -126,9 +124,7 @@ def test_legacy_audit_omissions_remain_unknown_not_falsely_clear(
     altered["historical_cross_unit_parent_details"] = snapshot[
         "historical_cross_unit_parent_details"
     ]
-    with pytest.raises(
-        ValidationError, match="Unavailable ecological historical parent audit"
-    ):
+    with pytest.raises(ValidationError, match="Unavailable ecological historical parent audit"):
         EcologyIdentityRegistryResponse.model_validate(altered)
 
 
