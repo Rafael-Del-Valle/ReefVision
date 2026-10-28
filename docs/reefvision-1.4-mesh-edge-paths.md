@@ -12,6 +12,15 @@ unreferenced routes never receive numeric intervals. The intervals apply
 the same multiplicative scale uncertainty to both lengths; they are not
 statistical confidence intervals.
 
+Connected routes also export `path_vertices_in_source_frame_m`, an ordered
+calibrated XYZ polyline corresponding one-to-one to `path_vertex_indices`.
+These coordinates use the original, unregistered mesh axes and include all
+traversed route vertices even when the display mesh is decimated. The polyline
+can support read-only inspection without treating the sampled renderer as
+scientific geometry. Disconnected and unreferenced routes return null; legacy
+artifacts without this field remain readable. Coordinates are not a verified
+coral centerline, georeferenced track, or biological branch identity.
+
 Connected routes additionally report ordered `path_edge_lengths_m` (one calibrated
 geometric distance for each consecutive pair in `path_vertex_indices`) and
 `path_edge_length_scale_intervals_m` (one lower/upper common-scale interval
