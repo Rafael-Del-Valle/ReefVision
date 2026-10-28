@@ -110,7 +110,6 @@ def test_invalid_review_attribution_fails_schema(field: str, value: object) -> N
         PointCloudPreviewRequest.model_validate(params)
 
 
-
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -122,9 +121,7 @@ def test_invalid_review_attribution_fails_schema(field: str, value: object) -> N
         ("reviewed_coordinate_frame_id", "invalid frame label"),
     ],
 )
-def test_preconstructed_point_cloud_review_mutation_fails_closed(
-    field: str, value: object
-) -> None:
+def test_preconstructed_point_cloud_review_mutation_fails_closed(field: str, value: object) -> None:
     request = PointCloudPreviewRequest.model_validate(_reviewed_cloud())
     assert request.calibration_review is not None
     setattr(request.calibration_review, field, value)
