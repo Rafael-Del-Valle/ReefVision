@@ -71,8 +71,12 @@ def test_zero_area_and_equal_area_patches_do_not_invent_dominance() -> None:
         **{
             **GEOMETRY,
             "vertices": [
-                [0, 0, 0], [1, 0, 0], [0, 1, 0],
-                [10, 0, 0], [11, 0, 0], [10, 1, 0],
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [10, 0, 0],
+                [11, 0, 0],
+                [10, 1, 0],
             ],
         }
     )
