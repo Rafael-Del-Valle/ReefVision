@@ -105,9 +105,7 @@ def test_historical_raw_label_denominator_remains_exportable(
     """Old signed reports counted aliases separately; never rewrite history."""
     current = _with_followup_label(_dated_artifact(client), "aquarium")
     assert current.candidate_report is not None
-    old_report = current.candidate_report.model_copy(
-        update={"declared_experimental_unit_count": 2}
-    )
+    old_report = current.candidate_report.model_copy(update={"declared_experimental_unit_count": 2})
     old = _resign_derived_evidence(
         current.model_copy(
             update={
