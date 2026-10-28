@@ -57,35 +57,49 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
     queryFn: ({ signal }) =>
       getVideoGeoreferencedObservations(videoId, {}, signal),
   });
+  // Select only time/depth slices with a unique, QC-compatible u/v pair.
+  // A cached dataset can also contain temperature, orphan components, or
+  // rejected values that must not create misleading empty current views.
+  const allVectors = useMemo(
+    () => currentVectors(dataset.data?.items ?? []),
+    [dataset.data],
+  );
   const times = useMemo(
-    () =>
-      [
-        ...new Set(dataset.data?.items.map((row) => row.observed_at) ?? []),
-      ].sort(),
-    [dataset.data],
+    () => [...new Set(allVectors.map((vector) => vector.observedAt))].sort(),
+    [allVectors],
   );
-  const depths = useMemo(
-    () =>
-      [
-        ...new Set(
-          dataset.data?.items.flatMap((row) =>
-            row.depth_m == null ? [] : [row.depth_m],
-          ) ?? [],
-        ),
-      ].sort((a, b) => a - b),
-    [dataset.data],
-  );
-  const selectedTime = time || times[0];
-  const selectedDepth = depth === "" ? depths[0] : Number(depth);
+  const selectedTime = times.includes(time) ? time : times[0];
+  const depthChoices = useMemo(() => {
+    const choices = new Map<
+      string,
+      { key: string; meters: number; reference: string }
+    >();
+    for (const vector of allVectors) {
+      if (vector.observedAt !== selectedTime) continue;
+      const key = JSON.stringify([vector.depthM, vector.depthReference]);
+      choices.set(key, {
+        key,
+        meters: vector.depthM,
+        reference: vector.depthReference,
+      });
+    }
+    return [...choices.values()].sort(
+      (a, b) =>
+        a.meters - b.meters || a.reference.localeCompare(b.reference),
+    );
+  }, [allVectors, selectedTime]);
+  const selectedDepth = depthChoices.some((choice) => choice.key === depth)
+    ? depth
+    : (depthChoices[0]?.key ?? "");
   const vectors = useMemo(
     () =>
-      currentVectors(
-        dataset.data?.items.filter(
-          (row) =>
-            row.observed_at === selectedTime && row.depth_m === selectedDepth,
-        ) ?? [],
+      allVectors.filter(
+        (vector) =>
+          vector.observedAt === selectedTime &&
+          JSON.stringify([vector.depthM, vector.depthReference]) ===
+            selectedDepth,
       ),
-    [dataset.data, selectedTime, selectedDepth],
+    [allVectors, selectedTime, selectedDepth],
   );
   const overlay = useMemo(
     () =>
@@ -178,14 +192,14 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                 </select>
               </label>
               <label>
-                Current depth (m; source datum shown per vector)
+                Current depth and datum
                 <select
-                  value={selectedDepth ?? ""}
+                  value={selectedDepth}
                   onChange={(e) => setDepth(e.target.value)}
                 >
-                  {depths.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
+                  {depthChoices.map((choice) => (
+                    <option key={choice.key} value={choice.key}>
+                      {choice.meters} m ({choice.reference})
                     </option>
                   ))}
                 </select>
