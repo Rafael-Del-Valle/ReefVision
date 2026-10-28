@@ -82,9 +82,7 @@ def test_uppercase_same_photo_same_instant_is_not_a_false_conflict() -> None:
     candidates[2] = candidates[2].model_copy(
         update={
             "image_sha256": "A" * 64,
-            "capture_timestamp_utc": datetime(
-                2026, 4, 3, 4, tzinfo=timezone(-timedelta(hours=4))
-            ),
+            "capture_timestamp_utc": datetime(2026, 4, 3, 4, tzinfo=timezone(-timedelta(hours=4))),
         }
     )
     qc = summarize_sampling_date_qc(candidates)
@@ -98,8 +96,7 @@ def test_uppercase_same_photo_same_instant_is_not_a_false_conflict() -> None:
     # alone must not forge a source-image metadata disagreement.
     candidates[2] = candidates[2].model_copy(update={"image_id": "A-first"})
     assert all(
-        row.qc_status == "date_series_candidate"
-        for row in summarize_sampling_date_qc(candidates)
+        row.qc_status == "date_series_candidate" for row in summarize_sampling_date_qc(candidates)
     )
 
 
@@ -129,23 +126,15 @@ def test_saved_workflow_source_artifact_replay_retains_digest_qc(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in workflow["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
-    saved = EcologyMeasurementCandidatesResponse.model_validate(
-        artifacts[0]["payload_json"]
-    )
+    saved = EcologyMeasurementCandidatesResponse.model_validate(artifacts[0]["payload_json"])
     assert saved.candidates
     source = saved.candidates[0]
     candidates = _two_series()
-    candidates[0] = candidates[0].model_copy(
-        update={"image_sha256": source.image_sha256}
-    )
-    candidates[-1] = candidates[-1].model_copy(
-        update={"image_sha256": source.image_sha256.upper()}
-    )
+    candidates[0] = candidates[0].model_copy(update={"image_sha256": source.image_sha256})
+    candidates[-1] = candidates[-1].model_copy(update={"image_sha256": source.image_sha256.upper()})
     restored = [
         EcologyMeasurementCandidate.model_validate(row.model_dump(mode="json"))
         for row in candidates
