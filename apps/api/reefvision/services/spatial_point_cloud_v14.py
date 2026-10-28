@@ -474,6 +474,16 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         if source_sha256 is not None and review.reviewed_source_payload_sha256 is None:
             result["qc_warnings"].append("independent_calibration_review_source_bytes_unbound")
         if (
+            review.reviewed_coordinate_frame_id is not None
+            and review.reviewed_coordinate_frame_id != payload.coordinate_frame_id
+        ):
+            raise ValueError("Point-cloud calibration review does not match source coordinate frame")
+        if (
+            payload.coordinate_frame_id is not None
+            and review.reviewed_coordinate_frame_id is None
+        ):
+            result["qc_warnings"].append("independent_calibration_review_coordinate_frame_unbound")
+        if (
             review.reviewed_specimen_id != payload.specimen_id
             or review.reviewed_observation_id != payload.observation_id
             or review.reviewed_observed_at_utc != payload.observed_at_utc
