@@ -81,7 +81,9 @@ def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
     # New versioned snapshots must not reinterpret an all-zero scoring vector
     # as a meaningful priority formula. Legacy unversioned queues retain their
     # existing compatibility path without invoking this validator.
-    total_weight = float(sum(weights.values()))
+    # Sum as floats: each valid JSON integer is representable, but their
+    # integer total might overflow during a later float conversion.
+    total_weight = sum(float(weight) for weight in weights.values())
     if not isfinite(total_weight) or total_weight <= 0:
         return False
 
