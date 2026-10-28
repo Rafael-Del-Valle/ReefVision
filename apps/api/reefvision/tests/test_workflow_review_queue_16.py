@@ -1054,3 +1054,36 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
         assert restored[0]["payload"]["queue_id"] == queue_id
         assert restored[0]["payload"]["review_status"] == "requires_researcher_review"
         assert restored[0]["payload"]["priority_score_unit"] == "dimensionless"
+
+        # A re-signed saved artifact also cannot invent out-of-order model
+        # references. This is source provenance, not a reviewer decision.
+        original_model_ids = list(rows[0].model_ids_json)
+        rows[0].model_ids_json = ["model-z", "model-a"]
+        queue.input_checksums_json = {
+            **original_checksums,
+            "item_evidence_sha256": queue_item_evidence_sha256(rows),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        assert rows[0].review_state == "in_progress"
+        rows[0].model_ids_json = original_model_ids
+        queue.input_checksums_json = original_checksums
+        session.flush()
+        recovered = execute_runtime_adapter(
+            "qc_review_queue",
+            session=session,
+            settings=app.state.settings,
+            project_id=project["id"],
+            parameters=params,
+            inputs={"project": [source]},
+        )
+        assert recovered[0]["payload"]["queue_id"] == queue_id
+        assert recovered[0]["payload"]["review_status"] == "requires_researcher_review"
