@@ -783,11 +783,18 @@ def create_pose_workflow_training_result(
 
     metadata = dict(seed_model.metadata_json or {}) if seed_model else {}
 
-    architecture = str(
-        parameters.get("architecture")
-        or metadata.get("source_architecture")
-        or (seed_model.source_filename if seed_model else "yolo11n-pose.yaml")
-    ).strip()
+    # An explicitly supplied architecture is part of the training lineage.
+    # Never turn False, zero, or an empty container into a default model.
+    requested_architecture = parameters.get("architecture")
+    if requested_architecture is not None:
+        if not isinstance(requested_architecture, str) or not requested_architecture.strip():
+            raise ValidationError("Pose training architecture must be a non-blank string")
+        architecture = requested_architecture.strip()
+    else:
+        architecture = str(
+            metadata.get("source_architecture")
+            or (seed_model.source_filename if seed_model else "yolo11n-pose.yaml")
+        ).strip()
 
     if seed_model is None and architecture not in {f"yolo11{scale}-pose.yaml" for scale in "nslmx"}:
         raise ValidationError("Random pose training requires a YOLO11 n/s/m/l/x pose architecture")
