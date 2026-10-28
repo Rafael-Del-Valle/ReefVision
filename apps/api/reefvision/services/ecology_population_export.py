@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from collections.abc import Sequence
 from io import StringIO
 from typing import Any
@@ -187,6 +188,28 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
             or len(set(blockers)) != len(blockers)
         ):
             raise ValidationError("Ecological population CSV invalid review blockers")
+        # A shared biological parent across units is a pseudoreplication risk.
+        # A serializer must not remove or invent its mandatory review warning.
+        if ("shared_parent_colonies" in blockers) != bool(shared_parent_keys):
+            raise ValidationError("Ecological population CSV shared-parent review blocker mismatch")
+        if shared_parent_keys and declared < 2:
+            raise ValidationError("Ecological population CSV shared parent needs multiple units")
+        # Sample SD is undefined for a single declared unit; with two or more
+        # units both finite nonnegative sample dispersions must be present.
+        dispersions = (
+            row["sample_sd_unit_absolute_change"],
+            row["sample_sd_unit_percent_change"],
+        )
+        if declared == 1:
+            if any(value != "" for value in dispersions):
+                raise ValidationError("Ecological population CSV invalid unit dispersion")
+        elif any(
+            not isinstance(value, float)
+            or not math.isfinite(value)
+            or value < 0
+            for value in dispersions
+        ):
+            raise ValidationError("Ecological population CSV invalid unit dispersion")
         if ("missing_parent_colony" in blockers) != bool(missing):
             raise ValidationError(
                 "Ecological population CSV missing-parent review blocker mismatch"

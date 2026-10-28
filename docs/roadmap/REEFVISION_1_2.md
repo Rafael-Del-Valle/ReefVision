@@ -3449,3 +3449,27 @@ authenticated parentage, independent experimental replicates, reviewed
 calibrated growth or release acceptance. The 1.1 migration divergence,
 scientist review, real-data acceptance and physical Windows GUI/MSI checks
 remain blockers. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Population CSV shared-parent and dispersion integrity (2026-10-28)
+
+Exact-head CI at `de12122e` passed 17 of 19 workflows; both
+backend failures were the same test expectation mismatch. A forged candidate
+unit count of zero correctly triggers the earlier declared-unit denominator
+validation, rather than the later candidate-specific check. The regression now
+expects that fail-closed error; production denominator checks are unchanged.
+
+The existing standalone population CSV renderer and executable, persisted
+`ecology_population_csv_export` Workflow Builder node now also independently
+reject a shared-parent roster without its required pseudoreplication review
+blocker (or a spurious blocker without shared parents). A shared parent cannot
+be reported across fewer than two declared units. Sample standard deviations
+must remain absent for one unit and finite, nonnegative values for two or more
+units; a CSV serializer cannot invent a variance estimate for one tank or hide
+an expected estimate for multiple tanks. Six parametrized corruption cases
+cover these guards, alongside the existing standalone/API and saved-workflow
+parity tests. This is a final-serialization defense, not independent validation
+of parentage, organism identity, calibration, or statistical inference.
+
+New-head CI, real scientist-reviewed longitudinal evidence, migration
+reconciliation with 1.1 and installed Windows GUI/MSI acceptance remain
+outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**

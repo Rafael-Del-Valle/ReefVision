@@ -333,6 +333,46 @@ def test_population_csv_rejects_serialized_review_roster_drift(
 @pytest.mark.parametrize(
     ("forged_fields", "error"),
     [
+        (
+            {
+                "design_review_blockers_json": (
+                    '["independence_not_authenticated","single_declared_unit",'
+                    '"missing_parent_colony","shared_parent_colonies"]'
+                ),
+            },
+            "shared-parent review blocker",
+        ),
+        (
+            {
+                "parent_colony_keys_json": '["parent-A"]',
+                "shared_parent_colony_keys_json": '["parent-A"]',
+            },
+            "shared-parent review blocker",
+        ),
+        (
+            {
+                "parent_colony_keys_json": '["parent-A"]',
+                "shared_parent_colony_keys_json": '["parent-A"]',
+                "design_review_blockers_json": (
+                    '["independence_not_authenticated","single_declared_unit",'
+                    '"missing_parent_colony","shared_parent_colonies"]'
+                ),
+            },
+            "shared parent needs multiple units",
+        ),
+        ({"sample_sd_unit_absolute_change": 1.0}, "unit dispersion"),
+        ({"sample_sd_unit_percent_change": 0.0}, "unit dispersion"),
+        (
+            {
+                "declared_unit_count": 2,
+                "contributing_organism_count": 2,
+                "experimental_unit_ids_json": '["tank-A","tank-B"]',
+                "design_review_blockers_json": (
+                    '["independence_not_authenticated","missing_parent_colony"]'
+                ),
+            },
+            "unit dispersion",
+        ),
         ({"parent_colony_keys_json": "not-json"}, "parent-colony roster"),
         ({"parent_colony_keys_json": '["parent-A","parent-A"]'}, "parent-colony roster"),
         ({"parent_colony_keys_json": '[""]'}, "parent-colony roster"),
@@ -385,7 +425,7 @@ def test_population_csv_rejects_forged_parent_lineage_at_serialization(
         ("experimental_unit_ids_json", '["tank-B"]', "declared-unit roster"),
         ("experimental_unit_ids_json", '["tank-A","tank-B"]', "declared-unit roster"),
         ("design_review_blockers_json", "[]", "declared-unit review gate"),
-        ("declared_unit_count", 0, "candidate declared-unit"),
+        ("declared_unit_count", 0, "declared-unit denominator"),
         ("contributing_organism_count", 0, "candidate declared-unit"),
         ("mean_absolute_change", "", "candidate declared-unit"),
         ("unit_status", "incomplete_followup", "excluded declared-unit"),
