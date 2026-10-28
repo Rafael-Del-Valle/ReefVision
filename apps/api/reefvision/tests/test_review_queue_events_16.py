@@ -228,3 +228,60 @@ def test_coordination_retries_and_history_reject_foreign_provenance(
     annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
+
+
+
+def test_single_item_actor_labels_are_validated_and_persisted(client: TestClient) -> None:
+    """Manual queue actions carry local attribution without approving annotations."""
+    project = create_project(client, "Attributed single-item triage")
+    import_one(client, project["id"])
+    created = client.post(f"/api/v1/projects/{project['id']}/review-queues", json={})
+    assert created.status_code == 201, created.text
+    queue_id = created.json()["id"]
+    item = client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"][0]
+    item_id = item["id"]
+    action_url = f"/api/v1/review-queue-items/{item_id}"
+    events_url = f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+
+    for invalid_actor in ("   ", "x" * 101):
+        invalid = client.post(f"{action_url}/start", json={"actor": invalid_actor})
+        assert invalid.status_code == 422, invalid.text
+    assert client.get(events_url).json()["total"] == 0
+    assert (
+        client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"][0]["review_state"]
+        == "pending"
+    )
+
+    started = client.post(f"{action_url}/start", json={"actor": "  field-reviewer  "})
+    assert started.status_code == 200, started.text
+    assert started.json()["review_state"] == "in_progress"
+    skipped = client.post(
+        f"{action_url}/skip",
+        json={"reason": "Check branching", "actor": "field-reviewer"},
+    )
+    assert skipped.status_code == 200, skipped.text
+    returned = client.post(f"{action_url}/return", json={"actor": "  lab-reviewer  "})
+    assert returned.status_code == 200, returned.text
+    completed = client.post(f"{action_url}/complete", json={"actor": "lab-reviewer"})
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["review_state"] == "completed"
+
+    history = client.get(events_url)
+    assert history.status_code == 200, history.text
+    assert history.json()["requires_researcher_review"] is True
+    assert [event["event_type"] for event in history.json()["items"]] == [
+        "triage_start",
+        "triage_skip",
+        "triage_return",
+        "triage_complete",
+    ]
+    assert [event["actor"] for event in history.json()["items"]] == [
+        "field-reviewer",
+        "field-reviewer",
+        "lab-reviewer",
+        "lab-reviewer",
+    ]
+    assert history.json()["items"][1]["comment"] == "Check branching"
+    assert client.get(f"/api/v1/images/{item['image_id']}/annotations").json()[
+        "annotations"
+    ] == []
