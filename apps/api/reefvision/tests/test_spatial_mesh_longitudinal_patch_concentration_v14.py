@@ -160,6 +160,14 @@ def test_patch_distribution_rejects_tampered_full_mesh_total() -> None:
         compare_mesh_observations(*observations)
 
 
+@pytest.mark.parametrize("timepoint", [0, 1])
+def test_patch_distribution_rejects_zero_full_mesh_total(timepoint: int) -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    observations[timepoint]["surface_area_m2"] = 0.0
+    with pytest.raises(ValueError, match="Patch surface areas"):
+        compare_mesh_observations(*observations)
+
+
 def test_legacy_patch_fractions_without_area_breakdown_remain_readable() -> None:
     observations = [_preview(payload) for payload in _meshes()]
     for record in observations:
