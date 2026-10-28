@@ -714,6 +714,16 @@ def create_pose_workflow_training_result(
     ):
         raise ValidationError("Pose training_config must be an object")
 
+    # Never silently reinterpret a scientist's explicit validation setting.
+    # Only a separate frozen, verified dataset can authorize validation.
+    if "val" in supplied_config and (
+        not isinstance(supplied_config["val"], bool)
+        or supplied_config["val"] != (validation_dataset is not None)
+    ):
+        raise ValidationError(
+            "Pose training_config.val must match the separate frozen validation dataset"
+        )
+
     training_config = {
         **DEFAULT_POSE_TRAINING_CONFIG,
         **dict(supplied_config),
