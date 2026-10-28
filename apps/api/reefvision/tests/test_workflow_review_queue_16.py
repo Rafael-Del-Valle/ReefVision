@@ -709,6 +709,43 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             )[0]["payload"]["queue_id"]
             == result["queue_id"]
         )
+        # A saved QC reference cannot invent an unresolved issue while
+        # retaining the "no QC severity" score. Re-signing immutable evidence
+        # must not promote that claim or erase a completed researcher's review.
+        original_issue_ids = list(saved_item.related_issue_ids_json)
+        original_checksums = dict(saved_queue.input_checksums_json)
+        assert saved_item.highest_qc_severity is None
+        assert original_issue_ids == []
+        saved_item.related_issue_ids_json = ["forged-qc-issue"]
+        saved_queue.input_checksums_json = {
+            **original_checksums,
+            "item_evidence_sha256": queue_item_evidence_sha256([saved_item]),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        assert saved_item.review_state == "completed"
+        saved_item.related_issue_ids_json = original_issue_ids
+        saved_queue.input_checksums_json = original_checksums
+        session.flush()
+        assert (
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )[0]["payload"]["queue_id"]
+            == result["queue_id"]
+        )
         # A re-signed false raw pending-proposal count must not survive a
         # saved executable Workflow Builder retry, even if the score and
         # normalized component remain internally consistent.
