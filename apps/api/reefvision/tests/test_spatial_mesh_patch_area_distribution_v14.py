@@ -32,11 +32,11 @@ GEOMETRY = {
 def test_patch_area_fractions_use_all_faces_and_preserve_source_patch_order() -> None:
     result = measure_mesh_preview(**GEOMETRY)
     assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.03, 0.1])
-    assert result["edge_connected_patch_surface_area_fractions"] == pytest.approx(
-        [3 / 13, 10 / 13]
-    )
+    assert result["edge_connected_patch_surface_area_fractions"] == pytest.approx([3 / 13, 10 / 13])
     assert result["largest_surface_patch_index"] == 1
     assert result["largest_surface_patch_area_fraction"] == pytest.approx(10 / 13)
+    assert result["edge_connected_patch_area_concentration_index"] == pytest.approx(109 / 169)
+    assert result["area_weighted_effective_patch_count"] == pytest.approx(169 / 109)
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
     assert "disconnected_mesh_patches" in result["qc_warnings"]
@@ -49,10 +49,10 @@ def test_patch_fractions_are_invariant_to_common_scale(
     result = measure_mesh_preview(
         **{**GEOMETRY, "meters_per_unit": scale, "relative_scale_uncertainty": uncertainty}
     )
-    assert result["edge_connected_patch_surface_area_fractions"] == pytest.approx(
-        [3 / 13, 10 / 13]
-    )
+    assert result["edge_connected_patch_surface_area_fractions"] == pytest.approx([3 / 13, 10 / 13])
     assert result["largest_surface_patch_index"] == 1
+    assert result["edge_connected_patch_area_concentration_index"] == pytest.approx(109 / 169)
+    assert result["area_weighted_effective_patch_count"] == pytest.approx(169 / 109)
 
 
 def test_zero_area_and_equal_area_patches_do_not_invent_dominance() -> None:
@@ -66,6 +66,8 @@ def test_zero_area_and_equal_area_patches_do_not_invent_dominance() -> None:
     assert zero["edge_connected_patch_surface_area_fractions"] is None
     assert zero["largest_surface_patch_index"] is None
     assert zero["largest_surface_patch_area_fraction"] is None
+    assert zero["edge_connected_patch_area_concentration_index"] is None
+    assert zero["area_weighted_effective_patch_count"] is None
 
     equal = measure_mesh_preview(
         **{
@@ -80,10 +82,10 @@ def test_zero_area_and_equal_area_patches_do_not_invent_dominance() -> None:
             ],
         }
     )
-    assert equal["edge_connected_patch_surface_area_fractions"] == pytest.approx(
-        [0.5, 0.5]
-    )
+    assert equal["edge_connected_patch_surface_area_fractions"] == pytest.approx([0.5, 0.5])
     assert equal["largest_surface_patch_index"] == 0
+    assert equal["edge_connected_patch_area_concentration_index"] == pytest.approx(0.5)
+    assert equal["area_weighted_effective_patch_count"] == pytest.approx(2.0)
 
 
 def test_patch_area_distribution_survives_saved_typed_workflow(client: TestClient) -> None:
@@ -128,9 +130,12 @@ def test_patch_area_distribution_survives_saved_typed_workflow(client: TestClien
         "edge_connected_patch_surface_area_fractions",
         "largest_surface_patch_index",
         "largest_surface_patch_area_fraction",
+        "edge_connected_patch_area_concentration_index",
+        "area_weighted_effective_patch_count",
     ):
         assert artifact[key] == standalone.json()[key]
-    assert artifact["provenance"]["geometry_sha256"] == (
-        standalone.json()["provenance"]["geometry_sha256"]
+    assert (
+        artifact["provenance"]["geometry_sha256"]
+        == (standalone.json()["provenance"]["geometry_sha256"])
     )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
