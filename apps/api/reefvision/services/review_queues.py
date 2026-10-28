@@ -591,12 +591,19 @@ class ReviewQueueService:
 
     def regenerate(self, queue_id: str) -> ReviewQueueResponse:
         queue = self._queue(queue_id)
+        # Regeneration is a new manual snapshot, not an interrupted retry of
+        # the saved Workflow Builder node. Reusing its internal owner identity
+        # would create two queues for one run/node and poison future replays.
+        # The explicit regenerated_from_queue_id retains the original lineage.
+        creator = queue.created_by
+        if creator.strip().lower().startswith("workflow:"):
+            creator = "local_user"
         request = ReviewQueueCreateRequest(
             source_quality_control_run_id=queue.source_quality_control_run_id,
             signal_weights=ReviewScoreWeights.model_validate(
                 queue.configuration_json.get("weights", {})
             ),
-            created_by=queue.created_by,
+            created_by=creator,
             review_below_confidence=queue.configuration_json.get("review_below_confidence"),
         )
         if queue.dataset_version_id is not None:
