@@ -1014,3 +1014,43 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
             inputs={"project": [source]},
         )
         assert retried[0]["payload"]["queue_id"] == queue_id
+
+        # A re-signed digest cannot relabel unverified QC as a verified
+        # biological finding in an actual persisted Workflow Builder run.
+        queue = session.get(ReviewQueue, queue_id)
+        assert queue is not None
+        original_breakdown = [dict(part) for part in rows[0].score_breakdown_json]
+        original_checksums = dict(queue.input_checksums_json)
+        altered_breakdown = [dict(part) for part in original_breakdown]
+        altered_breakdown[0]["label"] = "Verified coral polyp detection"
+        rows[0].score_breakdown_json = altered_breakdown
+        queue.input_checksums_json = {
+            **original_checksums,
+            "item_evidence_sha256": queue_item_evidence_sha256(rows),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        assert rows[0].review_state == "in_progress"
+        assert queue.item_count == 2
+        rows[0].score_breakdown_json = original_breakdown
+        queue.input_checksums_json = original_checksums
+        session.flush()
+        restored = execute_runtime_adapter(
+            "qc_review_queue",
+            session=session,
+            settings=app.state.settings,
+            project_id=project["id"],
+            parameters=params,
+            inputs={"project": [source]},
+        )
+        assert restored[0]["payload"]["queue_id"] == queue_id
+        assert restored[0]["payload"]["review_status"] == "requires_researcher_review"
+        assert restored[0]["payload"]["priority_score_unit"] == "dimensionless"
