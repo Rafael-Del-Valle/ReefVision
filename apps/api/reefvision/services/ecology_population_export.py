@@ -121,12 +121,7 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
         if blockers != ["independence_not_authenticated"]:
             raise ValidationError("Ecological population CSV invalid declared-unit review gate")
         if row["unit_status"] == "candidate":
-            if (
-                declared != 1
-                or not unit_ids
-                or organisms < 1
-                or row["mean_absolute_change"] == ""
-            ):
+            if declared != 1 or not unit_ids or organisms < 1 or row["mean_absolute_change"] == "":
                 raise ValidationError("Ecological population CSV invalid candidate declared-unit")
         elif row["unit_status"] in (
             "missing_unit_declaration",
@@ -169,8 +164,27 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
             or len(set(missing)) != len(missing)
         ):
             raise ValidationError("Ecological population CSV invalid missing-parent roster")
-        if not isinstance(blockers, list) or any(
-            not isinstance(blocker, str) for blocker in blockers
+        # Parent-colony disclosure must remain a unique, nonempty roster.
+        # Shared parents are necessarily members of the disclosed parent set;
+        # otherwise the CSV can hide a pseudoreplication warning.
+        try:
+            parent_keys = json.loads(str(row["parent_colony_keys_json"]))
+            shared_parent_keys = json.loads(str(row["shared_parent_colony_keys_json"]))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Ecological population CSV invalid parent-colony roster") from exc
+        if (
+            not isinstance(parent_keys, list)
+            or any(not isinstance(key, str) or not key.strip() for key in parent_keys)
+            or len(set(parent_keys)) != len(parent_keys)
+            or not isinstance(shared_parent_keys, list)
+            or any(not isinstance(key, str) or key not in parent_keys for key in shared_parent_keys)
+            or len(set(shared_parent_keys)) != len(shared_parent_keys)
+        ):
+            raise ValidationError("Ecological population CSV invalid parent-colony roster")
+        if (
+            not isinstance(blockers, list)
+            or any(not isinstance(blocker, str) or not blocker.strip() for blocker in blockers)
+            or len(set(blockers)) != len(blockers)
         ):
             raise ValidationError("Ecological population CSV invalid review blockers")
         if ("missing_parent_colony" in blockers) != bool(missing):
