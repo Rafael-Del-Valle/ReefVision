@@ -688,8 +688,7 @@ def test_v3_rejects_resigned_misleading_researcher_explanation(field: str) -> No
     else:
         item = items[0]
         part = next(
-            part for part in item.score_breakdown_json
-            if part["signal_id"] == "low_mean_confidence"
+            part for part in item.score_breakdown_json if part["signal_id"] == "low_mean_confidence"
         )
         part[field] = "Verified coral polyp detection"
     # The attacker has re-signed immutable evidence, but not changed any
@@ -697,6 +696,43 @@ def test_v3_rejects_resigned_misleading_researcher_explanation(field: str) -> No
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [
+        ("label_class_ids_json", ["class-z", "class-a"]),
+        ("label_class_ids_json", ["class-a", "class-a"]),
+        ("label_class_ids_json", [""]),
+        ("label_class_ids_json", [None]),
+        ("model_ids_json", ["model-z", "model-a"]),
+        ("model_ids_json", ["model-a", "model-a"]),
+        ("related_issue_ids_json", ["issue-z", "issue-a"]),
+        ("related_issue_ids_json", "issue-a"),
+        ("input_checksum", "A" * 64),
+        ("input_checksum", "x" * 64),
+        ("highest_qc_severity", "verified"),
+    ],
+)
+def test_v3_rejects_resigned_noncanonical_scientific_references(
+    field: str, invalid: object
+) -> None:
+    """A re-signed digest cannot invent malformed scientific source references."""
+    queue, items = _v3_snapshot()
+    items[0].review_state = "in_progress"
+    setattr(items[0], field, invalid)
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+    assert items[0].review_state == "in_progress"
+
+
+def test_v2_reference_compatibility_is_not_retroactively_reinterpreted() -> None:
+    """Historical v2 snapshots retain their original scientific reference contract."""
+    queue, items = snapshot()
+    items[0].model_ids_json = ["model-z", "model-a"]
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    validate_saved_queue_snapshot(queue, items)
 
 
 @pytest.mark.parametrize("corruption", ["invented_signal", "omitted_signal"])
