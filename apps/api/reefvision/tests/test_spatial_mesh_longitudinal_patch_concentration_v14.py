@@ -128,8 +128,38 @@ def test_patch_concentration_rejects_contradictory_source_metadata(
 ) -> None:
     before, after = (_preview(payload) for payload in _meshes())
     before[field] = value
-    with pytest.raises(ValueError, match="Patch"):
+    with pytest.raises(ValueError, match="[Pp]atch"):
         compare_mesh_observations(before, after)
+
+
+@pytest.mark.parametrize(
+    "invalid_count",
+    [True, 2.0, 0, -1, "2", float("nan"), 3],
+)
+@pytest.mark.parametrize("timepoint", [0, 1])
+def test_patch_count_rejects_forged_topology_metadata(
+    invalid_count: object, timepoint: int
+) -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    observations[timepoint]["edge_connected_patch_count"] = invalid_count
+    with pytest.raises(ValueError, match="Patch (count|area fractions)"):
+        compare_mesh_observations(*observations)
+
+
+@pytest.mark.parametrize("timepoint", [0, 1])
+def test_patch_area_evidence_without_fractions_is_rejected(timepoint: int) -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    record = observations[timepoint]
+    for field in (
+        "edge_connected_patch_surface_area_fractions",
+        "edge_connected_patch_area_concentration_index",
+        "area_weighted_effective_patch_count",
+    ):
+        record.pop(field)
+    # A modern artifact with per-patch areas cannot claim to be a legacy
+    # artifact lacking the distribution needed to audit those areas.
+    with pytest.raises(ValueError, match="Patch concentration requires source area fractions"):
+        compare_mesh_observations(*observations)
 
 
 @pytest.mark.parametrize(
@@ -177,6 +207,15 @@ def test_legacy_patch_fractions_without_area_breakdown_remain_readable() -> None
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
 
 
+def test_legacy_missing_topology_count_remains_readable() -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    for record in observations:
+        record.pop("edge_connected_patch_count")
+    result = compare_mesh_observations(*observations)
+    assert result["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+
 def test_missing_legacy_distribution_does_not_invent_zero_change() -> None:
     before, after = (_preview(payload) for payload in _meshes())
     for record in (before, after):
@@ -184,6 +223,7 @@ def test_missing_legacy_distribution_does_not_invent_zero_change() -> None:
             "edge_connected_patch_surface_area_fractions",
             "edge_connected_patch_area_concentration_index",
             "area_weighted_effective_patch_count",
+            "edge_connected_patch_surface_areas_m2",
         ):
             record.pop(field)
     result = compare_mesh_observations(before, after)
