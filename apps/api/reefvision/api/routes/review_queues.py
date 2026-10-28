@@ -2,15 +2,15 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.schemas.review_queues import ReviewQueueCreateRequest
 from reefvision.schemas.review_queues import (
     ReviewQueueBulkRequest,
     ReviewQueueBulkResponse,
-    ReviewQueueCreateRequest,
     ReviewQueueItemActorRequest,
     ReviewQueueItemCompleteRequest,
     ReviewQueueItemPageResponse,
@@ -28,6 +28,16 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 def service(request: Request, session: Session) -> ReviewQueueService:
     settings: Settings = request.app.state.settings
     return ReviewQueueService(session, settings)
+
+
+def _reject_reserved_workflow_creator(payload: ReviewQueueCreateRequest) -> None:
+    """Public queue creation cannot impersonate a saved Workflow Builder node."""
+    creator = payload.created_by
+    if creator is not None and creator.strip().lower().startswith("workflow:"):
+        raise HTTPException(
+            status_code=422,
+            detail="The workflow: creator namespace is reserved for saved workflow execution",
+        )
 
 
 @router.get("/projects/{project_id}/review-queues", response_model=list[ReviewQueueResponse])
@@ -50,6 +60,7 @@ def create_project_review_queue(
     request: Request,
     session: DbSession,
 ) -> ReviewQueueResponse:
+    _reject_reserved_workflow_creator(payload)
     return service(request, session).create_queue_for_project(project_id, payload)
 
 
@@ -77,6 +88,7 @@ def create_dataset_version_review_queue(
     request: Request,
     session: DbSession,
 ) -> ReviewQueueResponse:
+    _reject_reserved_workflow_creator(payload)
     return service(request, session).create_queue_for_dataset_version(version_id, payload)
 
 
