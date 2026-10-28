@@ -756,6 +756,59 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         retry_completed_node()
 
 
+def test_pose_workflow_rejects_explicitly_invalid_frozen_manifest_digest(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Use a real scientist-reviewed, API-frozen pose dataset. A persisted
+    # Workflow Builder artifact cannot bypass its checksum by supplying an
+    # explicitly false or empty digest.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+
+    for invalid_digest in (False, 0, "", None, "0" * 64):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="manifest no longer matches persisted truth"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={**payload, "manifest_sha256": invalid_digest},
+                parameters=parameters,
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+        valid = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=payload,
+            parameters=parameters,
+            processor=_fake_pose_processor,
+        )
+    assert valid["pose_training_dataset_id"] == dataset["id"]
+
+
 def test_pose_workflow_rejects_falsy_non_object_resource_limits_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
