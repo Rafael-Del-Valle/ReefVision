@@ -879,7 +879,6 @@ def test_pose_training_can_require_separate_validation_truth(
             processor=(_fake_pose_processor),
         )
 
-
     # A persisted Workflow Builder parameter must be an actual boolean:
     # "false" is truthy in Python, while 0/[] previously became False.
     for invalid_flag in ("false", "true", 0, 1, []):
