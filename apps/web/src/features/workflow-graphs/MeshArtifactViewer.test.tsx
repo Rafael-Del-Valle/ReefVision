@@ -112,7 +112,7 @@ describe("MeshArtifactViewer", () => {
     ).toHaveTextContent("vertex 2 (1.00000, 0.00000, 0.00000) m");
     expect(
       screen.getByText(/Source triangle 7 \(unverified source frame\)/),
-    ).toHaveTextContent("not an anatomical branch or verified surface");
+    ).toHaveTextContent("not anatomical branch lengths or verified surface");
     expect(JSON.stringify(validArtifact)).toBe(before);
   });
 
@@ -176,12 +176,16 @@ describe("MeshArtifactViewer", () => {
     expect(inspection).toHaveTextContent(
       "Scale-only triangle area interval: [2.43000, 3.63000] m²",
     );
-    expect(inspection).toHaveTextContent("reconstruction uncertainty unverified");
+    expect(inspection).toHaveTextContent(
+      "reconstruction uncertainty unverified",
+    );
     expect(JSON.stringify(sample)).toBe(original);
   });
 
   it("distinguishes missing and zero scale uncertainty, and rejects invalid evidence", () => {
-    const { rerender } = render(<MeshArtifactViewer artifact={validArtifact} />);
+    const { rerender } = render(
+      <MeshArtifactViewer artifact={validArtifact} />,
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Inspect source triangle 7" }),
     );
@@ -236,6 +240,86 @@ describe("MeshArtifactViewer", () => {
     expect(
       screen.getByText(/Source triangle 7 \(unverified source frame\)/),
     ).toHaveTextContent("Selected preview triangle area: 0.00000 m²");
+  });
+
+  it("inspects 3–4–5 triangle edges with scale-only intervals independent of camera", () => {
+    const sample = {
+      ...validArtifact,
+      preview_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [3, 0, 0],
+        [0, 4, 0],
+      ],
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 0.1,
+      },
+    };
+    const original = JSON.stringify(sample);
+    render(<MeshArtifactViewer artifact={sample} />);
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "Inspect source triangle 7" }),
+      { key: "Enter" },
+    );
+    const inspection = screen.getByText(
+      /Source triangle 7 \\(unverified source frame\\)/,
+    );
+    expect(inspection).toHaveTextContent(
+      "Selected preview triangle edge lengths (1–2, 2–3, 3–1): 3.00000, 5.00000, 4.00000 m",
+    );
+    expect(inspection).toHaveTextContent(
+      "Scale-only edge length intervals: [2.70000, 3.30000], [4.50000, 5.50000], [3.60000, 4.40000] m",
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Yaw" }), {
+      target: { value: "135" },
+    });
+    expect(inspection).toHaveTextContent(
+      "Selected preview triangle edge lengths (1–2, 2–3, 3–1): 3.00000, 5.00000, 4.00000 m",
+    );
+    expect(inspection).toHaveTextContent("not anatomical branch lengths");
+    expect(JSON.stringify(sample)).toBe(original);
+  });
+
+  it("keeps unknown edge uncertainty distinct from zero and handles degenerate edges", () => {
+    const sample = {
+      ...validArtifact,
+      preview_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+      ],
+    };
+    const { rerender } = render(<MeshArtifactViewer artifact={sample} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect source triangle 7" }),
+    );
+    expect(
+      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+    ).toHaveTextContent(
+      "Selected preview triangle edge lengths (1–2, 2–3, 3–1): 0.00000, 0.00000, 0.00000 m",
+    );
+    expect(
+      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+    ).toHaveTextContent("unknown (scale uncertainty not supplied)");
+    rerender(
+      <MeshArtifactViewer
+        artifact={{
+          ...sample,
+          provenance: {
+            calibration_verified: false,
+            relative_scale_uncertainty: 0,
+          },
+        }}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect source triangle 7" }),
+    );
+    expect(
+      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+    ).toHaveTextContent(
+      "Scale-only edge length intervals: [0.00000, 0.00000], [0.00000, 0.00000], [0.00000, 0.00000] m",
+    );
   });
 
   it("clears triangle selection for a replacement reconstruction", () => {
