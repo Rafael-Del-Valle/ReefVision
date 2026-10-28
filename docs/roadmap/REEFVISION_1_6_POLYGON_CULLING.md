@@ -70,3 +70,6 @@ non-renderable raster content. Standalone unit regressions cover both mismatch
 directions and malformed polygon safety. This changes only viewport display,
 not scientific data or Workflow Builder graph execution. Full exact-head
 Vitest/TypeScript/E2E and installed-Windows-GUI validation remain required.
+A separate Linux Node 22/TypeScript 5.8 strict source-representative harness
+passed 12 raster/polygon-fallback assertions. This does **not** establish that
+the full repository tests or React rendering passed.
