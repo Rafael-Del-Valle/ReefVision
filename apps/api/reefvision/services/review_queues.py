@@ -33,7 +33,10 @@ from reefvision.services.quality_control import (
     SEVERITY_SCORES,
     QualityControlService,
 )
-from reefvision.services.workflow_review_queue_integrity import queue_item_evidence_sha256
+from reefvision.services.workflow_review_queue_integrity import (
+    V3_SIGNAL_LABELS,
+    queue_item_evidence_sha256,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMULA_ID = "review_priority_v1"
@@ -97,21 +100,7 @@ class ReviewQueueService:
     ) -> tuple[list[dict[str, Any]], float]:
         weight_map = weights.model_dump(mode="json")
         total_weight = float(sum(weight_map.values()) or 1.0)
-        labels = {
-            "low_mean_confidence": "Low mean prediction confidence",
-            "low_min_confidence": "Low minimum prediction confidence",
-            "pending_proposals": "Many pending proposals",
-            "rejection_rate": "High proposal rejection rate",
-            "count_disagreement": "Model-versus-human count gap",
-            "unresolved_qc_severity": "Unresolved QC severity",
-            "rare_class_presence": "Rare-class presence",
-            "edited_acceptance_rate": "Edited acceptance rate",
-            "unreviewed_state": "Image not marked reviewed",
-            "missing_group_metadata": "Missing group metadata",
-            "incomplete_provenance": "Incomplete provenance",
-            "recent_import": "Recently imported image",
-            "stale_review_state": "Stale review state",
-        }
+        labels = V3_SIGNAL_LABELS
         breakdown: list[dict[str, Any]] = []
         total_score = 0.0
         for signal_id, raw_value in signal_values.items():
