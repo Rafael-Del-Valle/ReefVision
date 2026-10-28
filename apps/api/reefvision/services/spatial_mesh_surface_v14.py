@@ -690,7 +690,9 @@ def measure_mesh_preview(
         "area_weighted_effective_patch_count": effective_patch_count,
         "largest_surface_patch_index": largest_patch_index,
         "largest_surface_patch_area_fraction": (
-            patch_area_fractions[largest_patch_index] if largest_patch_index is not None else None
+            patch_area_fractions[largest_patch_index]
+            if largest_patch_index is not None and patch_area_fractions is not None
+            else None
         ),
         "edge_connected_patch_axis_aligned_dimensions_m": patch_dimensions_m,
         "edge_connected_patch_dimension_scale_intervals_m": (
