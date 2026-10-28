@@ -112,15 +112,14 @@ def test_saved_qc_workflow_rejects_duplicate_owned_queues_without_erasing_review
             "__workflow_run_id": run_id,
             "__workflow_node_run_id": node.id,
         }
-        replay_args = {
-            "session": session,
-            "settings": app.state.settings,
-            "project_id": project_id,
-            "parameters": parameters,
-            "inputs": {"project": [source]},
-        }
         # Establish that the original saved node is independently retryable.
-        initial_replay = create_review_queue_workflow_artifact(**replay_args)
+        initial_replay = create_review_queue_workflow_artifact(
+            session=session,
+            settings=app.state.settings,
+            project_id=project_id,
+            parameters=parameters,
+            inputs={"project": [source]},
+        )
         assert initial_replay[0]["payload"]["queue_id"] == queue_id
 
         # Simulate a legacy race or manual database corruption. The second
@@ -141,7 +140,13 @@ def test_saved_qc_workflow_rejects_duplicate_owned_queues_without_erasing_review
         session.commit()
         assert duplicate.id != original.id
         with pytest.raises(ValidationError, match="ambiguous duplicate workflow-owned queues"):
-            create_review_queue_workflow_artifact(**replay_args)
+            create_review_queue_workflow_artifact(
+                session=session,
+                settings=app.state.settings,
+                project_id=project_id,
+                parameters=parameters,
+                inputs={"project": [source]},
+            )
         owners = session.scalars(
             select(ReviewQueue).where(
                 ReviewQueue.project_id == project_id,
