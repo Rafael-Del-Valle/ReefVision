@@ -22,23 +22,25 @@ V2_SUPPORTED_FORMULA = ("review_priority_v1", "1.0.0")
 SUPPORTED_INTEGRITY_VERSIONS = ("qc-review-queue-v2", "qc-review-queue-v3")
 # Frozen scientific inputs for v3. A future scoring formula must introduce a
 # new version rather than silently adding or dropping biological/QC signals.
-V3_SUPPORTED_SIGNALS = frozenset(
-    {
-        "low_mean_confidence",
-        "low_min_confidence",
-        "pending_proposals",
-        "rejection_rate",
-        "count_disagreement",
-        "unresolved_qc_severity",
-        "rare_class_presence",
-        "edited_acceptance_rate",
-        "unreviewed_state",
-        "missing_group_metadata",
-        "incomplete_provenance",
-        "recent_import",
-        "stale_review_state",
-    }
-)
+# Human-readable explanations are scientific evidence too: a re-signed v3
+# snapshot must not call an unverified QC signal a verified biological result.
+# Keep these labels shared with the queue generator to prevent drift.
+V3_SIGNAL_LABELS = {
+    "low_mean_confidence": "Low mean prediction confidence",
+    "low_min_confidence": "Low minimum prediction confidence",
+    "pending_proposals": "Many pending proposals",
+    "rejection_rate": "High proposal rejection rate",
+    "count_disagreement": "Model-versus-human count gap",
+    "unresolved_qc_severity": "Unresolved QC severity",
+    "rare_class_presence": "Rare-class presence",
+    "edited_acceptance_rate": "Edited acceptance rate",
+    "unreviewed_state": "Image not marked reviewed",
+    "missing_group_metadata": "Missing group metadata",
+    "incomplete_provenance": "Incomplete provenance",
+    "recent_import": "Recently imported image",
+    "stale_review_state": "Stale review state",
+}
+V3_SUPPORTED_SIGNALS = frozenset(V3_SIGNAL_LABELS)
 
 
 def _finite_scientific_number(value: Any) -> bool:
@@ -124,6 +126,37 @@ def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
         and breakdown
         == sorted(breakdown, key=lambda part: (-part["contribution"], part["signal_id"]))
     )
+
+
+def _valid_v3_scientific_explanation(item: Any) -> bool:
+    """Validate frozen human-readable QC explanations, not only numeric scores.
+
+    Versioned queue labels and the short summary must never imply biological
+    verification or a different signal after a persisted artifact is re-signed.
+    This checks immutable evidence only, not editable reviewer comments.
+    """
+    breakdown = item.score_breakdown_json
+    if not isinstance(breakdown, list):
+        return False
+    for part in breakdown:
+        if not isinstance(part, dict):
+            return False
+        signal_id = part.get("signal_id")
+        if signal_id not in V3_SIGNAL_LABELS:
+            return False
+        label = V3_SIGNAL_LABELS[signal_id]
+        if (
+            part.get("label") != label
+            or part.get("description")
+            != f"{label} contributes according to the configured deterministic weight."
+        ):
+            return False
+    expected_summary = ", ".join(
+        f"{part['label']}: +{part['contribution']:.2f}"
+        for part in breakdown[:4]
+        if part["contribution"] > 0
+    )
+    return item.reason_summary == (expected_summary or None)
 
 
 def _valid_v3_signal_normalization(item: Any) -> bool:
@@ -332,7 +365,10 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             item, weights
         ):
             raise invalid
-        if integrity_version == "qc-review-queue-v3" and not _valid_v3_signal_normalization(item):
+        if integrity_version == "qc-review-queue-v3" and (
+            not _valid_v3_signal_normalization(item)
+            or not _valid_v3_scientific_explanation(item)
+        ):
             raise invalid
         scores[item.image_id] = item.score
         ranks.add(item.rank_position)
