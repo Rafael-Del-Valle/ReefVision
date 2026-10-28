@@ -75,15 +75,41 @@ def test_linked_measurements_keep_explicit_offsets_and_undated_evidence() -> Non
     offset = EcologyMeasurementCandidate.model_validate(payload)
     assert offset.value == 3.0
     assert offset.capture_timestamp_utc is not None
-    assert (
-        offset.capture_timestamp_utc.astimezone(UTC) == baseline.capture_timestamp_utc
-    )
+    assert offset.capture_timestamp_utc.astimezone(UTC) == baseline.capture_timestamp_utc
 
     payload["capture_timestamp_utc"] = None
     payload["capture_time_status"] = "timezone_missing"
     undated = EcologyMeasurementCandidate.model_validate(payload)
     assert undated.capture_timestamp_utc is None
     assert undated.review_gate == "scientist_review_required"
+
+
+@pytest.mark.parametrize(
+    "digest_field",
+    ["image_sha256", "annotation_sha256", "calibration_sha256"],
+)
+@pytest.mark.parametrize(
+    "bad_digest",
+    ["a" * 63, "a" * 65, "g" * 64, " a" * 32, "ａ" * 64, None, True, 17, []],
+)
+def test_projected_evidence_rejects_malformed_sha256(
+    digest_field: str, bad_digest: object
+) -> None:
+    payload = _candidate_payload()
+    payload[digest_field] = bad_digest
+    with pytest.raises(SchemaValidationError, match="64 hexadecimal"):
+        EcologyMeasurementCandidate.model_validate(payload)
+
+
+def test_projected_evidence_preserves_valid_mixed_case_digest_provenance() -> None:
+    payload = _candidate_payload()
+    payload["image_sha256"] = "aB" * 32
+    payload["annotation_sha256"] = "Cd" * 32
+    payload["calibration_sha256"] = "Ef" * 32
+    candidate = EcologyMeasurementCandidate.model_validate(payload)
+    assert candidate.image_sha256 == "aB" * 32
+    assert candidate.annotation_sha256 == "Cd" * 32
+    assert candidate.calibration_sha256 == "Ef" * 32
 
 
 def test_saved_workflow_source_replay_rejects_coerced_measurements_and_epochs(
@@ -98,21 +124,20 @@ def test_saved_workflow_source_replay_rejects_coerced_measurements_and_epochs(
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in run["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in run["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     saved = artifacts[0]["payload_json"]
     assert saved == response.json()
-    assert (
-        EcologyMeasurementCandidatesResponse.model_validate(saved).candidate_count > 0
-    )
+    assert EcologyMeasurementCandidatesResponse.model_validate(saved).candidate_count > 0
 
     for field, bad_value, error in (
         ("value", "3.2", "JSON number"),
         ("value", True, "JSON number"),
         ("capture_timestamp_utc", 1775203200, "explicit ISO 8601"),
+        ("image_sha256", "a" * 63, "64 hexadecimal"),
+        ("annotation_sha256", "g" * 64, "64 hexadecimal"),
+        ("calibration_sha256", "ａ" * 64, "64 hexadecimal"),
     ):
         tampered = deepcopy(saved)
         tampered["candidates"][0][field] = bad_value
