@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
@@ -20,6 +21,7 @@ from sqlalchemy import select
 from reefvision.config import Settings
 from reefvision.db.models import ReviewQueue, ReviewQueueItem, WorkflowArtifact, WorkflowNodeRun
 from reefvision.desktop import resolve_alembic_paths, run_pending_migrations
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.main import create_app
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
@@ -235,6 +237,8 @@ def test_upgraded_desktop_persists_executable_qc_and_manual_review(tmp_path: Pat
             saved_item = session.get(ReviewQueueItem, item_id)
             assert queue is not None and saved_item is not None
             initial_checksum = dict(queue.input_checksums_json)
+            assert initial_checksum["integrity_schema_version"] == "qc-review-queue-v3"
+            assert len(initial_checksum["item_evidence_sha256"]) == 64
             existing_queue_ids = [
                 row.id
                 for row in session.scalars(
@@ -250,6 +254,29 @@ def test_upgraded_desktop_persists_executable_qc_and_manual_review(tmp_path: Pat
                 "__workflow_run_id": run_id,
                 "__workflow_node_run_id": qc_node.id,
             }
+            # Corrupt a persisted scientific-evidence digest after the
+            # migration and restart. A saved graph must fail closed without
+            # resetting the researcher's manual review state.
+            queue.input_checksums_json = {
+                **initial_checksum,
+                "item_evidence_sha256": "0" * 64,
+            }
+            session.commit()
+            with pytest.raises(ValidationError, match="snapshot failed integrity validation"):
+                create_review_queue_workflow_artifact(
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project_id,
+                    parameters=params,
+                    inputs={"project": [source]},
+                )
+            assert session.get(ReviewQueueItem, item_id).review_state == "in_progress"
+            assert session.get(ReviewQueue, queue_id).input_checksums_json != initial_checksum
+
+            # Restore original evidence and replay without duplicating the
+            # queue or any append-only reviewer events.
+            queue.input_checksums_json = dict(initial_checksum)
+            session.commit()
             for _ in range(2):
                 replay = create_review_queue_workflow_artifact(
                     session=session,
