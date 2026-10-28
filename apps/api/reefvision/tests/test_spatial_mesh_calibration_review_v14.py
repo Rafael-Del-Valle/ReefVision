@@ -203,9 +203,9 @@ def test_saved_workflow_and_standalone_review_are_identical(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["provenance"]["source_payload_integrity_checked"] is True
-    assert expected["provenance"]["source_payload_sha256"] == params[
-        "expected_source_payload_sha256"
-    ]
+    assert (
+        expected["provenance"]["source_payload_sha256"] == params["expected_source_payload_sha256"]
+    )
     assert expected["provenance"]["calibration_verified"] is False
     graph = {
         "graph_id": "independent-calibration-review-v14",
