@@ -2968,3 +2968,30 @@ authenticated longitudinal source review, experimental-design attestation,
 migration reconciliation with unmerged 1.1, real scientific acceptance and
 installed Windows GUI/installer testing remain release blockers. No merge,
 release, model download or verified-dataset promotion occurred.
+
+## Exact source-revision identity validation (2026-10-27; development only)
+
+The source-linked `EcologyMeasurementCandidate` schema now requires
+`identity_revision` and `annotation_revision` to be **explicit positive
+JSON integers**. Boolean `true` (which Python otherwise interprets as
+integer 1), numeric strings, floats, nulls and containers cannot silently
+become an identity/annotation revision. Positive integers remain unchanged;
+the existing producer, standalone candidate API and typed persisted
+`ecology_measurement_candidates` Workflow Builder source share this schema.
+No database migration or environmental-context duplication is introduced.
+
+Added 14 direct rejection cases, six valid revision cases, and four saved
+executable-workflow artifact tampering/replay rejection cases. The preceding
+exact head `cbf29bad1035b988d93a2a39261e2acfc025ba23` passed 16/19
+GitHub Actions workflows; three backend workflows failed at Ruff RUF001
+because a fullwidth-character negative test used a literal confusable.
+The negative test now uses the ASCII Unicode escape `\\uff41` to preserve
+the runtime adversarial value without violating the lint policy.
+
+This guards **revision syntax and artifact rehydration only**, not the
+existence, ownership, immutable hash, biological identity or scientist review
+of source annotations. All output remains `linked_unverified` and
+`scientist_review_required`. Full exact-head CI, authenticated longitudinal
+source review, registered experimental design, migration reconciliation,
+real coral data acceptance and installed Windows GUI/installer testing remain
+mandatory. No merge, tag, release, installation or deployment is authorized.
