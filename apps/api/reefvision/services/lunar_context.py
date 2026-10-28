@@ -1,7 +1,7 @@
 """Versioned offline lunar context, never a tide or local sky prediction.
 
 Uses a short geocentric ecliptic-longitude series for the Sun and Moon.
-Approximate lunar age is elongation / 360 × mean synodic month, NOT
+Approximate lunar age is elongation / 360 times the mean synodic month, NOT
 an ephemeris-derived time since the most recent conjunction.
 """
 

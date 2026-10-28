@@ -30,7 +30,7 @@ class LunarContextRequest(ScientificModel):
     @model_validator(mode="after")
     def require_supported_epoch(self) -> LunarContextRequest:
         if not 1900 <= self.observed_at.year <= 2100:
-            raise ValueError("Low-precision lunar calculation supports 1900–2100 UTC")
+            raise ValueError("Low-precision lunar calculation supports 1900-2100 UTC")
         return self
 
 

@@ -32,7 +32,13 @@ export function LunarContextPanel({ projectId }: { projectId: string }) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const timestamp = observedAt.trim();
-    if (!UTC_TIMESTAMP.test(timestamp) || !Number.isFinite(Date.parse(timestamp))) {
+    const parsedTimestamp = Date.parse(timestamp);
+    if (
+      !UTC_TIMESTAMP.test(timestamp) ||
+      !Number.isFinite(parsedTimestamp) ||
+      new Date(parsedTimestamp).toISOString().slice(0, 19) !==
+        timestamp.slice(0, 19)
+    ) {
       setInputError("Enter a valid UTC timestamp including seconds and Z.");
       return;
     }

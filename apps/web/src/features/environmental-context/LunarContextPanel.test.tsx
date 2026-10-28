@@ -53,12 +53,31 @@ describe("LunarContextPanel", () => {
     fireEvent.change(screen.getByLabelText("Observation time (UTC)"), {
       target: { value: "2024-04-08T18:20:00" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Calculate lunar phase" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("including seconds and Z");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Calculate lunar phase" }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "including seconds and Z",
+    );
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("submits explicit UTC and displays qualified phase with provenance", async () => {
+  it("rejects impossible UTC calendar dates", () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    renderPanel();
+    fireEvent.change(screen.getByLabelText("Observation time (UTC)"), {
+      target: { value: "2024-02-30T18:20:00Z" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Calculate lunar phase" }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "including seconds and Z",
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("displays explicit UTC phase and provenance", async () => {
     const fetch = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async () =>
@@ -71,17 +90,25 @@ describe("LunarContextPanel", () => {
     fireEvent.change(screen.getByLabelText("Observation time (UTC)"), {
       target: { value: TIMESTAMP },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Calculate lunar phase" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Calculate lunar phase" }),
+    );
 
     expect(await screen.findByText("Phase: New moon")).toBeVisible();
-    expect(screen.getByText("Approximate illumination:", { exact: false })).toBeVisible();
+    expect(
+      screen.getByText("Approximate illumination:", { exact: false }),
+    ).toBeVisible();
     expect(screen.getByText(RESPONSE.content_sha256)).toBeInTheDocument();
     expect(
       screen.getByText("Lunar phase alone does not establish local spring or neap tides."),
     ).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
     const [url, options] = fetch.mock.calls[0];
-    expect(String(url)).toContain(`/projects/${PROJECT}/environment/lunar-context`);
-    expect(JSON.parse(String(options?.body))).toEqual({ observed_at: TIMESTAMP });
+    expect(String(url)).toContain(
+      `/projects/${PROJECT}/environment/lunar-context`,
+    );
+    expect(JSON.parse(String(options?.body))).toEqual({
+      observed_at: TIMESTAMP,
+    });
   });
 });
