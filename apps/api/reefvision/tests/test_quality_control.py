@@ -323,7 +323,15 @@ def test_review_queue_generation_preserves_breakdown_and_item_state_transitions(
     assert return_response.status_code == 200, return_response.text
     assert return_response.json()["review_state"] == "pending"
 
-    complete_response = client.post(f"/api/v1/review-queue-items/{item['id']}/complete")
+    unconfirmed = client.post(f"/api/v1/review-queue-items/{item['id']}/complete")
+    assert unconfirmed.status_code == 422, unconfirmed.text
+    unchanged = client.get(f"/api/v1/review-queues/{queue['id']}/items").json()
+    assert unchanged["items"][0]["review_state"] == "pending"
+
+    complete_response = client.post(
+        f"/api/v1/review-queue-items/{item['id']}/complete",
+        json={"actor": "QC reviewer", "review_confirmed": True},
+    )
     assert complete_response.status_code == 200, complete_response.text
     assert complete_response.json()["review_state"] == "completed"
 
