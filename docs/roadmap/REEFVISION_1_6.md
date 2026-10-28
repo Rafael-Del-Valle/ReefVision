@@ -25,6 +25,22 @@
 - Tests cover standalone and saved graph execution, typed artifact persistence, reuse,
   foreign-project rejection, and changed-parameter rejection.
 
+## 2026-10-27 — Saved QC producer-output reciprocity (Track D)
+
+- The executable `qc_review_queue` node already checked the signed project
+  source payload, successful `project_source` producer and QC consumer's saved
+  input binding. A missing reciprocal *producer output* binding could still
+  leave a plausible-looking source artifact accepted on interrupted replay.
+- The adapter now requires the source ID to be the exact persisted output
+  artifact list of its `project_source` node. This is the existing single-output
+  node contract; no migration, scientific rescoring or reviewer-state change.
+- Added standalone invalid-source cases for absent and substituted producer
+  outputs. The saved executable Workflow Builder regression also mutates both
+  output bindings, requires rejection before queue reuse, then restores the
+  original producer evidence and verifies safe retry.
+- These are development changes only. Exact-head CI and installed Windows
+  MSI/GUI/scientific acceptance remain pending; no merge or release.
+
 ## 2026-10-27 — Saved QC source edge and producer provenance
 
 - Audited the existing executable `qc_review_queue` adapter and Workflow Builder
