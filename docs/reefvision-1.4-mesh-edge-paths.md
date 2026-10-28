@@ -12,6 +12,19 @@ unreferenced routes never receive numeric intervals. The intervals apply
 the same multiplicative scale uncertainty to both lengths; they are not
 statistical confidence intervals.
 
+Connected routes additionally report ordered `path_edge_lengths_m` (one calibrated
+geometric distance for each consecutive pair in `path_vertex_indices`) and
+`path_edge_length_scale_intervals_m` (one lower/upper common-scale interval
+per edge when relative scale uncertainty was supplied; otherwise null).
+These segments allow reviewers to inspect where a shortest route travels on
+the original mesh, rather than treating only its total as evidence. Their
+sum approximates the route length subject to floating-point rounding.
+Disconnected and unreferenced routes return null for both segment fields,
+not empty arrays that could be mistaken for measured zero-length paths.
+The intervals share a single calibration uncertainty and must **not** be
+interpreted as independent edge-specific errors or confidence intervals.
+No segment is automatically accepted as a biological branch or centerline.
+
 A disconnected pair returns `status: disconnected` with unknown length.
 A vertex not referenced by any face returns `status: unreferenced_endpoint`.
 Neither is assigned an artificial zero or straight-line distance. An omitted
