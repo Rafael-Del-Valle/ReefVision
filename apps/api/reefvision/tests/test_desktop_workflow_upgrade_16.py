@@ -94,14 +94,10 @@ def test_upgraded_desktop_persists_executable_qc_and_manual_review(tmp_path: Pat
             relative_path="legacy/legacy-swiftia.png",
         )
         image_id = imported["successful"][0]["image_id"]
-        planned = client.post(
-            f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-        )
+        planned = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
         assert planned.status_code == 200, planned.text
         assert planned.json()["valid"] and planned.json()["executable"]
-        saved = client.post(
-            f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-        )
+        saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
         assert saved.status_code == 201, saved.text
         graph_id = saved.json()["id"]
         queued = client.post(
