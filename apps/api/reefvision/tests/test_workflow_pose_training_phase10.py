@@ -436,7 +436,9 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
             == result["result_checkpoint_path"]
         )
 
-    def retry_completed_node(*, run_name: str = "phase10-pose-retrain") -> dict[str, Any]:
+    def retry_completed_node(
+        *, run_name: str = "phase10-pose-retrain", notes: str | None = None
+    ) -> dict[str, Any]:
         with app.state.session_factory() as session:
             return create_pose_workflow_training_result(
                 session,
@@ -450,6 +452,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
                 initial_model_payload={"model_id": model_id},
                 parameters={
                     "run_name": run_name,
+                    "notes": notes,
                     "device": "cpu",
                     "precision": "fp32",
                     "random_seed": 31,
@@ -468,6 +471,11 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     # an already completed scientist-verified training result.
     with pytest.raises(ValidationError, match="configuration changed"):
         retry_completed_node(run_name="different-scientific-run")
+
+    # A saved workflow replay must not reuse weights after its experiment
+    # notes change, even if all frozen training inputs remain identical.
+    with pytest.raises(ValidationError, match="configuration changed"):
+        retry_completed_node(notes="different-experimental-context")
 
     with app.state.session_factory() as session:
         matching_runs = session.scalars(
