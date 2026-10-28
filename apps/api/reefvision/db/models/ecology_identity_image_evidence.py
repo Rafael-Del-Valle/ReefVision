@@ -42,7 +42,6 @@ class EcologyIdentityImageEvidence(Base):
     image_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     # NULL marks pre-migration links whose capture/geometry metadata was not frozen.
     source_metadata_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False

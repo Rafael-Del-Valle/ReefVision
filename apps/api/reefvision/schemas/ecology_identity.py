@@ -88,8 +88,6 @@ class EcologyImageEvidenceRow(BaseModel):
     # Optional defaults keep earlier saved Workflow Builder registry artifacts readable.
     source_metadata_sha256: str | None = None
     source_metadata_evidence_status: Literal["frozen", "legacy_unfrozen"] = "legacy_unfrozen"
-
-
     reason: str
     created_at: datetime
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
