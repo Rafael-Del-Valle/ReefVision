@@ -28,9 +28,7 @@ def test_known_phase_reference_windows(
     client: TestClient, timestamp: str, phase: str, fraction_limit: float
 ) -> None:
     project = create_project(client, "Lunar study")
-    response = client.post(
-        _endpoint(project["id"]), json={"observed_at": timestamp}
-    )
+    response = client.post(_endpoint(project["id"]), json={"observed_at": timestamp})
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["phase"] == phase
@@ -62,6 +60,7 @@ def test_equivalent_utc_instants_are_identical_and_repeatable(client: TestClient
     "payload",
     [
         {"observed_at": "2024-04-08T18:20:00"},
+        {"observed_at": "2024-02-30T18:20:00Z"},
         {"observed_at": "1899-01-01T00:00:00Z"},
         {"observed_at": "2101-01-01T00:00:00Z"},
         {"observed_at": NEW_MOON, "assumed_location": "Charleston"},
@@ -80,6 +79,4 @@ def test_no_cross_project_or_missing_project_context(client: TestClient) -> None
     project = create_project(client)
     url = _endpoint(project["id"])
     assert client.post(url, json={"observed_at": NEW_MOON}).status_code == 200
-    assert client.post(
-        _endpoint(str(uuid4())), json={"observed_at": NEW_MOON}
-    ).status_code == 404
+    assert client.post(_endpoint(str(uuid4())), json={"observed_at": NEW_MOON}).status_code == 404
