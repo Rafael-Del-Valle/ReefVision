@@ -70,7 +70,8 @@ def test_patch_concentration_is_permutation_invariant_scale_free_qc() -> None:
     assert result["after_area_weighted_effective_patch_count"] == pytest.approx(2)
     assert result["delta_area_weighted_effective_patch_count"] == pytest.approx(0.4)
     assert result["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
-    assert "ranked_patch_area_profile_distance_not_patch_correspondence" in result["qc_warnings"]
+    warning = "ranked_patch_area_profile_distance_not_patch_correspondence"
+    assert warning in result["qc_warnings"]
     assert (
         "patch_area_distribution_change_is_reconstruction_qc_not_fragmentation"
         in result["qc_warnings"]
@@ -100,7 +101,8 @@ def test_ranked_profile_pads_missing_patch_ranks_with_zero() -> None:
     assert before["edge_connected_patch_count"] == 2
     assert after["edge_connected_patch_count"] == 1
     assert result["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
-    assert "ranked_patch_area_profile_distance_not_patch_correspondence" in result["qc_warnings"]
+    warning = "ranked_patch_area_profile_distance_not_patch_correspondence"
+    assert warning in result["qc_warnings"]
 
 
 @pytest.mark.parametrize(
