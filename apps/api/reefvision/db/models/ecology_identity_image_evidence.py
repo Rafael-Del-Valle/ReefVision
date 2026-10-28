@@ -40,6 +40,12 @@ class EcologyIdentityImageEvidence(Base):
         String(36), ForeignKey("images.id", ondelete="RESTRICT"), nullable=False
     )
     image_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    # NULL marks pre-migration links whose capture/geometry metadata was not frozen.
+    source_metadata_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    @property
+    def source_metadata_evidence_status(self) -> str:
+        return "frozen" if self.source_metadata_sha256 is not None else "legacy_unfrozen"
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False

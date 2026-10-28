@@ -48,9 +48,7 @@ class EcologyMeasurementCandidate(BaseModel):
             raise ValueError("Projected measurement must be a JSON number, not coerced")
         return value
 
-    @field_validator(
-        "image_sha256", "annotation_sha256", "calibration_sha256", mode="before"
-    )
+    @field_validator("image_sha256", "annotation_sha256", "calibration_sha256", mode="before")
     @classmethod
     def require_sha256_evidence_digest(cls, value: object) -> str:
         """Reject malformed digests without changing original provenance casing."""

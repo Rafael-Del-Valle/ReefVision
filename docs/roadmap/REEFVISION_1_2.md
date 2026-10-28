@@ -2995,3 +2995,36 @@ of source annotations. All output remains `linked_unverified` and
 source review, registered experimental design, migration reconciliation,
 real coral data acceptance and installed Windows GUI/installer testing remain
 mandatory. No merge, tag, release, installation or deployment is authorized.
+
+
+## Frozen source-image acquisition and geometry metadata (2026-10-28; development only)
+
+A linked image's content SHA-256 was already immutable, but the source image
+capture timestamp, positive pixel dimensions, byte size, and media type could
+still change after linking. Such edits could retroactively change UTC
+longitudinal sampling dates or calibrated projected measurements without
+requiring a new organism/source evidence decision. New image links now store a
+SHA-256 of this metadata, including explicit missing/naive/aware capture-time
+status and UTC-normalized aware timestamps. Registry reads fail closed if the
+linked source metadata changes; the existing standalone registry and saved
+executable Workflow Builder source share this check.
+
+Migration `b12_identity_0005` adds a nullable fingerprint column. Historical
+links remain **legacy_unfrozen** (NULL) rather than receiving a fabricated
+snapshot from today's mutable image metadata. The API and persisted workflow
+registry expose `source_metadata_evidence_status` and the optional fingerprint;
+the registry evidence fingerprint advances to
+`ecology-image-evidence-0002`. No historical record is overwritten, no source
+is promoted to verified, and no inference of acquisition time is made. Focused
+regressions cover missing-to-dated and dated-to-different capture timestamps,
+positive dimension drift, legacy disclosure, and saved-workflow fail-closed
+behavior. Legacy acquisition evidence still requires explicit scientist review
+and a future migration/relink policy before verified longitudinal acceptance.
+
+The previous exact head `25b93af8e3cd3602e18496c633bf05b89409bacd`
+completed 16/19 Actions workflows. The three backend failures were solely
+Ruff formatting of the SHA-256 validator decorator and negative-test
+function signature; both formatting differences are corrected in this slice.
+Exact-head CI, independent biological verification, migration reconciliation
+with unmerged 1.1, and native Windows MSI/GUI acceptance remain outstanding.
+**ReefVision 1.2 is NOT RELEASE-READY; 1.3 has not started.**

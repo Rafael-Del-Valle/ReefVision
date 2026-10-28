@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from datetime import UTC
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -252,6 +253,37 @@ class EcologyIdentityService:
         if image.width_px <= 0 or image.height_px <= 0 or image.file_size_bytes <= 0:
             raise ValidationError("Ecological image evidence has invalid source dimensions or size")
 
+    @staticmethod
+    def _source_metadata_fingerprint(image: ImageAsset) -> str:
+        """Freeze imported capture time and image geometry without inferring dates.
+
+        A changed acquisition time or positive-but-different pixel dimension
+        must not silently alter longitudinal evidence after source linking.
+        """
+        capture = image.capture_timestamp
+        if capture is None:
+            time_status = "missing"
+            capture_text = None
+        elif capture.tzinfo is None or capture.utcoffset() is None:
+            time_status = "timezone_missing"
+            capture_text = capture.isoformat()
+        else:
+            time_status = "timezone_aware"
+            capture_text = capture.astimezone(UTC).isoformat()
+        return canonical_json_sha256(
+            {
+                "algorithm_version": "ecology-image-source-metadata-0001",
+                "image_id": image.id,
+                "image_sha256": image.sha256,
+                "width_px": image.width_px,
+                "height_px": image.height_px,
+                "file_size_bytes": image.file_size_bytes,
+                "media_type": image.media_type,
+                "capture_time_status": time_status,
+                "capture_timestamp": capture_text,
+            }
+        )
+
     def link_image(
         self,
         project_id: str,
@@ -287,6 +319,7 @@ class EcologyIdentityService:
             identity_revision=current.revision,
             image_id=image.id,
             image_sha256=image.sha256,
+            source_metadata_sha256=self._source_metadata_fingerprint(image),
             reason=payload.reason,
         )
         self.session.add(link)
@@ -762,6 +795,11 @@ class EcologyIdentityService:
             if image is None or image.project_id != project_id or image.sha256 != link.image_sha256:
                 raise ValidationError("Ecological image evidence source is missing or changed")
             self._assert_image_source_metadata(image)
+            if (
+                link.source_metadata_sha256 is not None
+                and link.source_metadata_sha256 != self._source_metadata_fingerprint(image)
+            ):
+                raise ValidationError("Ecological source image metadata changed after linking")
         return links
 
     def registry(self, project_id: str) -> EcologyIdentityRegistryResponse:
@@ -811,6 +849,8 @@ class EcologyIdentityService:
                 "identity_revision": row.identity_revision,
                 "image_id": row.image_id,
                 "image_sha256": row.image_sha256,
+                "source_metadata_sha256": row.source_metadata_sha256,
+                "source_metadata_evidence_status": row.source_metadata_evidence_status,
                 "reason": row.reason,
                 "created_at": row.created_at.isoformat(),
             }
@@ -888,7 +928,7 @@ class EcologyIdentityService:
             image_evidence_count=len(image_link_rows),
             image_evidence_sha256=canonical_json_sha256(
                 {
-                    "algorithm_version": "ecology-image-evidence-0001",
+                    "algorithm_version": "ecology-image-evidence-0002",
                     "project_id": project_id,
                     "links": image_link_fingerprint,
                 }

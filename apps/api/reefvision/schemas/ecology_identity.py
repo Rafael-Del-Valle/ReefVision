@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Literal
 
@@ -84,6 +85,20 @@ class EcologyImageEvidenceRow(BaseModel):
     identity_revision: int
     image_id: str
     image_sha256: str
+    # Optional defaults keep earlier saved Workflow Builder registry artifacts readable.
+    source_metadata_sha256: str | None = None
+    source_metadata_evidence_status: Literal["frozen", "legacy_unfrozen"] = "legacy_unfrozen"
+
+    @model_validator(mode="after")
+    def require_consistent_source_metadata_status(self) -> EcologyImageEvidenceRow:
+        """A replayed legacy link cannot masquerade as frozen source evidence."""
+        digest = self.source_metadata_sha256
+        if digest is not None and re.fullmatch(r"[0-9a-fA-F]{64}", digest) is None:
+            raise ValueError("Image source metadata fingerprint must be SHA-256")
+        if (digest is None) != (self.source_metadata_evidence_status == "legacy_unfrozen"):
+            raise ValueError("Image source metadata evidence status contradicts its fingerprint")
+        return self
+
     reason: str
     created_at: datetime
     evidence_level: Literal["linked_unverified"] = "linked_unverified"

@@ -114,9 +114,7 @@ def test_linked_measurements_keep_explicit_offsets_and_undated_evidence() -> Non
     "bad_digest",
     ["a" * 63, "a" * 65, "g" * 64, " a" * 32, "\uff41" * 64, None, True, 17, []],
 )
-def test_projected_evidence_rejects_malformed_sha256(
-    digest_field: str, bad_digest: object
-) -> None:
+def test_projected_evidence_rejects_malformed_sha256(digest_field: str, bad_digest: object) -> None:
     payload = _candidate_payload()
     payload[digest_field] = bad_digest
     with pytest.raises(SchemaValidationError, match="64 hexadecimal"):

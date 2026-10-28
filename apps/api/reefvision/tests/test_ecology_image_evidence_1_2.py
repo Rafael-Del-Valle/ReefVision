@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, cast
+
+import pytest
+from sqlalchemy import select
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as SchemaValidationError
 
 from reefvision.db.models import ImageAsset
+from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -197,3 +204,107 @@ def test_malformed_source_dimensions_fail_closed_in_api_and_saved_workflow(
     assert run["run"]["status"] == "failed"
     assert "invalid source dimensions or size" in run["run"]["error_message"]
     assert not any(row["data_type"] == "ecology_identity_registry" for row in run["artifacts"])
+
+
+@pytest.mark.parametrize(
+    ("original", "changed"),
+    [
+        (None, datetime(2026, 4, 3, 8)),
+        (datetime(2026, 4, 3, 8), datetime(2026, 4, 4, 8)),
+    ],
+)
+def test_changed_capture_metadata_revokes_api_and_saved_workflow(
+    client: TestClient,
+    original: datetime | None,
+    changed: datetime,
+) -> None:
+    """Even a plausible date correction cannot rewrite linked source evidence."""
+    project_id = str(create_project(client, "Frozen capture provenance")["id"])
+    _register(client, project_id, "colony-time")
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        image.capture_timestamp = original
+        session.commit()
+
+    linked = _link(client, project_id, "colony-time", image_id)
+    assert linked.status_code == 201, linked.text
+    assert linked.json()["source_metadata_evidence_status"] == "frozen"
+    assert len(linked.json()["source_metadata_sha256"]) == 64
+    registry_url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
+    before = client.get(registry_url)
+    assert before.status_code == 200, before.text
+    assert before.json()["image_evidence_links"] == [linked.json()]
+
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        image.capture_timestamp = changed
+        session.commit()
+
+    response = client.get(registry_url)
+    assert response.status_code == 400, response.text
+    assert "metadata changed after linking" in response.json()["detail"]
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "failed"
+    assert "metadata changed after linking" in workflow["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
+    )
+
+
+def test_changed_positive_image_dimensions_revoke_source_link(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Frozen image dimensions")["id"])
+    _register(client, project_id, "colony-size")
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    assert _link(client, project_id, "colony-size", image_id).status_code == 201
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        image.width_px += 1
+        session.commit()
+    response = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert response.status_code == 400, response.text
+    assert "metadata changed after linking" in response.json()["detail"]
+
+
+def test_legacy_image_link_is_explicitly_unfrozen_in_api_and_workflow(
+    client: TestClient,
+) -> None:
+    """A NULL pre-migration fingerprint must not masquerade as frozen evidence."""
+    project_id = str(create_project(client, "Legacy source evidence")["id"])
+    _register(client, project_id, "colony-legacy")
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    assert _link(client, project_id, "colony-legacy", image_id).status_code == 201
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        link = session.scalar(
+            select(EcologyIdentityImageEvidence).where(
+                EcologyIdentityImageEvidence.project_id == project_id
+            )
+        )
+        assert link is not None
+        link.source_metadata_sha256 = None
+        session.commit()
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 200, registry.text
+    evidence = registry.json()["image_evidence_links"][0]
+    assert evidence["source_metadata_sha256"] is None
+    assert evidence["source_metadata_evidence_status"] == "legacy_unfrozen"
+    assert evidence["evidence_level"] == "linked_unverified"
+    tampered = registry.json()
+    tampered["image_evidence_links"][0]["source_metadata_evidence_status"] = "frozen"
+    with pytest.raises(SchemaValidationError, match="contradicts its fingerprint"):
+        EcologyIdentityRegistryResponse.model_validate(tampered)
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == registry.json()
