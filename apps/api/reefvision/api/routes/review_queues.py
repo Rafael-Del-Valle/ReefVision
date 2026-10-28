@@ -13,6 +13,7 @@ from reefvision.schemas.review_queues import (
     ReviewQueueCreateRequest,
     ReviewQueueItemPageResponse,
     ReviewQueueItemResponse,
+    ReviewQueueItemActorRequest,
     ReviewQueueItemSkipRequest,
     ReviewQueueResponse,
 )
@@ -130,8 +131,11 @@ def start_review_queue_item(
     item_id: str,
     request: Request,
     session: DbSession,
+    payload: ReviewQueueItemActorRequest | None = None,
 ) -> ReviewQueueItemResponse:
-    return service(request, session).start_item(item_id)
+    return service(request, session).start_item(
+        item_id, actor=payload.actor if payload else "local_user"
+    )
 
 
 @router.post("/review-queue-items/{item_id}/complete", response_model=ReviewQueueItemResponse)
@@ -139,8 +143,11 @@ def complete_review_queue_item(
     item_id: str,
     request: Request,
     session: DbSession,
+    payload: ReviewQueueItemActorRequest | None = None,
 ) -> ReviewQueueItemResponse:
-    return service(request, session).complete_item(item_id)
+    return service(request, session).complete_item(
+        item_id, actor=payload.actor if payload else "local_user"
+    )
 
 
 @router.post("/review-queue-items/{item_id}/skip", response_model=ReviewQueueItemResponse)
@@ -158,8 +165,11 @@ def return_review_queue_item(
     item_id: str,
     request: Request,
     session: DbSession,
+    payload: ReviewQueueItemActorRequest | None = None,
 ) -> ReviewQueueItemResponse:
-    return service(request, session).return_item(item_id)
+    return service(request, session).return_item(
+        item_id, actor=payload.actor if payload else "local_user"
+    )
 
 
 @router.post("/review-queues/{queue_id}/regenerate", response_model=ReviewQueueResponse)
