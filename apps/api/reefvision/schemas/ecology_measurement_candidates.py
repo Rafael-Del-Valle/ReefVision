@@ -225,6 +225,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         Literal[
             "ecology-measurement-candidates-0018",
             "ecology-measurement-candidates-0019",
+            "ecology-measurement-candidates-0020",
         ]
         | None
     ) = None
