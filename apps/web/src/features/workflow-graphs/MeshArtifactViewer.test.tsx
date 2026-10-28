@@ -48,6 +48,69 @@ describe("MeshArtifactViewer", () => {
     expect(JSON.stringify(validArtifact)).toBe(before);
   });
 
+  it("renders complete provisional edge routes despite triangle decimation", () => {
+    const artifact = {
+      ...validArtifact,
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [0, 5, 2],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [0.5, 0.5, 0.5],
+            [0, 1, 0],
+          ],
+        },
+        {
+          status: "disconnected",
+          path_vertex_indices: null,
+          path_vertices_in_source_frame_m: null,
+        },
+      ],
+    };
+    const original = JSON.stringify(artifact);
+    const { container } = render(<MeshArtifactViewer artifact={artifact} />);
+    const polyline = container.querySelector(
+      '[data-testid="mesh-route-polyline"]',
+    );
+    expect(polyline).not.toBeNull();
+    expect(container.querySelectorAll("polyline")).toHaveLength(1);
+    expect(polyline?.getAttribute("points")?.split(" ")).toHaveLength(3);
+    const initial = polyline?.getAttribute("points");
+    fireEvent.change(screen.getByRole("slider", { name: "Yaw" }), {
+      target: { value: "90" },
+    });
+    expect(polyline?.getAttribute("points")).not.toBe(initial);
+    expect(screen.getByText(/complete provisional mesh-edge/)).toHaveTextContent(
+      "not verified coral branch centerlines",
+    );
+    expect(JSON.stringify(artifact)).toBe(original);
+  });
+
+  it("does not draw malformed or legacy route geometry", () => {
+    const malformed = {
+      ...validArtifact,
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [0, 1, 2],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [Number.POSITIVE_INFINITY, 0, 0],
+          ],
+        },
+      ],
+    };
+    expect(parseMeshRenderArtifact(malformed)?.pathPolylines).toEqual([]);
+    const { container, rerender } = render(
+      <MeshArtifactViewer artifact={malformed} />,
+    );
+    expect(container.querySelectorAll("polyline")).toHaveLength(0);
+    rerender(<MeshArtifactViewer artifact={validArtifact} />);
+    expect(container.querySelectorAll("polyline")).toHaveLength(0);
+    expect(parseMeshRenderArtifact(validArtifact)?.pathPolylines).toEqual([]);
+  });
+
   it("fails closed on malformed indices, non-finite geometry, and oversized payloads", () => {
     expect(
       parseMeshRenderArtifact({
