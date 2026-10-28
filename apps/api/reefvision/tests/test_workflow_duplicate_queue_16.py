@@ -68,9 +68,7 @@ def test_saved_qc_workflow_rejects_duplicate_owned_queues_without_erasing_review
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     references = [
-        item
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "review_queue_reference"
+        item for item in detail.json()["artifacts"] if item["data_type"] == "review_queue_reference"
     ]
     assert len(references) == 1
     queue_id = references[0]["payload_json"]["queue_id"]
@@ -91,6 +89,31 @@ def test_saved_qc_workflow_rejects_duplicate_owned_queues_without_erasing_review
         },
     )
     assert comment.status_code == 201, comment.text
+
+    # A separate saved execution of the same graph must have independent QC
+    # ownership, even when a different run's queue records are ambiguous.
+    second_queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert second_queued.status_code == 202, second_queued.text
+    second_run_id = second_queued.json()["id"]
+    assert process_workflow_run_job(
+        app.state.settings,
+        app.state.session_factory,
+        str(second_queued.json()["job_id"]),
+    )
+    second_detail = client.get(f"/api/v1/workflow-runs/{second_run_id}")
+    assert second_detail.status_code == 200, second_detail.text
+    assert second_detail.json()["run"]["status"] == "succeeded"
+    second_references = [
+        artifact
+        for artifact in second_detail.json()["artifacts"]
+        if artifact["data_type"] == "review_queue_reference"
+    ]
+    assert len(second_references) == 1
+    second_queue_id = second_references[0]["payload_json"]["queue_id"]
+    assert second_queue_id != queue_id
 
     with app.state.session_factory() as session:
         source = session.scalar(
@@ -154,6 +177,35 @@ def test_saved_qc_workflow_rejects_duplicate_owned_queues_without_erasing_review
             )
         ).all()
         assert {queue.id for queue in owners} == {queue_id, duplicate.id}
+
+        # A duplicate in the first run cannot poison another persisted run
+        # for the same project. Replaying that second run must be idempotent.
+        second_source = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == second_run_id,
+                WorkflowArtifact.data_type == "project_reference",
+            )
+        )
+        second_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == second_run_id,
+                WorkflowNodeRun.node_type == "qc_review_queue",
+            )
+        )
+        assert second_source is not None and second_node is not None
+        second_parameters = {
+            **dict(second_node.parameters_json or {}),
+            "__workflow_run_id": second_run_id,
+            "__workflow_node_run_id": second_node.id,
+        }
+        second_replay = create_review_queue_workflow_artifact(
+            session=session,
+            settings=app.state.settings,
+            project_id=project_id,
+            parameters=second_parameters,
+            inputs={"project": [second_source]},
+        )
+        assert second_replay[0]["payload"]["queue_id"] == second_queue_id
 
     # A rejected retry cannot erase reviewer comments, approve annotations,
     # change original evidence, or delete either queue.
