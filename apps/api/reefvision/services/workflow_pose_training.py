@@ -207,7 +207,10 @@ def _pose_dataset(
     # treat false, zero, or a blank digest as if no assertion was supplied.
     if "manifest_sha256" in payload:
         advertised_manifest = payload["manifest_sha256"]
-        if not isinstance(advertised_manifest, str) or advertised_manifest != dataset.manifest_sha256:
+        if (
+            not isinstance(advertised_manifest, str)
+            or advertised_manifest != dataset.manifest_sha256
+        ):
             raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
 
     # Downstream training must not silently accept a stale or substituted
