@@ -21,7 +21,9 @@ For polygon-drawn overlays, compute conservative image-space extents from
 finite vertex coordinates and use inclusive viewport intersection. Retain
 malformed/short/incomplete geometry instead of assuming it is offscreen.
 Raster-mask overlays still use raster bounds, **not** unrelated polygon points,
-and retain unknown/invalid bounds. Null records are not drawable. Original
+including when an imported raster-mask record has a missing `mask_path`.
+Such incomplete records retain unknown/invalid bounds and remain visible for
+researcher inspection; stale polygon vertices must not suppress their overlay. Null records are not drawable. Original
 mask records, IDs, class visibility, reviewer decisions and saved annotations
 are not changed by viewport culling.
 
@@ -30,7 +32,8 @@ are not changed by viewport culling.
 - `apps/web/src/features/annotation-editor/viewportCulling.test.ts`:
   10,000 missing-bounds polygon overlays, edge-touching geometry, stale
   metadata in both directions, malformed polygon points, raster-mask
-  uncertainty, and source-array preservation.
+  uncertainty, missing raster-mask paths with stale vertices, and source-array
+  preservation.
 - An isolated TypeScript strict compilation and seven JavaScript assertions
   of the new geometry-selection algorithm passed on Linux/Node 22. This is
   **not** a complete repository Vitest or browser test.
