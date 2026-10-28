@@ -334,9 +334,7 @@ def test_legacy_upgrade_keeps_distinct_local_user_class_visibility(tmp_path: Pat
             assert bundle.status_code == 200, bundle.text
             state = bundle.json()
             assert state["user_identity"] == identity
-            assert state["project_defaults"]["annotations"]["hidden_class_ids"] == [
-                class_ids[0]
-            ]
+            assert state["project_defaults"]["annotations"]["hidden_class_ids"] == [class_ids[0]]
             assert state["user_preferences"]["annotations"]["saved"] is True
             assert state["user_preferences"]["annotations"]["hidden_class_ids"] == hidden
             project = client.get(f"/api/v1/projects/{project_id}")
@@ -347,13 +345,16 @@ def test_legacy_upgrade_keeps_distinct_local_user_class_visibility(tmp_path: Pat
     try:
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
-            assert connection.scalar(
-                text(
-                    "SELECT COUNT(*) FROM class_visibility_preferences "
-                    "WHERE project_id = :project_id"
-                ),
-                {"project_id": project_id},
-            ) == 2
+            assert (
+                connection.scalar(
+                    text(
+                        "SELECT COUNT(*) FROM class_visibility_preferences "
+                        "WHERE project_id = :project_id"
+                    ),
+                    {"project_id": project_id},
+                )
+                == 2
+            )
     finally:
         engine.dispose()
 
@@ -385,13 +386,28 @@ def test_desktop_rejects_foreign_0038_stamp_without_touching_science(
         )
         assert created.status_code == 201, created.text
         project_id = created.json()["id"]
+        label = client.post(
+            f"/api/v1/projects/{project_id}/classes",
+            json={"class_index": 0, "name": "Swiftia exserta", "display_color": "#2288AA"},
+        )
+        assert label.status_code == 201, label.text
+        class_id = label.json()["id"]
+        defaults = client.put(
+            f"/api/v1/projects/{project_id}/class-visibility/defaults/annotations",
+            json={"hidden_class_ids": [class_id]},
+        )
+        assert defaults.status_code == 200, defaults.text
+        override = client.put(
+            f"/api/v1/projects/{project_id}/class-visibility/preferences/annotations",
+            json={"hidden_class_ids": []},
+        )
+        assert override.status_code == 200, override.text
+        assert override.json()["saved"] is True
 
     engine = create_database_engine(settings)
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text("UPDATE alembic_version SET version_num = '0038'")
-            )
+            connection.execute(text("UPDATE alembic_version SET version_num = '0038'"))
             connection.execute(
                 text("CREATE TABLE scientific_records (id TEXT PRIMARY KEY, note TEXT)")
             )
@@ -417,6 +433,18 @@ def test_desktop_rejects_foreign_0038_stamp_without_touching_science(
                     text("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name")
                 )
             )
+            # A refused foreign migration must not alter researcher visibility.
+            visibility_before = {
+                table: tuple(
+                    tuple(row)
+                    for row in connection.execute(text(f"SELECT * FROM {table} ORDER BY id"))
+                )
+                for table in (
+                    "class_visibility_preferences",
+                    "project_class_visibility_defaults",
+                )
+            }
+            assert all(len(rows) == 1 for rows in visibility_before.values())
     finally:
         engine.dispose()
 
@@ -434,14 +462,29 @@ def test_desktop_rejects_foreign_0038_stamp_without_touching_science(
                 )
             )
             assert schema_after == schema_before
+            visibility_after = {
+                table: tuple(
+                    tuple(row)
+                    for row in connection.execute(text(f"SELECT * FROM {table} ORDER BY id"))
+                )
+                for table in (
+                    "class_visibility_preferences",
+                    "project_class_visibility_defaults",
+                )
+            }
+            assert visibility_after == visibility_before
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0038"
-            assert connection.scalar(
-                text("SELECT note FROM scientific_records WHERE id = 'original'")
-            ) == "preserve scientific observations"
-            assert connection.scalar(
-                text("SELECT id FROM projects WHERE id = :project_id"),
-                {"project_id": project_id},
-            ) == project_id
+            assert (
+                connection.scalar(text("SELECT note FROM scientific_records WHERE id = 'original'"))
+                == "preserve scientific observations"
+            )
+            assert (
+                connection.scalar(
+                    text("SELECT id FROM projects WHERE id = :project_id"),
+                    {"project_id": project_id},
+                )
+                == project_id
+            )
             assert not inspect(connection).has_table("review_queue_item_events")
     finally:
         engine.dispose()
