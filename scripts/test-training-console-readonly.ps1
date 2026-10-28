@@ -16,6 +16,7 @@ $script:requests = [System.Collections.Generic.List[string]]::new()
 $script:messages = [System.Collections.Generic.List[string]]::new()
 $script:pollCount = 0
 $script:sleeps = 0
+$script:scenario = 'completed'
 
 # Summary values deliberately lag the per-epoch history. The live monitor
 # must display the latest actual box/cls/dfl epoch values, not stale summaries.
@@ -49,6 +50,30 @@ $script:completed = @'
   }
 }
 '@ | ConvertFrom-Json
+# A failed run must remain inspectable even when the optional persisted log
+# endpoint is unavailable; cancellation must also terminate monitoring.
+$script:terminalFailures = @{
+  failed = [pscustomobject]@{
+    run_name = 'Coral failure'
+    status = 'failed'
+    stage = 'fit'
+    progress_epoch = 1
+    progress_total_epochs = 3
+    metrics = @{ 'train/box_loss' = 0.40 }
+    metrics_history = @{}
+    error_message = ('GPU out of memory ' + [char]0x001B + ']0;spoofed error title' + [char]0x0007 + ' training stopped')
+  }
+  cancelled = [pscustomobject]@{
+    run_name = 'Coral cancelled'
+    status = 'cancelled'
+    stage = 'stopping'
+    progress_epoch = 1
+    progress_total_epochs = 3
+    metrics = @{}
+    metrics_history = @{}
+    error_message = $null
+  }
+}
 $script:logText = ('epoch=2', 'train/box_loss=0.25', 'train/cls_loss=0.30') -join [char]10
 $script:logText += ([string][char]10) + ([string][char]0x001B) + ']0;spoofed log title' + ([string][char]0x0007) + 'train/dfl_loss=0.10'
 
@@ -60,11 +85,19 @@ function Invoke-RestMethod {
   [void]$script:requests.Add("$Method $Uri")
   if ($Uri -ceq $url) {
     $script:pollCount++
+    if ($script:scenario -ne 'completed') {
+      if ($script:pollCount -eq 1) { return $script:terminalFailures[$script:scenario] }
+      throw 'Monitor polled after a failed or cancelled training job.'
+    }
     if ($script:pollCount -eq 1) { return $script:active }
     if ($script:pollCount -eq 2) { return $script:completed }
     throw 'Monitor polled after the training job ended.'
   }
   if ($Uri -ceq ($url + '/logs/tail')) {
+    if ($script:scenario -eq 'failed') { throw 'Simulated persisted log outage.' }
+    if ($script:scenario -eq 'cancelled') {
+      return [pscustomobject]@{ available = $false; text = '' }
+    }
     return [pscustomobject]@{ available = $true; text = $script:logText }
   }
   throw "Monitor requested an unexpected API endpoint: $Uri"
@@ -123,4 +156,36 @@ if ($output -match 'train/box_loss\s+0\.99') {
 if ($output.Contains('spoofed console title') -or $output.Contains('spoofed log title')) {
   throw 'Untrusted run metadata or persisted logs escaped display sanitization.'
 }
-Write-Output 'PowerShell training monitor read-only polling and loss regression passed.'
+# Both terminal error states must stop polling immediately. A missing log tail
+# must not hide the failure status or the sanitized diagnostic message.
+foreach ($terminalStatus in @('failed', 'cancelled')) {
+  $script:scenario = $terminalStatus
+  $script:requests.Clear()
+  $script:messages.Clear()
+  $script:pollCount = 0
+  $script:sleeps = 0
+  Invoke-Expression $match.Groups['body'].Value
+  $terminalOutput = $script:messages -join [char]10
+  $expectedTerminalRequests = @("Get $url", "Get $url/logs/tail")
+  if (($script:requests -join [char]10) -cne ($expectedTerminalRequests -join [char]10)) {
+    throw "Unexpected $terminalStatus monitor requests: $($script:requests -join ', ')"
+  }
+  if ($script:pollCount -ne 1 -or $script:sleeps -ne 0) {
+    throw "Monitor did not stop immediately after $terminalStatus."
+  }
+  if (-not $terminalOutput.Contains("Status: $terminalStatus") -or
+      -not $terminalOutput.Contains('Run ended. This window can now be closed.')) {
+    throw "Missing $terminalStatus terminal-state monitor output."
+  }
+  if ($terminalStatus -eq 'failed') {
+    if (-not $terminalOutput.Contains('Training job log unavailable (status/metrics remain live).') -or
+        -not $terminalOutput.Contains('GPU out of memory') -or
+        -not $terminalOutput.Contains('training stopped') -or
+        $terminalOutput.Contains('spoofed error title')) {
+      throw 'Failed-run diagnostics were hidden or terminal escape text was not sanitized.'
+    }
+  } elseif (-not $terminalOutput.Contains('No persisted training job log available yet.')) {
+    throw 'Cancelled-run monitor did not handle an unavailable persisted log.'
+  }
+}
+Write-Output 'PowerShell training monitor read-only polling, terminal-state, and loss regressions passed.'
