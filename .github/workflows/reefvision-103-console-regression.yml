@@ -1,0 +1,43 @@
+name: ReefVision 1.0.3 read-only training console regression
+
+# PR #73 has already merged, but its isolated development branch still
+# contains release-blocker fixes. Validate new commits on that exact branch.
+on:
+  push:
+    branches:
+      - develop/reefvision-1.0.3-consolidated
+    paths:
+      - .github/workflows/reefvision-103-console-regression.yml
+      - apps/web/src-tauri/src/main.rs
+      - scripts/test-training-console-readonly.ps1
+      - scripts/test-training-console-sanitizer.ps1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reefvision-103-console-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-readonly-console:
+    name: Windows embedded monitor, loss history, and terminal safety
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert the exact source revision under test
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) {
+            throw "Checkout SHA $actual does not match workflow SHA $env:GITHUB_SHA"
+          }
+          Write-Output "ReefVision 1.0.3 training console source SHA: $actual"
+      - name: Verify terminal sanitization of untrusted training output
+        shell: pwsh
+        run: ./scripts/test-training-console-sanitizer.ps1
+      - name: Verify read-only polling, live box/cls/dfl losses, and terminal states
+        shell: pwsh
+        run: ./scripts/test-training-console-readonly.ps1
