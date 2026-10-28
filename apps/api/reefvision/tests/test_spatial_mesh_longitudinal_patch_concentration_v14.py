@@ -69,12 +69,38 @@ def test_patch_concentration_is_permutation_invariant_scale_free_qc() -> None:
     assert result["before_area_weighted_effective_patch_count"] == pytest.approx(1.6)
     assert result["after_area_weighted_effective_patch_count"] == pytest.approx(2)
     assert result["delta_area_weighted_effective_patch_count"] == pytest.approx(0.4)
+    assert result["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+    assert "ranked_patch_area_profile_distance_not_patch_correspondence" in result["qc_warnings"]
     assert (
         "patch_area_distribution_change_is_reconstruction_qc_not_fragmentation"
         in result["qc_warnings"]
     )
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+
+def test_ranked_profile_is_independent_of_patch_index_order() -> None:
+    before, after = (_preview(payload) for payload in _meshes())
+    baseline = compare_mesh_observations(before, after)
+    before["edge_connected_patch_surface_area_fractions"].reverse()
+    reordered = compare_mesh_observations(before, after)
+    assert reordered["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+    assert (
+        reordered["ranked_patch_area_profile_distance"]
+        == baseline["ranked_patch_area_profile_distance"]
+    )
+
+
+def test_ranked_profile_pads_missing_patch_ranks_with_zero() -> None:
+    early, late = _meshes()
+    late["faces"] = [[0, 1, 2]]
+    late["vertices"] = late["vertices"][:3]
+    before, after = _preview(early), _preview(late)
+    result = compare_mesh_observations(before, after)
+    assert before["edge_connected_patch_count"] == 2
+    assert after["edge_connected_patch_count"] == 1
+    assert result["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+    assert "ranked_patch_area_profile_distance_not_patch_correspondence" in result["qc_warnings"]
 
 
 @pytest.mark.parametrize(
@@ -109,6 +135,7 @@ def test_missing_legacy_distribution_does_not_invent_zero_change() -> None:
     result = compare_mesh_observations(before, after)
     assert result["delta_patch_area_concentration_index"] is None
     assert result["delta_area_weighted_effective_patch_count"] is None
+    assert result["ranked_patch_area_profile_distance"] is None
     assert "patch_area_distribution_comparison_unavailable" in result["qc_warnings"]
 
 
@@ -131,6 +158,7 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
     assert result["after_patch_area_concentration_index"] == pytest.approx(0.5)
     assert result["delta_patch_area_concentration_index"] is None
     assert result["delta_area_weighted_effective_patch_count"] is None
+    assert result["ranked_patch_area_profile_distance"] is None
     assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is True
 
 
@@ -203,3 +231,4 @@ def test_patch_concentration_saved_workflow_matches_standalone(client: TestClien
     assert artifact == expected
     assert artifact["delta_patch_area_concentration_index"] == pytest.approx(-0.125)
     assert artifact["delta_area_weighted_effective_patch_count"] == pytest.approx(0.4)
+    assert artifact["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
