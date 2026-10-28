@@ -239,4 +239,44 @@ describe("dense-object viewport culling", () => {
     expect(masks[0]).toBe(visibleDespiteStaleBounds);
     expect(masks[1]).toBe(hiddenDespiteStaleBounds);
   });
+
+  it("never trusts polygon points for raster masks with a missing path", () => {
+    const viewport = { x_min: 0, y_min: 0, x_max: 100, y_max: 100 };
+    const staleOutsidePoints = [
+      { x: 500, y: 500 },
+      { x: 510, y: 500 },
+      { x: 510, y: 510 },
+    ];
+    const rasterInside = {
+      geometry_kind: "raster_mask",
+      mask_path: null,
+      points: staleOutsidePoints,
+      x_min: 10,
+      y_min: 10,
+      x_max: 20,
+      y_max: 20,
+    };
+    const rasterUnknown = {
+      ...rasterInside,
+      x_min: null,
+      y_min: null,
+      x_max: null,
+      y_max: null,
+    };
+    const rasterOutside = {
+      ...rasterInside,
+      x_min: 200,
+      y_min: 200,
+      x_max: 220,
+      y_max: 220,
+    };
+    const masks = [rasterInside, rasterUnknown, rasterOutside];
+    expect(cullViewportMasks(masks, viewport)).toEqual([
+      rasterInside,
+      rasterUnknown,
+    ]);
+    expect(masks).toHaveLength(3);
+    expect(masks[0]).toBe(rasterInside);
+    expect(cullViewportMasks(masks, null)).toBe(masks);
+  });
 });
