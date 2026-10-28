@@ -6,11 +6,10 @@ from datetime import datetime
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import select
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError as SchemaValidationError
+from sqlalchemy import select
 
 from reefvision.db.models import ImageAsset
 from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
