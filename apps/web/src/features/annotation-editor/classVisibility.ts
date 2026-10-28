@@ -51,8 +51,8 @@ export const visibilityLayerOptions: ClassVisibilityLayerOption[] = [
   {
     id: "segmentation_overlays",
     label: "Segmentation Overlays",
-    description: "Saved now and applied when segmentation overlays are shown.",
-    liveInEditor: false,
+    description: "Saved segmentation-mask overlays in the image editor.",
+    liveInEditor: true,
   },
 ];
 
