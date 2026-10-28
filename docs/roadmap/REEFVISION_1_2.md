@@ -2858,3 +2858,44 @@ difference in `test_ecology_projected_series_csv_1_2.py`, corrected here.
 Exact new-head CI, migration reconciliation, independently reviewed
 longitudinal measurements, and installed Windows acceptance remain pending.
 **1.2 is NOT RELEASE-READY; 1.3 is not started.**
+
+
+## Canonical source-linked sampling levels and provenance v0020 (2026-10-27)
+
+The prior exact 1.2 head `790114fa17459e0d47fdba10475e916f32d470bc`
+completed **16/19** GitHub Actions workflows. The three backend failures
+stopped at the same Ruff formatter difference in
+`test_ecology_digest_case_qc_1_2.py`; all six runner-requested formatting
+edits were applied before this scientific increment.
+
+The source-linked `summarize_sampling_date_qc` kernel now compares **canonical
+biological sampling levels**, not the raw spelling of otherwise equivalent
+labels. A registered tank photographed under the declarations `tank`,
+`aquarium`, `aquaria`, or `TankLevel` is one provisional longitudinal
+experimental unit when the identity revision, parent and unit ID are
+otherwise unchanged. Previously, raw-label comparison marked the series
+`identity_context_changed`, even though the existing visit-coverage and
+unit-summary kernels correctly grouped these aliases. Genuine
+`tank`-versus-`colony` changes still fail the date-series gate.
+
+Raw per-candidate labels remain unchanged and contribute to source SHA-256
+fingerprints; correcting a label changes the source fingerprint without
+creating a second independent replicate. The source fingerprint contract
+advances to `ecology-measurement-candidates-0020`; saved v0018/v0019
+artifacts remain deserializable, but a historical artifact with an obsolete
+derived QC decision is **not** silently re-signed or promoted by CSV export.
+The existing standalone API and executable, persisted
+`ecology_identity_registry_source` Workflow Builder node use the same
+shared QC kernel. Focused regressions cover equivalent aliases, true
+biological-level conflicts, signed CSV source/derived reconciliation,
+distinct source fingerprints and replay of the persisted workflow source
+artifact. No new workflow node, migration or 1.1 environmental store is
+introduced.
+
+**Scientific boundary:** all projected measurements and derived changes remain
+`linked_unverified`, with `scientist_review_required`; canonical labels
+do not prove true biological independence, verified identity, growth, or
+calibration accuracy. Exact-head CI, authenticated scientist-reviewed
+longitudinal observations, registered study-design acceptance, 1.1 migration
+reconciliation, independent real-data review, and native Windows installer/GUI
+acceptance are still required. **1.2 is NOT RELEASE-READY; 1.3 has not started.**
