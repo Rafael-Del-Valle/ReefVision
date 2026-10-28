@@ -67,7 +67,12 @@ def test_legacy_v1_image_signatures_remain_readable_but_not_forgeable(
         {
             key: value
             for key, value in row.items()
-            if key not in ("source_metadata_sha256", "source_metadata_evidence_status", "evidence_level", "project_id")
+            if key not in (
+                "source_metadata_sha256",
+                "source_metadata_evidence_status",
+                "evidence_level",
+                "project_id",
+            )
         }
         for row in legacy["image_evidence_links"]
     ]
