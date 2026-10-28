@@ -3371,3 +3371,18 @@ of contradictory sampling levels or altered source hashes. These are test
 contract repairs, **not** relaxation of scientific validation or proof of
 Windows/biological acceptance. CI and saved-workflow parity must be checked
 again on the resulting commit before advancing release readiness.
+
+## Source-graph pixel provenance and CI recovery (2026-10-28)
+
+The existing connected-branch preview now fails closed on negative or otherwise
+non-integer source node/segment pixels, missing node pixel provenance, and
+ambiguous duplicate pixel ownership across graph nodes. These safeguards run
+through the same shared service used by standalone previews and the executable,
+persisted `ecology_connected_branch_preview` Workflow Builder node; they do not
+change verified datasets, calibration or accepted measurements. Focused tests
+cover negative source pixels and duplicate node ownership, alongside existing
+saved-workflow parity/review-gate acceptance. The preceding exact-head CI
+completed 16/19 workflows; all three failures were the same Ruff RUF043
+regex-literal diagnostic in a test, now corrected without weakening its
+assertion. Latest-head CI, scientist review and Windows GUI acceptance remain
+required; this increment is not release-ready.

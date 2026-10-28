@@ -203,3 +203,28 @@ def test_existing_segments_cannot_count_a_pixel_step_twice(reverse: bool) -> Non
     existing = [original, duplicate]
     with pytest.raises(BranchEditError, match="same skeleton pixel step"):
         preview_connected_branch_addition(nodes, existing, proposed, edit_id="overlap")
+
+
+@pytest.mark.parametrize("invalid_pixel", [(-1, 2), (1, -2)])
+def test_existing_graph_rejects_negative_source_pixels(invalid_pixel: tuple[int, int]) -> None:
+    nodes, edges = _line()
+    invalid_node = replace(nodes[0], source_pixels=(invalid_pixel,))
+    with pytest.raises(BranchEditError, match="node has invalid source pixels"):
+        preview_connected_branch_addition(
+            [invalid_node, *nodes[1:]], edges, [(1, 2), (1, 3)], edit_id="bad-node"
+        )
+
+    invalid_edge = replace(edges[0], pixels=(invalid_pixel, *edges[0].pixels[1:]))
+    with pytest.raises(BranchEditError, match="segment has invalid source pixels"):
+        preview_connected_branch_addition(
+            nodes, [invalid_edge], [(1, 2), (1, 3)], edit_id="bad-edge"
+        )
+
+
+def test_existing_graph_rejects_overlapping_node_pixel_ownership() -> None:
+    nodes, edges = _line()
+    duplicate = replace(nodes[1], source_pixels=nodes[0].source_pixels)
+    with pytest.raises(BranchEditError, match="overlapping graph-node source pixels"):
+        preview_connected_branch_addition(
+            [nodes[0], duplicate], edges, [(1, 2), (1, 3)], edit_id="bad-ownership"
+        )

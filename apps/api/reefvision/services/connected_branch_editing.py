@@ -42,16 +42,20 @@ class ConnectedBranchPreview:
     review_required: bool = True
 
 
+def _valid_pixel(point: object) -> bool:
+    return (
+        isinstance(point, tuple)
+        and len(point) == 2
+        and all(type(value) is int and value >= 0 for value in point)
+    )
+
+
 def _checked_path(path: Sequence[Pixel]) -> tuple[Pixel, ...]:
     if len(path) < 2:
         raise BranchEditError("A branch needs at least two distinct connected pixels")
     pixels: list[Pixel] = []
     for point in path:
-        if (
-            not isinstance(point, tuple)
-            or len(point) != 2
-            or any(type(value) is not int or value < 0 for value in point)
-        ):
+        if not _valid_pixel(point):
             raise BranchEditError("Branch path must contain nonnegative integer (x, y) pixels")
         pixels.append(point)
     if len(set(pixels)) != len(pixels):
@@ -108,10 +112,18 @@ def _validate_graph(
     if len(node_by_id) != len(nodes) or len({edge.id for edge in edges}) != len(edges):
         raise BranchEditError("Existing graph has duplicate node or segment IDs")
     occupied: set[Pixel] = set()
+    node_pixels: set[Pixel] = set()
     traversed_steps: set[tuple[Pixel, Pixel]] = set()
     for node in nodes:
         if not isfinite(node.x) or not isfinite(node.y):
             raise BranchEditError("Existing graph contains a nonfinite graph-node coordinate")
+        if not node.source_pixels or any(not _valid_pixel(point) for point in node.source_pixels):
+            raise BranchEditError("Existing graph node has invalid source pixels")
+        if len(set(node.source_pixels)) != len(node.source_pixels) or node_pixels.intersection(
+            node.source_pixels
+        ):
+            raise BranchEditError("Existing graph has overlapping graph-node source pixels")
+        node_pixels.update(node.source_pixels)
         occupied.update(node.source_pixels)
     adjacency: dict[str, set[str]] = {node.id: set() for node in nodes}
     for edge in edges:
@@ -120,6 +132,8 @@ def _validate_graph(
             raise BranchEditError("Existing segment references an unknown graph node")
         if len(edge.pixels) < 2:
             raise BranchEditError("Existing segment has no measurable pixel path")
+        if any(not _valid_pixel(point) for point in edge.pixels):
+            raise BranchEditError("Existing segment has invalid source pixels")
         if (
             edge.pixels[0] not in source.source_pixels
             or edge.pixels[-1] not in target.source_pixels

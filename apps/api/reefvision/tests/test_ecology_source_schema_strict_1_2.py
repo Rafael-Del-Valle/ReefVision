@@ -263,7 +263,7 @@ def test_saved_registry_rejects_cross_project_or_orphaned_evidence(
         # before the cross-link validator reaches the image join.
         with pytest.raises(
             SchemaValidationError,
-            match="source image mismatch|calibration snapshot fingerprint mismatch",
+            match=r"source image mismatch|calibration snapshot fingerprint mismatch",
         ):
             EcologyIdentityRegistryResponse.model_validate(tampered)
 
