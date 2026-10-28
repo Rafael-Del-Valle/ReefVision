@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.schemas.review_queues import ReviewQueueCreateRequest
 from reefvision.schemas.review_queues import (
     ReviewQueueBulkRequest,
     ReviewQueueBulkResponse,
+    ReviewQueueCreateRequest,
     ReviewQueueItemActorRequest,
     ReviewQueueItemCompleteRequest,
     ReviewQueueItemPageResponse,
