@@ -79,7 +79,7 @@ def extend_mesh_registry(
             implementation_notes=[
                 "Uses the same bounded preview engine as the standalone API.",
                 "Geometry and calibration remain caller_supplied_unverified.",
-                "Independent calibration review is geometry-bound audit evidence, not verification.",
+                "Independent calibration review is provisional geometry-bound audit evidence.",
                 "This is not a persistent 3D asset importer or full mesh viewer.",
                 "Optional source SHA-256 binding rejects changed OBJ/PLY/GLB bytes on replay.",
                 "Optional edge routes are not biologically verified branch lengths.",
