@@ -3028,3 +3028,29 @@ function signature; both formatting differences are corrected in this slice.
 Exact-head CI, independent biological verification, migration reconciliation
 with unmerged 1.1, and native Windows MSI/GUI acceptance remain outstanding.
 **ReefVision 1.2 is NOT RELEASE-READY; 1.3 has not started.**
+
+
+## 2026-10-28 Track B — typed registry evidence digest QC
+
+After auditing exact-head PR #74 CI, repaired Ruff I001 import ordering in
+`test_ecology_image_evidence_1_2.py`. The preceding SHA
+`c7588b4ecdc85daaebe8657065a730fd8bcd79c5` had 16/19 successful
+Actions workflows; three backend workflows failed at that single import block.
+
+The `EcologyIdentityRegistryResponse` linked image, annotation and calibration
+rows now require exact 64-character ASCII hexadecimal SHA-256 strings for
+image-content, annotation-revision and calibration fingerprints. This closes a
+persisted-artifact rehydration gap: a saved executable Workflow Builder registry
+artifact containing a truncated or malformed linked evidence digest must not
+pass typed validation. Original mixed-case valid digests remain unchanged.
+The existing `linked_unverified` / `registered_unverified` evidence levels and
+`scientist_review_required` gate are preserved; syntactic validation does
+**not** verify the underlying source bytes, annotation approval, or a
+well-formed but substituted hash.
+
+Focused regression coverage executes the existing project-scoped registry
+source as a saved Workflow Builder graph, compares the persisted artifact to
+the standalone API, and checks malformed values in all four linked digest
+locations. No new workflow node, migration, 1.1 environment store or
+experimental-unit assumption was introduced. Exact-head CI and physical
+Windows acceptance must be checked independently before any release claim.
