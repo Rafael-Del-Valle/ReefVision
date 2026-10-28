@@ -151,7 +151,7 @@ def test_patch_count_rejects_forged_topology_metadata(
 ) -> None:
     observations = [_preview(payload) for payload in _meshes()]
     observations[timepoint]["edge_connected_patch_count"] = invalid_count
-    with pytest.raises(ValueError, match=r"Patch (count|area fractions)"):
+    with pytest.raises(ValueError, match=r"(?:[Pp]atch count|edge_connected_patch_count)"):
         compare_mesh_observations(*observations)
 
 
@@ -205,6 +205,43 @@ def test_patch_distribution_rejects_zero_full_mesh_total(timepoint: int) -> None
     observations[timepoint]["surface_area_m2"] = 0.0
     with pytest.raises(ValueError, match="Patch surface areas"):
         compare_mesh_observations(*observations)
+
+
+
+def test_degenerate_zero_area_meshes_keep_patch_distributions_unavailable() -> None:
+    """A real zero-area reconstruction is not a forged missing distribution."""
+    early, late = _meshes()
+    for source in (early, late):
+        source["vertices"] = [[0, 0, 0] for _ in source["vertices"]]
+    before, after = _preview(early), _preview(late)
+    assert before["surface_area_m2"] == after["surface_area_m2"] == 0.0
+    assert before["edge_connected_patch_surface_area_fractions"] is None
+    assert before["edge_connected_patch_surface_areas_m2"] == [0.0, 0.0]
+
+    result = compare_mesh_observations(before, after)
+    assert result["before_patch_area_concentration_index"] is None
+    assert result["after_patch_area_concentration_index"] is None
+    assert result["ranked_patch_area_profile_distance"] is None
+    assert result["ranked_patch_area_jensen_shannon_divergence_bits"] is None
+    assert "patch_area_distribution_comparison_unavailable" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "forged_areas",
+    [[0.0], [0.0, 1.0], [float("nan"), 0.0], [True, 0.0]],
+)
+def test_zero_area_mesh_rejects_forged_patch_area_evidence(
+    forged_areas: list[object],
+) -> None:
+    early, late = _meshes()
+    for source in (early, late):
+        source["vertices"] = [[0, 0, 0] for _ in source["vertices"]]
+    before, after = _preview(early), _preview(late)
+    before["edge_connected_patch_surface_areas_m2"] = forged_areas
+    with pytest.raises(ValueError, match="Patch concentration requires source area fractions"):
+        compare_mesh_observations(before, after)
+
 
 
 def test_legacy_patch_fractions_without_area_breakdown_remain_readable() -> None:
