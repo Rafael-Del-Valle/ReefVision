@@ -434,7 +434,9 @@ it("exports selected current vectors with units, source IDs and explicit uncerta
   expect(data).toContain('"-3","4","5"');
   expect(data).toContain('"0","bound"');
   expect(data).toContain('"stale_offline"');
-  expect(header).toContain("source_acquired_at_utc,source_url,processing_method");
+  expect(header).toContain(
+    "source_acquired_at_utc,source_url,processing_method",
+  );
   expect(data).toContain('"2026-04-04T00:00:00Z"');
   expect(data).toContain('"https://example.org/model","native_grid"');
   expect(data).toContain('"not_estimated"');
