@@ -107,9 +107,10 @@ it("opens cached currents with time, depth and provenance", async () => {
     target: { value: "cache" },
   });
   expect(await screen.findByText("5.000 m/s")).toBeInTheDocument();
-  expect(
-    screen.getByRole("list", { name: "Current measurements" }),
-  ).toHaveTextContent("36.9° toward true north");
+  const measurements = screen.getByRole("list", {
+    name: "Current measurements",
+  });
+  expect(measurements).toHaveTextContent("36.9° toward true north");
   expect(screen.getByText(/stale_offline/)).toBeInTheDocument();
   expect(
     screen.getByRole("region", { name: "Current slice descriptive metrics" }),
@@ -188,11 +189,9 @@ it("filters unpaired times and separates depth datums", async () => {
   expect(datumLabel).toHaveTextContent("(chart_datum)");
 });
 it("withholds metrics across incompatible source provenance", async () => {
+  const selectedTime = "2026-04-03T00:00:00Z";
   const alternateSource = rows
-    .filter(
-      (row) =>
-        row.observed_at === "2026-04-03T00:00:00Z" && row.depth_m === 5,
-    )
+    .filter((row) => row.observed_at === selectedTime && row.depth_m === 5)
     .map((row) => ({
       ...row,
       id: `alternate-source-${row.id}`,
@@ -207,14 +206,14 @@ it("withholds metrics across incompatible source provenance", async () => {
   fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
     target: { value: "cache" },
   });
-  expect(
-    await screen.findByText(/Descriptive current-slice metrics withheld/),
-  ).toBeInTheDocument();
+  const withheld = await screen.findByText(/metrics withheld/);
+  expect(withheld).toBeInTheDocument();
   const list = screen.getByRole("list", { name: "Current measurements" });
   expect(list.querySelectorAll("li")).toHaveLength(2);
-  expect(
-    screen.queryByRole("region", { name: "Current slice descriptive metrics" }),
-  ).not.toBeInTheDocument();
+  const metrics = screen.queryByRole("region", {
+    name: "Current slice descriptive metrics",
+  });
+  expect(metrics).not.toBeInTheDocument();
 });
 it("explains caches with no QC-compatible current pair", async () => {
   setup([rows[0]]);
