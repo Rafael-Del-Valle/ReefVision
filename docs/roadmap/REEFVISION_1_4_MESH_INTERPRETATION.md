@@ -705,3 +705,24 @@ review uncertainty or reconstruction error. This slice does not introduce
 persistent 3D source-asset storage, a reviewer identity service, or a
 certification workflow. Backend regression tests cover independent attribution,
 source binding, stale evidence, decision warnings, and saved-workflow parity.
+
+### Ordered cumulative mesh-route arclength (Track C)
+
+For each connected, caller-selected mesh-edge shortest path, the provisional
+`surface_edge_paths` artifact now includes `path_cumulative_lengths_m`.
+The array starts at zero and contains one cumulative calibrated distance for
+every ordered route vertex, including vertices omitted from the bounded
+interactive render sample. The corresponding
+`path_cumulative_length_scale_intervals_m` provides per-vertex **scale-only**
+lower and upper bounds when a relative calibration uncertainty is supplied.
+These are *not* independent confidence intervals; all values share the same
+caller-supplied calibration and its systematic uncertainty. Disconnected or
+unreferenced paths report null arrays, not fabricated zero-distance routes.
+The terminal cumulative distance agrees with the reported route length within
+floating-point precision. Standalone preview and persisted executable
+`mesh_surface_preview` Workflow Builder artifacts use the same engine; tests
+cover two-edge routes, uncertainty bounds, missing routes, and saved-graph
+parity. This is a geometric mesh-edge path, **not** an anatomical coral
+centerline, tissue-length measurement, verified branch length, or evidence of
+growth. Geometry, calibration, registration, and biological identity remain
+unverified.
