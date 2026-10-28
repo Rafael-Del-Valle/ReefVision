@@ -65,6 +65,7 @@ import { deleteMaskAnnotations } from "./maskDocumentOperations";
 import {
   cullViewportItems,
   cullViewportMasks,
+  usesRasterMaskOverlay,
   viewportImageBounds,
 } from "./viewportCulling";
 import { rasterMaskContentUrl } from "./rasterMaskApi";
@@ -4011,8 +4012,7 @@ export function AnnotationEditor({
                     const selected = state.selectedMaskIds.includes(mask.id);
 
                     if (
-                      mask.geometry_kind === "raster_mask" &&
-                      mask.mask_path !== null
+                      usesRasterMaskOverlay(mask)
                     ) {
                       return (
                         <image
