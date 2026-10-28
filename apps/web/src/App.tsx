@@ -28,6 +28,7 @@ import { ReefVisionAssistant } from "./features/assistant/ReefVisionAssistant";
 import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedAnnotationEditor";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
+import { ComputedMetricsPanel } from "./features/computed-metrics/ComputedMetricsPanel";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { EnvironmentalContextPanel } from "./features/environmental-context/EnvironmentalContextPanel";
 import { Gallery } from "./features/gallery/Gallery";
@@ -87,6 +88,7 @@ type ProjectView =
   | "versions"
   | "interoperability"
   | "environmental_context"
+  | "computed_metrics"
   | "models"
   | "training"
   | "classification"
@@ -144,6 +146,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Environmental Context",
         description:
           "Import sensor and NOAA observations with units, quality flags, and provenance.",
+      },
+      {
+        id: "computed_metrics",
+        label: "Computed Metrics",
+        description:
+          "Define unit-aware formulas and calculate immutable results from scientific records.",
       },
     ],
   },
@@ -918,6 +926,12 @@ function ReefVisionMainApp() {
             )}
             {activeView === "environmental_context" && (
               <EnvironmentalContextPanel
+                key={selectedProject.id}
+                project={selectedProject}
+              />
+            )}
+            {activeView === "computed_metrics" && (
+              <ComputedMetricsPanel
                 key={selectedProject.id}
                 project={selectedProject}
               />

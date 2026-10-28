@@ -114,3 +114,39 @@ release, merge, tag and hardware/scientific acceptance remain gated.
   semantics. A narrower supported dataset set is preferable to mislabeled values.
 - Full backend regression run is in progress. Copernicus live credentials, packaged
   runtime execution and field comparison remain external acceptance gates.
+
+### Task 4 evidence — first computed-metric vertical slice
+
+- Implemented a safe arithmetic interpreter with declared-symbol and AST
+  whitelists, unit/dimension conversion, finite-result checks and first-order
+  independent uncertainty propagation. Arbitrary calls, attributes, booleans,
+  exponentiation and incompatible units fail closed.
+- Added immutable checksummed metric definitions/results and additive migration
+  `0039_computed_metrics.py` after the existing, unchanged
+  `0038_scientific_data.py`. Results retain formula version/hash, original and
+  normalized values/units, uncertainty, exact subject/time identity, input IDs
+  and snapshots, calibration status, evidence category and workflow provenance.
+- Added standalone project API, result CSV, and a Computed Metrics workspace for
+  explicit symbol/dimension definitions and symbol/record-ID bindings. The UI
+  exposes formula/input provenance and does not hide the verified-annotation vs
+  unverified-prediction boundary.
+- Added executable typed `scientific_records_source` and `computed_metric`
+  Workflow Builder nodes plus a reusable template. Saved graph execution persists
+  a result and checksummed artifact; same-node replay is idempotent and conflicting
+  retry is rejected.
+- TDD evidence: expression domain 16 passed; computed API/migration/scientific
+  lineage 45 passed; combined workflow/metric regressions 36 passed; panel 2
+  passed; workflow-template 4 passed. Final local validation on 2026-10-28 passed
+  1,328 backend tests with 4 explicit live/hardware skips, 506 frontend tests,
+  TypeScript, production build, Prettier, Ruff and strict mypy across 421 source
+  files. Configured Playwright acceptance passed 13 tests and skipped the
+  external live-OSM demo. Exact-head remote CI remains the final integration gate.
+- Ruling: the initial slice requires all scalar inputs to share exact observation
+  time and full subject identity. It does not silently aggregate frames, objects,
+  tracks, verified annotations and predictions. Aggregate counts/coverage,
+  replicate/group design, bulk dataset calculations and broader formula functions
+  remain Phase 6 follow-on work.
+- Lineage coordination: independent 1.6 PR #77 also introduces a migration numbered
+  `0038`. Integration must preserve both already-shared histories and explicitly
+  merge or renumber in the integrating branch; this 1.1 work does not rewrite
+  either `0038` migration.

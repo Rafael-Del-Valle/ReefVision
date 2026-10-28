@@ -1,6 +1,6 @@
 # ReefVision 1.1 development roadmap
 
-Status date: 2026-10-18 UTC. Development only; no release acceptance claimed.
+Status date: 2026-10-28 UTC. Development only; no release acceptance claimed.
 
 ## Baseline and audit
 
@@ -15,32 +15,32 @@ by successful run 38545559271. Release validation remains separate from code CI.
 
 The application is React/TypeScript + TanStack Query + Leaflet, hosted in
 Tauri with a local FastAPI worker/backend. SQLAlchemy owns the SQLite model;
-The baseline Alembic head was 0037; this branch adds 0038. Public IDs are UUIDs, source coordinates are
+The baseline Alembic head was 0037; this branch adds 0038 and 0039. Public IDs are UUIDs, source coordinates are
 pixels, and model predictions remain separate from verified annotations.
 
 Reusable implementations inspected:
 
-| Area | Existing implementation | 1.1 work |
-| --- | --- | --- |
-| Telemetry | `geospatial/dji_srt.py`, `synchronization.py`, video georeferencing services | Extend; preserve explicit alignment and height evidence |
-| Geographic records | `GeoReferencedObservation`, configuration hash and stale-state services | Reuse; do not duplicate projection or invent uncertainty |
-| Movement/export | Geographic movement analytics and GIS export services | Heading, pairwise analysis, GeoPackage and reference acceptance |
-| Image calibration | `image_scale_calibration.py`, `scientific_mask_measurements.py`, image metadata | Preserve canonical calibration; snapshot it in scientific provenance |
-| Tracking/heatmaps | Video tracks, pose visualization and behavior services | Human/model/reviewer layers and uncertainty |
-| Workflows | Graph records, persisted execution, typed node registry and results packages | Safe computed metrics; comprehensive editor deferred to 2.0 |
-| Environmental context | No dedicated provider/cache/project scientific-record subsystem found | Add persistent typed records and bounded provider import |
+| Area                  | Existing implementation                                                         | 1.1 work                                                             |
+| --------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Telemetry             | `geospatial/dji_srt.py`, `synchronization.py`, video georeferencing services    | Extend; preserve explicit alignment and height evidence              |
+| Geographic records    | `GeoReferencedObservation`, configuration hash and stale-state services         | Reuse; do not duplicate projection or invent uncertainty             |
+| Movement/export       | Geographic movement analytics and GIS export services                           | Heading, pairwise analysis, GeoPackage and reference acceptance      |
+| Image calibration     | `image_scale_calibration.py`, `scientific_mask_measurements.py`, image metadata | Preserve canonical calibration; snapshot it in scientific provenance |
+| Tracking/heatmaps     | Video tracks, pose visualization and behavior services                          | Human/model/reviewer layers and uncertainty                          |
+| Workflows             | Graph records, persisted execution, typed node registry and results packages    | Safe computed metrics; comprehensive editor deferred to 2.0          |
+| Environmental context | No dedicated provider/cache/project scientific-record subsystem found           | Add persistent typed records and bounded provider import             |
 
 ## Milestones and acceptance
 
-| Phase | Dependencies | Implemented | Tested | Release-validated | Acceptance remaining |
-| --- | --- | --- | --- | --- | --- |
-| 1 Scientific foundation | Validated baseline | Core records, units, UTC, WGS84/pixels, calibration snapshots, provenance, QC and cache tables | API, integrity, serialization, migration round trip and legacy exchange tests pass | No | Additional CRS transforms, scientific project exchange, broader real-project migration acceptance |
-| 2 Telemetry and geographic measurements | 1; existing georeferencing | Existing telemetry/calibration reused; stale-coordinate exclusion and WGS84 segment bearings added | 71 focused backend tests pass, including datum-change/invalidation/recomputation; frontend regression tests pass | No | Propagated geographic uncertainty, pairwise geographic motion, mask geometry, GeoPackage, absolute UTC/VFR alignment, surveyed drone references |
-| 3 Environmental context | 1 | Local JSON import, NOAA station temperature, persistent 24-hour cache/offline, bounded lookup and project workspace | Provider/API/cache tests and live NOAA smoke test pass; UI unit tests/build pass | No | Copernicus current/temperature/salinity grids, credential settings, unattended daily refresh, detection/track lookup controls, browser/desktop acceptance |
-| 4 Current visualizer | 2, 3 | Not started | No | No | Streamlines, time/depth, layers, trajectories, cache/provenance, desktop acceptance |
-| 5 Scientific heatmaps | 1; existing pose/annotation records | Existing partial infrastructure | Not assessed for 1.1 | No | Independent reviewer/model layers and disagreement validation |
-| 6 Computed metrics | 1; calibration and verified annotations | Existing measurements only | Not assessed for 1.1 | No | Safe arithmetic/unit engine, matching run/frame identity, saved calculations/provenance |
-| 7 Event/environment analysis | 2, 3, 6 | Not started | No | No | Event windows; automated tidal/lunar context for dated, georeferenced observations; reproducible analysis and exports |
+| Phase                                   | Dependencies                            | Implemented                                                                                                                   | Tested                                                                                                           | Release-validated | Acceptance remaining                                                                                                                                      |
+| --------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Scientific foundation                 | Validated baseline                      | Core records, units, UTC, WGS84/pixels, calibration snapshots, provenance, QC and cache tables                                | API, integrity, serialization, migration round trip and legacy exchange tests pass                               | No                | Additional CRS transforms, scientific project exchange, broader real-project migration acceptance                                                         |
+| 2 Telemetry and geographic measurements | 1; existing georeferencing              | Existing telemetry/calibration reused; stale-coordinate exclusion and WGS84 segment bearings added                            | 71 focused backend tests pass, including datum-change/invalidation/recomputation; frontend regression tests pass | No                | Propagated geographic uncertainty, pairwise geographic motion, mask geometry, GeoPackage, absolute UTC/VFR alignment, surveyed drone references           |
+| 3 Environmental context                 | 1                                       | Local JSON import, NOAA station temperature, persistent 24-hour cache/offline, bounded lookup and project workspace           | Provider/API/cache tests and live NOAA smoke test pass; UI unit tests/build pass                                 | No                | Copernicus current/temperature/salinity grids, credential settings, unattended daily refresh, detection/track lookup controls, browser/desktop acceptance |
+| 4 Current visualizer                    | 2, 3                                    | Not started                                                                                                                   | No                                                                                                               | No                | Streamlines, time/depth, layers, trajectories, cache/provenance, desktop acceptance                                                                       |
+| 5 Scientific heatmaps                   | 1; existing pose/annotation records     | Existing partial infrastructure                                                                                               | Not assessed for 1.1                                                                                             | No                | Independent reviewer/model layers and disagreement validation                                                                                             |
+| 6 Computed metrics                      | 1; calibration and verified annotations | First scalar vertical slice: safe unit-aware arithmetic, immutable definitions/results, API/CSV/UI, executable workflow nodes | Domain/API/migration/workflow/UI regressions pass; broad final-head validation recorded below                    | No                | Aggregate annotation/mask counts and coverage, replicate/group contracts, broader formula functions and field-data acceptance                             |
+| 7 Event/environment analysis            | 2, 3, 6                                 | Not started                                                                                                                   | No                                                                                                               | No                | Event windows; automated tidal/lunar context for dated, georeferenced observations; reproducible analysis and exports                                     |
 
 Optional advection is deferred until core acceptance. Existing 1.0.x GUI,
 GPU and scientific acceptance issues do not block additive foundation work,
@@ -249,6 +249,49 @@ Validation checkpoint before final review:
   Chromium was absent and its installer received empty/invalid ZIP downloads.
   Browser execution and visual inspection remain unverified locally.
 
+## Computed metrics checkpoint (2026-10-28)
+
+The first Phase 6 vertical slice is implemented. A safe AST interpreter accepts
+only declared symbols, numeric constants, parentheses, unary signs and
+`+ - * /`; it does not execute Python or arbitrary calls. It performs unit and
+dimension validation, converts supported scalar/density/rate/percent units,
+rejects non-finite and zero-division results, and propagates independent
+first-order uncertainty when all inputs provide uncertainty.
+
+Definitions and results are immutable project-scoped records with formula
+version, definition/result SHA-256, original and normalized quantities,
+uncertainty, input record IDs and snapshots, exact subject/time identity,
+calibration currency and evidence-category checks. Standalone API/UI calculation,
+CSV export and saved Workflow Builder execution use the same service. The
+workflow source requires explicit record IDs; its typed result artifact carries
+the persisted result ID and checksum. Same-node replay is idempotent, while a
+conflicting replay fails without overwriting provenance.
+
+Focused TDD evidence: 16 expression-domain tests; 45 computed-metric
+API/migration/scientific-lineage tests; 36 combined workflow/computed-metric
+regressions; and 2 scientist-panel plus 4 workflow-template frontend tests
+passed. Final local validation on 2026-10-28 passed 1,328 backend tests with 4
+explicit live/hardware skips, 506 frontend tests, TypeScript, production build,
+Prettier, Ruff and strict mypy across 421 source files. Configured Playwright
+acceptance passed 13 tests and skipped the external live-OSM demo. The build
+retains the existing large-chunk advisory and backend retains the existing
+Starlette TestClient deprecation warning. Exact-head remote CI is tracked in
+draft PR #71 rather than inferred here.
+
+This is intentionally a scalar, exact-observation slice. It does not yet infer
+counts or coverage directly from annotation/mask collections, combine subjects,
+define biological replicates, calculate bulk dataset summaries, or expose
+general functions/exponentiation. Those require explicit aggregation and
+evidence contracts; silently grouping frames, tracks or model predictions is
+not acceptable. Representative field data, Windows installed-app behavior and
+independent scientific acceptance also remain open.
+
+Migration `0039_computed_metrics.py` follows this branch's existing, untouched
+`0038_scientific_data.py`. Independent 1.6 work in PR #77 also uses a migration
+number `0038`; merge sequencing must preserve both histories and create a
+deliberate Alembic merge/renumber decision in the integrating branch. Neither
+already-shared migration is rewritten in this 1.1 work.
+
 ## Remaining acceptance gates and next milestones
 
 1. Complete independent branch review, address integrity findings with
@@ -261,9 +304,10 @@ Validation checkpoint before final review:
    current, temperature and salinity fixtures before the current visualizer.
 5. Extend telemetry uncertainty and surveyed georeferencing acceptance, then
    GeoPackage and pairwise movement exports. Keep approximate positions marked.
-6. Implement the unit-checked computed-metric engine against verified
-   annotations and matching run/frame outputs; keep the comprehensive visual
-   node editor reserved for 2.0.
+6. Extend computed metrics beyond the first exact-subject scalar slice with
+   aggregate verified-annotation/mask counts and coverage, explicit replicate
+   grouping, bulk calculation/export and additional reviewed formula functions;
+   keep the comprehensive visual node editor reserved for 2.0.
 
 Windows installed-app/WebView, NVIDIA hardware, real drone/GCP reference data,
 authenticated Copernicus and researcher sensor/reference acceptance are still

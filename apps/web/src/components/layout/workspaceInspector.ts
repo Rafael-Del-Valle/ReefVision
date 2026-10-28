@@ -5,6 +5,7 @@ export type WorkspaceInspectorView =
   | "versions"
   | "interoperability"
   | "environmental_context"
+  | "computed_metrics"
   | "models"
   | "training"
   | "classification"
@@ -43,6 +44,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "versions",
   "interoperability",
   "environmental_context",
+  "computed_metrics",
   "models",
   "training",
   "classification",
@@ -141,6 +143,26 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Video & tracking",
         target: "video",
         description: "Inspect organism tracks and geographic observations.",
+      },
+    ],
+  },
+  computed_metrics: {
+    title: "Computed scientific metrics",
+    summary:
+      "Define unit-aware expressions and calculate immutable results from explicit scientific records.",
+    boundary: "record",
+    recordPolicy:
+      "Every result preserves the formula version, definition hash, input snapshots, units, uncertainty, subject identity, and workflow provenance. Verified annotations and unverified predictions remain separate evidence categories.",
+    actions: [
+      {
+        label: "Environmental Context",
+        target: "environmental_context",
+        description: "Inspect the scientific records used as metric inputs.",
+      },
+      {
+        label: "Workflow Builder",
+        target: "workflows",
+        description: "Run a saved metric definition in a reproducible graph.",
       },
     ],
   },
