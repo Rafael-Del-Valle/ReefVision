@@ -15,6 +15,8 @@ from pydantic import (
 )
 
 
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
+
 class PointCloudPreviewRequest(BaseModel):
     ply_text: str | None = Field(default=None, max_length=256_000)
     points: list[list[float]] | None = Field(default=None, min_length=1, max_length=2_000)
@@ -22,6 +24,7 @@ class PointCloudPreviewRequest(BaseModel):
     calibration_method: Literal["ruler", "photogrammetry_control", "instrument", "other"]
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
     relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
+    calibration_review: MeshCalibrationReviewEvidence | None = None
     source_label: str | None = Field(default=None, max_length=200)
     # Optional byte-exact replay guard for the submitted ASCII PLY text.
     # A matching digest does not verify calibration or specimen identity.
