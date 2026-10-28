@@ -899,7 +899,6 @@ describe("AnnotationEditor", () => {
     );
   });
 
-
   it("hides masks using project segmentation defaults", async () => {
     const baseMask = {
       id: "seg-mask-1",

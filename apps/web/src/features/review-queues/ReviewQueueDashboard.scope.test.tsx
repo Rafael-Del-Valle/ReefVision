@@ -189,72 +189,69 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect(queueIds.every((id) => id === "dataset-queue")).toBe(true);
   });
 
-  it(
-    "requires a reviewer label and confirmation before single-item completion",
-    async () => {
-      vi.mocked(getReviewQueueItems).mockResolvedValue({
-        items: [
-          {
-            id: "item-1",
-            image_id: "image-1",
-            rank_position: 1,
-            score: 0.6,
-            score_breakdown_json: [],
-            review_state: "pending",
-          },
-        ],
-        total: 1,
-        page: 1,
-        page_size: 25,
-        pages: 1,
-      } as Awaited<ReturnType<typeof getReviewQueueItems>>);
-      vi.mocked(completeReviewQueueItem).mockResolvedValue(
-        {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
-      );
-      vi.mocked(startReviewQueueItem).mockResolvedValue(
-        {} as Awaited<ReturnType<typeof startReviewQueueItem>>,
-      );
-      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-      try {
-        mount();
-        const complete = await screen.findByRole("button", {
-          name: "Mark complete",
-        });
-        const start = screen.getByRole("button", { name: "Start review" });
-        expect(complete.hasAttribute("disabled")).toBe(true);
-        expect(start.hasAttribute("disabled")).toBe(true);
-        fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
-          target: { value: "  reef-scientist  " },
-        });
-        expect(complete.hasAttribute("disabled")).toBe(false);
-        fireEvent.click(complete);
-        expect(confirm).toHaveBeenCalledTimes(1);
-        expect(completeReviewQueueItem).not.toHaveBeenCalled();
+  it("requires a reviewer label and confirmation before single-item completion", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [
+        {
+          id: "item-1",
+          image_id: "image-1",
+          rank_position: 1,
+          score: 0.6,
+          score_breakdown_json: [],
+          review_state: "pending",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(completeReviewQueueItem).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
+    );
+    vi.mocked(startReviewQueueItem).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof startReviewQueueItem>>,
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      mount();
+      const complete = await screen.findByRole("button", {
+        name: "Mark complete",
+      });
+      const start = screen.getByRole("button", { name: "Start review" });
+      expect(complete.hasAttribute("disabled")).toBe(true);
+      expect(start.hasAttribute("disabled")).toBe(true);
+      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+        target: { value: "  reef-scientist  " },
+      });
+      expect(complete.hasAttribute("disabled")).toBe(false);
+      fireEvent.click(complete);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(completeReviewQueueItem).not.toHaveBeenCalled();
 
-        confirm.mockReturnValue(true);
-        fireEvent.click(complete);
-        await waitFor(() =>
-          expect(completeReviewQueueItem).toHaveBeenCalledWith(
-            "item-1",
-            "reef-scientist",
-            true,
-          ),
-        );
-        expect(confirm.mock.calls[0][0]).toMatch(
-          /does not verify model predictions/,
-        );
-        fireEvent.click(start);
-        await waitFor(() =>
-          expect(startReviewQueueItem).toHaveBeenCalledWith(
-            "item-1",
-            "reef-scientist",
-          ),
-        );
-      } finally {
-        confirm.mockRestore();
-      }
-    },
-  );
+      confirm.mockReturnValue(true);
+      fireEvent.click(complete);
+      await waitFor(() =>
+        expect(completeReviewQueueItem).toHaveBeenCalledWith(
+          "item-1",
+          "reef-scientist",
+          true,
+        ),
+      );
+      expect(confirm.mock.calls[0][0]).toMatch(
+        /does not verify model predictions/,
+      );
+      fireEvent.click(start);
+      await waitFor(() =>
+        expect(startReviewQueueItem).toHaveBeenCalledWith(
+          "item-1",
+          "reef-scientist",
+        ),
+      );
+    } finally {
+      confirm.mockRestore();
+    }
+  });
 
   it("requires a reviewer label and confirmation from the quick-review modal", async () => {
     vi.mocked(getReviewQueueItems).mockResolvedValue({
@@ -280,7 +277,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     try {
       mount();
-      fireEvent.click(await screen.findByRole("button", { name: "Quick review" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Quick review" }),
+      );
       const quickComplete = await screen.findByRole("button", {
         name: "Quick modal complete",
       });

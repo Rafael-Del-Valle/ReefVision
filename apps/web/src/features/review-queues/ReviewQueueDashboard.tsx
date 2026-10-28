@@ -661,7 +661,9 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
-                        disabled={!singleItemActor.trim() || startItem.isPending}
+                        disabled={
+                          !singleItemActor.trim() || startItem.isPending
+                        }
                         onClick={() => startItem.mutate(item.id)}
                       >
                         Start review
@@ -671,7 +673,9 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
-                        disabled={!singleItemActor.trim() || completeItem.isPending}
+                        disabled={
+                          !singleItemActor.trim() || completeItem.isPending
+                        }
                         onClick={() => {
                           if (
                             window.confirm(
@@ -699,7 +703,9 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
-                        disabled={!singleItemActor.trim() || returnItem.isPending}
+                        disabled={
+                          !singleItemActor.trim() || returnItem.isPending
+                        }
                         onClick={() => returnItem.mutate(item.id)}
                       >
                         Return to queue
@@ -767,7 +773,9 @@ export function ReviewQueueDashboard({
           }}
           onMarkComplete={() => {
             if (!singleItemActor.trim()) {
-              window.alert("Enter a reviewer label before completing this QC item.");
+              window.alert(
+                "Enter a reviewer label before completing this QC item.",
+              );
               return;
             }
             if (

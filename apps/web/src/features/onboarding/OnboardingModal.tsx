@@ -1,10 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
 export type OnboardingDestination =
-  | "classes"
-  | "review_queue"
-  | "workflows"
-  | "system";
+  "classes" | "review_queue" | "workflows" | "system";
 
 interface OnboardingModalProps {
   version: string;
