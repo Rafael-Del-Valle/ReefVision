@@ -816,7 +816,13 @@ def create_pose_workflow_training_result(
 
     # Notes are persisted experiment context; changing them must not reuse
     # an earlier completed workflow node under a different scientific label.
-    notes = str(parameters.get("notes")).strip() if parameters.get("notes") else None
+    requested_notes = parameters.get("notes")
+    if requested_notes is None:
+        notes = None
+    elif not isinstance(requested_notes, str):
+        raise ValidationError("Pose training notes must be a string or null")
+    else:
+        notes = requested_notes.strip() or None
 
     device = str(
         parameters.get(
