@@ -139,8 +139,14 @@ def test_reviewed_import_rejects_changed_bytes_with_identical_geometry() -> None
     unreviewed = deepcopy(changed)
     del unreviewed["calibration_review"]
     changed_preview = preview_from_request(MeshPreviewRequest.model_validate(unreviewed))
-    assert original["provenance"]["geometry_sha256"] == changed_preview["provenance"]["geometry_sha256"]
-    assert original["provenance"]["source_payload_sha256"] != changed_preview["provenance"]["source_payload_sha256"]
+    assert (
+        original["provenance"]["geometry_sha256"]
+        == changed_preview["provenance"]["geometry_sha256"]
+    )
+    assert (
+        original["provenance"]["source_payload_sha256"]
+        != changed_preview["provenance"]["source_payload_sha256"]
+    )
     with pytest.raises(ValueError, match="imported source bytes"):
         preview_from_request(MeshPreviewRequest.model_validate(changed))
     assert original["provenance"]["calibration_review_evidence"] == payload["calibration_review"]
