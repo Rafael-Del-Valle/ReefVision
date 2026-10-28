@@ -1336,7 +1336,9 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   Workflow Builder automatically approves model predictions or observations.
 - Added API regression for all four labeled transitions, invalid-label
   atomicity and untouched annotations, plus frontend regression for required
-  label and canceled/confirmed completion. The saved executable Workflow
+  label, canceled/confirmed completion and attributed start. Successful
+  single-item and bulk state changes now invalidate cached reviewer-event
+  history so the coordination panel does not display stale audit events. The saved executable Workflow
   Builder QC node and its replay/retry tests remain unchanged and must pass
   full CI after this commit.
 - Labels are **self-reported**, not authenticated identities. Exact-head
