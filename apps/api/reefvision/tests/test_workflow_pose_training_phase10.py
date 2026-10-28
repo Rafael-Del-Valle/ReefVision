@@ -963,6 +963,27 @@ def test_pose_training_can_require_separate_validation_truth(
                 processor=_fake_pose_processor,
             )
 
+    # The saved node must not silently override a requested validation mode.
+    # This dataset was frozen through the scientist-review API.
+    for invalid_val in (True, "false", 0, None):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="training_config.val must match"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                initial_model_payload={"model_id": model_id},
+                parameters={"training_config": {"epochs": 1, "val": invalid_val}},
+                processor=_fake_pose_processor,
+            )
+
     with app.state.session_factory() as session:
         assert (
             session.scalar(
@@ -985,7 +1006,7 @@ def test_pose_training_can_require_separate_validation_truth(
             initial_model_payload={"model_id": model_id},
             parameters={
                 "require_validation_dataset": False,
-                "training_config": {"epochs": 1},
+                "training_config": {"epochs": 1, "val": False},
             },
             processor=_fake_pose_processor,
         )
