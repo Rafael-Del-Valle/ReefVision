@@ -1297,3 +1297,46 @@ def test_pose_workflow_rejects_lossy_initialization_mode_from_verified_truth(
             processor=_fake_pose_processor,
         )
     assert result["initialization_mode"] == "random"
+
+
+def test_pose_workflow_rejects_lossy_architecture_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Use scientist-reviewed, API-frozen truth: architecture is model provenance.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {"training_config": {"epochs": 1}}
+
+    for invalid_architecture in (False, 0, [], {}, "", "   ", 123):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="architecture must be a non-blank string"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={**parameters, "architecture": invalid_architecture},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters=parameters,
+            processor=_fake_pose_processor,
+        )
+
+    assert result["architecture"] == "yolo11n-pose.yaml"
