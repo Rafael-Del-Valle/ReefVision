@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from heapq import heappop, heappush
-from itertools import pairwise
+from itertools import accumulate, pairwise
 from math import dist, isfinite
 from typing import Any
 
@@ -69,6 +69,8 @@ def mesh_edge_paths(
         detour_ratio: float | None = None
         path_qc_warnings: list[str] | None = None
         path_edge_lengths_m: list[float] | None = None
+        path_cumulative_lengths_m: list[float] | None = None
+        path_cumulative_length_scale_intervals_m: list[list[float]] | None = None
         path_vertices_in_source_frame_m: list[list[float]] | None = None
         path_edge_length_scale_intervals_m: list[list[float]] | None = None
         if status == "connected":
@@ -86,10 +88,20 @@ def mesh_edge_paths(
             path_edge_lengths_m = [adjacency[a][b] * scale for a, b in pairwise(route)]
             if any(not isfinite(length) for length in path_edge_lengths_m):
                 raise ValueError("Calibrated mesh path segment length overflowed")
+            # One cumulative distance per ordered route vertex allows a reviewer
+            # to inspect the full geometric route, including decimated previews.
+            # This is not a verified biological centerline or growth estimate.
+            path_cumulative_lengths_m = [0.0, *accumulate(path_edge_lengths_m)]
+            if any(not isfinite(length) for length in path_cumulative_lengths_m):
+                raise ValueError("Calibrated cumulative mesh path length overflowed")
             if scale_uncertainty is not None:
                 path_edge_length_scale_intervals_m = [
                     [length * (1 - scale_uncertainty), length * (1 + scale_uncertainty)]
                     for length in path_edge_lengths_m
+                ]
+                path_cumulative_length_scale_intervals_m = [
+                    [length * (1 - scale_uncertainty), length * (1 + scale_uncertainty)]
+                    for length in path_cumulative_lengths_m
                 ]
             meters = shortest[end] * scale
             if not isfinite(meters):
@@ -136,6 +148,10 @@ def mesh_edge_paths(
                 "path_vertices_in_source_frame_m": path_vertices_in_source_frame_m,
                 "path_edge_lengths_m": path_edge_lengths_m,
                 "path_edge_length_scale_intervals_m": path_edge_length_scale_intervals_m,
+                "path_cumulative_lengths_m": path_cumulative_lengths_m,
+                "path_cumulative_length_scale_intervals_m": (
+                    path_cumulative_length_scale_intervals_m
+                ),
                 "path_qc_warnings": path_qc_warnings,
                 "edge_count": len(route) - 1 if route is not None else None,
                 "length_m": meters,
