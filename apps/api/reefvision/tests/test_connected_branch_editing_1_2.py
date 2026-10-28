@@ -119,9 +119,7 @@ def test_existing_source_segment_must_be_pixel_connected() -> None:
         pixels=((1, 2), (2, 2), (4, 2), (5, 2)),
     )
     with pytest.raises(BranchEditError, match="disconnected pixel step"):
-        preview_connected_branch_addition(
-            nodes, [disconnected], [(3, 2), (3, 3)], edit_id="gap"
-        )
+        preview_connected_branch_addition(nodes, [disconnected], [(3, 2), (3, 3)], edit_id="gap")
 
 
 def test_existing_source_segment_endpoints_must_match_graph_nodes() -> None:
@@ -150,9 +148,7 @@ def test_existing_segment_revisited_pixels_cannot_inflate_branch_length() -> Non
         node_to_node_length_pixels=6.0,
     )
     with pytest.raises(BranchEditError, match="revisits a pixel"):
-        preview_connected_branch_addition(
-            nodes, [repeated], [(3, 2), (3, 3)], edit_id="repeated"
-        )
+        preview_connected_branch_addition(nodes, [repeated], [(3, 2), (3, 3)], edit_id="repeated")
 
 
 def test_existing_segment_cycle_flag_must_match_graph_identity() -> None:
@@ -190,3 +186,21 @@ def test_real_closed_cycle_may_repeat_only_its_terminal_anchor() -> None:
     assert result.original_total_length_pixels == pytest.approx(length)
     assert result.proposed_total_length_pixels == pytest.approx(length + 2.0)
     assert result.review_required is True
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_existing_segments_cannot_count_a_pixel_step_twice(reverse: bool) -> None:
+    nodes, edges = _line()
+    original = edges[0]
+    duplicate = replace(
+        original,
+        id="branch-duplicate",
+        source_node_id=original.target_node_id if reverse else original.source_node_id,
+        target_node_id=original.source_node_id if reverse else original.target_node_id,
+        pixels=tuple(reversed(original.pixels)) if reverse else original.pixels,
+    )
+    proposed = [(1, 2), (1, 3)]
+    with pytest.raises(BranchEditError, match="same skeleton pixel step"):
+        preview_connected_branch_addition(
+            nodes, [original, duplicate], proposed, edit_id="overlap"
+        )

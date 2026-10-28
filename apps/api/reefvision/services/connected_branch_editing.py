@@ -108,6 +108,7 @@ def _validate_graph(
     if len(node_by_id) != len(nodes) or len({edge.id for edge in edges}) != len(edges):
         raise BranchEditError("Existing graph has duplicate node or segment IDs")
     occupied: set[Pixel] = set()
+    traversed_steps: set[tuple[Pixel, Pixel]] = set()
     for node in nodes:
         if not isfinite(node.x) or not isfinite(node.y):
             raise BranchEditError("Existing graph contains a nonfinite graph-node coordinate")
@@ -129,17 +130,23 @@ def _validate_graph(
         # Only a true closed cycle may repeat its first pixel at the end.
         # Otherwise revisiting a source pixel counts the same skeleton length twice.
         unique_path = (
-            edge.pixels[:-1]
-            if edge.is_cycle and edge.pixels[0] == edge.pixels[-1]
-            else edge.pixels
+            edge.pixels[:-1] if edge.is_cycle and edge.pixels[0] == edge.pixels[-1] else edge.pixels
         )
         if len(set(unique_path)) != len(unique_path):
             raise BranchEditError("Existing segment revisits a pixel and double-counts its length")
         if any(
-            max(abs(bx - ax), abs(by - ay)) != 1
-            for (ax, ay), (bx, by) in pairwise(edge.pixels)
+            max(abs(bx - ax), abs(by - ay)) != 1 for (ax, ay), (bx, by) in pairwise(edge.pixels)
         ):
             raise BranchEditError("Existing segment contains a disconnected pixel step")
+        # Different graph edges may share junction pixels, but never the same
+        # undirected pixel step: counting it twice inflates total skeleton length.
+        for first, second in pairwise(edge.pixels):
+            step = (first, second) if first < second else (second, first)
+            if step in traversed_steps:
+                raise BranchEditError(
+                    "Existing graph counts the same skeleton pixel step in multiple segments"
+                )
+            traversed_steps.add(step)
         expected = _edge(edge.id, source, target, edge.pixels)
         if not all(
             isfinite(value) and isclose(value, expected_value, rel_tol=1e-7, abs_tol=1e-7)

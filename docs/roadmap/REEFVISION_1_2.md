@@ -3345,3 +3345,17 @@ This increment also corrects the previous exact-head Ruff E501 failure at
 successful Actions workflows; the other three failed at Ruff. New-head CI,
 reviewed calibrated measurements, 1.1 migration reconciliation, and native
 Windows installer/GUI acceptance remain release gates.
+
+
+## Source graph pixel-step uniqueness (2026-10-28)
+
+The standalone connected-branch preview and the existing executable, persisted
+`ecology_connected_branch_preview` Workflow Builder node share a fail-closed
+source-graph check: two segments may meet at a node pixel, but cannot traverse
+the same undirected skeleton pixel step. Duplicate forward or reversed steps
+would otherwise inflate total branch length despite individually valid segment
+checksums. The check is limited to source-graph QC; it does not establish
+biological branch identity, calibrated physical length or verified observations.
+Regression tests cover both segment orientations, and existing saved-workflow
+parity/review-gate tests remain applicable. Exact-head CI and Windows scientific
+acceptance are still required; this is not a release-ready declaration.
