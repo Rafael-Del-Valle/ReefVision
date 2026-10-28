@@ -508,10 +508,9 @@ def _reused_pose_training_result(
         settings,
         f"{project.storage_root}/training/{run.id}/runs/pose/weights",
     )
-    if (
-        checkpoint.resolve().parent != expected_weights_dir.resolve()
-        or checkpoint.name not in {"best.pt", "last.pt"}
-    ):
+    if checkpoint.resolve().parent != expected_weights_dir.resolve():
+        raise ValidationError("Recovered pose training checkpoint belongs to another output")
+    if checkpoint.name not in {"best.pt", "last.pt"}:
         raise ValidationError("Recovered pose training checkpoint belongs to another output")
 
     if not checkpoint.is_file():
