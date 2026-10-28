@@ -631,6 +631,27 @@ invariance, different patch counts, missing legacy evidence, disputed identity,
 and complete saved-workflow artifact parity. No cloud processing or model
 checkpoint changes are involved.
 
+### Ranked patch-area Jensen-Shannon divergence and numeric resolution (Track C)
+
+The provisional longitudinal comparison also reports
+`ranked_patch_area_jensen_shannon_divergence_bits`, the base-2
+Jensen-Shannon divergence between sorted patch-area fractions, with
+missing patch ranks padded by zero. Its mathematical range is [0, 1].
+It is invariant to patch enumeration and a common scale factor but
+does **not** establish anatomical patch correspondence, growth, tissue
+loss, or biological reidentification. Both standalone comparisons and
+saved executable `mesh_longitudinal_comparison` Workflow Builder
+graphs use the same calculation.
+
+The implementation uses `2*p/(p+q)` rather than dividing by a
+potentially underflowed midpoint. If distinct ranked profiles differ
+below floating-point resolution, either the profile distance or the
+Jensen-Shannon divergence is reported as **null**, with an explicit
+`*_below_numeric_resolution` QC warning, rather than a false exact
+zero. Missing legacy distributions also remain null. Tests cover
+positive subnormal fractions, ordinary small positive differences,
+identical distributions, and persisted-workflow artifact parity.
+
 ### Full-mesh patch-area consistency guard (Track C)
 
 Longitudinal patch-area comparisons now cross-check stored area fractions
