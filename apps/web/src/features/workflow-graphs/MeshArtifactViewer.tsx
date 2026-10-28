@@ -148,6 +148,28 @@ function formatFaceVertices(vertices: Vec3[]): string {
 }
 
 /**
+ * Compute a display-only triangle area from calibrated XYZ coordinates.
+ * This is not a full-mesh, verified tissue-surface, or uncertainty estimate.
+ */
+function formatPreviewTriangleArea(vertices: Vec3[]): string {
+  if (vertices.length !== 3) return "unavailable";
+  const [a, b, c] = vertices;
+  const ux = b[0] - a[0];
+  const uy = b[1] - a[1];
+  const uz = b[2] - a[2];
+  const vx = c[0] - a[0];
+  const vy = c[1] - a[1];
+  const vz = c[2] - a[2];
+  const crossX = uy * vz - uz * vy;
+  const crossY = uz * vx - ux * vz;
+  const crossZ = ux * vy - uy * vx;
+  const area = Math.hypot(crossX, crossY, crossZ) / 2;
+  return Number.isFinite(area)
+    ? `${area.toPrecision(6)} m²`
+    : "unavailable (numeric overflow)";
+}
+
+/**
  * Read-only, interactive orthographic view of the bounded mesh sample.
  * Scientific measurements and provenance remain in the original persisted artifact.
  */
@@ -266,7 +288,7 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
       </svg>
       <p className="annotation-helper" aria-live="polite">
         {selectedVertices !== null && selectedSourceFaceIndex !== null
-          ? `Source triangle ${selectedSourceFaceIndex} (unverified source frame): ${formatFaceVertices(selectedVertices)}. Preview vertices only; not an anatomical branch or verified surface measurement.`
+          ? `Source triangle ${selectedSourceFaceIndex} (unverified source frame): ${formatFaceVertices(selectedVertices)}. Selected preview triangle area: ${formatPreviewTriangleArea(selectedVertices)} (geometry only; calibration and reconstruction uncertainty unverified). Preview vertices only; not an anatomical branch or verified surface measurement.`
           : "Select a displayed source triangle to inspect its original sampled vertices."}
       </p>
       <div className="feature-grid">
