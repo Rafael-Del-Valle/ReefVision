@@ -47,6 +47,24 @@ export function parseMeshRenderArtifact(
     return null;
   }
   const data = value as Record<string, unknown>;
+  // This viewer is for provisional reconstructions. Do not display a saved
+  // payload that contradicts its unverified scientific provenance.
+  const provenance = data.provenance;
+  if (
+    (data.measurement_status !== undefined &&
+      data.measurement_status !== "caller_supplied_unverified") ||
+    data.preview_coordinate_registration_verified === true ||
+    data.coordinate_registration_verified === true ||
+    data.specimen_identity_verified === true ||
+    data.observation_metadata_verified === true ||
+    (provenance !== undefined &&
+      (provenance === null ||
+        typeof provenance !== "object" ||
+        Array.isArray(provenance) ||
+        (provenance as Record<string, unknown>).calibration_verified !== false))
+  ) {
+    return null;
+  }
   const vertices = data.preview_vertices_in_source_frame_m;
   const faces = data.preview_faces_local_indices;
   const sourceFaceIndices = data.preview_face_indices;
@@ -218,7 +236,10 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
             aria-label={`Inspect source triangle ${polygon.sourceFaceIndex}`}
             aria-pressed={selectedSourceFaceIndex === polygon.sourceFaceIndex}
             onClick={() =>
-              setSelection({ artifact, sourceFaceIndex: polygon.sourceFaceIndex })
+              setSelection({
+                artifact,
+                sourceFaceIndex: polygon.sourceFaceIndex,
+              })
             }
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
