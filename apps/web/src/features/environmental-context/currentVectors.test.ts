@@ -435,3 +435,38 @@ it("neutralizes spreadsheet formulas in imported provenance without changing num
   expect(csv).toContain('"-2"');
   expect(csv).toContain('"-79.5"');
 });
+
+it("preserves the depth datum and each component QC in exported vectors", () => {
+  const east = component("current_eastward_velocity", 1, {
+    depth_reference: "mean_sea_level",
+    qc: "accepted",
+  });
+  const north = component("current_northward_velocity", 2, {
+    depth_reference: "mean_sea_level",
+    qc: "unassessed",
+  });
+  const vectors = currentVectors([east, north]);
+  expect(vectors).toHaveLength(1);
+  expect(vectors[0]).toMatchObject({
+    depthReference: "mean_sea_level",
+    eastQc: "accepted",
+    northQc: "unassessed",
+  });
+  const csv = currentVectorsCsv(vectors, {
+    cacheKey: "local-cache",
+    cacheStatus: "stale_offline",
+    fetchedAt: "2026-04-04T00:00:00Z",
+    expiresAt: "2026-04-05T00:00:00Z",
+  });
+  expect(csv).toContain("depth_m,depth_reference,east_velocity_m_per_s");
+  expect(csv).toContain("east_qc,north_qc");
+  expect(csv).toContain('"mean_sea_level"');
+  expect(csv).toContain('"accepted","unassessed"');
+  // Identical numeric depths do not justify combining different depth datums.
+  expect(
+    currentVectors([
+      east,
+      { ...north, depth_reference: "sea_surface" },
+    ]),
+  ).toEqual([]);
+});
