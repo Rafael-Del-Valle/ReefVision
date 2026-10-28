@@ -130,7 +130,7 @@ describe("MeshArtifactViewer", () => {
       screen.getByRole("button", { name: "Inspect source triangle 7" }),
     );
     const inspection = screen.getByText(
-      /Source triangle 7 \\(unverified source frame\\)/,
+      /Source triangle 7 \(unverified source frame\)/,
     );
     expect(inspection).toHaveTextContent(
       "Selected preview triangle area: 3.00000 m²",
@@ -141,7 +141,9 @@ describe("MeshArtifactViewer", () => {
     expect(inspection).toHaveTextContent(
       "Selected preview triangle area: 3.00000 m²",
     );
-    expect(inspection).toHaveTextContent("reconstruction uncertainty unverified");
+    expect(inspection).toHaveTextContent(
+      "reconstruction uncertainty unverified",
+    );
   });
 
   it("reports zero geometric area for a collinear preview triangle", () => {
@@ -158,7 +160,7 @@ describe("MeshArtifactViewer", () => {
       screen.getByRole("button", { name: "Inspect source triangle 7" }),
     );
     expect(
-      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+      screen.getByText(/Source triangle 7 \(unverified source frame\)/),
     ).toHaveTextContent("Selected preview triangle area: 0.00000 m²");
   });
 
