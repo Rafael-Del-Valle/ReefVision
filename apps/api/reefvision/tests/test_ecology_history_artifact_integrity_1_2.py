@@ -194,7 +194,9 @@ def test_replayed_calibration_values_require_original_source_digest(
 
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
-    artifacts = [row for row in workflow["artifacts"] if row["data_type"] == "ecology_identity_registry"]
+    artifacts = [
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == original
 
