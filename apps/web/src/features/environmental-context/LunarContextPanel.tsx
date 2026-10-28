@@ -2,10 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
 import { ErrorState } from "../../components/ui/AsyncState";
-import {
-  calculateLunarContext,
-  type LunarPhase,
-} from "./lunarContextApi";
+import { calculateLunarContext, type LunarPhase } from "./lunarContextApi";
 
 const PHASE_LABELS: Record<LunarPhase, string> = {
   new_moon: "New moon",
