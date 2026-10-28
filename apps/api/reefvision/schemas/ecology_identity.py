@@ -324,13 +324,17 @@ class EcologyIdentityRegistryResponse(BaseModel):
             for row in self.identity_history:
                 history_by_key.setdefault(row.organism_key, []).append(row)
             if set(history_by_key) != set(latest):
-                raise ValueError("Ecological registry latest identities contradict revision history")
+                raise ValueError(
+                    "Ecological registry latest identities contradict revision history"
+                )
             for organism_key, rows in history_by_key.items():
                 ordered = sorted(rows, key=lambda row: row.revision)
                 if [row.revision for row in ordered] != list(range(1, len(ordered) + 1)):
                     raise ValueError("Ecological registry revision history is not contiguous")
                 if ordered[-1] != latest[organism_key]:
-                    raise ValueError("Ecological registry latest identity contradicts revision history")
+                    raise ValueError(
+                        "Ecological registry latest identity contradicts revision history"
+                    )
 
             if self.history_sha256 is not None:
                 # Recheck the existing producer's canonical history digest.
