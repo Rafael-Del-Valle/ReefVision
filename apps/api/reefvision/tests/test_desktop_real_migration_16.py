@@ -6,6 +6,7 @@ scripts, and the database that the desktop opens again after upgrading.
 
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
@@ -243,3 +244,183 @@ def test_desktop_upgrade_from_0037_preserves_class_visibility_and_projects(
         assert visibility.status_code == 200, visibility.text
         assert visibility.json()["user_preferences"]["annotations"]["saved"] is True
         assert visibility.json()["user_preferences"]["annotations"]["hidden_class_ids"] == []
+
+
+def test_legacy_upgrade_keeps_distinct_local_user_class_visibility(tmp_path: Path) -> None:
+    """Two local identities sharing a study retain separate visibility after migration."""
+    database = tmp_path / "shared-study.sqlite"
+    database_url = f"sqlite:///{database.as_posix()}"
+    settings_a = Settings(
+        env="test",
+        data_dir=tmp_path / "researcher-a",
+        database_url=database_url,
+        background_worker_enabled=False,
+    )
+    settings_b = Settings(
+        env="test",
+        data_dir=tmp_path / "researcher-b",
+        database_url=database_url,
+        background_worker_enabled=False,
+    )
+    settings_a.ensure_directories()
+    settings_b.ensure_directories()
+
+    alembic_ini, migrations_dir = resolve_alembic_paths()
+    config = Config(str(alembic_ini))
+    config.attributes["configure_logger"] = False
+    config.attributes["desktop_database_url"] = settings_a.resolved_database_url
+    config.set_main_option("script_location", str(migrations_dir))
+    config.set_main_option("sqlalchemy.url", settings_a.resolved_database_url)
+    command.upgrade(config, "0037")
+
+    with TestClient(create_app(settings_a)) as client:
+        created = client.post(
+            "/api/v1/projects",
+            json={"name": "Shared legacy survey", "template": "blank"},
+        )
+        assert created.status_code == 201, created.text
+        project_id = created.json()["id"]
+        class_ids = []
+        for index, name in enumerate(("Swiftia open", "Swiftia closed")):
+            label = client.post(
+                f"/api/v1/projects/{project_id}/classes",
+                json={
+                    "class_index": index,
+                    "name": name,
+                    "display_color": "#2288AA",
+                },
+            )
+            assert label.status_code == 201, label.text
+            class_ids.append(label.json()["id"])
+
+        defaults = client.put(
+            f"/api/v1/projects/{project_id}/class-visibility/defaults/annotations",
+            json={"hidden_class_ids": [class_ids[0]]},
+        )
+        assert defaults.status_code == 200, defaults.text
+        override_a = client.put(
+            f"/api/v1/projects/{project_id}/class-visibility/preferences/annotations",
+            json={"hidden_class_ids": []},
+        )
+        assert override_a.status_code == 200, override_a.text
+        identity_a = client.get(
+            f"/api/v1/projects/{project_id}/class-visibility"
+        ).json()["user_identity"]
+
+    with TestClient(create_app(settings_b)) as client:
+        initial = client.get(f"/api/v1/projects/{project_id}/class-visibility")
+        assert initial.status_code == 200, initial.text
+        identity_b = initial.json()["user_identity"]
+        assert identity_b != identity_a
+        assert initial.json()["user_preferences"]["annotations"]["saved"] is False
+        assert initial.json()["project_defaults"]["annotations"]["hidden_class_ids"] == [
+            class_ids[0]
+        ]
+        override_b = client.put(
+            f"/api/v1/projects/{project_id}/class-visibility/preferences/annotations",
+            json={"hidden_class_ids": [class_ids[1]]},
+        )
+        assert override_b.status_code == 200, override_b.text
+
+    run_pending_migrations(settings_a)
+    # A second installed desktop must see the existing revision, not reapply it.
+    run_pending_migrations(settings_b)
+    for settings, identity, hidden in (
+        (settings_a, identity_a, []),
+        (settings_b, identity_b, [class_ids[1]]),
+    ):
+        with TestClient(create_app(settings)) as client:
+            bundle = client.get(f"/api/v1/projects/{project_id}/class-visibility")
+            assert bundle.status_code == 200, bundle.text
+            state = bundle.json()
+            assert state["user_identity"] == identity
+            assert state["project_defaults"]["annotations"]["hidden_class_ids"] == [
+                class_ids[0]
+            ]
+            assert state["user_preferences"]["annotations"]["saved"] is True
+            assert state["user_preferences"]["annotations"]["hidden_class_ids"] == hidden
+            project = client.get(f"/api/v1/projects/{project_id}")
+            assert project.status_code == 200, project.text
+            assert [item["id"] for item in project.json()["label_classes"]] == class_ids
+
+    engine = create_database_engine(settings_a)
+    try:
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+            assert connection.scalar(
+                text(
+                    "SELECT COUNT(*) FROM class_visibility_preferences "
+                    "WHERE project_id = :project_id"
+                ),
+                {"project_id": project_id},
+            ) == 2
+    finally:
+        engine.dispose()
+
+
+def test_desktop_rejects_foreign_0038_stamp_without_touching_science(
+    tmp_path: Path,
+) -> None:
+    """A conflicting 1.1-style stamp must fail before any desktop migration."""
+    data_dir = tmp_path / "conflicting-desktop"
+    settings = Settings(
+        env="test",
+        data_dir=data_dir,
+        database_url=f"sqlite:///{(data_dir / 'reefvision.db').as_posix()}",
+        background_worker_enabled=False,
+    )
+    settings.ensure_directories()
+    alembic_ini, migrations_dir = resolve_alembic_paths()
+    config = Config(str(alembic_ini))
+    config.attributes["configure_logger"] = False
+    config.attributes["desktop_database_url"] = settings.resolved_database_url
+    config.set_main_option("script_location", str(migrations_dir))
+    config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+    command.upgrade(config, "0037")
+
+    with TestClient(create_app(settings)) as client:
+        created = client.post(
+            "/api/v1/projects",
+            json={"name": "Do not mutate", "template": "blank"},
+        )
+        assert created.status_code == 201, created.text
+        project_id = created.json()["id"]
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE alembic_version SET version_num = '0038'")
+            )
+            connection.execute(
+                text("CREATE TABLE scientific_records (id TEXT PRIMARY KEY, note TEXT)")
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO scientific_records (id, note) "
+                    "VALUES ('original', 'preserve scientific observations')"
+                )
+            )
+            connection.execute(
+                text("CREATE TABLE environmental_cache_entries (id TEXT PRIMARY KEY)")
+            )
+    finally:
+        engine.dispose()
+
+    with pytest.raises(RuntimeError, match="Unsafe ReefVision Alembic revision 0038"):
+        run_pending_migrations(settings)
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0038"
+            assert connection.scalar(
+                text("SELECT note FROM scientific_records WHERE id = 'original'")
+            ) == "preserve scientific observations"
+            assert connection.scalar(
+                text("SELECT id FROM projects WHERE id = :project_id"),
+                {"project_id": project_id},
+            ) == project_id
+            assert not inspect(connection).has_table("review_queue_item_events")
+    finally:
+        engine.dispose()
