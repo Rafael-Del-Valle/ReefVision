@@ -203,10 +203,12 @@ def _pose_dataset(
     ):
         raise ValidationError(f"Pose {role} dataset landmark schema no longer matches frozen truth")
 
-    advertised_manifest = str(payload.get("manifest_sha256") or "")
-
-    if advertised_manifest and advertised_manifest != dataset.manifest_sha256:
-        raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
+    # An explicitly supplied checksum is a provenance assertion. Do not
+    # treat false, zero, or a blank digest as if no assertion was supplied.
+    if "manifest_sha256" in payload:
+        advertised_manifest = payload["manifest_sha256"]
+        if not isinstance(advertised_manifest, str) or advertised_manifest != dataset.manifest_sha256:
+            raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
 
     # Downstream training must not silently accept a stale or substituted
     # landmark schema identity from a persisted Workflow Builder artifact.
