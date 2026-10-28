@@ -109,6 +109,19 @@ interface MaskDisplayGeometry {
 }
 
 /**
+ * Match the editor's SVG choice: a raster overlay is drawable only when
+ * its content path is present. Legacy raster records without a path fall
+ * back to polygon points, so culling must use those same points.
+ */
+export function usesRasterMaskOverlay(mask: MaskDisplayGeometry): boolean {
+  return (
+    mask.geometry_kind === "raster_mask" &&
+    typeof mask.mask_path === "string" &&
+    mask.mask_path.trim().length > 0
+  );
+}
+
+/**
  * The SVG polygon is drawn from vertices, not stored bounding-box metadata.
  * Recompute its display extents so stale imported metadata cannot hide it.
  * Invalid vertices disable culling rather than silently dropping observations.
@@ -155,11 +168,10 @@ export function cullViewportMasks<
   }
   return items.filter((mask) => {
     if (mask == null) return false;
-    // A polygon is rendered from points. Use their actual extents instead of
-    // potentially stale bounds; a malformed polygon remains inspectable.
-    // Raster masks use pixel bounds even if their mask_path is missing; stale
-    // imported vertices are never evidence that a raster mask is offscreen.
-    if (mask.geometry_kind !== "raster_mask") {
+    // Match the editor: raster content uses stored pixel bounds, while a
+    // missing raster path falls back to a polygon drawn from its vertices.
+    // Never cull a malformed polygon using unrelated stored bounds.
+    if (!usesRasterMaskOverlay(mask)) {
       if (mask.points != null) {
         const polygonBounds = polygonDisplayBounds(mask);
         return polygonBounds
