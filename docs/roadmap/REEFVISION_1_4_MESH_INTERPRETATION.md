@@ -651,3 +651,35 @@ calibration or registration, or prove that two timepoints show the same coral.
 Regression tests exercise both timepoints, altered distributions that retain
 the same total, invalid numeric area records, mismatched totals, legacy
 compatibility, and existing saved Workflow Builder/standalone parity.
+
+
+## Independent calibration review evidence (Track C)
+
+The standalone mesh preview and executable, saved `mesh_surface_preview`
+Workflow Builder node now accept optional `calibration_review` evidence.
+The researcher first generates an unreviewed preview to obtain its
+`provenance.geometry_sha256`, then records a separately attributed review.
+The record requires a calibration operator, a **different** independent
+reviewer, a decision (`supports_scale`, `disputes_scale`, or `inconclusive`),
+a nonblank note, an aware review timestamp, and explicit bindings to the
+source geometry SHA-256, meters-per-unit scale, calibration method, calibration
+evidence, and relative scale uncertainty (including a distinct unknown/null
+value). A review predating the source observation is rejected.
+
+Reusing the review after any bound input changes fails closed instead of
+silently transferring an old scientific assessment to new geometry or a new
+calibration. The record is preserved under
+`provenance.calibration_review_evidence` in standalone and persisted workflow
+artifacts. Disputed and inconclusive reviews add explicit QC warnings.
+Legacy previews without review remain readable.
+
+**Review evidence is caller-supplied and not authenticated.** Even a
+`supports_scale` decision does not establish physical calibration,
+photogrammetric reconstruction accuracy, instrument traceability, biological
+identity, or a statistical confidence interval. `calibration_verified`
+remains `false` and `measurement_status` remains
+`caller_supplied_unverified`. The scale-only intervals do not incorporate
+review uncertainty or reconstruction error. This slice does not introduce
+persistent 3D source-asset storage, a reviewer identity service, or a
+certification workflow. Backend regression tests cover independent attribution,
+source binding, stale evidence, decision warnings, and saved-workflow parity.
