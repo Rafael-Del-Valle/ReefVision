@@ -363,9 +363,7 @@ class EcologyIdentityRegistryResponse(BaseModel):
                 if self.history_sha256.lower() != expected:
                     raise ValueError("Ecological registry history fingerprint mismatch")
 
-            known_revisions = {
-                (row.organism_key, row.revision) for row in self.identity_history
-            }
+            known_revisions = {(row.organism_key, row.revision) for row in self.identity_history}
             for row in self.image_evidence_links:
                 if (row.organism_key, row.identity_revision) not in known_revisions:
                     raise ValueError(
@@ -384,4 +382,84 @@ class EcologyIdentityRegistryResponse(BaseModel):
                     raise ValueError(
                         "Ecological registry image references unknown identity revision"
                     )
+
+        # The current-identity signature also protects legacy artifacts
+        # which omitted append-only revision history.
+        snapshot_rows = [
+            {
+                "id": row.id,
+                "organism_key": row.organism_key,
+                "revision": row.revision,
+                "kind": row.kind,
+                "parent_colony_key": row.parent_colony_key,
+                "experimental_unit_type": row.experimental_unit_type,
+                "experimental_unit_id": row.experimental_unit_id,
+            }
+            for row in self.identities
+        ]
+        expected_snapshot = canonical_json_sha256(
+            {
+                "schema_version": self.schema_version,
+                "project_id": self.project_id,
+                "identities": snapshot_rows,
+            }
+        )
+        if self.snapshot_sha256.lower() != expected_snapshot:
+            raise ValueError("Ecological registry identity snapshot fingerprint mismatch")
+
+        # Replay must not accept modified signed annotation/calibration links.
+        # Missing digests on historical artifacts are not retroactively signed.
+        if (
+            "annotation_evidence_links" in self.model_fields_set
+            and self.annotation_evidence_sha256 is not None
+        ):
+            annotation_rows = [
+                {
+                    "id": row.id,
+                    "image_evidence_id": row.image_evidence_id,
+                    "annotation_kind": row.annotation_kind,
+                    "annotation_id": row.annotation_id,
+                    "annotation_revision": row.annotation_revision,
+                    "annotation_sha256": row.annotation_sha256,
+                    "reason": row.reason,
+                    "created_at": row.created_at.isoformat(),
+                }
+                for row in self.annotation_evidence_links
+            ]
+            expected_annotation = canonical_json_sha256(
+                {
+                    "algorithm_version": "ecology-annotation-evidence-0001",
+                    "project_id": self.project_id,
+                    "links": annotation_rows,
+                }
+            )
+            if self.annotation_evidence_sha256.lower() != expected_annotation:
+                raise ValueError("Ecological registry annotation evidence fingerprint mismatch")
+
+        if (
+            "calibration_evidence_links" in self.model_fields_set
+            and self.calibration_evidence_sha256 is not None
+        ):
+            calibration_rows = [
+                {
+                    "id": row.id,
+                    "annotation_evidence_id": row.annotation_evidence_id,
+                    "image_id": row.image_id,
+                    "image_sha256": row.image_sha256,
+                    "calibration_sha256": row.calibration_sha256,
+                    "reason": row.reason,
+                    "created_at": row.created_at.isoformat(),
+                }
+                for row in self.calibration_evidence_links
+            ]
+            expected_calibration = canonical_json_sha256(
+                {
+                    "algorithm_version": "ecology-calibration-evidence-0001",
+                    "project_id": self.project_id,
+                    "links": calibration_rows,
+                }
+            )
+            if self.calibration_evidence_sha256.lower() != expected_calibration:
+                raise ValueError("Ecological registry calibration evidence fingerprint mismatch")
+
         return self

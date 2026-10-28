@@ -102,3 +102,73 @@ def test_missing_history_and_corrupt_revision_chain_fail_closed(
     discontinuous["identities"][0]["revision"] = 3
     with pytest.raises(ValidationError, match="revision history is not contiguous"):
         EcologyIdentityRegistryResponse.model_validate(discontinuous)
+
+
+def test_signed_registry_evidence_survives_workflow_and_rejects_tampering(
+    client: TestClient,
+) -> None:
+    """Saved workflow provenance is not silently rewritten during replay."""
+    from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
+        _link_calibration,
+        _prepared_annotation,
+        _save_calibration,
+    )
+
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    linked = _link_calibration(client, project_id, annotation)
+    assert linked.status_code == 201, linked.text
+    response = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert response.status_code == 200, response.text
+    original = response.json()
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == original
+    assert EcologyIdentityRegistryResponse.model_validate(original).review_gate == (
+        "scientist_review_required"
+    )
+
+    changed = deepcopy(original)
+    changed["snapshot_sha256"] = "0" * 64
+    with pytest.raises(ValidationError, match="identity snapshot fingerprint mismatch"):
+        EcologyIdentityRegistryResponse.model_validate(changed)
+
+    # A legacy workflow without history still cannot rewrite signed identity.
+    legacy = deepcopy(original)
+    for field in ("identity_history", "history_revision_count", "history_sha256"):
+        legacy.pop(field)
+    assert EcologyIdentityRegistryResponse.model_validate(legacy).review_gate == (
+        "scientist_review_required"
+    )
+    legacy["identities"][0]["kind"] = "individual"
+    with pytest.raises(ValidationError, match="identity snapshot fingerprint mismatch"):
+        EcologyIdentityRegistryResponse.model_validate(legacy)
+
+    for collection, expected in (
+        ("annotation_evidence_links", "annotation evidence fingerprint mismatch"),
+        ("calibration_evidence_links", "calibration evidence fingerprint mismatch"),
+    ):
+        changed = deepcopy(artifacts[0]["payload_json"])
+        changed[collection][0]["reason"] = "Retroactively altered scientific source"
+        with pytest.raises(ValidationError, match=expected):
+            EcologyIdentityRegistryResponse.model_validate(changed)
+
+    for digest_field, expected in (
+        ("annotation_evidence_sha256", "annotation evidence fingerprint mismatch"),
+        ("calibration_evidence_sha256", "calibration evidence fingerprint mismatch"),
+    ):
+        changed = deepcopy(original)
+        changed[digest_field] = "0" * 64
+        with pytest.raises(ValidationError, match=expected):
+            EcologyIdentityRegistryResponse.model_validate(changed)
+
+    unsigned = deepcopy(original)
+    unsigned.pop("annotation_evidence_sha256")
+    unsigned.pop("calibration_evidence_sha256")
+    assert EcologyIdentityRegistryResponse.model_validate(unsigned).review_gate == (
+        "scientist_review_required"
+    )

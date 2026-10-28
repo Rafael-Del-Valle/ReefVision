@@ -3106,3 +3106,32 @@ completed **16/19** Actions workflows; three backend failures were the same
 Ruff SIM102 nested-if and E501 overlong-line diagnostics, corrected in this
 increment. New-head CI and real-data scientific/Windows acceptance remain
 pending. **1.2 is NOT RELEASE-READY; 1.3 has not started.**
+
+## 2026-10-28 Track B — signed identity and linked-evidence replay integrity
+
+The previous exact HEAD `d5cfaeeb478eebe1d734444d45b43125b0796a15` passed **16/19** Actions workflows;
+three backend failures were exclusively a Ruff formatting difference in
+`schemas/ecology_identity.py`, corrected in this increment.
+
+The existing `EcologyIdentityRegistryResponse` now verifies the producer's
+latest-identity `snapshot_sha256` even for saved artifacts without identity
+history, and verifies signed annotation and calibration collection SHA-256
+digests when their rows are present. This prevents tampered biological identity
+kind or experimental-unit context, source annotation notes, calibration link
+notes, and substituted digests from silently passing Workflow Builder artifact
+rehydration. The standalone registry API and existing executable typed
+`ecology_identity_registry_source` node share this schema; no duplicate
+node, migration, environmental store, or model download was added.
+
+Historical artifacts missing optional collection digests remain readable but
+`registered_unverified` with `scientist_review_required`; no retrospective
+verification is inferred. This is internal fingerprint consistency, not
+authentication of source image bytes, researcher identity, calibration
+accuracy or independent biological replication. Historical image-link
+v0001/v0002 digest compatibility still needs separate review. Focused
+regressions cover API/saved-workflow parity, altered identities and linked
+evidence, substituted signatures and legacy unsigned compatibility. Exact-head
+CI, independent real-data scientist review, 1.1 migration reconciliation and
+physical Windows installer/GUI acceptance remain release blockers.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
+
