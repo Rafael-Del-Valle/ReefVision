@@ -1452,3 +1452,24 @@ Backend API regressions cover missing/false/nonboolean confirmation, absence of 
 - **Development only:** exact-head CI, Windows MSI upgrade/rollback, installed
   GUI, representative biological-data validation and independent 1.1/1.6
   Alembic revision-0038 reconciliation remain release blockers.
+
+## 2026-10-28 — Packaged first-project-write migration smoke (Track D)
+
+- Audited the historical disposable Windows clean-install failure from Actions
+  run 39954832671, evidence artifact 12504626823. MSI installation and first
+  API launch succeeded, but the report recorded `schema_status=uninitialized`
+  and the first `POST /api/v1/projects` failed HTTP 500. The archived API and
+  backend log tails contain no request traceback. This is historical evidence,
+  **not** proof that the current branch still has the same failure.
+- Added a real SQLite/Alembic regression in
+  `test_desktop_real_migration_16.py`: migrate a fresh disposable database,
+  require HTTP `up_to_date`, create a blank project through the actual API,
+  reopen the app and verify the same persisted project and migration status.
+  No `Base.metadata.create_all` shortcut or researcher data is used.
+- Added this regression to the focused Windows installer build preflight in
+  `build-desktop.yml`, before the multi-GB MSI build. This is a non-frozen
+  Windows API smoke test; it does **not** replace an installed MSI/GUI run.
+- Commits: `62794974` and `a5c6d5d1`. Exact-head CI and native installed
+  Windows acceptance are pending. The independent 1.1/1.6 Alembic 0038
+  collision and representative biological-data validation remain blockers.
+  **HOLD — do not merge, tag, publish or notify completion.**
