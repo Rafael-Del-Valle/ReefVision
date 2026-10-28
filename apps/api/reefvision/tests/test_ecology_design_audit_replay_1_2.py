@@ -55,7 +55,11 @@ def _shared_parent_design(client: TestClient) -> tuple[str, dict]:
         ("design_history_status", "no_design_changes_recorded", "design-change audit"),
         ("design_change_count", 0, "design-change audit"),
         ("design_change_events", [], "design-change audit"),
-        ("cross_unit_parent_audit_status", "no_cross_unit_parent_reuse", "cross-unit parent audit"),
+        (
+            "cross_unit_parent_audit_status",
+            "no_cross_unit_parent_reuse",
+            "cross-unit parent audit",
+        ),
         ("cross_unit_shared_parent_colony_keys", [], "cross-unit parent audit"),
         ("cross_unit_parent_details", [], "cross-unit parent audit"),
         (
@@ -72,7 +76,9 @@ def test_signed_design_warnings_cannot_be_hidden_in_saved_workflow(
     project_id, snapshot = _shared_parent_design(client)
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
-    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
+    artifacts = [
+        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == snapshot
     assert EcologyIdentityRegistryResponse.model_validate(snapshot).review_gate == (
@@ -120,7 +126,9 @@ def test_legacy_audit_omissions_remain_unknown_not_falsely_clear(
     altered["historical_cross_unit_parent_details"] = snapshot[
         "historical_cross_unit_parent_details"
     ]
-    with pytest.raises(ValidationError, match="Unavailable ecological historical parent audit"):
+    with pytest.raises(
+        ValidationError, match="Unavailable ecological historical parent audit"
+    ):
         EcologyIdentityRegistryResponse.model_validate(altered)
 
 
