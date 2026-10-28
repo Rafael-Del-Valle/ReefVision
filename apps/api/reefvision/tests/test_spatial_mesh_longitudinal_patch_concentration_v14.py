@@ -342,7 +342,6 @@ def test_patch_concentration_saved_workflow_matches_standalone(client: TestClien
     )
 
 
-
 def test_ranked_patch_divergence_zero_for_identical_area_profiles() -> None:
     early, late = _meshes()
     # Different geometry and calibration, but the same ranked area fractions.
@@ -363,3 +362,35 @@ def test_ranked_patch_divergence_is_symmetric_without_correspondence() -> None:
         second["ranked_patch_area_jensen_shannon_divergence_bits"]
     )
     assert 0 <= first["ranked_patch_area_jensen_shannon_divergence_bits"] <= 1
+
+
+@pytest.mark.parametrize("tiny_fraction", [5e-324, 1e-300])
+def test_subnormal_patch_fraction_divergence_is_not_falsely_zero(
+    tiny_fraction: float,
+) -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    for record in observations:
+        # Legacy fractions without per-patch areas are still supported.
+        # Use valid concentration metadata to isolate numerical stability.
+        record.pop("edge_connected_patch_surface_areas_m2")
+        record["edge_connected_patch_surface_area_fractions"] = [1.0, 0.0]
+        record["edge_connected_patch_area_concentration_index"] = 1.0
+        record["area_weighted_effective_patch_count"] = 1.0
+    observations[0]["edge_connected_patch_surface_area_fractions"] = [1.0, tiny_fraction]
+
+    result = compare_mesh_observations(*observations)
+    if tiny_fraction == 5e-324:
+        # Half of the smallest positive subnormal cannot be represented.
+        # Do not report zero as if the ranked profiles were identical.
+        assert result["ranked_patch_area_profile_distance"] is None
+        assert result["ranked_patch_area_jensen_shannon_divergence_bits"] is None
+        assert (
+            "ranked_patch_area_profile_distance_below_numeric_resolution"
+            in result["qc_warnings"]
+        )
+        assert "ranked_patch_area_divergence_below_numeric_resolution" in result["qc_warnings"]
+    else:
+        assert result["ranked_patch_area_profile_distance"] > 0
+        assert result["ranked_patch_area_jensen_shannon_divergence_bits"] > 0
+        assert "ranked_patch_area_divergence_below_numeric_resolution" not in result["qc_warnings"]
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
