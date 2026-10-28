@@ -648,12 +648,16 @@ def create_pose_workflow_training_result(
         if training_videos & validation_videos:
             raise ValidationError("Pose validation dataset must use independent source videos")
 
-    if (
-        validation_dataset is not None
-        and validation_dataset.pose_schema_content_hash != dataset.pose_schema_content_hash
+    # Matching landmark definitions do not establish identical scientific
+    # schema lineage: two reviewed schemas can share a content hash while
+    # representing different identities or revisions.
+    if validation_dataset is not None and (
+        validation_dataset.pose_schema_id != dataset.pose_schema_id
+        or validation_dataset.pose_schema_revision != dataset.pose_schema_revision
+        or validation_dataset.pose_schema_content_hash != dataset.pose_schema_content_hash
     ):
         raise ValidationError(
-            "Pose validation dataset must use the same landmark schema as training truth"
+            "Pose validation dataset must use the same landmark schema identity and revision as training truth"
         )
 
     # A truthy string such as "false" must not silently change whether
