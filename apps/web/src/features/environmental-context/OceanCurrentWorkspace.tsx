@@ -178,7 +178,7 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                 </select>
               </label>
               <label>
-                Current depth (m below sea surface)
+                Current depth (m; source datum shown per vector)
                 <select
                   value={selectedDepth ?? ""}
                   onChange={(e) => setDepth(e.target.value)}
@@ -256,8 +256,8 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
               </button>
               <p>
                 Summary export includes the selected time/depth, component
-                record IDs, units, cache provenance and known component
-                uncertainties. Derived speed/bearing uncertainty is not
+                record IDs, depth reference, per-component QC, units, cache
+                provenance and known component uncertainties. Derived speed/bearing uncertainty is not
                 estimated. Original scientific records remain the authoritative
                 source.
               </p>
@@ -363,13 +363,15 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                     {vector.bearing === null
                       ? "Stationary"
                       : `${vector.bearing.toFixed(1)}° toward true north`}{" "}
-                    · {vector.latitude}, {vector.longitude} · {vector.depthM} m
+                    · {vector.latitude}, {vector.longitude} · {vector.depthM} m ({vector.depthReference})
                     <br />
                     {vector.sourceKind === "modeled"
                       ? "Modeled"
                       : vector.sourceKind}{" "}
                     · {vector.dataset} · version{" "}
                     {vector.modelVersion ?? "unknown"} · {vector.source}
+                    <br />
+                    Component QC: east {vector.eastQc}; north {vector.northQc}.
                     <br />
                     Vector speed/direction and position uncertainty: not
                     estimated.
