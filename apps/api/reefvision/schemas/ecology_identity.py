@@ -89,6 +89,11 @@ class EcologyImageEvidenceRow(BaseModel):
     source_metadata_sha256: str | None = None
     source_metadata_evidence_status: Literal["frozen", "legacy_unfrozen"] = "legacy_unfrozen"
 
+
+    reason: str
+    created_at: datetime
+    evidence_level: Literal["linked_unverified"] = "linked_unverified"
+
     @model_validator(mode="after")
     def require_consistent_source_metadata_status(self) -> EcologyImageEvidenceRow:
         """A replayed legacy link cannot masquerade as frozen source evidence."""
@@ -98,10 +103,6 @@ class EcologyImageEvidenceRow(BaseModel):
         if (digest is None) != (self.source_metadata_evidence_status == "legacy_unfrozen"):
             raise ValueError("Image source metadata evidence status contradicts its fingerprint")
         return self
-
-    reason: str
-    created_at: datetime
-    evidence_level: Literal["linked_unverified"] = "linked_unverified"
 
 
 class EcologyAnnotationEvidenceCreate(BaseModel):
