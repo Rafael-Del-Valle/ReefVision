@@ -20,19 +20,22 @@ a visible polygon if its stored bounds were stale.
 For polygon-drawn overlays, compute conservative image-space extents from
 finite vertex coordinates and use inclusive viewport intersection. Retain
 malformed/short/incomplete geometry instead of assuming it is offscreen.
-Raster-mask overlays still use raster bounds, **not** unrelated polygon points,
-including when an imported raster-mask record has a missing `mask_path`.
-Such incomplete records retain unknown/invalid bounds and remain visible for
-researcher inspection; stale polygon vertices must not suppress their overlay. Null records are not drawable. Original
-mask records, IDs, class visibility, reviewer decisions and saved annotations
-are not changed by viewport culling.
+Raster-mask overlays with a valid content path use raster bounds, **not**
+unrelated polygon points. The editor actually renders legacy raster records
+with a null/absent/blank `mask_path` as polygon fallbacks when vertices exist.
+Culling now shares the renderer's raster-eligibility predicate and uses those
+drawn polygon vertices for fallback records, not stale raster bounds. Invalid
+polygon vertices or unknown bounds remain conservatively visible for manual
+inspection; null records are not drawable. Original mask records, IDs, class
+visibility, reviewer decisions and saved annotations are not modified.
 
 ## Regression evidence
 
 - `apps/web/src/features/annotation-editor/viewportCulling.test.ts`:
   10,000 missing-bounds polygon overlays, edge-touching geometry, stale
   metadata in both directions, malformed polygon points, raster-mask
-  uncertainty, missing raster-mask paths with stale vertices, and source-array
+  uncertainty, missing/blank raster paths with both stale-inside and
+  stale-outside bounds, renderer/fallback agreement, and source-array
   preservation.
 - An isolated TypeScript strict compilation and seven JavaScript assertions
   of the new geometry-selection algorithm passed on Linux/Node 22. This is
@@ -54,3 +57,16 @@ node to Workflow Builder.
 installed-GUI scientific acceptance, cross-version Alembic reconciliation,
 and full lint/type/backend/frontend/E2E at the accepted SHA. Do not merge,
 tag, publish, download pretrained weights, or modify user assets.
+
+## 2026-10-28 — Raster fallback display/culling consistency
+
+Read-only inspection of the actual `AnnotationEditor.tsx` SVG renderer found
+that a `raster_mask` with `mask_path: null` is rendered as a polygon when
+points exist. The preceding culler treated every `raster_mask` as a raster,
+even with no path; that could hide a visible polygon or retain an offscreen
+polygon. The shared `usesRasterMaskOverlay` predicate now selects the same
+rendering geometry in both paths and treats absent/empty/whitespace paths as
+non-renderable raster content. Standalone unit regressions cover both mismatch
+directions and malformed polygon safety. This changes only viewport display,
+not scientific data or Workflow Builder graph execution. Full exact-head
+Vitest/TypeScript/E2E and installed-Windows-GUI validation remain required.
