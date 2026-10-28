@@ -10,6 +10,8 @@ from datetime import UTC
 from math import dist, fsum, isfinite
 from typing import Any
 
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
+
 from reefvision.services import (
     spatial_mesh_boundary_v14,
     spatial_mesh_glb_v14,
@@ -865,6 +867,9 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
     )
     review = payload.calibration_review
     if review is not None:
+        # Pydantic does not revalidate already-created mutable model instances.
+        # Reject altered or constructed audit evidence before persisting provenance.
+        review = MeshCalibrationReviewEvidence.model_validate(review.model_dump(mode="python"))
         # An audit note must not be silently reused after geometry, scale,
         # method, evidence, or uncertainty is revised. Independent review
         # remains a caller-supplied claim, never a verified calibration.
@@ -882,10 +887,7 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
             and review.reviewed_coordinate_frame_id != payload.coordinate_frame_id
         ):
             raise ValueError("Calibration review does not match source coordinate frame")
-        if (
-            payload.coordinate_frame_id is not None
-            and review.reviewed_coordinate_frame_id is None
-        ):
+        if payload.coordinate_frame_id is not None and review.reviewed_coordinate_frame_id is None:
             result["qc_warnings"].append("independent_calibration_review_coordinate_frame_unbound")
         if (
             review.reviewed_specimen_id != payload.specimen_id
