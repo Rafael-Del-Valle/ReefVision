@@ -57,7 +57,9 @@ it("rejects velocity components with the same immutable record ID", () => {
 });
 it("rejects reuse of one immutable component ID across separate times", () => {
   const east = component("current_eastward_velocity", 3, { id: "east-reused" });
-  const north = component("current_northward_velocity", 4, { id: "north-first" });
+  const north = component("current_northward_velocity", 4, {
+    id: "north-first",
+  });
   const laterEast = {
     ...east,
     observed_at: "2026-04-03T01:00:00Z",
@@ -67,14 +69,13 @@ it("rejects reuse of one immutable component ID across separate times", () => {
     observed_at: "2026-04-03T01:00:00Z",
   });
   expect(currentVectors([east, north, laterEast, laterNorth])).toEqual([]);
-  expect(
-    currentVectors([
-      east,
-      north,
-      { ...laterEast, id: "east-later" },
-      laterNorth,
-    ]),
-  ).toHaveLength(2);
+  const distinctRecords = currentVectors([
+    east,
+    north,
+    { ...laterEast, id: "east-later" },
+    laterNorth,
+  ]);
+  expect(distinctRecords).toHaveLength(2);
 });
 it("preserves component uncertainty without deriving uncertainty", () => {
   const vectors = currentVectors([
