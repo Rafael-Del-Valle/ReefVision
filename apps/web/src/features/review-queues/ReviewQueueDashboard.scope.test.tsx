@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  completeReviewQueueItem,
+  startReviewQueueItem,
   getDatasetVersionQualityControlRuns,
   getDatasetVersionReviewQueues,
   getDatasetVersions,
@@ -15,6 +17,10 @@ import {
 import { ReviewQueueDashboard } from "./ReviewQueueDashboard";
 
 vi.mock("../../api/client", () => ({
+  completeReviewQueueItem: vi.fn(),
+  startReviewQueueItem: vi.fn(),
+  skipReviewQueueItem: vi.fn(),
+  returnReviewQueueItem: vi.fn(),
   getDatasetVersionQualityControlRuns: vi.fn(),
   getDatasetVersionReviewQueues: vi.fn(),
   getDatasetVersions: vi.fn(),
@@ -177,5 +183,58 @@ describe("ReviewQueueDashboard scope isolation", () => {
     const calls = vi.mocked(getReviewQueueItems).mock.calls;
     const queueIds = calls.map(([id]) => id);
     expect(queueIds.every((id) => id === "dataset-queue")).toBe(true);
+  });
+
+
+  it("requires a local reviewer label and explicit confirmation to complete an item", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [
+        {
+          id: "item-1",
+          image_id: "image-1",
+          rank_position: 1,
+          score: 0.6,
+          score_breakdown_json: [],
+          review_state: "pending",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(completeReviewQueueItem).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
+    );
+    vi.mocked(startReviewQueueItem).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof startReviewQueueItem>>,
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      mount();
+      const complete = await screen.findByRole("button", { name: "Mark complete" });
+      const start = screen.getByRole("button", { name: "Start review" });
+      expect(complete.hasAttribute("disabled")).toBe(true);
+      expect(start.hasAttribute("disabled")).toBe(true);
+      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+        target: { value: "  reef-scientist  " },
+      });
+      expect(complete.hasAttribute("disabled")).toBe(false);
+      fireEvent.click(complete);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(completeReviewQueueItem).not.toHaveBeenCalled();
+
+      confirm.mockReturnValue(true);
+      fireEvent.click(complete);
+      await waitFor(() =>
+        expect(completeReviewQueueItem).toHaveBeenCalledWith(
+          "item-1",
+          "reef-scientist",
+        ),
+      );
+      expect(confirm.mock.calls[0][0]).toMatch(/does not verify model predictions/);
+    } finally {
+      confirm.mockRestore();
+    }
   });
 });
