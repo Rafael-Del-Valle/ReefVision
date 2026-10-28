@@ -40,15 +40,21 @@ class EcologyMeasurementCandidate(BaseModel):
             raise ValueError("Projected measurement must be a JSON number, not coerced")
         return value
 
+    @field_validator("image_sha256", "annotation_sha256", "calibration_sha256", mode="before")
+    @classmethod
+    def require_sha256_evidence_digest(cls, value: object) -> str:
+        """Reject malformed source digests without changing original provenance casing."""
+        if not isinstance(value, str) or re.fullmatch(r"[0-9a-fA-F]{64}", value) is None:
+            raise ValueError("Ecological source evidence digest must be 64 hexadecimal characters")
+        return value
+
     @field_validator("capture_timestamp_utc", mode="before")
     @classmethod
     def require_explicit_capture_timestamp(cls, value: object) -> object:
         """Numeric epochs and date-only strings are not acquisition timestamps."""
         if value is None or isinstance(value, datetime):
             return value
-        if not isinstance(value, str) or not re.match(
-            r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()
-        ):
+        if not isinstance(value, str) or not re.match(r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()):
             raise ValueError("Capture time must be an explicit ISO 8601 calendar timestamp")
         return value
 
