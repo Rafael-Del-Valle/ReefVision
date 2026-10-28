@@ -14,8 +14,8 @@ from pydantic import (
     model_validator,
 )
 
-
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
+
 
 class PointCloudPreviewRequest(BaseModel):
     ply_text: str | None = Field(default=None, max_length=256_000)
