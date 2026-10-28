@@ -325,14 +325,14 @@ class EcologyIdentityRegistryResponse(BaseModel):
                 if row.image_evidence_id not in images:
                     raise ValueError("Ecological registry contains orphan annotation evidence")
         if "annotation_evidence_links" in self.model_fields_set:
-            for row in self.calibration_evidence_links:
-                if row.annotation_evidence_id not in annotations:
+            for calibration_link in self.calibration_evidence_links:
+                if calibration_link.annotation_evidence_id not in annotations:
                     raise ValueError("Ecological registry contains orphan calibration evidence")
                 if "image_evidence_links" in self.model_fields_set:
-                    source = images.get(annotations[row.annotation_evidence_id].image_evidence_id)
+                    source = images.get(annotations[calibration_link.annotation_evidence_id].image_evidence_id)
                     if source is None or (
-                        row.image_id != source.image_id
-                        or row.image_sha256.lower() != source.image_sha256.lower()
+                        calibration_link.image_id != source.image_id
+                        or calibration_link.image_sha256.lower() != source.image_sha256.lower()
                     ):
                         raise ValueError("Ecological registry calibration source image mismatch")
 
@@ -341,8 +341,8 @@ class EcologyIdentityRegistryResponse(BaseModel):
             # Present-but-empty history is not the same as a legacy artifact
             # that never stored revision history.
             history_by_key: dict[str, list[EcologyIdentityRow]] = {}
-            for row in self.identity_history:
-                history_by_key.setdefault(row.organism_key, []).append(row)
+            for identity_revision in self.identity_history:
+                history_by_key.setdefault(identity_revision.organism_key, []).append(identity_revision)
             if set(history_by_key) != set(latest):
                 raise ValueError(
                     "Ecological registry latest identities contradict revision history"
@@ -384,20 +384,20 @@ class EcologyIdentityRegistryResponse(BaseModel):
                     raise ValueError("Ecological registry history fingerprint mismatch")
 
             known_revisions = {(row.organism_key, row.revision) for row in self.identity_history}
-            for row in self.image_evidence_links:
-                if (row.organism_key, row.identity_revision) not in known_revisions:
+            for image_link in self.image_evidence_links:
+                if (image_link.organism_key, image_link.identity_revision) not in known_revisions:
                     raise ValueError(
                         "Ecological registry image references unknown identity revision"
                     )
         else:
             # Legacy snapshots may omit the history, but cannot reference
             # nonexistent organisms or future identity revisions.
-            for row in self.image_evidence_links:
-                current = latest.get(row.organism_key)
+            for image_link in self.image_evidence_links:
+                current = latest.get(image_link.organism_key)
                 if (
                     current is None
-                    or row.identity_revision < 1
-                    or row.identity_revision > current.revision
+                    or image_link.identity_revision < 1
+                    or image_link.identity_revision > current.revision
                 ):
                     raise ValueError(
                         "Ecological registry image references unknown identity revision"
@@ -593,15 +593,15 @@ class EcologyIdentityRegistryResponse(BaseModel):
         else:
             if "identity_history" not in self.model_fields_set:
                 raise ValueError("Ecological historical parent audit requires revision history")
-            details = derive_historical_cross_unit_parent_details(self.identity_history)
+            historical_details = derive_historical_cross_unit_parent_details(self.identity_history)
             status = (
                 "recorded_across_units_requires_review"
-                if details
+                if historical_details
                 else "no_recorded_cross_unit_parent_reuse"
             )
             if self.historical_cross_unit_parent_audit_status != status or (
                 "historical_cross_unit_parent_details" in self.model_fields_set
-                and self.historical_cross_unit_parent_details != details
+                and self.historical_cross_unit_parent_details != historical_details
             ):
                 raise ValueError("Ecological historical parent audit differs from identity history")
         return self
