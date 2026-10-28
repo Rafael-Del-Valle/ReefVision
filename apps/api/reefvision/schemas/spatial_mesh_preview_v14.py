@@ -32,6 +32,13 @@ class MeshCalibrationReviewEvidence(BaseModel):
     reviewed_at_utc: AwareDatetime
     # Bind the review to geometry and every scale-bearing calibration input.
     reviewed_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reviewed_specimen_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    reviewed_observation_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    reviewed_observed_at_utc: AwareDatetime | None = None
     reviewed_meters_per_unit: StrictFloat = Field(gt=0, le=1_000_000, allow_inf_nan=False)
     reviewed_calibration_method: Literal[
         "ruler", "photogrammetry_control", "instrument", "other"
