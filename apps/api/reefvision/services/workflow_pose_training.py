@@ -1041,6 +1041,11 @@ def create_pose_workflow_training_result(
     job = refreshed_job
     run = refreshed_run
 
+    # A worker must not replace the queued child job with another successful
+    # job, even if its request claims the same workflow and training run.
+    if run.job_id != job.id:
+        raise ValidationError("Completed pose training child job identity changed")
+
     if job.status != "succeeded" or run.status != "completed":
         detail = run.error_message or job.error_message or (f"job={job.status}, run={run.status}")
 
