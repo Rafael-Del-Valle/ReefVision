@@ -46,6 +46,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "video_tracking",
     "ecology_longitudinal_analysis",
     "ecology_identity_registry_source",
+    "ecology_connected_branch_preview",
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
     "ecology_paired_count_comparison",
@@ -796,6 +797,42 @@ def _video_tracking(
     ]
 
 
+def _ecology_connected_branch_preview(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.schemas.connected_branch_editing import ConnectedBranchPreviewRequest
+    from reefvision.services.connected_branch_preview import preview_saved_branch_addition
+
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    allowed = runtime_keys | {"analysis_id", "edit_id", "points"}
+    if set(parameters) - allowed:
+        raise ValidationError("Connected branch preview has unsupported parameters")
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Connected branch preview requires the current project source")
+    analysis_id = parameters.get("analysis_id")
+    if not isinstance(analysis_id, str) or not analysis_id:
+        raise ValidationError("Connected branch preview requires a saved analysis ID")
+    request = ConnectedBranchPreviewRequest.model_validate(
+        {"edit_id": parameters.get("edit_id"), "points": parameters.get("points")}
+    )
+    preview = preview_saved_branch_addition(session, settings, analysis_id, request)
+    image = session.get(ImageAsset, preview.image_id)
+    if image is None or image.project_id != project_id:
+        raise ValidationError("Connected branch preview source belongs to another project")
+    return [
+        {
+            "port_id": "preview",
+            "data_type": "connected_branch_preview",
+            "payload": {"project_id": project_id, **preview.model_dump(mode="json")},
+        }
+    ]
+
+
 def _ecology_identity_registry_source(
     session: Session,
     settings: Settings,
@@ -1020,6 +1057,7 @@ _ADAPTERS = {
     "video_tracking": _video_tracking,
     "ecology_longitudinal_analysis": _ecology_longitudinal_analysis,
     "ecology_identity_registry_source": _ecology_identity_registry_source,
+    "ecology_connected_branch_preview": _ecology_connected_branch_preview,
     "ecology_measurement_csv_export": _ecology_measurement_csv_export,
     "ecology_population_csv_export": _ecology_population_csv_export,
     "ecology_paired_count_comparison": _ecology_paired_count_comparison,

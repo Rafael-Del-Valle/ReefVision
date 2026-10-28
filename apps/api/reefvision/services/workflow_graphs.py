@@ -126,6 +126,9 @@ _ACTIONS: dict[str, str] = {
         "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
+    "ecology_connected_branch_preview": (
+        "Preview an attached coral centerline segment without changing saved geometry."
+    ),
     "ecology_identity_registry_source": (
         "Snapshot versioned project-owned organism identities; scientist review remains required."
     ),

@@ -631,6 +631,43 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
     )
 
+    registry["ecology_connected_branch_preview"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_connected_branch_preview",
+        display_name="Preview Connected Coral Branch",
+        category="Scientific analysis",
+        description=(
+            "Preview a connected centerline segment from a saved skeleton revision. "
+            "No physical measurement, accepted edit, or dataset verification is created."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="preview",
+                display_name="Unverified connected branch proposal",
+                accepted_types=["connected_branch_preview"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=["analysis_id", "edit_id", "points"],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Uses the same persisted, checksum-checked skeleton as the standalone API.",
+            "Requires exact pixel attachment; no bridge, snap, or accepted edit is created.",
+            "Rejects a source image from another project.",
+            "Persists source revision SHA-256, pixel geometry, and scientist review gate.",
+            "Cannot enter verified-dataset ports without independent review.",
+        ],
+    )
+
     registry["ecology_identity_registry_source"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_identity_registry_source",
         display_name="Project Ecological Identity Registry",

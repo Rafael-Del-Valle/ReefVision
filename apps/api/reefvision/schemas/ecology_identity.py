@@ -329,7 +329,8 @@ class EcologyIdentityRegistryResponse(BaseModel):
                 if calibration_link.annotation_evidence_id not in annotations:
                     raise ValueError("Ecological registry contains orphan calibration evidence")
                 if "image_evidence_links" in self.model_fields_set:
-                    source = images.get(annotations[calibration_link.annotation_evidence_id].image_evidence_id)
+                    annotation_link = annotations[calibration_link.annotation_evidence_id]
+                    source = images.get(annotation_link.image_evidence_id)
                     if source is None or (
                         calibration_link.image_id != source.image_id
                         or calibration_link.image_sha256.lower() != source.image_sha256.lower()
@@ -342,7 +343,9 @@ class EcologyIdentityRegistryResponse(BaseModel):
             # that never stored revision history.
             history_by_key: dict[str, list[EcologyIdentityRow]] = {}
             for identity_revision in self.identity_history:
-                history_by_key.setdefault(identity_revision.organism_key, []).append(identity_revision)
+                history_by_key.setdefault(identity_revision.organism_key, []).append(
+                    identity_revision
+                )
             if set(history_by_key) != set(latest):
                 raise ValueError(
                     "Ecological registry latest identities contradict revision history"

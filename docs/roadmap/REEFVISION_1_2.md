@@ -3268,3 +3268,26 @@ static regression gate. Await new-head CI results and continue real-source
 review, longitudinal measurement verification, migration reconciliation with
 1.1 and installed Windows GUI acceptance. **1.2 NOT RELEASE-READY; 1.3 not
 started.**
+
+
+## Saved Workflow Builder connected-branch proposal (2026-10-28; development only)
+
+The read-only saved-skeleton branch-preview API is also exposed as the executable
+`ecology_connected_branch_preview` Workflow Builder node. Its typed project
+input and `connected_branch_preview` output require a saved analysis ID,
+explicit edit ID and integer source-image pixel path. Execution reuses the
+standalone preview's latest-revision, checksum, topology, attachment and
+image-bound checks. It refuses foreign-project source images and unsupported
+parameters. The persisted artifact includes project ID, source analysis ID,
+source result SHA-256, exact proposed node/edge geometry, pixel-only lengths,
+`proposal_unverified`, `scientist_review_required` and explicit false
+flags for persistence and physical-length calculation. It cannot feed
+verified-dataset ports. Saved-workflow acceptance exercises API parity,
+read-only behavior, foreign-project refusal and forged verification claims.
+This is **not** a reviewed or persisted biological branch measurement.
+Calibrated per-segment identity, explicit acceptance, scientific source review,
+and representative installed-Windows validation remain outstanding.
+
+The same iteration corrects two exact Ruff E501 line-length errors in the
+ecological identity schema observed in the previous CI backend jobs.
+New-head CI is required; source changes and committed tests are not test passes.
