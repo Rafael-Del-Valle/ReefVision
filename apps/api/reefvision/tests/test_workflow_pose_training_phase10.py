@@ -437,7 +437,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         )
 
     def retry_completed_node(
-        *, run_name: str = "phase10-pose-retrain", notes: str | None = None
+        *, run_name: str = "phase10-pose-retrain", notes: Any = None
     ) -> dict[str, Any]:
         with app.state.session_factory() as session:
             return create_pose_workflow_training_result(
@@ -476,6 +476,12 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     # notes change, even if all frozen training inputs remain identical.
     with pytest.raises(ValidationError, match="configuration changed"):
         retry_completed_node(notes="different-experimental-context")
+
+    # Explicit non-string notes previously became None or coerced text,
+    # allowing a saved workflow to silently reuse an unrelated checkpoint.
+    for invalid_notes in (False, 0, [], {}, 2.5):
+        with pytest.raises(ValidationError, match="notes must be a string or null"):
+            retry_completed_node(notes=invalid_notes)
 
     with app.state.session_factory() as session:
         matching_runs = session.scalars(
