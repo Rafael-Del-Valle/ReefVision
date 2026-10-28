@@ -4,13 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   completeReviewQueueItem,
-  startReviewQueueItem,
   getDatasetVersionQualityControlRuns,
   getDatasetVersionReviewQueues,
   getDatasetVersions,
   getQualityControlRuns,
   getReviewQueueItems,
   getReviewQueues,
+  startReviewQueueItem,
   type Project,
   type ReviewQueueRecord,
 } from "../../api/client";
@@ -185,7 +185,6 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect(queueIds.every((id) => id === "dataset-queue")).toBe(true);
   });
 
-
   it("requires a local reviewer label and explicit confirmation to complete an item", async () => {
     vi.mocked(getReviewQueueItems).mockResolvedValue({
       items: [
@@ -212,7 +211,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     try {
       mount();
-      const complete = await screen.findByRole("button", { name: "Mark complete" });
+      const complete = await screen.findByRole("button", {
+        name: "Mark complete",
+      });
       const start = screen.getByRole("button", { name: "Start review" });
       expect(complete.hasAttribute("disabled")).toBe(true);
       expect(start.hasAttribute("disabled")).toBe(true);
@@ -232,7 +233,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
           "reef-scientist",
         ),
       );
-      expect(confirm.mock.calls[0][0]).toMatch(/does not verify model predictions/);
+      expect(confirm.mock.calls[0][0]).toMatch(
+        /does not verify model predictions/,
+      );
     } finally {
       confirm.mockRestore();
     }
