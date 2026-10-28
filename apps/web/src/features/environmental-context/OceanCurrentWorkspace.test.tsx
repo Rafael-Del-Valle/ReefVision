@@ -193,12 +193,16 @@ it("explains caches with no QC-compatible current pair", async () => {
   fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
     target: { value: "cache" },
   });
-  expect(await screen.findByText(/No QC-compatible/)).toBeInTheDocument();
-  expect(screen.getByLabelText("Current time (UTC)")).toBeDisabled();
-  expect(screen.getByLabelText("Current depth and datum")).toBeDisabled();
-  expect(
-    screen.getByRole("button", { name: "Export current vector summary CSV" }),
-  ).toBeDisabled();
+  const emptyState = await screen.findByText(/No QC-compatible/);
+  expect(emptyState).toBeInTheDocument();
+  const timeSelect = screen.getByLabelText("Current time (UTC)");
+  const depthSelect = screen.getByLabelText("Current depth and datum");
+  const exportButton = screen.getByRole("button", {
+    name: "Export current vector summary CSV",
+  });
+  expect(timeSelect).toBeDisabled();
+  expect(depthSelect).toBeDisabled();
+  expect(exportButton).toBeDisabled();
 });
 it("never presents an empty or failed cache as measured currents", async () => {
   const fetch = setup();
