@@ -70,6 +70,9 @@ def test_patch_concentration_is_permutation_invariant_scale_free_qc() -> None:
     assert result["after_area_weighted_effective_patch_count"] == pytest.approx(2)
     assert result["delta_area_weighted_effective_patch_count"] == pytest.approx(0.4)
     assert result["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+    assert result["ranked_patch_area_jensen_shannon_divergence_bits"] == pytest.approx(
+        0.0487949406953985
+    )
     warning = "ranked_patch_area_profile_distance_not_patch_correspondence"
     assert warning in result["qc_warnings"]
     assert (
@@ -97,6 +100,9 @@ def test_ranked_profile_is_independent_of_patch_index_order() -> None:
         reordered["ranked_patch_area_profile_distance"]
         == baseline["ranked_patch_area_profile_distance"]
     )
+    assert reordered["ranked_patch_area_jensen_shannon_divergence_bits"] == pytest.approx(
+        baseline["ranked_patch_area_jensen_shannon_divergence_bits"]
+    )
 
 
 def test_ranked_profile_pads_missing_patch_ranks_with_zero() -> None:
@@ -108,6 +114,9 @@ def test_ranked_profile_pads_missing_patch_ranks_with_zero() -> None:
     assert before["edge_connected_patch_count"] == 2
     assert after["edge_connected_patch_count"] == 1
     assert result["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+    assert result["ranked_patch_area_jensen_shannon_divergence_bits"] == pytest.approx(
+        0.1379253809700299
+    )
     warning = "ranked_patch_area_profile_distance_not_patch_correspondence"
     assert warning in result["qc_warnings"]
 
@@ -128,7 +137,7 @@ def test_patch_concentration_rejects_contradictory_source_metadata(
 ) -> None:
     before, after = (_preview(payload) for payload in _meshes())
     before[field] = value
-    with pytest.raises(ValueError, match="[Pp]atch"):
+    with pytest.raises(ValueError, match=r"[Pp]atch"):
         compare_mesh_observations(before, after)
 
 
@@ -142,7 +151,7 @@ def test_patch_count_rejects_forged_topology_metadata(
 ) -> None:
     observations = [_preview(payload) for payload in _meshes()]
     observations[timepoint]["edge_connected_patch_count"] = invalid_count
-    with pytest.raises(ValueError, match="Patch (count|area fractions)"):
+    with pytest.raises(ValueError, match=r"Patch (count|area fractions)"):
         compare_mesh_observations(*observations)
 
 
@@ -230,6 +239,7 @@ def test_missing_legacy_distribution_does_not_invent_zero_change() -> None:
     assert result["delta_patch_area_concentration_index"] is None
     assert result["delta_area_weighted_effective_patch_count"] is None
     assert result["ranked_patch_area_profile_distance"] is None
+    assert result["ranked_patch_area_jensen_shannon_divergence_bits"] is None
     assert "patch_area_distribution_comparison_unavailable" in result["qc_warnings"]
 
 
@@ -253,6 +263,7 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
     assert result["delta_patch_area_concentration_index"] is None
     assert result["delta_area_weighted_effective_patch_count"] is None
     assert result["ranked_patch_area_profile_distance"] is None
+    assert result["ranked_patch_area_jensen_shannon_divergence_bits"] is None
     assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is True
 
 
@@ -326,3 +337,29 @@ def test_patch_concentration_saved_workflow_matches_standalone(client: TestClien
     assert artifact["delta_patch_area_concentration_index"] == pytest.approx(-0.125)
     assert artifact["delta_area_weighted_effective_patch_count"] == pytest.approx(0.4)
     assert artifact["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+    assert artifact["ranked_patch_area_jensen_shannon_divergence_bits"] == pytest.approx(
+        0.0487949406953985
+    )
+
+
+
+def test_ranked_patch_divergence_zero_for_identical_area_profiles() -> None:
+    early, late = _meshes()
+    # Different geometry and calibration, but the same ranked area fractions.
+    late["vertices"][4] = [16, 0, 0]
+    result = compare_mesh_observations(_preview(early), _preview(late))
+    assert result["ranked_patch_area_jensen_shannon_divergence_bits"] == pytest.approx(0)
+    assert result["ranked_patch_area_profile_distance"] == pytest.approx(0)
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+
+def test_ranked_patch_divergence_is_symmetric_without_correspondence() -> None:
+    early, late = _meshes()
+    first = compare_mesh_observations(_preview(early), _preview(late))
+    # Swap which geometry is observed at each date, preserving chronological order.
+    early["vertices"], late["vertices"] = late["vertices"], early["vertices"]
+    second = compare_mesh_observations(_preview(early), _preview(late))
+    assert first["ranked_patch_area_jensen_shannon_divergence_bits"] == pytest.approx(
+        second["ranked_patch_area_jensen_shannon_divergence_bits"]
+    )
+    assert 0 <= first["ranked_patch_area_jensen_shannon_divergence_bits"] <= 1
