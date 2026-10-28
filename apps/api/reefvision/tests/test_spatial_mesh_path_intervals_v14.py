@@ -25,6 +25,11 @@ def test_path_scale_intervals_survive_saved_workflow(client: TestClient) -> None
     assert connected["length_scale_interval_m"] == pytest.approx([0.009, 0.011])
     assert connected["endpoint_chord_scale_interval_m"] == pytest.approx([0.009, 0.011])
     assert connected["path_edge_lengths_m"] == pytest.approx([0.01])
+    assert connected["path_cumulative_lengths_m"] == pytest.approx([0.0, 0.01])
+    assert connected["path_cumulative_length_scale_intervals_m"] == [
+        [0.0, 0.0],
+        pytest.approx([0.009, 0.011]),
+    ]
     assert connected["path_vertices_in_source_frame_m"] == [[0.0, 0.0, 0.0], [0.01, 0.0, 0.0]]
     assert connected["path_edge_length_scale_intervals_m"][0] == pytest.approx([0.009, 0.011])
     for route in expected[1:]:
@@ -33,6 +38,8 @@ def test_path_scale_intervals_survive_saved_workflow(client: TestClient) -> None
         assert route["path_edge_lengths_m"] is None
         assert route["path_vertices_in_source_frame_m"] is None
         assert route["path_edge_length_scale_intervals_m"] is None
+        assert route["path_cumulative_lengths_m"] is None
+        assert route["path_cumulative_length_scale_intervals_m"] is None
 
     graph = {
         "graph_id": "mesh-path-intervals-v14",
@@ -72,6 +79,9 @@ def test_path_scale_intervals_survive_saved_workflow(client: TestClient) -> None
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["surface_edge_paths"] == expected
+    assert artifact["surface_edge_paths"][0]["path_cumulative_lengths_m"] == pytest.approx(
+        [0.0, 0.01]
+    )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
 
@@ -91,6 +101,12 @@ def test_two_edge_route_retains_segment_geometry_and_uncertainty() -> None:
     assert route["status"] == "connected"
     assert route["path_vertex_indices"] in ([0, 1, 3], [0, 2, 3])
     assert route["path_edge_lengths_m"] == pytest.approx([0.1, 0.1])
+    assert route["path_cumulative_lengths_m"] == pytest.approx([0.0, 0.1, 0.2])
+    assert route["path_cumulative_length_scale_intervals_m"] == [
+        [0.0, 0.0],
+        pytest.approx([0.09, 0.11]),
+        pytest.approx([0.18, 0.22]),
+    ]
     source_vertices = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]]
     expected_vertices = [
         [coordinate * 0.1 for coordinate in source_vertices[index]]
@@ -101,5 +117,6 @@ def test_two_edge_route_retains_segment_geometry_and_uncertainty() -> None:
     for interval in route["path_edge_length_scale_intervals_m"]:
         assert interval == pytest.approx([0.09, 0.11])
     assert sum(route["path_edge_lengths_m"]) == pytest.approx(route["length_m"])
+    assert route["path_cumulative_lengths_m"][-1] == pytest.approx(route["length_m"])
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
