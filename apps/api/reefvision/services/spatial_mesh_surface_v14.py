@@ -376,6 +376,19 @@ def measure_mesh_preview(
         enclosed_volume_m3 = None
         volume_qc_warnings.add("enclosed_volume_numeric_overflow")
     patch_areas_m2 = [patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches]
+    # Fractions are dimensionless, independent of common calibration scale,
+    # and use the complete reconstruction rather than sampled display faces.
+    # Patch order is the first source-face index; ties retain that order.
+    patch_area_fractions = (
+        [patch_area_mesh_units[patch] / raw_area for patch in ordered_patches]
+        if raw_area > 0
+        else None
+    )
+    largest_patch_index = (
+        max(range(len(ordered_patches)), key=lambda index: patch_area_fractions[index])
+        if patch_area_fractions is not None
+        else None
+    )
     # A/V is a geometric inverse-length descriptor, not biomass or coral health.
     # Withhold the aggregate ratio whenever aggregate enclosed volume is rejected;
     # eligible per-patch ratios remain available as provisional evidence.
@@ -663,6 +676,13 @@ def measure_mesh_preview(
         "edge_connected_patch_nonmanifold_edge_counts": patch_nonmanifold_edge_counts,
         "edge_connected_patch_inconsistent_winding_edge_counts": patch_winding_edge_counts,
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,
+        "edge_connected_patch_surface_area_fractions": patch_area_fractions,
+        "largest_surface_patch_index": largest_patch_index,
+        "largest_surface_patch_area_fraction": (
+            patch_area_fractions[largest_patch_index]
+            if largest_patch_index is not None
+            else None
+        ),
         "edge_connected_patch_axis_aligned_dimensions_m": patch_dimensions_m,
         "edge_connected_patch_dimension_scale_intervals_m": (
             [
