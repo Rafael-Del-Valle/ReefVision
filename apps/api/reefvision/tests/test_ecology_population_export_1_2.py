@@ -330,6 +330,42 @@ def test_population_csv_rejects_serialized_review_roster_drift(
         render_ecology_population_csv(source)
 
 
+@pytest.mark.parametrize(
+    ("field", "forged_value", "error"),
+    [
+        ("experimental_unit_ids_json", '["tank-B"]', "declared-unit roster"),
+        ("experimental_unit_ids_json", '["tank-A","tank-B"]', "declared-unit roster"),
+        ("design_review_blockers_json", "[]", "declared-unit review gate"),
+        ("declared_unit_count", 0, "candidate declared-unit"),
+        ("contributing_organism_count", 0, "candidate declared-unit"),
+        ("mean_absolute_change", "", "candidate declared-unit"),
+        ("unit_status", "incomplete_followup", "excluded declared-unit"),
+    ],
+)
+def test_population_csv_rejects_serialized_declared_unit_drift(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    forged_value: object,
+    error: str,
+) -> None:
+    """CSV rows cannot invent or suppress unit eligibility and scientific review."""
+    source = _dated_artifact(client)
+    original = exporter._write_checked_row
+
+    def corrupt_unit_row(writer: Any, values: tuple[object, ...]) -> None:
+        if values[exporter._COLUMNS.index("row_type")] != "declared_unit":
+            original(writer, values)
+            return
+        altered = list(values)
+        altered[exporter._COLUMNS.index(field)] = forged_value
+        original(writer, tuple(altered))
+
+    monkeypatch.setattr(exporter, "_write_checked_row", corrupt_unit_row)
+    with pytest.raises(ValidationError, match=error):
+        render_ecology_population_csv(source)
+
+
 def test_saved_workflow_population_csv_matches_standalone_and_blocks_promotion(
     client: TestClient,
 ) -> None:

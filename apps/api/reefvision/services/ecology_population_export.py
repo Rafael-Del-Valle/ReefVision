@@ -103,6 +103,47 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
     if row["row_type"] == "declared_unit":
         if declared not in (0, 1) or (declared == 0 and organisms != 0) or organisms < 0:
             raise ValidationError("Ecological population CSV invalid declared-unit denominator")
+        # A CSV serializer must not turn one candidate tank into several
+        # independent units, or hide an excluded unit behind a candidate label.
+        try:
+            unit_ids = json.loads(str(row["experimental_unit_ids_json"]))
+            blockers = json.loads(str(row["design_review_blockers_json"]))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Ecological population CSV invalid declared-unit roster") from exc
+        if (
+            not isinstance(unit_ids, list)
+            or len(unit_ids) > 1
+            or any(not isinstance(key, str) or not key.strip() for key in unit_ids)
+            or [_csv_identifier(key) for key in unit_ids]
+            != ([row["experimental_unit_id"]] if row["experimental_unit_id"] else [])
+        ):
+            raise ValidationError("Ecological population CSV invalid declared-unit roster")
+        if blockers != ["independence_not_authenticated"]:
+            raise ValidationError("Ecological population CSV invalid declared-unit review gate")
+        if row["unit_status"] == "candidate":
+            if (
+                declared != 1
+                or not unit_ids
+                or organisms < 1
+                or row["mean_absolute_change"] == ""
+            ):
+                raise ValidationError("Ecological population CSV invalid candidate declared-unit")
+        elif row["unit_status"] in (
+            "missing_unit_declaration",
+            "technical_replicate_unit",
+            "mixed_units",
+            "incomplete_followup",
+            "sampling_window_mismatch",
+        ):
+            if (
+                declared != 0
+                or organisms != 0
+                or row["mean_absolute_change"] != ""
+                or row["mean_percent_change"] != ""
+            ):
+                raise ValidationError("Ecological population CSV invalid excluded declared-unit")
+        else:
+            raise ValidationError("Ecological population CSV invalid declared-unit status")
     elif row["row_type"] == "population_stratum":
         if declared < 1 or organisms < declared:
             raise ValidationError("Ecological population CSV invalid population denominator")
@@ -136,10 +177,9 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
             raise ValidationError(
                 "Ecological population CSV missing-parent review blocker mismatch"
             )
-        if (
-            "independence_not_authenticated" not in blockers
-            or ("single_declared_unit" in blockers) != (declared == 1)
-        ):
+        if "independence_not_authenticated" not in blockers or (
+            "single_declared_unit" in blockers
+        ) != (declared == 1):
             raise ValidationError(
                 "Ecological population CSV independent-unit review blockers mismatch"
             )

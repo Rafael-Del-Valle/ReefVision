@@ -3407,3 +3407,24 @@ This is a bounded scientific-integrity and CI-recovery change. New-head CI,
 reviewed longitudinal calibration/identity, 1.1 migration reconciliation,
 and physical Windows installer/GUI acceptance remain required. Version 1.2
 is **not release-ready**; version 1.3 has not started.
+
+## Declared-unit CSV serialization safeguards (2026-10-28)
+
+The existing standalone ecological population CSV and executable saved
+`ecology_population_csv_export` Workflow Builder node now independently
+validate the serialized **declared-unit** roster and eligibility gate, in
+addition to source-level recomputation. A candidate row must retain exactly
+one identified declared unit, at least one contributing organism and an
+absolute-change value. An excluded row cannot carry contributing organisms,
+unit votes or endpoint means. Unit identifiers in JSON must match the
+spreadsheet-safe identifier column, and the explicit
+`independence_not_authenticated` review blocker cannot be removed or
+replaced. Seven parametrized serializer-corruption cases cover these
+failure modes, while existing standalone/API and persisted saved-workflow
+parity tests protect legitimate candidate and excluded rows.
+
+This is a serialization integrity check, **not** independent authentication
+of tank/colony assignment, reviewed identity or calibration. Evidence remains
+`linked_unverified`, inference is forbidden, and scientist review is required.
+CI, longitudinal source authentication, migration reconciliation and physical
+Windows acceptance remain release blockers.
