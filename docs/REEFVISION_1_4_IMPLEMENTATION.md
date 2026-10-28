@@ -652,3 +652,25 @@ this read-only UI introduces no new numerical analysis or verification claim.
 The prior point-cloud selection TypeScript nullability error (TS18047)
 was also corrected. Complete exact-head CI and Windows installed-GUI
 acceptance remain required before release.
+
+## Longitudinal patch topology and source-area integrity (Track C)
+
+The standalone longitudinal mesh comparison and saved, executable typed
+`mesh_longitudinal_comparison` Workflow Builder node recompute the
+scale-invariant patch concentration from the full-resolution patch area
+fractions. When a source artifact includes `edge_connected_patch_count`,
+it must be a **positive integer**, not a Boolean, float, string, or
+nonfinite value, and must agree with the number of fractions. Modern
+artifacts containing per-patch surface areas must also retain their
+fractions; dropping fractions cannot silently downgrade them to legacy
+records and suppress distribution QC. Older artifacts genuinely lacking
+the newer per-patch areas or topology count remain readable.
+
+Contradictory source metadata raises an explicit scientific validation
+error instead of producing a misleading longitudinal patch-change
+estimate. The saved-workflow result is compared byte-for-byte with the
+standalone artifact in the regression suite, and additional before/after
+tests cover forged topology counts and incomplete area evidence. These
+checks do **not** prove reconstruction accuracy, patch correspondence,
+calibration, organism identity, or coral fragmentation. Measurements
+remain provisional and require human scientific review.
