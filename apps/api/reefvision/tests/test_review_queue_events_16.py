@@ -132,10 +132,7 @@ def test_single_item_triage_persists_atomic_events(client: TestClient) -> None:
     assert completed.status_code == 200, completed.text
     assert completed.json()["review_state"] == "completed"
     assert completed.json()["completed_at"] is not None
-    assert (
-        client.post(f"{state_url}/complete", json={"review_confirmed": True}).status_code
-        == 409
-    )
+    assert client.post(f"{state_url}/complete", json={"review_confirmed": True}).status_code == 409
     assert client.post(f"{state_url}/start").status_code == 409
     final_history = client.get(history_url).json()
     assert final_history["total"] == 4
@@ -246,7 +243,6 @@ def test_coordination_retries_and_history_reject_foreign_provenance(
     annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
-
 
 
 def test_single_item_actor_labels_are_validated_and_persisted(client: TestClient) -> None:

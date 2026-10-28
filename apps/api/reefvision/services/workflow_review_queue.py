@@ -36,9 +36,8 @@ def create_review_queue_workflow_artifact(
     # persisted JSON was altered after its checksum was recorded. Verify this
     # before queue creation or reuse; no research data is rewritten on failure.
     source_payload = sources[0].payload_json
-    if (
-        not isinstance(source_payload, dict)
-        or sources[0].payload_sha256 != canonical_json_sha256(source_payload)
+    if not isinstance(source_payload, dict) or sources[0].payload_sha256 != canonical_json_sha256(
+        source_payload
     ):
         raise ValidationError("QC Review Queue source artifact failed integrity validation")
     if source_payload.get("project_id") != project_id:
