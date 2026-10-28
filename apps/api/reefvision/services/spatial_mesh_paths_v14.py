@@ -77,9 +77,7 @@ def mesh_edge_paths(
             route.reverse()
             # Preserve every traversed geometric edge for independent route
             # inspection. These are mesh-edge distances, not coral centerlines.
-            path_edge_lengths_m = [
-                adjacency[a][b] * scale for a, b in pairwise(route)
-            ]
+            path_edge_lengths_m = [adjacency[a][b] * scale for a, b in pairwise(route)]
             if any(not isfinite(length) for length in path_edge_lengths_m):
                 raise ValueError("Calibrated mesh path segment length overflowed")
             if scale_uncertainty is not None:
