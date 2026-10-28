@@ -3079,3 +3079,30 @@ biological growth or true experimental independence. Full exact-head CI,
 1.1 migration reconciliation, authenticated scientist review and physical
 Windows installer/GUI acceptance remain required. **1.2 is NOT RELEASE-READY;
 1.3 has not started.**
+
+
+## 2026-10-28 Track B — revision-history artifact reconciliation
+
+The existing project-owned `ecology_identity_registry_source` Workflow Builder
+node and standalone identity-registry API share a typed evidence contract.
+Persisted artifacts now reject missing/extra organism histories, noncontiguous
+revisions, latest-identity snapshots that disagree with the append-only history,
+and image links to nonexistent or future revisions. An explicitly present empty
+history is not treated as an old artifact that omitted the history field.
+
+When the existing `history_sha256` is present, rehydration recomputes the
+producer's canonical `ecology-identity-history-0001` digest, preventing a
+changed historical experimental-unit assignment or note from passing with the
+original hash. Legacy saved artifacts that omit history remain readable, but
+linked images still require a known organism and plausible prior revision.
+These checks do not cryptographically authenticate a researcher, establish
+true independent experimental units, or promote unverified biological evidence.
+
+Focused regressions cover standalone API versus executed saved-workflow
+parity, retroactive history edits, contradictory latest identity, future/orphan
+image revisions, explicitly empty histories, discontinuous revisions and
+legacy compatibility. The previous exact HEAD `acb0cb052580e4f010c8355790f2a9c83a7d1ce1`
+completed **16/19** Actions workflows; three backend failures were the same
+Ruff SIM102 nested-if and E501 overlong-line diagnostics, corrected in this
+increment. New-head CI and real-data scientific/Windows acceptance remain
+pending. **1.2 is NOT RELEASE-READY; 1.3 has not started.**

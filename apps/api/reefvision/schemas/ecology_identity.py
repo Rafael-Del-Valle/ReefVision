@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
+from reefvision.storage.datasets import canonical_json_sha256
 
 Key = str
 
@@ -290,9 +291,12 @@ class EcologyIdentityRegistryResponse(BaseModel):
             ("calibration_evidence_links", "calibration_evidence_count"),
             ("identity_history", "history_revision_count"),
         ):
-            if collection in self.model_fields_set and count_field in self.model_fields_set:
-                if getattr(self, count_field) != len(getattr(self, collection)):
-                    raise ValueError("Ecological registry evidence count contradicts its links")
+            if (
+                collection in self.model_fields_set
+                and count_field in self.model_fields_set
+                and getattr(self, count_field) != len(getattr(self, collection))
+            ):
+                raise ValueError("Ecological registry evidence count contradicts its links")
 
         images = {row.id: row for row in self.image_evidence_links}
         annotations = {row.id: row for row in self.annotation_evidence_links}
@@ -312,9 +316,68 @@ class EcologyIdentityRegistryResponse(BaseModel):
                     ):
                         raise ValueError("Ecological registry calibration source image mismatch")
 
-        if self.identity_history and "identity_history" in self.model_fields_set:
-            revisions = {(row.organism_key, row.revision) for row in self.identity_history}
+        latest = {row.organism_key: row for row in self.identities}
+        if "identity_history" in self.model_fields_set:
+            # Present-but-empty history is not the same as a legacy artifact
+            # that never stored revision history.
+            history_by_key: dict[str, list[EcologyIdentityRow]] = {}
+            for row in self.identity_history:
+                history_by_key.setdefault(row.organism_key, []).append(row)
+            if set(history_by_key) != set(latest):
+                raise ValueError("Ecological registry latest identities contradict revision history")
+            for organism_key, rows in history_by_key.items():
+                ordered = sorted(rows, key=lambda row: row.revision)
+                if [row.revision for row in ordered] != list(range(1, len(ordered) + 1)):
+                    raise ValueError("Ecological registry revision history is not contiguous")
+                if ordered[-1] != latest[organism_key]:
+                    raise ValueError("Ecological registry latest identity contradicts revision history")
+
+            if self.history_sha256 is not None:
+                # Recheck the existing producer's canonical history digest.
+                # A digest proves internal consistency, not external authorship.
+                history_rows = [
+                    {
+                        "id": row.id,
+                        "organism_key": row.organism_key,
+                        "revision": row.revision,
+                        "kind": row.kind,
+                        "parent_colony_key": row.parent_colony_key,
+                        "experimental_unit_type": row.experimental_unit_type,
+                        "experimental_unit_id": row.experimental_unit_id,
+                        "reason": row.reason,
+                        "created_at": row.created_at.isoformat(),
+                    }
+                    for row in self.identity_history
+                ]
+                expected = canonical_json_sha256(
+                    {
+                        "algorithm_version": "ecology-identity-history-0001",
+                        "project_id": self.project_id,
+                        "revisions": history_rows,
+                    }
+                )
+                if self.history_sha256.lower() != expected:
+                    raise ValueError("Ecological registry history fingerprint mismatch")
+
+            known_revisions = {
+                (row.organism_key, row.revision) for row in self.identity_history
+            }
             for row in self.image_evidence_links:
-                if (row.organism_key, row.identity_revision) not in revisions:
-                    raise ValueError("Ecological registry image references unknown identity revision")
+                if (row.organism_key, row.identity_revision) not in known_revisions:
+                    raise ValueError(
+                        "Ecological registry image references unknown identity revision"
+                    )
+        else:
+            # Legacy snapshots may omit the history, but cannot reference
+            # nonexistent organisms or future identity revisions.
+            for row in self.image_evidence_links:
+                current = latest.get(row.organism_key)
+                if (
+                    current is None
+                    or row.identity_revision < 1
+                    or row.identity_revision > current.revision
+                ):
+                    raise ValueError(
+                        "Ecological registry image references unknown identity revision"
+                    )
         return self
