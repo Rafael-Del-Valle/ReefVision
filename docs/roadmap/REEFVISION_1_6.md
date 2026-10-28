@@ -2,6 +2,31 @@
 
 **Status:** draft implementation, not release acceptance. Master coordination: issue #76.
 
+## 2026-10-28 — Saved QC output binding and fail-closed recovery (Track D)
+
+- Inspected the existing 1.6 Workflow Builder adapter, standalone review-queue
+  endpoints, prior tests, 1.0–1.5 overlap and exact-head Actions results.
+  At predecessor `5c3d05db`, frontend CI passed, but backend CI stopped at
+  Ruff formatting in `test_workflow_queue_creator_namespace_16.py`.
+- A completed saved QC node already records its typed output artifact ID.
+  Previously, removing or changing its queue's internal workflow owner could
+  cause a retry to generate a replacement queue rather than reject missing
+  original scientific evidence. A re-signed output artifact could also claim
+  another queue ID without being checked against the saved queue.
+- On retry, when a persisted output binding exists, require exactly one
+  matching `review_queue_reference` artifact with valid digest, producer,
+  port, run, project and **original queue ID**. Reject absent, reassigned,
+  forged or ambiguous evidence without creating a new queue. The initial
+  interrupted-create path with no saved output remains supported.
+- Extended the existing real saved-workflow + standalone API regression to
+  simulate reassigned queue ownership and re-signed forged queue references,
+  then restore the original evidence and confirm idempotent replay. Fixed the
+  precise predecessor Ruff formatting failure in the same test file.
+- This is integrity protection, **not** atomic cross-worker queue creation.
+  No database migration, reviewer auto-approval, pretrained weights or
+  changes to unverified annotations. Exact-head backend/frontend CI and
+  native Windows/scientific acceptance remain required before release.
+
 ## 2026-10-28 — Independent saved QC runs and duplicate-owner regression (Track D)
 
 - Inspected draft PR #77, master issue #76 and exact-head backend CI run
