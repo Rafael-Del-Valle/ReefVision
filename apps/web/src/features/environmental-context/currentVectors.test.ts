@@ -463,6 +463,7 @@ it("exports selected current vectors with units, source IDs and explicit uncerta
   const [header, data] = csv.trimEnd().split("\r\n");
   expect(header.split(",")).toContain("bearing_deg_true_north");
   expect(header.split(",")).toContain("derived_uncertainty_status");
+  expect(header.split(",")).toContain("aggregation_provenance_key_json");
   expect(data).toContain('"east-1","north-1"');
   expect(data).toContain('"-3","4","5"');
   expect(data).toContain('"0","bound"');
@@ -473,6 +474,11 @@ it("exports selected current vectors with units, source IDs and explicit uncerta
   expect(data).toContain('"2026-04-04T00:00:00Z"');
   expect(data).toContain('"https://example.org/model","native_grid"');
   expect(data).toContain('"not_estimated"');
+  // CSV quoting must preserve the exact canonical provenance used to decide
+  // whether vectors can be pooled, including JSON quotes and cache identity.
+  const quotedProvenance = `"${vectors[0].aggregationProvenanceKey.replaceAll('"', '""')}"`;
+  expect(data).toContain(quotedProvenance);
+  expect(vectors[0].aggregationProvenanceKey).toContain('"cache"');
   expect(data).toContain('"Model ""A"", =danger"');
   expect(csv.endsWith("\r\n")).toBe(true);
   expect(currentVectorsCsv([], context).split("\r\n")).toHaveLength(2);
