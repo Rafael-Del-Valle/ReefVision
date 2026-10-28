@@ -2904,35 +2904,42 @@ export async function addReviewQueueEvent(
 
 export async function startReviewQueueItem(
   itemId: string,
+  actor?: string,
 ): Promise<ReviewQueueItem> {
   return request<ReviewQueueItem>(`/review-queue-items/${itemId}/start`, {
     method: "POST",
+    ...(actor ? { body: JSON.stringify({ actor }) } : {}),
   });
 }
 
 export async function completeReviewQueueItem(
   itemId: string,
+  actor?: string,
 ): Promise<ReviewQueueItem> {
   return request<ReviewQueueItem>(`/review-queue-items/${itemId}/complete`, {
     method: "POST",
+    ...(actor ? { body: JSON.stringify({ actor }) } : {}),
   });
 }
 
 export async function skipReviewQueueItem(
   itemId: string,
   reason: string,
+  actor?: string,
 ): Promise<ReviewQueueItem> {
   return request<ReviewQueueItem>(`/review-queue-items/${itemId}/skip`, {
     method: "POST",
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ reason, ...(actor ? { actor } : {}) }),
   });
 }
 
 export async function returnReviewQueueItem(
   itemId: string,
+  actor?: string,
 ): Promise<ReviewQueueItem> {
   return request<ReviewQueueItem>(`/review-queue-items/${itemId}/return`, {
     method: "POST",
+    ...(actor ? { body: JSON.stringify({ actor }) } : {}),
   });
 }
 
