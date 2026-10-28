@@ -69,6 +69,7 @@ export function parseMeshRenderArtifact(
       (index) =>
         typeof index === "number" && Number.isInteger(index) && index >= 0,
     ) ||
+    new Set(sourceFaceIndices).size !== sourceFaceIndices.length ||
     !isVec3(target) ||
     typeof radius !== "number" ||
     !Number.isFinite(radius) ||
@@ -119,6 +120,15 @@ function project(
   return { x: 280 + rotatedX * scale, y: 200 - rotatedY * scale, depth };
 }
 
+function formatFaceVertices(vertices: Vec3[]): string {
+  return vertices
+    .map(
+      (vertex, index) =>
+        `vertex ${index + 1} (${vertex.map((coordinate) => coordinate.toPrecision(6)).join(", ")}) m`,
+    )
+    .join("; ");
+}
+
 /**
  * Read-only, interactive orthographic view of the bounded mesh sample.
  * Scientific measurements and provenance remain in the original persisted artifact.
@@ -128,6 +138,23 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
   const [yaw, setYaw] = useState(30);
   const [pitch, setPitch] = useState(20);
   const [zoom, setZoom] = useState(1);
+  // A source triangle number is scoped to the reconstruction, not the organism.
+  const [selection, setSelection] = useState<{
+    artifact: unknown;
+    sourceFaceIndex: number;
+  } | null>(null);
+  const selectedSourceFaceIndex =
+    selection !== null && selection.artifact === artifact
+      ? selection.sourceFaceIndex
+      : null;
+  const selectedDisplayFaceIndex =
+    mesh?.sourceFaceIndices.indexOf(selectedSourceFaceIndex ?? -1) ?? -1;
+  const selectedVertices =
+    mesh && selectedDisplayFaceIndex >= 0
+      ? mesh.faces[selectedDisplayFaceIndex].map(
+          (vertexIndex) => mesh.vertices[vertexIndex],
+        )
+      : null;
 
   const polygons = useMemo(() => {
     if (!mesh) return [];
@@ -186,7 +213,27 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
             key={`${polygon.sourceFaceIndex}-${index}`}
             data-source-face-index={polygon.sourceFaceIndex}
             points={polygon.points}
-            fill="#48b7d0"
+            role="button"
+            tabIndex={0}
+            aria-label={`Inspect source triangle ${polygon.sourceFaceIndex}`}
+            aria-pressed={selectedSourceFaceIndex === polygon.sourceFaceIndex}
+            onClick={() =>
+              setSelection({ artifact, sourceFaceIndex: polygon.sourceFaceIndex })
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setSelection({
+                  artifact,
+                  sourceFaceIndex: polygon.sourceFaceIndex,
+                });
+              }
+            }}
+            fill={
+              selectedSourceFaceIndex === polygon.sourceFaceIndex
+                ? "#f3bf62"
+                : "#48b7d0"
+            }
             fillOpacity={0.45}
             stroke="#a8e9f2"
             strokeWidth={0.8}
@@ -196,6 +243,11 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
           </polygon>
         ))}
       </svg>
+      <p className="annotation-helper" aria-live="polite">
+        {selectedVertices !== null && selectedSourceFaceIndex !== null
+          ? `Source triangle ${selectedSourceFaceIndex} (unverified source frame): ${formatFaceVertices(selectedVertices)}. Preview vertices only; not an anatomical branch or verified surface measurement.`
+          : "Select a displayed source triangle to inspect its original sampled vertices."}
+      </p>
       <div className="feature-grid">
         <label>
           Yaw
