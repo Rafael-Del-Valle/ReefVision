@@ -508,9 +508,7 @@ def compare_mesh_observations(
         warnings.append("reconstruction_qc_rates_unavailable")
     # Complete-mesh area concentration is independent of a common scale and
     # of patch ordering. It is reconstruction QC, not coral fragmentation.
-    patch_distributions = [
-        _patch_area_concentration(record) for record in (before, after)
-    ]
+    patch_distributions = [_patch_area_concentration(record) for record in (before, after)]
     before_patch_distribution, after_patch_distribution = patch_distributions
     patch_concentration_delta = (
         after_patch_distribution[0] - before_patch_distribution[0]
