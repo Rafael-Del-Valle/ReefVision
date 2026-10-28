@@ -34,6 +34,11 @@ class MeshCalibrationReviewEvidence(BaseModel):
     reviewed_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     # Optional byte-exact binding for imported OBJ, PLY, or GLB source files.
     reviewed_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    # Optional review binding to the caller-supplied source frame label.
+    # Matching frame labels never establish coordinate registration.
+    reviewed_coordinate_frame_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
     reviewed_specimen_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
