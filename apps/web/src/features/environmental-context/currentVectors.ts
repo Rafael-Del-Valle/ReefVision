@@ -19,6 +19,9 @@ export interface CurrentVector {
   modelVersion: string | null;
   observedAt: string;
   depthM: number;
+  depthReference: string;
+  eastQc: NonNullable<ScientificRecord["qc"]>;
+  northQc: NonNullable<ScientificRecord["qc"]>;
   recordIds: string[];
 }
 function componentUncertainty(
@@ -165,6 +168,9 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       modelVersion: row.provenance.model_version ?? null,
       observedAt: row.observed_at,
       depthM: row.depth_m!,
+      depthReference: row.depth_reference!,
+      eastQc: row.qc ?? "unassessed",
+      northQc: group.north[0].qc ?? "unassessed",
       recordIds: [row.id, group.north[0].id],
     });
   }
@@ -198,6 +204,7 @@ const CURRENT_CSV_COLUMNS = [
   "latitude_deg",
   "longitude_deg",
   "depth_m",
+  "depth_reference",
   "east_velocity_m_per_s",
   "north_velocity_m_per_s",
   "speed_m_per_s",
@@ -206,6 +213,8 @@ const CURRENT_CSV_COLUMNS = [
   "east_uncertainty_kind",
   "north_uncertainty_m_per_s",
   "north_uncertainty_kind",
+  "east_qc",
+  "north_qc",
   "source_kind",
   "source",
   "dataset_id",
@@ -242,6 +251,7 @@ export function currentVectorsCsv(
         vector.latitude,
         vector.longitude,
         vector.depthM,
+        vector.depthReference,
         vector.east,
         vector.north,
         vector.speed,
@@ -250,6 +260,8 @@ export function currentVectorsCsv(
         vector.eastUncertainty?.kind,
         vector.northUncertainty?.value,
         vector.northUncertainty?.kind,
+        vector.eastQc,
+        vector.northQc,
         vector.sourceKind,
         vector.source,
         vector.dataset,
