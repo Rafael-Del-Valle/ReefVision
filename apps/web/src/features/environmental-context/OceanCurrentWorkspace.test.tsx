@@ -126,7 +126,7 @@ it("opens cached currents with time, depth and provenance", async () => {
   });
   expect(await screen.findByText("2.000 m/s")).toBeInTheDocument();
   fireEvent.change(
-    screen.getByLabelText("Current depth (m below sea surface)"),
+    screen.getByLabelText("Current depth (m; source datum shown per vector)"),
     { target: { value: "10" } },
   );
   expect(screen.getByText(/32.5, -79.5 · 10 m/)).toBeInTheDocument();
