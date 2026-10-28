@@ -108,9 +108,7 @@ export function LunarContextPanel({ projectId }: { projectId: string }) {
             <p>
               Content SHA-256: <code>{result.content_sha256}</code>
             </p>
-            <p>
-              Reference frame: {result.reference_frame}
-            </p>
+            <p>Reference frame: {result.reference_frame}</p>
             <ul>
               {result.methodological_notes.map((note) => (
                 <li key={note}>{note}</li>
