@@ -726,3 +726,24 @@ parity. This is a geometric mesh-edge path, **not** an anatomical coral
 centerline, tissue-length measurement, verified branch length, or evidence of
 growth. Geometry, calibration, registration, and biological identity remain
 unverified.
+
+### Zero-area reconstruction QC and longitudinal comparisons (Track C)
+
+A zero-area mesh (including a degenerate reconstruction with triangles but
+zero geometric surface area) has **no defined patch-area distribution**.
+Its patch concentration, effective patch count, ranked profile distance, and
+Jensen–Shannon divergence are reported as unavailable, not as measured zero
+change. Modern previews with missing fractions are accepted only when the
+per-patch area list is finite, exactly zero for every patch, consistent with
+the reported patch count, and the total surface area is zero. Positive or
+malformed per-patch areas, missing fractions alongside non-null concentration
+statistics, and inconsistent topology remain rejected. Older records that
+lack the optional patch-area breakdown remain readable without fabricating
+a distribution. This is reconstruction-quality evidence, not biological
+tissue loss, fragmentation, or verified coral growth.
+
+Standalone longitudinal comparisons and persisted executable Workflow
+Builder graphs share this validation path. Regression coverage includes
+degenerate zero-area previews, forged area evidence, and the pre-existing
+zero-face and extreme-calibration saved-workflow cases. Physical calibration,
+registration, and specimen identity remain unverified.
