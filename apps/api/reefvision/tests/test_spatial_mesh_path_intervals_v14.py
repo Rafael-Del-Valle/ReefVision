@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_spatial_mesh_edge_paths_v14 import PARAMS
 
@@ -23,9 +24,15 @@ def test_path_scale_intervals_survive_saved_workflow(client: TestClient) -> None
     connected = expected[0]
     assert connected["length_scale_interval_m"] == pytest.approx([0.009, 0.011])
     assert connected["endpoint_chord_scale_interval_m"] == pytest.approx([0.009, 0.011])
+    assert connected["path_edge_lengths_m"] == pytest.approx([0.01])
+    assert connected["path_edge_length_scale_intervals_m"] == pytest.approx(
+        [[0.009, 0.011]]
+    )
     for route in expected[1:]:
         assert route["length_scale_interval_m"] is None
         assert route["endpoint_chord_scale_interval_m"] is None
+        assert route["path_edge_lengths_m"] is None
+        assert route["path_edge_length_scale_intervals_m"] is None
 
     graph = {
         "graph_id": "mesh-path-intervals-v14",
@@ -67,3 +74,26 @@ def test_path_scale_intervals_survive_saved_workflow(client: TestClient) -> None
     assert artifact["surface_edge_paths"] == expected
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+def test_two_edge_route_retains_segment_geometry_and_uncertainty() -> None:
+    """Report ordered mesh-edge segments without inventing biological branches."""
+    result = measure_mesh_preview(
+        vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]],
+        faces=[[0, 1, 2], [1, 3, 2]],
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Unverified ruler",
+        relative_scale_uncertainty=0.1,
+        surface_path_vertex_pairs=[[0, 3]],
+    )
+    route = result["surface_edge_paths"][0]
+    assert route["status"] == "connected"
+    assert route["path_vertex_indices"] in ([0, 1, 3], [0, 2, 3])
+    assert route["path_edge_lengths_m"] == pytest.approx([0.1, 0.1])
+    assert route["path_edge_length_scale_intervals_m"] == pytest.approx(
+        [[0.09, 0.11], [0.09, 0.11]]
+    )
+    assert sum(route["path_edge_lengths_m"]) == pytest.approx(route["length_m"])
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["provenance"]["calibration_verified"] is False
