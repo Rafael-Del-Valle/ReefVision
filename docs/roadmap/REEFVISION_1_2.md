@@ -3204,3 +3204,43 @@ All evidence remains `registered_unverified` /
 authenticated longitudinal calibrated measurements, migration reconciliation
 with unmerged 1.1, real-data acceptance, and installed Windows GUI/MSI checks
 remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## 2026-10-28 Track B — frozen calibration snapshot replay validation
+
+**Audit:** Draft PR #74 remained open on `develop/reefvision-1.2`; the prior
+head `b178e404a073e780604314be421bfab1183068d6` completed 16/19
+GitHub Actions workflows. All three backend failures stopped at Ruff format,
+with two affected files and exact formatting differences retrieved from job
+logs. The formatter corrections were applied without changing the design
+audit's scientific meaning.
+
+**Scientific correction:** The existing project-owned registry producer
+computes each calibration's `ecology-calibration-source-0001` SHA-256 over
+the frozen calibration JSON, source image ID and image SHA-256. The persisted
+registry collection fingerprint previously included only that per-source
+digest, not the calibration JSON values themselves. A replayed saved-workflow
+artifact could therefore change the physical distance-per-pixel, length
+unit or reference segment while leaving the collection fingerprint intact.
+`EcologyCalibrationEvidenceRow` now independently recomputes and verifies
+the per-source digest during typed deserialization. Altered calibration
+values or substituted per-source digests fail closed even if an older
+artifact omits the optional collection signature.
+
+**Integration and regression:** The existing standalone
+`GET /api/v1/projects/{project_id}/ecology/identity-registry` and the
+executable, persisted `ecology_identity_registry_source` Workflow Builder
+node use this same typed schema. A source-backed API/saved-workflow regression
+checks identical persisted evidence, three altered physical-calibration
+fields, an unsigned legacy collection, and a substituted per-source digest.
+No duplicate environmental context, workflow node, model weights, database
+migration or independent-unit claim was added.
+
+**Boundary:** Matching SHA-256 proves internal consistency of the frozen
+snapshot, not scientific review, physical calibration accuracy, independent
+source authentication or biological growth. Evidence remains
+`registered_unverified`/`linked_unverified` with
+`scientist_review_required`. Exact-head full CI, source-backed ecological
+review, migration reconciliation with 1.1, full backend/frontend/E2E
+acceptance and installed Windows GUI/MSI-CAB checks remain outstanding.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
