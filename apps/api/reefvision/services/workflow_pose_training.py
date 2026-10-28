@@ -1094,6 +1094,27 @@ def create_pose_workflow_training_result(
         if recovered is None or recovered.id != run.id:
             raise ValidationError("Completed pose training run lineage changed")
 
+    # The worker ran after frozen-truth preflight. Recheck the persisted
+    # scientist-reviewed rows before returning the checkpoint: a worker or
+    # concurrent writer must not mutate verified landmarks/review evidence
+    # after training was queued and still expose the result as frozen truth.
+    _pose_dataset(
+        session,
+        project_id=project_id,
+        payload={"dataset_id": dataset.id, "manifest_sha256": dataset.manifest_sha256},
+        role="training",
+    )
+    if validation_dataset is not None:
+        _pose_dataset(
+            session,
+            project_id=project_id,
+            payload={
+                "dataset_id": validation_dataset.id,
+                "manifest_sha256": validation_dataset.manifest_sha256,
+            },
+            role="validation",
+        )
+
     if not run.result_checkpoint_path:
         raise ValidationError("Completed pose training did not produce a checkpoint")
 
