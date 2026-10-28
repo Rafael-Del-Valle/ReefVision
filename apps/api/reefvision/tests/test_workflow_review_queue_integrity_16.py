@@ -776,9 +776,7 @@ def test_v3_accepts_real_pending_count_normalization(pending_count: int | float)
         ("missing_group_metadata", 0.75),
     ],
 )
-def test_v3_rejects_resigned_fractional_binary_qc_flags(
-    signal_id: str, false_flag: float
-) -> None:
+def test_v3_rejects_resigned_fractional_binary_qc_flags(signal_id: str, false_flag: float) -> None:
     """A matching checksum and score cannot turn a yes/no observation into a fraction."""
     queue, items = _v3_snapshot()
     item = items[0]
