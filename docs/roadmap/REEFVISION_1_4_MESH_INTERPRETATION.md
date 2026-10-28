@@ -630,3 +630,24 @@ the same engine; regression tests cover known fractions, patch-order
 invariance, different patch counts, missing legacy evidence, disputed identity,
 and complete saved-workflow artifact parity. No cloud processing or model
 checkpoint changes are involved.
+
+### Full-mesh patch-area consistency guard (Track C)
+
+Longitudinal patch-area comparisons now cross-check stored area fractions
+against the actual per-patch `edge_connected_patch_surface_areas_m2` values
+whenever that breakdown is present. The number of patch areas must match
+the number of fractions; every area must be finite and nonnegative, the
+areas must sum to the full-mesh `surface_area_m2`, and each fraction must
+agree with its corresponding area divided by that total. Contradictions
+fail closed before ranked-profile or concentration differences are reported.
+This prevents edited summary fractions from silently contradicting the
+source reconstruction's complete-mesh area breakdown.
+
+Older artifacts that genuinely lack the optional per-patch area breakdown
+remain readable under the previous fraction and topology checks; the
+absence of an area breakdown does **not** establish verified geometry.
+The guard does not independently authenticate imported mesh bytes, validate
+calibration or registration, or prove that two timepoints show the same coral.
+Regression tests exercise both timepoints, altered distributions that retain
+the same total, invalid numeric area records, mismatched totals, legacy
+compatibility, and existing saved Workflow Builder/standalone parity.
