@@ -908,6 +908,57 @@ def test_pose_workflow_rejects_lossy_run_names_from_verified_truth(
     assert result["run_name"] == "workflow-pose-retrain"
 
 
+def test_pose_workflow_rejects_lossy_device_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Use a scientist-reviewed pose dataset frozen through the real API.
+    # A non-string or empty device must fail before a training job is queued.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+    for invalid_device in (False, 0, None, [], {}, "", "   "):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="device must be a non-blank string"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={**parameters, "device": invalid_device},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={**parameters, "device": " cpu "},
+            processor=_fake_pose_processor,
+        )
+    assert result["device"] == "cpu"
+
+
 def test_pose_workflow_rejects_lossy_random_seeds_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
