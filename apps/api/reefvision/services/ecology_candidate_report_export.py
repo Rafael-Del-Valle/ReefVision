@@ -11,6 +11,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
 from reefvision.services.ecology_measurement_candidates import (
+    count_declared_ecological_units,
     summarize_projected_endpoint_changes,
     summarize_projected_population_summaries,
     summarize_projected_unit_summaries,
@@ -175,12 +176,10 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
     # internal consistency check, not proof of scientist review or ownership.
     source_image_count = len({row.image_id for row in response.candidates})
     source_organism_count = len({row.organism_key for row in response.candidates})
-    declared_unit_count = len(
-        {
-            (row.experimental_unit_type, row.experimental_unit_id)
-            for row in response.candidates
-            if row.experimental_unit_type and row.experimental_unit_id
-        }
+    declared_unit_count = count_declared_ecological_units(
+        response.candidates,
+        canonicalize=response.source_fingerprint_contract
+        == "ecology-measurement-candidates-0021",
     )
     if (
         report.source_image_count != source_image_count
