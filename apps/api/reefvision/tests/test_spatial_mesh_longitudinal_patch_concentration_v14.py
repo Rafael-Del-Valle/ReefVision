@@ -144,9 +144,7 @@ def test_patch_concentration_rejects_contradictory_source_metadata(
     ],
 )
 @pytest.mark.parametrize("timepoint", [0, 1])
-def test_patch_distribution_rejects_tampered_full_mesh_areas(
-    corruption, timepoint: int
-) -> None:
+def test_patch_distribution_rejects_tampered_full_mesh_areas(corruption, timepoint: int) -> None:
     observations = [_preview(payload) for payload in _meshes()]
     record = observations[timepoint]
     original = record["edge_connected_patch_surface_areas_m2"]
