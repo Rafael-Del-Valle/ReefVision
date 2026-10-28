@@ -9,6 +9,8 @@ from reefvision.services.connected_branch_editing import (
     preview_connected_branch_addition,
 )
 from reefvision.services.skeleton_algorithms import (
+    SkeletonGraphEdge,
+    SkeletonGraphNode,
     build_initial_branch_graph,
     classify_skeleton_pixels,
 )
@@ -135,3 +137,56 @@ def test_existing_source_segment_endpoints_must_match_graph_nodes() -> None:
         preview_connected_branch_addition(
             nodes, [shifted], [(3, 2), (3, 3)], edit_id="misattributed"
         )
+
+
+def test_existing_segment_revisited_pixels_cannot_inflate_branch_length() -> None:
+    nodes, edges = _line()
+    # This path has valid endpoints and adjacent steps, and its forged length
+    # matches the path sum, but it traverses the same biological segment twice.
+    repeated = replace(
+        edges[0],
+        pixels=((1, 2), (2, 2), (3, 2), (2, 2), (3, 2), (4, 2), (5, 2)),
+        boundary_to_boundary_length_pixels=6.0,
+        node_to_node_length_pixels=6.0,
+    )
+    with pytest.raises(BranchEditError, match="revisits a pixel"):
+        preview_connected_branch_addition(
+            nodes, [repeated], [(3, 2), (3, 3)], edit_id="repeated"
+        )
+
+
+def test_existing_segment_cycle_flag_must_match_graph_identity() -> None:
+    nodes, edges = _line()
+    forged_cycle = replace(edges[0], is_cycle=True)
+    with pytest.raises(BranchEditError, match="cycle flag"):
+        preview_connected_branch_addition(
+            nodes, [forged_cycle], [(3, 2), (3, 3)], edit_id="false-cycle"
+        )
+
+
+def test_real_closed_cycle_may_repeat_only_its_terminal_anchor() -> None:
+    node = SkeletonGraphNode(
+        id="cycle-0001",
+        kind="cycle_anchor",
+        x=2.0,
+        y=1.0,
+        source_pixels=((2, 1),),
+        external_connection_count=2,
+    )
+    pixels = ((2, 1), (3, 2), (2, 3), (1, 2), (2, 1))
+    length = 4 * 2**0.5
+    edge = SkeletonGraphEdge(
+        id="branch-0001",
+        source_node_id=node.id,
+        target_node_id=node.id,
+        pixels=pixels,
+        boundary_to_boundary_length_pixels=length,
+        node_to_node_length_pixels=length,
+        is_cycle=True,
+    )
+    result = preview_connected_branch_addition(
+        [node], [edge], [(2, 1), (2, 0), (3, 0)], edit_id="real-cycle"
+    )
+    assert result.original_total_length_pixels == pytest.approx(length)
+    assert result.proposed_total_length_pixels == pytest.approx(length + 2.0)
+    assert result.review_required is True
