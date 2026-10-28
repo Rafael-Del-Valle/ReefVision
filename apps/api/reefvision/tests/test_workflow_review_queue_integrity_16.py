@@ -10,6 +10,7 @@ import pytest
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.review_queues import ReviewScoreWeights
 from reefvision.services.workflow_review_queue_integrity import (
+    V3_SIGNAL_LABELS,
     V3_SUPPORTED_SIGNALS,
     queue_item_evidence_sha256,
     validate_saved_queue_snapshot,
@@ -635,17 +636,26 @@ def _v3_snapshot():
             [
                 {
                     "signal_id": signal,
-                    "label": signal,
+                    "label": V3_SIGNAL_LABELS[signal],
                     "raw_value": value,
                     "normalized_value": round(value, 6),
                     "weight": weights[signal],
                     "contribution": round(value * weights[signal] * 100, 2),
-                    "description": "Synthetic QC priority contribution",
+                    "description": (
+                        f"{V3_SIGNAL_LABELS[signal]} contributes according to the "
+                        "configured deterministic weight."
+                    ),
                 }
                 for signal, value in raw.items()
             ],
             key=lambda part: (-part["contribution"], part["signal_id"]),
         )
+        summary = ", ".join(
+            f"{part['label']}: +{part['contribution']:.2f}"
+            for part in item.score_breakdown_json[:4]
+            if part["contribution"] > 0
+        )
+        item.reason_summary = summary or None
     queue.input_checksums_json["integrity_schema_version"] = "qc-review-queue-v3"
     queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
         {
@@ -666,6 +676,27 @@ def test_v3_scientific_signal_contract_matches_queue_generator_schema():
     validate_saved_queue_snapshot(queue, items)
     items[0].review_state = "completed"
     validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize("field", ["label", "description", "reason_summary"])
+def test_v3_rejects_resigned_misleading_researcher_explanation(field: str) -> None:
+    """Correct scores and digests must not disguise unverified QC as verified biology."""
+    queue, items = _v3_snapshot()
+    validate_saved_queue_snapshot(queue, items)
+    if field == "reason_summary":
+        items[0].reason_summary = "Verified coral polyp detection"
+    else:
+        item = items[0]
+        part = next(
+            part for part in item.score_breakdown_json
+            if part["signal_id"] == "low_mean_confidence"
+        )
+        part[field] = "Verified coral polyp detection"
+    # The attacker has re-signed immutable evidence, but not changed any
+    # scientific score, priority, weight or human reviewer decision.
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
 
 
 @pytest.mark.parametrize("corruption", ["invented_signal", "omitted_signal"])
