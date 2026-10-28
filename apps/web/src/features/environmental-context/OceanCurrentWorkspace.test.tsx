@@ -125,14 +125,13 @@ it("opens cached currents with time, depth and provenance", async () => {
     target: { value: "2026-04-03T01:00:00Z" },
   });
   expect(await screen.findByText("2.000 m/s")).toBeInTheDocument();
-  fireEvent.change(
-    screen.getByLabelText("Current depth and datum"),
-    { target: { value: JSON.stringify([10, "sea_surface"]) } },
-  );
+  fireEvent.change(screen.getByLabelText("Current depth and datum"), {
+    target: { value: JSON.stringify([10, "sea_surface"]) },
+  });
   expect(screen.getByText(/32.5, -79.5 · 10 m/)).toBeInTheDocument();
   expect(screen.getByLabelText("Online basemap tiles")).not.toBeChecked();
 });
-it("only offers paired QC-compatible times and separates depth datums", async () => {
+it("filters unpaired times and separates depth datums", async () => {
   const earlierOrphan = {
     ...rows[0],
     id: "earlier-orphan",
@@ -184,6 +183,26 @@ it("only offers paired QC-compatible times and separates depth datums", async ()
   expect(screen.getByText(/32.5, -79.5 · 5 m/)).toHaveTextContent(
     "(chart_datum)",
   );
+});
+it("explains when the cached dataset has no QC-compatible current pair", async () => {
+  setup([rows[0]]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  expect(
+    await screen.findByText(
+      /No QC-compatible paired eastward\/northward currents in this cached dataset/,
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Current time (UTC)")).toBeDisabled();
+  expect(screen.getByLabelText("Current depth and datum")).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Export current vector summary CSV" }),
+  ).toBeDisabled();
 });
 it("never presents an empty or failed cache as measured currents", async () => {
   const fetch = setup();
