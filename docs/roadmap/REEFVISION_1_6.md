@@ -2,6 +2,27 @@
 
 **Status:** draft implementation, not release acceptance. Master coordination: issue #76.
 
+## 2026-10-28 — Independent saved QC runs and duplicate-owner regression (Track D)
+
+- Inspected draft PR #77, master issue #76 and exact-head backend CI run
+  40737911861. Frontend passed; backend failed only at Ruff formatting
+  of the new duplicate-queue regression's artifact filter (line 71).
+- Corrected the CI-reported formatting and extended the real saved
+  `project_source -> qc_review_queue` regression: execute the same
+  persisted graph twice for one project, retain separate typed
+  `review_queue_reference` outputs and queue IDs, then inject duplicate
+  ownership into the first run. The first retry must reject ambiguous
+  evidence; the independent second run must remain retryable without
+  creating a new queue or altering reviewer comments.
+- The existing production adapter already scopes queue ownership by
+  project and workflow run/node identity. This is additional regression
+  coverage, not a new locking guarantee. Concurrent creation across
+  workers still requires a database-level atomicity design and migration
+  compatibility review before claiming race freedom.
+- Exact-new-head backend pytest, Ruff, mypy and full Windows/biological
+  release acceptance are pending. No user assets or annotations were
+  altered, and no automated research approval was introduced.
+
 ## 2026-10-28 — Oversized JSON QC evidence fails closed (Track D)
 
 - Audited exact-head CI and found backend Ruff formatting failure in the
