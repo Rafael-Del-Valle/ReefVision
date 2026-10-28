@@ -28,6 +28,11 @@ end-to-end API-level regression against a disposable on-disk database:
    assignment, in-progress state, visibility override and original
    unverified image observations. An idempotent comment retry must not
    duplicate reviewer history.
+6. Re-enter the persisted QC node twice after restart, using its original
+   typed project-source artifact and saved execution parameters. Require the
+   same queue ID, scoring checksum, in-progress state, reviewer assignment,
+   three audit events and no newly verified annotations. No second queue may
+   be created for the original node-run identity.
 
 This test covers the **standalone manual review APIs** and the **saved
 executable Workflow Builder** on the same migrated installation. It is not
@@ -39,6 +44,11 @@ The independent 1.1 branch also uses revision `0038` for different
 scientific tables. This test intentionally exercises only the isolated 1.6
 migration lineage and **does not** reconcile or approve mixing the two
 branches. Do not stamp, rewrite or delete user databases to resolve it.
+
+The post-restart replay is an adapter-level retry, not a second queued workflow
+job. The existing saved-workflow execution and standalone API are both covered;
+no background worker or model download is required. The test still cannot
+prove interactive Windows GUI behavior or installation rollback safety.
 
 Exact-head CI, native Windows MSI upgrade/rollback, installed interactive
 GUI and real biological-image performance/scientific acceptance remain
