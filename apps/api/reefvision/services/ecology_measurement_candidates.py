@@ -352,11 +352,14 @@ def summarize_sampling_date_qc(
                 )
             }
         )
+        # Compare biological *levels*, not spelling variants: tank and
+        # aquarium refer to the same declared sampling level. Retain the
+        # original labels on candidates for fingerprinted provenance.
         contexts = {
             (
                 record.identity_revision,
                 record.parent_colony_key,
-                record.experimental_unit_type,
+                _source_sampling_level(record.experimental_unit_type),
                 record.experimental_unit_id,
             )
             for record in records
@@ -1096,7 +1099,7 @@ class EcologyMeasurementCandidateService:
         skipped = [row.model_dump(mode="json") for row in exclusions]
         fingerprint = canonical_json_sha256(
             {
-                "algorithm_version": "ecology-measurement-candidates-0019",
+                "algorithm_version": "ecology-measurement-candidates-0020",
                 "project_id": project_id,
                 "registry_history_sha256": snapshot.history_sha256,
                 "registry_image_evidence_sha256": snapshot.image_evidence_sha256,
@@ -1117,7 +1120,7 @@ class EcologyMeasurementCandidateService:
             source_calibration_evidence_sha256=snapshot.calibration_evidence_sha256,
             source_image_evidence_sha256=snapshot.image_evidence_sha256,
             source_annotation_evidence_sha256=snapshot.annotation_evidence_sha256,
-            source_fingerprint_contract="ecology-measurement-candidates-0019",
+            source_fingerprint_contract="ecology-measurement-candidates-0020",
             candidates=candidates,
             candidate_count=len(candidates),
             sampling_date_qc=sampling_date_qc,
