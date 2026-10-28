@@ -1,5 +1,7 @@
 """1.2 connected branch edit preview regressions: no silent links or length loss."""
 
+from dataclasses import replace
+
 import pytest
 
 from reefvision.services.connected_branch_editing import (
@@ -103,4 +105,33 @@ def test_reusing_an_edit_id_is_blocked() -> None:
     with pytest.raises(BranchEditError, match="collides"):
         preview_connected_branch_addition(
             first.nodes, first.edges, [(5, 2), (5, 3)], edit_id="once"
+        )
+
+
+def test_existing_source_segment_must_be_pixel_connected() -> None:
+    nodes, edges = _line()
+    # The forged source keeps the original measured length even though
+    # its recorded path jumps over a missing pixel.
+    disconnected = replace(
+        edges[0],
+        pixels=((1, 2), (2, 2), (4, 2), (5, 2)),
+    )
+    with pytest.raises(BranchEditError, match="disconnected pixel step"):
+        preview_connected_branch_addition(
+            nodes, [disconnected], [(3, 2), (3, 3)], edit_id="gap"
+        )
+
+
+def test_existing_source_segment_endpoints_must_match_graph_nodes() -> None:
+    nodes, edges = _line()
+    # A plausible length checksum alone cannot authenticate graph attachment.
+    shifted = replace(
+        edges[0],
+        pixels=((2, 2), (3, 2), (4, 2), (5, 2)),
+        boundary_to_boundary_length_pixels=3.0,
+        node_to_node_length_pixels=4.0,
+    )
+    with pytest.raises(BranchEditError, match="endpoints do not match"):
+        preview_connected_branch_addition(
+            nodes, [shifted], [(3, 2), (3, 3)], edit_id="misattributed"
         )
