@@ -968,7 +968,7 @@ def test_pose_training_can_require_separate_validation_truth(
     for invalid_val in (True, "false", 0, None):
         with (
             app.state.session_factory() as session,
-            pytest.raises(ValidationError, match="training_config.val must match"),
+            pytest.raises(ValidationError, match=r"training_config\.val must match"),
         ):
             create_pose_workflow_training_result(
                 session,
