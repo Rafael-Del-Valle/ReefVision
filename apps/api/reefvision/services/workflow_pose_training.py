@@ -849,12 +849,12 @@ def create_pose_workflow_training_result(
     else:
         notes = requested_notes.strip() or None
 
-    device = str(
-        parameters.get(
-            "device",
-            "auto",
-        )
-    )
+    # Device selection is persisted as experimental configuration. Reject
+    # lossy string coercion before queuing a GPU job or recording its lineage.
+    requested_device = parameters.get("device", "auto")
+    if not isinstance(requested_device, str) or not requested_device.strip():
+        raise ValidationError("Pose training device must be a non-blank string")
+    device = requested_device.strip()
 
     # A coerced boolean, fractional float, or negative seed changes the
     # scientist's requested random state (or can crash before a job exists).
