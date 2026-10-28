@@ -1621,6 +1621,46 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
         frozen_item.review_provenance_json = original_review
         session.commit()
 
+    # A copied, checksummed checkpoint from a different output directory is
+    # not the trained artifact of this node, even when its bytes are identical.
+    def substituted_checkpoint_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run = child_session.get(TrainingRun, str(job.request_json["training_run_id"]))
+            assert run is not None
+            assert run.result_checkpoint_path is not None
+            original = resolve_managed_project_path(settings, run.result_checkpoint_path)
+            substituted_relative = (
+                f"{project['storage_root']}/training/{run.id}/runs/other/weights/best.pt"
+            )
+            substituted = resolve_managed_project_path(settings, substituted_relative)
+            substituted.parent.mkdir(parents=True, exist_ok=True)
+            substituted.write_bytes(original.read_bytes())
+            run.result_checkpoint_path = substituted_relative
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="checkpoint belongs to another output"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="substituted-checkpoint-node",
+            processor=substituted_checkpoint_processor,
+        )
+
     # The legitimate saved-node lineage must still complete and expose a
     # checksummed checkpoint when its worker has not changed the child job.
     with app.state.session_factory() as session:
