@@ -136,10 +136,11 @@ release, merge, tag and hardware/scientific acceptance remain gated.
   retry is rejected.
 - TDD evidence: expression domain 16 passed; computed API/migration/scientific
   lineage 45 passed; combined workflow/metric regressions 36 passed; panel 2
-  passed; workflow-template 4 passed. Pre-review local validation on 2026-10-28 passed
-  1,328 backend tests with 4 explicit live/hardware skips, 506 frontend tests,
-  TypeScript, production build, Prettier, Ruff and strict mypy across 421 source
-  files. Configured Playwright acceptance passed 13 tests and skipped the
+  passed; workflow-template 4 passed. Final local validation after independent
+  review on 2026-10-28 passed 1,366 backend tests with 4 explicit live/hardware
+  skips, 507 frontend tests, TypeScript, production build, Prettier, Ruff and
+  strict mypy across 421 source files. Configured Playwright acceptance passed
+  13 tests and skipped the
   external live-OSM demo. Exact-head remote CI remains the final integration gate.
 - Ruling: the initial slice requires all scalar inputs to share exact observation
   time and full subject identity. It does not silently aggregate frames, objects,
@@ -160,3 +161,7 @@ release, merge, tag and hardware/scientific acceptance remain gated.
   `0038`. Integration must preserve both already-shared histories and explicitly
   merge or renumber in the integrating branch; this 1.1 work does not rewrite
   either `0038` migration.
+- Independent whole-branch review reproduced nine important integrity gaps and
+  one pagination gap. All received RED→GREEN regressions; the single scoped
+  re-review found every item addressed with no new critical/important breakage
+  or out-of-scope observation.

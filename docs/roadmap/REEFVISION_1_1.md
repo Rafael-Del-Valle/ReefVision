@@ -286,13 +286,20 @@ serialize, validate and remap their complete provenance without data loss.
 Focused TDD evidence: 16 expression-domain tests; 45 computed-metric
 API/migration/scientific-lineage tests; 36 combined workflow/computed-metric
 regressions; and 2 scientist-panel plus 4 workflow-template frontend tests
-passed. Pre-review local validation on 2026-10-28 passed 1,328 backend tests with 4
-explicit live/hardware skips, 506 frontend tests, TypeScript, production build,
-Prettier, Ruff and strict mypy across 421 source files. Configured Playwright
+passed. Final local validation after independent review on 2026-10-28 passed
+1,366 backend tests with 4 explicit live/hardware skips, 507 frontend tests,
+TypeScript, production build, Prettier, Ruff and strict mypy across 421 source
+files. Configured Playwright
 acceptance passed 13 tests and skipped the external live-OSM demo. The build
 retains the existing large-chunk advisory and backend retains the existing
 Starlette TestClient deprecation warning. Exact-head remote CI is tracked in
 draft PR #71 rather than inferred here.
+
+The whole-branch review reproduced nine important scientific/data-integrity
+gaps and one UI pagination gap. Each received a failing regression before the
+consolidated fix. A scoped re-review verified every finding addressed with no
+new critical/important breakage or out-of-scope observation. Conservative
+unsupported cases now fail closed as documented above.
 
 This is intentionally a scalar, exact-observation slice. It does not yet infer
 counts or coverage directly from annotation/mask collections, combine subjects,
@@ -310,8 +317,8 @@ already-shared migration is rewritten in this 1.1 work.
 
 ## Remaining acceptance gates and next milestones
 
-1. Complete independent branch review, address integrity findings with
-   regression tests, rerun gates and record final-head CI in draft PR #71.
+1. Record final-head remote CI in draft PR #71 and resolve any exact-head
+   failures without weakening the scientific contracts.
 2. Extend project exchange to carry scientific records/cache and remap their
    referenced IDs; validate actual researcher 1.0.x projects and installed-app restore.
 3. Bind provider lookup in image/video/track inspectors and expose record
