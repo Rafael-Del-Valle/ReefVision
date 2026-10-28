@@ -389,6 +389,16 @@ def measure_mesh_preview(
         if patch_area_fractions is not None
         else None
     )
+    # A dimensionless surface concentration diagnostic. This is an effective
+    # number of geometric patches, never an estimate of coral colony count.
+    patch_area_concentration = (
+        fsum(fraction * fraction for fraction in patch_area_fractions)
+        if patch_area_fractions is not None
+        else None
+    )
+    effective_patch_count = (
+        1.0 / patch_area_concentration if patch_area_concentration else None
+    )
     # A/V is a geometric inverse-length descriptor, not biomass or coral health.
     # Withhold the aggregate ratio whenever aggregate enclosed volume is rejected;
     # eligible per-patch ratios remain available as provisional evidence.
@@ -677,11 +687,11 @@ def measure_mesh_preview(
         "edge_connected_patch_inconsistent_winding_edge_counts": patch_winding_edge_counts,
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,
         "edge_connected_patch_surface_area_fractions": patch_area_fractions,
+        "edge_connected_patch_area_concentration_index": patch_area_concentration,
+        "area_weighted_effective_patch_count": effective_patch_count,
         "largest_surface_patch_index": largest_patch_index,
         "largest_surface_patch_area_fraction": (
-            patch_area_fractions[largest_patch_index]
-            if largest_patch_index is not None
-            else None
+            patch_area_fractions[largest_patch_index] if largest_patch_index is not None else None
         ),
         "edge_connected_patch_axis_aligned_dimensions_m": patch_dimensions_m,
         "edge_connected_patch_dimension_scale_intervals_m": (
