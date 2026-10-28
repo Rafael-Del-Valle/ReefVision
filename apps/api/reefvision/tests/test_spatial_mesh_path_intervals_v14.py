@@ -91,10 +91,10 @@ def test_two_edge_route_retains_segment_geometry_and_uncertainty() -> None:
     assert route["status"] == "connected"
     assert route["path_vertex_indices"] in ([0, 1, 3], [0, 2, 3])
     assert route["path_edge_lengths_m"] == pytest.approx([0.1, 0.1])
+    source_vertices = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]]
     expected_vertices = [
-        [coordinate * 0.1 for coordinate in vertex]
-        for vertex in ([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]][index]
-                       for index in route["path_vertex_indices"])
+        [coordinate * 0.1 for coordinate in source_vertices[index]]
+        for index in route["path_vertex_indices"]
     ]
     assert route["path_vertices_in_source_frame_m"] == expected_vertices
     assert len(route["path_vertices_in_source_frame_m"]) == route["edge_count"] + 1
