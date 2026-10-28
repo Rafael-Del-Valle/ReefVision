@@ -977,7 +977,9 @@ def test_pose_workflow_rejects_lossy_random_seeds_from_verified_truth(
         "architecture": "yolo11n-pose.yaml",
         "training_config": {"epochs": 1},
     }
-    for invalid_seed in (True, False, -1, 2.5, "2.5", "invalid"):
+    # Unicode superscript digits cannot be parsed as integers; huge seeds
+    # must not overflow the persisted signed 64-bit training-run column.
+    for invalid_seed in (True, False, -1, 2.5, "2.5", "invalid", "²", 2**63, "9" * 5000):
         with (
             app.state.session_factory() as session,
             pytest.raises(ValidationError, match="random_seed must be a non-negative integer"),
