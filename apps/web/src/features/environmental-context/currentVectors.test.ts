@@ -552,6 +552,97 @@ it("distinguishes mean current speed from vector-mean flow and cancellation", ()
   expect(summarizeCurrentSlice([])).toBeNull();
 });
 
+it("does not pool different cached acquisitions, processing settings or subjects", () => {
+  const base = component("current_eastward_velocity", 1);
+  const firstEast = { ...base, id: "east-a" };
+  const firstNorth = component("current_northward_velocity", 0, {
+    id: "north-a",
+  });
+  const otherLocation = {
+    latitude: 32.6,
+    longitude: -79.5,
+    crs: "EPSG:4326" as const,
+  };
+  for (const difference of [
+    { environmental_cache_key: "another-cache" },
+    {
+      provenance: {
+        ...base.provenance,
+        processing_parameters: { interpolation: "linear" },
+      },
+    },
+    {
+      provenance: {
+        ...base.provenance,
+        source_metadata: { dataset: { ensemble_member: 1 } },
+      },
+    },
+    { subject: { image_id: "00000000-0000-4000-8000-000000000005" } },
+  ]) {
+    const secondEast = component("current_eastward_velocity", 2, {
+      id: "east-b",
+      location: otherLocation,
+      ...difference,
+    });
+    const secondNorth = component("current_northward_velocity", 0, {
+      id: "north-b",
+      location: otherLocation,
+      ...difference,
+    });
+    const vectors = currentVectors([
+      firstEast,
+      firstNorth,
+      secondEast,
+      secondNorth,
+    ]);
+    expect(vectors).toHaveLength(2);
+    expect(summarizeCurrentSlice(vectors)).toBeNull();
+  }
+});
+
+it("summarizes equivalent processing metadata regardless of JSON key order", () => {
+  const base = component("current_eastward_velocity", 1);
+  const firstProvenance = {
+    ...base.provenance,
+    processing_parameters: { subset: { north: 33, south: 32 }, method: "native" },
+  };
+  const secondProvenance = {
+    ...base.provenance,
+    processing_parameters: { method: "native", subset: { south: 32, north: 33 } },
+  };
+  const otherLocation = {
+    latitude: 32.6,
+    longitude: -79.5,
+    crs: "EPSG:4326" as const,
+  };
+  const vectors = currentVectors([
+    component("current_eastward_velocity", 1, {
+      id: "east-a",
+      provenance: firstProvenance,
+    }),
+    component("current_northward_velocity", 0, {
+      id: "north-a",
+      provenance: firstProvenance,
+    }),
+    component("current_eastward_velocity", 2, {
+      id: "east-b",
+      location: otherLocation,
+      provenance: secondProvenance,
+    }),
+    component("current_northward_velocity", 0, {
+      id: "north-b",
+      location: otherLocation,
+      provenance: secondProvenance,
+    }),
+  ]);
+  expect(vectors).toHaveLength(2);
+  expect(summarizeCurrentSlice(vectors)).toMatchObject({
+    count: 2,
+    meanSpeed: 1.5,
+    maximumSpeed: 2,
+  });
+});
+
 it("does not aggregate incompatible current times or depth datums", () => {
   const east = component("current_eastward_velocity", 3, { id: "east-a" });
   const north = component("current_northward_velocity", 4, { id: "north-a" });

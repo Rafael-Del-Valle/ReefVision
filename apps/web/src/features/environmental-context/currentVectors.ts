@@ -26,6 +26,7 @@ export interface CurrentVector {
   eastQc: NonNullable<ScientificRecord["qc"]>;
   northQc: NonNullable<ScientificRecord["qc"]>;
   recordIds: string[];
+  aggregationProvenanceKey: string;
 }
 function componentUncertainty(
   row: ScientificRecord,
@@ -78,6 +79,27 @@ function sharedSourceMetadata(row: ScientificRecord): unknown {
     ([key]) => !COMPONENT_METADATA_FIELDS.has(key),
   );
   return canonicalJsonValue(Object.fromEntries(sharedEntries));
+}
+// A displayed time/depth slice can contain distinct acquisitions, model runs,
+// processing settings or scientific subjects. Such vectors may be mapped
+// individually but must not be pooled into one descriptive summary.
+function aggregationProvenanceKey(row: ScientificRecord): string {
+  return JSON.stringify([
+    row.project_id,
+    row.subject?.image_id ?? null,
+    row.subject?.video_id ?? null,
+    row.subject?.frame_index ?? null,
+    row.subject?.track_id ?? null,
+    row.subject?.annotation_id ?? null,
+    row.subject?.mask_id ?? null,
+    row.subject?.prediction_id ?? null,
+    row.subject?.model_run_id ?? null,
+    row.environmental_cache_key ?? null,
+    row.provenance.spatial_resolution_m ?? null,
+    row.provenance.temporal_resolution_s ?? null,
+    canonicalJsonValue(row.provenance.processing_parameters ?? null),
+    sharedSourceMetadata(row),
+  ]);
 }
 export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
   const groups = new Map<
@@ -199,6 +221,7 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       eastQc: row.qc ?? "unassessed",
       northQc: group.north[0].qc ?? "unassessed",
       recordIds: [row.id, group.north[0].id],
+      aggregationProvenanceKey: aggregationProvenanceKey(row),
     });
   }
   return result;
@@ -235,6 +258,7 @@ export function summarizeCurrentSlice(
         vector.sourceAcquiredAt !== first.sourceAcquiredAt ||
         vector.sourceUrl !== first.sourceUrl ||
         vector.processingMethod !== first.processingMethod,
+        vector.aggregationProvenanceKey !== first.aggregationProvenanceKey,
     )
   )
     return null;
