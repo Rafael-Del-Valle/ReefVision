@@ -52,7 +52,9 @@ export function parseMeshRenderArtifact(
   // payload that contradicts its unverified scientific provenance.
   const provenance = data.provenance;
   const relativeScaleUncertainty =
-    provenance !== null && typeof provenance === "object" && !Array.isArray(provenance)
+    provenance !== null &&
+    typeof provenance === "object" &&
+    !Array.isArray(provenance)
       ? (provenance as Record<string, unknown>).relative_scale_uncertainty
       : undefined;
   if (
@@ -66,7 +68,8 @@ export function parseMeshRenderArtifact(
       (provenance === null ||
         typeof provenance !== "object" ||
         Array.isArray(provenance) ||
-        (provenance as Record<string, unknown>).calibration_verified !== false)) ||
+        (provenance as Record<string, unknown>).calibration_verified !==
+          false)) ||
     (relativeScaleUncertainty !== undefined &&
       relativeScaleUncertainty !== null &&
       (typeof relativeScaleUncertainty !== "number" ||
@@ -184,7 +187,9 @@ function previewTriangleArea(vertices: Vec3[]): number | null {
 
 function formatPreviewTriangleArea(vertices: Vec3[]): string {
   const area = previewTriangleArea(vertices);
-  return area === null ? "unavailable (numeric overflow)" : `${area.toPrecision(6)} m²`;
+  return area === null
+    ? "unavailable (numeric overflow)"
+    : `${area.toPrecision(6)} m²`;
 }
 
 /** Scale-only bounds, not reconstruction error or a statistical confidence interval. */
@@ -192,13 +197,60 @@ function formatPreviewTriangleScaleInterval(
   vertices: Vec3[],
   relativeUncertainty: number | null,
 ): string {
-  if (relativeUncertainty === null) return "unknown (scale uncertainty not supplied)";
+  if (relativeUncertainty === null)
+    return "unknown (scale uncertainty not supplied)";
   const area = previewTriangleArea(vertices);
   if (area === null) return "unavailable (numeric overflow)";
   const lower = area * (1 - relativeUncertainty) ** 2;
   const upper = area * (1 + relativeUncertainty) ** 2;
   return Number.isFinite(lower) && Number.isFinite(upper)
     ? `[${lower.toPrecision(6)}, ${upper.toPrecision(6)}] m²`
+    : "unavailable (numeric overflow)";
+}
+
+/** Display-only source-frame triangle edge lengths, not coral branch lengths. */
+function previewTriangleEdgeLengths(vertices: Vec3[]): number[] | null {
+  if (vertices.length !== 3) return null;
+  const pairs: [number, number][] = [
+    [0, 1],
+    [1, 2],
+    [2, 0],
+  ];
+  const lengths = pairs.map(([first, second]) => {
+    const a = vertices[first];
+    const b = vertices[second];
+    return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  });
+  return lengths.every(Number.isFinite) ? lengths : null;
+}
+
+function formatPreviewTriangleEdges(vertices: Vec3[]): string {
+  const lengths = previewTriangleEdgeLengths(vertices);
+  return lengths === null
+    ? "unavailable (numeric overflow)"
+    : `${lengths.map((length) => length.toPrecision(6)).join(", ")} m`;
+}
+
+/** Multiplicative scale bounds only; not reconstruction or endpoint uncertainty. */
+function formatPreviewTriangleEdgeIntervals(
+  vertices: Vec3[],
+  relativeUncertainty: number | null,
+): string {
+  if (relativeUncertainty === null)
+    return "unknown (scale uncertainty not supplied)";
+  const lengths = previewTriangleEdgeLengths(vertices);
+  if (lengths === null) return "unavailable (numeric overflow)";
+  const bounds = lengths.map((length) => [
+    length * (1 - relativeUncertainty),
+    length * (1 + relativeUncertainty),
+  ]);
+  return bounds.every((pair) => pair.every(Number.isFinite))
+    ? `${bounds
+        .map(
+          ([lower, upper]) =>
+            `[${lower.toPrecision(6)}, ${upper.toPrecision(6)}]`,
+        )
+        .join(", ")} m`
     : "unavailable (numeric overflow)";
 }
 
@@ -321,7 +373,7 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
       </svg>
       <p className="annotation-helper" aria-live="polite">
         {selectedVertices !== null && selectedSourceFaceIndex !== null
-          ? `Source triangle ${selectedSourceFaceIndex} (unverified source frame): ${formatFaceVertices(selectedVertices)}. Selected preview triangle area: ${formatPreviewTriangleArea(selectedVertices)}. Scale-only triangle area interval: ${formatPreviewTriangleScaleInterval(selectedVertices, mesh.relativeScaleUncertainty)} (caller-supplied scale uncertainty only; calibration and reconstruction uncertainty unverified). Preview vertices only; not an anatomical branch or verified surface measurement.`
+          ? `Source triangle ${selectedSourceFaceIndex} (unverified source frame): ${formatFaceVertices(selectedVertices)}. Selected preview triangle area: ${formatPreviewTriangleArea(selectedVertices)}. Scale-only triangle area interval: ${formatPreviewTriangleScaleInterval(selectedVertices, mesh.relativeScaleUncertainty)}. Selected preview triangle edge lengths (1–2, 2–3, 3–1): ${formatPreviewTriangleEdges(selectedVertices)}. Scale-only edge length intervals: ${formatPreviewTriangleEdgeIntervals(selectedVertices, mesh.relativeScaleUncertainty)} (caller-supplied scale uncertainty only; calibration and reconstruction uncertainty unverified). Preview vertices only; triangle edges are not anatomical branch lengths or verified surface measurements.`
           : "Select a displayed source triangle to inspect its original sampled vertices."}
       </p>
       <div className="feature-grid">
