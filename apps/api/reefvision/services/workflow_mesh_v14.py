@@ -119,6 +119,7 @@ def extend_mesh_registry(
                 "preserve_measured_chord_endpoints_in_preview": False,
                 "expected_source_payload_sha256": None,
                 "relative_scale_uncertainty": None,
+                "calibration_review": None,
                 "source_label": None,
                 "specimen_id": None,
                 "observation_id": None,
@@ -129,6 +130,7 @@ def extend_mesh_registry(
             executable=True,
             implementation_notes=[
                 "Same bounded point-cloud engine as standalone API.",
+                "Independent point-cloud calibration review is provisional source-bound QC.",
                 "Calibration and coordinate registration remain unverified.",
                 "No surface area or biological branch length is inferred.",
                 "Selected point-pair chords are not biological branch lengths.",
