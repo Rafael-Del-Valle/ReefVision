@@ -116,6 +116,52 @@ describe("MeshArtifactViewer", () => {
     expect(JSON.stringify(validArtifact)).toBe(before);
   });
 
+  it("computes preview triangle area from calibrated 3D vertices, independent of camera yaw", () => {
+    const sample = {
+      ...validArtifact,
+      preview_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [0, 2, 0],
+        [0, 0, 3],
+      ],
+    };
+    render(<MeshArtifactViewer artifact={sample} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect source triangle 7" }),
+    );
+    const inspection = screen.getByText(
+      /Source triangle 7 \\(unverified source frame\\)/,
+    );
+    expect(inspection).toHaveTextContent(
+      "Selected preview triangle area: 3.00000 m²",
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Yaw" }), {
+      target: { value: "120" },
+    });
+    expect(inspection).toHaveTextContent(
+      "Selected preview triangle area: 3.00000 m²",
+    );
+    expect(inspection).toHaveTextContent("reconstruction uncertainty unverified");
+  });
+
+  it("reports zero geometric area for a collinear preview triangle", () => {
+    const sample = {
+      ...validArtifact,
+      preview_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [1, 0, 0],
+        [2, 0, 0],
+      ],
+    };
+    render(<MeshArtifactViewer artifact={sample} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect source triangle 7" }),
+    );
+    expect(
+      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+    ).toHaveTextContent("Selected preview triangle area: 0.00000 m²");
+  });
+
   it("clears triangle selection for a replacement reconstruction", () => {
     const { rerender } = render(
       <MeshArtifactViewer artifact={validArtifact} />,
