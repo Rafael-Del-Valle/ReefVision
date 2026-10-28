@@ -3165,3 +3165,42 @@ reconciliation, and installed Windows GUI acceptance remain pending.
 bytes, organism identity, calibration correctness, or scientist verification.
 All ecological evidence remains unverified and requires review. No merge,
 installer publication, or cross-version integration is authorized.
+
+
+## 2026-10-28 Track B — saved-workflow experimental-design audit integrity
+
+Audited draft PR #74 and the existing source-linked ecological registry, design
+revision service, CSV history exporter, and executable
+`ecology_identity_registry_source` Workflow Builder node. The previous exact
+head `1496d333a68f69588bc9ad59aa4a811f690a499e` completed **16/19**
+Actions workflows. The three backend failures were caused by Ruff formatting
+differences in `schemas/ecology_identity.py` and
+`test_ecology_image_registry_replay_1_2.py`; applied the reported formatting
+changes without changing historical evidence semantics.
+
+**New scientific safeguard:** Pydantic artifact rehydration now independently
+rederives declared design-change events and counts, current cross-unit shared
+parent-colony warnings, and historical cross-unit parent warnings from the
+persisted identity and revision evidence. Contradictory "no design change",
+"no shared parent", or "no historical reuse" claims fail closed. This closes a
+gap where an executed saved workflow's persisted typed artifact could hide
+pseudoreplication warnings even though the standalone CSV exporter performed
+these consistency checks. No new workflow node or environmental data store
+was created; standalone and saved-workflow paths share the existing typed
+source, evidence provenance and `scientist_review_required` gate.
+
+Regression cases register a colony with fragments in different tanks, revise
+a tank assignment, execute and persist a saved workflow, and attempt to erase
+eight design/current-parent/historical-parent audit fields. Legacy artifacts
+omitting audit fields still deserialize as **unavailable**, never as a verified
+negative finding; inconsistent "unavailable" audit payloads are rejected.
+Known design/historical audit claims require replayable identity history.
+
+**Boundary:** Registered unit IDs, parent relationships and their deterministic
+audits do not establish true biological independence, verified specimen
+identity, observed transfers or scientifically reviewed measurements.
+All evidence remains `registered_unverified` /
+`scientist_review_required`. Exact-head CI, registered study-design review,
+authenticated longitudinal calibrated measurements, migration reconciliation
+with unmerged 1.1, real-data acceptance, and installed Windows GUI/MSI checks
+remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
