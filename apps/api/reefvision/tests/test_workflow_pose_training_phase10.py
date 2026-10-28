@@ -1492,6 +1492,38 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             processor=substituted_artifact_processor,
         )
 
+    # A worker must not silently relabel the model architecture after training
+    # and expose a checkpoint under different scientific configuration.
+    def substituted_configuration_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run = child_session.get(TrainingRun, str(job.request_json["training_run_id"]))
+            assert run is not None
+            run.architecture = "yolo11x-pose.yaml"
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="configuration changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-config-node",
+            processor=substituted_configuration_processor,
+        )
+
     # The legitimate saved-node lineage must still complete and expose a
     # checksummed checkpoint when its worker has not changed the child job.
     with app.state.session_factory() as session:
