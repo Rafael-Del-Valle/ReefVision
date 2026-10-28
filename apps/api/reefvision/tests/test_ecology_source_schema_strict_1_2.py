@@ -41,6 +41,28 @@ def _candidate_payload() -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize("revision_field", ["identity_revision", "annotation_revision"])
+@pytest.mark.parametrize("bad_revision", [True, False, "1", 1.0, None, [], {}])
+def test_projected_source_revisions_reject_coerced_identifiers(
+    revision_field: str, bad_revision: object
+) -> None:
+    payload = _candidate_payload()
+    payload[revision_field] = bad_revision
+    with pytest.raises(SchemaValidationError, match="positive JSON integer"):
+        EcologyMeasurementCandidate.model_validate(payload)
+
+
+@pytest.mark.parametrize("revision_field", ["identity_revision", "annotation_revision"])
+@pytest.mark.parametrize("revision", [1, 2, 9])
+def test_projected_source_revisions_preserve_valid_positive_integers(
+    revision_field: str, revision: int
+) -> None:
+    payload = _candidate_payload()
+    payload[revision_field] = revision
+    candidate = EcologyMeasurementCandidate.model_validate(payload)
+    assert getattr(candidate, revision_field) == revision
+
+
 @pytest.mark.parametrize("bad_value", [True, False, "3.2", None, [], {}])
 def test_linked_measurements_reject_coerced_numeric_values(bad_value: object) -> None:
     payload = _candidate_payload()
@@ -90,7 +112,7 @@ def test_linked_measurements_keep_explicit_offsets_and_undated_evidence() -> Non
 )
 @pytest.mark.parametrize(
     "bad_digest",
-    ["a" * 63, "a" * 65, "g" * 64, " a" * 32, "ａ" * 64, None, True, 17, []],
+    ["a" * 63, "a" * 65, "g" * 64, " a" * 32, "\uff41" * 64, None, True, 17, []],
 )
 def test_projected_evidence_rejects_malformed_sha256(
     digest_field: str, bad_digest: object
@@ -132,12 +154,16 @@ def test_saved_workflow_source_replay_rejects_coerced_measurements_and_epochs(
     assert EcologyMeasurementCandidatesResponse.model_validate(saved).candidate_count > 0
 
     for field, bad_value, error in (
+        ("identity_revision", True, "positive JSON integer"),
+        ("identity_revision", "1", "positive JSON integer"),
+        ("annotation_revision", 1.0, "positive JSON integer"),
+        ("annotation_revision", None, "positive JSON integer"),
         ("value", "3.2", "JSON number"),
         ("value", True, "JSON number"),
         ("capture_timestamp_utc", 1775203200, "explicit ISO 8601"),
         ("image_sha256", "a" * 63, "64 hexadecimal"),
         ("annotation_sha256", "g" * 64, "64 hexadecimal"),
-        ("calibration_sha256", "ａ" * 64, "64 hexadecimal"),
+        ("calibration_sha256", "\uff41" * 64, "64 hexadecimal"),
     ):
         tampered = deepcopy(saved)
         tampered["candidates"][0][field] = bad_value
