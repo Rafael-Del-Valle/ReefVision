@@ -777,6 +777,63 @@ def test_pose_workflow_rejects_falsy_non_object_resource_limits_from_verified_tr
         )
 
 
+def test_pose_workflow_rejects_lossy_run_names_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The dataset was frozen through the scientist-review API, not fabricated.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+    for invalid_name, expected_error in (
+        (False, "run_name must be a string"),
+        (0, "run_name must be a string"),
+        ([], "run_name must be a string"),
+        ({}, "run_name must be a string"),
+        ("", "run_name cannot be blank"),
+        ("   ", "run_name cannot be blank"),
+    ):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=expected_error),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={**parameters, "run_name": invalid_name},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters=parameters,
+            processor=_fake_pose_processor,
+        )
+    assert result["run_name"] == "workflow-pose-retrain"
+
+
 def test_pose_workflow_rejects_lossy_random_seeds_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
