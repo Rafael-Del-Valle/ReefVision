@@ -672,10 +672,15 @@ def create_pose_workflow_training_result(
             "This pose retraining configuration requires a separate frozen validation dataset"
         )
 
-    initialization_mode = str(
-        parameters.get("initialization_mode")
-        or ("registered_model" if initial_model_payload else "random")
-    )
+    # An explicit falsy mode must not silently become random initialization
+    # (or registered-model initialization when a seed artifact is connected).
+    requested_mode = parameters.get("initialization_mode")
+    if requested_mode is None:
+        initialization_mode = "registered_model" if initial_model_payload else "random"
+    elif not isinstance(requested_mode, str) or not requested_mode:
+        raise ValidationError("Pose initialization_mode must be random or registered_model")
+    else:
+        initialization_mode = requested_mode
     if initialization_mode not in {"random", "registered_model"}:
         raise ValidationError("Pose initialization_mode must be random or registered_model")
     if initialization_mode == "random" and initial_model_payload:
