@@ -12,6 +12,7 @@ export interface MeshRenderArtifact {
   decimated: boolean;
   faceFraction: number;
   areaFraction: number | null;
+  relativeScaleUncertainty: number | null;
 }
 
 function isVec3(value: unknown): value is Vec3 {
@@ -50,6 +51,10 @@ export function parseMeshRenderArtifact(
   // This viewer is for provisional reconstructions. Do not display a saved
   // payload that contradicts its unverified scientific provenance.
   const provenance = data.provenance;
+  const relativeScaleUncertainty =
+    provenance !== null && typeof provenance === "object" && !Array.isArray(provenance)
+      ? (provenance as Record<string, unknown>).relative_scale_uncertainty
+      : undefined;
   if (
     (data.measurement_status !== undefined &&
       data.measurement_status !== "caller_supplied_unverified") ||
@@ -61,7 +66,13 @@ export function parseMeshRenderArtifact(
       (provenance === null ||
         typeof provenance !== "object" ||
         Array.isArray(provenance) ||
-        (provenance as Record<string, unknown>).calibration_verified !== false))
+        (provenance as Record<string, unknown>).calibration_verified !== false)) ||
+    (relativeScaleUncertainty !== undefined &&
+      relativeScaleUncertainty !== null &&
+      (typeof relativeScaleUncertainty !== "number" ||
+        !Number.isFinite(relativeScaleUncertainty) ||
+        relativeScaleUncertainty < 0 ||
+        relativeScaleUncertainty > 1))
   ) {
     return null;
   }
@@ -114,6 +125,10 @@ export function parseMeshRenderArtifact(
     decimated: data.preview_is_decimated,
     faceFraction: fraction,
     areaFraction: areaFraction as number | null,
+    relativeScaleUncertainty:
+      typeof relativeScaleUncertainty === "number"
+        ? relativeScaleUncertainty
+        : null,
   };
 }
 
@@ -151,8 +166,8 @@ function formatFaceVertices(vertices: Vec3[]): string {
  * Compute a display-only triangle area from calibrated XYZ coordinates.
  * This is not a full-mesh, verified tissue-surface, or uncertainty estimate.
  */
-function formatPreviewTriangleArea(vertices: Vec3[]): string {
-  if (vertices.length !== 3) return "unavailable";
+function previewTriangleArea(vertices: Vec3[]): number | null {
+  if (vertices.length !== 3) return null;
   const [a, b, c] = vertices;
   const ux = b[0] - a[0];
   const uy = b[1] - a[1];
@@ -164,8 +179,26 @@ function formatPreviewTriangleArea(vertices: Vec3[]): string {
   const crossY = uz * vx - ux * vz;
   const crossZ = ux * vy - uy * vx;
   const area = Math.hypot(crossX, crossY, crossZ) / 2;
-  return Number.isFinite(area)
-    ? `${area.toPrecision(6)} m²`
+  return Number.isFinite(area) ? area : null;
+}
+
+function formatPreviewTriangleArea(vertices: Vec3[]): string {
+  const area = previewTriangleArea(vertices);
+  return area === null ? "unavailable (numeric overflow)" : `${area.toPrecision(6)} m²`;
+}
+
+/** Scale-only bounds, not reconstruction error or a statistical confidence interval. */
+function formatPreviewTriangleScaleInterval(
+  vertices: Vec3[],
+  relativeUncertainty: number | null,
+): string {
+  if (relativeUncertainty === null) return "unknown (scale uncertainty not supplied)";
+  const area = previewTriangleArea(vertices);
+  if (area === null) return "unavailable (numeric overflow)";
+  const lower = area * (1 - relativeUncertainty) ** 2;
+  const upper = area * (1 + relativeUncertainty) ** 2;
+  return Number.isFinite(lower) && Number.isFinite(upper)
+    ? `[${lower.toPrecision(6)}, ${upper.toPrecision(6)}] m²`
     : "unavailable (numeric overflow)";
 }
 
@@ -288,7 +321,7 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
       </svg>
       <p className="annotation-helper" aria-live="polite">
         {selectedVertices !== null && selectedSourceFaceIndex !== null
-          ? `Source triangle ${selectedSourceFaceIndex} (unverified source frame): ${formatFaceVertices(selectedVertices)}. Selected preview triangle area: ${formatPreviewTriangleArea(selectedVertices)} (geometry only; calibration and reconstruction uncertainty unverified). Preview vertices only; not an anatomical branch or verified surface measurement.`
+          ? `Source triangle ${selectedSourceFaceIndex} (unverified source frame): ${formatFaceVertices(selectedVertices)}. Selected preview triangle area: ${formatPreviewTriangleArea(selectedVertices)}. Scale-only triangle area interval: ${formatPreviewTriangleScaleInterval(selectedVertices, mesh.relativeScaleUncertainty)} (caller-supplied scale uncertainty only; calibration and reconstruction uncertainty unverified). Preview vertices only; not an anatomical branch or verified surface measurement.`
           : "Select a displayed source triangle to inspect its original sampled vertices."}
       </p>
       <div className="feature-grid">
