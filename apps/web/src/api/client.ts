@@ -2914,11 +2914,12 @@ export async function startReviewQueueItem(
 
 export async function completeReviewQueueItem(
   itemId: string,
-  actor?: string,
+  actor: string,
+  reviewConfirmed: true,
 ): Promise<ReviewQueueItem> {
   return request<ReviewQueueItem>(`/review-queue-items/${itemId}/complete`, {
     method: "POST",
-    ...(actor ? { body: JSON.stringify({ actor }) } : {}),
+    body: JSON.stringify({ actor, review_confirmed: reviewConfirmed }),
   });
 }
 
