@@ -233,6 +233,7 @@ describe("ReviewQueueDashboard scope isolation", () => {
           expect(completeReviewQueueItem).toHaveBeenCalledWith(
             "item-1",
             "reef-scientist",
+            true,
           ),
         );
         expect(confirm.mock.calls[0][0]).toMatch(
