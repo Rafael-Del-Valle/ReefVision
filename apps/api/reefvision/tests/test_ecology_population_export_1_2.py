@@ -331,6 +331,55 @@ def test_population_csv_rejects_serialized_review_roster_drift(
 
 
 @pytest.mark.parametrize(
+    ("forged_fields", "error"),
+    [
+        ({"parent_colony_keys_json": "not-json"}, "parent-colony roster"),
+        ({"parent_colony_keys_json": '["parent-A","parent-A"]'}, "parent-colony roster"),
+        ({"parent_colony_keys_json": '[""]'}, "parent-colony roster"),
+        ({"shared_parent_colony_keys_json": '["unknown-parent"]'}, "parent-colony roster"),
+        (
+            {
+                "parent_colony_keys_json": '["parent-A"]',
+                "shared_parent_colony_keys_json": '["parent-A","parent-A"]',
+            },
+            "parent-colony roster",
+        ),
+        (
+            {
+                "design_review_blockers_json": (
+                    '["independence_not_authenticated","single_declared_unit",'
+                    '"missing_parent_colony","missing_parent_colony"]'
+                ),
+            },
+            "review blockers",
+        ),
+    ],
+)
+def test_population_csv_rejects_forged_parent_lineage_at_serialization(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    forged_fields: dict[str, str],
+    error: str,
+) -> None:
+    """A reserialized population row cannot conceal shared-parent review."""
+    source = _dated_artifact(client)
+    original = exporter._write_checked_row
+
+    def corrupt_population_row(writer: Any, values: tuple[object, ...]) -> None:
+        if values[exporter._COLUMNS.index("row_type")] != "population_stratum":
+            original(writer, values)
+            return
+        altered = list(values)
+        for field, forged_value in forged_fields.items():
+            altered[exporter._COLUMNS.index(field)] = forged_value
+        original(writer, tuple(altered))
+
+    monkeypatch.setattr(exporter, "_write_checked_row", corrupt_population_row)
+    with pytest.raises(ValidationError, match=error):
+        render_ecology_population_csv(source)
+
+
+@pytest.mark.parametrize(
     ("field", "forged_value", "error"),
     [
         ("experimental_unit_ids_json", '["tank-B"]', "declared-unit roster"),
