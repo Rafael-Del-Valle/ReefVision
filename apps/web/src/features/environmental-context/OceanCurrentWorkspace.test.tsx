@@ -107,7 +107,9 @@ it("opens cached currents with time, depth and provenance", async () => {
     target: { value: "cache" },
   });
   expect(await screen.findByText("5.000 m/s")).toBeInTheDocument();
-  expect(screen.getByText(/36.9° toward true north/)).toBeInTheDocument();
+  expect(screen.getByRole("list", { name: "Current measurements" })).toHaveTextContent(
+    "36.9° toward true north",
+  );
   expect(screen.getByText(/stale_offline/)).toBeInTheDocument();
   expect(
     screen.getByRole("region", { name: "Current slice descriptive metrics" }),
