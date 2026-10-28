@@ -165,7 +165,7 @@ describe("MeshArtifactViewer", () => {
       screen.getByRole("button", { name: "Inspect source triangle 7" }),
     );
     const inspection = screen.getByText(
-      /Source triangle 7 \\(unverified source frame\\)/,
+      /Source triangle 7 \(unverified source frame\)/,
     );
     expect(inspection).toHaveTextContent(
       "Scale-only triangle area interval: [2.43000, 3.63000] m²",
@@ -185,9 +185,9 @@ describe("MeshArtifactViewer", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Inspect source triangle 7" }),
     );
-    expect(screen.getByText(/Source triangle 7 \\(unverified source frame\\)/)).toHaveTextContent(
-      "unknown (scale uncertainty not supplied)",
-    );
+    expect(
+      screen.getByText(/Source triangle 7 \(unverified source frame\)/),
+    ).toHaveTextContent("unknown (scale uncertainty not supplied)");
     rerender(
       <MeshArtifactViewer
         artifact={{
@@ -202,7 +202,9 @@ describe("MeshArtifactViewer", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Inspect source triangle 7" }),
     );
-    expect(screen.getByText(/Source triangle 7 \\(unverified source frame\\)/)).toHaveTextContent(
+    expect(
+      screen.getByText(/Source triangle 7 \(unverified source frame\)/),
+    ).toHaveTextContent(
       "Scale-only triangle area interval: [0.500000, 0.500000] m²",
     );
     for (const invalid of [-0.1, 1.1, Number.NaN, true, "0.1"]) {
