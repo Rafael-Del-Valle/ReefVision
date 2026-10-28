@@ -20,6 +20,7 @@ from reefvision.db.models import (
     PoseLandmarkSchemaRevision,
     PoseModelSchemaBinding,
     PoseTrainingDataset,
+    PoseTrainingDatasetItem,
     Project,
     TrainingRun,
 )
@@ -1566,6 +1567,59 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             workflow_node_run_id="tampered-config-node",
             processor=substituted_configuration_processor,
         )
+
+    # Frozen review evidence can be changed by a worker after preflight.
+    # First completion must recheck the persisted items before publishing
+    # the checkpoint, even when the dataset manifest itself was not changed.
+    original_review: dict[str, Any] | None = None
+
+    def tampered_frozen_truth_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        nonlocal original_review
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            frozen_item = child_session.scalar(
+                select(PoseTrainingDatasetItem).where(
+                    PoseTrainingDatasetItem.dataset_id == str(dataset["id"])
+                )
+            )
+            assert frozen_item is not None
+            original_review = dict(frozen_item.review_provenance_json)
+            frozen_item.review_provenance_json = {
+                **original_review,
+                "action": "unverified_after_training",
+            }
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-frozen-truth-node",
+            processor=tampered_frozen_truth_processor,
+        )
+
+    assert original_review is not None
+    with app.state.session_factory() as session:
+        frozen_item = session.scalar(
+            select(PoseTrainingDatasetItem).where(
+                PoseTrainingDatasetItem.dataset_id == str(dataset["id"])
+            )
+        )
+        assert frozen_item is not None
+        frozen_item.review_provenance_json = original_review
+        session.commit()
 
     # The legitimate saved-node lineage must still complete and expose a
     # checksummed checkpoint when its worker has not changed the child job.
