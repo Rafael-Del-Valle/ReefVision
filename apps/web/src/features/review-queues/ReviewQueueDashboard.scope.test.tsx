@@ -29,7 +29,11 @@ vi.mock("../../api/client", () => ({
   getReviewQueues: vi.fn(),
 }));
 vi.mock("./QuickConfidenceReviewDialog", () => ({
-  QuickConfidenceReviewDialog: () => null,
+  QuickConfidenceReviewDialog: ({
+    onMarkComplete,
+  }: {
+    onMarkComplete?: () => void;
+  }) => <button onClick={onMarkComplete}>Quick modal complete</button>,
 }));
 vi.mock("./ReviewQueueBulkTriage", () => ({
   ReviewQueueBulkTriage: () => null,
@@ -251,4 +255,58 @@ describe("ReviewQueueDashboard scope isolation", () => {
       }
     },
   );
+
+  it("requires a reviewer label and confirmation from the quick-review modal", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [
+        {
+          id: "item-quick",
+          image_id: "image-quick",
+          rank_position: 1,
+          score: 0.6,
+          score_breakdown_json: [],
+          review_state: "pending",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(completeReviewQueueItem).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
+    );
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      mount();
+      fireEvent.click(await screen.findByRole("button", { name: "Quick review" }));
+      const quickComplete = await screen.findByRole("button", {
+        name: "Quick modal complete",
+      });
+      fireEvent.click(quickComplete);
+      expect(alert).toHaveBeenCalledTimes(1);
+      expect(completeReviewQueueItem).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+        target: { value: "  coral-reviewer  " },
+      });
+      fireEvent.click(quickComplete);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(completeReviewQueueItem).not.toHaveBeenCalled();
+
+      confirm.mockReturnValue(true);
+      fireEvent.click(quickComplete);
+      await waitFor(() =>
+        expect(completeReviewQueueItem).toHaveBeenCalledWith(
+          "item-quick",
+          "coral-reviewer",
+          true,
+        ),
+      );
+    } finally {
+      alert.mockRestore();
+      confirm.mockRestore();
+    }
+  });
 });
