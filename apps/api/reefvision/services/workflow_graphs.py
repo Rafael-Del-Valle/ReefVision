@@ -54,6 +54,12 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
 
 _ACTIONS: dict[str, str] = {
     "project_source": "Resolve the project selected in the API route.",
+    "scientific_records_source": (
+        "Load explicit project scientific records and verify their immutable checksums."
+    ),
+    "computed_metric": (
+        "Evaluate a safe unit-aware metric definition and persist the provenance-complete result."
+    ),
     "project_images": "Resolve project images using the configured filters.",
     "dataset_version_source": "Load one immutable dataset version and its image membership.",
     "dataset_version_create": (

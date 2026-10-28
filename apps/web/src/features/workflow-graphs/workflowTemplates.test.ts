@@ -6,6 +6,39 @@ import {
 } from "./workflowTemplates";
 
 describe("workflowTemplates", () => {
+  it("includes an explicit scientific-record metric workflow", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "computed-scientific-metric",
+    );
+    expect(template).toBeDefined();
+    const graph = template?.graph as {
+      nodes: Array<{
+        node_type: string;
+        parameters: Record<string, unknown>;
+      }>;
+      edges: Array<{ source_port_id: string; target_port_id: string }>;
+    };
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "scientific_records_source",
+      "computed_metric",
+    ]);
+    expect(graph.nodes[1].parameters.record_ids).toEqual([
+      "replace-with-scientific-record-id",
+    ]);
+    expect(graph.nodes[2].parameters).toMatchObject({
+      definition_id: "replace-with-metric-definition-id",
+      bindings: { input: "replace-with-scientific-record-id" },
+    });
+    expect(
+      graph.edges.some(
+        (edge) =>
+          edge.source_port_id === "records" &&
+          edge.target_port_id === "records",
+      ),
+    ).toBe(true);
+  });
+
   it("builds seed-free pose architecture training from an immutable dataset", () => {
     const graph = createPoseArchitectureWorkflow("yolo11m-pose.yaml");
     expect(

@@ -54,6 +54,42 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             implementation_notes=["The project ID comes from the API route, not graph JSON."],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="scientific_records_source",
+            display_name="Scientific Records",
+            category="sources",
+            description=(
+                "Load explicit immutable scientific records for a computed metric without "
+                "searching or guessing inputs."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("records", "Scientific Records", "scientific_record_collection")],
+            required_parameters=["record_ids"],
+            optional_parameters={},
+            execution_state="executable_source",
+            executable=True,
+            implementation_notes=[
+                "Every record ID is project-scoped and checksum-verified at execution time."
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="computed_metric",
+            display_name="Computed Scientific Metric",
+            category="analysis",
+            description=(
+                "Evaluate one persisted safe unit-aware metric definition and save its result."
+            ),
+            input_ports=[_input("records", "Scientific Records", "scientific_record_collection")],
+            output_ports=[_output("result", "Computed Metric Result", "computed_metric_result")],
+            required_parameters=["definition_id", "bindings"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Uses the same immutable definition/result service as the standalone Metrics UI.",
+                "Bindings map declared formula symbols to record IDs in the connected source.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="project_images",
             display_name="Project Images",
             category="sources",

@@ -34,6 +34,53 @@ const projectImages = {
   ],
 };
 
+const computedScientificMetric = {
+  graph_id: "computed-scientific-metric",
+  name: "Computed scientific metric",
+  schema_version: "workflow-graph-0001",
+  nodes: [
+    {
+      node_id: "project",
+      node_type: "project_source",
+      parameters: {},
+      position: { x: 40, y: 80 },
+    },
+    {
+      node_id: "records",
+      node_type: "scientific_records_source",
+      parameters: {
+        record_ids: ["replace-with-scientific-record-id"],
+      },
+      position: { x: 360, y: 80 },
+    },
+    {
+      node_id: "metric",
+      node_type: "computed_metric",
+      parameters: {
+        definition_id: "replace-with-metric-definition-id",
+        bindings: { input: "replace-with-scientific-record-id" },
+      },
+      position: { x: 700, y: 80 },
+    },
+  ],
+  edges: [
+    {
+      edge_id: "project-records",
+      source_node_id: "project",
+      source_port_id: "project",
+      target_node_id: "records",
+      target_port_id: "project",
+    },
+    {
+      edge_id: "records-metric",
+      source_node_id: "records",
+      source_port_id: "records",
+      target_node_id: "metric",
+      target_port_id: "records",
+    },
+  ],
+};
+
 const localConsensus = {
   graph_id: "two-of-three-detection-consensus",
   name: "2-of-3 local detection consensus",
@@ -978,6 +1025,13 @@ export const workflowTemplates: WorkflowTemplate[] = [
     description:
       "Pose inference → temporal identity → scientist review → Active Learning → verified dataset → retrain → register → Results Package, with a visual next-iteration cue.",
     graph: poseActiveLearningRetrain,
+  },
+  {
+    id: "computed-scientific-metric",
+    name: "Computed scientific metric",
+    description:
+      "Explicit scientific records → safe unit-aware definition → immutable result.",
+    graph: computedScientificMetric,
   },
   {
     id: "project-images",

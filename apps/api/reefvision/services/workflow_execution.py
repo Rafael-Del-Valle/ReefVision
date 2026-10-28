@@ -21,6 +21,7 @@ from reefvision.db.models import (
     PredictionProposal,
     Project,
     ProjectExchangePackage,
+    ScientificRecord,
     VideoAsset,
     WorkflowArtifact,
     WorkflowGraphRecord,
@@ -39,7 +40,9 @@ from reefvision.schemas.workflow_execution import (
     WorkflowRunResponse,
 )
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
+from reefvision.services.computed_metrics import ComputedMetricService
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
+from reefvision.services.scientific_data import ScientificDataService
 from reefvision.services.workflow_classification import (
     materialize_workflow_classification_dataset,
     train_workflow_classifier,
@@ -59,6 +62,8 @@ from reefvision.storage.datasets import canonical_json_sha256
 
 EXECUTABLE_NODE_TYPES = {
     "project_source",
+    "scientific_records_source",
+    "computed_metric",
     "project_images",
     "dataset_version_source",
     "dataset_version_create",
@@ -352,6 +357,105 @@ class WorkflowExecutionService:
                     "project_id": project.id,
                     "project_name": project.name,
                     "storage_root": project.storage_root,
+                },
+            )
+        ]
+
+    def _execute_scientific_records_source(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Scientific record source project artifact is mismatched")
+        raw_ids = parameters.get("record_ids")
+        if (
+            not isinstance(raw_ids, list)
+            or not raw_ids
+            or len(raw_ids) > 500
+            or any(not isinstance(value, str) or not value for value in raw_ids)
+        ):
+            raise ValidationError("Scientific record source requires 1 to 500 explicit record IDs")
+        record_ids = list(dict.fromkeys(raw_ids))
+        if len(record_ids) != len(raw_ids):
+            raise ValidationError("Scientific record source IDs must be unique")
+        scientific = ScientificDataService(self.session)
+        checksums: dict[str, str] = {}
+        for record_id in record_ids:
+            row = self.session.get(ScientificRecord, record_id)
+            if row is None or row.project_id != project_id:
+                raise ValidationError("Every workflow scientific record must belong to the project")
+            checksums[record_id] = scientific.response(row).content_sha256
+        return [
+            WorkflowArtifactSpec(
+                port_id="records",
+                data_type="scientific_record_collection",
+                payload={
+                    "project_id": project_id,
+                    "record_ids": record_ids,
+                    "content_sha256": checksums,
+                },
+            )
+        ]
+
+    def _execute_computed_metric(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        records_payload = self._single_payload(inputs, "records")
+        if records_payload.get("project_id") != project_id:
+            raise ValidationError("Computed metric record artifact is project-mismatched")
+        allowed_ids = records_payload.get("record_ids")
+        raw_bindings = parameters.get("bindings")
+        definition_id = parameters.get("definition_id")
+        if not isinstance(definition_id, str) or not definition_id:
+            raise ValidationError("Computed metric requires a definition_id")
+        if not isinstance(raw_bindings, dict) or not raw_bindings:
+            raise ValidationError("Computed metric requires explicit symbol bindings")
+        bindings = {str(symbol): str(record_id) for symbol, record_id in raw_bindings.items()}
+        if not isinstance(allowed_ids, list) or any(
+            record_id not in allowed_ids for record_id in bindings.values()
+        ):
+            raise ValidationError(
+                "Computed metric bindings must reference records from the connected source"
+            )
+        service = ComputedMetricService(self.session)
+        result = service.calculate(
+            project_id,
+            definition_id,
+            bindings,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        response = service.result_response(result)
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="computed_metric_result",
+                payload={
+                    "result_id": str(response.id),
+                    "definition_id": str(response.definition_id),
+                    "definition_sha256": response.definition_sha256,
+                    "formula_version": response.formula_version,
+                    "value": response.value,
+                    "unit": response.unit,
+                    "uncertainty": response.uncertainty,
+                    "observed_at": response.observed_at.isoformat(),
+                    "input_record_ids": {
+                        symbol: str(record_id)
+                        for symbol, record_id in response.input_record_ids.items()
+                    },
+                    "content_sha256": response.content_sha256,
                 },
             )
         ]
