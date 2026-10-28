@@ -2,6 +2,35 @@
 
 **Status:** draft implementation, not release acceptance. Master coordination: issue #76.
 
+
+## 2026-10-28 — Canonical saved QC scientific references (Track D)
+
+- Audited 1.0–1.5 overlap and the existing 1.6 QC queue generator, versioned
+  snapshot validator, executable Workflow Builder adapter and saved-run tests.
+  No new review-queue implementation, schema revision or cross-branch merge.
+- The v3 queue generator already saves sorted, unique class/model/QC-issue ID
+  lists, a lowercase SHA-256 input fingerprint and one of three QC severities.
+  Previously, a corrupted queue could re-sign its own item-evidence digest
+  after inventing malformed reference lists or a false severity; score and
+  normalization checks alone did not catch that change.
+- New v3-only replay validation rejects non-list, unsorted, duplicate, blank
+  or non-string reference IDs, malformed input fingerprints and unsupported
+  QC severities. This checks canonical evidence shape, **not** whether a
+  referenced model/class/issue is scientifically authentic. Historical v2
+  snapshots retain their prior compatibility contract.
+- Added standalone parameterized corruption and v2 compatibility tests, plus
+  a real saved `project_source -> qc_review_queue` regression: re-signing
+  out-of-order model IDs must fail without changing an in-progress researcher's
+  review; restoring the original evidence must permit typed, review-required
+  replay with the same queue ID. No auto-approval or live rescore.
+- Also corrected two exact Ruff-format failures from CI run 40773023885
+  (`workflow_review_queue_integrity.py:369` and
+  `test_workflow_review_queue_integrity_16.py:691`).
+- Acceptance remains HOLD until new-head CI, independent 1.1/1.6 Alembic
+  0038 reconciliation, native Windows MSI upgrade/rollback and installed GUI,
+  and representative biological-data validation are completed.
+
+
 ## 2026-10-28 — Saved QC output binding and fail-closed recovery (Track D)
 
 - Inspected the existing 1.6 Workflow Builder adapter, standalone review-queue
