@@ -899,6 +899,181 @@ describe("AnnotationEditor", () => {
     );
   });
 
+
+  it("applies project segmentation visibility to masks without hiding boxes or changing records", async () => {
+    const baseMask = {
+      id: "seg-mask-1",
+      image_id: session.image.id,
+      label_class_id: "class-1",
+      geometry_kind: "polygon",
+      mask_path: null,
+      polygon_json: [
+        [320, 320],
+        [420, 320],
+        [420, 420],
+      ],
+      x_min: 320,
+      y_min: 320,
+      x_max: 420,
+      y_max: 420,
+      area_pixels: 5000,
+      source_type: "human",
+      provenance_json: null,
+      status: "verified",
+      created_by: "local_user",
+      created_at: "2026-07-08T00:00:00Z",
+      updated_at: "2026-07-08T00:00:00Z",
+      deleted_at: null,
+      revision: 1,
+    };
+    const sessionWithMasks = {
+      ...session,
+      mask_annotations: [
+        baseMask,
+        { ...baseMask, id: "seg-mask-2", label_class_id: "class-2" },
+      ],
+      mask_counts_by_class: [
+        { label_class_id: "class-1", count: 1 },
+        { label_class_id: "class-2", count: 1 },
+      ],
+    } as AnnotationSession;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(sessionWithMasks);
+        }
+        if (
+          url.endsWith(`/projects/${project.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(
+            buildVisibilityBundle({
+              projectDefaults: { segmentation_overlays: ["class-1"] },
+            }),
+          );
+        }
+        const fallback = handleDefaultEditorRequests(url, init);
+        if (fallback) return fallback;
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("mask-annotation-seg-mask-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mask-annotation-seg-mask-2")).toBeInTheDocument();
+
+    await userEvent.selectOptions(
+      screen.getByTestId("class-visibility-layer"),
+      "segmentation_overlays",
+    );
+    expect(screen.queryByText(/stored now and will be applied/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(await screen.findByTestId("mask-annotation-seg-mask-1")).toBeInTheDocument();
+    expect(screen.getByTestId("mask-annotation-seg-mask-2")).toBeInTheDocument();
+
+    expect(sessionWithMasks.mask_annotations).toHaveLength(2);
+    expect(sessionWithMasks.mask_counts_by_class).toHaveLength(2);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+  });
+
+  it("prefers personal segmentation visibility and restores it after a session override", async () => {
+    const baseMask = {
+      id: "user-mask-1",
+      image_id: session.image.id,
+      label_class_id: "class-1",
+      geometry_kind: "polygon",
+      mask_path: null,
+      polygon_json: [
+        [320, 320],
+        [420, 320],
+        [420, 420],
+      ],
+      x_min: 320,
+      y_min: 320,
+      x_max: 420,
+      y_max: 420,
+      area_pixels: 5000,
+      source_type: "human",
+      provenance_json: null,
+      status: "verified",
+      created_by: "local_user",
+      created_at: "2026-07-08T00:00:00Z",
+      updated_at: "2026-07-08T00:00:00Z",
+      deleted_at: null,
+      revision: 1,
+    };
+    const withMasks = {
+      ...session,
+      mask_annotations: [
+        baseMask,
+        { ...baseMask, id: "user-mask-2", label_class_id: "class-2" },
+      ],
+    } as AnnotationSession;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(withMasks);
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/class-visibility`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(
+          buildVisibilityBundle({
+            userPreferences: { segmentation_overlays: ["class-2"] },
+            projectDefaults: { segmentation_overlays: ["class-1"] },
+          }),
+        );
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    expect(screen.getByTestId("mask-annotation-user-mask-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("mask-annotation-user-mask-2")).not.toBeInTheDocument();
+    await userEvent.selectOptions(
+      screen.getByTestId("class-visibility-layer"),
+      "segmentation_overlays",
+    );
+    const classRow = screen.getByTestId("class-tool-1").closest("li");
+    if (!(classRow instanceof HTMLElement)) {
+      throw new Error("Expected segmentation class row");
+    }
+    await userEvent.click(
+      within(classRow).getByRole("checkbox", { name: "Visible" }),
+    );
+    expect(screen.queryByTestId("mask-annotation-user-mask-1")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reset Session" }));
+    expect(await screen.findByTestId("mask-annotation-user-mask-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("mask-annotation-user-mask-2")).not.toBeInTheDocument();
+    expect(withMasks.mask_annotations).toHaveLength(2);
+  });
+
   it("keeps the selected annotation class unchanged in box mode", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
