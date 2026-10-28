@@ -396,9 +396,7 @@ def measure_mesh_preview(
         if patch_area_fractions is not None
         else None
     )
-    effective_patch_count = (
-        1.0 / patch_area_concentration if patch_area_concentration else None
-    )
+    effective_patch_count = 1.0 / patch_area_concentration if patch_area_concentration else None
     # A/V is a geometric inverse-length descriptor, not biomass or coral health.
     # Withhold the aggregate ratio whenever aggregate enclosed volume is rejected;
     # eligible per-patch ratios remain available as provisional evidence.
