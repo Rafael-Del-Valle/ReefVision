@@ -1457,6 +1457,49 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             processor=substituted_job_processor,
         )
 
+    # A different successful job with copied request metadata must not
+    # replace the exact child job queued by this saved workflow node.
+    def substituted_job_identity_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            original = child_session.get(Job, job_id)
+            assert original is not None
+            replacement = Job(
+                project_id=original.project_id,
+                job_type="training",
+                status="succeeded",
+                progress_current=original.progress_current,
+                progress_total=original.progress_total,
+                request_json=dict(original.request_json),
+                result_json=dict(original.result_json or {}),
+            )
+            child_session.add(replacement)
+            child_session.flush()
+            run = child_session.get(TrainingRun, str(original.request_json["training_run_id"]))
+            assert run is not None
+            run.job_id = replacement.id
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="child job identity changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="substituted-job-identity-node",
+            processor=substituted_job_identity_processor,
+        )
+
     # The first result must also reject a worker-mutated frozen artifact
     # manifest, before a downstream node can consume the false schema lineage.
     def substituted_artifact_processor(
