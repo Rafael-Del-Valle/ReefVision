@@ -220,7 +220,20 @@ def test_completed_review_creates_idempotent_feedback_dataset(
     assert selected["image_id"] == low_confidence_image
 
     item_id = selected["queue_item_id"]
-    completed = client.post(f"/api/v1/review-queue-items/{item_id}/complete")
+    # Queue bookkeeping requires explicit researcher confirmation. A missing
+    # confirmation must not count toward active-learning feedback readiness.
+    unconfirmed = client.post(f"/api/v1/review-queue-items/{item_id}/complete")
+    assert unconfirmed.status_code == 422, unconfirmed.text
+    before_confirmation = client.get(
+        f"/api/v1/active-learning-rounds/{round_record['id']}/feedback"
+    )
+    assert before_confirmation.status_code == 200, before_confirmation.text
+    assert before_confirmation.json()["completed_count"] == 0
+
+    completed = client.post(
+        f"/api/v1/review-queue-items/{item_id}/complete",
+        json={"actor": "active-learning reviewer", "review_confirmed": True},
+    )
     assert completed.status_code == 200, completed.text
 
     feedback = client.get(f"/api/v1/active-learning-rounds/{round_record['id']}/feedback")
