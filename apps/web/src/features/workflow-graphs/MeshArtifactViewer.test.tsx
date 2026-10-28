@@ -97,7 +97,8 @@ describe("MeshArtifactViewer", () => {
       screen.getByText(/Calibration and coordinate registration/),
     ).toHaveTextContent("unverified");
   });
-  it("inspects source triangle vertices without changing the saved scientific artifact", () => {
+
+  it("inspects source triangle vertices without changing saved data", () => {
     const before = JSON.stringify(validArtifact);
     render(<MeshArtifactViewer artifact={validArtifact} />);
     const triangle = screen.getByRole("button", {
@@ -107,15 +108,15 @@ describe("MeshArtifactViewer", () => {
     fireEvent.keyDown(triangle, { key: "Enter" });
     expect(triangle).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+      screen.getByText(/Source triangle 7 \(unverified source frame\)/),
     ).toHaveTextContent("vertex 2 (1.00000, 0.00000, 0.00000) m");
     expect(
-      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+      screen.getByText(/Source triangle 7 \(unverified source frame\)/),
     ).toHaveTextContent("not an anatomical branch or verified surface");
     expect(JSON.stringify(validArtifact)).toBe(before);
   });
 
-  it("does not transfer a source triangle selection to another reconstruction", () => {
+  it("clears triangle selection for a replacement reconstruction", () => {
     const { rerender } = render(
       <MeshArtifactViewer artifact={validArtifact} />,
     );
@@ -123,11 +124,11 @@ describe("MeshArtifactViewer", () => {
       screen.getByRole("button", { name: "Inspect source triangle 7" }),
     );
     expect(
-      screen.getByText(/Source triangle 7 \\(unverified source frame\\)/),
+      screen.getByText(/Source triangle 7 \(unverified source frame\)/),
     ).toBeInTheDocument();
     rerender(<MeshArtifactViewer artifact={{ ...validArtifact }} />);
     expect(
-      screen.queryByText(/Source triangle 7 \\(unverified source frame\\)/),
+      screen.queryByText(/Source triangle 7 \(unverified source frame\)/),
     ).not.toBeInTheDocument();
     expect(
       screen.getByText(/Select a displayed source triangle/),
@@ -146,5 +147,4 @@ describe("MeshArtifactViewer", () => {
       }),
     ).toBeNull();
   });
-
 });
