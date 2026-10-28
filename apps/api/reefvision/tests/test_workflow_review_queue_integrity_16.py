@@ -765,3 +765,44 @@ def test_v3_accepts_real_pending_count_normalization(pending_count: int | float)
         part["normalized_value"] = normalized
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
     validate_saved_queue_snapshot(queue, items)
+
+@pytest.mark.parametrize(
+    ("signal_id", "false_flag"),
+    [
+        ("unreviewed_state", 0.5),
+        ("unreviewed_state", 0.25),
+        ("missing_group_metadata", 0.5),
+        ("missing_group_metadata", 0.75),
+    ],
+)
+def test_v3_rejects_resigned_fractional_binary_qc_flags(
+    signal_id: str, false_flag: float
+) -> None:
+    """A matching checksum and score cannot turn a yes/no observation into a fraction."""
+    queue, items = _v3_snapshot()
+    item = items[0]
+    item.signal_values_json[signal_id] = false_flag
+    item.normalized_signals_json[signal_id] = false_flag
+    part = next(part for part in item.score_breakdown_json if part["signal_id"] == signal_id)
+    part["raw_value"] = false_flag
+    part["normalized_value"] = false_flag
+    # The signal has zero weight in this fixture. Its score, summary, rank,
+    # and other evidence remain consistent after the digest is recomputed.
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize("signal_id", ["unreviewed_state", "missing_group_metadata"])
+@pytest.mark.parametrize("flag", [0, 1, 0.0, 1.0])
+def test_v3_accepts_genuine_binary_qc_flags(signal_id: str, flag: int | float) -> None:
+    """Both possible flag states remain valid, including legacy integer JSON values."""
+    queue, items = _v3_snapshot()
+    for item in items:
+        item.signal_values_json[signal_id] = flag
+        item.normalized_signals_json[signal_id] = flag
+        part = next(part for part in item.score_breakdown_json if part["signal_id"] == signal_id)
+        part["raw_value"] = flag
+        part["normalized_value"] = flag
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    validate_saved_queue_snapshot(queue, items)
