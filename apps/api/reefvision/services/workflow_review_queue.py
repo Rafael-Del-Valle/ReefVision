@@ -112,6 +112,29 @@ def create_review_queue_workflow_artifact(
             "preserve both records for manual reconciliation"
         )
     existing = matching_queues[0] if matching_queues else None
+    # A completed node has a persisted output contract. If its queue was
+    # deleted, reassigned, or replaced, never silently create a new queue or
+    # reuse another queue with the same owner. This protects researcher audit
+    # history even if an attacker re-signs a substituted artifact payload.
+    saved_outputs = node.output_artifact_ids_json
+    if saved_outputs:
+        if not isinstance(saved_outputs, list) or len(saved_outputs) != 1:
+            raise ValidationError("QC review-queue saved output binding is invalid")
+        saved_output = session.get(WorkflowArtifact, saved_outputs[0])
+        if (
+            saved_output is None
+            or saved_output.workflow_run_id != run_id
+            or saved_output.producer_node_run_id != node_run_id
+            or saved_output.producer_port_id != "queue"
+            or saved_output.data_type != "review_queue_reference"
+            or not isinstance(saved_output.payload_json, dict)
+            or saved_output.payload_sha256
+            != canonical_json_sha256(saved_output.payload_json)
+            or saved_output.payload_json.get("project_id") != project_id
+            or existing is None
+            or saved_output.payload_json.get("queue_id") != existing.id
+        ):
+            raise ValidationError("QC review-queue saved output no longer matches its queue")
     if existing is not None:
         config = dict(existing.configuration_json or {})
         if (
