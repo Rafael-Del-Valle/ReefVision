@@ -662,7 +662,8 @@ The researcher first generates an unreviewed preview to obtain its
 The record requires a calibration operator, a **different** independent
 reviewer, a decision (`supports_scale`, `disputes_scale`, or `inconclusive`),
 a nonblank note, an aware review timestamp, and explicit bindings to the
-source geometry SHA-256, meters-per-unit scale, calibration method, calibration
+source geometry SHA-256, specimen and observation identifiers and timestamp,
+meters-per-unit scale, calibration method, calibration
 evidence, and relative scale uncertainty (including a distinct unknown/null
 value). A review predating the source observation is rejected.
 
