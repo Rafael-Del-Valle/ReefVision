@@ -109,6 +109,10 @@ it("opens cached currents with time, depth and provenance", async () => {
   expect(await screen.findByText("5.000 m/s")).toBeInTheDocument();
   expect(screen.getByText(/36.9° toward true north/)).toBeInTheDocument();
   expect(screen.getByText(/stale_offline/)).toBeInTheDocument();
+  expect(
+    screen.getByRole("region", { name: "Current slice descriptive metrics" }),
+  ).toHaveTextContent("Mean speed: 5.000 m/s");
+  expect(screen.getByText(/not independent replicates/)).toBeInTheDocument();
   expect(screen.getByText(/Modeled.*synthetic.*202601/)).toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Export current vector summary CSV" }),

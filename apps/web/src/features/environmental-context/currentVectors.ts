@@ -203,6 +203,70 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
   }
   return result;
 }
+/**
+ * Descriptive statistics for one compatible UTC/depth/source slice.
+ * An unweighted mean across model cells or subject-linked records is NOT an
+ * estimate of independent replication, transport, or scientific uncertainty.
+ */
+export interface CurrentSliceMetrics {
+  count: number;
+  meanSpeed: number;
+  maximumSpeed: number;
+  vectorMeanSpeed: number;
+  vectorMeanBearing: number | null;
+}
+
+export function summarizeCurrentSlice(
+  vectors: readonly CurrentVector[],
+): CurrentSliceMetrics | null {
+  if (vectors.length === 0) return null;
+  const first = vectors[0];
+  // Never average across times, depth datums, datasets or acquisitions.
+  if (
+    vectors.some(
+      (vector) =>
+        vector.observedAt !== first.observedAt ||
+        vector.depthM !== first.depthM ||
+        vector.depthReference !== first.depthReference ||
+        vector.source !== first.source ||
+        vector.sourceKind !== first.sourceKind ||
+        vector.dataset !== first.dataset ||
+        vector.modelVersion !== first.modelVersion ||
+        vector.sourceAcquiredAt !== first.sourceAcquiredAt ||
+        vector.sourceUrl !== first.sourceUrl ||
+        vector.processingMethod !== first.processingMethod,
+    )
+  )
+    return null;
+
+  let meanSpeed = 0;
+  let meanEast = 0;
+  let meanNorth = 0;
+  let maximumSpeed = 0;
+  vectors.forEach((vector, index) => {
+    // Incremental weighted means avoid overflowing sums of finite speeds.
+    const weight = 1 / (index + 1);
+    meanSpeed = meanSpeed * (1 - weight) + vector.speed * weight;
+    meanEast = meanEast * (1 - weight) + vector.east * weight;
+    meanNorth = meanNorth * (1 - weight) + vector.north * weight;
+    maximumSpeed = Math.max(maximumSpeed, vector.speed);
+  });
+  const vectorMeanSpeed = Math.hypot(meanEast, meanNorth);
+  if (!Number.isFinite(meanSpeed) || !Number.isFinite(vectorMeanSpeed))
+    return null;
+  // Opposing flows can cancel. Never assign a direction to numerical noise.
+  const directionDefined = vectorMeanSpeed > maximumSpeed * Number.EPSILON * 8;
+  return {
+    count: vectors.length,
+    meanSpeed,
+    maximumSpeed,
+    vectorMeanSpeed,
+    vectorMeanBearing: directionDefined
+      ? ((Math.atan2(meanEast, meanNorth) * 180) / Math.PI + 360) % 360
+      : null,
+  };
+}
+
 export function vectorColor(speed: number): string {
   return speed < 0.25
     ? "#2563eb"

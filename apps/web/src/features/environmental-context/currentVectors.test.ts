@@ -3,6 +3,7 @@ import {
   currentComponentUncertaintyText,
   currentVectors,
   currentVectorsCsv,
+  summarizeCurrentSlice,
 } from "./currentVectors";
 import type { ScientificRecord } from "./environmentalContextApi";
 function component(
@@ -526,4 +527,55 @@ it("preserves the depth datum and each component QC in exported vectors", () => 
   expect(
     currentVectors([east, { ...north, depth_reference: "sea_surface" }]),
   ).toEqual([]);
+});
+
+it("distinguishes mean current speed from vector-mean flow and cancellation", () => {
+  const east = component("current_eastward_velocity", 1, { id: "east-a" });
+  const north = component("current_northward_velocity", 0, { id: "north-a" });
+  const oppositeEast = component("current_eastward_velocity", -1, {
+    id: "east-b",
+    location: { latitude: 32.6, longitude: -79.5, crs: "EPSG:4326" },
+  });
+  const oppositeNorth = component("current_northward_velocity", 0, {
+    id: "north-b",
+    location: { latitude: 32.6, longitude: -79.5, crs: "EPSG:4326" },
+  });
+  const vectors = currentVectors([east, north, oppositeEast, oppositeNorth]);
+  expect(vectors).toHaveLength(2);
+  expect(summarizeCurrentSlice(vectors)).toEqual({
+    count: 2,
+    meanSpeed: 1,
+    maximumSpeed: 1,
+    vectorMeanSpeed: 0,
+    vectorMeanBearing: null,
+  });
+  expect(summarizeCurrentSlice([])).toBeNull();
+});
+
+it("does not aggregate incompatible current times or depth datums", () => {
+  const east = component("current_eastward_velocity", 3, { id: "east-a" });
+  const north = component("current_northward_velocity", 4, { id: "north-a" });
+  const laterEast = component("current_eastward_velocity", 0, {
+    id: "east-b",
+    observed_at: "2026-04-03T01:00:00Z",
+  });
+  const laterNorth = component("current_northward_velocity", 2, {
+    id: "north-b",
+    observed_at: "2026-04-03T01:00:00Z",
+  });
+  const vectors = currentVectors([east, north, laterEast, laterNorth]);
+  expect(vectors).toHaveLength(2);
+  expect(summarizeCurrentSlice([vectors[0]])).toMatchObject({
+    count: 1,
+    meanSpeed: 5,
+    maximumSpeed: 5,
+    vectorMeanSpeed: 5,
+  });
+  expect(summarizeCurrentSlice(vectors)).toBeNull();
+  expect(
+    summarizeCurrentSlice([
+      vectors[0],
+      { ...vectors[0], depthReference: "chart_datum" },
+    ]),
+  ).toBeNull();
 });

@@ -232,3 +232,16 @@ request bounds and available coordinate resolutions are preserved. Credentials,
 provider live-data acceptance and packaged-runtime execution have not been claimed.
 Synthetic xarray fixtures validate the worker, numerical interpretation, caching
 and exchange independently of Copernicus access.
+
+## Descriptive current-slice metrics (development)
+
+The ocean-current workspace reports the number of paired records, unweighted
+arithmetic mean speed, maximum speed, and magnitude/direction of the mean
+velocity vector for a selected UTC time and depth datum. **Mean speed** and
+**vector-mean speed** are different: opposing currents can have positive mean
+speed but zero vector-mean flow, in which case direction is undefined. The
+summary is suppressed when source, model version, acquisition, time, or depth
+reference differs across records. These are descriptive statistics of eligible
+records, not independent experimental replicates. No spatial weighting,
+uncertainty propagation, confidence interval, organism transport, or advection
+is inferred. Original immutable component records remain authoritative.

@@ -7,6 +7,7 @@ import {
   currentComponentUncertaintyText,
   currentVectors,
   currentVectorsCsv,
+  summarizeCurrentSlice,
   vectorColor,
 } from "./currentVectors";
 import {
@@ -100,6 +101,7 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
       ),
     [allVectors, selectedTime, selectedDepth],
   );
+  const metrics = useMemo(() => summarizeCurrentSlice(vectors), [vectors]);
   const overlay = useMemo(
     () =>
       showObjects
@@ -276,6 +278,26 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                 speed/bearing uncertainty is not estimated. Original scientific
                 records remain the authoritative source.
               </p>
+              {metrics && (
+                <section aria-label="Current slice descriptive metrics">
+                  <h4>Descriptive current slice</h4>
+                  <p>
+                    {metrics.count} paired records · unweighted descriptive
+                    statistics. Model cells and subject-linked records are not
+                    independent replicates. No spatial weighting, uncertainty
+                    propagation, statistical inference or advection is implied.
+                  </p>
+                  <p>
+                    Mean speed: {metrics.meanSpeed.toFixed(3)} m/s · Maximum
+                    speed: {metrics.maximumSpeed.toFixed(3)} m/s · Vector-mean
+                    flow: {metrics.vectorMeanSpeed.toFixed(3)} m/s ·{" "}
+                    {metrics.vectorMeanBearing === null
+                      ? "Vector-mean direction undefined (stationary or cancellation)"
+                      : `${metrics.vectorMeanBearing.toFixed(1)}° toward true north`}
+                    .
+                  </p>
+                </section>
+              )}
               {allVectors.length === 0 && (
                 <p role="status">
                   No QC-compatible paired eastward/northward currents in this
