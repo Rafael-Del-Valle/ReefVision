@@ -119,6 +119,13 @@ def _validate_graph(
             raise BranchEditError("Existing segment references an unknown graph node")
         if len(edge.pixels) < 2:
             raise BranchEditError("Existing segment has no measurable pixel path")
+        if edge.pixels[0] not in source.source_pixels or edge.pixels[-1] not in target.source_pixels:
+            raise BranchEditError("Existing segment endpoints do not match their graph nodes")
+        if any(
+            max(abs(bx - ax), abs(by - ay)) != 1
+            for (ax, ay), (bx, by) in pairwise(edge.pixels)
+        ):
+            raise BranchEditError("Existing segment contains a disconnected pixel step")
         expected = _edge(edge.id, source, target, edge.pixels)
         if not all(
             isfinite(value) and isclose(value, expected_value, rel_tol=1e-7, abs_tol=1e-7)
