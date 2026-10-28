@@ -3054,3 +3054,28 @@ the standalone API, and checks malformed values in all four linked digest
 locations. No new workflow node, migration, 1.1 environment store or
 experimental-unit assumption was introduced. Exact-head CI and physical
 Windows acceptance must be checked independently before any release claim.
+
+## 2026-10-28 Track B — saved registry evidence relationship integrity
+
+The source registry's typed response now rejects cross-project biological
+identities and linked evidence, duplicate source-link identities, mismatched
+explicit evidence counts, orphaned image/annotation/calibration references,
+calibrations attached to the wrong image bytes, and image links referring to
+unknown recorded identity revisions. This protects deserialized executable
+Workflow Builder source artifacts as well as the standalone project registry;
+the existing typed node, persisted output, and scientist-review gate are reused
+rather than introducing a second scientific evidence path. Older artifacts
+that omitted later-added link collections/counts remain readable, but fields
+actually present must be internally consistent. The image SHA-256 comparison
+is case-insensitive for content equality while original provenance is retained.
+
+The previous exact HEAD `bf2b36f5fe859fe3a98feac5a34ca2b68b414d35`
+completed 16 of 19 Actions workflows; all three backend failures were Ruff
+formatting of two test expressions, corrected in this increment. Added
+standalone-API versus saved-workflow parity and tampered-artifact regression
+cases for project ownership, source joins, count integrity and identity history.
+These checks do not verify source file bytes, researcher approval, calibrated
+biological growth or true experimental independence. Full exact-head CI,
+1.1 migration reconciliation, authenticated scientist review and physical
+Windows installer/GUI acceptance remain required. **1.2 is NOT RELEASE-READY;
+1.3 has not started.**

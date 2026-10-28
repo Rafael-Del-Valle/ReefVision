@@ -254,3 +254,67 @@ class EcologyIdentityRegistryResponse(BaseModel):
     )
     evidence_level: Literal["registered_unverified"] = "registered_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+    @model_validator(mode="after")
+    def require_linked_evidence_integrity(self) -> EcologyIdentityRegistryResponse:
+        """Reject cross-project, orphaned or duplicated persisted source evidence.
+
+        Older artifacts may omit later-added link collections or counts.
+        Only enforce relationships for fields actually present in a snapshot.
+        This does not authenticate the underlying source bytes.
+        """
+        for collection in (
+            "identities",
+            "identity_history",
+            "image_evidence_links",
+            "annotation_evidence_links",
+            "calibration_evidence_links",
+        ):
+            rows = getattr(self, collection)
+            if any(row.project_id != self.project_id for row in rows):
+                raise ValueError("Ecological registry contains cross-project evidence")
+            keys = [
+                (row.organism_key, row.revision)
+                if collection == "identity_history"
+                else row.organism_key
+                if collection == "identities"
+                else row.id
+                for row in rows
+            ]
+            if len(keys) != len(set(keys)):
+                raise ValueError("Ecological registry contains duplicate evidence identities")
+
+        for collection, count_field in (
+            ("image_evidence_links", "image_evidence_count"),
+            ("annotation_evidence_links", "annotation_evidence_count"),
+            ("calibration_evidence_links", "calibration_evidence_count"),
+            ("identity_history", "history_revision_count"),
+        ):
+            if collection in self.model_fields_set and count_field in self.model_fields_set:
+                if getattr(self, count_field) != len(getattr(self, collection)):
+                    raise ValueError("Ecological registry evidence count contradicts its links")
+
+        images = {row.id: row for row in self.image_evidence_links}
+        annotations = {row.id: row for row in self.annotation_evidence_links}
+        if "image_evidence_links" in self.model_fields_set:
+            for row in self.annotation_evidence_links:
+                if row.image_evidence_id not in images:
+                    raise ValueError("Ecological registry contains orphan annotation evidence")
+        if "annotation_evidence_links" in self.model_fields_set:
+            for row in self.calibration_evidence_links:
+                if row.annotation_evidence_id not in annotations:
+                    raise ValueError("Ecological registry contains orphan calibration evidence")
+                if "image_evidence_links" in self.model_fields_set:
+                    source = images.get(annotations[row.annotation_evidence_id].image_evidence_id)
+                    if source is None or (
+                        row.image_id != source.image_id
+                        or row.image_sha256.lower() != source.image_sha256.lower()
+                    ):
+                        raise ValueError("Ecological registry calibration source image mismatch")
+
+        if self.identity_history and "identity_history" in self.model_fields_set:
+            revisions = {(row.organism_key, row.revision) for row in self.identity_history}
+            for row in self.image_evidence_links:
+                if (row.organism_key, row.identity_revision) not in revisions:
+                    raise ValueError("Ecological registry image references unknown identity revision")
+        return self

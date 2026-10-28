@@ -249,9 +249,7 @@ def test_changed_capture_metadata_revokes_api_and_saved_workflow(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "failed"
     assert "metadata changed after linking" in workflow["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
 
 
 def test_changed_positive_image_dimensions_revoke_source_link(

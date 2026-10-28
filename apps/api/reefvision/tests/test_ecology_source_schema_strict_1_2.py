@@ -185,9 +185,7 @@ def test_saved_identity_registry_rejects_malformed_linked_evidence_hashes(
     assert standalone.status_code == 200, standalone.text
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
-    artifacts = [
-        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
-    ]
+    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
     assert len(artifacts) == 1
     saved = artifacts[0]["payload_json"]
     assert saved == standalone.json()
@@ -213,3 +211,85 @@ def test_saved_identity_registry_rejects_malformed_linked_evidence_hashes(
         mixed_case[collection][0][field] = "aB" * 32
         rehydrated = EcologyIdentityRegistryResponse.model_validate(mixed_case)
         assert getattr(getattr(rehydrated, collection)[0], field) == "aB" * 32
+
+
+def test_saved_registry_rejects_cross_project_or_orphaned_evidence(
+    client: TestClient,
+) -> None:
+    """A persisted typed source must not mix projects or break provenance joins."""
+    project_id, _ = _source(client)
+    response = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert response.status_code == 200, response.text
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
+    assert len(artifacts) == 1
+    saved = artifacts[0]["payload_json"]
+    assert saved == response.json()
+    parsed = EcologyIdentityRegistryResponse.model_validate(saved)
+    assert parsed.review_gate == "scientist_review_required"
+
+    for collection in (
+        "identities",
+        "identity_history",
+        "image_evidence_links",
+        "annotation_evidence_links",
+        "calibration_evidence_links",
+    ):
+        assert saved[collection]
+        tampered = deepcopy(saved)
+        tampered[collection][0]["project_id"] = "another-project"
+        with pytest.raises(SchemaValidationError, match="cross-project evidence"):
+            EcologyIdentityRegistryResponse.model_validate(tampered)
+
+    for collection, field in (
+        ("annotation_evidence_links", "image_evidence_id"),
+        ("calibration_evidence_links", "annotation_evidence_id"),
+    ):
+        tampered = deepcopy(saved)
+        tampered[collection][0][field] = "missing-evidence-id"
+        with pytest.raises(SchemaValidationError, match="orphan"):
+            EcologyIdentityRegistryResponse.model_validate(tampered)
+
+    for field in ("image_id", "image_sha256"):
+        tampered = deepcopy(saved)
+        original = tampered["calibration_evidence_links"][0][field]
+        tampered["calibration_evidence_links"][0][field] = (
+            "different-image-id"
+            if field == "image_id"
+            else ("0" if original[0] != "0" else "1") + original[1:]
+        )
+        with pytest.raises(SchemaValidationError, match="source image mismatch"):
+            EcologyIdentityRegistryResponse.model_validate(tampered)
+
+    tampered = deepcopy(saved)
+    tampered["image_evidence_links"][0]["identity_revision"] += 10
+    with pytest.raises(SchemaValidationError, match="unknown identity revision"):
+        EcologyIdentityRegistryResponse.model_validate(tampered)
+
+
+def test_saved_registry_rejects_forged_counts_and_duplicate_evidence(
+    client: TestClient,
+) -> None:
+    project_id, _ = _source(client)
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
+    assert len(artifacts) == 1
+    saved = artifacts[0]["payload_json"]
+    for collection, count_field in (
+        ("image_evidence_links", "image_evidence_count"),
+        ("annotation_evidence_links", "annotation_evidence_count"),
+        ("calibration_evidence_links", "calibration_evidence_count"),
+        ("identity_history", "history_revision_count"),
+    ):
+        tampered = deepcopy(saved)
+        tampered[count_field] = len(tampered[collection]) + 1
+        with pytest.raises(SchemaValidationError, match="count contradicts"):
+            EcologyIdentityRegistryResponse.model_validate(tampered)
+
+    tampered = deepcopy(saved)
+    tampered["image_evidence_links"].append(deepcopy(tampered["image_evidence_links"][0]))
+    tampered["image_evidence_count"] += 1
+    with pytest.raises(SchemaValidationError, match="duplicate evidence identities"):
+        EcologyIdentityRegistryResponse.model_validate(tampered)
