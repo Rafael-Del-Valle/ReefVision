@@ -8,6 +8,8 @@ from datetime import UTC
 from math import dist, isfinite
 from typing import Any
 
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
+
 from reefvision.services.spatial_mesh_obj_v14 import MAX_VERTICES
 
 MAX_PLY_BYTES = 256_000
@@ -462,6 +464,8 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
     )
     review = payload.calibration_review
     if review is not None:
+        # Reject post-validation mutation of review attribution and scientific QC.
+        review = MeshCalibrationReviewEvidence.model_validate(review.model_dump(mode="python"))
         # Review evidence is bound to the exact observation and calibration,
         # not a claim of verified physical scale or authenticated identity.
         if review.reviewed_geometry_sha256 != result["provenance"]["geometry_sha256"]:
@@ -480,10 +484,7 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             raise ValueError(
                 "Point-cloud calibration review does not match source coordinate frame"
             )
-        if (
-            payload.coordinate_frame_id is not None
-            and review.reviewed_coordinate_frame_id is None
-        ):
+        if payload.coordinate_frame_id is not None and review.reviewed_coordinate_frame_id is None:
             result["qc_warnings"].append("independent_calibration_review_coordinate_frame_unbound")
         if (
             review.reviewed_specimen_id != payload.specimen_id
