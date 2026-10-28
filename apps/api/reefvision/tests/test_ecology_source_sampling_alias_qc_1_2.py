@@ -41,18 +41,18 @@ def _with_followup_label(
     qc = summarize_sampling_date_qc(candidates)
     changes = summarize_projected_endpoint_changes(candidates, qc)
     units = summarize_projected_unit_summaries(candidates, changes)
+    visits = summarize_projected_visit_coverage(candidates)
+    population = summarize_projected_population_summaries(units)
     return _resign_derived_evidence(
         original.model_copy(
             update={
                 "source_fingerprint_contract": "ecology-measurement-candidates-0020",
                 "candidates": candidates,
                 "sampling_date_qc": qc,
-                "projected_visit_coverage": summarize_projected_visit_coverage(candidates),
+                "projected_visit_coverage": visits,
                 "projected_endpoint_changes": changes,
                 "projected_unit_summaries": units,
-                "projected_population_summaries": summarize_projected_population_summaries(
-                    units
-                ),
+                "projected_population_summaries": population,
             }
         )
     )
@@ -74,7 +74,9 @@ def test_source_linked_aliases_preserve_one_longitudinal_unit_and_csv(
     assert len(result.projected_population_summaries) == 1
     assert result.projected_population_summaries[0].declared_unit_count == 1
     assert len(result.projected_visit_coverage) == 2
-    assert all(row.experimental_unit_type == "tank" for row in result.projected_visit_coverage)
+    assert all(
+        row.experimental_unit_type == "tank" for row in result.projected_visit_coverage
+    )
     assert result.candidates[-1].experimental_unit_type == alias
     assert result.review_gate == "scientist_review_required"
     assert result.evidence_level == "linked_unverified"
@@ -93,7 +95,10 @@ def test_alias_correction_changes_fingerprint_without_inflating_replicates(
     same_label = _with_followup_label(original, "tank")
     alias = _with_followup_label(original, "aquarium")
     assert same_label.input_sha256 != alias.input_sha256
-    assert same_label.projected_population_summaries == alias.projected_population_summaries
+    assert (
+        same_label.projected_population_summaries
+        == alias.projected_population_summaries
+    )
     assert alias.projected_population_summaries[0].declared_unit_count == 1
 
 
