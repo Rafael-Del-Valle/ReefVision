@@ -143,9 +143,15 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
             if value < 0 or value % 1 != 0:
                 return False
             expected = min(value / 10.0, 1.0)
+        elif signal_id in {"unreviewed_state", "missing_group_metadata"}:
+            # These flags are emitted only as 0 or 1. A fractional flag
+            # is not a valid observation even when its digest is re-signed.
+            if value not in (0.0, 1.0):
+                return False
+            expected = value
         else:
-            # All remaining v3 signals are already bounded proportions,
-            # confidences, binary flags or normalized QC severity scores.
+            # Remaining v3 signals are bounded proportions, confidences
+            # or normalized QC severity scores.
             if not 0 <= value <= 1:
                 return False
             expected = value
