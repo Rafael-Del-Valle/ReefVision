@@ -1346,3 +1346,12 @@ Do not merge, tag, release, download pretrained weights or deploy paid hosting.
   installed-GUI and MSI upgrade/rollback acceptance are pending. Cross-version
   1.1/1.6 Alembic revision-0038 reconciliation remains blocked on accepted
   upstream integration. **DRAFT / HOLD; no release or approval.**
+
+
+### 2026-10-27 — Single-item QC confirmation parity (Track D; not release-ready)
+
+The individual `POST /api/v1/review-queue-items/{item_id}/complete` endpoint now requires a JSON request with `review_confirmed: true` (strict boolean). Missing, false, or string-valued confirmation returns HTTP 422 **before** any state or reviewer-event mutation. This closes a direct-API bypass of the dashboard's existing human confirmation; bulk completion already required the same explicit signal. A self-reported `actor` label remains optional for local compatibility, but is **not authenticated**. This is a deliberate pre-release tightening of the single-item API; older callers must add the explicit confirmation field.
+
+The dashboard sends the confirmation only after the user confirms the action. The quick-review modal path now also asks for a reviewer label and explicit confirmation before submitting completion. Single-item skip reasons reject whitespace-only text and store trimmed evidence, consistent with bulk skip behavior. Completion is **QC queue bookkeeping only**: it does not verify annotations, accept predictions, or certify biological observations. Existing persisted reviewer events and saved `qc_review_queue` Workflow Builder runs remain untouched; the workflow node still requires researcher review.
+
+Backend API regressions cover missing/false/nonboolean confirmation, absence of state/event mutation, valid confirmed completion, legacy actor defaults, blank skip rejection, and trimmed skip audit evidence. Frontend regression checks that a confirmed action passes the explicit flag. **Acceptance pending:** exact-head CI, local full suite, saved-workflow regression rerun, Windows installed GUI/MSI upgrade/rollback, real biological-data review, and cross-version Alembic revision-0038 reconciliation. No merge, tag, release, or completion notice.
