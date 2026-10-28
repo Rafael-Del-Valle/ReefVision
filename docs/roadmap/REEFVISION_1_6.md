@@ -1473,3 +1473,21 @@ Backend API regressions cover missing/false/nonboolean confirmation, absence of 
   Windows acceptance are pending. The independent 1.1/1.6 Alembic 0038
   collision and representative biological-data validation remain blockers.
   **HOLD — do not merge, tag, publish or notify completion.**
+
+
+## 2026-10-28 — Real legacy-0037 desktop upgrade preservation regression (Track D)
+
+- Added a disposable SQLite/Alembic regression to
+  `test_desktop_real_migration_16.py`: migrate to the **real 0037 schema**,
+  create a project and label class through the API, persist a project-level
+  hidden-class default and an explicitly empty per-user override, then run the
+  actual 1.6 desktop migration to 0041. Reopen the API and verify original
+  project, class, local identity and both visibility scopes remain unchanged.
+  Verify that a new project can be written after the upgrade and survives
+  another desktop restart. No `Base.metadata.create_all`, manual stamp,
+  deletion or user database is involved.
+- This exercises the **isolated 1.6** lineage only. The independently authored
+  1.1 revision 0038 is still incompatible and must not be merged, stamped or
+  applied to an installed 1.6 database without reviewed reconciliation.
+- Release remains **HOLD** until exact-head CI and native installed Windows
+  MSI/GUI, upgrade/rollback and representative scientific-data acceptance pass.
