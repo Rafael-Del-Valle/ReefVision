@@ -863,4 +863,29 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         specimen_identity_verified=False,
         observation_metadata_verified=False,
     )
+    review = payload.calibration_review
+    if review is not None:
+        # An audit note must not be silently reused after geometry, scale,
+        # method, evidence, or uncertainty is revised. Independent review
+        # remains a caller-supplied claim, never a verified calibration.
+        if review.reviewed_geometry_sha256 != result["provenance"]["geometry_sha256"]:
+            raise ValueError("Calibration review does not match source geometry")
+        if (
+            review.reviewed_meters_per_unit != payload.meters_per_unit
+            or review.reviewed_calibration_method != payload.calibration_method
+            or review.reviewed_calibration_evidence.strip() != payload.calibration_evidence.strip()
+            or review.reviewed_relative_scale_uncertainty != payload.relative_scale_uncertainty
+        ):
+            raise ValueError("Calibration review does not match current calibration inputs")
+        if (
+            payload.observed_at_utc is not None
+            and review.reviewed_at_utc < payload.observed_at_utc
+        ):
+            raise ValueError("Calibration review predates the source observation")
+        result["provenance"]["calibration_review_evidence"] = review.model_dump(mode="json")
+        result["qc_warnings"].append("independent_calibration_review_not_verification")
+        if review.independent_review_decision == "disputes_scale":
+            result["qc_warnings"].append("independent_calibration_review_disputes_scale")
+        elif review.independent_review_decision == "inconclusive":
+            result["qc_warnings"].append("independent_calibration_review_inconclusive")
     return result
