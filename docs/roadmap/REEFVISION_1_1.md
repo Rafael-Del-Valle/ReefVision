@@ -256,7 +256,11 @@ only declared symbols, numeric constants, parentheses, unary signs and
 `+ - * /`; it does not execute Python or arbitrary calls. It performs unit and
 dimension validation, converts supported scalar/density/rate/percent units,
 rejects non-finite and zero-division results, and propagates independent
-first-order uncertainty when all inputs provide uncertainty.
+first-order uncertainty when all inputs provide the same supported uncertainty
+kind (`standard_deviation` or `standard_error`), retained in result provenance.
+Bounds and mixed kinds are rejected. Absolute temperature records support
+identity/unit conversion only; arithmetic, including differences, is rejected
+until absolute temperatures and temperature intervals have distinct types.
 
 Definitions and results are immutable project-scoped records with formula
 version, definition/result SHA-256, original and normalized quantities,
@@ -267,10 +271,22 @@ workflow source requires explicit record IDs; its typed result artifact carries
 the persisted result ID and checksum. Same-node replay is idempotent, while a
 conflicting replay fails without overwriting provenance.
 
+Definition validation infers dimensions structurally; division by zero is
+checked against the actual inputs. Reusing one record for multiple symbols is
+rejected because the independent uncertainty model cannot represent that
+correlation. Multi-input records must also agree on location, pixel coordinates,
+depth/reference, source, dataset and station/source metadata. Empty subjects
+require known location, depth and dataset rather than treating missing identity
+as a match. CSV includes every persisted result, normalized quantities and
+workflow IDs; text formulas are escaped for spreadsheet safety. The panel shows
+total counts and provides load-more controls. Project exchange export is blocked
+for projects containing computed metric definitions/results until exchange can
+serialize, validate and remap their complete provenance without data loss.
+
 Focused TDD evidence: 16 expression-domain tests; 45 computed-metric
 API/migration/scientific-lineage tests; 36 combined workflow/computed-metric
 regressions; and 2 scientist-panel plus 4 workflow-template frontend tests
-passed. Final local validation on 2026-10-28 passed 1,328 backend tests with 4
+passed. Pre-review local validation on 2026-10-28 passed 1,328 backend tests with 4
 explicit live/hardware skips, 506 frontend tests, TypeScript, production build,
 Prettier, Ruff and strict mypy across 421 source files. Configured Playwright
 acceptance passed 13 tests and skipped the external live-OSM demo. The build

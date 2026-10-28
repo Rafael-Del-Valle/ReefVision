@@ -124,9 +124,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export function getComputedMetricDefinitions(
   projectId: string,
   signal?: AbortSignal,
+  offset = 0,
 ): Promise<ComputedMetricDefinitionPage> {
   return request(
-    `/projects/${encodeURIComponent(projectId)}/computed-metric-definitions?limit=500&offset=0`,
+    `/projects/${encodeURIComponent(projectId)}/computed-metric-definitions?limit=500&offset=${offset}`,
     { signal },
   );
 }
@@ -158,9 +159,10 @@ export function calculateComputedMetric(
 export function getComputedMetricResults(
   projectId: string,
   signal?: AbortSignal,
+  offset = 0,
 ): Promise<ComputedMetricResultPage> {
   return request(
-    `/projects/${encodeURIComponent(projectId)}/computed-metric-results?limit=500&offset=0`,
+    `/projects/${encodeURIComponent(projectId)}/computed-metric-results?limit=500&offset=${offset}`,
     { signal },
   );
 }

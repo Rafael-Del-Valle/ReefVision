@@ -136,7 +136,7 @@ release, merge, tag and hardware/scientific acceptance remain gated.
   retry is rejected.
 - TDD evidence: expression domain 16 passed; computed API/migration/scientific
   lineage 45 passed; combined workflow/metric regressions 36 passed; panel 2
-  passed; workflow-template 4 passed. Final local validation on 2026-10-28 passed
+  passed; workflow-template 4 passed. Pre-review local validation on 2026-10-28 passed
   1,328 backend tests with 4 explicit live/hardware skips, 506 frontend tests,
   TypeScript, production build, Prettier, Ruff and strict mypy across 421 source
   files. Configured Playwright acceptance passed 13 tests and skipped the
@@ -146,6 +146,16 @@ release, merge, tag and hardware/scientific acceptance remain gated.
   tracks, verified annotations and predictions. Aggregate counts/coverage,
   replicate/group design, bulk dataset calculations and broader formula functions
   remain Phase 6 follow-on work.
+- Review hardening: infer dimensions without dummy numeric inputs; stabilize
+  quotient derivatives and uncertainty norms; bound formula size/complexity and
+  return structured errors for numeric overflow. Hash the stored formula version
+  and explicitly reject unsupported engines. Reject duplicate record bindings,
+  bounds/mixed uncertainty kinds, and ambiguous empty-subject context. Preserve
+  supported uncertainty kinds in provenance. Absolute temperatures allow direct
+  conversion only until distinct interval semantics exist. CSV has no row cap
+  and includes normalized quantities and workflow IDs; the UI offers load more
+  and total counts. Project exchange fails closed when computed definitions or
+  results exist because exchange does not yet preserve/remap them.
 - Lineage coordination: independent 1.6 PR #77 also introduces a migration numbered
   `0038`. Integration must preserve both already-shared histories and explicitly
   merge or renumber in the integrating branch; this 1.1 work does not rewrite

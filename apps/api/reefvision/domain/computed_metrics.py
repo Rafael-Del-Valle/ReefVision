@@ -98,7 +98,11 @@ def _unit_dimension(unit: str) -> Dimension:
 
 
 def _ensure_finite(value: float, description: str) -> float:
-    if not math.isfinite(value):
+    try:
+        finite = math.isfinite(value)
+    except OverflowError as exc:
+        raise MetricExpressionError(f"{description} must be finite") from exc
+    if not finite:
         raise MetricExpressionError(f"{description} must be finite")
     return value
 
@@ -121,7 +125,10 @@ def _validate_node(node: ast.AST) -> None:
         and isinstance(node.value, (int, float))
         and not isinstance(node.value, bool)
     ):
-        _ensure_finite(float(node.value), "Formula constant")
+        try:
+            _ensure_finite(float(node.value), "Formula constant")
+        except OverflowError as exc:
+            raise MetricExpressionError("Formula constant must be finite") from exc
         return
     raise MetricExpressionError(
         f"Expression element is not allowed: {type(node).__name__}; use only arithmetic"
@@ -133,14 +140,25 @@ def compile_expression(expression: str, symbols: set[str]) -> CompiledMetricExpr
 
     if not expression.strip():
         raise MetricExpressionError("Expression is required")
+    if len(expression) > 1000:
+        raise MetricExpressionError("Expression exceeds the 1000 character limit")
     if not symbols or any(
         not symbol.isidentifier() or symbol.startswith("_") for symbol in symbols
     ):
         raise MetricExpressionError("Metric symbols must be non-private identifiers")
     try:
         tree = ast.parse(expression, mode="eval")
-    except SyntaxError as exc:
+    except (SyntaxError, RecursionError) as exc:
         raise MetricExpressionError("Expression is not valid arithmetic") from exc
+    # Bound tree size and depth before recursive validation/evaluation.
+    pending: list[tuple[ast.AST, int]] = [(tree, 0)]
+    count = 0
+    while pending:
+        node, depth = pending.pop()
+        count += 1
+        if count > 300 or depth > 50:
+            raise MetricExpressionError("Expression exceeds the complexity limit")
+        pending.extend((child, depth + 1) for child in ast.iter_child_nodes(node))
     _validate_node(tree)
     referenced = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
     undeclared = referenced - symbols
@@ -155,6 +173,46 @@ def compile_expression(expression: str, symbols: set[str]) -> CompiledMetricExpr
         version=FORMULA_ENGINE_VERSION,
         tree=tree,
     )
+
+
+def _infer_dimension(node: ast.AST, inputs: dict[str, Dimension]) -> Dimension:
+    """Check physical types without substituting arbitrary numeric values."""
+    if isinstance(node, ast.Name):
+        return inputs[node.id]
+    if isinstance(node, ast.Constant):
+        return ()
+    if isinstance(node, ast.UnaryOp):
+        result = _infer_dimension(node.operand, inputs)
+        if result == _DIMENSION_EXPONENTS["temperature"]:
+            raise MetricExpressionError("Absolute temperature arithmetic is not supported")
+        return result
+    if not isinstance(node, ast.BinOp):
+        raise MetricExpressionError("Expression element is not allowed")
+    left = _infer_dimension(node.left, inputs)
+    right = _infer_dimension(node.right, inputs)
+    # Scientific records contain absolute temperatures, not temperature differences.
+    # Until these types are distinct, allow only identity/unit conversion.
+    if _DIMENSION_EXPONENTS["temperature"] in (left, right):
+        raise MetricExpressionError("Absolute temperature arithmetic is not supported")
+    if isinstance(node.op, (ast.Add, ast.Sub)):
+        if left != right:
+            raise MetricExpressionError("Addition and subtraction require compatible dimensions")
+        return left
+    return _combine_dimensions(left, right, 1 if isinstance(node.op, ast.Mult) else -1)
+
+
+def validate_expression_dimensions(
+    compiled: CompiledMetricExpression, input_units: dict[str, str], output_unit: str
+) -> None:
+    if set(input_units) != set(compiled.symbols):
+        raise MetricExpressionError("Input symbols must exactly match the compiled expression")
+    dimension = _infer_dimension(
+        compiled.tree.body, {symbol: _unit_dimension(unit) for symbol, unit in input_units.items()}
+    )
+    if dimension != _unit_dimension(output_unit):
+        raise MetricExpressionError(
+            "Declared output unit is incompatible with the expression dimension"
+        )
 
 
 def _derivatives(
@@ -208,16 +266,18 @@ def _evaluate(node: ast.AST, values: dict[str, _Evaluated]) -> _Evaluated:
         )
     if right.value == 0:
         raise MetricExpressionError("Division by zero is not allowed")
-    denominator = right.value * right.value
+    quotient = _ensure_finite(left.value / right.value, "Formula result")
     return _Evaluated(
-        _ensure_finite(left.value / right.value, "Formula result"),
+        quotient,
         _combine_dimensions(left.dimension, right.dimension, -1),
-        _derivatives(
-            left.derivatives,
-            right.derivatives,
-            1 / right.value,
-            -left.value / denominator,
-        ),
+        {
+            symbol: _ensure_finite(
+                (left.derivatives.get(symbol, 0) - quotient * right.derivatives.get(symbol, 0))
+                / right.value,
+                "Formula derivative",
+            )
+            for symbol in left.derivatives.keys() | right.derivatives.keys()
+        },
     )
 
 
@@ -241,6 +301,8 @@ def evaluate_expression(
     normalized_uncertainties: dict[str, float | None] = {}
     for symbol, quantity in inputs.items():
         _ensure_finite(quantity.value, f"Input {symbol}")
+        if quantity.uncertainty is not None and quantity.uncertainty < 0:
+            raise MetricExpressionError(f"Input {symbol} uncertainty must be nonnegative")
         try:
             normalized_value, _ = normalize_quantity(quantity.value, quantity.unit)
             input_uncertainty = (
@@ -248,7 +310,7 @@ def evaluate_expression(
                 if quantity.uncertainty is not None
                 else None
             )
-        except ValueError as exc:
+        except (ValueError, OverflowError) as exc:
             raise MetricExpressionError(
                 f"Input {symbol} requires a supported unit and finite value"
             ) from exc
@@ -259,6 +321,9 @@ def evaluate_expression(
         )
         normalized_uncertainties[symbol] = input_uncertainty
 
+    validate_expression_dimensions(
+        compiled, {symbol: quantity.unit for symbol, quantity in inputs.items()}, output_unit
+    )
     evaluated = _evaluate(compiled.tree.body, normalized_inputs)
     if evaluated.dimension != output_dimension:
         raise MetricExpressionError(
@@ -269,9 +334,9 @@ def evaluate_expression(
         known_uncertainties = {
             symbol: value for symbol, value in normalized_uncertainties.items() if value is not None
         }
-        normalized_uncertainty = math.sqrt(
-            sum(
-                (evaluated.derivatives[symbol] * known_uncertainties[symbol]) ** 2
+        normalized_uncertainty = math.hypot(
+            *(
+                evaluated.derivatives[symbol] * known_uncertainties[symbol]
                 for symbol in compiled.symbols
             )
         )

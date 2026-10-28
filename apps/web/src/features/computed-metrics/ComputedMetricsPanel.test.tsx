@@ -95,6 +95,59 @@ function renderPanel() {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ComputedMetricsPanel", () => {
+  it("loads later definition and result pages and displays total counts", async () => {
+    const fetched: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const path = String(url);
+      fetched.push(path);
+      const later = path.includes("offset=1");
+      if (path.includes("computed-metric-definitions")) {
+        return json({
+          items: [
+            later
+              ? {
+                  ...definition,
+                  id: "later-definition",
+                  name: "Later definition",
+                }
+              : definition,
+          ],
+          total: 2,
+        });
+      }
+      return json({
+        items: [
+          later
+            ? { ...result, id: "later-result", definition_name: "Later metric" }
+            : result,
+        ],
+        total: 2,
+      });
+    });
+    renderPanel();
+    expect(await screen.findByText("Showing 1 of 2 definitions")).toBeVisible();
+    expect(await screen.findByText("Showing 1 of 2 results")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more definitions" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Load more results" }));
+    expect(
+      await screen.findByRole("option", { name: "Later definition" }),
+    ).toBeVisible();
+    expect(
+      await screen.findByLabelText("Computed result Later metric"),
+    ).toBeVisible();
+    expect(screen.getByText("Showing 2 of 2 definitions")).toBeVisible();
+    expect(screen.getByText("Showing 2 of 2 results")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Load more definitions" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Load more results" }),
+    ).not.toBeInTheDocument();
+    expect(fetched.filter((path) => path.includes("offset=1"))).toHaveLength(2);
+  });
+
   it("creates and calculates a definition with visible immutable provenance and CSV export", async () => {
     let savedDefinition = false;
     let savedResult = false;

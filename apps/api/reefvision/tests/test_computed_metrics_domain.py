@@ -172,3 +172,66 @@ def test_rejects_invalid_or_non_finite_quantities(
             {"value": quantity},
             output_unit="count",
         )
+
+
+@pytest.mark.parametrize(
+    ("expression", "output_unit"),
+    [("a / b", "1"), ("a - b", "degF"), ("a + b", "K"), ("a * 2", "degC")],
+)
+def test_rejects_ambiguous_absolute_temperature_arithmetic(expression, output_unit) -> None:
+    inputs = {"a": MetricQuantity(300, "K"), "b": MetricQuantity(150, "K")}
+    if "b" not in expression:
+        inputs.pop("b")
+    with pytest.raises(MetricExpressionError, match="temperature arithmetic"):
+        evaluate_expression(compile_expression(expression, set(inputs)), inputs, output_unit)
+
+
+def test_absolute_temperature_identity_still_converts_units() -> None:
+    result = evaluate_expression(
+        compile_expression("temperature", {"temperature"}),
+        {"temperature": MetricQuantity(300, "K", 2)},
+        "degF",
+    )
+    assert result.value == pytest.approx(80.33)
+    assert result.uncertainty == pytest.approx(3.6)
+
+
+def test_small_quotient_has_finite_correct_derivatives() -> None:
+    result = evaluate_expression(
+        compile_expression("a / b", {"a", "b"}),
+        {"a": MetricQuantity(1e-200, "m", 1e-201), "b": MetricQuantity(1e-200, "m", 1e-201)},
+        "1",
+    )
+    assert result.value == 1
+    assert result.derivatives == {"a": pytest.approx(1e200), "b": pytest.approx(-1e200)}
+    assert result.uncertainty == pytest.approx(math.sqrt(0.02))
+
+
+def test_large_uncertainties_use_stable_norm() -> None:
+    result = evaluate_expression(
+        compile_expression("a + b", {"a", "b"}),
+        {"a": MetricQuantity(1, "m", 1e200), "b": MetricQuantity(1, "m", 1e200)},
+        "m",
+    )
+    assert result.uncertainty == pytest.approx(math.sqrt(2) * 1e200)
+
+
+@pytest.mark.parametrize("expression", ["a + " + "9" * 400, "a+" * 600 + "a"])
+def test_numeric_and_expression_limits_raise_domain_errors(expression) -> None:
+    with pytest.raises(MetricExpressionError):
+        compile_expression(expression, {"a"})
+
+
+def test_overflowing_uncertainty_is_a_domain_error() -> None:
+    with pytest.raises(MetricExpressionError, match="finite"):
+        evaluate_expression(
+            compile_expression("a * 2", {"a"}), {"a": MetricQuantity(1, "m", 1e308)}, "m"
+        )
+
+
+@pytest.mark.parametrize("uncertainty", [10**400, -1])
+def test_invalid_uncertainty_raises_domain_error(uncertainty) -> None:
+    with pytest.raises(MetricExpressionError):
+        evaluate_expression(
+            compile_expression("a", {"a"}), {"a": MetricQuantity(1, "m", uncertainty)}, "m"
+        )

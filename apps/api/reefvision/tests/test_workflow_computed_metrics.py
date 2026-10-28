@@ -1,3 +1,5 @@
+import csv
+import io
 from typing import cast
 from uuid import uuid4
 
@@ -117,6 +119,10 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(client: Tes
     assert results["items"][0]["workflow_run_id"] == run["id"]
     metric_node = next(node for node in payload["nodes"] if node["node_type"] == "computed_metric")
     assert results["items"][0]["workflow_node_run_id"] == metric_node["id"]
+    exported = client.get(f"/api/v1/projects/{project['id']}/computed-metric-results.csv")
+    csv_row = next(csv.DictReader(io.StringIO(exported.text)))
+    assert csv_row["workflow_run_id"] == run["id"]
+    assert csv_row["workflow_node_run_id"] == metric_node["id"]
 
     with app.state.session_factory() as session:
         replay = ComputedMetricService(session).calculate(
@@ -137,7 +143,7 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(client: Tes
             )
 
 
-@pytest.mark.parametrize("failure", ["missing_record", "outside_source"])
+@pytest.mark.parametrize("failure", ["missing_record", "outside_source", "duplicate_binding"])
 def test_workflow_metric_failure_is_persisted_without_result(
     client: TestClient, failure: str
 ) -> None:
@@ -155,8 +161,13 @@ def test_workflow_metric_failure_is_persisted_without_result(
     nodes = cast(list[dict], graph["nodes"])
     if failure == "missing_record":
         nodes[1]["parameters"] = {"record_ids": [str(uuid4()), area["id"]]}
-    else:
+    elif failure == "outside_source":
         nodes[1]["parameters"] = {"record_ids": [organisms["id"]]}
+    else:
+        nodes[2]["parameters"]["bindings"] = {
+            "organisms": organisms["id"],
+            "surveyed_area": organisms["id"],
+        }
 
     run = save_and_queue(client, project["id"], graph)
     app = cast(FastAPI, client.app)
@@ -182,3 +193,5 @@ def test_workflow_metric_failure_is_persisted_without_result(
             )
         )
         assert failed_node is not None
+        if failure == "duplicate_binding":
+            assert "distinct scientific record" in (failed_node.error_message or "")

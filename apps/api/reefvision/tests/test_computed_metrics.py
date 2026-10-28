@@ -22,6 +22,9 @@ def scientific_record(
         "unit": unit,
         "observed_at": "2026-04-03T13:00:00Z",
         "source_kind": "observed",
+        "location": {"latitude": 25, "longitude": -80},
+        "depth_m": 10,
+        "depth_reference": "sea_surface",
         "provenance": {
             "source": "Reef survey",
             "dataset_id": "survey-2026",

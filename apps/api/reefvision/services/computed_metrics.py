@@ -21,6 +21,7 @@ from reefvision.domain.computed_metrics import (
     MetricQuantity,
     compile_expression,
     evaluate_expression,
+    validate_expression_dimensions,
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.domain.scientific_units import UNITS
@@ -57,13 +58,25 @@ def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
+def _csv_text(value: str) -> str:
+    """Keep user-authored names and expressions inert in spreadsheet programs."""
+    return (
+        "'" + value if value.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "\n")) else value
+    )
+
+
 def _definition_payload(
-    *, name: str, expression: str, inputs: list[dict[str, str]], output_unit: str
+    *,
+    name: str,
+    expression: str,
+    inputs: list[dict[str, str]],
+    output_unit: str,
+    formula_version: str,
 ) -> dict[str, Any]:
     return {
         "name": name,
         "expression": expression,
-        "formula_version": FORMULA_ENGINE_VERSION,
+        "formula_version": formula_version,
         "inputs": inputs,
         "output_unit": output_unit,
     }
@@ -87,12 +100,9 @@ class ComputedMetricService:
             compiled = compile_expression(
                 payload.expression, {item.symbol for item in payload.inputs}
             )
-            evaluate_expression(
+            validate_expression_dimensions(
                 compiled,
-                {
-                    item.symbol: MetricQuantity(value=1, unit=_REPRESENTATIVE_UNITS[item.dimension])
-                    for item in payload.inputs
-                },
+                {item.symbol: _REPRESENTATIVE_UNITS[item.dimension] for item in payload.inputs},
                 output_unit=payload.output_unit,
             )
             return compiled
@@ -110,6 +120,7 @@ class ComputedMetricService:
             expression=payload.expression,
             inputs=inputs,
             output_unit=payload.output_unit,
+            formula_version=FORMULA_ENGINE_VERSION,
         )
         row = ComputedMetricDefinition(
             id=str(uuid4()),
@@ -134,6 +145,7 @@ class ComputedMetricService:
                 expression=row.expression,
                 inputs=row.input_spec_json,
                 output_unit=row.output_unit,
+                formula_version=row.formula_version,
             )
         )
         if expected != row.definition_sha256:
@@ -194,12 +206,19 @@ class ComputedMetricService:
         workflow_node_run_id: str | None = None,
     ) -> ComputedMetricResult:
         definition = self.get_definition(project_id, definition_id)
+        if definition.formula_version != FORMULA_ENGINE_VERSION:
+            raise ValidationError(f"Unsupported formula version: {definition.formula_version}")
         specs = [
             ComputedMetricInputSpec.model_validate(item) for item in definition.input_spec_json
         ]
         symbols = {item.symbol for item in specs}
         if set(bindings) != symbols:
             raise ValidationError("Calculation bindings must exactly match definition inputs")
+        if len(set(bindings.values())) != len(bindings):
+            raise ValidationError(
+                "Each input must bind a distinct scientific record; "
+                "correlated bindings are unsupported"
+            )
         if workflow_node_run_id is not None:
             existing = self.session.scalar(
                 select(ComputedMetricResult).where(
@@ -260,8 +279,39 @@ class ComputedMetricService:
         observed_times = [item.observed_at for item in records.values()]
         if any(value != observed_times[0] for value in observed_times[1:]):
             raise ValidationError("Metric inputs must share the exact observation time")
-        compiled = compile_expression(definition.expression, symbols)
+        if len(records) > 1:
+            contexts = [
+                (
+                    item.location,
+                    item.pixel,
+                    item.depth_m,
+                    item.depth_reference,
+                    item.provenance.source,
+                    item.provenance.dataset_id,
+                    item.provenance.source_metadata,
+                    item.provenance.source_url,
+                )
+                for item in records.values()
+            ]
+            if any(context != contexts[0] for context in contexts[1:]) or (
+                not subjects[0]
+                and (contexts[0][0] is None or contexts[0][2] is None or not contexts[0][5])
+            ):
+                raise ValidationError(
+                    "Metric inputs require explicit shared contextual identity: matching location, "
+                    "pixel, depth/reference, source/URL, dataset and station/source metadata; "
+                    "inputs without a subject require known location, depth and dataset"
+                )
+        uncertainty_kinds = {
+            record.uncertainty.kind for record in records.values() if record.uncertainty is not None
+        }
+        if "bound" in uncertainty_kinds or len(uncertainty_kinds) > 1:
+            raise ValidationError(
+                "Unsupported uncertainty kind combination: use one common standard_deviation "
+                "or standard_error kind; bound propagation is not supported"
+            )
         try:
+            compiled = compile_expression(definition.expression, symbols)
             evaluation = evaluate_expression(
                 compiled,
                 {
@@ -301,6 +351,9 @@ class ComputedMetricService:
                     symbol: record.content_sha256 for symbol, record in records.items()
                 },
                 "source_categories": sorted(categories),
+                "uncertainty_kind": (
+                    next(iter(uncertainty_kinds)) if evaluation.uncertainty is not None else None
+                ),
                 "uncertainty_method": (
                     "independent_first_order_root_sum_square"
                     if evaluation.uncertainty is not None
@@ -351,7 +404,13 @@ class ComputedMetricService:
         )
 
     def export_csv(self, project_id: str) -> str:
-        page = self.list_results(project_id, limit=10000, offset=0)
+        self.require_project(project_id)
+        rows = self.session.scalars(
+            select(ComputedMetricResult)
+            .where(ComputedMetricResult.project_id == project_id)
+            .order_by(ComputedMetricResult.created_at, ComputedMetricResult.id)
+            .execution_options(yield_per=500)
+        )
         output = io.StringIO(newline="")
         fieldnames = [
             "result_id",
@@ -363,6 +422,11 @@ class ComputedMetricService:
             "value",
             "unit",
             "uncertainty",
+            "normalized_value",
+            "normalized_unit",
+            "normalized_uncertainty",
+            "workflow_run_id",
+            "workflow_node_run_id",
             "observed_at_utc",
             "subject_json",
             "input_record_ids_json",
@@ -372,18 +436,26 @@ class ComputedMetricService:
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
-        for item in page.items:
+        for row in rows:
+            item = self.result_response(row)
             writer.writerow(
                 {
                     "result_id": str(item.id),
                     "definition_id": str(item.definition_id),
-                    "definition_name": item.definition_name,
-                    "expression": item.expression,
+                    "definition_name": _csv_text(item.definition_name),
+                    "expression": _csv_text(item.expression),
                     "formula_version": item.formula_version,
                     "definition_sha256": item.definition_sha256,
                     "value": item.value,
                     "unit": item.unit,
                     "uncertainty": item.uncertainty,
+                    "normalized_value": item.normalized_value,
+                    "normalized_unit": item.normalized_unit,
+                    "normalized_uncertainty": item.normalized_uncertainty,
+                    "workflow_run_id": str(item.workflow_run_id) if item.workflow_run_id else "",
+                    "workflow_node_run_id": str(item.workflow_node_run_id)
+                    if item.workflow_node_run_id
+                    else "",
                     "observed_at_utc": item.observed_at.isoformat(),
                     "subject_json": json.dumps(item.subject, sort_keys=True),
                     "input_record_ids_json": json.dumps(

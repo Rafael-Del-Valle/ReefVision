@@ -1,4 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { Project } from "../../api/client";
@@ -72,15 +76,31 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
   const [selectedDefinitionId, setSelectedDefinitionId] = useState("");
   const [bindings, setBindings] = useState("");
 
-  const definitionsQuery = useQuery({
+  const definitionsQuery = useInfiniteQuery({
     queryKey: ["computed-metric-definitions", project.id],
-    queryFn: ({ signal }) => getComputedMetricDefinitions(project.id, signal),
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      getComputedMetricDefinitions(project.id, signal, pageParam),
+    getNextPageParam: (lastPage, _pages, offset) =>
+      lastPage.items.length && offset + lastPage.items.length < lastPage.total
+        ? offset + lastPage.items.length
+        : undefined,
   });
-  const resultsQuery = useQuery({
+  const resultsQuery = useInfiniteQuery({
     queryKey: ["computed-metric-results", project.id],
-    queryFn: ({ signal }) => getComputedMetricResults(project.id, signal),
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      getComputedMetricResults(project.id, signal, pageParam),
+    getNextPageParam: (lastPage, _pages, offset) =>
+      lastPage.items.length && offset + lastPage.items.length < lastPage.total
+        ? offset + lastPage.items.length
+        : undefined,
   });
-  const definitions = definitionsQuery.data?.items ?? [];
+  const definitions =
+    definitionsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const results = resultsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const definitionsTotal = definitionsQuery.data?.pages[0]?.total ?? 0;
+  const resultsTotal = resultsQuery.data?.pages[0]?.total ?? 0;
   const activeDefinitionId = selectedDefinitionId || definitions[0]?.id || "";
 
   const createMutation = useMutation({
@@ -240,6 +260,9 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
           <p className="form-help">
             Inputs must have the same exact subject and observation time.
             Verified annotations and unverified predictions cannot be mixed.
+            Without a subject, inputs need matching location, depth, dataset,
+            and source context. Use distinct records and a common standard
+            uncertainty kind; bounds and temperature arithmetic are unsupported.
           </p>
           <button
             type="submit"
@@ -258,6 +281,9 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
 
       <section className="training-content" aria-label="Metric definitions">
         <h3>Metric definitions</h3>
+        <p>
+          Showing {definitions.length} of {definitionsTotal} definitions
+        </p>
         {definitionsQuery.isPending ? (
           <LoadingState title="Loading metric definitions" />
         ) : definitionsQuery.error ? (
@@ -300,10 +326,22 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
             ))}
           </div>
         )}
+        {definitionsQuery.hasNextPage && (
+          <button
+            type="button"
+            disabled={definitionsQuery.isFetchingNextPage}
+            onClick={() => definitionsQuery.fetchNextPage()}
+          >
+            Load more definitions
+          </button>
+        )}
       </section>
 
       <section className="training-content" aria-label="Computed results">
         <h3>Computed results</h3>
+        <p>
+          Showing {results.length} of {resultsTotal} results
+        </p>
         {resultsQuery.isPending ? (
           <LoadingState title="Loading computed results" />
         ) : resultsQuery.error ? (
@@ -312,14 +350,14 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
             message={resultsQuery.error.message}
             onRetry={() => resultsQuery.refetch()}
           />
-        ) : !resultsQuery.data?.items.length ? (
+        ) : !results.length ? (
           <EmptyState
             title="No computed results yet"
             description="Calculate a saved definition."
           />
         ) : (
           <div className="training-card-grid">
-            {resultsQuery.data.items.map((result) => (
+            {results.map((result) => (
               <article
                 className="panel-card training-content"
                 key={result.id}
@@ -372,6 +410,15 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
               </article>
             ))}
           </div>
+        )}
+        {resultsQuery.hasNextPage && (
+          <button
+            type="button"
+            disabled={resultsQuery.isFetchingNextPage}
+            onClick={() => resultsQuery.fetchNextPage()}
+          >
+            Load more results
+          </button>
         )}
       </section>
     </section>
