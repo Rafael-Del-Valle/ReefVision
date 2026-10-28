@@ -430,7 +430,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
             == result["result_checkpoint_path"]
         )
 
-    def retry_completed_node() -> dict[str, Any]:
+    def retry_completed_node(*, run_name: str = "phase10-pose-retrain") -> dict[str, Any]:
         with app.state.session_factory() as session:
             return create_pose_workflow_training_result(
                 session,
@@ -443,7 +443,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
                 },
                 initial_model_payload={"model_id": model_id},
                 parameters={
-                    "run_name": "phase10-pose-retrain",
+                    "run_name": run_name,
                     "device": "cpu",
                     "precision": "fp32",
                     "random_seed": 31,
@@ -457,6 +457,17 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     reused = retry_completed_node()
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
+
+    # Changing the saved node's requested run name cannot relabel or reuse
+    # an already completed scientist-verified training result.
+    with pytest.raises(ValidationError, match="configuration changed"):
+        retry_completed_node(run_name="different-scientific-run")
+
+    with app.state.session_factory() as session:
+        matching_runs = session.scalars(
+            select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+        ).all()
+        assert matching_runs == [result["training_run_id"]]
 
     # Simulate a worker retry while this same persisted child job is still
     # training. Replaying the saved node must not queue a second GPU job.
@@ -642,6 +653,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
             "seed model changed",
         ),
         ("provider_id", "corrupted-provider", "configuration changed"),
+        ("run_name", "corrupted-run-name", "configuration changed"),
         ("resource_limits_json", {"max_gpu_memory_mb": 1024}, "configuration changed"),
         (
             "evaluation_config_json",
