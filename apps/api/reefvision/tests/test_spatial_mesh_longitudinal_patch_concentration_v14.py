@@ -139,7 +139,7 @@ def test_patch_concentration_rejects_contradictory_source_metadata(
         lambda areas: [float("nan"), areas[1]],
         lambda areas: [True, areas[1]],
         lambda areas: [-1.0, areas[1]],
-        lambda areas: list(reversed(areas)),
+        lambda areas: [areas[0] / 2, areas[1] + areas[0] / 2],
         lambda areas: [area * 2 for area in areas],
     ],
 )
