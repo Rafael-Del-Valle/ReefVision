@@ -170,3 +170,53 @@ def test_signed_registry_evidence_survives_workflow_and_rejects_tampering(
     assert EcologyIdentityRegistryResponse.model_validate(unsigned).review_gate == (
         "scientist_review_required"
     )
+
+
+def test_replayed_calibration_values_require_original_source_digest(
+    client: TestClient,
+) -> None:
+    """A valid collection signature cannot conceal modified calibration values."""
+    from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
+        _link_calibration,
+        _prepared_annotation,
+        _save_calibration,
+    )
+
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation).status_code == 201
+    response = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert response.status_code == 200, response.text
+    original = response.json()
+    assert EcologyIdentityRegistryResponse.model_validate(original).review_gate == (
+        "scientist_review_required"
+    )
+
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "succeeded"
+    artifacts = [row for row in workflow["artifacts"] if row["data_type"] == "ecology_identity_registry"]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == original
+
+    for field, forged_value in (
+        ("distance_per_pixel", 0.5),
+        ("unit", "cm"),
+        ("reference_length", 10.0),
+    ):
+        tampered = deepcopy(artifacts[0]["payload_json"])
+        tampered["calibration_evidence_links"][0]["calibration_json"][field] = forged_value
+        with pytest.raises(ValidationError, match="calibration snapshot fingerprint mismatch"):
+            EcologyIdentityRegistryResponse.model_validate(tampered)
+
+    # Old saved artifacts may omit collection signatures, but the per-source
+    # digest still binds the frozen calibration to the linked image bytes.
+    unsigned = deepcopy(original)
+    unsigned.pop("calibration_evidence_sha256")
+    unsigned["calibration_evidence_links"][0]["calibration_json"]["distance_per_pixel"] = 0.5
+    with pytest.raises(ValidationError, match="calibration snapshot fingerprint mismatch"):
+        EcologyIdentityRegistryResponse.model_validate(unsigned)
+
+    substituted = deepcopy(original)
+    substituted["calibration_evidence_links"][0]["calibration_sha256"] = "0" * 64
+    with pytest.raises(ValidationError, match="calibration snapshot fingerprint mismatch"):
+        EcologyIdentityRegistryResponse.model_validate(substituted)
