@@ -24,8 +24,7 @@ def test_branch_preview_uses_saved_graph_without_changing_source(client: TestCli
         for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)):
             path = [(x + offset * dx, y + offset * dy) for offset in range(3)]
             if all(
-                0 <= px < 80 and 0 <= py < 60 and (px, py) not in occupied
-                for px, py in path[1:]
+                0 <= px < 80 and 0 <= py < 60 and (px, py) not in occupied for px, py in path[1:]
             ):
                 proposed_path = path
                 break
@@ -60,9 +59,7 @@ def test_branch_preview_fails_closed_on_disconnected_and_forged_requests(
     client: TestClient,
 ) -> None:
     mask_id = _seed_mask(client)
-    saved = client.post(
-        f"/api/v1/mask-annotations/{mask_id}/skeleton-analyses", json={}
-    )
+    saved = client.post(f"/api/v1/mask-annotations/{mask_id}/skeleton-analyses", json={})
     assert saved.status_code == 200, saved.text
     analysis_id = saved.json()["id"]
     endpoint = f"/api/v1/skeleton-analyses/{analysis_id}/branch-edits/preview"

@@ -21,10 +21,7 @@ def _source(client: TestClient) -> tuple[str, dict[str, Any], list[dict[str, int
     )
     assert response.status_code == 200, response.text
     source = response.json()
-    occupied = {
-        (point["x"], point["y"])
-        for point in source["result"]["final_skeleton_pixels"]
-    }
+    occupied = {(point["x"], point["y"]) for point in source["result"]["final_skeleton_pixels"]}
     proposed = None
     for node in source["result"]["final_graph_nodes"]:
         if node["kind"] != "endpoint":
@@ -33,8 +30,7 @@ def _source(client: TestClient) -> tuple[str, dict[str, Any], list[dict[str, int
         for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)):
             path = [(x + step * dx, y + step * dy) for step in range(3)]
             if all(
-                0 <= px < 80 and 0 <= py < 60 and (px, py) not in occupied
-                for px, py in path[1:]
+                0 <= px < 80 and 0 <= py < 60 and (px, py) not in occupied for px, py in path[1:]
             ):
                 proposed = [{"x": px, "y": py} for px, py in path]
                 break
@@ -102,8 +98,7 @@ def test_saved_branch_preview_matches_api_and_preserves_skeleton(client: TestCli
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200
     definition = next(
-        row for row in registry.json()
-        if row["node_type"] == "ecology_connected_branch_preview"
+        row for row in registry.json() if row["node_type"] == "ecology_connected_branch_preview"
     )
     assert definition["executable"] is True
     assert definition["output_ports"][0]["accepted_types"] == ["connected_branch_preview"]
@@ -119,8 +114,7 @@ def test_saved_branch_preview_matches_api_and_preserves_skeleton(client: TestCli
     detail = _run(client, project_id, graph)
     assert detail["run"]["status"] == "succeeded"
     artifacts = [
-        item for item in detail["artifacts"]
-        if item["data_type"] == "connected_branch_preview"
+        item for item in detail["artifacts"] if item["data_type"] == "connected_branch_preview"
     ]
     assert len(artifacts) == 1
     payload = dict(artifacts[0]["payload_json"])
@@ -145,9 +139,7 @@ def test_saved_branch_preview_matches_api_and_preserves_skeleton(client: TestCli
             "target_port_id": "reviewed",
         }
     )
-    invalid = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph
-    )
+    invalid = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph)
     assert invalid.status_code == 200, invalid.text
     assert invalid.json()["valid"] is False
 
@@ -158,8 +150,7 @@ def test_saved_branch_preview_rejects_cross_project_source(client: TestClient) -
     detail = _run(client, str(other["id"]), _graph(source["id"], points))
     assert detail["run"]["status"] == "failed"
     assert not [
-        item for item in detail["artifacts"]
-        if item["data_type"] == "connected_branch_preview"
+        item for item in detail["artifacts"] if item["data_type"] == "connected_branch_preview"
     ]
 
 
@@ -170,6 +161,5 @@ def test_saved_branch_preview_rejects_forged_verification(client: TestClient) ->
     detail = _run(client, project_id, graph)
     assert detail["run"]["status"] == "failed"
     assert not [
-        item for item in detail["artifacts"]
-        if item["data_type"] == "connected_branch_preview"
+        item for item in detail["artifacts"] if item["data_type"] == "connected_branch_preview"
     ]

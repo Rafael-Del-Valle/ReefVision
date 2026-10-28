@@ -65,9 +65,7 @@ def test_attachment_to_existing_endpoint_keeps_original_edge_identity() -> None:
 
 def test_second_branch_attaches_to_created_junction() -> None:
     nodes, edges = _line()
-    first = preview_connected_branch_addition(
-        nodes, edges, [(3, 2), (3, 3), (3, 4)], edit_id="one"
-    )
+    first = preview_connected_branch_addition(nodes, edges, [(3, 2), (3, 3), (3, 4)], edit_id="one")
     second = preview_connected_branch_addition(
         first.nodes, first.edges, [(3, 2), (4, 3), (5, 4)], edit_id="two"
     )
@@ -101,9 +99,7 @@ def test_existing_graph_ids_must_be_unique() -> None:
 
 def test_reusing_an_edit_id_is_blocked() -> None:
     nodes, edges = _line()
-    first = preview_connected_branch_addition(
-        nodes, edges, [(1, 2), (1, 3)], edit_id="once"
-    )
+    first = preview_connected_branch_addition(nodes, edges, [(1, 2), (1, 3)], edit_id="once")
     with pytest.raises(BranchEditError, match="collides"):
         preview_connected_branch_addition(
             first.nodes, first.edges, [(5, 2), (5, 3)], edit_id="once"

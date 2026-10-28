@@ -209,8 +209,7 @@ def preview_connected_branch_addition(
 
     if root is not None:
         incident_count = sum(
-            (edge.source_node_id == root.id) + (edge.target_node_id == root.id)
-            for edge in edges
+            (edge.source_node_id == root.id) + (edge.target_node_id == root.id) for edge in edges
         )
         root = replace(
             root,
@@ -256,7 +255,8 @@ def preview_connected_branch_addition(
     updated_edges.append(added_edge)
     proposed_tle = total_graph_length_pixels(updated_edges)
     if not isclose(
-        proposed_tle, original_tle + added_edge.node_to_node_length_pixels,
+        proposed_tle,
+        original_tle + added_edge.node_to_node_length_pixels,
         rel_tol=1e-9,
         abs_tol=1e-9,
     ):
