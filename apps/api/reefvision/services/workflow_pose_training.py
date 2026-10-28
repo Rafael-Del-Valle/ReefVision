@@ -499,6 +499,21 @@ def _reused_pose_training_result(
         run.result_checkpoint_path,
     )
 
+    # A valid checksum alone cannot prove this model came from this training
+    # run: a worker could point to another run's perfectly intact weights.
+    project = session.get(Project, run.project_id)
+    if project is None:
+        raise ValidationError("Recovered pose training project is missing")
+    expected_weights_dir = resolve_managed_project_path(
+        settings,
+        f"{project.storage_root}/training/{run.id}/runs/pose/weights",
+    )
+    if (
+        checkpoint.resolve().parent != expected_weights_dir.resolve()
+        or checkpoint.name not in {"best.pt", "last.pt"}
+    ):
+        raise ValidationError("Recovered pose training checkpoint belongs to another output")
+
     if not checkpoint.is_file():
         raise ValidationError("Recovered pose training checkpoint is missing")
 
