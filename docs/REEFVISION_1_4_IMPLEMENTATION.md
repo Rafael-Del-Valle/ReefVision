@@ -674,3 +674,30 @@ tests cover forged topology counts and incomplete area evidence. These
 checks do **not** prove reconstruction accuracy, patch correspondence,
 calibration, organism identity, or coral fragmentation. Measurements
 remain provisional and require human scientific review.
+
+
+## Ranked patch-area Jensen-Shannon reconstruction QC (Track C)
+
+Longitudinal mesh comparison now reports
+`ranked_patch_area_jensen_shannon_divergence_bits` alongside the existing
+ranked total-variation distance. The new metric uses base-2
+Jensen-Shannon divergence of descending, full-mesh connected-patch area
+fractions, padding missing ranks with zero. It is symmetric, bounded
+between 0 (identical ranked area distributions) and 1 bit, and
+invariant to patch index permutations and uniform calibration scaling.
+A zero-area rank contributes zero. Both source distributions must pass
+the existing finite fraction, topology, and complete-mesh area
+consistency checks. Missing legacy fractions yield `null`, never an
+invented zero divergence.
+
+This is a **reconstruction distribution QC diagnostic**, not proof
+that patches correspond, coral branches changed, tissue was lost,
+the same specimen was observed, or registration is accurate.
+A disputed or inconclusive independent reidentification review withholds
+the cross-timepoint divergence while retaining per-observation evidence.
+The existing standalone endpoint and persisted typed
+`mesh_longitudinal_comparison` Workflow Builder node use the same
+calculation. Regression tests cover known values, patch reordering,
+different patch counts, zero divergence, symmetry, legacy absence,
+disputed identity, and saved-workflow artifact parity. Release remains
+blocked on full scientific and installed-Windows acceptance.
