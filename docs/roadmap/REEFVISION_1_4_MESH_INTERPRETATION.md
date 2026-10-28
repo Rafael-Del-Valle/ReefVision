@@ -549,3 +549,26 @@ three import formats, saved-graph execution, and indexed-triangle fallback.
 This is a reproducibility prerequisite for future project-scoped content-addressed
 asset imports, **not** persistent file storage, verified calibration, verified
 source acquisition, or an anatomical coral measurement.
+
+## Geometric patch-area concentration (1.4 development)
+
+The full-resolution mesh preview reports
+`edge_connected_patch_area_concentration_index` as the sum of squared
+surface-area fractions for all edge-connected patches, and
+`area_weighted_effective_patch_count` as its reciprocal. For two
+equal-area patches these values are 0.5 and 2, respectively; for one
+positive-area patch both are 1. A mesh whose total triangle area is zero
+reports null for both rather than inventing an effective patch count.
+Values are dimensionless and invariant to a shared calibration scale.
+
+These statistics characterize how reconstructed **geometric surface area**
+is concentrated across disconnected patches. They are **not** organism
+counts, diversity estimates, completeness scores, or evidence of coral
+reidentification. Patches can represent fragments, reconstruction errors,
+or multiple parts of one colony. Human review and calibration/registration
+provenance remain required before biological interpretation.
+
+The standalone mesh-preview API and the executable, saved
+`mesh_surface_preview` Workflow Builder node use the same measurement
+engine; the corresponding regression test checks exact saved-artifact
+parity, zero-area handling, scale invariance, and deterministic ties.
