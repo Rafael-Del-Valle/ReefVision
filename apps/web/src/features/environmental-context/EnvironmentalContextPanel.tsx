@@ -1,4 +1,5 @@
 import { OceanCurrentWorkspace } from "./OceanCurrentWorkspace";
+import { LunarContextPanel } from "./LunarContextPanel";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -381,6 +382,7 @@ export function EnvironmentalContextPanel({ project }: { project: Project }) {
         )}
       </section>
       <OceanCurrentWorkspace key={project.id} projectId={project.id} />
+      <LunarContextPanel key={project.id} projectId={project.id} />
     </section>
   );
 }
