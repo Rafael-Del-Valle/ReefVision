@@ -32,6 +32,14 @@ class EcologyMeasurementCandidate(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
+    @field_validator("identity_revision", "annotation_revision", mode="before")
+    @classmethod
+    def require_explicit_revision_integer(cls, value: object) -> int:
+        """Preserve exact reviewed identity/annotation revision references."""
+        if type(value) is not int:
+            raise ValueError("Evidence revision must be a positive JSON integer")
+        return value
+
     @field_validator("value", mode="before")
     @classmethod
     def reject_coerced_projected_values(cls, value: object) -> object:
