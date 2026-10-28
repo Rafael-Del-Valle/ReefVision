@@ -200,7 +200,6 @@ def test_existing_segments_cannot_count_a_pixel_step_twice(reverse: bool) -> Non
         pixels=tuple(reversed(original.pixels)) if reverse else original.pixels,
     )
     proposed = [(1, 2), (1, 3)]
+    existing = [original, duplicate]
     with pytest.raises(BranchEditError, match="same skeleton pixel step"):
-        preview_connected_branch_addition(
-            nodes, [original, duplicate], proposed, edit_id="overlap"
-        )
+        preview_connected_branch_addition(nodes, existing, proposed, edit_id="overlap")
