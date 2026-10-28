@@ -1406,3 +1406,21 @@ Backend API regressions cover missing/false/nonboolean confirmation, absence of 
   and no save request. Full Vitest/TypeScript/E2E and installed-Windows GUI
   acceptance remain pending. No migration or new workflow node is appropriate
   for a presentation-only visibility filter.
+
+## 2026-10-28 — v3 binary QC observation integrity (Track D)
+
+- Audited the frozen v3 queue generator and saved Workflow Builder replay checks.
+  The generator emits `unreviewed_state` and `missing_group_metadata` only as
+  binary 0/1 observations, but the replay validator previously accepted
+  fractional raw values between zero and one if re-signed.
+- Versioned v3 replay now rejects fractional values for these two flags.
+  Continuous proportions remain continuous; pending-proposal counts retain
+  their nonnegative integer and saturation rules. Historical unversioned/v2
+  queue compatibility, mutable reviewer decisions and original data are intact.
+- Standalone regressions cover four re-signed false flags and eight valid
+  integer/float binary states. The real saved executable `qc_review_queue`
+  regression rejects both fractional flags before queue reuse, preserves a
+  completed review and succeeds after original evidence is restored.
+- **Development only:** exact-head CI, Windows MSI upgrade/rollback, installed
+  GUI, representative biological-data validation and independent 1.1/1.6
+  Alembic revision-0038 reconciliation remain release blockers.
