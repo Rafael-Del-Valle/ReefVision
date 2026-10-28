@@ -135,6 +135,36 @@ describe("MeshArtifactViewer", () => {
     ).toBeInTheDocument();
   });
 
+  it("rejects contradictory calibration, registration, and identity claims", () => {
+    const invalidArtifacts = [
+      { ...validArtifact, measurement_status: "verified" },
+      { ...validArtifact, provenance: { calibration_verified: true } },
+      { ...validArtifact, provenance: null },
+      { ...validArtifact, preview_coordinate_registration_verified: true },
+      { ...validArtifact, coordinate_registration_verified: true },
+      { ...validArtifact, specimen_identity_verified: true },
+      { ...validArtifact, observation_metadata_verified: true },
+    ];
+    for (const artifact of invalidArtifacts) {
+      expect(parseMeshRenderArtifact(artifact)).toBeNull();
+    }
+    render(
+      <MeshArtifactViewer
+        artifact={{ ...validArtifact, provenance: { calibration_verified: true } }}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "no valid bounded 3D display geometry",
+    );
+  });
+
+  it("preserves display compatibility with legacy artifacts lacking review metadata", () => {
+    const legacy: Record<string, unknown> = { ...validArtifact };
+    delete legacy.provenance;
+    delete legacy.measurement_status;
+    expect(parseMeshRenderArtifact(legacy)).not.toBeNull();
+  });
+
   it("rejects duplicate source-face identities in a sampled mesh", () => {
     expect(
       parseMeshRenderArtifact({
