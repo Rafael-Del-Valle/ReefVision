@@ -552,7 +552,7 @@ it("distinguishes mean current speed from vector-mean flow and cancellation", ()
   expect(summarizeCurrentSlice([])).toBeNull();
 });
 
-it("does not pool different cached acquisitions, processing settings or subjects", () => {
+it("rejects pooling incompatible cache, method and subject", () => {
   const base = component("current_eastward_velocity", 1);
   const firstEast = { ...base, id: "east-a" };
   const firstNorth = component("current_northward_velocity", 0, {
@@ -600,15 +600,21 @@ it("does not pool different cached acquisitions, processing settings or subjects
   }
 });
 
-it("summarizes equivalent processing metadata regardless of JSON key order", () => {
+it("summarizes equivalent processing regardless of JSON key order", () => {
   const base = component("current_eastward_velocity", 1);
   const firstProvenance = {
     ...base.provenance,
-    processing_parameters: { subset: { north: 33, south: 32 }, method: "native" },
+    processing_parameters: {
+      subset: { north: 33, south: 32 },
+      method: "native",
+    },
   };
   const secondProvenance = {
     ...base.provenance,
-    processing_parameters: { method: "native", subset: { south: 32, north: 33 } },
+    processing_parameters: {
+      method: "native",
+      subset: { south: 32, north: 33 },
+    },
   };
   const otherLocation = {
     latitude: 32.6,

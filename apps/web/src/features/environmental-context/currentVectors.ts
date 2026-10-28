@@ -257,7 +257,7 @@ export function summarizeCurrentSlice(
         vector.modelVersion !== first.modelVersion ||
         vector.sourceAcquiredAt !== first.sourceAcquiredAt ||
         vector.sourceUrl !== first.sourceUrl ||
-        vector.processingMethod !== first.processingMethod,
+        vector.processingMethod !== first.processingMethod ||
         vector.aggregationProvenanceKey !== first.aggregationProvenanceKey,
     )
   )
