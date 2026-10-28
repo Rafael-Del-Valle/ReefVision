@@ -180,13 +180,13 @@ def preview_connected_branch_addition(
     if any(point in occupied for point in path[1:]):
         raise BranchEditError("Proposed branch overlaps existing segments beyond its attachment")
 
-    original_tle = total_graph_length_pixels(edges)
+    original_tle = total_graph_length_pixels(tuple(edges))
     if not nodes and not edges:
-        root = _new_endpoint(ids["root"], path[0])
-        tip = _new_endpoint(ids["tip"], path[-1])
-        new_edge = _edge(ids["branch"], root, tip, path)
+        initial_root = _new_endpoint(ids["root"], path[0])
+        initial_tip = _new_endpoint(ids["tip"], path[-1])
+        new_edge = _edge(ids["branch"], initial_root, initial_tip, path)
         return ConnectedBranchPreview(
-            nodes=(root, tip),
+            nodes=(initial_root, initial_tip),
             edges=(new_edge,),
             attached_node_id=None,
             added_edge_id=new_edge.id,
