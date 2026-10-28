@@ -460,4 +460,38 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         source_payload_size_bytes=len(source_bytes) if source_bytes is not None else None,
         source_payload_integrity_checked=expected_sha256 is not None,
     )
+    review = payload.calibration_review
+    if review is not None:
+        # Review evidence is bound to the exact observation and calibration,
+        # not a claim of verified physical scale or authenticated identity.
+        if review.reviewed_geometry_sha256 != result["provenance"]["geometry_sha256"]:
+            raise ValueError("Point-cloud calibration review does not match source geometry")
+        if (
+            review.reviewed_source_payload_sha256 is not None
+            and review.reviewed_source_payload_sha256 != source_sha256
+        ):
+            raise ValueError("Point-cloud calibration review does not match imported source bytes")
+        if source_sha256 is not None and review.reviewed_source_payload_sha256 is None:
+            result["qc_warnings"].append("independent_calibration_review_source_bytes_unbound")
+        if (
+            review.reviewed_specimen_id != payload.specimen_id
+            or review.reviewed_observation_id != payload.observation_id
+            or review.reviewed_observed_at_utc != payload.observed_at_utc
+        ):
+            raise ValueError("Point-cloud calibration review does not match source observation")
+        if (
+            review.reviewed_meters_per_unit != payload.meters_per_unit
+            or review.reviewed_calibration_method != payload.calibration_method
+            or review.reviewed_calibration_evidence.strip() != payload.calibration_evidence.strip()
+            or review.reviewed_relative_scale_uncertainty != payload.relative_scale_uncertainty
+        ):
+            raise ValueError("Point-cloud calibration review does not match calibration inputs")
+        if payload.observed_at_utc is not None and review.reviewed_at_utc < payload.observed_at_utc:
+            raise ValueError("Point-cloud calibration review predates source observation")
+        result["provenance"]["calibration_review_evidence"] = review.model_dump(mode="json")
+        result["qc_warnings"].append("independent_calibration_review_not_verification")
+        if review.independent_review_decision == "disputes_scale":
+            result["qc_warnings"].append("independent_calibration_review_disputes_scale")
+        elif review.independent_review_decision == "inconclusive":
+            result["qc_warnings"].append("independent_calibration_review_inconclusive")
     return result
