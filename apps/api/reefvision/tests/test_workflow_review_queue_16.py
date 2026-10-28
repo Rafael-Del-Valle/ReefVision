@@ -746,6 +746,51 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             )[0]["payload"]["queue_id"]
             == result["queue_id"]
         )
+        # Binary QC flags are yes/no scientific observations. Re-signing
+        # a fractional raw flag with a matching breakdown must fail before
+        # an interrupted saved workflow can reuse the completed review queue.
+        original_signals = dict(saved_item.signal_values_json)
+        original_breakdown = list(saved_item.score_breakdown_json)
+        original_checksums = dict(saved_queue.input_checksums_json)
+        for binary_signal in ("unreviewed_state", "missing_group_metadata"):
+            saved_item.signal_values_json = {
+                **original_signals,
+                binary_signal: 0.5,
+            }
+            saved_item.score_breakdown_json = [
+                {**part, "raw_value": 0.5} if part["signal_id"] == binary_signal else part
+                for part in original_breakdown
+            ]
+            saved_queue.input_checksums_json = {
+                **original_checksums,
+                "item_evidence_sha256": queue_item_evidence_sha256([saved_item]),
+            }
+            session.flush()
+            with pytest.raises(ValidationError, match="snapshot failed integrity"):
+                execute_runtime_adapter(
+                    "qc_review_queue",
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project["id"],
+                    parameters=params,
+                    inputs={"project": [source]},
+                )
+            assert saved_item.review_state == "completed"
+            saved_item.signal_values_json = original_signals
+            saved_item.score_breakdown_json = original_breakdown
+            saved_queue.input_checksums_json = original_checksums
+            session.flush()
+        assert (
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )[0]["payload"]["queue_id"]
+            == result["queue_id"]
+        )
         # The saved workflow must also reject altered scoring provenance,
         # even when the original item scores and scope checksum are intact.
         original_formula_version = saved_queue.formula_version
