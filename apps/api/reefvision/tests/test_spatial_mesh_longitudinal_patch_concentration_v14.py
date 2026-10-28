@@ -81,10 +81,17 @@ def test_patch_concentration_is_permutation_invariant_scale_free_qc() -> None:
 
 
 def test_ranked_profile_is_independent_of_patch_index_order() -> None:
-    before, after = (_preview(payload) for payload in _meshes())
+    early, late = _meshes()
+    before, after = _preview(early), _preview(late)
     baseline = compare_mesh_observations(before, after)
-    before["edge_connected_patch_surface_area_fractions"].reverse()
-    reordered = compare_mesh_observations(before, after)
+    # Permute source vertex indices to reverse the patch order without
+    # tampering with saved artifact metadata or changing the actual geometry.
+    early["vertices"] = early["vertices"][3:] + early["vertices"][:3]
+    reordered_before = _preview(early)
+    assert reordered_before["edge_connected_patch_surface_area_fractions"] == pytest.approx(
+        list(reversed(before["edge_connected_patch_surface_area_fractions"]))
+    )
+    reordered = compare_mesh_observations(reordered_before, after)
     assert reordered["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
     assert (
         reordered["ranked_patch_area_profile_distance"]
