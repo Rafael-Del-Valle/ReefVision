@@ -150,6 +150,9 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
   const result: CurrentVector[] = [];
   for (const [key, group] of groups) {
     if (group.east.length !== 1 || group.north.length !== 1) continue;
+    // A single immutable scientific record cannot independently represent both
+    // velocity components, even when a malformed import assigns both labels.
+    if (group.east[0].id === group.north[0].id) continue;
     const row = group.east[0];
     const east = row.normalized_value;
     const north = group.north[0].normalized_value;
