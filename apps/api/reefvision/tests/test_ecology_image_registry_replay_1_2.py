@@ -67,7 +67,8 @@ def test_legacy_v1_image_signatures_remain_readable_but_not_forgeable(
         {
             key: value
             for key, value in row.items()
-            if key not in (
+            if key
+            not in (
                 "source_metadata_sha256",
                 "source_metadata_evidence_status",
                 "evidence_level",
@@ -94,9 +95,9 @@ def test_legacy_v1_image_signatures_remain_readable_but_not_forgeable(
 
     # A frozen modern link cannot be laundered through the old digest format.
     forged = deepcopy(legacy)
-    forged["image_evidence_links"][0]["source_metadata_sha256"] = (
-        snapshot["image_evidence_links"][0]["source_metadata_sha256"]
-    )
+    forged["image_evidence_links"][0]["source_metadata_sha256"] = snapshot["image_evidence_links"][
+        0
+    ]["source_metadata_sha256"]
     forged["image_evidence_links"][0]["source_metadata_evidence_status"] = "frozen"
     with pytest.raises(ValidationError, match="image evidence fingerprint mismatch"):
         EcologyIdentityRegistryResponse.model_validate(forged)
