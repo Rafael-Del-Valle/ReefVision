@@ -131,8 +131,31 @@ class ReviewQueueItemActorRequest(BaseModel):
         return actor
 
 
+class ReviewQueueItemCompleteRequest(ReviewQueueItemActorRequest):
+    """Explicit human confirmation for individual queue bookkeeping completion.
+
+    This does not verify annotations, predictions, or biological measurements.
+    """
+
+    review_confirmed: StrictBool
+
+    @model_validator(mode="after")
+    def require_manual_review_confirmation(self) -> Self:
+        if not self.review_confirmed:
+            raise ValueError("Single-item completion requires explicit manual-review confirmation")
+        return self
+
+
 class ReviewQueueItemSkipRequest(ReviewQueueItemActorRequest):
     reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        reason = value.strip()
+        if not reason:
+            raise ValueError("A nonempty skip reason is required")
+        return reason
 
 
 class ReviewQueueBulkRequest(BaseModel):
