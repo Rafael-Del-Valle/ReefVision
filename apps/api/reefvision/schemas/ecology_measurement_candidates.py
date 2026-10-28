@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class EcologyMeasurementCandidate(BaseModel):
@@ -30,6 +31,26 @@ class EcologyMeasurementCandidate(BaseModel):
     capture_time_status: Literal["timezone_aware", "missing", "timezone_missing"]
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def reject_coerced_projected_values(cls, value: object) -> object:
+        """Do not reinterpret booleans or strings as calibrated measurements."""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("Projected measurement must be a JSON number, not coerced")
+        return value
+
+    @field_validator("capture_timestamp_utc", mode="before")
+    @classmethod
+    def require_explicit_capture_timestamp(cls, value: object) -> object:
+        """Numeric epochs and date-only strings are not acquisition timestamps."""
+        if value is None or isinstance(value, datetime):
+            return value
+        if not isinstance(value, str) or not re.match(
+            r"^\\d{4}-\\d{2}-\\d{2}[Tt ]", value.strip()
+        ):
+            raise ValueError("Capture time must be an explicit ISO 8601 calendar timestamp")
+        return value
 
     @model_validator(mode="after")
     def consistent_capture_time_evidence(self) -> EcologyMeasurementCandidate:
