@@ -25,6 +25,24 @@
 - Tests cover standalone and saved graph execution, typed artifact persistence, reuse,
   foreign-project rejection, and changed-parameter rejection.
 
+## 2026-10-27 — Saved QC source edge and producer provenance
+
+- Audited the existing executable `qc_review_queue` adapter and Workflow Builder
+  job runner. The runner resolves typed edges, but the adapter's direct/retry
+  path previously checked only the source JSON digest and workflow-run ID.
+- The adapter now also requires a completed `project_source` producer in the
+  same run, the `project` output port, and the exact source artifact ID
+  recorded in the saved QC node's input binding. Valid-looking substituted
+  artifacts cannot reuse an existing researcher-reviewed queue.
+- The real saved executable graph regression corrupts the producer port,
+  producer identity, saved edge binding and producer completion state, verifies
+  fail-closed rejection, restores each record and confirms safe queue reuse.
+  This does not alter scoring, researcher actions, biological observations,
+  database schema or historical reviewer events.
+- Development only: exact-head CI, native Windows MSI/GUI acceptance,
+  representative biological datasets and independent 1.1/1.6 migration
+  reconciliation remain outstanding. No release approval.
+
 ## 1.6 bulk QC triage increment
 
 - A manual `POST /api/v1/review-queues/{queue_id}/items/bulk` endpoint can
