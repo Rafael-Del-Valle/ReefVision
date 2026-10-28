@@ -476,7 +476,8 @@ it("exports selected current vectors with units, source IDs and explicit uncerta
   expect(data).toContain('"not_estimated"');
   // CSV quoting must preserve the exact canonical provenance used to decide
   // whether vectors can be pooled, including JSON quotes and cache identity.
-  const quotedProvenance = `"${vectors[0].aggregationProvenanceKey.replaceAll('"', '""')}"`;
+  const key = vectors[0].aggregationProvenanceKey;
+  const quotedProvenance = `"${key.replaceAll('"', '""')}"`;
   expect(data).toContain(quotedProvenance);
   expect(vectors[0].aggregationProvenanceKey).toContain('"cache"');
   expect(data).toContain('"Model ""A"", =danger"');
