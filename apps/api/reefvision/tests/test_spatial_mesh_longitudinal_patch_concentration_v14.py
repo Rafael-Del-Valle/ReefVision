@@ -132,6 +132,45 @@ def test_patch_concentration_rejects_contradictory_source_metadata(
         compare_mesh_observations(before, after)
 
 
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        lambda areas: areas[:1],
+        lambda areas: [float("nan"), areas[1]],
+        lambda areas: [True, areas[1]],
+        lambda areas: [-1.0, areas[1]],
+        lambda areas: list(reversed(areas)),
+        lambda areas: [area * 2 for area in areas],
+    ],
+)
+@pytest.mark.parametrize("timepoint", [0, 1])
+def test_patch_distribution_rejects_tampered_full_mesh_areas(
+    corruption, timepoint: int
+) -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    record = observations[timepoint]
+    original = record["edge_connected_patch_surface_areas_m2"]
+    record["edge_connected_patch_surface_areas_m2"] = corruption(original)
+    with pytest.raises(ValueError, match="Patch surface areas"):
+        compare_mesh_observations(*observations)
+
+
+def test_patch_distribution_rejects_tampered_full_mesh_total() -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    observations[0]["surface_area_m2"] *= 2
+    with pytest.raises(ValueError, match="Patch surface areas"):
+        compare_mesh_observations(*observations)
+
+
+def test_legacy_patch_fractions_without_area_breakdown_remain_readable() -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    for record in observations:
+        record.pop("edge_connected_patch_surface_areas_m2")
+    result = compare_mesh_observations(*observations)
+    assert result["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+
 def test_missing_legacy_distribution_does_not_invent_zero_change() -> None:
     before, after = (_preview(payload) for payload in _meshes())
     for record in (before, after):
