@@ -6,6 +6,7 @@ export type WorkspaceInspectorView =
   | "interoperability"
   | "environmental_context"
   | "computed_metrics"
+  | "scientific_heatmaps"
   | "models"
   | "training"
   | "classification"
@@ -45,6 +46,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "interoperability",
   "environmental_context",
   "computed_metrics",
+  "scientific_heatmaps",
   "models",
   "training",
   "classification",
@@ -163,6 +165,28 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Workflow Builder",
         target: "workflows",
         description: "Run a saved metric definition in a reproducible graph.",
+      },
+    ],
+  },
+  scientific_heatmaps: {
+    title: "Scientific spatial heatmaps",
+    summary:
+      "Inspect source-pixel object distributions with independent reviewed-box, verified-mask, and provisional-prediction layers.",
+    boundary: "mixed",
+    recordPolicy:
+      "Heatmaps are read-only derived views. Bounding-rectangle centroids determine grid membership. They do not establish union mask coverage, calibrated physical density, or reviewer agreement. Pending predictions are never counted as verified annotations.",
+    actions: [
+      {
+        label: "Images & annotation",
+        target: "gallery",
+        description:
+          "Inspect original imagery and use the canonical annotation workflow.",
+      },
+      {
+        label: "Computed Metrics",
+        target: "computed_metrics",
+        description:
+          "Inspect unit-aware calculations and immutable scientific records.",
       },
     ],
   },

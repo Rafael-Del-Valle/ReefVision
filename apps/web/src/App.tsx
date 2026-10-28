@@ -32,6 +32,7 @@ import { ComputedMetricsPanel } from "./features/computed-metrics/ComputedMetric
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { EnvironmentalContextPanel } from "./features/environmental-context/EnvironmentalContextPanel";
 import { Gallery } from "./features/gallery/Gallery";
+import { ScientificHeatmapsPanel } from "./features/scientific-heatmaps/ScientificHeatmapsPanel";
 import { InteroperabilityWorkspace } from "./features/interoperability/InteroperabilityWorkspace";
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
@@ -89,6 +90,7 @@ type ProjectView =
   | "interoperability"
   | "environmental_context"
   | "computed_metrics"
+  | "scientific_heatmaps"
   | "models"
   | "training"
   | "classification"
@@ -152,6 +154,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Computed Metrics",
         description:
           "Define unit-aware formulas and calculate immutable results from scientific records.",
+      },
+      {
+        id: "scientific_heatmaps",
+        label: "Scientific Heatmaps",
+        description:
+          "Explore reviewed objects, verified masks, and predictions in independent spatial layers.",
       },
     ],
   },
@@ -932,6 +940,12 @@ function ReefVisionMainApp() {
             )}
             {activeView === "computed_metrics" && (
               <ComputedMetricsPanel
+                key={selectedProject.id}
+                project={selectedProject}
+              />
+            )}
+            {activeView === "scientific_heatmaps" && (
+              <ScientificHeatmapsPanel
                 key={selectedProject.id}
                 project={selectedProject}
               />
