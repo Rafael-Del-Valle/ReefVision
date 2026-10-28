@@ -47,7 +47,7 @@ class EcologyMeasurementCandidate(BaseModel):
         if value is None or isinstance(value, datetime):
             return value
         if not isinstance(value, str) or not re.match(
-            r"^\\d{4}-\\d{2}-\\d{2}[Tt ]", value.strip()
+            r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()
         ):
             raise ValueError("Capture time must be an explicit ISO 8601 calendar timestamp")
         return value
