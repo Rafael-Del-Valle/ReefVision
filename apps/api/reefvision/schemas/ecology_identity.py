@@ -152,6 +152,26 @@ class EcologyCalibrationEvidenceRow(BaseModel):
     created_at: datetime
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
 
+    @model_validator(mode="after")
+    def require_frozen_calibration_snapshot(self) -> EcologyCalibrationEvidenceRow:
+        """Bind replayed calibration values to the source image and frozen digest.
+
+        A collection signature alone covers the stored digest, not the
+        calibration_json values. Check those values before a saved workflow
+        can use them as projected measurement provenance.
+        """
+        expected = canonical_json_sha256(
+            {
+                "algorithm_version": "ecology-calibration-source-0001",
+                "image_id": self.image_id,
+                "image_sha256": self.image_sha256,
+                "calibration": self.calibration_json,
+            }
+        )
+        if self.calibration_sha256.lower() != expected:
+            raise ValueError("Ecological calibration snapshot fingerprint mismatch")
+        return self
+
 
 EcologyDesignChangedField = Literal[
     "kind", "parent_colony_key", "experimental_unit_type", "experimental_unit_id"
@@ -542,17 +562,13 @@ class EcologyIdentityRegistryResponse(BaseModel):
             if "identity_history" not in self.model_fields_set:
                 raise ValueError("Ecological design audit requires revision history")
             changes = derive_ecology_design_changes(self.identity_history)
-            status = (
-                "design_changes_require_review" if changes else "no_design_changes_recorded"
-            )
+            status = "design_changes_require_review" if changes else "no_design_changes_recorded"
             if (
                 self.design_history_status != status
                 or self.design_change_count != len(changes)
                 or self.design_change_events != changes
             ):
-                raise ValueError(
-                    "Ecological design-change audit differs from identity history"
-                )
+                raise ValueError("Ecological design-change audit differs from identity history")
 
         if self.cross_unit_parent_audit_status == "unavailable":
             if self.cross_unit_shared_parent_colony_keys or self.cross_unit_parent_details:
@@ -573,28 +589,19 @@ class EcologyIdentityRegistryResponse(BaseModel):
 
         if self.historical_cross_unit_parent_audit_status == "unavailable":
             if self.historical_cross_unit_parent_details:
-                raise ValueError(
-                    "Unavailable ecological historical parent audit contains findings"
-                )
+                raise ValueError("Unavailable ecological historical parent audit contains findings")
         else:
             if "identity_history" not in self.model_fields_set:
-                raise ValueError(
-                    "Ecological historical parent audit requires revision history"
-                )
+                raise ValueError("Ecological historical parent audit requires revision history")
             details = derive_historical_cross_unit_parent_details(self.identity_history)
             status = (
                 "recorded_across_units_requires_review"
                 if details
                 else "no_recorded_cross_unit_parent_reuse"
             )
-            if (
-                self.historical_cross_unit_parent_audit_status != status
-                or (
-                    "historical_cross_unit_parent_details" in self.model_fields_set
-                    and self.historical_cross_unit_parent_details != details
-                )
+            if self.historical_cross_unit_parent_audit_status != status or (
+                "historical_cross_unit_parent_details" in self.model_fields_set
+                and self.historical_cross_unit_parent_details != details
             ):
-                raise ValueError(
-                    "Ecological historical parent audit differs from identity history"
-                )
+                raise ValueError("Ecological historical parent audit differs from identity history")
         return self
