@@ -40,12 +40,16 @@ class EcologyMeasurementCandidate(BaseModel):
             raise ValueError("Projected measurement must be a JSON number, not coerced")
         return value
 
-    @field_validator("image_sha256", "annotation_sha256", "calibration_sha256", mode="before")
+    @field_validator(
+        "image_sha256", "annotation_sha256", "calibration_sha256", mode="before"
+    )
     @classmethod
     def require_sha256_evidence_digest(cls, value: object) -> str:
-        """Reject malformed source digests without changing original provenance casing."""
-        if not isinstance(value, str) or re.fullmatch(r"[0-9a-fA-F]{64}", value) is None:
-            raise ValueError("Ecological source evidence digest must be 64 hexadecimal characters")
+        """Reject malformed digests without changing original provenance casing."""
+        if not isinstance(value, str):
+            raise ValueError("Source SHA-256 must be 64 hexadecimal characters")
+        if re.fullmatch(r"[0-9a-fA-F]{64}", value) is None:
+            raise ValueError("Source SHA-256 must be 64 hexadecimal characters")
         return value
 
     @field_validator("capture_timestamp_utc", mode="before")
