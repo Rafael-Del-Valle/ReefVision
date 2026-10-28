@@ -110,6 +110,28 @@ def test_invalid_review_attribution_fails_schema(field: str, value: object) -> N
         PointCloudPreviewRequest.model_validate(params)
 
 
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("independent_reviewer_id", "OPERATOR-1"),
+        ("independent_review_decision", "verified"),
+        ("independent_review_note", "   "),
+        ("reviewed_geometry_sha256", "not-a-digest"),
+        ("reviewed_meters_per_unit", -0.1),
+        ("reviewed_coordinate_frame_id", "invalid frame label"),
+    ],
+)
+def test_preconstructed_point_cloud_review_mutation_fails_closed(
+    field: str, value: object
+) -> None:
+    request = PointCloudPreviewRequest.model_validate(_reviewed_cloud())
+    assert request.calibration_review is not None
+    setattr(request.calibration_review, field, value)
+    with pytest.raises(PydanticValidationError):
+        preview_point_cloud_from_request(request)
+
+
 def test_review_rejects_changed_ply_bytes_even_if_xyz_is_unchanged() -> None:
     params = _reviewed_cloud()
     changed = deepcopy(params)
