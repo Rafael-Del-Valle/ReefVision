@@ -657,7 +657,8 @@ def create_pose_workflow_training_result(
         or validation_dataset.pose_schema_content_hash != dataset.pose_schema_content_hash
     ):
         raise ValidationError(
-            "Pose validation dataset must use the same landmark schema identity and revision as training truth"
+            "Pose validation dataset must use the same landmark schema identity "
+            "and revision as training truth"
         )
 
     # A truthy string such as "false" must not silently change whether
