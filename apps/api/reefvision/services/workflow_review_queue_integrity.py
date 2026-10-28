@@ -202,6 +202,32 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
     return True
 
 
+
+def _valid_v3_scientific_references(item: Any) -> bool:
+    """Reject re-signed, malformed QC source references without querying live data.
+
+    The queue generator stores canonical, sorted unique ID lists and a
+    lowercase SHA-256 input fingerprint. A digest alone does not prevent a
+    corrupted saved workflow from inventing references to scientific evidence.
+    This contract applies only to new v3 snapshots, not historical queues.
+    """
+    for field in ("label_class_ids_json", "model_ids_json", "related_issue_ids_json"):
+        values = getattr(item, field, None)
+        if (
+            not isinstance(values, list)
+            or any(type(value) is not str or not value or value != value.strip() for value in values)
+            or values != sorted(set(values))
+        ):
+            return False
+    checksum = getattr(item, "input_checksum", None)
+    return (
+        type(checksum) is str
+        and len(checksum) == 64
+        and all(char in "0123456789abcdef" for char in checksum)
+        and item.highest_qc_severity in (None, "info", "warning", "error")
+    )
+
+
 def queue_item_evidence_sha256(items: Sequence[Any]) -> str:
     """Digest immutable scientific queue evidence, excluding mutable reviewer decisions.
 
@@ -368,6 +394,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         if integrity_version == "qc-review-queue-v3" and (
             not _valid_v3_signal_normalization(item)
             or not _valid_v3_scientific_explanation(item)
+            or not _valid_v3_scientific_references(item)
         ):
             raise invalid
         scores[item.image_id] = item.score
