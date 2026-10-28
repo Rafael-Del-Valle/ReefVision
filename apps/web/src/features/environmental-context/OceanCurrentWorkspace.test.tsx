@@ -137,11 +137,9 @@ it("filters unpaired times and separates depth datums", async () => {
     id: "earlier-orphan",
     observed_at: "2026-04-02T00:00:00Z",
   };
+  const selectedTime = "2026-04-03T00:00:00Z";
   const alternateDatum = rows
-    .filter(
-      (row) =>
-        row.observed_at === "2026-04-03T00:00:00Z" && row.depth_m === 5,
-    )
+    .filter((row) => row.observed_at === selectedTime && row.depth_m === 5)
     .map((row) => ({
       ...row,
       id: `alternate-${row.id}`,
@@ -180,9 +178,8 @@ it("filters unpaired times and separates depth datums", async () => {
   });
   expect(screen.getByText("10.000 m/s")).toBeInTheDocument();
   expect(screen.queryByText("5.000 m/s")).not.toBeInTheDocument();
-  expect(screen.getByText(/32.5, -79.5 · 5 m/)).toHaveTextContent(
-    "(chart_datum)",
-  );
+  const datumLabel = screen.getByText(/32.5, -79.5 · 5 m/);
+  expect(datumLabel).toHaveTextContent("(chart_datum)");
 });
 it("explains caches with no QC-compatible current pair", async () => {
   setup([rows[0]]);
