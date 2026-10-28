@@ -257,9 +257,9 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
               <p>
                 Summary export includes the selected time/depth, component
                 record IDs, depth reference, per-component QC, units, cache
-                provenance and known component uncertainties. Derived speed/bearing uncertainty is not
-                estimated. Original scientific records remain the authoritative
-                source.
+                provenance and known component uncertainties. Derived
+                speed/bearing uncertainty is not estimated. Original scientific
+                records remain the authoritative source.
               </p>
               {vectors.length === 0 && (
                 <p role="status">
@@ -363,7 +363,8 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                     {vector.bearing === null
                       ? "Stationary"
                       : `${vector.bearing.toFixed(1)}° toward true north`}{" "}
-                    · {vector.latitude}, {vector.longitude} · {vector.depthM} m ({vector.depthReference})
+                    · {vector.latitude}, {vector.longitude} · {vector.depthM} m
+                    ({vector.depthReference})
                     <br />
                     {vector.sourceKind === "modeled"
                       ? "Modeled"
