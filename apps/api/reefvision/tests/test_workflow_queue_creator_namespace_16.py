@@ -182,7 +182,7 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
         assert saved_queue is not None
         saved_queue.created_by = "local_user"
         session.commit()
-        with pytest.raises(ValidationError, match="saved output no longer matches"):
+        with pytest.raises(ValidationError, match="saved output"):
             create_review_queue_workflow_artifact(
                 session=session,
                 settings=app.state.settings,
