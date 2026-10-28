@@ -3,7 +3,22 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { OceanCurrentWorkspace } from "./OceanCurrentWorkspace";
 vi.mock("../video/OpenStreetMapView", () => ({
-  OpenStreetMapView: () => <div aria-label="Current map" />,
+  OpenStreetMapView: ({
+    currentVectors,
+    showCurrentArrows,
+    showCurrentSpeedHeatmap,
+  }: {
+    currentVectors: { id: string }[];
+    showCurrentArrows: boolean;
+    showCurrentSpeedHeatmap: boolean;
+  }) => (
+    <div
+      aria-label="Current map"
+      data-current-count={currentVectors.length}
+      data-show-arrows={String(showCurrentArrows)}
+      data-show-heatmap={String(showCurrentSpeedHeatmap)}
+    />
+  ),
 }));
 const rows = [0, 1].flatMap((hour) =>
   [5, 10].flatMap((depth) =>
@@ -96,6 +111,28 @@ function setup(datasetRows = rows) {
   return fetch;
 }
 afterEach(() => vi.unstubAllGlobals());
+it("shows a local sample heatmap without forcing current arrows or online tiles", async () => {
+  setup();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  await screen.findByText("5.000 m/s");
+  const map = screen.getByLabelText("Current map");
+  expect(map).toHaveAttribute("data-current-count", "1");
+  expect(map).toHaveAttribute("data-show-heatmap", "false");
+  fireEvent.click(screen.getByLabelText("Show current vectors"));
+  expect(map).toHaveAttribute("data-current-count", "0");
+  fireEvent.click(screen.getByLabelText("Current speed sample heatmap"));
+  expect(map).toHaveAttribute("data-current-count", "1");
+  expect(map).toHaveAttribute("data-show-arrows", "false");
+  expect(map).toHaveAttribute("data-show-heatmap", "true");
+  expect(screen.getByLabelText("Online basemap tiles")).not.toBeChecked();
+  expect(screen.getByText(/No interpolation,/)).toBeInTheDocument();
+});
 it("opens cached currents with time, depth and provenance", async () => {
   const fetch = setup();
   expect(fetch).not.toHaveBeenCalled();

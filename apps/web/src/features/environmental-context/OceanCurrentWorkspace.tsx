@@ -25,6 +25,7 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
   const [time, setTime] = useState("");
   const [depth, setDepth] = useState("");
   const [visible, setVisible] = useState(true);
+  const [speedHeatmap, setSpeedHeatmap] = useState(false);
   const [basemap, setBasemap] = useState(false);
   const [showObjects, setShowObjects] = useState(false);
   const [videoId, setVideoId] = useState("");
@@ -218,6 +219,20 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
               <label>
                 <input
                   type="checkbox"
+                  checked={speedHeatmap}
+                  onChange={(e) => setSpeedHeatmap(e.target.checked)}
+                />
+                Current speed sample heatmap
+              </label>
+              <p>
+                Heatmap circles show QC-compatible sampled current speeds at
+                their recorded coordinates. Circle size is fixed on screen;
+                overlaps are not a density estimate. No interpolation,
+                uncertainty footprint, or travel distance is implied.
+              </p>
+              <label>
+                <input
+                  type="checkbox"
                   checked={basemap}
                   onChange={(e) => setBasemap(e.target.checked)}
                 />
@@ -313,7 +328,9 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
               )}
               <OpenStreetMapView
                 observations={overlay}
-                currentVectors={visible ? vectors : []}
+                currentVectors={visible || speedHeatmap ? vectors : []}
+                showCurrentArrows={visible}
+                showCurrentSpeedHeatmap={speedHeatmap}
                 showBasemap={basemap}
                 mapExtent={extent}
                 showTrackLines={showObjects}

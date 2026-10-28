@@ -13,6 +13,8 @@ import type { GeoReferencedObservationSummary } from "./videoGeoreferencedObserv
 interface OpenStreetMapViewProps {
   observations: GeoReferencedObservationSummary[];
   currentVectors?: CurrentVector[];
+  showCurrentArrows?: boolean;
+  showCurrentSpeedHeatmap?: boolean;
   showBasemap?: boolean;
   mapExtent?: [[number, number], [number, number]];
   activeObservationId?: string | null;
@@ -39,6 +41,8 @@ function observationPosition(
 export function OpenStreetMapView({
   observations,
   currentVectors = NO_CURRENTS,
+  showCurrentArrows = true,
+  showCurrentSpeedHeatmap = false,
   showBasemap = true,
   mapExtent,
   activeObservationId = null,
@@ -179,6 +183,20 @@ export function OpenStreetMapView({
       ),
     ];
     for (const vector of drawableCurrents) {
+      if (showCurrentSpeedHeatmap) {
+        // A sample-centered intensity marker, not an interpolated raster or
+        // an uncertainty footprint. Constant pixel radius avoids implying
+        // a physical area of influence or model-cell resolution.
+        L.circleMarker([vector.latitude, vector.longitude], {
+          radius: 18,
+          color: vectorColor(vector.speed),
+          weight: 0,
+          fillColor: vectorColor(vector.speed),
+          fillOpacity: 0.35,
+          interactive: false,
+        }).addTo(overlays);
+      }
+      if (!showCurrentArrows) continue;
       const arrow = document.createElement("div");
       arrow.textContent = vector.bearing === null ? "•" : "↑";
       arrow.style.cssText = `font-size:28px;line-height:32px;text-align:center;color:${vectorColor(vector.speed)};transform:rotate(${vector.bearing ?? 0}deg);`;
@@ -288,6 +306,8 @@ export function OpenStreetMapView({
   }, [
     activeObservationId,
     currentVectors,
+    showCurrentArrows,
+    showCurrentSpeedHeatmap,
     showBasemap,
     mapExtent,
     observations,
