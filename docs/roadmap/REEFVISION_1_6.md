@@ -18,8 +18,11 @@
   Existing legitimate finite evidence and historical unversioned queue
   compatibility remain unchanged. No live rescoring, scientific annotation
   mutation or automatic human approval is introduced.
-- Added eight standalone regression cases (seven v2 evidence locations and
-  one v3 pending-count case). Saved executable Workflow Builder retry
+- Added nine standalone regression cases (seven v2 evidence locations,
+  one v3 pending-count case and one re-signed aggregate-weight overflow case).
+  The latter guards individually finite JSON integer weights whose combined
+  total cannot be represented as a finite floating-point number. Saved
+  executable Workflow Builder retry
   coverage remains in `test_workflow_review_queue_16.py`; the same
   validator is called by that adapter before any queue reuse.
 - **Acceptance:** exact-new-head Ruff, pytest, mypy and Windows acceptance
