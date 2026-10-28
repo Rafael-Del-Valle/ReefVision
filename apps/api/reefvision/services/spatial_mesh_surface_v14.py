@@ -871,6 +871,12 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         if review.reviewed_geometry_sha256 != result["provenance"]["geometry_sha256"]:
             raise ValueError("Calibration review does not match source geometry")
         if (
+            review.reviewed_specimen_id != payload.specimen_id
+            or review.reviewed_observation_id != payload.observation_id
+            or review.reviewed_observed_at_utc != payload.observed_at_utc
+        ):
+            raise ValueError("Calibration review does not match source observation")
+        if (
             review.reviewed_meters_per_unit != payload.meters_per_unit
             or review.reviewed_calibration_method != payload.calibration_method
             or review.reviewed_calibration_evidence.strip() != payload.calibration_evidence.strip()
