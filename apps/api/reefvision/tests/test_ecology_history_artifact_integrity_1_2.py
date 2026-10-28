@@ -123,9 +123,7 @@ def test_signed_registry_evidence_survives_workflow_and_rejects_tampering(
     original = response.json()
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
-    artifacts = [
-        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
-    ]
+    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == original
     assert EcologyIdentityRegistryResponse.model_validate(original).review_gate == (
