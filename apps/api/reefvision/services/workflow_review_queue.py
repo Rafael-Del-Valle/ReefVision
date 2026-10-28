@@ -117,24 +117,13 @@ def create_review_queue_workflow_artifact(
     # reuse another queue with the same owner. This protects researcher audit
     # history even if an attacker re-signs a substituted artifact payload.
     saved_outputs = node.output_artifact_ids_json
-    if saved_outputs:
-        if not isinstance(saved_outputs, list) or len(saved_outputs) != 1:
-            raise ValidationError("QC review-queue saved output binding is invalid")
-        saved_output = session.get(WorkflowArtifact, saved_outputs[0])
-        if (
-            saved_output is None
-            or saved_output.workflow_run_id != run_id
-            or saved_output.producer_node_run_id != node_run_id
-            or saved_output.producer_port_id != "queue"
-            or saved_output.data_type != "review_queue_reference"
-            or not isinstance(saved_output.payload_json, dict)
-            or saved_output.payload_sha256
-            != canonical_json_sha256(saved_output.payload_json)
-            or saved_output.payload_json.get("project_id") != project_id
-            or existing is None
-            or saved_output.payload_json.get("queue_id") != existing.id
-        ):
-            raise ValidationError("QC review-queue saved output no longer matches its queue")
+    if saved_outputs and (
+        not isinstance(saved_outputs, list)
+        or len(saved_outputs) != 1
+        or type(saved_outputs[0]) is not str
+        or existing is None
+    ):
+        raise ValidationError("QC review-queue saved output binding is invalid")
     if existing is not None:
         config = dict(existing.configuration_json or {})
         if (
@@ -152,23 +141,33 @@ def create_review_queue_workflow_artifact(
     else:
         queue = service.create_queue_for_project(project_id, request)
 
-    return [
-        {
-            "port_id": "queue",
-            "data_type": "review_queue_reference",
-            "payload": {
-                "schema_version": "workflow-qc-review-queue-0001",
-                "project_id": project_id,
-                "queue_id": queue.id,
-                "item_count": queue.item_count,
-                "source_quality_control_run_id": queue.source_quality_control_run_id,
-                "formula_id": queue.formula_id,
-                "formula_version": queue.formula_version,
-                "input_checksums": queue.input_checksums_json,
-                "review_status": "requires_researcher_review",
-                "priority_score_unit": "dimensionless",
-                "workflow_run_id": run_id,
-                "workflow_node_run_id": node_run_id,
-            },
-        }
-    ]
+    payload = {
+        "schema_version": "workflow-qc-review-queue-0001",
+        "project_id": project_id,
+        "queue_id": queue.id,
+        "item_count": queue.item_count,
+        "source_quality_control_run_id": queue.source_quality_control_run_id,
+        "formula_id": queue.formula_id,
+        "formula_version": queue.formula_version,
+        "input_checksums": queue.input_checksums_json,
+        "review_status": "requires_researcher_review",
+        "priority_score_unit": "dimensionless",
+        "workflow_run_id": run_id,
+        "workflow_node_run_id": node_run_id,
+    }
+    if saved_outputs:
+        saved_output = session.get(WorkflowArtifact, saved_outputs[0])
+        if (
+            saved_output is None
+            or saved_output.workflow_run_id != run_id
+            or saved_output.producer_node_run_id != node_run_id
+            or saved_output.producer_port_id != "queue"
+            or saved_output.data_type != "review_queue_reference"
+            or not isinstance(saved_output.payload_json, dict)
+            or saved_output.payload_sha256
+            != canonical_json_sha256(saved_output.payload_json)
+            or saved_output.payload_json != payload
+        ):
+            raise ValidationError("QC review-queue saved output no longer matches its queue")
+
+    return [{"port_id": "queue", "data_type": "review_queue_reference", "payload": payload}]
