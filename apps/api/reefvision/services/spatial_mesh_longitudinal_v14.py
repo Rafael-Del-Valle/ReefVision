@@ -577,21 +577,31 @@ def compare_mesh_observations(
         # All source fractions have been validated as finite and summing to
         # one. Clamp only tiny floating-point overshoot of the [0, 1] bound.
         ranked_patch_area_profile_distance = min(1.0, max(0.0, ranked_patch_area_profile_distance))
+        # An exactly zero float from distinct ranked fractions can reflect
+        # subnormal underflow, not identical reconstructions.
+        if ranked_before != ranked_after and ranked_patch_area_profile_distance == 0.0:
+            ranked_patch_area_profile_distance = None
+            warnings.append("ranked_patch_area_profile_distance_below_numeric_resolution")
         # Jensen-Shannon divergence (base-2, [0, 1]) detects changes in
-        # the ranked area distribution without claiming patch correspondence.
+        # ranked patch areas without claiming correspondence. Computing
+        # 2 * p / (p + q) avoids a zero midpoint when p is subnormal and q=0.
         # Zero-area ranks contribute zero, including padded absent patches.
         ranked_patch_area_jensen_shannon_divergence_bits = fsum(
-            0.5 * early * log2(early / midpoint) if early > 0 else 0.0
+            0.5 * early * log2((2.0 * early) / (early + late)) if early > 0 else 0.0
             for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
-            for midpoint in ((early + late) / 2,)
         ) + fsum(
-            0.5 * late * log2(late / midpoint) if late > 0 else 0.0
+            0.5 * late * log2((2.0 * late) / (early + late)) if late > 0 else 0.0
             for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
-            for midpoint in ((early + late) / 2,)
         )
         ranked_patch_area_jensen_shannon_divergence_bits = min(
             1.0, max(0.0, ranked_patch_area_jensen_shannon_divergence_bits)
         )
+        if (
+            ranked_before != ranked_after
+            and ranked_patch_area_jensen_shannon_divergence_bits == 0.0
+        ):
+            ranked_patch_area_jensen_shannon_divergence_bits = None
+            warnings.append("ranked_patch_area_divergence_below_numeric_resolution")
     if patch_concentration_delta is None:
         warnings.append("patch_area_distribution_comparison_unavailable")
     else:
