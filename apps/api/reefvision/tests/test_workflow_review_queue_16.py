@@ -350,6 +350,55 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             )
         source.payload_sha256 = original_source_digest
         session.flush()
+        # A valid JSON digest alone must not allow substitution of an
+        # unbound or wrongly produced project reference on saved QC retry.
+        for field, bad_value in (
+            ("producer_port_id", "unreviewed_project"),
+            ("producer_node_run_id", persisted_node.id),
+        ):
+            original = getattr(source, field)
+            setattr(source, field, bad_value)
+            session.flush()
+            with pytest.raises(ValidationError, match="producer or binding provenance"):
+                execute_runtime_adapter(
+                    "qc_review_queue",
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project["id"],
+                    parameters=params,
+                    inputs={"project": [source]},
+                )
+            setattr(source, field, original)
+            session.flush()
+        original_binding = list(persisted_node.input_artifact_ids_json)
+        assert original_binding == [source.id]
+        persisted_node.input_artifact_ids_json = []
+        session.flush()
+        with pytest.raises(ValidationError, match="producer or binding provenance"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        persisted_node.input_artifact_ids_json = original_binding
+        producer = session.get(WorkflowNodeRun, source.producer_node_run_id)
+        assert producer is not None and producer.status == "succeeded"
+        producer.status = "pending"
+        session.flush()
+        with pytest.raises(ValidationError, match="producer or binding provenance"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        producer.status = "succeeded"
+        session.flush()
         retry = execute_runtime_adapter(
             "qc_review_queue",
             session=session,
