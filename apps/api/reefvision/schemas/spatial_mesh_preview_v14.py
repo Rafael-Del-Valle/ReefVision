@@ -33,9 +33,7 @@ class MeshCalibrationReviewEvidence(BaseModel):
     # Bind the review to geometry and every scale-bearing calibration input.
     reviewed_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     # Optional byte-exact binding for imported OBJ, PLY, or GLB source files.
-    reviewed_source_payload_sha256: str | None = Field(
-        default=None, pattern=r"^[0-9a-f]{64}$"
-    )
+    reviewed_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     reviewed_specimen_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
