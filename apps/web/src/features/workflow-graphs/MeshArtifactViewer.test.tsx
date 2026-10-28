@@ -81,9 +81,9 @@ describe("MeshArtifactViewer", () => {
       target: { value: "90" },
     });
     expect(polyline?.getAttribute("points")).not.toBe(initial);
-    expect(screen.getByText(/complete provisional mesh-edge/)).toHaveTextContent(
-      "not verified coral branch centerlines",
-    );
+    expect(
+      screen.getByText(/complete provisional mesh-edge/),
+    ).toHaveTextContent("not verified coral branch centerlines");
     expect(JSON.stringify(artifact)).toBe(original);
   });
 
