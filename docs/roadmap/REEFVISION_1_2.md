@@ -3244,3 +3244,27 @@ source authentication or biological growth. Evidence remains
 review, migration reconciliation with 1.1, full backend/frontend/E2E
 acceptance and installed Windows GUI/MSI-CAB checks remain outstanding.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## 2026-10-28 Track B — strict typing repair for ecological evidence replay
+
+Pre-edit exact-head CI at `0f1601008fd350261b38f03aa6e0ed7c16c0bb19`
+completed **16/19** PR-triggered workflows. CI, Pose Workflow Validation,
+and ReefVision 1.0 Acceptance failed at strict mypy, not Ruff. The backend
+reported **17 typing errors** in `schemas/ecology_identity.py`, all caused
+by reused function-scoped loop variables across annotation, calibration,
+identity-history, image-evidence, and historical-parent audit collections.
+Ruff lint and formatting had already passed on that head.
+
+The registry validator now uses distinct, semantically named local variables
+for calibration links, identity revisions, image links, and historical parent
+findings. The validated relationships, snapshot digests, design warnings,
+scientist-review gates, legacy handling and Workflow Builder artifact contract
+are unchanged. This is a strict typing / CI unblock, not a claim of new
+scientific verification or a release-ready transition. Existing standalone
+registry and saved executable `ecology_identity_registry_source` regressions
+remain the behavioral acceptance tests; the exact-head mypy/CI run is the
+static regression gate. Await new-head CI results and continue real-source
+review, longitudinal measurement verification, migration reconciliation with
+1.1 and installed Windows GUI acceptance. **1.2 NOT RELEASE-READY; 1.3 not
+started.**
