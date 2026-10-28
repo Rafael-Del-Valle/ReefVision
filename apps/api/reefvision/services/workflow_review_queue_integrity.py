@@ -142,7 +142,7 @@ def _valid_v3_scientific_explanation(item: Any) -> bool:
         if not isinstance(part, dict):
             return False
         signal_id = part.get("signal_id")
-        if signal_id not in V3_SIGNAL_LABELS:
+        if not isinstance(signal_id, str) or signal_id not in V3_SIGNAL_LABELS:
             return False
         label = V3_SIGNAL_LABELS[signal_id]
         if (
