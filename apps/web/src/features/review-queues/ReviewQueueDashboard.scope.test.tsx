@@ -12,6 +12,7 @@ import {
   getReviewQueues,
   startReviewQueueItem,
   type Project,
+  type ReviewQueueItem,
   type ReviewQueueRecord,
 } from "../../api/client";
 import { ReviewQueueDashboard } from "./ReviewQueueDashboard";
@@ -41,6 +42,36 @@ vi.mock("./ReviewQueueBulkTriage", () => ({
 vi.mock("./ReviewQueueCoordinationPanel", () => ({
   ReviewQueueCoordinationPanel: () => null,
 }));
+
+function reviewItem(id: string, imageId: string): ReviewQueueItem {
+  return {
+    id,
+    review_queue_id: "queue-a",
+    project_id: "project-a",
+    dataset_version_id: null,
+    image_id: imageId,
+    split: null,
+    review_state: "pending",
+    score: 0.6,
+    rank_position: 1,
+    highest_qc_severity: null,
+    label_class_ids_json: [],
+    model_ids_json: [],
+    related_issue_ids_json: [],
+    signal_values_json: {},
+    normalized_signals_json: {},
+    weights_json: {},
+    score_breakdown_json: [],
+    input_checksum: "a".repeat(64),
+    reason_summary: null,
+    skip_reason: null,
+    created_at: "2026-10-23T12:00:00Z",
+    updated_at: "2026-10-23T12:00:00Z",
+    started_at: null,
+    completed_at: null,
+    returned_at: null,
+  };
+}
 
 function queue(id: string): ReviewQueueRecord {
   return {
@@ -191,16 +222,7 @@ describe("ReviewQueueDashboard scope isolation", () => {
 
   it("requires a reviewer label and confirmation before single-item completion", async () => {
     vi.mocked(getReviewQueueItems).mockResolvedValue({
-      items: [
-        {
-          id: "item-1",
-          image_id: "image-1",
-          rank_position: 1,
-          score: 0.6,
-          score_breakdown_json: [],
-          review_state: "pending",
-        },
-      ],
+      items: [reviewItem("item-1", "image-1")],
       total: 1,
       page: 1,
       page_size: 25,
@@ -255,16 +277,7 @@ describe("ReviewQueueDashboard scope isolation", () => {
 
   it("requires a reviewer label and confirmation from the quick-review modal", async () => {
     vi.mocked(getReviewQueueItems).mockResolvedValue({
-      items: [
-        {
-          id: "item-quick",
-          image_id: "image-quick",
-          rank_position: 1,
-          score: 0.6,
-          score_breakdown_json: [],
-          review_state: "pending",
-        },
-      ],
+      items: [reviewItem("item-quick", "image-quick")],
       total: 1,
       page: 1,
       page_size: 25,
