@@ -58,6 +58,22 @@ def create_review_queue_workflow_artifact(
     ):
         raise ValidationError("QC Review Queue requires valid persisted workflow provenance")
 
+    # A matching project ID and payload digest are not sufficient provenance:
+    # bind the input to its completed project-source node, output port and
+    # the exact input artifact recorded for this saved QC node. Otherwise a
+    # valid-looking substitute could be injected on an interrupted retry.
+    source = sources[0]
+    producer = session.get(WorkflowNodeRun, source.producer_node_run_id)
+    if (
+        source.producer_port_id != "project"
+        or producer is None
+        or producer.workflow_run_id != run_id
+        or producer.node_type != "project_source"
+        or producer.status != "succeeded"
+        or node.input_artifact_ids_json != [source.id]
+    ):
+        raise ValidationError("QC Review Queue source has invalid producer or binding provenance")
+
     # The saved node is the authoritative execution contract. An interrupted
     # retry must not silently change its source QC run or review threshold,
     # including explicit None versus an omitted value. Ignore only runtime
