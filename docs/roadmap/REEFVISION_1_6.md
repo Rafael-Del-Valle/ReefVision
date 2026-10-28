@@ -1491,3 +1491,28 @@ Backend API regressions cover missing/false/nonboolean confirmation, absence of 
   applied to an installed 1.6 database without reviewed reconciliation.
 - Release remains **HOLD** until exact-head CI and native installed Windows
   MSI/GUI, upgrade/rollback and representative scientific-data acceptance pass.
+
+
+## 2026-10-28 — Legacy multi-user visibility and foreign 0038 desktop guards
+
+- Audited existing 0012 class-visibility persistence, isolated 1.6 Alembic
+  revisions 0038–0041, desktop migration guard, real migration tests and
+  exact predecessor CI (run 40673702046: backend/frontend both successful).
+- Added a real 0037-to-0041 SQLite upgrade regression using two separate local
+  identity directories and one shared research database. It creates two classes,
+  a project default, an explicitly empty override for researcher A and a
+  different override for researcher B. After upgrade and two desktop migration
+  invocations, both identities, overrides, class IDs and project defaults must
+  remain independent and durable. No metadata.create_all shortcut is used.
+- Added a real desktop migration refusal regression for a 0038 stamp carrying
+  1.1-style scientific/environmental tables. The migration must reject before
+  creating the 1.6 review-events table, preserving the original project,
+  scientific record and revision marker. This is a simulated conflicting
+  schema, not a validated full 1.1-to-1.6 migration.
+- Tests are additive and do not alter the database schema, production APIs,
+  local identity implementation, scientific records or saved Workflow Builder
+  behavior. The existing executable QC workflow remains the review-gated
+  integration for 1.6.
+- **Acceptance remains HOLD:** exact-new-head CI, independent 1.1/1.6
+  migration reconciliation, real MSI upgrade/rollback, installed GUI and
+  representative biological-data testing are still required.
