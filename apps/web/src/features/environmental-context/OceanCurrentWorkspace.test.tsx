@@ -184,7 +184,7 @@ it("filters unpaired times and separates depth datums", async () => {
     "(chart_datum)",
   );
 });
-it("explains when the cached dataset has no QC-compatible current pair", async () => {
+it("explains caches with no QC-compatible current pair", async () => {
   setup([rows[0]]);
   fireEvent.click(
     screen.getByRole("button", { name: "Open ocean current map" }),
