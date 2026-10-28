@@ -46,7 +46,7 @@ def _with_followup_label(
     return _resign_derived_evidence(
         original.model_copy(
             update={
-                "source_fingerprint_contract": "ecology-measurement-candidates-0020",
+                "source_fingerprint_contract": "ecology-measurement-candidates-0021",
                 "candidates": candidates,
                 "sampling_date_qc": qc,
                 "projected_visit_coverage": visits,
@@ -74,10 +74,10 @@ def test_source_linked_aliases_preserve_one_longitudinal_unit_and_csv(
     assert len(result.projected_population_summaries) == 1
     assert result.projected_population_summaries[0].declared_unit_count == 1
     assert len(result.projected_visit_coverage) == 2
-    assert all(
-        row.experimental_unit_type == "tank" for row in result.projected_visit_coverage
-    )
+    assert all(row.experimental_unit_type == "tank" for row in result.projected_visit_coverage)
     assert result.candidates[-1].experimental_unit_type == alias
+    assert result.candidate_report is not None
+    assert result.candidate_report.declared_experimental_unit_count == 1
     assert result.review_gate == "scientist_review_required"
     assert result.evidence_level == "linked_unverified"
 
@@ -95,11 +95,47 @@ def test_alias_correction_changes_fingerprint_without_inflating_replicates(
     same_label = _with_followup_label(original, "tank")
     alias = _with_followup_label(original, "aquarium")
     assert same_label.input_sha256 != alias.input_sha256
-    assert (
-        same_label.projected_population_summaries
-        == alias.projected_population_summaries
-    )
+    assert same_label.projected_population_summaries == alias.projected_population_summaries
     assert alias.projected_population_summaries[0].declared_unit_count == 1
+
+
+def test_historical_raw_label_denominator_remains_exportable(
+    client: TestClient,
+) -> None:
+    """Old signed reports counted aliases separately; never rewrite history."""
+    current = _with_followup_label(_dated_artifact(client), "aquarium")
+    assert current.candidate_report is not None
+    old_report = current.candidate_report.model_copy(
+        update={"declared_experimental_unit_count": 2}
+    )
+    old = _resign_derived_evidence(
+        current.model_copy(
+            update={
+                "source_fingerprint_contract": "ecology-measurement-candidates-0020",
+                "candidate_report": old_report,
+            }
+        )
+    )
+    assert old.candidate_report is not None
+    assert old.candidate_report.declared_experimental_unit_count == 2
+    assert "source_fingerprint_rechecked" in render_ecology_series_qc_csv(old)
+
+
+def test_new_report_rejects_resigned_alias_double_count(
+    client: TestClient,
+) -> None:
+    current = _with_followup_label(_dated_artifact(client), "aquarium")
+    assert current.candidate_report is not None
+    inflated_report = current.candidate_report.model_copy(
+        update={"declared_experimental_unit_count": 2}
+    )
+    forged = _resign_derived_evidence(
+        current.model_copy(update={"candidate_report": inflated_report})
+    )
+    from reefvision.domain.errors import ValidationError
+
+    with pytest.raises(ValidationError, match="report denominators"):
+        render_ecology_series_qc_csv(forged)
 
 
 def test_conflicting_biological_levels_still_exclude_endpoint(
