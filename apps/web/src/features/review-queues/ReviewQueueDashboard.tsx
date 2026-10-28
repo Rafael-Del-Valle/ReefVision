@@ -224,6 +224,9 @@ export function ReviewQueueDashboard({
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_items", selectedQueueId],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_events", selectedQueueId],
+      });
     },
   });
   const completeItem = useMutation({
@@ -232,6 +235,9 @@ export function ReviewQueueDashboard({
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_items", selectedQueueId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_events", selectedQueueId],
       });
     },
   });
@@ -247,6 +253,9 @@ export function ReviewQueueDashboard({
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_items", selectedQueueId],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_events", selectedQueueId],
+      });
     },
   });
   const returnItem = useMutation({
@@ -255,6 +264,9 @@ export function ReviewQueueDashboard({
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_items", selectedQueueId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_events", selectedQueueId],
       });
     },
   });
