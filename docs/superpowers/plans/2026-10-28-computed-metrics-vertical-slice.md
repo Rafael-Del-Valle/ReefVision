@@ -33,11 +33,13 @@
 ### Task 1: Safe unit-aware expression engine
 
 **Files:**
+
 - Create: `apps/api/reefvision/domain/computed_metrics.py`
 - Modify: `apps/api/reefvision/domain/scientific_units.py`
 - Test: `apps/api/reefvision/tests/test_computed_metrics_domain.py`
 
 **Interfaces:**
+
 - Produces: `compile_expression(expression: str, symbols: set[str]) -> CompiledMetricExpression` and `evaluate_expression(compiled, inputs: dict[str, MetricQuantity], output_unit: str) -> MetricEvaluation`.
 - `MetricEvaluation` exposes display and normalized value/unit, dimensional signature, per-symbol derivatives, and propagated uncertainty when every input uncertainty is available.
 
@@ -51,6 +53,7 @@
 ### Task 2: Immutable definitions, results, API, migration, and CSV
 
 **Files:**
+
 - Create: `apps/api/reefvision/db/models/computed_metric.py`
 - Create: `apps/api/reefvision/schemas/computed_metrics.py`
 - Create: `apps/api/reefvision/services/computed_metrics.py`
@@ -63,6 +66,7 @@
 - Modify: `apps/api/reefvision/tests/test_mask_migration_lineage.py`
 
 **Interfaces:**
+
 - Consumes: Task 1 expression compiler/evaluator and existing `ScientificDataService.response` integrity checks.
 - Produces: immutable project-scoped `ComputedMetricDefinition`/`ComputedMetricResult`, create/list/calculate endpoints, and a provenance-complete CSV export.
 
@@ -76,6 +80,7 @@
 ### Task 3: Executable typed Workflow Builder integration
 
 **Files:**
+
 - Modify: `apps/api/reefvision/services/workflow_node_registry.py`
 - Modify: `apps/api/reefvision/services/workflow_execution.py`
 - Create: `apps/api/reefvision/tests/test_workflow_computed_metrics.py`
@@ -83,6 +88,7 @@
 - Modify: `apps/web/src/features/workflow-graphs/workflowTemplates.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 2 definition/result service.
 - Produces: executable `scientific_records_source` (`scientific_record_collection`) and `computed_metric` (`computed_metric_result`) nodes with persisted result IDs and checksummed artifacts.
 
@@ -96,6 +102,7 @@
 ### Task 4: Standalone scientist-facing UI and roadmap evidence
 
 **Files:**
+
 - Create: `apps/web/src/features/computed-metrics/computedMetricsApi.ts`
 - Create: `apps/web/src/features/computed-metrics/ComputedMetricsPanel.tsx`
 - Create: `apps/web/src/features/computed-metrics/ComputedMetricsPanel.test.tsx`
@@ -104,6 +111,7 @@
 - Modify: `docs/roadmap/REEFVISION_1_1_MILESTONE_2.md`
 
 **Interfaces:**
+
 - Consumes: Task 2 API and Task 3 workflow node availability.
 - Produces: project navigation for defining expressions/input dimensions, running explicit record bindings, inspecting immutable result provenance/uncertainty, and exporting CSV.
 
