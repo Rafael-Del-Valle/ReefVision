@@ -72,6 +72,7 @@ export function ReviewQueueDashboard({
   const [qcSeverity, setQcSeverity] = useState("");
   const [reviewState, setReviewState] = useState("");
   const [modelId, setModelId] = useState("");
+  const [singleItemActor, setSingleItemActor] = useState("");
   const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
   const [reviewBelowConfidence, setReviewBelowConfidence] = useState("");
   const [quickReviewItemId, setQuickReviewItemId] = useState<string | null>(
@@ -138,6 +139,7 @@ export function ReviewQueueDashboard({
 
   useEffect(() => {
     // Dataset IDs and QC source runs belong to the prior project too.
+    setSingleItemActor("");
     setScopeType("project");
     setDatasetVersionId("");
     setSelectedRunId("");
@@ -216,7 +218,8 @@ export function ReviewQueueDashboard({
     },
   });
   const startItem = useMutation({
-    mutationFn: (itemId: string) => startReviewQueueItem(itemId),
+    mutationFn: (itemId: string) =>
+      startReviewQueueItem(itemId, singleItemActor.trim()),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_items", selectedQueueId],
@@ -224,7 +227,8 @@ export function ReviewQueueDashboard({
     },
   });
   const completeItem = useMutation({
-    mutationFn: (itemId: string) => completeReviewQueueItem(itemId),
+    mutationFn: (itemId: string) =>
+      completeReviewQueueItem(itemId, singleItemActor.trim()),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_items", selectedQueueId],
@@ -237,7 +241,7 @@ export function ReviewQueueDashboard({
       if (!reason?.trim()) {
         throw new Error("A skip reason is required");
       }
-      return skipReviewQueueItem(itemId, reason.trim());
+      return skipReviewQueueItem(itemId, reason.trim(), singleItemActor.trim());
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
@@ -246,7 +250,8 @@ export function ReviewQueueDashboard({
     },
   });
   const returnItem = useMutation({
-    mutationFn: (itemId: string) => returnReviewQueueItem(itemId),
+    mutationFn: (itemId: string) =>
+      returnReviewQueueItem(itemId, singleItemActor.trim()),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_items", selectedQueueId],
@@ -571,6 +576,17 @@ export function ReviewQueueDashboard({
                 items={items.data.items}
               />
             )}
+            {activeQueueId && (
+              <label>
+                Single-item reviewer label (self-reported, not authenticated)
+                <input
+                  aria-label="Single-item reviewer label"
+                  maxLength={100}
+                  value={singleItemActor}
+                  onChange={(event) => setSingleItemActor(event.target.value)}
+                />
+              </label>
+            )}
             <div className="dashboard-list">
               {items.data?.items.map((item) => (
                 <article key={item.id} className="dashboard-row">
@@ -633,6 +649,7 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
+                        disabled={!singleItemActor.trim() || startItem.isPending}
                         onClick={() => startItem.mutate(item.id)}
                       >
                         Start review
@@ -642,7 +659,17 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
-                        onClick={() => completeItem.mutate(item.id)}
+                        disabled={!singleItemActor.trim() || completeItem.isPending}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "Confirm you personally reviewed this queue item. " +
+                                "Completing a QC queue item does not verify model predictions or annotations.",
+                            )
+                          ) {
+                            completeItem.mutate(item.id);
+                          }
+                        }}
                       >
                         Mark complete
                       </button>
@@ -651,6 +678,7 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
+                        disabled={!singleItemActor.trim() || skipItem.isPending}
                         onClick={() => skipItem.mutate(item.id)}
                       >
                         Skip
@@ -659,6 +687,7 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
+                        disabled={!singleItemActor.trim() || returnItem.isPending}
                         onClick={() => returnItem.mutate(item.id)}
                       >
                         Return to queue
