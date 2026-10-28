@@ -772,7 +772,15 @@ def create_pose_workflow_training_result(
     if seed_model is None and architecture not in {f"yolo11{scale}-pose.yaml" for scale in "nslmx"}:
         raise ValidationError("Random pose training requires a YOLO11 n/s/m/l/x pose architecture")
 
-    run_name = str(parameters.get("run_name") or "workflow-pose-retrain").strip()
+    # An explicit falsy or non-string name must not silently become a
+    # different persisted training identity on a saved workflow replay.
+    requested_run_name = parameters.get("run_name")
+    if requested_run_name is None:
+        run_name = "workflow-pose-retrain"
+    elif not isinstance(requested_run_name, str):
+        raise ValidationError("Pose training run_name must be a string")
+    else:
+        run_name = requested_run_name.strip()
 
     if not run_name:
         raise ValidationError("Pose training run_name cannot be blank")
