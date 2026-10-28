@@ -188,7 +188,7 @@ def test_series_qc_csv_rechecks_complete_source_fingerprint_and_marks_legacy(
     )
     assert response.status_code == 200
     payload = EcologyMeasurementCandidatesResponse.model_validate(response.json())
-    assert payload.source_fingerprint_contract == "ecology-measurement-candidates-0019"
+    assert payload.source_fingerprint_contract == "ecology-measurement-candidates-0021"
     assert payload.candidates
     assert '"true"' not in render_ecology_series_qc_csv(payload)  # CSV booleans are plain text
 

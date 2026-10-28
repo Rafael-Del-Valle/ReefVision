@@ -594,9 +594,18 @@ def test_superseded_ecological_identity_history_in_saved_workflow(client: TestCl
 
 def test_legacy_ecological_registry_artifact_defaults_to_empty_history() -> None:
     from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
+    from reefvision.storage.datasets import canonical_json_sha256
 
+    project_id = "legacy"
+    snapshot_sha256 = canonical_json_sha256(
+        {
+            "schema_version": "ecology-identity-registry-0001",
+            "project_id": project_id,
+            "identities": [],
+        }
+    )
     old = EcologyIdentityRegistryResponse.model_validate(
-        {"project_id": "legacy", "identities": [], "snapshot_sha256": "legacy-hash"}
+        {"project_id": project_id, "identities": [], "snapshot_sha256": snapshot_sha256}
     )
     assert old.identity_history == []
     assert old.history_revision_count == 0

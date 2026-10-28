@@ -3359,3 +3359,15 @@ biological branch identity, calibrated physical length or verified observations.
 Regression tests cover both segment orientations, and existing saved-workflow
 parity/review-gate tests remain applicable. Exact-head CI and Windows scientific
 acceptance are still required; this is not a release-ready declaration.
+
+## CI regression recovery — signed evidence and report contracts (2026-10-28)
+
+The exact-head 1.2 backend suite exposed stale tests after the 0021 candidate
+fingerprint, b12_identity_0005 migration, and fail-closed signed-evidence checks.
+The regression fixtures now sign report algorithm identifiers, use authentic
+empty-identity digests, preserve historical unverified artifacts only when
+modern history-dependent audit claims are absent, and expect early rejection
+of contradictory sampling levels or altered source hashes. These are test
+contract repairs, **not** relaxation of scientific validation or proof of
+Windows/biological acceptance. CI and saved-workflow parity must be checked
+again on the resulting commit before advancing release readiness.

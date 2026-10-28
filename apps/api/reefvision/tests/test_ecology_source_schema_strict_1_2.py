@@ -175,10 +175,10 @@ def test_saved_workflow_source_replay_rejects_coerced_measurements_and_epochs(
 def test_saved_identity_registry_rejects_malformed_linked_evidence_hashes(
     client: TestClient,
 ) -> None:
-    """Typed standalone and persisted registry sources must reject forged hash formats.
+    """Saved sources reject malformed hashes and valid-looking substituted digests.
 
-    These checks validate SHA-256 *syntax*, not the underlying file bytes,
-    scientist review, or authenticity of a replacement well-formed digest.
+    Format validation is not source authentication; signed collections and
+    source joins must also reject changed, well-formed values.
     """
     project_id, _ = _source(client)
     standalone = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
@@ -206,11 +206,11 @@ def test_saved_identity_registry_rejects_malformed_linked_evidence_hashes(
             with pytest.raises(SchemaValidationError):
                 EcologyIdentityRegistryResponse.model_validate(tampered)
 
-        # Case is preserved for historical source provenance; syntax is valid.
+        # Well-formed replacement hashes must not bypass signed provenance.
         mixed_case = deepcopy(saved)
         mixed_case[collection][0][field] = "aB" * 32
-        rehydrated = EcologyIdentityRegistryResponse.model_validate(mixed_case)
-        assert getattr(getattr(rehydrated, collection)[0], field) == "aB" * 32
+        with pytest.raises(SchemaValidationError, match="mismatch"):
+            EcologyIdentityRegistryResponse.model_validate(mixed_case)
 
 
 def test_saved_registry_rejects_cross_project_or_orphaned_evidence(
@@ -259,7 +259,12 @@ def test_saved_registry_rejects_cross_project_or_orphaned_evidence(
             if field == "image_id"
             else ("0" if original[0] != "0" else "1") + original[1:]
         )
-        with pytest.raises(SchemaValidationError, match="source image mismatch"):
+        # The frozen calibration digest can reject altered source bytes
+        # before the cross-link validator reaches the image join.
+        with pytest.raises(
+            SchemaValidationError,
+            match="source image mismatch|calibration snapshot fingerprint mismatch",
+        ):
             EcologyIdentityRegistryResponse.model_validate(tampered)
 
     tampered = deepcopy(saved)

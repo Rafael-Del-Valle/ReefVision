@@ -309,6 +309,8 @@ def _resign_derived_evidence(
         mode="json",
         exclude={"schema_version", "report_sha256", "evidence_level", "review_gate"},
     )
+    # The producer signs the algorithm contract as well as report totals.
+    report_values["algorithm_version"] = "ecology-candidate-report-0001"
     report_values["source_input_sha256"] = new_sha
     signed_report = report.model_copy(
         update={

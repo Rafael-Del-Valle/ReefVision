@@ -79,10 +79,26 @@ def test_missing_history_and_corrupt_revision_chain_fail_closed(
     with pytest.raises(ValidationError, match="latest identities contradict"):
         EcologyIdentityRegistryResponse.model_validate(explicit_empty)
 
-    # Older saved workflows can omit history entirely, but not claim future
-    # identity revisions or nonexistent organisms in their image links.
+    # A modern signed audit cannot be retained after removing its history.
+    modern_without_history = deepcopy(original)
+    for field in ("identity_history", "history_revision_count", "history_sha256"):
+        modern_without_history.pop(field)
+    with pytest.raises(ValidationError, match="design audit requires revision history"):
+        EcologyIdentityRegistryResponse.model_validate(modern_without_history)
+
+    # Genuine historical artifacts omitted both revision history and its
+    # derived audits; their identities still remain signed and unverified.
     legacy = deepcopy(original)
-    for key in ("identity_history", "history_revision_count", "history_sha256"):
+    for key in (
+        "identity_history",
+        "history_revision_count",
+        "history_sha256",
+        "design_history_status",
+        "design_change_count",
+        "design_change_events",
+        "historical_cross_unit_parent_audit_status",
+        "historical_cross_unit_parent_details",
+    ):
         legacy.pop(key)
     assert EcologyIdentityRegistryResponse.model_validate(legacy).review_gate == (
         "scientist_review_required"
@@ -137,8 +153,17 @@ def test_signed_registry_evidence_survives_workflow_and_rejects_tampering(
 
     # A legacy workflow without history still cannot rewrite signed identity.
     legacy = deepcopy(original)
-    for field in ("identity_history", "history_revision_count", "history_sha256"):
-        legacy.pop(field)
+    for key in (
+        "identity_history",
+        "history_revision_count",
+        "history_sha256",
+        "design_history_status",
+        "design_change_count",
+        "design_change_events",
+        "historical_cross_unit_parent_audit_status",
+        "historical_cross_unit_parent_details",
+    ):
+        legacy.pop(key)
     assert EcologyIdentityRegistryResponse.model_validate(legacy).review_gate == (
         "scientist_review_required"
     )

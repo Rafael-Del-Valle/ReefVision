@@ -336,9 +336,9 @@ def test_source_alias_does_not_hide_cross_tank_reassignment() -> None:
 
 def test_source_mixed_biological_levels_fail_closed() -> None:
     records = _dated_alias_series("fragment-A", "tank/site", "tank-1", 501, 2.0)
-    changes = summarize_projected_endpoint_changes(records, summarize_sampling_date_qc(records))
+    # Reject the ambiguous physical unit at the first source-QC boundary.
     with pytest.raises(ValidationError, match="mixes biological sampling levels"):
-        summarize_projected_unit_summaries(records, changes)
+        summarize_sampling_date_qc(records)
 
 
 @pytest.mark.parametrize("technical_type", ["camera tank", "image-tank", "frame aquarium"])

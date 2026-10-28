@@ -14,6 +14,7 @@ from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
 from reefvision.services.ecology_identity_history_export import render_ecology_identity_history_csv
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 
 
@@ -136,8 +137,15 @@ def test_identity_history_csv_rejects_tampered_or_legacy_artifacts(client: TestC
     with pytest.raises(ValidationError, match="latest record differs"):
         render_ecology_identity_history_csv(altered)
 
+    snapshot_sha256 = canonical_json_sha256(
+        {
+            "schema_version": "ecology-identity-registry-0001",
+            "project_id": project_id,
+            "identities": [],
+        }
+    )
     legacy = EcologyIdentityRegistryResponse.model_validate(
-        {"project_id": project_id, "identities": [], "snapshot_sha256": "legacy"}
+        {"project_id": project_id, "identities": [], "snapshot_sha256": snapshot_sha256}
     )
     with pytest.raises(ValidationError, match="fingerprint is missing"):
         render_ecology_identity_history_csv(legacy)
