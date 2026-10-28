@@ -11,9 +11,9 @@ from reefvision.schemas.review_queues import (
     ReviewQueueBulkRequest,
     ReviewQueueBulkResponse,
     ReviewQueueCreateRequest,
+    ReviewQueueItemActorRequest,
     ReviewQueueItemPageResponse,
     ReviewQueueItemResponse,
-    ReviewQueueItemActorRequest,
     ReviewQueueItemSkipRequest,
     ReviewQueueResponse,
 )
