@@ -2917,3 +2917,28 @@ re-signed denominators and existing saved-workflow evidence. Source-linked
 measurements remain `linked_unverified`, with scientist review required.
 Full CI, registered study designs, migrations and installed Windows GUI
 acceptance remain outstanding.
+
+## Strict source-linked measurement and acquisition-time inputs (2026-10-27)
+
+The typed `EcologyMeasurementCandidate` contract now rejects coerced
+calibrated values (Boolean, numeric strings, nulls and structured values)
+rather than silently converting them into apparent measurements. Positive
+finite JSON numbers remain valid. Capture times must be explicit ISO 8601
+calendar timestamps or already typed `datetime` objects; Unix epoch
+numbers, numeric timestamp strings and date-only values are rejected.
+Valid timezone-offset timestamps and genuinely undated historical records
+remain supported, with the existing capture-status consistency checks.
+
+The standalone project-owned candidate API and executable saved
+`ecology_identity_registry_source` Workflow Builder node already share
+this Pydantic evidence schema; no duplicate workflow node or environmental
+store is introduced. Focused tests cover eleven malformed inputs, valid
+offset/undated records, successful API-versus-saved-workflow parity, and
+fail-closed rehydration of tampered persisted source payloads. These
+regressions do **not** establish a scientist-approved measurement record.
+All source-linked projected values remain `linked_unverified`, require
+`scientist_review_required`, and cannot be promoted into immutable verified
+training data. No migration or historical artifact rewrite is introduced.
+Exact-head CI, independent real-data acceptance, migration reconciliation,
+and native Windows installer/GUI tests remain mandatory.
+**ReefVision 1.2 is NOT RELEASE-READY; 1.3 has not started.**
