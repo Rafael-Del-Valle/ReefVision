@@ -572,3 +572,33 @@ The standalone mesh-preview API and the executable, saved
 `mesh_surface_preview` Workflow Builder node use the same measurement
 engine; the corresponding regression test checks exact saved-artifact
 parity, zero-area handling, scale invariance, and deterministic ties.
+
+## Longitudinal patch-area distribution QC (October 28, 2026)
+
+The provisional `mesh_longitudinal_comparison` analysis now recomputes
+scale-invariant patch-area concentration and effective geometric patch count
+from the **complete-mesh** per-patch surface-area fractions at each observation.
+It reports both timepoint descriptors and after-minus-before changes. Because
+patch order and individual patch identity are not assumed to persist between
+surveys, it compares only permutation-invariant aggregate descriptors, never
+patch-to-patch correspondence. Changing the caller's meters-per-unit scale
+cannot by itself change these dimensionless statistics.
+
+The analysis validates that source fractions are finite, between zero and one,
+sum to one, and match the recorded topology patch count when available. If
+stored concentration or effective-count values are supplied, they must agree
+with values recomputed from the fractions; contradictory metadata fails closed.
+Older artifacts without these fields and zero-area surfaces produce null
+comparison values with an explicit availability warning, not fabricated zeros.
+A disputed or inconclusive independently recorded specimen match withholds
+cross-timepoint differences while retaining each original observation's
+reconstruction descriptors and QC. Supporting review never certifies identity.
+
+These differences describe **reconstruction geometry**, not biological
+fragmentation, growth, coral condition, or independent colony counts. They
+cannot correct differences in mesh completeness, segmentation, or source
+registration. The standalone project comparison endpoint and the executable,
+typed, persisted Workflow Builder graph share the same comparison engine;
+`test_spatial_mesh_longitudinal_patch_concentration_v14.py` covers numeric
+examples, malformed source metadata, legacy fallback, disputed identity,
+and saved-workflow artifact parity.
