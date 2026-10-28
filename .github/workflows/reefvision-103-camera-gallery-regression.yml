@@ -1,0 +1,104 @@
+name: ReefVision 1.0.3 camera and gallery regression
+
+# PR #73 is merged; its isolated branch still needs independently verifiable
+# Windows camera-import and Chromium initial-image/gallery acceptance.
+on:
+  push:
+    branches:
+      - develop/reefvision-1.0.3-consolidated
+    paths:
+      - .github/workflows/reefvision-103-camera-gallery-regression.yml
+      - apps/api/reefvision/storage/images.py
+      - apps/api/reefvision/services/images.py
+      - apps/api/reefvision/tests/test_camera_jpeg_regression_103.py
+      - apps/api/reefvision/tests/test_image_import_collision_103.py
+      - apps/web/src/features/gallery/**
+      - apps/web/src/features/annotation-editor/ImageViewport*
+      - apps/web/tests/e2e/gallery-viewport-103.spec.ts
+      - apps/web/package.json
+      - apps/web/package-lock.json
+      - pyproject.toml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reefvision-103-camera-gallery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-camera-import:
+    name: Windows JPEG aliases, EXIF, and immutable originals
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert exact source revision
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) {
+            throw "Checkout SHA $actual does not match workflow SHA $env:GITHUB_SHA"
+          }
+          Write-Output "Camera import test source SHA: $actual"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install application and scientific test dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install opencv-python-headless boto3
+      - name: Verify JPEG camera formats and immutable original storage
+        shell: pwsh
+        env:
+          REEFVISION_ENV: test
+          REEFVISION_BACKGROUND_WORKER_ENABLED: "false"
+        run: |
+          python -m pytest apps/api/reefvision/tests/test_camera_jpeg_regression_103.py apps/api/reefvision/tests/test_image_import_collision_103.py -q
+
+  chromium-initial-image-gallery:
+    name: Chromium first image, wheel navigation, and gallery
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert exact source revision
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "Gallery test source SHA: $GITHUB_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install pinned frontend dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Validate gallery and image viewport regressions
+        working-directory: apps/web
+        run: |
+          npm run typecheck
+          npx vitest run --config vite.config.mjs --configLoader runner src/features/gallery/Gallery.test.tsx src/features/gallery/galleryNavigation.test.ts src/features/annotation-editor/ImageViewport.test.tsx
+      - name: Install Chromium for browser-level acceptance
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+      - name: Build and exercise first image and filmstrip in Chromium
+        working-directory: apps/web
+        run: |
+          npm run ui:build
+          npx playwright test tests/e2e/gallery-viewport-103.spec.ts --project=chromium
+      - name: Preserve browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reefvision-103-gallery-browser-failure
+          path: |
+            apps/web/test-results/**
+            apps/web/playwright-report/**
+          if-no-files-found: ignore
+          retention-days: 14
