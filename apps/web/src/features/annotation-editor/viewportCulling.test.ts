@@ -4,6 +4,7 @@ import {
   cullViewportItems,
   cullViewportMasks,
   intersectsViewport,
+  usesRasterMaskOverlay,
   viewportImageBounds,
 } from "./viewportCulling";
 
@@ -240,43 +241,105 @@ describe("dense-object viewport culling", () => {
     expect(masks[1]).toBe(hiddenDespiteStaleBounds);
   });
 
-  it("never trusts polygon points for raster masks with a missing path", () => {
+  it("matches raster SVG rendering and polygon fallback for missing paths", () => {
     const viewport = { x_min: 0, y_min: 0, x_max: 100, y_max: 100 };
-    const staleOutsidePoints = [
+    const insidePoints = [
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+      { x: 20, y: 20 },
+    ];
+    const outsidePoints = [
       { x: 500, y: 500 },
       { x: 510, y: 500 },
       { x: 510, y: 510 },
     ];
-    const rasterInside = {
-      geometry_kind: "raster_mask",
-      mask_path: null,
-      points: staleOutsidePoints,
+    const staleInsideBounds = {
       x_min: 10,
       y_min: 10,
       x_max: 20,
       y_max: 20,
     };
-    const rasterUnknown = {
-      ...rasterInside,
-      x_min: null,
-      y_min: null,
-      x_max: null,
-      y_max: null,
+    const staleOutsideBounds = {
+      x_min: 500,
+      y_min: 500,
+      x_max: 510,
+      y_max: 510,
     };
-    const rasterOutside = {
-      ...rasterInside,
+    const polygonFallbackVisible = {
+      geometry_kind: "raster_mask",
+      mask_path: null,
+      points: insidePoints,
+      ...staleOutsideBounds,
+    };
+    const polygonFallbackHidden = {
+      geometry_kind: "raster_mask",
+      mask_path: null,
+      points: outsidePoints,
+      ...staleInsideBounds,
+    };
+    const rasterVisible = {
+      geometry_kind: "raster_mask",
+      mask_path: "mask.png",
+      points: outsidePoints,
+      ...staleInsideBounds,
+    };
+    const rasterHidden = {
+      geometry_kind: "raster_mask",
+      mask_path: "mask.png",
+      points: insidePoints,
+      ...staleOutsideBounds,
+    };
+    const invalidPolygon = {
+      ...polygonFallbackHidden,
+      points: [{ x: NaN, y: 0 }, ...outsidePoints.slice(1)],
+    };
+    const masks = [
+      polygonFallbackVisible,
+      polygonFallbackHidden,
+      rasterVisible,
+      rasterHidden,
+      invalidPolygon,
+    ];
+    expect(cullViewportMasks(masks, viewport)).toEqual([
+      polygonFallbackVisible,
+      rasterVisible,
+      invalidPolygon,
+    ]);
+    expect(masks).toHaveLength(5);
+    expect(masks[0]).toBe(polygonFallbackVisible);
+    expect(cullViewportMasks(masks, null)).toBe(masks);
+  });
+
+  it("uses polygon fallback for absent, empty or whitespace raster paths", () => {
+    const viewport = { x_min: 0, y_min: 0, x_max: 100, y_max: 100 };
+    const points = [
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+      { x: 20, y: 20 },
+    ];
+    const outsideBounds = {
       x_min: 200,
       y_min: 200,
       x_max: 220,
       y_max: 220,
     };
-    const masks = [rasterInside, rasterUnknown, rasterOutside];
-    expect(cullViewportMasks(masks, viewport)).toEqual([
-      rasterInside,
-      rasterUnknown,
-    ]);
-    expect(masks).toHaveLength(3);
-    expect(masks[0]).toBe(rasterInside);
-    expect(cullViewportMasks(masks, null)).toBe(masks);
+    for (const mask_path of [null, undefined, "", "  "]) {
+      const fallback = {
+        geometry_kind: "raster_mask",
+        mask_path,
+        points,
+        ...outsideBounds,
+      };
+      expect(usesRasterMaskOverlay(fallback)).toBe(false);
+      expect(cullViewportMasks([fallback], viewport)).toEqual([fallback]);
+    }
+    const raster = {
+      geometry_kind: "raster_mask",
+      mask_path: "mask.png",
+      points,
+      ...outsideBounds,
+    };
+    expect(usesRasterMaskOverlay(raster)).toBe(true);
+    expect(cullViewportMasks([raster], viewport)).toEqual([]);
   });
 });
