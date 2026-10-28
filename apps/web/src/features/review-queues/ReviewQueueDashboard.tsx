@@ -231,7 +231,7 @@ export function ReviewQueueDashboard({
   });
   const completeItem = useMutation({
     mutationFn: (itemId: string) =>
-      completeReviewQueueItem(itemId, singleItemActor.trim()),
+      completeReviewQueueItem(itemId, singleItemActor.trim(), true),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_items", selectedQueueId],
@@ -765,11 +765,22 @@ export function ReviewQueueDashboard({
             setQuickReviewItemId(null);
             onOpenImage(quickReviewItem);
           }}
-          onMarkComplete={() =>
-            completeItem.mutate(quickReviewItem.id, {
-              onSuccess: () => setQuickReviewItemId(null),
-            })
-          }
+          onMarkComplete={() => {
+            if (!singleItemActor.trim()) {
+              window.alert("Enter a reviewer label before completing this QC item.");
+              return;
+            }
+            if (
+              window.confirm(
+                "Confirm you personally reviewed this queue item. " +
+                  "Completing QC does not verify predictions or annotations.",
+              )
+            ) {
+              completeItem.mutate(quickReviewItem.id, {
+                onSuccess: () => setQuickReviewItemId(null),
+              });
+            }
+          }}
           markingComplete={completeItem.isPending}
         />
       )}
