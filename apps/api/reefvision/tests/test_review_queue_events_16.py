@@ -282,6 +282,6 @@ def test_single_item_actor_labels_are_validated_and_persisted(client: TestClient
         "lab-reviewer",
     ]
     assert history.json()["items"][1]["comment"] == "Check branching"
-    assert client.get(f"/api/v1/images/{item['image_id']}/annotations").json()[
-        "annotations"
-    ] == []
+    annotations = client.get(f"/api/v1/images/{item['image_id']}/annotations")
+    assert annotations.status_code == 200, annotations.text
+    assert annotations.json()["annotations"] == []
