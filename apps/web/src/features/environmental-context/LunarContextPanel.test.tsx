@@ -100,7 +100,9 @@ describe("LunarContextPanel", () => {
     ).toBeVisible();
     expect(screen.getByText(RESPONSE.content_sha256)).toBeInTheDocument();
     expect(
-      screen.getByText("Lunar phase alone does not establish local spring or neap tides."),
+      screen.getByText(
+        "Lunar phase alone does not establish local spring or neap tides.",
+      ),
     ).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
     const [url, options] = fetch.mock.calls[0];
