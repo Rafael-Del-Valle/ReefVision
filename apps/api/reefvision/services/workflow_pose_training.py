@@ -1064,6 +1064,31 @@ def create_pose_workflow_training_result(
     ):
         raise ValidationError("Completed pose training child job lineage changed")
 
+    # Validate the persisted run itself before first exposing its checkpoint.
+    # A worker can change training configuration after the job was queued;
+    # replay validation already rejects that drift, so first completion must too.
+    if workflow_run_id and workflow_node_run_id:
+        recovered = _completed_workflow_pose_training_run(
+            session,
+            project_id=project_id,
+            workflow_run_id=workflow_run_id,
+            workflow_node_run_id=workflow_node_run_id,
+            dataset=dataset,
+            validation_dataset=validation_dataset,
+            split_manifest_sha256=split_manifest_sha256,
+            seed_model=seed_model,
+            architecture=architecture,
+            run_name=run_name,
+            notes=notes,
+            device=device,
+            precision=precision,
+            random_seed=random_seed,
+            training_config=training_config,
+            resource_limits=resource_limits,
+        )
+        if recovered is None or recovered.id != run.id:
+            raise ValidationError("Completed pose training run lineage changed")
+
     if not run.result_checkpoint_path:
         raise ValidationError("Completed pose training did not produce a checkpoint")
 
