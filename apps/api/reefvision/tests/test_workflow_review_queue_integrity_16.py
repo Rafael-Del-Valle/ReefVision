@@ -851,3 +851,25 @@ def test_v3_saved_pending_count_rejects_oversized_integer_without_overflow() -> 
     items[0].signal_values_json["pending_proposals"] = 10**400
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
+
+
+def test_v3_saved_aggregate_integer_weights_reject_overflow_without_exception() -> None:
+    """Individually finite JSON integers can still overflow the weight total."""
+    queue, items = _v3_snapshot()
+    weights = dict(queue.configuration_json["weights"])
+    weights["low_mean_confidence"] = 10**308
+    weights["low_min_confidence"] = 10**308
+    queue.configuration_json["weights"] = weights
+    for item in items:
+        item.weights_json = dict(weights)
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+            "integrity_schema_version": "qc-review-queue-v3",
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
