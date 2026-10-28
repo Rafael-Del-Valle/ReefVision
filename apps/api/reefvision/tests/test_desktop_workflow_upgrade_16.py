@@ -15,11 +15,14 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from reefvision.config import Settings
+from reefvision.db.models import ReviewQueue, ReviewQueueItem, WorkflowArtifact, WorkflowNodeRun
 from reefvision.desktop import resolve_alembic_paths, run_pending_migrations
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.main import create_app
+from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.tests.test_annotations import import_one
 
 
@@ -207,3 +210,73 @@ def test_upgraded_desktop_persists_executable_qc_and_manual_review(tmp_path: Pat
         annotations = client.get(f"/api/v1/images/{image_id}/annotations")
         assert annotations.status_code == 200, annotations.text
         assert annotations.json()["annotations"] == []
+
+        # Exercise the *same* persisted Workflow Builder node after a real
+        # desktop migration and process restart. A replay must reuse its
+        # original review queue rather than duplicate scientific evidence or
+        # reset a human researcher's in-progress triage and assignment.
+        app = cast(FastAPI, client.app)
+        with app.state.session_factory() as session:
+            source = session.scalar(
+                select(WorkflowArtifact).where(
+                    WorkflowArtifact.workflow_run_id == run_id,
+                    WorkflowArtifact.data_type == "project_reference",
+                )
+            )
+            qc_node = session.scalar(
+                select(WorkflowNodeRun).where(
+                    WorkflowNodeRun.workflow_run_id == run_id,
+                    WorkflowNodeRun.node_type == "qc_review_queue",
+                )
+            )
+            assert source is not None and qc_node is not None
+            assert qc_node.status == "succeeded"
+            queue = session.get(ReviewQueue, queue_id)
+            saved_item = session.get(ReviewQueueItem, item_id)
+            assert queue is not None and saved_item is not None
+            initial_checksum = dict(queue.input_checksums_json)
+            existing_queue_ids = [
+                row.id
+                for row in session.scalars(
+                    select(ReviewQueue).where(
+                        ReviewQueue.project_id == project_id,
+                        ReviewQueue.created_by == f"workflow:{run_id}:{qc_node.id}",
+                    )
+                )
+            ]
+            assert existing_queue_ids == [queue_id]
+            params = {
+                **dict(qc_node.parameters_json or {}),
+                "__workflow_run_id": run_id,
+                "__workflow_node_run_id": qc_node.id,
+            }
+            for _ in range(2):
+                replay = create_review_queue_workflow_artifact(
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project_id,
+                    parameters=params,
+                    inputs={"project": [source]},
+                )
+                assert len(replay) == 1
+                assert replay[0]["data_type"] == "review_queue_reference"
+                assert replay[0]["payload"]["queue_id"] == queue_id
+                assert replay[0]["payload"]["input_checksums"] == initial_checksum
+                assert saved_item.review_state == "in_progress"
+                assert queue.input_checksums_json == initial_checksum
+            assert [
+                row.id
+                for row in session.scalars(
+                    select(ReviewQueue).where(
+                        ReviewQueue.project_id == project_id,
+                        ReviewQueue.created_by == f"workflow:{run_id}:{qc_node.id}",
+                    )
+                )
+            ] == [queue_id]
+
+        history_after_replay = client.get(events_url)
+        assert history_after_replay.status_code == 200, history_after_replay.text
+        assert history_after_replay.json()["total"] == 3
+        assert history_after_replay.json()["current_assignee"] == "second reviewer"
+        assert history_after_replay.json()["requires_researcher_review"] is True
+        assert client.get(f"/api/v1/images/{image_id}/annotations").json()["annotations"] == []
