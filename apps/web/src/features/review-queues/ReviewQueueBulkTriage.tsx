@@ -84,6 +84,9 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_items", queueId],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_events", queueId],
+      });
     },
     onError: (_, payload) => {
       // A lost response may follow a committed transaction.
