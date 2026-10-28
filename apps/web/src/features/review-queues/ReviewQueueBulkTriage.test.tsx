@@ -85,6 +85,11 @@ describe("ReviewQueueBulkTriage", () => {
         queryKey: ["review_queue_items", "queue-1"],
       }),
     );
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["review_queue_events", "queue-1"],
+      }),
+    );
     expect(screen.getByRole("status").textContent).toContain(
       "scientific review remains required",
     );
