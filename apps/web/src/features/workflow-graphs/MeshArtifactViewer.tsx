@@ -13,6 +13,7 @@ export interface MeshRenderArtifact {
   faceFraction: number;
   areaFraction: number | null;
   relativeScaleUncertainty: number | null;
+  pathPolylines: Vec3[][];
 }
 
 function isVec3(value: unknown): value is Vec3 {
@@ -38,6 +39,38 @@ function isFace(value: unknown, vertexCount: number): value is Face {
         index < vertexCount,
     )
   );
+}
+
+/**
+ * Keep complete selected edge paths visible when the triangle preview is
+ * decimated. Invalid or legacy path evidence is never drawn as a route.
+ */
+function parsePathPolylines(value: unknown): Vec3[][] {
+  if (!Array.isArray(value) || value.length > 16) return [];
+  return value.flatMap((entry) => {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      return [];
+    }
+    const route = entry as Record<string, unknown>;
+    if (route.status !== "connected") return [];
+    const indices = route.path_vertex_indices;
+    const coordinates = route.path_vertices_in_source_frame_m;
+    if (
+      !Array.isArray(indices) ||
+      indices.length < 2 ||
+      indices.length > 2000 ||
+      !indices.every(
+        (index) => typeof index === "number" && Number.isInteger(index) && index >= 0,
+      ) ||
+      new Set(indices).size !== indices.length ||
+      !Array.isArray(coordinates) ||
+      coordinates.length !== indices.length ||
+      !coordinates.every(isVec3)
+    ) {
+      return [];
+    }
+    return [coordinates as Vec3[]];
+  });
 }
 
 /** Validate persisted renderer data before drawing; never infer scientific verification. */
@@ -132,6 +165,7 @@ export function parseMeshRenderArtifact(
       typeof relativeScaleUncertainty === "number"
         ? relativeScaleUncertainty
         : null,
+    pathPolylines: parsePathPolylines(data.surface_edge_paths),
   };
 }
 
@@ -304,6 +338,18 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
       .sort((a, b) => a.depth - b.depth);
   }, [mesh, yaw, pitch, zoom]);
 
+  const routePolylines = useMemo(() => {
+    if (!mesh) return [];
+    return mesh.pathPolylines.map((vertices) =>
+      vertices
+        .map((vertex) =>
+          project(vertex, mesh.cameraTarget, mesh.cameraRadius, yaw, pitch, zoom),
+        )
+        .map((point) => `${point.x},${point.y}`)
+        .join(" "),
+    );
+  }, [mesh, yaw, pitch, zoom]);
+
   if (!mesh) {
     return (
       <p role="status">
@@ -370,7 +416,28 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
             <title>Source triangle {polygon.sourceFaceIndex}</title>
           </polygon>
         ))}
+        {routePolylines.map((points, index) => (
+          <polyline
+            key={index}
+            data-testid="mesh-route-polyline"
+            points={points}
+            fill="none"
+            stroke="#fbbf24"
+            strokeWidth={2.5}
+            vectorEffect="non-scaling-stroke"
+            aria-label={`Provisional mesh edge route ${index + 1}`}
+          >
+            <title>Unverified source-frame mesh edge route {index + 1}</title>
+          </polyline>
+        ))}
       </svg>
+      {routePolylines.length > 0 && (
+        <p className="annotation-helper">
+          Displaying {routePolylines.length} complete provisional mesh-edge
+          route(s), including vertices omitted from sampled triangles. Routes
+          are not verified coral branch centerlines or registered positions.
+        </p>
+      )}
       <p className="annotation-helper" aria-live="polite">
         {selectedVertices !== null && selectedSourceFaceIndex !== null
           ? `Source triangle ${selectedSourceFaceIndex} (unverified source frame): ${formatFaceVertices(selectedVertices)}. Selected preview triangle area: ${formatPreviewTriangleArea(selectedVertices)}. Scale-only triangle area interval: ${formatPreviewTriangleScaleInterval(selectedVertices, mesh.relativeScaleUncertainty)}. Selected preview triangle edge lengths (1–2, 2–3, 3–1): ${formatPreviewTriangleEdges(selectedVertices)}. Scale-only edge length intervals: ${formatPreviewTriangleEdgeIntervals(selectedVertices, mesh.relativeScaleUncertainty)} (caller-supplied scale uncertainty only; calibration and reconstruction uncertainty unverified). Preview vertices only; triangle edges are not anatomical branch lengths or verified surface measurements.`
