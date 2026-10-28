@@ -93,14 +93,25 @@ def create_review_queue_workflow_artifact(
         created_by=f"workflow:{run_id}:{node_run_id}",
     )
     service = ReviewQueueService(session, settings)
-    existing = session.scalar(
+    # A saved node owns at most one immutable QC evidence snapshot. A
+    # corrupted or previously raced database may contain two queues with the
+    # same workflow owner. Never select an arbitrary first queue: that could
+    # replay a different scientific snapshot and conceal reviewer history.
+    # Preserve both records for explicit researcher-led reconciliation.
+    matching_queues = session.scalars(
         select(ReviewQueue)
         .where(
             ReviewQueue.project_id == project_id,
             ReviewQueue.created_by == request.created_by,
         )
-        .limit(1)
-    )
+        .limit(2)
+    ).all()
+    if len(matching_queues) > 1:
+        raise ValidationError(
+            "QC review-queue retry has ambiguous duplicate workflow-owned queues; "
+            "preserve both records for manual reconciliation"
+        )
+    existing = matching_queues[0] if matching_queues else None
     if existing is not None:
         config = dict(existing.configuration_json or {})
         if (
