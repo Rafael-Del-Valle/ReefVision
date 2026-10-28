@@ -9,7 +9,9 @@ import pytest
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.review_queues import ReviewScoreWeights
+from reefvision.services.quality_control import SEVERITY_SCORES
 from reefvision.services.workflow_review_queue_integrity import (
+    V3_QC_SEVERITY_SCORES,
     V3_SIGNAL_LABELS,
     V3_SUPPORTED_SIGNALS,
     queue_item_evidence_sha256,
@@ -629,6 +631,10 @@ def _v3_snapshot():
         original = item.normalized_signals_json["signal"]
         raw = {signal: 0.0 for signal in V3_SUPPORTED_SIGNALS}
         raw["low_mean_confidence"] = original
+        if item.highest_qc_severity is not None:
+            raw["unresolved_qc_severity"] = V3_QC_SEVERITY_SCORES[item.highest_qc_severity]
+        else:
+            item.related_issue_ids_json = []
         item.weights_json = dict(weights)
         item.signal_values_json = raw
         item.normalized_signals_json = dict(raw)
@@ -672,6 +678,7 @@ def _v3_snapshot():
 def test_v3_scientific_signal_contract_matches_queue_generator_schema():
     """The frozen v3 formula must enumerate every generated scoring input."""
     assert set(ReviewScoreWeights.model_fields) == V3_SUPPORTED_SIGNALS
+    assert SEVERITY_SCORES == V3_QC_SEVERITY_SCORES
     queue, items = _v3_snapshot()
     validate_saved_queue_snapshot(queue, items)
     items[0].review_state = "completed"
@@ -725,6 +732,40 @@ def test_v3_rejects_resigned_noncanonical_scientific_references(
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
     assert items[0].review_state == "in_progress"
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    ["missing_issue", "missing_severity", "wrong_severity", "wrong_raw_severity"],
+)
+def test_v3_rejects_resigned_inconsistent_qc_severity(corruption: str) -> None:
+    """An unresolved QC issue and its severity score are one scientific observation."""
+    queue, items = _v3_snapshot()
+    item = items[0]
+    item.review_state = "in_progress"
+    if corruption == "missing_issue":
+        item.related_issue_ids_json = []
+    elif corruption == "missing_severity":
+        item.highest_qc_severity = None
+        item.signal_values_json["unresolved_qc_severity"] = 0.0
+        item.normalized_signals_json["unresolved_qc_severity"] = 0.0
+        for part in item.score_breakdown_json:
+            if part["signal_id"] == "unresolved_qc_severity":
+                part["raw_value"] = 0.0
+                part["normalized_value"] = 0.0
+    elif corruption == "wrong_severity":
+        item.highest_qc_severity = "error"
+    else:
+        item.signal_values_json["unresolved_qc_severity"] = 0.3
+        item.normalized_signals_json["unresolved_qc_severity"] = 0.3
+        for part in item.score_breakdown_json:
+            if part["signal_id"] == "unresolved_qc_severity":
+                part["raw_value"] = 0.3
+                part["normalized_value"] = 0.3
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+    assert item.review_state == "in_progress"
 
 
 def test_v2_reference_compatibility_is_not_retroactively_reinterpreted() -> None:
