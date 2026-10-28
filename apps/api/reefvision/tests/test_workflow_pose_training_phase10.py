@@ -40,7 +40,13 @@ from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_pose_active_learning_phase8 import (
+    _build_temporal,
+    _first_class,
+    _track,
+)
 from reefvision.tests.test_pose_training_datasets_phase9 import (
+    _persist_test_pose_schema,
     _verified_round,
 )
 
@@ -1079,6 +1085,91 @@ def test_pose_validation_rejects_second_verified_round_from_same_video(
             parameters={"training_config": {"epochs": 1}},
             processor=_fake_pose_processor,
         )
+
+
+def test_pose_validation_rejects_distinct_schema_identity_with_matching_content(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze two scientist-reviewed datasets from independent source videos.
+    # Equal landmark definitions are not enough when their schema IDs differ.
+    project, training = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    imported = client.post(
+        f"/api/v1/projects/{project['id']}/imports/videos",
+        files={
+            "file": (
+                "independent-validation.mp4",
+                io.BytesIO(b"independent-pose-validation-video"),
+                "video/mp4",
+            )
+        },
+    )
+    assert imported.status_code == 201, imported.text
+    video_id = imported.json()["id"]
+    track = _track(client, str(video_id), _first_class(project))
+    _build_temporal(client, str(track["id"]))
+    _persist_test_pose_schema(
+        client,
+        project_id=str(project["id"]),
+        track_id=str(track["id"]),
+    )
+
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/pose-active-learning-rounds",
+        json={
+            "name": "Independent validation with distinct schema identity",
+            "video_id": video_id,
+            "track_ids": [track["id"]],
+            "selection_unit": "frame",
+            "requested_size": 1,
+            "minimum_frame_spacing": 0,
+        },
+    )
+    assert created.status_code == 201, created.text
+    round_id = created.json()["id"]
+    candidates = client.get(f"/api/v1/pose-active-learning-rounds/{round_id}/candidates")
+    assert candidates.status_code == 200, candidates.text
+    reviewed = client.put(
+        f"/api/v1/pose-active-learning-candidates/{candidates.json()[0]['id']}/review",
+        json={"action": "verify", "reviewed_by": "scientist"},
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    frozen = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_id}/training-dataset",
+        json={"name": "Independent validation truth", "created_by": "scientist"},
+    )
+    assert frozen.status_code == 201, frozen.text
+    validation = frozen.json()
+    assert training["pose_schema_content_hash"] == validation["pose_schema_content_hash"]
+    assert training["pose_schema_id"] != validation["pose_schema_id"]
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="same landmark schema identity and revision"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": training["id"],
+                "manifest_sha256": training["manifest_sha256"],
+            },
+            validation_dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": validation["id"],
+                "manifest_sha256": validation["manifest_sha256"],
+            },
+            parameters={"training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
 
 
 def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
