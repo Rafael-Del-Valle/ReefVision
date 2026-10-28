@@ -16,8 +16,10 @@ Connected routes also export `path_vertices_in_source_frame_m`, an ordered
 calibrated XYZ polyline corresponding one-to-one to `path_vertex_indices`.
 These coordinates use the original, unregistered mesh axes and include all
 traversed route vertices even when the display mesh is decimated. The polyline
-can support read-only inspection without treating the sampled renderer as
-scientific geometry. Disconnected and unreferenced routes return null; legacy
+are rendered as read-only polylines over the interactive mesh preview,
+including vertices omitted from sampled triangles. Invalid or legacy route
+coordinate evidence is not drawn; the sampled mesh remains viewable. Neither
+route display nor triangle decimation changes full-mesh measurements. Disconnected and unreferenced routes return null; legacy
 artifacts without this field remain readable. Coordinates are not a verified
 coral centerline, georeferenced track, or biological branch identity.
 
