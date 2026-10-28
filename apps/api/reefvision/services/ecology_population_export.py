@@ -133,12 +133,16 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
         ):
             raise ValidationError("Ecological population CSV invalid review blockers")
         if ("missing_parent_colony" in blockers) != bool(missing):
-            raise ValidationError("Ecological population CSV missing-parent review blocker mismatch")
+            raise ValidationError(
+                "Ecological population CSV missing-parent review blocker mismatch"
+            )
         if (
             "independence_not_authenticated" not in blockers
             or ("single_declared_unit" in blockers) != (declared == 1)
         ):
-            raise ValidationError("Ecological population CSV independent-unit review blockers mismatch")
+            raise ValidationError(
+                "Ecological population CSV independent-unit review blockers mismatch"
+            )
     else:
         raise ValidationError("Ecological population CSV row type is invalid")
     writer.writerow(values)
