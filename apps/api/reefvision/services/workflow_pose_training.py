@@ -863,12 +863,24 @@ def create_pose_workflow_training_result(
     if raw_seed is None:
         random_seed = None
     elif isinstance(raw_seed, bool) or not (
-        isinstance(raw_seed, int) or (isinstance(raw_seed, str) and raw_seed.strip().isdigit())
+        isinstance(raw_seed, int)
+        or (
+            isinstance(raw_seed, str)
+            and raw_seed.strip().isascii()
+            and raw_seed.strip().isdecimal()
+        )
     ):
         raise ValidationError("Pose training random_seed must be a non-negative integer")
     else:
-        random_seed = int(raw_seed)
-        if random_seed < 0:
+        # SQLite stores signed 64-bit integers. Reject out-of-range seeds
+        # before creating a run instead of failing at persistence time.
+        try:
+            random_seed = int(raw_seed)
+        except ValueError as exc:
+            raise ValidationError(
+                "Pose training random_seed must be a non-negative integer"
+            ) from exc
+        if not 0 <= random_seed <= (2**63 - 1):
             raise ValidationError("Pose training random_seed must be a non-negative integer")
 
     resource_limits = parameters.get("resource_limits")
