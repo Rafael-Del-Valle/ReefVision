@@ -84,7 +84,7 @@ class EcologyImageEvidenceRow(BaseModel):
     organism_key: str
     identity_revision: int
     image_id: str
-    image_sha256: str
+    image_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
     # Optional defaults keep earlier saved Workflow Builder registry artifacts readable.
     source_metadata_sha256: str | None = None
     source_metadata_evidence_status: Literal["frozen", "legacy_unfrozen"] = "legacy_unfrozen"
@@ -122,7 +122,7 @@ class EcologyAnnotationEvidenceRow(BaseModel):
     annotation_kind: Literal["box", "mask"]
     annotation_id: str
     annotation_revision: int
-    annotation_sha256: str
+    annotation_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
     reason: str
     created_at: datetime
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
@@ -144,9 +144,9 @@ class EcologyCalibrationEvidenceRow(BaseModel):
     project_id: str
     annotation_evidence_id: str
     image_id: str
-    image_sha256: str
+    image_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
     calibration_json: dict[str, Any]
-    calibration_sha256: str
+    calibration_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
     reason: str
     created_at: datetime
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
