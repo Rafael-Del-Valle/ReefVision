@@ -78,14 +78,13 @@ describe("LunarContextPanel", () => {
   });
 
   it("displays explicit UTC phase and provenance", async () => {
-    const fetch = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async () =>
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
         new Response(JSON.stringify(RESPONSE), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),
-      );
+    );
     renderPanel();
     fireEvent.change(screen.getByLabelText("Observation time (UTC)"), {
       target: { value: TIMESTAMP },
