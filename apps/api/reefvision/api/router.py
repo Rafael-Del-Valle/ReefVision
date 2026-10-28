@@ -50,6 +50,7 @@ from reefvision.api.routes.sam2_models import router as sam2_models_router
 from reefvision.api.routes.sam_image_proposals import router as sam_image_proposals_router
 from reefvision.api.routes.scale_label_ocr import router as scale_label_ocr_router
 from reefvision.api.routes.scientific_data import router as scientific_data_router
+from reefvision.api.routes.scientific_heatmaps import router as scientific_heatmaps_router
 from reefvision.api.routes.segmentation_deployment import router as segmentation_deployment_router
 from reefvision.api.routes.segmentation_evaluation_queue import (
     router as segmentation_evaluation_queue_router,
@@ -70,6 +71,7 @@ install_workflow_v1_extensions()
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(environmental_context_router)
 api_router.include_router(scientific_data_router)
+api_router.include_router(scientific_heatmaps_router)
 api_router.include_router(computed_metrics_router)
 api_router.include_router(geographic_movement_analytics_router)
 api_router.include_router(health_router)
