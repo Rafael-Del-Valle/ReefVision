@@ -247,7 +247,8 @@ def test_population_csv_rejects_resigned_or_legacy_unreviewed_science(
         {"mean_unit_percent_change": 12345.0},
         {"experimental_unit_ids": ["tank-A", "forged-tank-B"]},
         {"parent_colony_keys": ["forged-parent"]},
-        {"units_missing_parent_colony": ["tank-A"]},
+        {"units_missing_parent_colony": []},
+        {"units_missing_parent_colony": ["forged-tank-B"]},
     ],
 )
 def test_population_csv_rejects_resigned_forged_replication_evidence(
@@ -265,16 +266,68 @@ def test_population_csv_rejects_resigned_forged_replication_evidence(
     forged = _resign_derived_evidence(
         source.model_copy(update={"projected_population_summaries": [altered_summary]})
     )
-    # A fabricated missing-parent declaration can fail the earlier source-total
-    # fingerprint guard; other altered aggregates fail population recomputation.
-    # Both checks must reject the re-signed artifact before a CSV is emitted.
-    expected_error = (
-        "fingerprint does not match source totals"
-        if "units_missing_parent_colony" in forged_fields
-        else "Projected population summaries"
-    )
-    with pytest.raises(ValidationError, match=expected_error):
+    # The original fixture genuinely lacks parent lineage. Only a changed
+    # missing-parent roster is tampering; its true ["tank-A"] value is valid.
+    with pytest.raises(ValidationError, match="Projected population summaries"):
         render_ecology_population_csv(forged)
+
+
+def test_population_csv_preserves_true_missing_parent_review(client: TestClient) -> None:
+    """Unknown parentage is disclosed and never treated as independent evidence."""
+    source = _dated_artifact(client)
+    summary = source.projected_population_summaries[0]
+    assert summary.units_missing_parent_colony == ["tank-A"]
+    assert "missing_parent_colony" in summary.design_review_blockers
+    row = next(
+        row
+        for row in _rows(render_ecology_population_csv(source))
+        if row["row_type"] == "population_stratum"
+    )
+    assert json.loads(row["units_missing_parent_colony_json"]) == ["tank-A"]
+    assert "missing_parent_colony" in json.loads(row["design_review_blockers_json"])
+    assert row["independent_unit_inference_allowed"] == "false"
+
+
+@pytest.mark.parametrize(
+    ("field", "forged_value", "error"),
+    [
+        ("experimental_unit_ids_json", '["tank-A","tank-B"]', "population unit roster"),
+        ("units_missing_parent_colony_json", "[]", "missing-parent review blocker"),
+        ("units_missing_parent_colony_json", '["forged-tank-B"]', "missing-parent roster"),
+        (
+            "design_review_blockers_json",
+            '["independence_not_authenticated","single_declared_unit"]',
+            "missing-parent review blocker",
+        ),
+        (
+            "design_review_blockers_json",
+            '["single_declared_unit","missing_parent_colony"]',
+            "independent-unit review blockers",
+        ),
+    ],
+)
+def test_population_csv_rejects_serialized_review_roster_drift(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    forged_value: str,
+    error: str,
+) -> None:
+    """A serializer bug must not suppress review or inflate independent units."""
+    source = _dated_artifact(client)
+    original = exporter._write_checked_row
+
+    def corrupt_population_row(writer: Any, values: tuple[object, ...]) -> None:
+        if values[exporter._COLUMNS.index("row_type")] != "population_stratum":
+            original(writer, values)
+            return
+        altered = list(values)
+        altered[exporter._COLUMNS.index(field)] = forged_value
+        original(writer, tuple(altered))
+
+    monkeypatch.setattr(exporter, "_write_checked_row", corrupt_population_row)
+    with pytest.raises(ValidationError, match=error):
+        render_ecology_population_csv(source)
 
 
 def test_saved_workflow_population_csv_matches_standalone_and_blocks_promotion(

@@ -106,6 +106,39 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
     elif row["row_type"] == "population_stratum":
         if declared < 1 or organisms < declared:
             raise ValidationError("Ecological population CSV invalid population denominator")
+        # Independently check the serialized scientific review roster.
+        # Source recomputation protects artifacts; this boundary also protects
+        # against a future CSV serializer manufacturing independent units.
+        try:
+            unit_ids = json.loads(str(row["experimental_unit_ids_json"]))
+            missing = json.loads(str(row["units_missing_parent_colony_json"]))
+            blockers = json.loads(str(row["design_review_blockers_json"]))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Ecological population CSV invalid review roster") from exc
+        if (
+            not isinstance(unit_ids, list)
+            or len(unit_ids) != declared
+            or any(not isinstance(key, str) or not key.strip() for key in unit_ids)
+            or len(set(unit_ids)) != declared
+        ):
+            raise ValidationError("Ecological population CSV invalid population unit roster")
+        if (
+            not isinstance(missing, list)
+            or any(not isinstance(key, str) or key not in unit_ids for key in missing)
+            or len(set(missing)) != len(missing)
+        ):
+            raise ValidationError("Ecological population CSV invalid missing-parent roster")
+        if not isinstance(blockers, list) or any(
+            not isinstance(blocker, str) for blocker in blockers
+        ):
+            raise ValidationError("Ecological population CSV invalid review blockers")
+        if ("missing_parent_colony" in blockers) != bool(missing):
+            raise ValidationError("Ecological population CSV missing-parent review blocker mismatch")
+        if (
+            "independence_not_authenticated" not in blockers
+            or ("single_declared_unit" in blockers) != (declared == 1)
+        ):
+            raise ValidationError("Ecological population CSV independent-unit review blockers mismatch")
     else:
         raise ValidationError("Ecological population CSV row type is invalid")
     writer.writerow(values)

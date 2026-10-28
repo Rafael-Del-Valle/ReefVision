@@ -3386,3 +3386,24 @@ completed 16/19 workflows; all three failures were the same Ruff RUF043
 regex-literal diagnostic in a test, now corrected without weakening its
 assertion. Latest-head CI, scientist review and Windows GUI acceptance remain
 required; this increment is not release-ready.
+
+## Population CSV parent-lineage review and CI regression (2026-10-28)
+
+The exact-head 1.2 CI at `c2c1b55a` completed 17/19 workflows
+successfully; both backend failures were one test expecting a missing-parent
+roster mutation to be rejected even though the supplied value already matched
+the fixture's true `["tank-A"]` disclosure. The regression now forges
+actually different missing-parent rosters, preserves a positive control for
+real missing-parent evidence, and requires the existing recomputation guard
+to reject re-signed contradictory population summaries. The population CSV
+writer additionally rejects malformed or duplicated independent-unit rosters,
+missing-parent unit IDs outside the declared roster, and missing/independence
+review-blocker inconsistencies at the serialization boundary. Focused tests
+cover these defenses; standalone and persisted saved-workflow export use the
+same renderer. All outputs remain `linked_unverified` with scientist review
+required; neither true independence nor verified parentage is claimed.
+
+This is a bounded scientific-integrity and CI-recovery change. New-head CI,
+reviewed longitudinal calibration/identity, 1.1 migration reconciliation,
+and physical Windows installer/GUI acceptance remain required. Version 1.2
+is **not release-ready**; version 1.3 has not started.
