@@ -16,6 +16,42 @@ from pydantic import (
 )
 
 
+class MeshCalibrationReviewEvidence(BaseModel):
+    """Independently attributed calibration QC; never certifies physical scale."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    calibration_operator_id: str = Field(
+        min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    independent_reviewer_id: str = Field(
+        min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    independent_review_decision: Literal["supports_scale", "disputes_scale", "inconclusive"]
+    independent_review_note: str = Field(min_length=1, max_length=2_000)
+    reviewed_at_utc: AwareDatetime
+    # Bind the review to geometry and every scale-bearing calibration input.
+    reviewed_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reviewed_meters_per_unit: StrictFloat = Field(gt=0, le=1_000_000, allow_inf_nan=False)
+    reviewed_calibration_method: Literal[
+        "ruler", "photogrammetry_control", "instrument", "other"
+    ]
+    reviewed_calibration_evidence: str = Field(min_length=1, max_length=2_000)
+    reviewed_relative_scale_uncertainty: StrictFloat | None = Field(
+        default=None, ge=0, le=1, allow_inf_nan=False
+    )
+
+    @model_validator(mode="after")
+    def independent_review_is_attributed(self) -> MeshCalibrationReviewEvidence:
+        if self.calibration_operator_id == self.independent_reviewer_id:
+            raise ValueError("Independent calibration reviewer must differ from operator")
+        if not self.independent_review_note.strip():
+            raise ValueError("Independent calibration review note cannot be blank")
+        if not self.reviewed_calibration_evidence.strip():
+            raise ValueError("Reviewed calibration evidence cannot be blank")
+        return self
+
+
 class MeshPreviewRequest(BaseModel):
     obj_text: str | None = Field(default=None, max_length=256_000)
     ply_text: str | None = Field(default=None, max_length=256_000)
@@ -26,6 +62,7 @@ class MeshPreviewRequest(BaseModel):
     calibration_method: Literal["ruler", "photogrammetry_control", "instrument", "other"]
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
     relative_scale_uncertainty: StrictFloat | StrictInt | None = Field(default=None, ge=0, le=1)
+    calibration_review: MeshCalibrationReviewEvidence | None = None
     source_label: str | None = Field(default=None, max_length=200)
     # Optional replay guard for imported source bytes (OBJ/PLY UTF-8 or decoded GLB).
     # Matching bytes do not establish calibration, specimen identity or human review.
