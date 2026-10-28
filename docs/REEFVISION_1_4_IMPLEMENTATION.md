@@ -610,3 +610,25 @@ existing calibration-scale intervals remain the scientific calculation
 basis; decimated preview triangles do not change these metrics.
 Standalone, direct-service, and saved-workflow regression cases cover
 unequal triangles, zero-area triangles, provenance, and artifact parity.
+
+## Interactive mesh triangle inspection (Track C)
+
+The bounded mesh artifact viewer now permits mouse and keyboard (Enter/Space)
+inspection of sampled triangles by their **original source-face index**.
+The readout lists the three sampled, caller-calibrated source-frame vertex
+coordinates in meters, without estimating anatomical branch length or
+recomputing full-resolution surface area from the decimated preview.
+The selected triangle is highlighted, and selection is scoped to the exact
+artifact object: switching reconstructions clears the effective selection
+even when source-face indices are reused. Duplicate source-face indices in
+the same bounded sample are rejected rather than ambiguously identifying
+two different triangles.
+
+Frontend regressions cover keyboard inspection, immutable scientific
+artifacts, reconstruction replacement, and duplicate source-face QC.
+Standalone mesh preview and saved executable typed Workflow Builder runs
+continue to share the existing full-resolution scientific measurement engine;
+this read-only UI introduces no new numerical analysis or verification claim.
+The prior point-cloud selection TypeScript nullability error (TS18047)
+was also corrected. Complete exact-head CI and Windows installed-GUI
+acceptance remain required before release.
