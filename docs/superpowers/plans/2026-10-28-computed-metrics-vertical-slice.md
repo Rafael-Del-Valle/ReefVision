@@ -113,4 +113,3 @@
 - [ ] Update both 1.1 roadmaps with objective scope/evidence and explicit remaining Phase 6 limitations/0038 coordination.
 - [ ] Run focused backend tests, migration round trip, Ruff, mypy, frontend suite/build, and as much of the full backend/Playwright matrix as the environment supports.
 - [ ] Commit documentation/validation evidence, request whole-branch review, fix important findings via RED→GREEN, push, update draft PR #71 and issue #76, then inspect exact-head CI.
-
