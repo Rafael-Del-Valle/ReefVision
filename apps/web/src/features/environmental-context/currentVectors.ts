@@ -147,12 +147,26 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
     group[direction].push(row);
     groups.set(key, group);
   }
+  // One immutable record ID cannot represent components at multiple grid
+  // cells or times. Reject every vector depending on a duplicated ID rather
+  // than silently counting the same observation more than once.
+  const recordIdCounts = new Map<string, number>();
+  for (const group of groups.values()) {
+    for (const row of [...group.east, ...group.north]) {
+      recordIdCounts.set(row.id, (recordIdCounts.get(row.id) ?? 0) + 1);
+    }
+  }
   const result: CurrentVector[] = [];
   for (const [key, group] of groups) {
     if (group.east.length !== 1 || group.north.length !== 1) continue;
     // A single immutable scientific record cannot independently represent both
     // velocity components, even when a malformed import assigns both labels.
     if (group.east[0].id === group.north[0].id) continue;
+    if (
+      recordIdCounts.get(group.east[0].id) !== 1 ||
+      recordIdCounts.get(group.north[0].id) !== 1
+    )
+      continue;
     const row = group.east[0];
     const east = row.normalized_value;
     const north = group.north[0].normalized_value;
