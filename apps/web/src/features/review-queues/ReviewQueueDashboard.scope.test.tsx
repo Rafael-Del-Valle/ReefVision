@@ -185,7 +185,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect(queueIds.every((id) => id === "dataset-queue")).toBe(true);
   });
 
-  it("requires a local reviewer label and explicit confirmation to complete an item", async () => {
+  it(
+    "requires a reviewer label and confirmation before single-item completion",
+    async () => {
     vi.mocked(getReviewQueueItems).mockResolvedValue({
       items: [
         {
@@ -236,8 +238,16 @@ describe("ReviewQueueDashboard scope isolation", () => {
       expect(confirm.mock.calls[0][0]).toMatch(
         /does not verify model predictions/,
       );
+      fireEvent.click(start);
+      await waitFor(() =>
+        expect(startReviewQueueItem).toHaveBeenCalledWith(
+          "item-1",
+          "reef-scientist",
+        ),
+      );
     } finally {
       confirm.mockRestore();
     }
-  });
+    },
+  );
 });
