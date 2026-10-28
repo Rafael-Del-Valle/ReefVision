@@ -132,3 +132,23 @@ Frontend regression coverage: `MeshArtifactViewer.test.tsx` tests rotation,
 reset, immutable artifacts, invalid geometry rejection, bounded display,
 and zero-area coverage. Windows installed-GUI, representative coral scans,
 and full release acceptance remain outstanding.
+
+### Selected triangle calibration-scale bounds (development)
+
+The read-only interactive mesh viewer now reports a selected source triangle's
+area in m² alongside a **scale-only interval** when the saved artifact
+includes `provenance.relative_scale_uncertainty` (a caller-supplied fraction
+between 0 and 1). For nominal triangle area `A` and relative scale bound
+`u`, the displayed endpoints are `A(1-u)^2` and `A(1+u)^2`.
+For example, a 3 m² triangle with `u=0.1` displays [2.43, 3.63] m².
+This is a deterministic propagation of one multiplicative scale bound,
+**not** a confidence interval, full-coral surface-area estimate, independent
+calibration review, or reconstruction/registration uncertainty estimate.
+A missing scale bound displays **unknown**, never a fabricated zero.
+Nonfinite or out-of-range scale uncertainty fails closed; numeric overflow
+withholds the interval. Rotation and zoom do not change the reported area.
+The viewer consumes the same preview geometry and provenance returned by
+standalone mesh analysis and persisted, typed Workflow Builder artifacts;
+it does not modify either scientific artifact or saved graph.
+Frontend regression tests cover known geometry, rotation invariance,
+unknown versus zero uncertainty, invalid metadata, and immutability.
