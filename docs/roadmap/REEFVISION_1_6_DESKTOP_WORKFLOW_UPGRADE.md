@@ -61,3 +61,24 @@ GUI and real biological-image performance/scientific acceptance remain
 mandatory. A passing disposable SQLite regression is not release readiness.
 No pretrained model downloads, external services, user-asset deletion or
 automatic scientific approval are involved.
+
+## Ambiguous saved-QC ownership safeguard
+
+A persisted `qc_review_queue` node must have **at most one** review queue
+with its exact `workflow:<run-id>:<node-id>` creator identity in the same
+project. The adapter now reads up to two matching queues before retrying:
+if two exist, it rejects replay rather than selecting an arbitrary historical
+snapshot. It neither deletes a queue nor rewrites researcher decisions.
+
+`apps/api/reefvision/tests/test_workflow_duplicate_queue_16.py` exercises
+a real saved executable graph and an initial successful retry, records a
+researcher comment, injects a second queue with the same owner into a
+disposable test database, and requires a controlled validation rejection.
+The regression verifies preservation of both queues, the original comment,
+the review-required artifact and unverified image annotations.
+
+This is a **replay safety check**, not a database uniqueness migration or
+proof of atomic queue creation under concurrent workers. A separate reviewed
+transaction/uniqueness design would be needed to prevent all races without
+breaking historical duplicate records. The 1.1/1.6 revision-0038 collision
+and native Windows installed-GUI/installer acceptance remain blockers.
