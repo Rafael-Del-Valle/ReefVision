@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from math import atan2, degrees, exp, hypot, isclose, isfinite, log
+from math import atan2, degrees, exp, fsum, hypot, isclose, isfinite, log
 from re import fullmatch
 from typing import Any
 
@@ -22,6 +22,45 @@ def _is_sha256_fingerprint(value: Any) -> bool:
         and len(value) == 64
         and all(character in "0123456789abcdef" for character in value)
     )
+
+
+def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | None:
+    """Recompute scale-invariant patch concentration from complete-mesh fractions.
+
+    Never trust a stored concentration without its fractions. Source patch order
+    is not a cross-survey identity, so only permutation-invariant QC is compared.
+    """
+    fractions = record.get("edge_connected_patch_surface_area_fractions")
+    stored = (
+        record.get("edge_connected_patch_area_concentration_index"),
+        record.get("area_weighted_effective_patch_count"),
+    )
+    if fractions is None:
+        if any(value is not None for value in stored):
+            raise ValueError("Patch concentration requires source area fractions")
+        return None
+    if not isinstance(fractions, list) or not fractions or any(
+        type(value) not in (int, float) or not isfinite(value) or not 0 <= value <= 1
+        for value in fractions
+    ):
+        raise ValueError("Patch area fractions must be a nonempty finite unit-range list")
+    patch_count = record.get("edge_connected_patch_count")
+    if patch_count is not None and len(fractions) != patch_count:
+        raise ValueError("Patch area fractions inconsistent with topology patch count")
+    if not isclose(fsum(fractions), 1.0, rel_tol=1e-9, abs_tol=1e-9):
+        raise ValueError("Patch area fractions must sum to one")
+    concentration = fsum(fraction * fraction for fraction in fractions)
+    effective_count = 1.0 / concentration if concentration > 0 else float("inf")
+    if not isfinite(effective_count):
+        raise ValueError("Patch area concentration is outside numeric bounds")
+    for claimed, expected in zip(stored, (concentration, effective_count), strict=True):
+        if claimed is not None and (
+            type(claimed) not in (int, float)
+            or not isfinite(claimed)
+            or not isclose(claimed, expected, rel_tol=1e-9, abs_tol=1e-9)
+        ):
+            raise ValueError("Stored patch concentration contradicts source area fractions")
+    return concentration, effective_count
 
 
 def compare_mesh_observations(
@@ -467,6 +506,26 @@ def compare_mesh_observations(
         warnings.append("reconstruction_qc_rates_not_biological_condition")
     else:
         warnings.append("reconstruction_qc_rates_unavailable")
+    # Complete-mesh area concentration is independent of a common scale and
+    # of patch ordering. It is reconstruction QC, not coral fragmentation.
+    patch_distributions = [
+        _patch_area_concentration(record) for record in (before, after)
+    ]
+    before_patch_distribution, after_patch_distribution = patch_distributions
+    patch_concentration_delta = (
+        after_patch_distribution[0] - before_patch_distribution[0]
+        if before_patch_distribution is not None and after_patch_distribution is not None
+        else None
+    )
+    effective_patch_count_delta = (
+        after_patch_distribution[1] - before_patch_distribution[1]
+        if before_patch_distribution is not None and after_patch_distribution is not None
+        else None
+    )
+    if patch_concentration_delta is None:
+        warnings.append("patch_area_distribution_comparison_unavailable")
+    else:
+        warnings.append("patch_area_distribution_change_is_reconstruction_qc_not_fragmentation")
     # A change in triangle count changes the reconstruction sampling. This
     # dimensionless ratio is a QC descriptor, not biological growth evidence.
     early_faces = before_topology["face_count"]
@@ -869,6 +928,20 @@ def compare_mesh_observations(
         "before_reconstruction_qc_rates": reconstruction_qc_rates[0],
         "after_reconstruction_qc_rates": reconstruction_qc_rates[1],
         "reconstruction_qc_rate_changes_after_minus_before": reconstruction_qc_rate_changes,
+        "before_patch_area_concentration_index": (
+            before_patch_distribution[0] if before_patch_distribution is not None else None
+        ),
+        "after_patch_area_concentration_index": (
+            after_patch_distribution[0] if after_patch_distribution is not None else None
+        ),
+        "delta_patch_area_concentration_index": patch_concentration_delta,
+        "before_area_weighted_effective_patch_count": (
+            before_patch_distribution[1] if before_patch_distribution is not None else None
+        ),
+        "after_area_weighted_effective_patch_count": (
+            after_patch_distribution[1] if after_patch_distribution is not None else None
+        ),
+        "delta_area_weighted_effective_patch_count": effective_patch_count_delta,
         "reconstruction_face_count_ratio_after_to_before": face_count_ratio,
         "registration_residual_to_smaller_extent_ratio": (
             registration_residual_to_smaller_extent_ratio
@@ -953,6 +1026,8 @@ def compare_mesh_observations(
         # disputed or inconclusive match cannot support cross-timepoint organism
         # change estimates, even if the numerical geometry is well formed.
         for key in (
+            "delta_patch_area_concentration_index",
+            "delta_area_weighted_effective_patch_count",
             "scale_normalized_surface_area_ratio_after_to_before",
             "scale_normalized_bounding_box_diagonal_ratio_after_to_before",
             "registered_surface_centroid_offset_target_frame_m",
