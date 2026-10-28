@@ -17,6 +17,7 @@ from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
 from reefvision.db.models.classification_dataset import ClassificationDataset
 from reefvision.db.models.classification_prediction import ClassificationPrediction
+from reefvision.db.models.computed_metric import ComputedMetricDefinition, ComputedMetricResult
 from reefvision.db.models.dataset_version import DatasetVersion
 from reefvision.db.models.dataset_version_item import DatasetVersionItem
 from reefvision.db.models.experiment_record import ExperimentRecord
@@ -87,6 +88,8 @@ __all__ = [
     "ClassVisibilityPreference",
     "ClassificationDataset",
     "ClassificationPrediction",
+    "ComputedMetricDefinition",
+    "ComputedMetricResult",
     "DatasetVersion",
     "DatasetVersionItem",
     "EnvironmentalCacheEntry",
