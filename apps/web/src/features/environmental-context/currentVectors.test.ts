@@ -97,6 +97,25 @@ it("keeps missing, zero and invalid component uncertainties distinct", () => {
   expect(invalid.eastUncertainty).toBeNull();
   expect(invalid.northUncertainty).toBeNull();
 });
+it("preserves tiny nonzero uncertainty in the display instead of rounding to zero", () => {
+  const vectors = currentVectors([
+    component("current_eastward_velocity", 1, {
+      normalized_uncertainty: 0.00000023,
+      uncertainty: { value: 0.00000023, kind: "standard_deviation" },
+    }),
+    component("current_northward_velocity", 0, {
+      normalized_uncertainty: 0,
+      uncertainty: { value: 0, kind: "standard_error" },
+    }),
+  ]);
+  expect(vectors).toHaveLength(1);
+  expect(
+    currentComponentUncertaintyText("East", vectors[0].eastUncertainty),
+  ).toBe("East component uncertainty: 2.30e-7 m/s (standard deviation)");
+  expect(
+    currentComponentUncertaintyText("North", vectors[0].northUncertainty),
+  ).toBe("North component uncertainty: 0.000 m/s (standard error)");
+});
 it("omits currents whose magnitude overflows finite components", () => {
   expect(
     currentVectors([
@@ -464,9 +483,6 @@ it("preserves the depth datum and each component QC in exported vectors", () => 
   expect(csv).toContain('"accepted","unassessed"');
   // Identical numeric depths do not justify combining different depth datums.
   expect(
-    currentVectors([
-      east,
-      { ...north, depth_reference: "sea_surface" },
-    ]),
+    currentVectors([east, { ...north, depth_reference: "sea_surface" }]),
   ).toEqual([]);
 });
