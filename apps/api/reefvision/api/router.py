@@ -7,6 +7,7 @@ from reefvision.api.routes.advanced_provider_execution import (
     router as advanced_provider_execution_router,
 )
 from reefvision.api.routes.advanced_providers import router as advanced_providers_router
+from reefvision.api.routes.annotation_aggregates import router as annotation_aggregates_router
 from reefvision.api.routes.annotation_imports import router as annotation_imports_router
 from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
@@ -90,6 +91,7 @@ api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
 api_router.include_router(annotation_imports_router)
 api_router.include_router(annotations_router)
+api_router.include_router(annotation_aggregates_router)
 api_router.include_router(raster_edits_router)
 api_router.include_router(measurements_router)
 api_router.include_router(scale_label_ocr_router)
