@@ -150,7 +150,10 @@ describe("MeshArtifactViewer", () => {
     }
     render(
       <MeshArtifactViewer
-        artifact={{ ...validArtifact, provenance: { calibration_verified: true } }}
+        artifact={{
+          ...validArtifact,
+          provenance: { calibration_verified: true },
+        }}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
