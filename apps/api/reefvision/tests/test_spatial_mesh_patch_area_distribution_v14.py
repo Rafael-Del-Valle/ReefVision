@@ -88,6 +88,21 @@ def test_zero_area_and_equal_area_patches_do_not_invent_dominance() -> None:
     assert equal["area_weighted_effective_patch_count"] == pytest.approx(2.0)
 
 
+def test_single_positive_area_patch_has_effective_count_one() -> None:
+    result = measure_mesh_preview(
+        **{
+            **GEOMETRY,
+            "faces": [[0, 1, 2]],
+            "relative_scale_uncertainty": None,
+        }
+    )
+    assert result["edge_connected_patch_surface_area_fractions"] == [1.0]
+    assert result["edge_connected_patch_area_concentration_index"] == 1.0
+    assert result["area_weighted_effective_patch_count"] == 1.0
+    assert result["provenance"]["relative_scale_uncertainty"] is None
+    assert result["measurement_status"] == "caller_supplied_unverified"
+
+
 def test_patch_area_distribution_survives_saved_typed_workflow(client: TestClient) -> None:
     project_id = str(create_project(client, "Mesh patch distribution")["id"])
     base = f"/api/v1/projects/{project_id}"
