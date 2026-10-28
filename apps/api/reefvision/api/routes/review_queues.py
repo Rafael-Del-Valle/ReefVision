@@ -12,6 +12,7 @@ from reefvision.schemas.review_queues import (
     ReviewQueueBulkResponse,
     ReviewQueueCreateRequest,
     ReviewQueueItemActorRequest,
+    ReviewQueueItemCompleteRequest,
     ReviewQueueItemPageResponse,
     ReviewQueueItemResponse,
     ReviewQueueItemSkipRequest,
@@ -141,13 +142,12 @@ def start_review_queue_item(
 @router.post("/review-queue-items/{item_id}/complete", response_model=ReviewQueueItemResponse)
 def complete_review_queue_item(
     item_id: str,
+    payload: ReviewQueueItemCompleteRequest,
     request: Request,
     session: DbSession,
-    payload: ReviewQueueItemActorRequest | None = None,
 ) -> ReviewQueueItemResponse:
-    return service(request, session).complete_item(
-        item_id, actor=payload.actor if payload else "local_user"
-    )
+    # Schema rejects missing/false confirmation before any review state mutation.
+    return service(request, session).complete_item(item_id, actor=payload.actor)
 
 
 @router.post("/review-queue-items/{item_id}/skip", response_model=ReviewQueueItemResponse)
