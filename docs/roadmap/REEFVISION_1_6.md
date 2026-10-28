@@ -2,6 +2,31 @@
 
 **Status:** draft implementation, not release acceptance. Master coordination: issue #76.
 
+## 2026-10-28 — Oversized JSON QC evidence fails closed (Track D)
+
+- Audited exact-head CI and found backend Ruff formatting failure in the
+  existing v3 QC regression file; frontend format/type/unit/E2E/build checks
+  passed at head `7bd1d155`. Corrected the missing blank line.
+- The saved `qc_review_queue` validator used `math.isfinite` directly on
+  Python integers from persisted JSON. An integer above floating-point range
+  (for example `10**400`) raises `OverflowError` rather than producing
+  a controlled scientific-integrity rejection. This could abort an interrupted
+  saved Workflow Builder retry with an unhandled server error.
+- Centralized finite-number validation now rejects booleans, NaN/Inf, invalid
+  types and unrepresentable integers across v2/v3 raw and normalized signals,
+  score components, configured weights/thresholds, item scores and summaries.
+  Existing legitimate finite evidence and historical unversioned queue
+  compatibility remain unchanged. No live rescoring, scientific annotation
+  mutation or automatic human approval is introduced.
+- Added eight standalone regression cases (seven v2 evidence locations and
+  one v3 pending-count case). Saved executable Workflow Builder retry
+  coverage remains in `test_workflow_review_queue_16.py`; the same
+  validator is called by that adapter before any queue reuse.
+- **Acceptance:** exact-new-head Ruff, pytest, mypy and Windows acceptance
+  are required. Do not interpret a prior passing frontend job as full release
+  readiness; 1.1/1.6 Alembic 0038 reconciliation, native MSI upgrade/rollback,
+  installed GUI and representative biological-data validation remain open.
+
 ## Existing support audited against main `9278d45e`
 
 - Label class management and operation history already exist (migrations 0011–0013).
