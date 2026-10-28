@@ -146,6 +146,78 @@ describe("MeshArtifactViewer", () => {
     );
   });
 
+  it("shows caller-supplied scale-only area bounds without changing the saved mesh", () => {
+    const sample = {
+      ...validArtifact,
+      preview_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [0, 2, 0],
+        [0, 0, 3],
+      ],
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 0.1,
+      },
+    };
+    const original = JSON.stringify(sample);
+    render(<MeshArtifactViewer artifact={sample} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect source triangle 7" }),
+    );
+    const inspection = screen.getByText(
+      /Source triangle 7 \\(unverified source frame\\)/,
+    );
+    expect(inspection).toHaveTextContent(
+      "Scale-only triangle area interval: [2.43000, 3.63000] m²",
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Yaw" }), {
+      target: { value: "150" },
+    });
+    expect(inspection).toHaveTextContent(
+      "Scale-only triangle area interval: [2.43000, 3.63000] m²",
+    );
+    expect(inspection).toHaveTextContent("reconstruction uncertainty unverified");
+    expect(JSON.stringify(sample)).toBe(original);
+  });
+
+  it("distinguishes missing and zero scale uncertainty, and rejects invalid evidence", () => {
+    const { rerender } = render(<MeshArtifactViewer artifact={validArtifact} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect source triangle 7" }),
+    );
+    expect(screen.getByText(/Source triangle 7 \\(unverified source frame\\)/)).toHaveTextContent(
+      "unknown (scale uncertainty not supplied)",
+    );
+    rerender(
+      <MeshArtifactViewer
+        artifact={{
+          ...validArtifact,
+          provenance: {
+            calibration_verified: false,
+            relative_scale_uncertainty: 0,
+          },
+        }}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect source triangle 7" }),
+    );
+    expect(screen.getByText(/Source triangle 7 \\(unverified source frame\\)/)).toHaveTextContent(
+      "Scale-only triangle area interval: [0.500000, 0.500000] m²",
+    );
+    for (const invalid of [-0.1, 1.1, Number.NaN, true, "0.1"]) {
+      expect(
+        parseMeshRenderArtifact({
+          ...validArtifact,
+          provenance: {
+            calibration_verified: false,
+            relative_scale_uncertainty: invalid,
+          },
+        }),
+      ).toBeNull();
+    }
+  });
+
   it("reports zero geometric area for a collinear preview triangle", () => {
     const sample = {
       ...validArtifact,
