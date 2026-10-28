@@ -1407,3 +1407,68 @@ def test_pose_workflow_rejects_lossy_architecture_from_verified_truth(
         )
 
     assert result["architecture"] == "yolo11n-pose.yaml"
+
+def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The training input is frozen through scientist review and the real API.
+    # A completed worker must not relabel another workflow node's job before
+    # the first result artifact is returned (not just on a later retry).
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    project_id = str(project["id"])
+    payload = {
+        "project_id": project_id,
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+
+    def substituted_job_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as session:
+            job = session.get(Job, job_id)
+            assert job is not None
+            job.request_json = {
+                **dict(job.request_json),
+                "workflow_node_run_id": "substituted-pose-node",
+            }
+            session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="child job lineage changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="original-pose-node",
+            processor=substituted_job_processor,
+        )
+
+    # The legitimate saved-node lineage must still complete and expose a
+    # checksummed checkpoint when its worker has not changed the child job.
+    with app.state.session_factory() as session:
+        valid = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="legitimate-pose-node",
+            processor=_fake_pose_processor,
+        )
+    assert valid["workflow_node_run_id"] == "legitimate-pose-node"
+    assert valid["pose_training_dataset_id"] == dataset["id"]
+    assert len(valid["result_checkpoint_sha256"]) == 64
