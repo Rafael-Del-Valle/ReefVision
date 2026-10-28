@@ -3291,3 +3291,39 @@ and representative installed-Windows validation remain outstanding.
 The same iteration corrects two exact Ruff E501 line-length errors in the
 ecological identity schema observed in the previous CI backend jobs.
 New-head CI is required; source changes and committed tests are not test passes.
+
+
+## 2026-10-28 Track B — connected-branch source graph continuity and typing
+
+**Pre-edit audit:** `main` remained at `e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc`;
+1.2 draft PR #74 was open at `a69378a277b622be5456883b1adb2818159b92e3`.
+All 19 prior-head Actions completed: 16 successful and three backend failures.
+CI, Pose Workflow Validation and ReefVision 1.0 Acceptance each failed strict
+mypy on exactly two errors in `services/connected_branch_editing.py`:
+a `Sequence` passed to a list/tuple-only length helper and a nullable root
+assigned to a variable inferred as non-null from the initial-graph path.
+The fix materializes a tuple for the length helper and gives initial-graph
+nodes distinct local names; no graph measurements or verification status change.
+
+**Scientific integrity:** The existing read-only branch-preview kernel now
+rejects a source graph edge whose stored pixel path contains a nonadjacent
+step or whose first/last pixel is not in the claimed source/target node.
+Previously, a forged but internally length-consistent edge could conceal a
+missing skeleton pixel or misattribute graph attachment, compromising connected
+branch and total-length interpretation. Two focused regressions construct
+length-consistent forged source edges and require fail-closed behavior.
+Valid initial, endpoint, junction, and interior-attachment previews retain
+existing behavior. The standalone saved-skeleton API and executable persisted
+`ecology_connected_branch_preview` Workflow Builder node share the same
+service and source-bound provenance, remain `proposal_unverified`, and require
+scientist review. Existing API/saved-workflow acceptance tests are the
+integration regression gate; no separate duplicate workflow node is added.
+
+**Validation boundary:** The code and regression tests were committed to the
+isolated 1.2 branch. Full local checkout, mypy, Ruff and runtime pytest were
+not available in the execution environment; exact-head GitHub Actions must
+confirm the fixes. No source-backed calibrated per-branch measurement, approved
+biological identity, verified experimental design, or real longitudinal growth
+claim follows from these previews. Migration reconciliation with 1.1 and
+installed Windows GUI/MSI scientific acceptance remain required.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
