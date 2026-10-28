@@ -2942,3 +2942,29 @@ training data. No migration or historical artifact rewrite is introduced.
 Exact-head CI, independent real-data acceptance, migration reconciliation,
 and native Windows installer/GUI tests remain mandatory.
 **ReefVision 1.2 is NOT RELEASE-READY; 1.3 has not started.**
+
+## Source-evidence SHA-256 syntax gate (2026-10-27; development only)
+
+The typed `EcologyMeasurementCandidate` contract now rejects malformed
+`image_sha256`, `annotation_sha256`, and `calibration_sha256` values
+before accepting a source-linked projected measurement. All three fields
+require exactly 64 ASCII hexadecimal characters: truncated/overlong values,
+non-hex characters, Unicode lookalikes and non-string values fail closed.
+Valid mixed-case hexadecimal digests are preserved byte-for-byte in original
+source provenance; the existing date-quality guard continues to compare
+image content digests case-insensitively. This is a **syntax and artifact
+rehydration safeguard**, not a fresh hash of image bytes or independent
+verification of reviewed annotation, calibration or organism identity.
+
+Regression coverage exercises 27 malformed field/value combinations,
+valid mixed-case digests, and tampered persisted Workflow Builder source
+artifacts, while the existing standalone candidate endpoint and executable
+source node retain their typed `ecology_measurement_candidates` contract,
+`linked_unverified` evidence level and `scientist_review_required` gate.
+The three backend workflows on the preceding exact head
+`fa46b91c9734bbfb18cf7ca425e1d8192503037f` failed only Ruff formatting;
+the two reported files were corrected in this increment. New-head CI,
+authenticated longitudinal source review, experimental-design attestation,
+migration reconciliation with unmerged 1.1, real scientific acceptance and
+installed Windows GUI/installer testing remain release blockers. No merge,
+release, model download or verified-dataset promotion occurred.
