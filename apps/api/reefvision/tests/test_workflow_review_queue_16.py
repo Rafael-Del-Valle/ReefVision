@@ -18,6 +18,7 @@ from reefvision.db.models import (
     ReviewQueueItem,
     WorkflowArtifact,
     WorkflowNodeRun,
+    WorkflowRun,
 )
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ValidationError
@@ -72,6 +73,57 @@ def test_qc_queue_adapter_rejects_modified_project_source_artifact(corruption: s
             settings=cast(Settings, None),
             project_id="project-one",
             parameters={},
+            inputs={"project": [cast(WorkflowArtifact, source)]},
+        )
+
+
+@pytest.mark.parametrize(
+    "corruption", ["wrong_port", "wrong_producer", "wrong_binding", "unfinished_producer"]
+)
+def test_qc_queue_adapter_requires_bound_completed_source(corruption: str) -> None:
+    """Even a correctly signed source must belong to the saved graph edge."""
+    payload = {"project_id": "project-one"}
+    source = SimpleNamespace(
+        id="artifact",
+        workflow_run_id="run",
+        producer_node_run_id="producer",
+        producer_port_id="project",
+        data_type="project_reference",
+        payload_json=payload,
+        payload_sha256=canonical_json_sha256(payload),
+    )
+    run = SimpleNamespace(project_id="project-one")
+    node = SimpleNamespace(
+        workflow_run_id="run",
+        node_type="qc_review_queue",
+        input_artifact_ids_json=["artifact"],
+    )
+    producer = SimpleNamespace(
+        workflow_run_id="run", node_type="project_source", status="succeeded"
+    )
+    if corruption == "wrong_port":
+        source.producer_port_id = "unreviewed_project"
+    elif corruption == "wrong_producer":
+        source.producer_node_run_id = "qc"
+    elif corruption == "wrong_binding":
+        node.input_artifact_ids_json = ["another-artifact"]
+    else:
+        producer.status = "pending"
+
+    class ReadOnlySession:
+        def get(self, model: object, identifier: str) -> object | None:
+            if model is WorkflowRun:
+                return run if identifier == "run" else None
+            if model is WorkflowNodeRun:
+                return {"qc": node, "producer": producer}.get(identifier)
+            raise AssertionError("Invalid source must be rejected before any queue access")
+
+    with pytest.raises(ValidationError, match="producer or binding provenance"):
+        create_review_queue_workflow_artifact(
+            session=cast(Session, ReadOnlySession()),
+            settings=cast(Settings, None),
+            project_id="project-one",
+            parameters={"__workflow_run_id": "run", "__workflow_node_run_id": "qc"},
             inputs={"project": [cast(WorkflowArtifact, source)]},
         )
 
