@@ -3428,3 +3428,24 @@ of tank/colony assignment, reviewed identity or calibration. Evidence remains
 `linked_unverified`, inference is forbidden, and scientist review is required.
 CI, longitudinal source authentication, migration reconciliation and physical
 Windows acceptance remain release blockers.
+
+## Population CSV parent-colony disclosure integrity (2026-10-28)
+
+The standalone ecological population CSV renderer and executable, persisted
+`ecology_population_csv_export` Workflow Builder node now reject a forged
+parent-colony roster at the final serialization boundary. Parent identifiers
+must be unique, nonblank strings; shared-parent identifiers must be unique
+members of the disclosed parent roster. Duplicate, blank or non-string
+scientific-review blockers are also rejected. Six parametrized regression
+cases cover malformed/duplicated parent IDs, an undisclosed shared parent,
+duplicate shared-parent IDs and duplicate review warnings. The existing
+standalone/API and saved-workflow parity acceptance remains applicable.
+
+This run also applies the exact Ruff formatting change reported by the
+preceding 1.2 head `4162f739` (16/19 successful Actions; three backend
+format failures). The new commits have not passed exact-head CI at the
+time of implementation. These are serialization integrity checks, **not**
+authenticated parentage, independent experimental replicates, reviewed
+calibrated growth or release acceptance. The 1.1 migration divergence,
+scientist review, real-data acceptance and physical Windows GUI/MSI checks
+remain blockers. **1.2 NOT RELEASE-READY; 1.3 not started.**
