@@ -221,9 +221,7 @@ def _pose_dataset(
         ("source_retraining_manifest_sha256", dataset.source_retraining_manifest_sha256),
     )
     if any(
-        payload[field] != expected
-        for field, expected in source_lineage_fields
-        if field in payload
+        payload[field] != expected for field, expected in source_lineage_fields if field in payload
     ):
         raise ValidationError(
             f"Pose {role} dataset artifact source lineage no longer matches frozen truth"
