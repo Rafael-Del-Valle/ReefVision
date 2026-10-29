@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
@@ -58,11 +64,18 @@ describe("ProjectSpatialAssetPreview", () => {
     fireEvent.change(screen.getByLabelText("Calibration method (unverified)"), {
       target: { value: "ruler" },
     });
-    fireEvent.change(screen.getByLabelText("Calibration evidence (unverified)"), {
-      target: { value: "Unreviewed ruler" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Preview imported source" }));
-    expect(await screen.findByText("Unreviewed cloud artifact")).toBeInTheDocument();
+    fireEvent.change(
+      screen.getByLabelText("Calibration evidence (unverified)"),
+      {
+        target: { value: "Unreviewed ruler" },
+      },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview imported source" }),
+    );
+    expect(
+      await screen.findByText("Unreviewed cloud artifact"),
+    ).toBeInTheDocument();
     expect(previewProjectSpatialAsset).toHaveBeenCalledWith(
       "reef-project",
       asset,
@@ -74,11 +87,18 @@ describe("ProjectSpatialAssetPreview", () => {
         relative_scale_uncertainty: null,
       }),
     );
-    expect(screen.getByText(/not calibration, biological identity, or review/)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Meters per source unit (unverified)"), {
-      target: { value: "0.02" },
-    });
-    expect(screen.queryByText("Unreviewed cloud artifact")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/not calibration, biological identity, or review/),
+    ).toBeInTheDocument();
+    fireEvent.change(
+      screen.getByLabelText("Meters per source unit (unverified)"),
+      {
+        target: { value: "0.02" },
+      },
+    );
+    expect(
+      screen.queryByText("Unreviewed cloud artifact"),
+    ).not.toBeInTheDocument();
   });
 
   it("defaults to unknown calibration and invalidates results when method changes", async () => {
@@ -87,12 +107,21 @@ describe("ProjectSpatialAssetPreview", () => {
     fireEvent.change(screen.getByLabelText("Project 3D source"), {
       target: { value: "asset-1" },
     });
-    fireEvent.change(screen.getByLabelText("Calibration evidence (unverified)"), {
-      target: { value: "Unreviewed source metadata" },
-    });
-    expect(screen.getByLabelText("Calibration method (unverified)")).toHaveValue("other");
-    fireEvent.click(screen.getByRole("button", { name: "Preview imported source" }));
-    expect(await screen.findByText("Unreviewed mesh artifact")).toBeInTheDocument();
+    fireEvent.change(
+      screen.getByLabelText("Calibration evidence (unverified)"),
+      {
+        target: { value: "Unreviewed source metadata" },
+      },
+    );
+    expect(
+      screen.getByLabelText("Calibration method (unverified)"),
+    ).toHaveValue("other");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview imported source" }),
+    );
+    expect(
+      await screen.findByText("Unreviewed mesh artifact"),
+    ).toBeInTheDocument();
     expect(previewProjectSpatialAsset).toHaveBeenLastCalledWith(
       "reef-project",
       asset,
@@ -103,9 +132,15 @@ describe("ProjectSpatialAssetPreview", () => {
     fireEvent.change(screen.getByLabelText("Calibration method (unverified)"), {
       target: { value: "instrument" },
     });
-    expect(screen.queryByText("Unreviewed mesh artifact")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Preview imported source" }));
-    await waitFor(() => expect(previewProjectSpatialAsset).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByText("Unreviewed mesh artifact"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview imported source" }),
+    );
+    await waitFor(() =>
+      expect(previewProjectSpatialAsset).toHaveBeenCalledTimes(2),
+    );
     expect(previewProjectSpatialAsset).toHaveBeenLastCalledWith(
       "reef-project",
       asset,
@@ -127,7 +162,10 @@ describe("ProjectSpatialAssetPreview", () => {
     expect(
       await screen.findByText(/human scientific review remains required/),
     ).toBeInTheDocument();
-    expect(importProjectSpatialAsset).toHaveBeenCalledWith("reef-project", file);
+    expect(importProjectSpatialAsset).toHaveBeenCalledWith(
+      "reef-project",
+      file,
+    );
     expect(screen.getByLabelText("Project 3D source")).toHaveValue("asset-1");
   });
 
@@ -135,7 +173,9 @@ describe("ProjectSpatialAssetPreview", () => {
     vi.mocked(listProjectSpatialAssets)
       .mockResolvedValueOnce([asset])
       .mockResolvedValueOnce([]);
-    const view = render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    const view = render(
+      <ProjectSpatialAssetPreview projectId="reef-project" />,
+    );
     await screen.findByRole("option", { name: /colony.ply/ });
     fireEvent.change(screen.getByLabelText("Project 3D source"), {
       target: { value: "asset-1" },
@@ -148,7 +188,9 @@ describe("ProjectSpatialAssetPreview", () => {
       ),
     );
     expect(screen.getByLabelText("Project 3D source")).toHaveValue("");
-    expect(screen.queryByRole("option", { name: /colony.ply/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /colony.ply/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps project originals when an upload fails before listing finishes", async () => {
