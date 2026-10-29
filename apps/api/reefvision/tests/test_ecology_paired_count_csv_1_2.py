@@ -54,11 +54,15 @@ def test_standalone_csv_has_source_provenance_and_correct_denominators(
         "pair",
         "pair",
         "pair",
+        "organism_descriptive",
+        "organism_descriptive",
         "declared_unit",
         "overall",
     ]
     assert all(row["evidence_level"] == "caller_supplied_unverified" for row in rows)
     assert all(row["review_status"] == "requires_source_verification" for row in rows)
+    assert all(row["independent_inference_allowed"] == "false" for row in rows)
+    assert all(row["export_schema_version"] == "ecology-paired-count-csv-0002" for row in rows)
     assert all(
         row["source_input_sha256"] == comparison.analysis_provenance.canonical_input_sha256
         for row in rows
@@ -66,6 +70,14 @@ def test_standalone_csv_has_source_provenance_and_correct_denominators(
     assert rows[2]["reference_count"] == "0.0"
     assert rows[2]["signed_percent_deviation"] == ""
     assert rows[2]["absolute_percent_deviation"] == ""
+    assert rows[3]["organism_id"] == "fragment-A"
+    assert rows[3]["paired_observation_count"] == "2"
+    assert rows[3]["repeated_observation_count"] == "1"
+    assert rows[3]["nonzero_reference_count"] == "1"
+    assert rows[3]["mean_signed_bias"] == "2.5"
+    assert rows[3]["mean_signed_percent_deviation"] == "20.0"
+    assert rows[4]["organism_id"] == "fragment-B"
+    assert rows[4]["mean_signed_bias"] == "-4.0"
     assert rows[-1]["paired_observation_count"] == "3"
     assert rows[-1]["observed_organism_count"] == "2"
     assert rows[-1]["declared_independent_unit_count"] == "1"
@@ -93,6 +105,8 @@ def test_csv_escapes_user_supplied_formula_identifiers(client: TestClient) -> No
     assert rows[0]["observation_id"] == "'+SUM(1,2)"
     assert rows[0]["reference_source_record_id"] == "'@human"
     assert rows[0]["model_source_record_id"] == "'-model"
+    organism = next(row for row in rows if row["row_type"] == "organism_descriptive")
+    assert organism["organism_id"] == "'=HYPERLINK(1)"
 
 
 def test_saved_csv_workflow_persists_typed_unverified_parity(client: TestClient) -> None:
@@ -101,17 +115,14 @@ def test_saved_csv_workflow_persists_typed_unverified_parity(client: TestClient)
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200, registry.text
     node = next(
-        row for row in registry.json()
-        if row["node_type"] == "ecology_paired_count_csv_export"
+        row for row in registry.json() if row["node_type"] == "ecology_paired_count_csv_export"
     )
     assert node["executable"] is True
     assert node["input_ports"][0]["accepted_types"] == ["paired_count_comparison"]
     assert node["output_ports"][0]["accepted_types"] == ["paired_count_comparison_csv"]
 
     graph = cast(dict[str, Any], _graph())
-    graph["nodes"].append(
-        {"node_id": "csv-export", "node_type": "ecology_paired_count_csv_export"}
-    )
+    graph["nodes"].append({"node_id": "csv-export", "node_type": "ecology_paired_count_csv_export"})
     graph["edges"].append(
         {
             "edge_id": "comparison-csv",
@@ -121,9 +132,7 @@ def test_saved_csv_workflow_persists_typed_unverified_parity(client: TestClient)
             "target_port_id": "comparison",
         }
     )
-    planned = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    planned = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert planned.status_code == 200, planned.text
     assert planned.json()["executable"] is True
     saved = client.post(
@@ -137,19 +146,22 @@ def test_saved_csv_workflow_persists_typed_unverified_parity(client: TestClient)
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = detail.json()["artifacts"]
     comparison = next(
-        row["payload_json"] for row in artifacts
-        if row["data_type"] == "paired_count_comparison"
+        row["payload_json"] for row in artifacts if row["data_type"] == "paired_count_comparison"
     )
     csv_artifact = next(
-        row["payload_json"] for row in artifacts
+        row["payload_json"]
+        for row in artifacts
         if row["data_type"] == "paired_count_comparison_csv"
     )
     standalone = client.post(
@@ -157,18 +169,20 @@ def test_saved_csv_workflow_persists_typed_unverified_parity(client: TestClient)
         json=_request(_pairs()),
     )
     assert standalone.status_code == 200, standalone.text
+    assert csv_artifact["schema_version"] == "ecology-paired-count-csv-0002"
     assert csv_artifact["csv_text"] == standalone.text
-    assert csv_artifact["source_input_sha256"] == (
-        comparison["analysis_provenance"]["canonical_input_sha256"]
+    assert "organism_descriptive" in csv_artifact["csv_text"]
+    assert "independent_inference_allowed" in csv_artifact["csv_text"]
+    assert (
+        csv_artifact["source_input_sha256"]
+        == (comparison["analysis_provenance"]["canonical_input_sha256"])
     )
     assert csv_artifact["csv_sha256"] == hashlib.sha256(standalone.content).hexdigest()
     assert csv_artifact["evidence_level"] == "caller_supplied_unverified"
     assert csv_artifact["review_status"] == "requires_source_verification"
     assert csv_artifact["independent_unit_inference_allowed"] is False
 
-    graph["nodes"].append(
-        {"node_id": "dataset", "node_type": "dataset_version_create"}
-    )
+    graph["nodes"].append({"node_id": "dataset", "node_type": "dataset_version_create"})
     graph["edges"].append(
         {
             "edge_id": "csv-into-reviewed",
@@ -178,15 +192,10 @@ def test_saved_csv_workflow_persists_typed_unverified_parity(client: TestClient)
             "target_port_id": "reviewed",
         }
     )
-    rejected = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph
-    )
+    rejected = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/validate", json=graph)
     assert rejected.status_code == 200, rejected.text
     assert rejected.json()["valid"] is False
-    assert any(
-        issue["code"] == "incompatible_port_types"
-        for issue in rejected.json()["issues"]
-    )
+    assert any(issue["code"] == "incompatible_port_types" for issue in rejected.json()["issues"])
 
 
 def test_csv_rechecks_tampered_results_and_provenance() -> None:

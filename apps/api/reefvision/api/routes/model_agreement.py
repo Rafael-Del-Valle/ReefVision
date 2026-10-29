@@ -34,7 +34,5 @@ def export_paired_count_comparison(request: PairedCountComparisonRequest) -> Res
     return Response(
         content=render_paired_count_csv(comparison),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": 'attachment; filename="reefvision-paired-counts.csv"'
-        },
+        headers={"Content-Disposition": 'attachment; filename="reefvision-paired-counts.csv"'},
     )

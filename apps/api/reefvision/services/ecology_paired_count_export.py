@@ -4,21 +4,24 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import defaultdict
 from io import StringIO
 
 from pydantic import ValidationError as SchemaValidationError
 
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.model_agreement import PairedCountComparisonResponse
 from reefvision.services.ecology_candidate_report_export import _csv_identifier
 
-_EXPORT_VERSION = "ecology-paired-count-csv-0001"
+_EXPORT_VERSION = "ecology-paired-count-csv-0002"
 _COLUMNS = (
     "export_schema_version",
     "source_input_sha256",
     "algorithm_version",
     "evidence_level",
     "review_status",
+    "independent_inference_allowed",
     "reference_kind",
     "metric_name",
     "row_type",
@@ -35,6 +38,7 @@ _COLUMNS = (
     "signed_percent_deviation",
     "absolute_percent_deviation",
     "paired_observation_count",
+    "repeated_observation_count",
     "observed_organism_count",
     "nonzero_reference_count",
     "mean_signed_bias",
@@ -64,9 +68,7 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
     if comparison.analysis_provenance.algorithm_version != "ecology-paired-count-0007":
         raise ValidationError("Paired count CSV requires the current validated result contract")
     try:
-        checked = PairedCountComparisonResponse.model_validate(
-            comparison.model_dump(mode="json")
-        )
+        checked = PairedCountComparisonResponse.model_validate(comparison.model_dump(mode="json"))
     except SchemaValidationError as exc:
         raise ValidationError("Paired count CSV source artifact failed integrity checks") from exc
 
@@ -89,6 +91,7 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
         "algorithm_version": checked.analysis_provenance.algorithm_version,
         "evidence_level": checked.evidence_level,
         "review_status": checked.review_status,
+        "independent_inference_allowed": "false",
         "reference_kind": checked.reference_kind,
         "metric_name": _csv_identifier(checked.metric_name),
         "experimental_unit_type": _csv_identifier(checked.experimental_unit_type or ""),
@@ -100,12 +103,12 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
     def write(row_type: str, **values: object) -> None:
         writer.writerow({**common, "row_type": row_type, **values})
 
+    by_organism = defaultdict(list)
     for pair in sorted(checked.paired_differences, key=lambda row: row.observation_id):
+        by_organism[pair.organism_id].append(pair)
         write(
             "pair",
-            experimental_unit_id=_csv_identifier(
-                unit_by_organism.get(pair.organism_id, "")
-            ),
+            experimental_unit_id=_csv_identifier(unit_by_organism.get(pair.organism_id, "")),
             organism_id=_csv_identifier(pair.organism_id),
             observation_id=_csv_identifier(pair.observation_id),
             reference_source_record_id=_csv_identifier(pair.reference_source_record_id),
@@ -118,6 +121,44 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
             absolute_percent_deviation=_optional_number(pair.absolute_percent_deviation),
         )
 
+    # One descriptive row per organism: repeated photographs are not replicates.
+    # The independently declared experimental unit remains unverified.
+    for organism_id, rows in sorted(by_organism.items()):
+        eligible_signed = [
+            row.signed_percent_deviation
+            for row in rows
+            if row.signed_percent_deviation is not None
+        ]
+        eligible_absolute = [
+            row.absolute_percent_deviation
+            for row in rows
+            if row.absolute_percent_deviation is not None
+        ]
+        write(
+            "organism_descriptive",
+            experimental_unit_id=_csv_identifier(unit_by_organism.get(organism_id, "")),
+            organism_id=_csv_identifier(organism_id),
+            paired_observation_count=len(rows),
+            repeated_observation_count=len(rows) - 1,
+            observed_organism_count=1,
+            nonzero_reference_count=len(eligible_absolute),
+            mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in rows),
+            mean_absolute_error=finite_descriptive_mean(row.absolute_difference for row in rows),
+            mean_signed_percent_deviation=(
+                finite_descriptive_mean(eligible_signed) if eligible_signed else ""
+            ),
+            mean_absolute_percent_deviation=(
+                finite_descriptive_mean(eligible_absolute) if eligible_absolute else ""
+            ),
+            summary_json=_json(
+                {
+                    "analysis_level": "organism_descriptive",
+                    "observation_ids": [row.observation_id for row in rows],
+                    "zero_reference_count": len(rows) - len(eligible_absolute),
+                }
+            ),
+        )
+
     for unit in sorted(checked.unit_summaries, key=lambda row: row.experimental_unit_id):
         write(
             "declared_unit",
@@ -127,12 +168,8 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
             nonzero_reference_count=unit.nonzero_reference_count,
             mean_signed_bias=unit.mean_signed_bias,
             mean_absolute_error=unit.mean_absolute_error,
-            mean_signed_percent_deviation=_optional_number(
-                unit.mean_signed_percent_deviation
-            ),
-            mean_absolute_percent_deviation=_optional_number(
-                unit.mean_absolute_percent_deviation
-            ),
+            mean_signed_percent_deviation=_optional_number(unit.mean_signed_percent_deviation),
+            mean_absolute_percent_deviation=_optional_number(unit.mean_absolute_percent_deviation),
             summary_json=_json(unit.model_dump(mode="json")),
         )
 
@@ -143,20 +180,10 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
         nonzero_reference_count=checked.nonzero_reference_count,
         mean_signed_bias=checked.mean_signed_bias,
         mean_absolute_error=checked.mean_absolute_error,
-        mean_signed_percent_deviation=_optional_number(
-            checked.mean_signed_percent_deviation
-        ),
-        mean_absolute_percent_deviation=_optional_number(
-            checked.mean_absolute_percent_deviation
-        ),
-        declared_independent_unit_count=_optional_number(
-            checked.declared_independent_unit_count
-        ),
-        shared_parent_colony_ids_json=_json(
-            checked.cross_unit_shared_parent_colony_ids
-        ),
-        summary_json=_json(
-            checked.model_dump(mode="json", exclude={"paired_differences"})
-        ),
+        mean_signed_percent_deviation=_optional_number(checked.mean_signed_percent_deviation),
+        mean_absolute_percent_deviation=_optional_number(checked.mean_absolute_percent_deviation),
+        declared_independent_unit_count=_optional_number(checked.declared_independent_unit_count),
+        shared_parent_colony_ids_json=_json(checked.cross_unit_shared_parent_colony_ids),
+        summary_json=_json(checked.model_dump(mode="json", exclude={"paired_differences"})),
     )
     return output.getvalue()

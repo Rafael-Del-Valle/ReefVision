@@ -1072,11 +1072,9 @@ def _ecology_paired_count_csv_export(
             "port_id": "csv",
             "data_type": "paired_count_comparison_csv",
             "payload": {
-                "schema_version": "ecology-paired-count-csv-0001",
+                "schema_version": "ecology-paired-count-csv-0002",
                 "project_id": project_id,
-                "source_input_sha256": (
-                    comparison.analysis_provenance.canonical_input_sha256
-                ),
+                "source_input_sha256": (comparison.analysis_provenance.canonical_input_sha256),
                 "source_record_ids": comparison.analysis_provenance.source_record_ids,
                 "algorithm_version": comparison.analysis_provenance.algorithm_version,
                 "csv_sha256": hashlib.sha256(csv_text.encode("utf-8")).hexdigest(),

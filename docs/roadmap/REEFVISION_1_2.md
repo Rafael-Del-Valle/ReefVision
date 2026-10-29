@@ -3899,3 +3899,29 @@ independent experimental units, ICC/Bland–Altman, or scientist review.
 Exact-head CI, migration reconciliation with 1.1, representative data and
 native Windows GUI/MSI acceptance remain required. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+## Per-organism descriptive CSV rows and formatter recovery (2026-10-29)
+
+The prior exact-head `51cb56ea53a8b9f2c2609a3df340fc7fbfacc8ff`
+completed 15/19 GitHub Actions workflows successfully. CI, Pose Workflow
+Validation, ReefVision 1.0 Acceptance and Milestone 10 Acceptance stopped at
+Ruff formatting before executing their backend scientific tests. Applied the
+formatter's exact four-file corrections.
+
+Paired human–model CSV export `ecology-paired-count-csv-0002` now adds one
+**organism_descriptive** row per distinct organism, with within-organism
+signed bias, absolute error, eligible percent-deviation denominators, repeated
+image counts and stable source-observation identifiers. Pair-level, declared
+experimental-unit and overall rows remain, and deterministic ordering is
+preserved. Each CSV row explicitly states `independent_inference_allowed=false`:
+repeated photographs and caller-declared organisms/tanks are **not** verified
+independent replicates. The standalone endpoint and existing typed, executable
+saved Workflow Builder CSV node use the same renderer and provenance/review
+restrictions. Regression coverage includes repeated images, zero-reference
+percent exclusion, spreadsheet formula safety, standalone/workflow parity,
+and the unverified-inference warning. No source is promoted to verified.
+
+Full exact-new-head CI, authenticated longitudinal calibration/identity,
+1.1 migration reconciliation, real-data scientific review and physical
+Windows GUI/MSI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
+1.3 not started.**
