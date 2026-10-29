@@ -5,10 +5,11 @@ Queues rank review effort; they never establish verified biological truth.
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -20,6 +21,17 @@ from reefvision.services.workflow_review_queue_integrity import (
     validate_saved_queue_snapshot,
 )
 from reefvision.storage.datasets import canonical_json_sha256
+
+
+def _is_sqlite_writer_contention(exc: OperationalError) -> bool:
+    """Recognize SQLite busy/locked errors, not arbitrary database failures."""
+    if not isinstance(exc.orig, sqlite3.OperationalError):
+        return False
+    code = getattr(exc.orig, "sqlite_errorcode", None)
+    return isinstance(code, int) and (code & 0xFF) in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }
 
 
 def create_review_queue_workflow_artifact(
@@ -150,6 +162,21 @@ def create_review_queue_workflow_artifact(
             session.rollback()
             raise ValidationError(
                 "Concurrent QC review-queue creation detected; retry the saved workflow node"
+            ) from exc
+        except OperationalError as exc:
+            # A second local SQLite writer may hold a RESERVED/EXCLUSIVE lock
+            # before our stable primary-key insert is attempted. This raises
+            # SQLITE_BUSY/LOCKED rather than IntegrityError. Fail closed and
+            # permit an explicit saved-node retry after the writer releases it.
+            # Do not mask unrelated I/O, schema or database errors.
+            if (
+                session.get_bind().dialect.name != "sqlite"
+                or not _is_sqlite_writer_contention(exc)
+            ):
+                raise
+            session.rollback()
+            raise ValidationError(
+                "SQLite QC review-queue writer contention; retry the saved workflow node"
             ) from exc
 
     payload = {
