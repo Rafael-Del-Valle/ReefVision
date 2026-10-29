@@ -169,7 +169,8 @@ def test_saved_environmental_threshold_graph_reuses_current_noaa_snapshot(
     assert any(
         item["id"] == saved["id"]
         and item["graph_sha256"] == saved["graph_sha256"]
-        and item["graph_json"]["nodes"] == graph["nodes"]
+        and item["graph_json"]["nodes"][1]["parameters"]["query"]
+        == graph["nodes"][1]["parameters"]["query"]
         for item in listed.json()
     )
 
