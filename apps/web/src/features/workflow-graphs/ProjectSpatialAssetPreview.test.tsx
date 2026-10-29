@@ -55,6 +55,9 @@ describe("ProjectSpatialAssetPreview", () => {
     fireEvent.change(screen.getByLabelText("Preview geometry"), {
       target: { value: "point_cloud" },
     });
+    fireEvent.change(screen.getByLabelText("Calibration method (unverified)"), {
+      target: { value: "ruler" },
+    });
     fireEvent.change(screen.getByLabelText("Calibration evidence (unverified)"), {
       target: { value: "Unreviewed ruler" },
     });
@@ -66,6 +69,7 @@ describe("ProjectSpatialAssetPreview", () => {
       "point_cloud",
       expect.objectContaining({
         meters_per_unit: 0.01,
+        calibration_method: "ruler",
         calibration_evidence: "Unreviewed ruler",
         relative_scale_uncertainty: null,
       }),
@@ -75,6 +79,39 @@ describe("ProjectSpatialAssetPreview", () => {
       target: { value: "0.02" },
     });
     expect(screen.queryByText("Unreviewed cloud artifact")).not.toBeInTheDocument();
+  });
+
+  it("defaults to unknown calibration and invalidates results when method changes", async () => {
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    await screen.findByRole("option", { name: /colony.ply/ });
+    fireEvent.change(screen.getByLabelText("Project 3D source"), {
+      target: { value: "asset-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Calibration evidence (unverified)"), {
+      target: { value: "Unreviewed source metadata" },
+    });
+    expect(screen.getByLabelText("Calibration method (unverified)")).toHaveValue("other");
+    fireEvent.click(screen.getByRole("button", { name: "Preview imported source" }));
+    expect(await screen.findByText("Unreviewed mesh artifact")).toBeInTheDocument();
+    expect(previewProjectSpatialAsset).toHaveBeenLastCalledWith(
+      "reef-project",
+      asset,
+      "mesh",
+      expect.objectContaining({ calibration_method: "other" }),
+    );
+
+    fireEvent.change(screen.getByLabelText("Calibration method (unverified)"), {
+      target: { value: "instrument" },
+    });
+    expect(screen.queryByText("Unreviewed mesh artifact")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Preview imported source" }));
+    await waitFor(() => expect(previewProjectSpatialAsset).toHaveBeenCalledTimes(2));
+    expect(previewProjectSpatialAsset).toHaveBeenLastCalledWith(
+      "reef-project",
+      asset,
+      "mesh",
+      expect.objectContaining({ calibration_method: "instrument" }),
+    );
   });
 
   it("imports a new original and keeps scientific review explicitly pending", async () => {
