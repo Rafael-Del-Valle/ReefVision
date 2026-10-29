@@ -408,6 +408,54 @@ def test_threshold_samples_preserve_source_records_and_unit_contract(client):
     assert history.json()["total"] == len(source_ids)
 
 
+def test_threshold_inclusive_directions_preserve_exact_boundary_and_qc(client):
+    """Inclusive comparisons retain equality without admitting suspect evidence."""
+    project = create_project(client)
+    records_url = f"/api/v1/projects/{project['id']}/scientific-records"
+    saved = client.post(
+        records_url,
+        json={
+            "records": [
+                observation(value=20, unit="degC", qc="accepted"),
+                observation(value=21, unit="degC", qc="accepted"),
+                observation(value=19, unit="degC", qc="accepted"),
+                observation(value=20, unit="degC", qc="suspect"),
+            ]
+        },
+    )
+    assert saved.status_code == 201, saved.text
+    ids = [row["id"] for row in saved.json()["items"]]
+    url = f"/api/v1/projects/{project['id']}/environment/events/threshold"
+    query = {
+        "variable": "water_temperature",
+        "location": {"latitude": 32.75, "longitude": -79.93},
+        "observed_at": "2026-04-03T13:00:00Z",
+        "max_distance_m": 1000,
+        "max_time_delta_s": 60,
+        "source_kinds": ["observed"],
+        "threshold_value": 68,
+        "threshold_unit": "degF",
+    }
+    expected = {
+        "above": {ids[1]},
+        "below": {ids[2]},
+        "at_or_above": {ids[0], ids[1]},
+        "at_or_below": {ids[0], ids[2]},
+    }
+    for direction, record_ids in expected.items():
+        response = client.post(url, json={**query, "direction": direction})
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["direction"] == direction
+        assert payload["normalized_threshold"] == pytest.approx(20)
+        assert {item["record"]["id"] for item in payload["matches"]} == record_ids
+    invalid = client.post(url, json={**query, "direction": "approximately_above"})
+    assert invalid.status_code == 422, invalid.text
+    history = client.get(records_url)
+    assert history.status_code == 200, history.text
+    assert history.json()["total"] == len(ids)
+
+
 def test_threshold_samples_exclude_superseded_noaa_evidence(client):
     from reefvision.schemas.environmental_context import NOAAImportRequest
     from reefvision.services.environmental_context import EnvironmentalContextService

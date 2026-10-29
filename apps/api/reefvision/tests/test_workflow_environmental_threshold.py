@@ -110,6 +110,54 @@ def test_saved_environmental_threshold_workflow_persists_provenance(client: Test
     assert history.json()["total"] == len(record_ids)
 
 
+def test_saved_environmental_threshold_inclusive_boundary_survives_reload(
+    client: TestClient,
+) -> None:
+    """A persisted inclusive rule must execute with the exact scientific boundary."""
+    project = create_project(client, "Inclusive environmental threshold")
+    records_url = f"/api/v1/projects/{project['id']}/scientific-records"
+    saved_records = client.post(
+        records_url,
+        json={
+            "records": [
+                observation(value=20, unit="degC", qc="accepted"),
+                observation(value=20, unit="degC", qc="suspect"),
+            ]
+        },
+    )
+    assert saved_records.status_code == 201, saved_records.text
+    accepted_id = saved_records.json()["items"][0]["id"]
+    graph = threshold_graph({**threshold_query(), "direction": "at_or_above"})
+    run = save_and_queue(client, project["id"], graph)
+    saved_graphs = client.get(f"/api/v1/projects/{project['id']}/workflow-graphs")
+    assert saved_graphs.status_code == 200, saved_graphs.text
+    assert any(
+        item["id"] == run["workflow_graph_record_id"]
+        and item["graph_json"]["nodes"][1]["parameters"]["query"]["direction"]
+        == "at_or_above"
+        for item in saved_graphs.json()
+    )
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "environmental_threshold_samples"
+    )
+    payload = artifact["payload_json"]
+    assert payload["direction"] == "at_or_above"
+    assert payload["query"]["direction"] == "at_or_above"
+    assert payload["sample_count"] == 1
+    assert payload["matches"][0]["record_id"] == accepted_id
+    assert payload["matches"][0]["snapshot"]["record"]["qc"] == "accepted"
+    assert len(artifact["payload_sha256"]) == 64
+
+
 def test_invalid_environmental_threshold_workflow_fails_without_artifact(
     client: TestClient,
 ) -> None:

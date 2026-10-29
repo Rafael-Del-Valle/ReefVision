@@ -120,19 +120,22 @@ class EnvironmentalDatasetPage(ScientificModel):
     total: int
 
 
+ThresholdDirection = Literal["above", "below", "at_or_above", "at_or_below"]
+
+
 class EnvironmentalThresholdRequest(EnvironmentalLookup):
     """Detect threshold-exceeding samples without inferring event duration."""
 
     threshold_value: float
     threshold_unit: str = Field(min_length=1, max_length=20)
-    direction: Literal["above", "below"] = "above"
+    direction: ThresholdDirection = "above"
 
 
 class EnvironmentalThresholdResponse(ScientificModel):
     matches: list[EnvironmentalMatch]
     normalized_threshold: float
     normalized_unit: str
-    direction: Literal["above", "below"]
+    direction: ThresholdDirection
     method: Literal["observed_sample_threshold_no_interpolation"] = (
         "observed_sample_threshold_no_interpolation"
     )

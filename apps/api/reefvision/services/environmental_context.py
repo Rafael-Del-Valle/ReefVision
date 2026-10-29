@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from operator import ge, gt, le, lt
 from typing import Any
 
 import httpx
@@ -257,14 +258,16 @@ class EnvironmentalContextService:
         candidates = self.lookup(project_id, lookup).matches
         if any(match.record.normalized_unit != unit for match in candidates):
             raise ValidationError("Threshold unit must match the normalized observation unit")
+        compare = {
+            "above": gt,
+            "below": lt,
+            "at_or_above": ge,
+            "at_or_below": le,
+        }[request.direction]
         matches = [
             match
             for match in candidates
-            if (
-                match.record.normalized_value > threshold
-                if request.direction == "above"
-                else match.record.normalized_value < threshold
-            )
+            if compare(match.record.normalized_value, threshold)
         ]
         matches.sort(key=lambda item: (item.record.observed_at, str(item.record.id)))
         return EnvironmentalThresholdResponse(
