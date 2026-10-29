@@ -190,6 +190,62 @@ def test_log_tail_rejects_unsafe_paths(tmp_path: Path, filename: str) -> None:
     assert error.value.status_code == 403
 
 
+
+@pytest.mark.parametrize("outside_root", [True, False])
+def test_log_tail_rejects_symlink_to_unauthorized_target(
+    tmp_path: Path, outside_root: bool
+) -> None:
+    """A permitted .log alias cannot expose external files or a database."""
+    target = (
+        tmp_path.parent / f"{tmp_path.name}-private.log"
+        if outside_root
+        else tmp_path / "reefvision.db"
+    )
+    original = b"private scientific records\\n"
+    target.write_bytes(original)
+    alias = tmp_path / "training.log"
+    try:
+        alias.symlink_to(target)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"File symlinks unavailable on this runner: {error}")
+
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+    assert error.value.status_code == 403
+    assert target.read_bytes() == original
+
+
+def test_log_tail_allows_in_root_log_symlink_without_writing(tmp_path: Path) -> None:
+    """Legitimate managed log aliases remain readable, never mutable."""
+    target = tmp_path / "worker.log"
+    original = b"epoch=4\\ntrain/box_loss=0.25\\n"
+    target.write_bytes(original)
+    alias = tmp_path / "training.log"
+    try:
+        alias.symlink_to(target)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"File symlinks unavailable on this runner: {error}")
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": original.decode("utf-8"),
+    }
+    assert target.read_bytes() == original
+
+
+def test_log_tail_broken_symlink_does_not_expose_or_invent_data(tmp_path: Path) -> None:
+    alias = tmp_path / "training.log"
+    try:
+        alias.symlink_to(tmp_path / "missing.log")
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"File symlinks unavailable on this runner: {error}")
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": False,
+        "text": "",
+    }
+
+
 def test_log_tail_strips_terminal_control_sequences(tmp_path: Path) -> None:
     log = tmp_path / "training.log"
     original = (
