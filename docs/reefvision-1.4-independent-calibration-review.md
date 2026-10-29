@@ -46,3 +46,20 @@ validation engine and preserve provisional status.
 ## Longitudinal independent-review replay safeguards
 
 The `mesh_longitudinal_comparison` standalone endpoint and persisted, executable typed Workflow Builder node reject registration and specimen-reidentification review timestamps preceding either bound observation. Saved-graph regression tests also reject case-only reviewer/operator aliases (including `OPERATOR-1` versus `operator-1` and `OBSERVER-1` versus `observer-1`) without emitting a comparison artifact. Accepted comparisons preserve the caller-supplied review record, its original timestamp, and provisional verification flags in the saved artifact. These tests cover consistency of saved execution, **not** authenticated reviewer identity, durable review-record versioning, registration accuracy, or verified biological reidentification.
+
+
+## Imported 3D original identity binding
+
+Project-owned OBJ, PLY, and GLB originals are stored under a path derived from
+the immutable asset ID and recorded format. Source retrieval now rejects a
+database record whose managed path no longer matches that identity, even when
+an alternate file inside the same project contains byte-identical content and
+would pass the stored SHA-256 digest. This prevents a metadata/path substitution
+from silently changing the meaning of an imported asset reference.
+
+Regression tests cover OBJ mesh and ASCII PLY point-cloud previews through
+both standalone project endpoints and previously saved, executable typed
+Workflow Builder graphs. A substituted path must fail before a scientific
+measurement artifact is emitted. This is an integrity and reproducibility
+guard, **not** proof of original acquisition, authenticated operator identity,
+physical calibration, or verified coral specimen identity.
