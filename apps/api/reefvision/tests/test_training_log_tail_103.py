@@ -201,7 +201,7 @@ def test_log_tail_rejects_symlink_to_unauthorized_target(
         if outside_root
         else tmp_path / "reefvision.db"
     )
-    original = b"private scientific records\\n"
+    original = b"private scientific records\n"
     target.write_bytes(original)
     alias = tmp_path / "training.log"
     try:
@@ -218,7 +218,7 @@ def test_log_tail_rejects_symlink_to_unauthorized_target(
 def test_log_tail_allows_in_root_log_symlink_without_writing(tmp_path: Path) -> None:
     """Legitimate managed log aliases remain readable, never mutable."""
     target = tmp_path / "worker.log"
-    original = b"epoch=4\\ntrain/box_loss=0.25\\n"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
     target.write_bytes(original)
     alias = tmp_path / "training.log"
     try:
