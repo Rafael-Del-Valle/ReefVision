@@ -28,10 +28,24 @@ must agree with the stored original. Results include
 `caller_supplied_unverified` measurement status. Saved graphs store the ID,
 not a second copy of the original bytes; missing or tampered files fail closed.
 
+Project-owned ASCII PLY **point clouds** can now use the same `asset_id`
+contract in the standalone `spatial/point-cloud-preview` endpoint and in
+saved, executable `point_cloud_preview` Workflow Builder nodes. An asset ID
+cannot be combined with inline PLY or XYZ points. Each execution verifies
+project ownership, original byte length and SHA-256, optional expected digest,
+and the PLY source format before running the existing point-cloud engine.
+The bounded point-cloud parser accepts only ASCII PLY with vertex-only XYZ
+(and optional RGB), not mesh faces or inferred surfaces. Results record the
+project asset ID and SHA-256, plus `project_source_original_unreviewed` QC.
+The standalone and persisted-graph paths use the same resolver and engine;
+saved graphs retain the ID, not a second copy of source bytes. Tests cover
+artifact equality, cross-project rejection, altered originals, and mixed
+inline/stored geometry. Matching digests do **not** verify physical scale,
+coordinate registration, specimen identity, or biological branch length.
+
 This remains a first persistence slice, **not** a finished asset workspace.
 An 8 MiB stored source may still exceed the existing bounded mesh parser
 limits (256,000 text characters or 350,000 GLB base64 characters); such
-sources are retained but cannot yet be previewed. PLY point-cloud asset
-binding, an interactive asset picker, large-file streaming, migration/Windows
+sources are retained but cannot yet be previewed. An interactive asset picker, large-file streaming, migration/Windows
 installation verification, and all remaining scientific release gates remain
 open. No asset is automatically calibrated, registered or biologically verified.
