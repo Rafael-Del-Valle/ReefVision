@@ -354,3 +354,53 @@ def test_lookup_excludes_stale_calibration_but_preserves_unlinked_station_observ
     after = client.post(lookup_url, json=request)
     assert after.status_code == 200, after.text
     assert [match["record"]["id"] for match in after.json()["matches"]] == [unlinked_record["id"]]
+
+
+def test_threshold_samples_preserve_source_records_and_unit_contract(client):
+    project = create_project(client)
+    records_url = f"/api/v1/projects/{project['id']}/scientific-records"
+    saved = client.post(
+        records_url,
+        json={
+            "records": [
+                observation(value=22, unit="degC", qc="accepted"),
+                observation(value=18, unit="degC", qc="accepted"),
+                observation(value=25, unit="degC", qc="suspect"),
+                observation(value=26, unit="degC", qc="rejected"),
+                observation(value=30, unit="degC", source_kind="modeled"),
+            ]
+        },
+    )
+    assert saved.status_code == 201, saved.text
+    source_ids = [row["id"] for row in saved.json()["items"]]
+    url = f"/api/v1/projects/{project['id']}/environment/events/threshold"
+    payload = {
+        "variable": "water_temperature",
+        "location": {"latitude": 32.75, "longitude": -79.93},
+        "observed_at": "2026-04-03T13:00:00Z",
+        "max_distance_m": 1000,
+        "max_time_delta_s": 60,
+        "source_kinds": ["observed"],
+        "threshold_value": 68,
+        "threshold_unit": "degF",
+        "direction": "above",
+    }
+    above = client.post(url, json=payload)
+    assert above.status_code == 200, above.text
+    result = above.json()
+    assert result["method"] == "observed_sample_threshold_no_interpolation"
+    assert result["normalized_threshold"] == pytest.approx(20)
+    assert result["normalized_unit"] == "degC"
+    assert [item["record"]["id"] for item in result["matches"]] == source_ids[:1]
+    assert result["matches"][0]["record"]["provenance"]["source"] == "laboratory sensor"
+
+    below = client.post(url, json={**payload, "direction": "below"})
+    assert below.status_code == 200, below.text
+    assert [item["record"]["id"] for item in below.json()["matches"]] == source_ids[1:2]
+    wrong_units = client.post(url, json={**payload, "threshold_unit": "m/s"})
+    assert wrong_units.status_code == 400, wrong_units.text
+    nonfinite = client.post(url, json={**payload, "threshold_value": "NaN"})
+    assert nonfinite.status_code == 422, nonfinite.text
+    history = client.get(records_url)
+    assert history.status_code == 200, history.text
+    assert history.json()["total"] == len(source_ids)
