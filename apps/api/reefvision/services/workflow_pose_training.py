@@ -556,11 +556,14 @@ def _reused_pose_training_result(
         advertised = artifact_manifest.get(field)
         if advertised is None:
             continue
-        if not isinstance(advertised, str) or (
-            resolve_managed_project_path(settings, advertised).resolve()
-            != (expected_weights_dir / filename).resolve()
-        ):
+        if not isinstance(advertised, str):
             raise ValidationError("Recovered pose-training checkpoint artifact path changed")
+        advertised_checkpoint = resolve_managed_project_path(settings, advertised)
+        if (
+            advertised_checkpoint.resolve() != (expected_weights_dir / filename).resolve()
+            or not advertised_checkpoint.is_file()
+        ):
+            raise ValidationError("Recovered pose-training checkpoint artifact path changed or is missing")
 
     if not checkpoint.is_file():
         raise ValidationError("Recovered pose training checkpoint is missing")
