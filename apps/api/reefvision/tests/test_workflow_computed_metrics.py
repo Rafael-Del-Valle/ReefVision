@@ -151,6 +151,7 @@ def test_workflow_metric_failure_is_persisted_without_result(
     client: TestClient, failure: str
 ) -> None:
     project = create_project(client, f"Metric workflow {failure}")
+    qc_by_failure = {"qc_rejected": "rejected", "qc_suspect": "suspect"}
     organisms, area = add_records(
         client,
         project["id"],
@@ -159,9 +160,7 @@ def test_workflow_metric_failure_is_persisted_without_result(
                 "organism_count",
                 12,
                 "count",
-                qc={"qc_rejected": "rejected", "qc_suspect": "suspect"}.get(
-                    failure, "unassessed"
-                ),
+                qc=qc_by_failure.get(failure, "unassessed"),
             ),
             scientific_record("surveyed_area", 2, "m2"),
         ],
@@ -186,6 +185,10 @@ def test_workflow_metric_failure_is_persisted_without_result(
     )
     detail = client.get(f"/api/v1/workflow-runs/{run['id']}").json()
     assert detail["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "computed_metric_result"
+        for artifact in detail["artifacts"]
+    )
     assert (
         client.get(f"/api/v1/projects/{project['id']}/computed-metric-results").json()["total"] == 0
     )
