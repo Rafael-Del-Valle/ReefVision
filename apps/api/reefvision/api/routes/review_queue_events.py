@@ -6,15 +6,14 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from reefvision.domain.errors import ConflictError
-from reefvision.services.review_queue_bulk import _is_sqlite_writer_contention
-
 from reefvision.api.dependencies import get_db_session
+from reefvision.domain.errors import ConflictError
 from reefvision.schemas.review_queue_events import (
     ReviewQueueEventCreate,
     ReviewQueueEventResponse,
     ReviewQueueEventsPage,
 )
+from reefvision.services.review_queue_bulk import _is_sqlite_writer_contention
 from reefvision.services.review_queue_events import (
     create_review_event,
     list_review_events,
