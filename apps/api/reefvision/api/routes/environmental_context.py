@@ -15,6 +15,8 @@ from reefvision.schemas.environmental_context import (
     EnvironmentalLookupResponse,
     EnvironmentalSubjectContext,
     EnvironmentalSubjectLookup,
+    EnvironmentalThresholdRequest,
+    EnvironmentalThresholdResponse,
     NOAAImportRequest,
 )
 from reefvision.services.copernicus_environment import CopernicusEnvironmentService
@@ -38,6 +40,16 @@ def lookup_environment(
     project_id: UUID, payload: EnvironmentalLookup, session: DbSession
 ) -> EnvironmentalLookupResponse:
     return EnvironmentalContextService(session).lookup(str(project_id), payload)
+
+
+@router.post(
+    "/projects/{project_id}/environment/events/threshold",
+    response_model=EnvironmentalThresholdResponse,
+)
+def environmental_threshold_samples(
+    project_id: UUID, payload: EnvironmentalThresholdRequest, session: DbSession
+) -> EnvironmentalThresholdResponse:
+    return EnvironmentalContextService(session).threshold_samples(str(project_id), payload)
 
 
 @router.post(
