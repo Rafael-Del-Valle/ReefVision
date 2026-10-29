@@ -545,6 +545,23 @@ def _reused_pose_training_result(
     if checkpoint.name not in {"best.pt", "last.pt"}:
         raise ValidationError("Recovered pose training checkpoint belongs to another output")
 
+    # Downstream nodes also receive the worker's best/last checkpoint paths.
+    # A valid result checkpoint cannot authorize unrelated model artifacts
+    # advertised through that same scientific provenance manifest.
+    artifact_manifest = dict(run.artifact_manifest_json or {})
+    for field, filename in (
+        ("best_checkpoint_path", "best.pt"),
+        ("last_checkpoint_path", "last.pt"),
+    ):
+        advertised = artifact_manifest.get(field)
+        if advertised is None:
+            continue
+        if not isinstance(advertised, str) or (
+            resolve_managed_project_path(settings, advertised).resolve()
+            != (expected_weights_dir / filename).resolve()
+        ):
+            raise ValidationError("Recovered pose-training checkpoint artifact path changed")
+
     if not checkpoint.is_file():
         raise ValidationError("Recovered pose training checkpoint is missing")
 
