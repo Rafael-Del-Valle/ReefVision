@@ -125,7 +125,7 @@ def test_standalone_accepts_parent_fragments_in_separate_tanks(client: TestClien
     assert payload["declared_independent_unit_count"] == 2
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"
-    assert payload["analysis_provenance"]["algorithm_version"] == "ecology-paired-count-0006"
+    assert payload["analysis_provenance"]["algorithm_version"] == "ecology-paired-count-0007"
     assert payload["overcount_pair_count"] == 1
     assert payload["undercount_pair_count"] == 1
     assert payload["exact_match_pair_count"] == 0

@@ -3646,3 +3646,30 @@ passes are claimed before their actual execution. Reviewed source-backed
 longitudinal calibration, organism identity, study-design independence and
 1.1 Alembic-head reconciliation remain release blockers.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Paired-count organism-direction QC (2026-10-29)
+
+The existing standalone human–model comparison and executable, persisted
+`ecology_paired_count_comparison` Workflow Builder node now report overcount,
+undercount and zero-mean direction **per caller-declared organism** in addition
+to existing per-image directional frequencies. Each organism receives one vote
+from the arithmetic mean of its signed paired-image differences; repeated
+images cannot inflate the number of organism votes. A zero-mean organism may
+contain cancelling over- and undercounts, and is deliberately named
+`balanced_organism_count`, not an exact-match organism. Per-tank organism
+votes and global organism votes are descriptive, not verified independent
+experimental replicates. All outputs remain caller-supplied/unverified and
+cannot flow into verified datasets through Workflow Builder.
+
+The additive typed fields default to zero when older persisted artifacts are
+read. New computations use provenance `ecology-paired-count-0007`; older
+artifacts retain their historical algorithm identifiers. Domain regression
+tests exercise cancelling errors, repeated-image denominators, nested tank
+votes and legacy decoding. Standalone API and saved executable workflow tests
+check persisted typed artifacts and parity. Prior head `739953939` passed
+19/19 GitHub Actions workflows; the new head requires its own CI validation.
+Scientist-reviewed calibrated longitudinal evidence, 1.1 migration
+reconciliation, representative real-data review and physical Windows
+installer/GUI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
+1.3 not started.**

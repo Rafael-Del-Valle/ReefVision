@@ -146,6 +146,11 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     assert payload["overcount_pair_count"] == 1
     assert payload["undercount_pair_count"] == 1
     assert payload["exact_match_pair_count"] == 0
+    assert payload["overcount_organism_count"] == 1
+    assert payload["undercount_organism_count"] == 1
+    assert payload["balanced_organism_count"] == 0
+    assert payload["unit_summaries"][0]["overcount_organism_count"] == 1
+    assert payload["unit_summaries"][0]["undercount_organism_count"] == 1
     assert payload["unit_summaries"][0]["overcount_pair_count"] == 1
     assert payload["unit_summaries"][0]["undercount_pair_count"] == 1
     assert payload["unit_summaries"][0]["exact_match_pair_count"] == 0
@@ -165,6 +170,9 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
         "overcount_pair_count",
         "undercount_pair_count",
         "exact_match_pair_count",
+        "overcount_organism_count",
+        "undercount_organism_count",
+        "balanced_organism_count",
         "mean_signed_percent_deviation",
         "unit_balanced_mean_signed_percent_deviation",
         "organism_and_unit_balanced_mean_signed_percent_deviation",
@@ -243,6 +251,9 @@ def test_saved_repeated_organism_pairs_retain_frequency_qc(client: TestClient) -
     assert artifact["overcount_pair_count"] == 2
     assert artifact["undercount_pair_count"] == 1
     assert artifact["exact_match_pair_count"] == 0
+    assert artifact["overcount_organism_count"] == 1
+    assert artifact["undercount_organism_count"] == 1
+    assert artifact["balanced_organism_count"] == 0
     assert artifact["unequal_pair_counts_across_organisms"] is True
     assert artifact["unit_summaries"][0]["unequal_pair_counts_within_unit"] is True
     for key in (
@@ -252,6 +263,9 @@ def test_saved_repeated_organism_pairs_retain_frequency_qc(client: TestClient) -
         "repeated_pair_count_beyond_first_per_organism",
         "unequal_pair_counts_across_organisms",
         "unit_summaries",
+        "overcount_organism_count",
+        "undercount_organism_count",
+        "balanced_organism_count",
     ):
         assert artifact[key] == standalone.json()[key]
     assert artifact["evidence_level"] == "caller_supplied_unverified"

@@ -115,6 +115,11 @@ class PairedCountUnitSummary(BaseModel):
     overcount_pair_count: int = Field(default=0, ge=0)
     undercount_pair_count: int = Field(default=0, ge=0)
     exact_match_pair_count: int = Field(default=0, ge=0)
+    # Each organism contributes one directional vote from its mean signed count bias.
+    # A zero mean can contain opposing errors; it is not an all-images exact match.
+    overcount_organism_count: int = Field(default=0, ge=0)
+    undercount_organism_count: int = Field(default=0, ge=0)
+    balanced_organism_count: int = Field(default=0, ge=0)
     nonzero_reference_count: int = 0
     percent_contributing_organism_count: int = 0
     mean_absolute_percent_deviation: float | None = None

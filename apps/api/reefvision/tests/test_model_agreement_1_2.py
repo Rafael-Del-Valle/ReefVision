@@ -180,7 +180,7 @@ def test_pair_frequency_audit_exposes_nested_pseudoreplication_risk() -> None:
     assert result.organism_and_unit_balanced_mean_signed_percent_deviation == pytest.approx(-1.25)
     assert result.evidence_level == "caller_supplied_unverified"
     assert result.review_status == "requires_source_verification"
-    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0006"
+    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0007"
 
 
 def test_equal_pair_frequencies_do_not_raise_false_imbalance() -> None:
@@ -224,3 +224,65 @@ def test_directional_pair_frequencies_include_zero_reference_and_exact_matches()
     assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0006"
     assert result.review_status == "requires_source_verification"
     assert result.evidence_level == "caller_supplied_unverified"
+
+
+def test_organism_direction_votes_do_not_treat_repeated_images_as_replicates() -> None:
+    """Opposing image errors can balance for one organism without exact images."""
+    rows = [
+        pair("a1", "frag-A", "tank-1", 10, 13),
+        pair("a2", "frag-A", "tank-1", 10, 7),
+        pair("b", "frag-B", "tank-1", 10, 12),
+        pair("c", "frag-C", "tank-2", 10, 9),
+    ]
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_observer", pairs=rows)
+    )
+    assert result.paired_observation_count == 4
+    assert result.observed_organism_count == 3
+    assert (result.overcount_pair_count, result.undercount_pair_count) == (2, 2)
+    assert result.exact_match_pair_count == 0
+    assert (
+        result.overcount_organism_count,
+        result.undercount_organism_count,
+        result.balanced_organism_count,
+    ) == (1, 1, 1)
+    assert [
+        (
+            unit.overcount_organism_count,
+            unit.undercount_organism_count,
+            unit.balanced_organism_count,
+        )
+        for unit in result.unit_summaries
+    ] == [(1, 0, 1), (0, 1, 0)]
+    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0007"
+    assert result.review_status == "requires_source_verification"
+
+
+def test_organism_direction_fields_remain_optional_for_old_saved_artifacts() -> None:
+    """Earlier typed artifacts decode without inventing historical vote evidence."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 11),
+                pair("b", "frag-B", "tank-2", 10, 9),
+            ],
+        )
+    )
+    old = result.model_dump(mode="json")
+    old["analysis_provenance"]["algorithm_version"] = "ecology-paired-count-0006"
+    for key in (
+        "overcount_organism_count",
+        "undercount_organism_count",
+        "balanced_organism_count",
+    ):
+        old.pop(key)
+        for unit in old["unit_summaries"]:
+            unit.pop(key)
+    restored = PairedCountComparisonResponse.model_validate(old)
+    assert restored.overcount_organism_count == 0
+    assert restored.undercount_organism_count == 0
+    assert restored.balanced_organism_count == 0
+    assert restored.unit_summaries[0].overcount_organism_count == 0

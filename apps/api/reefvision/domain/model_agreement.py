@@ -75,6 +75,7 @@ def compare_paired_counts(
 
     differences: list[PairedCountDifference] = []
     pair_counts_by_organism: dict[str, int] = defaultdict(int)
+    by_organism: dict[str, list[PairedCountDifference]] = defaultdict(list)
     by_unit: dict[str, list[PairedCountDifference]] = defaultdict(list)
     unit_organisms: dict[str, set[str]] = defaultdict(set)
     by_unit_organism: dict[str, dict[str, list[PairedCountDifference]]] = defaultdict(
@@ -103,6 +104,7 @@ def compare_paired_counts(
         )
         differences.append(row)
         pair_counts_by_organism[item.organism_id] += 1
+        by_organism[item.organism_id].append(row)
         if unit_type is not None:
             assert item.experimental_unit_id is not None
             by_unit[item.experimental_unit_id].append(row)
@@ -118,6 +120,10 @@ def compare_paired_counts(
         row.signed_percent_deviation
         for row in differences
         if row.signed_percent_deviation is not None
+    ]
+    organism_biases_all = [
+        finite_descriptive_mean(row.signed_difference for row in by_organism[organism])
+        for organism in sorted(by_organism)
     ]
     unit_summaries = []
     percent_contributing_organisms = 0
@@ -165,6 +171,9 @@ def compare_paired_counts(
                 overcount_pair_count=sum(row.signed_difference > 0 for row in rows),
                 undercount_pair_count=sum(row.signed_difference < 0 for row in rows),
                 exact_match_pair_count=sum(row.signed_difference == 0 for row in rows),
+                overcount_organism_count=sum(bias > 0 for bias in organism_biases),
+                undercount_organism_count=sum(bias < 0 for bias in organism_biases),
+                balanced_organism_count=sum(bias == 0 for bias in organism_biases),
                 observation_counts_by_organism=counts_by_organism,
                 repeated_pair_count_beyond_first_per_organism=(len(rows) - len(counts_by_organism)),
                 unequal_pair_counts_within_unit=len(set(counts_by_organism.values())) > 1,
@@ -262,7 +271,7 @@ def compare_paired_counts(
     return PairedCountComparisonResponse(
         reference_kind=request.reference_kind,
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-paired-count-0006",
+            algorithm_version="ecology-paired-count-0007",
             records=request.pairs,
             parameters={
                 "reference_kind": request.reference_kind,
@@ -275,6 +284,9 @@ def compare_paired_counts(
         overcount_pair_count=sum(row.signed_difference > 0 for row in differences),
         undercount_pair_count=sum(row.signed_difference < 0 for row in differences),
         exact_match_pair_count=sum(row.signed_difference == 0 for row in differences),
+        overcount_organism_count=sum(bias > 0 for bias in organism_biases_all),
+        undercount_organism_count=sum(bias < 0 for bias in organism_biases_all),
+        balanced_organism_count=sum(bias == 0 for bias in organism_biases_all),
         observed_organism_count=len(pair_counts_by_organism),
         observation_counts_by_organism=dict(sorted(pair_counts_by_organism.items())),
         repeated_pair_count_beyond_first_per_organism=(
@@ -316,6 +328,8 @@ def compare_paired_counts(
             "Percent deviation excludes zero-reference pairs; its denominator is reported.",
             "Signed percent is 100 * (model - human) / human: positive means overcount.",
             "Directional frequencies count paired images, not independent biological units.",
+            "Organism direction counts classify mean signed error per caller-declared organism.",
+            "A zero organism mean can hide offsetting overcounts and undercounts.",
             "Unit-balanced percent excludes units without nonzero human references.",
             "Nested percent excludes organisms without nonzero human references.",
             "Signed bias is model minus human reference; no ICC, limits of agreement or p-values.",
