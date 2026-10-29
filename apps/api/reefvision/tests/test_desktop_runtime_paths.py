@@ -85,12 +85,18 @@ def _add_native_review_table(
             if stamped_revision == "0041"
             else "client_request_id TEXT"
         )
+        # A stamped 0041 fixture must retain the actual 0038 NOT NULL
+        # attribution contract; otherwise the desktop guard correctly refuses
+        # it before exercising the intended startup/upgrade behavior.
+        attribution_required = " NOT NULL" if stamped_revision == "0041" else ""
         connection.execute(
             "CREATE TABLE review_queue_item_events ("
-            f"id TEXT PRIMARY KEY, review_queue_id TEXT, {request_item_decl}, "
-            f"project_id TEXT, {request_key_decl}, "
-            f"{event_type_decl}, actor TEXT, "
-            f"comment TEXT, assignee TEXT, created_at TEXT{event_type_check}{request_identity})"
+            f"id TEXT PRIMARY KEY{attribution_required}, "
+            f"review_queue_id TEXT{attribution_required}, {request_item_decl}, "
+            f"project_id TEXT{attribution_required}, {request_key_decl}, "
+            f"{event_type_decl}, actor TEXT{attribution_required}, "
+            f"comment TEXT, assignee TEXT, "
+            f"created_at TEXT{attribution_required}{event_type_check}{request_identity})"
         )
         if stamped_revision == "0041":
             # Synthetic schema identity must include the real 0041 registry
@@ -121,20 +127,26 @@ def test_synthetic_0041_review_fixture_preserves_per_item_request_idempotency(
     with sqlite3.connect(database) as connection:
         connection.execute(
             "INSERT INTO review_queue_item_events "
-            "(id, review_queue_item_id, client_request_id, event_type) "
-            "VALUES ('first', 'item-a', 'request-1', 'comment')"
+            "(id, review_queue_id, review_queue_item_id, project_id, "
+            "client_request_id, event_type, actor, created_at) "
+            "VALUES ('first', 'queue-a', 'item-a', 'project-a', "
+            "'request-1', 'comment', 'reviewer', '2026-10-29T00:00:00')"
         )
         with pytest.raises(sqlite3.IntegrityError, match="UNIQUE constraint failed"):
             connection.execute(
                 "INSERT INTO review_queue_item_events "
-                "(id, review_queue_item_id, client_request_id, event_type) "
-                "VALUES ('duplicate', 'item-a', 'request-1', 'comment')"
+                "(id, review_queue_id, review_queue_item_id, project_id, "
+                "client_request_id, event_type, actor, created_at) "
+                "VALUES ('duplicate', 'queue-a', 'item-a', 'project-a', "
+                "'request-1', 'comment', 'reviewer', '2026-10-29T00:00:00')"
             )
         # Request identities are scoped to an item, not globally to a queue.
         connection.execute(
             "INSERT INTO review_queue_item_events "
-            "(id, review_queue_item_id, client_request_id, event_type) "
-            "VALUES ('other-item', 'item-b', 'request-1', 'comment')"
+            "(id, review_queue_id, review_queue_item_id, project_id, "
+            "client_request_id, event_type, actor, created_at) "
+            "VALUES ('other-item', 'queue-a', 'item-b', 'project-a', "
+            "'request-1', 'comment', 'reviewer', '2026-10-29T00:00:00')"
         )
         saved_events = connection.execute(
             "SELECT COUNT(*) FROM review_queue_item_events"
