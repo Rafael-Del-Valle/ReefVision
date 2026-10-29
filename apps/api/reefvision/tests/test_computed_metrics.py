@@ -386,7 +386,9 @@ def test_calculation_rejects_qc_ineligible_observations(client: TestClient, qc: 
     )
 
 
-def test_calculation_rejects_superseded_noaa_snapshot_but_accepts_current(client: TestClient):
+def test_calculation_rejects_superseded_noaa_snapshot_but_accepts_current(
+    client: TestClient,
+) -> None:
     from datetime import timedelta
 
     import httpx
