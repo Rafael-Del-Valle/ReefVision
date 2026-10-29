@@ -11,7 +11,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 
@@ -39,6 +39,7 @@ REQUIRED_PASS = (
 OPTIONAL_APPROVAL_GATES = ("sam2_live", "confidence_review")
 MSI_VERSION = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,5}\Z")
 SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
+ACCEPTANCE_RUN = re.compile(r"reefvision-clean-[0-9a-fA-F]{12}\Z")
 
 
 def _require(condition: bool, message: str) -> None:
@@ -61,6 +62,38 @@ def _utc(value: Any, label: str) -> datetime:
         raise AcceptanceEvidenceError(f"{label} is not a valid timestamp") from exc
     _require(result.tzinfo is not None and result.utcoffset().total_seconds() == 0, f"{label} must be UTC")
     return result.astimezone(timezone.utc)
+
+
+def _windows_path(value: Any, label: str) -> PureWindowsPath:
+    """Require an absolute, unambiguous Windows evidence path."""
+    _require(isinstance(value, str) and bool(value.strip()), f"Missing {label}")
+    _require(
+        not any(segment in {".", ".."} for segment in re.split(r"[\\/]+", value)),
+        f"{label} contains relative path segments",
+    )
+    path = PureWindowsPath(value)
+    _require(path.is_absolute() and path.anchor != str(path), f"{label} must be absolute")
+    return path
+
+
+def _isolated_acceptance_root(report: dict[str, Any]) -> None:
+    """Bind acceptance evidence to the disposable marker-gated data directory.
+
+    This validates report structure only; the Windows harness separately checks
+    real filesystem ancestry, junctions, permissions and retained user data.
+    """
+    root = _windows_path(report.get("acceptance_root"), "acceptance_root")
+    data = _windows_path(report.get("isolated_data_root"), "isolated_data_root")
+    _require(len(data.parts) == len(root.parts) + 2, "Isolated data root has wrong depth")
+    _require(
+        tuple(part.casefold() for part in data.parts[: len(root.parts)])
+        == tuple(part.casefold() for part in root.parts),
+        "Isolated data root is outside acceptance root",
+    )
+    _require(
+        ACCEPTANCE_RUN.fullmatch(data.parts[-2]) is not None and data.parts[-1].casefold() == "data",
+        "Isolated data root is not a disposable ReefVision run",
+    )
 
 
 def _status(report: dict[str, Any], key: str) -> str:
@@ -100,6 +133,7 @@ def validate_report(
     _require(report.get("schema_version") == "reefvision-windows-clean-acceptance-1", "Unknown evidence schema")
     _require(report.get("plan_only") is False, "Plan-only evidence is not installed acceptance")
     _require(report.get("failure_reason") is None, "Acceptance report records a failure")
+    _isolated_acceptance_root(report)
     start = _utc(report.get("started_at_utc"), "started_at_utc")
     end = _utc(report.get("completed_at_utc"), "completed_at_utc")
     _require(end >= start, "Acceptance completion precedes start")
