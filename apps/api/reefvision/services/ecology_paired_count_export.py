@@ -125,9 +125,7 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
     # The independently declared experimental unit remains unverified.
     for organism_id, rows in sorted(by_organism.items()):
         eligible_signed = [
-            row.signed_percent_deviation
-            for row in rows
-            if row.signed_percent_deviation is not None
+            row.signed_percent_deviation for row in rows if row.signed_percent_deviation is not None
         ]
         eligible_absolute = [
             row.absolute_percent_deviation
