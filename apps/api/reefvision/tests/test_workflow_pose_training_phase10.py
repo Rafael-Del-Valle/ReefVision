@@ -945,7 +945,8 @@ def test_pose_workflow_rejects_falsy_non_object_resource_limits_from_verified_tr
     # Invalid resource limits must fail before a training job is persisted.
     project, dataset = _frozen_dataset(client, monkeypatch)
     app = cast(FastAPI, client.app)
-    for invalid_limits in ([], "", 0, False):
+    # An explicitly null policy must not silently remove GPU/resource limits.
+    for invalid_limits in (None, [], "", 0, False):
         with (
             app.state.session_factory() as session,
             pytest.raises(ValidationError, match="resource_limits must be an object"),
