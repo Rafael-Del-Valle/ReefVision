@@ -36,9 +36,7 @@ def upgrade() -> None:
             name="uq_spatial_source_project_digest_format",
         ),
     )
-    op.create_index(
-        "ix_spatial_source_assets_project_id", "spatial_source_assets", ["project_id"]
-    )
+    op.create_index("ix_spatial_source_assets_project_id", "spatial_source_assets", ["project_id"])
 
 
 def downgrade() -> None:
