@@ -161,6 +161,16 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     ][0]["reference_source_record_id"]
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(tampered_sources)
+    # Source provenance must reconcile with the persisted paired rows, even
+    # if every numerical statistic and biological denominator remains valid.
+    tampered_provenance = dict(payload)
+    tampered_provenance["analysis_provenance"] = dict(payload["analysis_provenance"])
+    tampered_provenance["analysis_provenance"]["source_record_ids"] = [
+        "fabricated-human-source",
+        *payload["analysis_provenance"]["source_record_ids"][1:],
+    ]
+    with pytest.raises(SchemaValidationError, match="Directional provenance source roster"):
+        PairedCountComparisonResponse.model_validate(tampered_provenance)
     # Even a saved typed workflow artifact must reject unsafe integral
     # floating-point raw counts before checking derived statistical means.
     tampered_precision = dict(payload)
