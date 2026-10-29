@@ -891,9 +891,10 @@ def test_pose_workflow_preserves_api_frozen_source_lineage_in_artifacts(
             )
 
     with app.state.session_factory() as session:
-        assert session.scalar(
-            select(TrainingRun.id).where(TrainingRun.project_id == project_id)
-        ) is None
+        assert (
+            session.scalar(select(TrainingRun.id).where(TrainingRun.project_id == project_id))
+            is None
+        )
         result = create_pose_workflow_training_result(
             session,
             test_settings,
