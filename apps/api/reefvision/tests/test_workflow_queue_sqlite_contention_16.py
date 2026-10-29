@@ -11,12 +11,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue import (
+    _is_sqlite_queue_identity_collision,
     _is_sqlite_writer_contention,
     create_review_queue_workflow_artifact,
 )
@@ -36,17 +38,46 @@ def test_sqlite_busy_is_distinguished_from_unrelated_database_errors(tmp_path: P
 
         with pytest.raises(sqlite3.OperationalError) as unrelated:
             competing.execute("SELECT * FROM missing_table")
-        assert not _is_sqlite_writer_contention(
-            OperationalError("SELECT", {}, unrelated.value)
-        )
+        assert not _is_sqlite_writer_contention(OperationalError("SELECT", {}, unrelated.value))
     finally:
         writer.rollback()
         writer.close()
         competing.close()
 
 
+def _sqlite_constraint_error(*, duplicate_id: bool) -> sqlite3.IntegrityError:
+    """Use real SQLite extended error codes, not fabricated exception text."""
+    with sqlite3.connect(":memory:") as db:
+        db.execute(
+            "CREATE TABLE review_queues (id TEXT PRIMARY KEY, created_by TEXT UNIQUE)"
+        )
+        db.execute("INSERT INTO review_queues VALUES ('first', 'researcher')")
+        try:
+            if duplicate_id:
+                db.execute("INSERT INTO review_queues VALUES ('first', 'other')")
+            else:
+                db.execute("INSERT INTO review_queues VALUES ('second', 'researcher')")
+        except sqlite3.IntegrityError as exc:
+            return exc
+    raise AssertionError("Expected a SQLite constraint failure")
+
+
+def test_only_review_queue_primary_key_collision_is_retryable() -> None:
+    identity_error = _sqlite_constraint_error(duplicate_id=True)
+    unrelated_error = _sqlite_constraint_error(duplicate_id=False)
+    assert identity_error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
+    assert unrelated_error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_UNIQUE
+    assert _is_sqlite_queue_identity_collision(IntegrityError("INSERT", {}, identity_error))
+    assert not _is_sqlite_queue_identity_collision(
+        IntegrityError("INSERT", {}, unrelated_error)
+    )
+    assert not _is_sqlite_queue_identity_collision(
+        IntegrityError("INSERT", {}, RuntimeError("review_queues.id"))
+    )
+
+
 def test_saved_qc_workflow_retries_after_real_sqlite_writer_lock(
-    client: TestClient,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project = create_project(client, "SQLite QC contention regression")
     project_id = project["id"]
@@ -142,6 +173,33 @@ def test_saved_qc_workflow_retries_after_real_sqlite_writer_lock(
         node.output_artifact_ids_json = []
         session.delete(queue)
         session.commit()
+
+    # A distinct SQLite UNIQUE violation must propagate; it is not a
+    # competing writer for this workflow's deterministic queue identity.
+    unrelated = IntegrityError(
+        "INSERT", {}, _sqlite_constraint_error(duplicate_id=False)
+    )
+
+    def raise_unrelated_constraint(*_args: object, **_kwargs: object) -> None:
+        raise unrelated
+
+    with app.state.session_factory() as session:
+        source = session.get(WorkflowArtifact, source_id)
+        assert source is not None
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                ReviewQueueService,
+                "create_queue_for_project",
+                raise_unrelated_constraint,
+            )
+            with pytest.raises(IntegrityError, match="review_queues.created_by"):
+                create_review_queue_workflow_artifact(
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project_id,
+                    parameters=params,
+                    inputs={"project": [source]},
+                )
 
     database_path = app.state.engine.url.database
     assert database_path is not None
