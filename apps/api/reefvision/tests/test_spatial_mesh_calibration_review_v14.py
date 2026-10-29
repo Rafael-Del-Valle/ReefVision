@@ -102,7 +102,7 @@ def test_review_is_recorded_without_certifying_calibration(
         ("reviewed_calibration_method", "instrument", "calibration inputs"),
         ("reviewed_calibration_evidence", "Different ruler", "calibration inputs"),
         ("reviewed_relative_scale_uncertainty", 0.1, "calibration inputs"),
-        ("reviewed_at_utc", "2026-09-30T12:00:00Z", "predates"),
+        ("reviewed_at_utc", "2026-09-30T12:00:00Z", "cannot predate bound observation"),
     ],
 )
 def test_review_rejects_stale_geometry_calibration_or_time(
