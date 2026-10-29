@@ -13,9 +13,22 @@ PLY is `mesh_or_point_cloud` because the extension alone does not establish
 topology. Raw imports are **unreviewed**, not parsed, calibrated, registered,
 or biologically identified. No delete or remote publishing operation exists.
 
-This is a first persistence slice, **not yet** a finished asset workspace.
-Standalone mesh/point-cloud previews and typed persisted Workflow Builder
-nodes still consume bounded inline geometry. A subsequent 1.4 slice must
-bind project-owned asset IDs to both execution paths with digest checks,
-saved-graph replay tests, and an interactive asset picker. Installed-Windows
-GUI, large-file streaming, and full scientific release gates remain open.
+Mesh measurement now also accepts a project-owned `asset_id` in the existing
+`POST /api/v1/projects/{project_id}/spatial/mesh-preview` request or in a
+saved `mesh_surface_preview` Workflow Builder node. `asset_id` is mutually
+exclusive with inline OBJ/PLY/GLB/triangle geometry. At **execution time**,
+ReefVision verifies project ownership, source byte count and SHA-256 before
+resolving the original into the same bounded measurement engine used for
+inline inputs. An optional caller-supplied `expected_source_payload_sha256`
+must agree with the stored original. Results include
+`provenance.spatial_source_asset_id` and the source digest, while retaining
+`caller_supplied_unverified` measurement status. Saved graphs store the ID,
+not a second copy of the original bytes; missing or tampered files fail closed.
+
+This remains a first persistence slice, **not** a finished asset workspace.
+An 8 MiB stored source may still exceed the existing bounded mesh parser
+limits (256,000 text characters or 350,000 GLB base64 characters); such
+sources are retained but cannot yet be previewed. PLY point-cloud asset
+binding, an interactive asset picker, large-file streaming, migration/Windows
+installation verification, and all remaining scientific release gates remain
+open. No asset is automatically calibrated, registered or biologically verified.
