@@ -73,10 +73,8 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
             fields.extend(
                 [
                     "reason TEXT",
-                    "FOREIGN KEY(review_queue_id) "
-                    "REFERENCES review_queues(id) ON DELETE RESTRICT",
-                    "FOREIGN KEY(project_id) "
-                    "REFERENCES projects(id) ON DELETE RESTRICT",
+                    "FOREIGN KEY(review_queue_id) REFERENCES review_queues(id) ON DELETE RESTRICT",
+                    "FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE RESTRICT",
                 ]
             )
             connection.execute(
@@ -84,10 +82,7 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
             )
             before_schema = tuple(
                 connection.execute(
-                    text(
-                        "SELECT name, sql FROM sqlite_master "
-                        "WHERE type='table' ORDER BY name"
-                    )
+                    text("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
                 ).all()
             )
             for _ in range(2):
@@ -98,25 +93,20 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
                         assert_compatible_revision_0038(connection)
                 after_schema = tuple(
                     connection.execute(
-                        text(
-                            "SELECT name, sql FROM sqlite_master "
-                            "WHERE type='table' ORDER BY name"
-                        )
+                        text("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
                     ).all()
                 )
                 assert after_schema == before_schema
-                assert (
-                    connection.scalar(text("SELECT version_num FROM alembic_version"))
-                    == "0041"
-                )
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
                 assert connection.scalar(text("SELECT value FROM observations")) == (
                     "original coral observation"
                 )
-                assert connection.scalar(
-                    text("SELECT actor FROM review_queue_item_events")
-                ) == "reviewer"
-                assert connection.scalar(
-                    text("SELECT COUNT(*) FROM review_queue_bulk_requests")
-                ) == 0
+                assert (
+                    connection.scalar(text("SELECT actor FROM review_queue_item_events"))
+                    == "reviewer"
+                )
+                assert (
+                    connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
+                )
     finally:
         engine.dispose()
