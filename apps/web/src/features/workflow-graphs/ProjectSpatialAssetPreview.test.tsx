@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
@@ -171,7 +171,9 @@ describe("ProjectSpatialAssetPreview", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Upload unavailable",
     );
-    resolveList([asset]);
+    await act(async () => {
+      resolveList([asset]);
+    });
     expect(
       await screen.findByRole("option", { name: /colony.ply/ }),
     ).toBeInTheDocument();
@@ -195,7 +197,9 @@ describe("ProjectSpatialAssetPreview", () => {
     expect(
       await screen.findByText(/human scientific review remains required/),
     ).toBeInTheDocument();
-    resolveList([]);
+    await act(async () => {
+      resolveList([]);
+    });
     await waitFor(() =>
       expect(screen.getByLabelText("Project 3D source")).toHaveValue("asset-1"),
     );
