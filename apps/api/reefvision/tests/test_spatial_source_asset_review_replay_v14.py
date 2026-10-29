@@ -158,7 +158,14 @@ def test_original_read_is_bounded_even_if_file_grows_during_read(
         original_path = resolve_managed_project_path(app.state.settings, record.managed_path)
 
     # Simulate replacement between path checks and the actual file read.
-    oversized_stream = BytesIO(b"x" * (MAX_BYTES + 2))
+    read_sizes: list[int] = []
+
+    class TrackedBytesIO(BytesIO):
+        def read(self, size: int = -1) -> bytes:
+            read_sizes.append(size)
+            return super().read(size)
+
+    oversized_stream = TrackedBytesIO(b"x" * (MAX_BYTES + 2))
     original_open = Path.open
 
     def changed_open(path: Path, *args: object, **kwargs: object) -> BytesIO:
@@ -169,4 +176,4 @@ def test_original_read_is_bounded_even_if_file_grows_during_read(
     monkeypatch.setattr(Path, "open", changed_open)
     response = client.get(f"{base}/spatial/assets/{asset_id}/content")
     assert response.status_code == 400, response.text
-    assert oversized_stream.tell() == MAX_BYTES + 1
+    assert read_sizes == [MAX_BYTES + 1]
