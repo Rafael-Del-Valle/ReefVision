@@ -212,8 +212,7 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
     # The two stored priority signals are 1 - mean and 1 - minimum,
     # respectively. Check the relation only when pending predictions exist.
     return not (
-        raw["pending_proposals"] > 0
-        and raw["low_min_confidence"] < raw["low_mean_confidence"]
+        raw["pending_proposals"] > 0 and raw["low_min_confidence"] < raw["low_mean_confidence"]
     )
 
 
