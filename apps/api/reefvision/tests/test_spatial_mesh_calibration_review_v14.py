@@ -378,6 +378,5 @@ def test_review_chronology_fails_closed_in_saved_graph(client: TestClient) -> No
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert not any(
-        item["data_type"] == "mesh_measurement_preview"
-        for item in detail.json()["artifacts"]
+        item["data_type"] == "mesh_measurement_preview" for item in detail.json()["artifacts"]
     )
