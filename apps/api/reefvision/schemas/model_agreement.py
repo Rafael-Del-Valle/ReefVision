@@ -353,14 +353,18 @@ class PairedCountComparisonResponse(BaseModel):
             ):
                 raise ValueError(f"Directional {field_name} does not match source means")
 
+        grouped_rows: dict[str, list[PairedCountDifference]] = {
+            organism: [] for organism in observed_organisms
+        }
+        for row in self.paired_differences:
+            grouped_rows[row.organism_id].append(row)
+
         # A tank's summary must agree with its own organism rows, not just
         # with totals from other tanks. Otherwise swapping unit-level errors
         # can preserve every global denominator and mean.
         for unit in self.unit_summaries:
             by_organism = {
-                organism: [
-                    row for row in self.paired_differences if row.organism_id == organism
-                ]
+                organism: grouped_rows[organism]
                 for organism in sorted(unit.observation_counts_by_organism)
             }
             rows = [row for group in by_organism.values() for row in group]
@@ -432,12 +436,8 @@ class PairedCountComparisonResponse(BaseModel):
                 require_derived_mean(field_name, values, unit)
 
         global_organism_biases = [
-            finite_descriptive_mean(
-                row.signed_difference
-                for row in self.paired_differences
-                if row.organism_id == organism
-            )
-            for organism in sorted(observed_organisms)
+            finite_descriptive_mean(row.signed_difference for row in grouped_rows[organism])
+            for organism in sorted(grouped_rows)
         ]
         if (
             sum(bias > 0 for bias in global_organism_biases),
