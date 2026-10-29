@@ -301,3 +301,63 @@ def test_full_backup_preserves_scientific_records_and_offline_provider_cache(cli
             assert ScientificDataService(session).list_records(project["id"]).total == 2
     finally:
         engine.dispose()
+
+def test_lookup_excludes_stale_calibration_but_preserves_unlinked_station_observations(client):
+    from reefvision.tests.test_annotations import import_one
+
+    project = create_project(client)
+    image_id = import_one(client, project["id"])["successful"][0]["image_id"]
+    calibration_url = f"/api/v1/images/{image_id}/measurement-calibration"
+    calibration = client.put(
+        calibration_url, json={"distance_per_pixel": 0.1, "unit": "mm"}
+    )
+    assert calibration.status_code == 200, calibration.text
+
+    records_url = f"/api/v1/projects/{project['id']}/scientific-records"
+    saved = client.post(
+        records_url,
+        json={
+            "records": [
+                observation(
+                    subject={"image_id": image_id},
+                    pixel={"x": 40, "y": 30, "frame": "image_pixels"},
+                ),
+                observation(value=70.0),
+            ]
+        },
+    )
+    assert saved.status_code == 201, saved.text
+    image_record, unlinked_record = saved.json()["items"]
+    assert image_record["calibration_current"] is True
+
+    lookup_url = f"/api/v1/projects/{project['id']}/environment/lookup"
+    request = {
+        "variable": "water_temperature",
+        "location": {"latitude": 32.75, "longitude": -79.93},
+        "observed_at": "2026-04-03T13:00:00Z",
+        "max_distance_m": 1000,
+        "max_time_delta_s": 60,
+    }
+    before = client.post(lookup_url, json=request)
+    assert before.status_code == 200, before.text
+    assert {match["record"]["id"] for match in before.json()["matches"]} == {
+        image_record["id"],
+        unlinked_record["id"],
+    }
+
+    changed = client.put(
+        calibration_url, json={"distance_per_pixel": 0.2, "unit": "mm"}
+    )
+    assert changed.status_code == 200, changed.text
+    history = client.get(records_url)
+    assert history.status_code == 200, history.text
+    stale = next(
+        row for row in history.json()["items"] if row["id"] == image_record["id"]
+    )
+    assert stale["calibration_current"] is False
+
+    after = client.post(lookup_url, json=request)
+    assert after.status_code == 200, after.text
+    assert [match["record"]["id"] for match in after.json()["matches"]] == [
+        unlinked_record["id"]
+    ]

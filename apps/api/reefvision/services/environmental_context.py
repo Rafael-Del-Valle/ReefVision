@@ -181,6 +181,7 @@ class EnvironmentalContextService:
             if (
                 record.location is None
                 or record.qc in ("rejected", "suspect")
+                or record.calibration_current is False
                 or record.environmental_snapshot_current is False
             ):
                 continue
