@@ -127,3 +127,105 @@ def test_invalid_environmental_threshold_workflow_fails_without_artifact(
         artifact["data_type"] == "environmental_threshold_samples"
         for artifact in detail.json()["artifacts"]
     )
+
+
+def test_saved_environmental_threshold_graph_reuses_current_noaa_snapshot(
+    client: TestClient,
+) -> None:
+    """Replaying one saved graph must not silently reuse superseded NOAA evidence."""
+    from datetime import UTC, datetime, timedelta
+
+    import httpx
+
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+    from reefvision.tests.test_environmental_context import noaa_fixture
+
+    project = create_project(client, "Replayed NOAA threshold workflow")
+    raw = noaa_fixture()
+    raw["data"][0]["v"] = "21.0"
+    import_request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    start = datetime(2026, 4, 4, tzinfo=UTC)
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
+        ) as http,
+    ):
+        first_import = EnvironmentalContextService(
+            session, http=http, now=start
+        ).import_noaa(project["id"], import_request)
+    first_record_id = str(first_import.items[0].id)
+
+    graph = threshold_graph(threshold_query())
+    saved_response = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved_response.status_code == 201, saved_response.text
+    saved = saved_response.json()
+    listed = client.get(f"/api/v1/projects/{project['id']}/workflow-graphs")
+    assert listed.status_code == 200, listed.text
+    assert any(
+        item["id"] == saved["id"]
+        and item["graph_sha256"] == saved["graph_sha256"]
+        and item["graph_json"]["nodes"] == graph["nodes"]
+        for item in listed.json()
+    )
+
+    def execute_saved_graph() -> tuple[dict, dict]:
+        queued = client.post(
+            f"/api/v1/projects/{project['id']}/workflow-runs",
+            json={"graph_record_id": saved["id"]},
+        )
+        assert queued.status_code == 202, queued.text
+        run = queued.json()
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["graph_sha256"] == saved["graph_sha256"]
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "environmental_threshold_samples"
+        )
+        return run, artifact
+
+    first_run, first_artifact = execute_saved_graph()
+    assert first_artifact["payload_json"]["sample_count"] == 1
+    assert first_artifact["payload_json"]["matches"][0]["record_id"] == first_record_id
+    first_checksum = first_artifact["payload_sha256"]
+
+    raw["data"][0]["v"] = "19.0"
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
+        ) as http,
+    ):
+        refreshed = EnvironmentalContextService(
+            session, http=http, now=start + timedelta(days=1)
+        ).import_noaa(project["id"], import_request)
+    assert str(refreshed.items[0].id) != first_record_id
+
+    second_run, second_artifact = execute_saved_graph()
+    assert second_run["workflow_graph_record_id"] == first_run["workflow_graph_record_id"]
+    assert second_artifact["payload_json"]["sample_count"] == 0
+    assert second_artifact["payload_json"]["matches"] == []
+
+    persisted_first = client.get(f"/api/v1/workflow-runs/{first_run['id']}")
+    assert persisted_first.status_code == 200, persisted_first.text
+    original_artifact = next(
+        item
+        for item in persisted_first.json()["artifacts"]
+        if item["data_type"] == "environmental_threshold_samples"
+    )
+    assert original_artifact["payload_sha256"] == first_checksum
+    assert original_artifact["payload_json"]["matches"][0]["record_id"] == first_record_id
+    history = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
+    assert history.status_code == 200, history.text
+    old = next(item for item in history.json()["items"] if item["id"] == first_record_id)
+    assert old["environmental_snapshot_current"] is False
