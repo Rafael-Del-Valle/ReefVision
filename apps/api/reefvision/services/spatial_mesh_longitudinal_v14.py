@@ -236,6 +236,10 @@ def compare_mesh_observations(
     bounds: list[list[float]] = []
     for record, metadata in zip((before, after), (first, second), strict=True):
         pair = record.get("surface_area_scale_interval_m2")
+        # Legacy previews without uncertainty metadata cannot authenticate a
+        # supplied scale interval. Reject rather than assume zero uncertainty.
+        if pair is not None and "relative_scale_uncertainty" not in metadata:
+            raise ValueError("Surface-area scale interval requires source uncertainty")
         # A supplied interval must agree with the source preview's scale
         # uncertainty. Merely enclosing the nominal area would permit a
         # forged, arbitrarily narrow longitudinal uncertainty interval.
@@ -324,6 +328,10 @@ def compare_mesh_observations(
             (before, after), extents, (first, second), strict=True
         ):
             pair = record.get("axis_aligned_bounding_box_diagonal_scale_interval_m")
+            # A legacy preview lacking scale uncertainty cannot substantiate
+            # a claimed diagonal interval, even if it encloses the nominal value.
+            if pair is not None and "relative_scale_uncertainty" not in metadata:
+                raise ValueError("Bounding-box scale interval requires source uncertainty")
             # A caller cannot substitute narrower scale-only extent bounds
             # than those implied by the source preview's uncertainty.
             if "relative_scale_uncertainty" in metadata and pair is not None:
