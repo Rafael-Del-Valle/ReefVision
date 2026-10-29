@@ -687,3 +687,20 @@ def test_current_saved_paired_rows_preserve_source_uniqueness_and_integer_counts
         first["model_count"] = 10.5
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(payload)
+
+@pytest.mark.parametrize("field", ["reference_count", "model_count"])
+def test_saved_paired_counts_reject_unsafe_integral_floats(field: str) -> None:
+    """Persisted rows cannot manufacture enormous exact-match raw counts."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    rows = [
+        pair("a", "frag-A", "tank-1", 10, 10),
+        pair("b", "frag-B", "tank-2", 20, 20),
+    ]
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_consensus", pairs=rows)
+    )
+    payload = result.model_dump(mode="json")
+    payload["paired_differences"][0][field] = float(2**53)
+    with pytest.raises(SchemaValidationError, match="safe-integer range"):
+        PairedCountComparisonResponse.model_validate(payload)

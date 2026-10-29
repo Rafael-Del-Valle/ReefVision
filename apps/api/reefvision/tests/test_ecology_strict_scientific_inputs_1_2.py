@@ -101,6 +101,21 @@ def test_paired_counts_reject_unsafe_json_integer_precision(client: TestClient, 
     assert response.status_code == 422, response.text
 
 
+@pytest.mark.parametrize("field", ["reference_count", "model_count"])
+@pytest.mark.parametrize("value", [float(2**53), 1e20])
+def test_paired_counts_reject_unsafe_json_float_precision(
+    client: TestClient, field: str, value: float
+) -> None:
+    """An integral-looking JSON float can still exceed exact count precision."""
+    pairs = paired_observations()
+    pairs[0][field] = value
+    payload = {"pairs": pairs, "reference_kind": "human_consensus"}
+    with pytest.raises(SchemaValidationError, match="safe-integer range"):
+        PairedCountComparisonRequest.model_validate(payload)
+    response = client.post("/api/v1/ecology/paired-count-comparison", json=payload)
+    assert response.status_code == 422, response.text
+
+
 def test_paired_counts_accept_largest_safe_json_integer(client: TestClient) -> None:
     pairs = paired_observations()
     pairs[0]["reference_count"] = 2**53 - 1
@@ -112,6 +127,18 @@ def test_paired_counts_accept_largest_safe_json_integer(client: TestClient) -> N
     assert response.status_code == 200, response.text
     assert response.json()["paired_differences"][0]["reference_count"] == 2**53 - 1
     assert response.json()["paired_differences"][0]["signed_difference"] == 0
+
+
+def test_paired_counts_accept_largest_safe_json_float(client: TestClient) -> None:
+    pairs = paired_observations()
+    pairs[0]["reference_count"] = float(2**53 - 1)
+    pairs[0]["model_count"] = float(2**53 - 1)
+    response = client.post(
+        "/api/v1/ecology/paired-count-comparison",
+        json={"pairs": pairs, "reference_kind": "human_consensus"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["paired_differences"][0]["reference_count"] == 2**53 - 1
 
 
 def test_paired_counts_accept_integral_json_floats(client: TestClient) -> None:
@@ -177,6 +204,7 @@ def test_valid_zero_remains_unverified(client: TestClient) -> None:
         "paired_string",
         "paired_fractional",
         "paired_unsafe_integer",
+        "paired_unsafe_float",
     ],
 )
 def test_saved_workflow_rejects_invalid_scientific_input(client: TestClient, kind: str) -> None:
@@ -201,6 +229,8 @@ def test_saved_workflow_rejects_invalid_scientific_input(client: TestClient, kin
             invalid_count = 12.5
         elif kind == "paired_unsafe_integer":
             invalid_count = 2**53 + 1
+        elif kind == "paired_unsafe_float":
+            invalid_count = float(2**53)
         graph["nodes"][1]["parameters"]["pairs"][0]["model_count"] = invalid_count
         forbidden_artifact = "paired_count_comparison"
 

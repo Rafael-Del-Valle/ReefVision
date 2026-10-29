@@ -3856,3 +3856,19 @@ strict-input regression test, which is corrected here. No evidence is
 promoted to verified status; authenticated source linkage, registered
 experimental designs, calibration review, migration reconciliation, and
 native Windows acceptance remain required.
+
+## Float-count precision guard and saved-result integrity (2026-10-29)
+
+Exploratory paired human/model counts now reject **both JSON integers and
+integral JSON floats** above the IEEE-754 safe-integer maximum (2^53 - 1).
+The prior integer-only guard allowed an integral-looking float above that
+limit, where consecutive organism counts cannot be reliably distinguished.
+Current-version persisted `ecology-paired-count-0007` artifacts enforce the
+same raw-count limit on read-back, including typed Workflow Builder results.
+The largest safe integer remains permitted as an integer or integral float.
+Standalone API, saved-workflow failure/no-successful-artifact, and persisted
+artifact tamper regressions cover the boundary. Historical versioned
+artifacts retain their existing compatibility path. This numerical safeguard
+does not authenticate biological counts, calibration, experimental units or
+source reviews; evidence remains `caller_supplied_unverified`. Full CI,
+scientific dataset review and Windows installed-GUI acceptance are pending.

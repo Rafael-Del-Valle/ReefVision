@@ -58,10 +58,11 @@ class PairedCountObservation(BaseModel):
             raise ValueError("Count values must be numeric, not Boolean")
         if not isinstance(value, (int, float)):
             raise ValueError("Count values must be JSON numbers, not coerced")
-        # Pydantic stores counts as float. A larger JSON integer could be
-        # silently rounded before the whole-number check (2**53 + 1 -> 2**53).
-        if isinstance(value, int) and value > 2**53 - 1:
-            raise ValueError("JSON integer counts exceed the IEEE-754 safe-integer range")
+        # Pydantic stores counts as float. Unsafe JSON integers can round
+        # silently (2**53 + 1 -> 2**53), while integral JSON floats beyond
+        # the same limit cannot reliably represent consecutive organism counts.
+        if value > 2**53 - 1:
+            raise ValueError("Count values exceed the IEEE-754 safe-integer range")
         return value
 
     @field_validator("reference_count", "model_count")
@@ -224,6 +225,8 @@ class PairedCountComparisonResponse(BaseModel):
                 raise ValueError("Directional paired values must be finite")
             if row.reference_count < 0 or row.model_count < 0:
                 raise ValueError("Directional raw counts must be nonnegative")
+            if row.reference_count > 2**53 - 1 or row.model_count > 2**53 - 1:
+                raise ValueError("Directional raw counts exceed IEEE-754 safe-integer range")
             if not row.reference_count.is_integer() or not row.model_count.is_integer():
                 raise ValueError("Directional raw counts must be whole numbers")
             if row.signed_difference != row.model_count - row.reference_count:

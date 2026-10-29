@@ -155,14 +155,21 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     # Persisted Workflow Builder outputs must retain distinct paired evidence
     # on reload, not merely consistent directional statistics.
     tampered_sources = dict(payload)
-    tampered_sources["paired_differences"] = [
-        dict(row) for row in payload["paired_differences"]
-    ]
-    tampered_sources["paired_differences"][1]["reference_source_record_id"] = (
-        tampered_sources["paired_differences"][0]["reference_source_record_id"]
-    )
+    tampered_sources["paired_differences"] = [dict(row) for row in payload["paired_differences"]]
+    tampered_sources["paired_differences"][1]["reference_source_record_id"] = tampered_sources[
+        "paired_differences"
+    ][0]["reference_source_record_id"]
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(tampered_sources)
+    # Even a saved typed workflow artifact must reject unsafe integral
+    # floating-point raw counts before checking derived statistical means.
+    tampered_precision = dict(payload)
+    tampered_precision["paired_differences"] = [
+        dict(row) for row in payload["paired_differences"]
+    ]
+    tampered_precision["paired_differences"][0]["model_count"] = float(2**53)
+    with pytest.raises(SchemaValidationError, match="safe-integer range"):
+        PairedCountComparisonResponse.model_validate(tampered_precision)
     assert payload["project_id"] == project_id
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"
