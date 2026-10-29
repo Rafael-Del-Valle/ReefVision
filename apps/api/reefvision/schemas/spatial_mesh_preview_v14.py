@@ -65,6 +65,8 @@ class MeshCalibrationReviewEvidence(BaseModel):
 
 
 class MeshPreviewRequest(BaseModel):
+    # Project-owned immutable original, resolved at execution rather than graph-save time.
+    asset_id: str | None = Field(default=None, min_length=1, max_length=64)
     obj_text: str | None = Field(default=None, max_length=256_000)
     ply_text: str | None = Field(default=None, max_length=256_000)
     glb_base64: str | None = Field(default=None, max_length=350_000)
@@ -101,12 +103,15 @@ class MeshPreviewRequest(BaseModel):
         supplied_text = sum(
             value is not None for value in (self.obj_text, self.ply_text, self.glb_base64)
         )
-        if supplied_text:
+        if self.asset_id is not None:
+            if supplied_text or self.vertices is not None or self.faces is not None:
+                raise ValueError("Project asset ID cannot be combined with inline geometry")
+        elif supplied_text:
             if supplied_text != 1 or self.vertices is not None or self.faces is not None:
                 raise ValueError("Use OBJ, PLY, GLB, or indexed triangles, not a mixture")
         elif self.vertices is None or self.faces is None:
             raise ValueError("Indexed triangles require vertices and faces")
-        if self.expected_source_payload_sha256 is not None and not supplied_text:
+        if self.expected_source_payload_sha256 is not None and not (supplied_text or self.asset_id):
             raise ValueError("Source SHA-256 binding requires an imported OBJ, PLY, or GLB file")
         if self.surface_path_vertex_pairs is not None:
             for pair in self.surface_path_vertex_pairs:
