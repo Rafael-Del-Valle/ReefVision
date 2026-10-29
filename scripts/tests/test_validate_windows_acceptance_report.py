@@ -119,6 +119,32 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 with self.assertRaises(MODULE.AcceptanceEvidenceError):
                     MODULE.validate_report(changed, expected_version="1.0.2")
 
+    def test_acceptance_roots_reject_nonlocal_or_ambiguous_windows_paths(self) -> None:
+        report = good_report()
+        unsafe_paths = (
+            ("acceptance_root", r"\\\\server\\share\\acceptance"),
+            ("acceptance_root", r"\\\\?\\C:\\disposable\\reefvision-acceptance"),
+            ("acceptance_root", "C:/disposable/CON.txt/reefvision-acceptance"),
+            ("acceptance_root", "C:/disposable/reefvision-acceptance:alternate"),
+            ("acceptance_root", "C:/disposable/reefvision-acceptance."),
+            ("acceptance_root", "C:/disposable/reefvision-acceptance "),
+            ("acceptance_root", "C:/disposable/\\x01/reefvision-acceptance"),
+            (
+                "isolated_data_root",
+                "C:/disposable/reefvision-acceptance/reefvision-clean-a1b2c3d4e5f6/data:alternate",
+            ),
+            (
+                "isolated_data_root",
+                "C:/disposable/reefvision-acceptance/reefvision-clean-a1b2c3d4e5f6/COM1.txt",
+            ),
+        )
+        for field, value in unsafe_paths:
+            with self.subTest(field=field, value=value):
+                changed = copy.deepcopy(report)
+                changed[field] = value
+                with self.assertRaises(MODULE.AcceptanceEvidenceError):
+                    MODULE.validate_report(changed, expected_version="1.0.2")
+
     def test_acceptance_root_is_case_insensitive_for_windows_paths(self) -> None:
         report = good_report()
         report["acceptance_root"] = r"C:\\DISPOSABLE\\ReefVision-Acceptance"
