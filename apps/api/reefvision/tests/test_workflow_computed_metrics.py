@@ -144,7 +144,8 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(client: Tes
 
 
 @pytest.mark.parametrize(
-    "failure", ["missing_record", "outside_source", "duplicate_binding", "qc_rejected"]
+    "failure",
+    ["missing_record", "outside_source", "duplicate_binding", "qc_rejected", "qc_suspect"],
 )
 def test_workflow_metric_failure_is_persisted_without_result(
     client: TestClient, failure: str
@@ -158,7 +159,13 @@ def test_workflow_metric_failure_is_persisted_without_result(
                 "organism_count",
                 12,
                 "count",
-                qc="rejected" if failure == "qc_rejected" else "unassessed",
+                qc=(
+                    "rejected"
+                    if failure == "qc_rejected"
+                    else "suspect"
+                    if failure == "qc_suspect"
+                    else "unassessed"
+                ),
             ),
             scientific_record("surveyed_area", 2, "m2"),
         ],
@@ -202,5 +209,5 @@ def test_workflow_metric_failure_is_persisted_without_result(
         assert failed_node is not None
         if failure == "duplicate_binding":
             assert "distinct scientific record" in (failed_node.error_message or "")
-        if failure == "qc_rejected":
+        if failure in {"qc_rejected", "qc_suspect"}:
             assert "suspect or rejected" in (failed_node.error_message or "")
