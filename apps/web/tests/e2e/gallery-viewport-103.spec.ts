@@ -172,6 +172,32 @@ test("initial image and gallery scrolling", async ({ page }) => {
   };
 
   await assertDecodedAndContained(1600, 1200);
+  // Synthetic WheelEvent assertions below only prove that preventDefault was
+  // called. Exercise real mouse-wheel input over the *first* loaded image to
+  // catch compositor scrolling that partially displaces the camera preview.
+  await focused.hover();
+  const initialImageBounds = await focused.boundingBox();
+  expect(initialImageBounds).not.toBeNull();
+  const initialImageSource = await focused.getAttribute("src");
+  const initialPageScroll = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  await page.mouse.wheel(0, 320);
+  await page.mouse.wheel(220, 0);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(await focused.boundingBox()).toEqual(initialImageBounds);
+  expect(await focused.getAttribute("src")).toBe(initialImageSource);
+  expect(
+    await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+  ).toEqual(initialPageScroll);
+  await assertDecodedAndContained(1600, 1200);
+
   // Exercise the native non-passive listener in a real Chromium page, not just
   // jsdom. Prevent wheel-driven WebView2 page movement over the preview while
   // leaving browser zoom modifiers and zero-delta events untouched.
