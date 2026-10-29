@@ -90,6 +90,7 @@ jobs:
           apps/api/reefvision/tests/test_desktop_real_migration_16.py
           apps/api/reefvision/tests/test_workflow_queue_multiprocess_16.py
           apps/api/reefvision/tests/test_workflow_queue_sqlite_contention_16.py
+          apps/api/reefvision/tests/test_review_queue_bulk_sqlite_contention_16.py
           apps/api/reefvision/tests/test_model_install.py
           apps/api/reefvision/tests/test_bundled_models.py
 
