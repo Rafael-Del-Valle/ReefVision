@@ -220,7 +220,11 @@ def test_saved_workflow_discloses_shared_parent_across_tanks(client: TestClient)
     assert payload["overcount_pair_count"] == 1
     assert payload["undercount_pair_count"] == 1
     assert payload["exact_match_pair_count"] == 0
-    assert (payload["overcount_organism_count"], payload["undercount_organism_count"], payload["balanced_organism_count"]) == (1, 1, 0)
+    assert (
+        payload["overcount_organism_count"],
+        payload["undercount_organism_count"],
+        payload["balanced_organism_count"],
+    ) == (1, 1, 0)
     assert payload["percent_contributing_independent_unit_count"] == 2
     assert payload["unit_balanced_mean_signed_percent_deviation"] == 0
     assert all(unit["organism_count"] == 1 for unit in payload["unit_summaries"])
