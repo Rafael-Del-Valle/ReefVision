@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 from typing import cast
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -20,7 +20,6 @@ from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.tests.test_annotations import create_project, import_one
-
 
 # Each worker independently opens the real application's SQLAlchemy engine.
 # The filesystem gate starts both workers only after their imports complete.
@@ -87,6 +86,26 @@ def test_two_processes_cannot_duplicate_saved_workflow_qc_queue(
         relative_path="qc/multiprocess-swiftia.png",
     )
     assert len(imported["successful"]) == 1
+
+    # A manual queue is a separate researcher-owned record. A concurrent
+    # saved-workflow retry must neither rewrite it nor lose its audit history.
+    manual = client.post(f"/api/v1/projects/{project_id}/review-queues", json={})
+    assert manual.status_code == 201, manual.text
+    manual_id = manual.json()["id"]
+    manual_items = client.get(f"/api/v1/review-queues/{manual_id}/items")
+    assert manual_items.status_code == 200, manual_items.text
+    manual_item_id = manual_items.json()["items"][0]["id"]
+    manual_events_url = f"/api/v1/review-queues/{manual_id}/items/{manual_item_id}/events"
+    comment = client.post(
+        manual_events_url,
+        json={
+            "client_request_id": str(uuid4()),
+            "event_type": "comment",
+            "actor": "researcher",
+            "comment": "Independent manual review must survive two-process QC replay",
+        },
+    )
+    assert comment.status_code == 201, comment.text
 
     graph = {
         "graph_id": "qc-multiprocess-16",
@@ -222,6 +241,14 @@ def test_two_processes_cannot_duplicate_saved_workflow_qc_queue(
         assert replay[0]["payload"]["queue_id"] == expected_id
         assert replay[0]["payload"]["priority_score_unit"] == "dimensionless"
         assert replay[0]["payload"]["review_status"] == "requires_researcher_review"
+
+    manual_history = client.get(manual_events_url)
+    assert manual_history.status_code == 200, manual_history.text
+    assert manual_history.json()["total"] == 1
+    assert manual_history.json()["items"][0]["id"] == comment.json()["id"]
+    manual_after = client.get(f"/api/v1/review-queues/{manual_id}/items")
+    assert manual_after.status_code == 200, manual_after.text
+    assert manual_after.json()["items"][0]["id"] == manual_item_id
 
     annotations = client.get(f"/api/v1/images/{imported['successful'][0]['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
