@@ -332,12 +332,17 @@ class PairedCountComparisonResponse(BaseModel):
             != self.observed_organism_count
         ):
             raise ValueError("Directional unit totals must match global denominators")
+
         # Recompute published means from the persisted paired evidence. A
         # plausible direction histogram cannot authorize fabricated averages.
         # Use the same overflow-safe scientific mean as the producer.
-        def require_derived_mean(field_name: str, values: list[float]) -> None:
+        def require_derived_mean(
+            field_name: str,
+            values: list[float],
+            target: PairedCountComparisonResponse | PairedCountUnitSummary = self,
+        ) -> None:
             expected = finite_descriptive_mean(values) if values else None
-            actual = getattr(self, field_name)
+            actual = getattr(target, field_name)
             if (expected is None and actual is not None) or (
                 expected is not None
                 and (
@@ -347,6 +352,107 @@ class PairedCountComparisonResponse(BaseModel):
                 )
             ):
                 raise ValueError(f"Directional {field_name} does not match source means")
+
+        # A tank's summary must agree with its own organism rows, not just
+        # with totals from other tanks. Otherwise swapping unit-level errors
+        # can preserve every global denominator and mean.
+        for unit in self.unit_summaries:
+            by_organism = {
+                organism: [
+                    row for row in self.paired_differences if row.organism_id == organism
+                ]
+                for organism in sorted(unit.observation_counts_by_organism)
+            }
+            rows = [row for group in by_organism.values() for row in group]
+            if len(rows) != unit.paired_observation_count:
+                raise ValueError("Directional unit rows must match organism membership")
+            if (
+                sum(row.signed_difference > 0 for row in rows),
+                sum(row.signed_difference < 0 for row in rows),
+                sum(row.signed_difference == 0 for row in rows),
+            ) != (
+                unit.overcount_pair_count,
+                unit.undercount_pair_count,
+                unit.exact_match_pair_count,
+            ):
+                raise ValueError("Directional unit pair votes must match source rows")
+            organism_biases = [
+                finite_descriptive_mean(row.signed_difference for row in group)
+                for group in by_organism.values()
+            ]
+            organism_errors = [
+                finite_descriptive_mean(row.absolute_difference for row in group)
+                for group in by_organism.values()
+            ]
+            if (
+                sum(bias > 0 for bias in organism_biases),
+                sum(bias < 0 for bias in organism_biases),
+                sum(bias == 0 for bias in organism_biases),
+            ) != (
+                unit.overcount_organism_count,
+                unit.undercount_organism_count,
+                unit.balanced_organism_count,
+            ):
+                raise ValueError("Directional unit organism votes must match source rows")
+
+            def eligible(values: list[float | None]) -> list[float]:
+                return [value for value in values if value is not None]
+
+            absolute_percents = eligible([row.absolute_percent_deviation for row in rows])
+            signed_percents = eligible([row.signed_percent_deviation for row in rows])
+            organism_absolute_percents = [
+                finite_descriptive_mean(values)
+                for group in by_organism.values()
+                if (
+                    values := eligible([row.absolute_percent_deviation for row in group])
+                )
+            ]
+            organism_signed_percents = [
+                finite_descriptive_mean(values)
+                for group in by_organism.values()
+                if (
+                    values := eligible([row.signed_percent_deviation for row in group])
+                )
+            ]
+            if (
+                unit.nonzero_reference_count != len(absolute_percents)
+                or unit.percent_contributing_organism_count != len(organism_absolute_percents)
+            ):
+                raise ValueError("Directional unit percentage denominators must match rows")
+            for field_name, values in (
+                ("mean_signed_bias", [row.signed_difference for row in rows]),
+                ("mean_absolute_error", [row.absolute_difference for row in rows]),
+                ("organism_balanced_mean_signed_bias", organism_biases),
+                ("organism_balanced_mean_absolute_error", organism_errors),
+                ("mean_absolute_percent_deviation", absolute_percents),
+                ("organism_balanced_mean_absolute_percent_deviation", organism_absolute_percents),
+                ("mean_signed_percent_deviation", signed_percents),
+                ("organism_balanced_mean_signed_percent_deviation", organism_signed_percents),
+            ):
+                require_derived_mean(field_name, values, unit)
+
+        global_organism_biases = [
+            finite_descriptive_mean(
+                row.signed_difference
+                for row in self.paired_differences
+                if row.organism_id == organism
+            )
+            for organism in sorted(observed_organisms)
+        ]
+        if (
+            sum(bias > 0 for bias in global_organism_biases),
+            sum(bias < 0 for bias in global_organism_biases),
+            sum(bias == 0 for bias in global_organism_biases),
+        ) != (
+            self.overcount_organism_count,
+            self.undercount_organism_count,
+            self.balanced_organism_count,
+        ):
+            raise ValueError("Directional global organism votes must match source rows")
+        if self.unequal_pair_counts_across_organisms != (
+            len(set(observed_organisms.values())) > 1
+        ):
+            raise ValueError("Directional global repeated-image imbalance is inconsistent")
 
         for field_name, values in (
             ("mean_signed_bias", [row.signed_difference for row in self.paired_differences]),
