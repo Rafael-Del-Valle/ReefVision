@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from statistics import mean
 from typing import Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from sqlalchemy.orm import Session
 
@@ -168,7 +168,19 @@ class ReviewQueueService:
                 if annotation.label_class_id:
                     class_counts[annotation.label_class_id] += 1
         max_class_count = max(class_counts.values(), default=1)
+        # Workflow-owned queues use a stable primary key. If two local workers
+        # both miss the initial ownership lookup, SQLite's existing primary-key
+        # constraint prevents them from committing two different snapshots.
+        # Historical workflow queues retain their original random IDs on replay.
+        # Standalone and regenerated queues remain independently generated.
+        owner = request.created_by or "local_user"
+        queue_id = (
+            str(uuid5(NAMESPACE_URL, f"reefvision:qc-queue:v1:{project.id}:{owner}"))
+            if owner.startswith("workflow:") and regenerated_from_queue_id is None
+            else str(uuid4())
+        )
         queue = ReviewQueue(
+            id=queue_id,
             project_id=project.id,
             dataset_version_id=dataset_version.id if dataset_version else None,
             source_quality_control_run_id=source_run.id if source_run else None,
@@ -185,7 +197,7 @@ class ReviewQueueService:
             },
             input_checksums_json={},
             summary_json={},
-            created_by=request.created_by or "local_user",
+            created_by=owner,
             completed_at=_utc_now(),
         )
         self.queues.add_queue(queue)
