@@ -5,19 +5,28 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from operator import ge, gt, le, lt
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, ScientificRecord
+from reefvision.db.models.scientific_record import (
+    EnvironmentalCacheEntry,
+    EnvironmentalEventDefinition,
+    ScientificRecord,
+)
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.domain.scientific_units import UNITS, normalize_quantity
 from reefvision.schemas.environmental_context import (
     ENVIRONMENTAL_VARIABLES,
     EnvironmentalDatasetPage,
     EnvironmentalDatasetSummary,
+    EnvironmentalEventDefinitionCreate,
+    EnvironmentalEventDefinitionPage,
+    EnvironmentalEventDefinitionResponse,
+    EnvironmentalEventEvaluationResponse,
     EnvironmentalImportResponse,
     EnvironmentalLookup,
     EnvironmentalLookupResponse,
@@ -232,10 +241,9 @@ class EnvironmentalContextService:
         )
         return EnvironmentalLookupResponse(matches=matches)
 
-    def threshold_samples(
-        self, project_id: str, request: EnvironmentalThresholdRequest
-    ) -> EnvironmentalThresholdResponse:
-        """Return qualifying samples, not inferred temporal events or event durations."""
+    @staticmethod
+    def _validated_threshold(request: EnvironmentalThresholdRequest) -> tuple[float, str]:
+        """Validate dimensions without requiring observations to be present."""
         try:
             threshold, unit = normalize_quantity(request.threshold_value, request.threshold_unit)
         except ValueError as exc:
@@ -252,6 +260,13 @@ class EnvironmentalContextService:
             raise ValidationError("Unsupported environmental threshold variable")
         if UNITS[request.threshold_unit][0] != expected_dimensions[request.variable]:
             raise ValidationError("Threshold unit must match the environmental variable")
+        return threshold, unit
+
+    def threshold_samples(
+        self, project_id: str, request: EnvironmentalThresholdRequest
+    ) -> EnvironmentalThresholdResponse:
+        """Return qualifying samples, not inferred temporal events or event durations."""
+        threshold, unit = self._validated_threshold(request)
         lookup = EnvironmentalLookup.model_validate(
             request.model_dump(exclude={"threshold_value", "threshold_unit", "direction"})
         )
@@ -273,6 +288,87 @@ class EnvironmentalContextService:
             normalized_threshold=threshold,
             normalized_unit=unit,
             direction=request.direction,
+        )
+
+    def create_event_definition(
+        self, project_id: str, payload: EnvironmentalEventDefinitionCreate
+    ) -> EnvironmentalEventDefinition:
+        self.science.require_project(project_id)
+        self._validated_threshold(payload.query)
+        query = payload.query.model_dump(mode="json")
+        row = EnvironmentalEventDefinition(
+            id=str(uuid4()),
+            project_id=project_id,
+            name=payload.name,
+            query_json=query,
+            definition_sha256=content_hash(
+                {"schema_version": "1.1.0", "name": payload.name, "query": query}
+            ),
+        )
+        self.session.add(row)
+        self.session.flush()
+        return row
+
+    def event_definition_response(
+        self, row: EnvironmentalEventDefinition
+    ) -> EnvironmentalEventDefinitionResponse:
+        expected = content_hash(
+            {"schema_version": "1.1.0", "name": row.name, "query": row.query_json}
+        )
+        if expected != row.definition_sha256:
+            raise ConflictError("Environmental event definition checksum mismatch")
+        try:
+            query = EnvironmentalThresholdRequest.model_validate(row.query_json)
+        except ValueError as exc:
+            raise ConflictError("Environmental event definition is invalid") from exc
+        return EnvironmentalEventDefinitionResponse(
+            id=row.id,
+            project_id=row.project_id,
+            name=row.name,
+            query=query,
+            definition_sha256=row.definition_sha256,
+            created_at=_utc(row.created_at),
+        )
+
+    def get_event_definition(
+        self, project_id: str, definition_id: str
+    ) -> EnvironmentalEventDefinition:
+        self.science.require_project(project_id)
+        row = self.session.get(EnvironmentalEventDefinition, definition_id)
+        if row is None or row.project_id != project_id:
+            raise NotFoundError("Environmental event definition not found")
+        self.event_definition_response(row)
+        return row
+
+    def list_event_definitions(
+        self, project_id: str, *, limit: int, offset: int
+    ) -> EnvironmentalEventDefinitionPage:
+        self.science.require_project(project_id)
+        query = select(EnvironmentalEventDefinition).where(
+            EnvironmentalEventDefinition.project_id == project_id
+        )
+        total = self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        rows = self.session.scalars(
+            query.order_by(
+                EnvironmentalEventDefinition.created_at, EnvironmentalEventDefinition.id
+            )
+            .limit(limit)
+            .offset(offset)
+        ).all()
+        return EnvironmentalEventDefinitionPage(
+            items=[self.event_definition_response(row) for row in rows], total=total
+        )
+
+    def evaluate_event_definition(
+        self, project_id: str, definition_id: str
+    ) -> EnvironmentalEventEvaluationResponse:
+        definition = self.event_definition_response(
+            self.get_event_definition(project_id, definition_id)
+        )
+        return EnvironmentalEventEvaluationResponse(
+            definition_id=definition.id,
+            definition_sha256=definition.definition_sha256,
+            result=self.threshold_samples(project_id, definition.query),
         )
 
     def subject_context(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -479,11 +479,25 @@ class WorkflowExecutionService:
         query = parameters.get("query")
         if not isinstance(query, dict):
             raise ValidationError("Environmental threshold requires an explicit query object")
-        try:
-            request = EnvironmentalThresholdRequest.model_validate(query)
-        except ValueError as exc:
-            raise ValidationError("Invalid environmental threshold query") from exc
-        result = EnvironmentalContextService(self.session).threshold_samples(project_id, request)
+        service = EnvironmentalContextService(self.session)
+        definition_id = None
+        definition_sha256 = None
+        if set(query) == {"definition_id"}:
+            try:
+                definition_id = str(UUID(str(query["definition_id"])))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise ValidationError("Invalid environmental event definition ID") from exc
+            definition = service.event_definition_response(
+                service.get_event_definition(project_id, definition_id)
+            )
+            definition_sha256 = definition.definition_sha256
+            request = definition.query
+        else:
+            try:
+                request = EnvironmentalThresholdRequest.model_validate(query)
+            except ValueError as exc:
+                raise ValidationError("Invalid environmental threshold query") from exc
+        result = service.threshold_samples(project_id, request)
         if len(result.matches) > 250:
             raise ValidationError(
                 "Environmental threshold returned over 250 samples; narrow the query bounds"
@@ -497,6 +511,8 @@ class WorkflowExecutionService:
                     "workflow_run_id": run_id,
                     "workflow_node_run_id": node_run.id,
                     "query": request.model_dump(mode="json"),
+                    "definition_id": definition_id,
+                    "definition_sha256": definition_sha256,
                     "method": result.method,
                     "normalized_threshold": result.normalized_threshold,
                     "normalized_unit": result.normalized_unit,

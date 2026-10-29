@@ -139,3 +139,25 @@ class EnvironmentalThresholdResponse(ScientificModel):
     method: Literal["observed_sample_threshold_no_interpolation"] = (
         "observed_sample_threshold_no_interpolation"
     )
+
+class EnvironmentalEventDefinitionCreate(ScientificModel):
+    name: str = Field(min_length=1, max_length=200)
+    query: EnvironmentalThresholdRequest
+
+
+class EnvironmentalEventDefinitionResponse(EnvironmentalEventDefinitionCreate):
+    id: UUID
+    project_id: UUID
+    definition_sha256: str
+    created_at: datetime
+
+
+class EnvironmentalEventDefinitionPage(ScientificModel):
+    items: list[EnvironmentalEventDefinitionResponse]
+    total: int
+
+
+class EnvironmentalEventEvaluationResponse(ScientificModel):
+    definition_id: UUID
+    definition_sha256: str
+    result: EnvironmentalThresholdResponse

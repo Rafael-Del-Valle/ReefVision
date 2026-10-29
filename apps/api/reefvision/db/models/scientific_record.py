@@ -45,3 +45,18 @@ class EnvironmentalCacheEntry(Base):
     content_sha256: Mapped[str] = mapped_column(String(64))
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+class EnvironmentalEventDefinition(Base):
+    """Immutable researcher-authored query, independent of changing source observations."""
+
+    __tablename__ = "environmental_event_definitions"
+    __table_args__ = (
+        Index("ix_environmental_event_definition_project", "project_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(200))
+    query_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    definition_sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

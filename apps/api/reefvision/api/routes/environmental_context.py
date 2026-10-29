@@ -10,6 +10,10 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.copernicus import CopernicusRequest
 from reefvision.schemas.environmental_context import (
     EnvironmentalDatasetPage,
+    EnvironmentalEventDefinitionCreate,
+    EnvironmentalEventDefinitionPage,
+    EnvironmentalEventDefinitionResponse,
+    EnvironmentalEventEvaluationResponse,
     EnvironmentalImportResponse,
     EnvironmentalLookup,
     EnvironmentalLookupResponse,
@@ -50,6 +54,61 @@ def environmental_threshold_samples(
     project_id: UUID, payload: EnvironmentalThresholdRequest, session: DbSession
 ) -> EnvironmentalThresholdResponse:
     return EnvironmentalContextService(session).threshold_samples(str(project_id), payload)
+
+
+@router.post(
+    "/projects/{project_id}/environment/events/definitions",
+    response_model=EnvironmentalEventDefinitionResponse,
+    status_code=201,
+)
+def create_event_definition(
+    project_id: UUID, payload: EnvironmentalEventDefinitionCreate, session: DbSession
+) -> EnvironmentalEventDefinitionResponse:
+    service = EnvironmentalContextService(session)
+    row = service.create_event_definition(str(project_id), payload)
+    response = service.event_definition_response(row)
+    session.commit()
+    return response
+
+
+@router.get(
+    "/projects/{project_id}/environment/events/definitions",
+    response_model=EnvironmentalEventDefinitionPage,
+)
+def list_event_definitions(
+    project_id: UUID,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> EnvironmentalEventDefinitionPage:
+    return EnvironmentalContextService(session).list_event_definitions(
+        str(project_id), limit=limit, offset=offset
+    )
+
+
+@router.get(
+    "/projects/{project_id}/environment/events/definitions/{definition_id}",
+    response_model=EnvironmentalEventDefinitionResponse,
+)
+def get_event_definition(
+    project_id: UUID, definition_id: UUID, session: DbSession
+) -> EnvironmentalEventDefinitionResponse:
+    service = EnvironmentalContextService(session)
+    return service.event_definition_response(
+        service.get_event_definition(str(project_id), str(definition_id))
+    )
+
+
+@router.post(
+    "/projects/{project_id}/environment/events/definitions/{definition_id}/evaluate",
+    response_model=EnvironmentalEventEvaluationResponse,
+)
+def evaluate_event_definition(
+    project_id: UUID, definition_id: UUID, session: DbSession
+) -> EnvironmentalEventEvaluationResponse:
+    return EnvironmentalContextService(session).evaluate_event_definition(
+        str(project_id), str(definition_id)
+    )
 
 
 @router.post(
