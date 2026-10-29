@@ -256,6 +256,13 @@ def _seed_pose_model(
     if model.purpose != "detector" or model.task != "pose" or model.provider_name != "ultralytics":
         raise ValidationError("Pose retraining seed must be a registered Ultralytics pose model")
 
+    # A model-reference artifact may pin the original registered checkpoint.
+    # Its digest is an explicit lineage assertion, not a hint to discard when
+    # the model ID still resolves to an intact but different registration.
+    for digest_field in ("sha256", "source_model_sha256"):
+        if digest_field in payload and payload[digest_field] != model.sha256:
+            raise ValidationError("Pose retraining seed artifact checksum changed")
+
     binding = session.get(
         PoseModelSchemaBinding,
         model.id,
