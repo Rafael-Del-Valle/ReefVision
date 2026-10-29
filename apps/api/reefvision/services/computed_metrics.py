@@ -245,6 +245,18 @@ class ComputedMetricService:
             if scientific_row is None or scientific_row.project_id != project_id:
                 raise ValidationError("All scientific inputs must belong to this project")
             scientific_response = scientific.response(scientific_row)
+            if scientific_response.qc in ("suspect", "rejected"):
+                raise ValidationError(
+                    "Computed metrics cannot use suspect or rejected scientific observations"
+                )
+            if scientific_response.environmental_snapshot_current is False:
+                raise ValidationError(
+                    "Computed metrics cannot use superseded environmental observations"
+                )
+            if scientific_response.calibration_current is False:
+                raise ValidationError(
+                    "Computed metrics cannot use observations with stale image calibration"
+                )
             if UNITS[scientific_response.unit][0] != spec.dimension:
                 raise ValidationError(
                     f"Input {spec.symbol} requires {spec.dimension} units, "
