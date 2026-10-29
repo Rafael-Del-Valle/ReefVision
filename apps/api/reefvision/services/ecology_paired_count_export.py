@@ -14,7 +14,7 @@ from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.model_agreement import PairedCountComparisonResponse
 from reefvision.services.ecology_candidate_report_export import _csv_identifier
 
-_EXPORT_VERSION = "ecology-paired-count-csv-0002"
+_EXPORT_VERSION = "ecology-paired-count-csv-0003"
 _COLUMNS = (
     "export_schema_version",
     "source_input_sha256",
@@ -45,6 +45,20 @@ _COLUMNS = (
     "mean_absolute_error",
     "mean_signed_percent_deviation",
     "mean_absolute_percent_deviation",
+    "organism_balanced_mean_signed_bias",
+    "organism_balanced_mean_absolute_error",
+    "organism_balanced_mean_signed_percent_deviation",
+    "organism_balanced_mean_absolute_percent_deviation",
+    "unit_balanced_mean_signed_bias",
+    "unit_balanced_mean_absolute_error",
+    "unit_balanced_mean_signed_percent_deviation",
+    "unit_balanced_mean_absolute_percent_deviation",
+    "organism_and_unit_balanced_mean_signed_bias",
+    "organism_and_unit_balanced_mean_absolute_error",
+    "organism_and_unit_balanced_mean_signed_percent_deviation",
+    "organism_and_unit_balanced_mean_absolute_percent_deviation",
+    "percent_contributing_organism_count",
+    "percent_contributing_independent_unit_count",
     "declared_independent_unit_count",
     "shared_parent_colony_ids_json",
     "summary_json",
@@ -168,6 +182,15 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
             mean_absolute_error=unit.mean_absolute_error,
             mean_signed_percent_deviation=_optional_number(unit.mean_signed_percent_deviation),
             mean_absolute_percent_deviation=_optional_number(unit.mean_absolute_percent_deviation),
+            organism_balanced_mean_signed_bias=unit.organism_balanced_mean_signed_bias,
+            organism_balanced_mean_absolute_error=unit.organism_balanced_mean_absolute_error,
+            organism_balanced_mean_signed_percent_deviation=_optional_number(
+                unit.organism_balanced_mean_signed_percent_deviation
+            ),
+            organism_balanced_mean_absolute_percent_deviation=_optional_number(
+                unit.organism_balanced_mean_absolute_percent_deviation
+            ),
+            percent_contributing_organism_count=unit.percent_contributing_organism_count,
             summary_json=_json(unit.model_dump(mode="json")),
         )
 
@@ -180,6 +203,32 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
         mean_absolute_error=checked.mean_absolute_error,
         mean_signed_percent_deviation=_optional_number(checked.mean_signed_percent_deviation),
         mean_absolute_percent_deviation=_optional_number(checked.mean_absolute_percent_deviation),
+        unit_balanced_mean_signed_bias=_optional_number(checked.unit_balanced_mean_signed_bias),
+        unit_balanced_mean_absolute_error=_optional_number(checked.unit_balanced_mean_absolute_error),
+        unit_balanced_mean_signed_percent_deviation=_optional_number(
+            checked.unit_balanced_mean_signed_percent_deviation
+        ),
+        unit_balanced_mean_absolute_percent_deviation=_optional_number(
+            checked.unit_balanced_mean_absolute_percent_deviation
+        ),
+        organism_and_unit_balanced_mean_signed_bias=_optional_number(
+            checked.organism_and_unit_balanced_mean_signed_bias
+        ),
+        organism_and_unit_balanced_mean_absolute_error=_optional_number(
+            checked.organism_and_unit_balanced_mean_absolute_error
+        ),
+        organism_and_unit_balanced_mean_signed_percent_deviation=_optional_number(
+            checked.organism_and_unit_balanced_mean_signed_percent_deviation
+        ),
+        organism_and_unit_balanced_mean_absolute_percent_deviation=_optional_number(
+            checked.organism_and_unit_balanced_mean_absolute_percent_deviation
+        ),
+        percent_contributing_organism_count=_optional_number(
+            checked.percent_contributing_organism_count
+        ),
+        percent_contributing_independent_unit_count=_optional_number(
+            checked.percent_contributing_independent_unit_count
+        ),
         declared_independent_unit_count=_optional_number(checked.declared_independent_unit_count),
         shared_parent_colony_ids_json=_json(checked.cross_unit_shared_parent_colony_ids),
         summary_json=_json(checked.model_dump(mode="json", exclude={"paired_differences"})),

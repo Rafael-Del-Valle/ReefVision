@@ -18,8 +18,8 @@ from reefvision.schemas.model_agreement import (
     PairedCountComparisonRequest,
     PairedCountComparisonResponse,
 )
-from reefvision.services.ecology_paired_count_export import render_paired_count_csv
 from reefvision.schemas.workflow_graphs import WorkflowDataType, WorkflowPortDefinition
+from reefvision.services.ecology_paired_count_export import render_paired_count_csv
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_model_agreement_1_2 import _graph, _pairs
 
@@ -63,7 +63,7 @@ def test_standalone_csv_has_source_provenance_and_correct_denominators(
     assert all(row["evidence_level"] == "caller_supplied_unverified" for row in rows)
     assert all(row["review_status"] == "requires_source_verification" for row in rows)
     assert all(row["independent_inference_allowed"] == "false" for row in rows)
-    assert all(row["export_schema_version"] == "ecology-paired-count-csv-0002" for row in rows)
+    assert all(row["export_schema_version"] == "ecology-paired-count-csv-0003" for row in rows)
     assert all(
         row["source_input_sha256"] == comparison.analysis_provenance.canonical_input_sha256
         for row in rows
@@ -89,6 +89,96 @@ def test_standalone_csv_has_source_provenance_and_correct_denominators(
     )
     assert shuffled.status_code == 200, shuffled.text
     assert shuffled.text == exported.text
+
+
+
+def test_csv_exposes_nested_biological_unit_balancing_without_inflating_n(
+    client: TestClient,
+) -> None:
+    """Repeated images cannot masquerade as equally weighted biological units."""
+    original = _pairs()
+    a_first = dict(original[0])
+    a_first.update(reference_count=10, model_count=20)
+    a_repeat = dict(a_first)
+    a_repeat.update(
+        observation_id="image-3",
+        reference_source_record_id="human-image-3",
+        model_source_record_id="model-image-3",
+    )
+    b = dict(original[1])
+    b.update(reference_count=10, model_count=10)
+    c = dict(b)
+    c.update(
+        observation_id="image-4",
+        organism_id="fragment-C",
+        reference_source_record_id="human-image-4",
+        model_source_record_id="model-image-4",
+        experimental_unit_id="tank-B",
+    )
+    pairs = [a_first, a_repeat, b, c]
+    response = client.post(
+        "/api/v1/ecology/paired-count-comparison/report.csv", json=_request(pairs)
+    )
+    assert response.status_code == 200, response.text
+    rows = list(csv.DictReader(StringIO(response.text)))
+    units = {
+        row["experimental_unit_id"]: row
+        for row in rows
+        if row["row_type"] == "declared_unit"
+    }
+    overall = next(row for row in rows if row["row_type"] == "overall")
+    assert len(units) == 2
+    assert overall["paired_observation_count"] == "4"
+    assert overall["observed_organism_count"] == "3"
+    assert overall["declared_independent_unit_count"] == "2"
+    assert overall["percent_contributing_organism_count"] == "3"
+    assert overall["percent_contributing_independent_unit_count"] == "2"
+    assert float(overall["mean_signed_bias"]) == pytest.approx(5)
+    assert float(overall["unit_balanced_mean_signed_bias"]) == pytest.approx(10 / 3)
+    assert float(overall["organism_and_unit_balanced_mean_signed_bias"]) == pytest.approx(
+        2.5
+    )
+    assert float(overall["unit_balanced_mean_absolute_percent_deviation"]) == (
+        pytest.approx(100 / 3)
+    )
+    assert float(
+        overall["organism_and_unit_balanced_mean_absolute_percent_deviation"]
+    ) == pytest.approx(25)
+    assert units["tank-A"]["paired_observation_count"] == "3"
+    assert units["tank-A"]["observed_organism_count"] == "2"
+    assert units["tank-A"]["percent_contributing_organism_count"] == "2"
+    assert float(units["tank-A"]["mean_signed_bias"]) == pytest.approx(20 / 3)
+    assert float(units["tank-A"]["organism_balanced_mean_signed_bias"]) == 5
+    assert units["tank-B"]["paired_observation_count"] == "1"
+    assert units["tank-B"]["percent_contributing_organism_count"] == "1"
+    assert all(row["independent_inference_allowed"] == "false" for row in rows)
+
+    # A comparison with no declared independent units cannot invent balanced N.
+    no_units = [
+        {
+            key: value
+            for key, value in pair.items()
+            if key not in ("experimental_unit_id", "experimental_unit_type")
+        }
+        for pair in pairs
+    ]
+    unregistered = client.post(
+        "/api/v1/ecology/paired-count-comparison/report.csv",
+        json=_request(no_units),
+    )
+    assert unregistered.status_code == 200, unregistered.text
+    unregistered_rows = list(csv.DictReader(StringIO(unregistered.text)))
+    unregistered_overall = next(
+        row for row in unregistered_rows if row["row_type"] == "overall"
+    )
+    assert not any(row["row_type"] == "declared_unit" for row in unregistered_rows)
+    for field in (
+        "declared_independent_unit_count",
+        "unit_balanced_mean_signed_bias",
+        "organism_and_unit_balanced_mean_signed_bias",
+        "percent_contributing_independent_unit_count",
+    ):
+        assert unregistered_overall[field] == ""
 
 
 def test_csv_escapes_user_supplied_formula_identifiers(client: TestClient) -> None:
@@ -170,7 +260,7 @@ def test_saved_csv_workflow_persists_typed_unverified_parity(client: TestClient)
         json=_request(_pairs()),
     )
     assert standalone.status_code == 200, standalone.text
-    assert csv_artifact["schema_version"] == "ecology-paired-count-csv-0002"
+    assert csv_artifact["schema_version"] == "ecology-paired-count-csv-0003"
     assert csv_artifact["csv_text"] == standalone.text
     assert "organism_descriptive" in csv_artifact["csv_text"]
     assert "independent_inference_allowed" in csv_artifact["csv_text"]

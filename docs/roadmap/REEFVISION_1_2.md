@@ -3951,3 +3951,33 @@ pytest/Ruff run. Exact-head CI, authenticated longitudinal calibration and
 organism identity, experimental-design review, 1.1 migration reconciliation,
 representative biological data and installed Windows GUI/MSI acceptance are
 still required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Paired-count CSV explicit biological weighting (2026-10-29)
+
+The exact predecessor `d1dbc8c4a4935792d5d4913c74390531e85fbab5`
+passed **16/19** GitHub Actions workflows, including Milestone 10
+Acceptance and Windows desktop build. Three backend checks failed solely
+at Ruff import sorting in `test_ecology_paired_count_csv_1_2.py`; the
+CI-reported import ordering is corrected here.
+
+Export contract `ecology-paired-count-csv-0003` now exposes the
+existing organism-balanced, declared-unit-balanced and nested
+organism-within-unit-balanced signed bias, absolute error and percentage
+deviation as **separate named CSV columns**. It also exposes eligible
+organism/unit percentage denominators. A unit row reports organism-balanced
+statistics; the overall row reports unit-balanced and nested statistics.
+Pair-weighted descriptive means remain labeled separately. Missing
+experimental-unit registration yields blank unit-balanced estimates,
+never an invented independent sample size. These are descriptive estimates,
+not ICC, hypothesis tests, authenticated replication or verified measurements.
+
+Standalone CSV and the typed executable saved Workflow Builder CSV artifact
+share the same renderer and updated schema version. A new unequal-image
+fixture demonstrates that pair-, unit- and nested-balanced means diverge,
+checks denominator integrity, and verifies the unregistered-unit case.
+Existing saved-workflow CSV SHA-256, provenance, unverified review gate,
+source-identity protection and standalone parity tests remain in force.
+
+Integrated exact-head CI, migration reconciliation with 1.1, source-authenticated
+calibrated longitudinal measurements, biological review and physical Windows
+GUI/MSI acceptance are still required. **1.2 NOT RELEASE-READY; 1.3 not started.**
