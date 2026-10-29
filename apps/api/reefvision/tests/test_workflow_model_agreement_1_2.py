@@ -140,6 +140,10 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     tampered["paired_differences"][0]["signed_difference"] = 99
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(tampered)
+    tampered_mean = dict(payload)
+    tampered_mean["mean_signed_bias"] = 999
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(tampered_mean)
     assert payload["project_id"] == project_id
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"
@@ -171,9 +175,10 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
         json={"pairs": _pairs(), "reference_kind": "human_consensus"},
     )
     assert standalone.status_code == 200, standalone.text
-    assert PairedCountComparisonResponse.model_validate(
-        standalone.json()
-    ).paired_observation_count == 2
+    assert (
+        PairedCountComparisonResponse.model_validate(standalone.json()).paired_observation_count
+        == 2
+    )
     assert payload["analysis_provenance"] == standalone.json()["analysis_provenance"]
     for key in (
         "observed_organism_count",

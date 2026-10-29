@@ -446,3 +446,78 @@ def test_current_saved_unit_roster_rejects_pseudoreplicate_tampering(
         payload["unit_summaries"] = []
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "mean_signed_bias",
+        "mean_absolute_error",
+        "mean_absolute_percent_deviation",
+        "mean_signed_percent_deviation",
+        "unit_balanced_mean_signed_bias",
+        "unit_balanced_mean_absolute_error",
+        "organism_and_unit_balanced_mean_signed_bias",
+        "organism_and_unit_balanced_mean_absolute_error",
+        "unit_balanced_mean_absolute_percent_deviation",
+        "organism_and_unit_balanced_mean_absolute_percent_deviation",
+        "unit_balanced_mean_signed_percent_deviation",
+        "organism_and_unit_balanced_mean_signed_percent_deviation",
+    ],
+)
+def test_current_saved_paired_means_reject_forged_aggregates(field: str) -> None:
+    """Saved 0007 means must reconcile with rows and unit summaries."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 12),
+                pair("b", "frag-B", "tank-2", 20, 16),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    payload[field] += 5
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
+
+
+def test_current_saved_zero_reference_means_cannot_be_forged() -> None:
+    """No nonzero reference means no percentage estimate, not zero error."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_observer",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 0, 3),
+                pair("b", "frag-B", "tank-2", 0, 5),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    assert payload["mean_absolute_percent_deviation"] is None
+    payload["mean_absolute_percent_deviation"] = 0
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
+
+
+def test_current_saved_nonzero_reference_requires_signed_percentage() -> None:
+    """Current artifacts cannot omit signed percent while retaining absolute percent."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 12),
+                pair("b", "frag-B", "tank-2", 10, 8),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    payload["paired_differences"][0]["signed_percent_deviation"] = None
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)

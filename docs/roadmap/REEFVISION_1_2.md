@@ -3761,3 +3761,18 @@ saved-workflow artifact-tampering/parity check were added. Full new-head
 CI, authenticated calibrated longitudinal sources, experimental-design
 review, 1.1 migration reconciliation and physical Windows installer/GUI
 acceptance remain mandatory. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Saved paired-count aggregate integrity (2026-10-29)
+
+The current `ecology-paired-count-0007` typed result contract now recomputes
+pair-weighted signed bias, absolute error and percentage means directly from
+persisted paired differences. It also reconciles unit-balanced and nested
+organism/unit means with the persisted unit summaries. Missing eligible
+reference counts must remain null, not an invented zero percentage, and
+nonzero-reference rows must retain signed percentage deviation. Fourteen
+focused scientific tamper cases and saved executable Workflow Builder artifact
+acceptance cover these checks; the standalone API shares the same result
+schema. These consistency checks **do not** authenticate source records,
+registered units, biological identity or human consensus. Previous algorithm
+versions remain readable. CI and Windows scientific/GUI acceptance remain
+required before release.

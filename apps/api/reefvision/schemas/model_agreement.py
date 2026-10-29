@@ -9,6 +9,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
+from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.scientific_provenance import ScientificInputProvenance
 
 
@@ -227,7 +228,7 @@ class PairedCountComparisonResponse(BaseModel):
                 abs_tol=1e-12,
             ):
                 raise ValueError("Directional absolute percentages must match raw counts")
-            if row.signed_percent_deviation is not None and not math.isclose(
+            if row.signed_percent_deviation is None or not math.isclose(
                 row.signed_percent_deviation,
                 expected_percent,
                 rel_tol=1e-12,
@@ -331,4 +332,74 @@ class PairedCountComparisonResponse(BaseModel):
             != self.observed_organism_count
         ):
             raise ValueError("Directional unit totals must match global denominators")
+        # Recompute published means from the persisted paired evidence. A
+        # plausible direction histogram cannot authorize fabricated averages.
+        # Use the same overflow-safe scientific mean as the producer.
+        def require_derived_mean(field_name: str, values: list[float]) -> None:
+            expected = finite_descriptive_mean(values) if values else None
+            actual = getattr(self, field_name)
+            if (expected is None and actual is not None) or (
+                expected is not None
+                and (
+                    actual is None
+                    or not math.isfinite(actual)
+                    or not math.isclose(actual, expected, rel_tol=1e-12, abs_tol=1e-12)
+                )
+            ):
+                raise ValueError(f"Directional {field_name} does not match source means")
+
+        for field_name, values in (
+            ("mean_signed_bias", [row.signed_difference for row in self.paired_differences]),
+            ("mean_absolute_error", [row.absolute_difference for row in self.paired_differences]),
+            (
+                "mean_absolute_percent_deviation",
+                [
+                    row.absolute_percent_deviation
+                    for row in self.paired_differences
+                    if row.absolute_percent_deviation is not None
+                ],
+            ),
+            (
+                "mean_signed_percent_deviation",
+                [
+                    row.signed_percent_deviation
+                    for row in self.paired_differences
+                    if row.signed_percent_deviation is not None
+                ],
+            ),
+        ):
+            require_derived_mean(field_name, values)
+        for field_name, unit_field in (
+            ("unit_balanced_mean_signed_bias", "mean_signed_bias"),
+            ("unit_balanced_mean_absolute_error", "mean_absolute_error"),
+            (
+                "organism_and_unit_balanced_mean_signed_bias",
+                "organism_balanced_mean_signed_bias",
+            ),
+            (
+                "organism_and_unit_balanced_mean_absolute_error",
+                "organism_balanced_mean_absolute_error",
+            ),
+            (
+                "unit_balanced_mean_absolute_percent_deviation",
+                "mean_absolute_percent_deviation",
+            ),
+            (
+                "organism_and_unit_balanced_mean_absolute_percent_deviation",
+                "organism_balanced_mean_absolute_percent_deviation",
+            ),
+            ("unit_balanced_mean_signed_percent_deviation", "mean_signed_percent_deviation"),
+            (
+                "organism_and_unit_balanced_mean_signed_percent_deviation",
+                "organism_balanced_mean_signed_percent_deviation",
+            ),
+        ):
+            require_derived_mean(
+                field_name,
+                [
+                    value
+                    for unit in self.unit_summaries
+                    if (value := getattr(unit, unit_field)) is not None
+                ],
+            )
         return self
