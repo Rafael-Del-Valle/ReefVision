@@ -47,7 +47,15 @@ function ProjectSpatialAssetPreviewSession({
     void listProjectSpatialAssets(projectId, controller.signal)
       .then((records) => {
         if (version === listVersion.current && !controller.signal.aborted) {
-          setAssets(records);
+          setAssets((previous) => {
+            const existingIds = new Set(previous.map((item) => item.id));
+            return [
+              ...previous,
+              ...records.filter(
+                (record) => record.project_id === projectId && !existingIds.has(record.id),
+              ),
+            ];
+          });
         }
       })
       .catch((reason: unknown) => {
@@ -76,8 +84,6 @@ function ProjectSpatialAssetPreviewSession({
   async function importFile(): Promise<void> {
     if (!file) return;
     const version = ++requestVersion.current;
-    listVersion.current += 1;
-    setLoadingList(false);
     setBusy(true);
     setError(null);
     setArtifact(null);
