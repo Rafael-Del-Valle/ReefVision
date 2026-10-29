@@ -32,9 +32,7 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
-            )
+            connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
             connection.execute(text("INSERT INTO alembic_version VALUES ('0041')"))
             connection.execute(text("CREATE TABLE observations (value TEXT NOT NULL)"))
             connection.execute(
