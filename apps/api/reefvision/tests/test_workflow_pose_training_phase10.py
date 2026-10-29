@@ -1139,6 +1139,44 @@ def test_pose_workflow_rejects_lossy_random_seeds_from_verified_truth(
         )
     assert result["random_seed"] == 0
 
+    # The worker accepts a seed in Ultralytics training_config as well as
+    # ReefVision's top-level random_seed. A saved scientific run must never
+    # advertise one seed while its training arguments execute with another.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match=r"training_config\.seed must match random_seed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={
+                **parameters,
+                "random_seed": 8,
+                "training_config": {"epochs": 1, "seed": 7},
+            },
+            processor=_fake_pose_processor,
+        )
+
+    # A legacy graph that specifies only training_config.seed must persist
+    # the effective worker seed in the TrainingRun and downstream artifact.
+    with app.state.session_factory() as session:
+        configured_result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={**parameters, "training_config": {"epochs": 1, "seed": 7}},
+            processor=_fake_pose_processor,
+        )
+    assert configured_result["random_seed"] == 7
+    with app.state.session_factory() as session:
+        saved_run = session.get(TrainingRun, configured_result["training_run_id"])
+        assert saved_run is not None
+        assert saved_run.random_seed == 7
+        assert saved_run.training_config_json["seed"] == 7
+
 
 def test_pose_training_can_require_separate_validation_truth(
     client: TestClient,
