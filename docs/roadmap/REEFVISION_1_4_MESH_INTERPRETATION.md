@@ -747,3 +747,22 @@ Builder graphs share this validation path. Regression coverage includes
 degenerate zero-area previews, forged area evidence, and the pre-existing
 zero-face and extreme-calibration saved-workflow cases. Physical calibration,
 registration, and specimen identity remain unverified.
+
+### Legacy scale-interval provenance guard (October 29, 2026)
+
+Longitudinal 3D comparisons now reject a stored surface-area or
+axis-aligned bounding-box diagonal **scale interval** if the associated
+observation lacks `provenance.relative_scale_uncertainty` entirely.
+An interval that encloses its nominal measurement is not sufficient:
+without the source calibration uncertainty, a legacy record could
+otherwise present arbitrarily narrow bounds as scientific evidence.
+The existing checks also reject supplied intervals when source
+uncertainty is explicitly unknown or their endpoints contradict it.
+
+Older observations **without a claimed interval** remain readable, with
+combined longitudinal scale bounds withheld rather than invented.
+Both the standalone comparison and executable typed Workflow Builder
+adapter use this fail-closed validation. Regression tests exercise
+both timepoints and both interval types. These are scale-only bounds,
+not statistical confidence intervals or verified coral growth; physical
+calibration, registration and biological identity remain provisional.
