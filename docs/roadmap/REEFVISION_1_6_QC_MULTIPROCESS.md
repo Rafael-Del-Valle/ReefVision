@@ -41,3 +41,23 @@ from this test alone.
 Windows MSI clean install, upgrade/rollback and interactive GUI; representative
 biological-data acceptance; full exact-head lint, typing, backend, frontend,
 E2E and migration checks. No other version branch is merged here.
+
+## 2026-10-29 — exact-head CI triage and independent review preservation
+
+CI run 40818779675 on `66e87711` reported two backend Ruff failures:
+I001 in the multi-process test import/comment spacing and RUF043 in the
+SQLite UNIQUE-constraint regex assertion. Both reported locations were
+corrected without changing production queue creation or scientific scoring.
+
+The independent-process regression additionally creates a separate
+researcher-owned standalone QC queue, writes a review comment through the
+normal event API, and verifies the comment ID, event count, and item identity
+after the two saved-workflow writers race. This explicitly tests that
+concurrent workflow recovery does not overwrite an unrelated researcher's
+review history. It complements the existing single-process lock test.
+
+**Verification boundary:** GitHub blob read-back confirms the changes;
+exact-head backend pytest, Ruff, type checks, frontend/E2E, and Windows
+installed-GUI acceptance must still be checked in CI. Do not treat a queued
+or cancelled CI run as a pass. The cross-version Alembic 0038 conflict,
+native MSI upgrade/rollback, and biological acceptance remain HOLD.
