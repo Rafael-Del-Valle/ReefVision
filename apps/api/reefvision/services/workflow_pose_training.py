@@ -919,9 +919,9 @@ def create_pose_workflow_training_result(
     if configured_seed_supplied and supplied_config["seed"] != random_seed:
         raise ValidationError("Pose training_config.seed must match random_seed")
 
-    resource_limits = parameters.get("resource_limits")
-    if resource_limits is None:
-        resource_limits = {}
+    # Missing limits use the unrestricted default, but an explicit null in
+    # a saved workflow must not silently discard its resource policy.
+    resource_limits = parameters.get("resource_limits", {})
     if not isinstance(resource_limits, dict):
         raise ValidationError("Pose training resource_limits must be an object")
     resource_limits = dict(resource_limits)
