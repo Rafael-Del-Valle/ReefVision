@@ -9,6 +9,14 @@ and byte-content retrieval are project-scoped. Content reads recheck the
 stored byte length and SHA-256 and reject missing or modified originals.
 The managed filesystem path is never exposed by the API.
 
+The project 3D preview client rejects inconsistent source-format/kind pairs
+(PLY is `mesh_or_point_cloud`; OBJ/GLB are `mesh`), empty, fractional, or
+oversized reported source byte counts, and forged source verification flags
+before requesting analysis. These checks do not replace server-side ownership,
+byte-length, and SHA-256 verification. Invalid preview requests reject through
+the asynchronous API contract, allowing callers and saved-workflow UIs to
+handle errors without mistaking a synchronous exception for an artifact.
+
 PLY is `mesh_or_point_cloud` because the extension alone does not establish
 topology. Raw imports are **unreviewed**, not parsed, calibrated, registered,
 or biologically identified. No delete or remote publishing operation exists.
