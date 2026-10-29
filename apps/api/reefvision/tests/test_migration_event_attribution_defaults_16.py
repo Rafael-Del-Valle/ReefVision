@@ -29,17 +29,13 @@ def test_review_event_attribution_defaults_fail_closed_without_writes(
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
-            )
+            connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
             connection.execute(
                 text("INSERT INTO alembic_version VALUES (:revision)"),
                 {"revision": revision},
             )
             connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
-            connection.execute(
-                text("INSERT INTO preserved VALUES ('original coral observation')")
-            )
+            connection.execute(text("INSERT INTO preserved VALUES ('original coral observation')"))
             fields = [
                 f"{name} TEXT NOT NULL"
                 + (" PRIMARY KEY" if name == "id" else "")
@@ -49,21 +45,15 @@ def test_review_event_attribution_defaults_fail_closed_without_writes(
             fields.extend(["event_type TEXT NOT NULL", "comment TEXT", "assignee TEXT"])
             allowed = "'comment', 'assign', 'unassign'"
             if revision == "0041":
-                allowed += (
-                    ", 'triage_start', 'triage_skip', 'triage_return', "
-                    "'triage_complete'"
-                )
+                allowed += ", 'triage_start', 'triage_skip', 'triage_return', 'triage_complete'"
             fields.append(
-                "CONSTRAINT ck_review_queue_item_event_type "
-                f"CHECK (event_type IN ({allowed}))"
+                f"CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed}))"
             )
             fields.append(
                 "CONSTRAINT uq_review_queue_item_event_request "
                 "UNIQUE (review_queue_item_id, client_request_id)"
             )
-            connection.execute(
-                text(f"CREATE TABLE review_queue_item_events ({', '.join(fields)})")
-            )
+            connection.execute(text(f"CREATE TABLE review_queue_item_events ({', '.join(fields)})"))
             connection.execute(
                 text(
                     "INSERT INTO review_queue_item_events "
@@ -89,10 +79,7 @@ def test_review_event_attribution_defaults_fail_closed_without_writes(
                 )
             original_schema = tuple(
                 connection.execute(
-                    text(
-                        "SELECT name, sql FROM sqlite_master "
-                        "WHERE type='table' ORDER BY name"
-                    )
+                    text("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
                 ).all()
             )
             original_events = tuple(
@@ -107,31 +94,35 @@ def test_review_event_attribution_defaults_fail_closed_without_writes(
                 if defaulted_field is None:
                     assert_compatible_revision_0038(connection)
                 else:
-                    with pytest.raises(
-                        RuntimeError, match="unexpected server defaults"
-                    ):
+                    with pytest.raises(RuntimeError, match="unexpected server defaults"):
                         assert_compatible_revision_0038(connection)
-                assert tuple(
-                    connection.execute(
-                        text(
-                            "SELECT name, sql FROM sqlite_master "
-                            "WHERE type='table' ORDER BY name"
-                        )
-                    ).all()
-                ) == original_schema
-                assert tuple(
-                    connection.execute(
-                        text(
-                            "SELECT id, actor, client_request_id, created_at "
-                            "FROM review_queue_item_events"
-                        )
-                    ).all()
-                ) == original_events
+                assert (
+                    tuple(
+                        connection.execute(
+                            text(
+                                "SELECT name, sql FROM sqlite_master "
+                                "WHERE type='table' ORDER BY name"
+                            )
+                        ).all()
+                    )
+                    == original_schema
+                )
+                assert (
+                    tuple(
+                        connection.execute(
+                            text(
+                                "SELECT id, actor, client_request_id, created_at "
+                                "FROM review_queue_item_events"
+                            )
+                        ).all()
+                    )
+                    == original_events
+                )
                 assert connection.scalar(text("SELECT value FROM preserved")) == (
                     "original coral observation"
                 )
-                assert connection.scalar(
-                    text("SELECT version_num FROM alembic_version")
-                ) == revision
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                )
     finally:
         engine.dispose()
