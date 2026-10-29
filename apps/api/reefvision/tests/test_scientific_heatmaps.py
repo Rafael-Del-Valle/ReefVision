@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from reefvision.tests.test_annotations import (
@@ -54,7 +55,7 @@ def test_empty_heatmap_is_zero_and_repeatable(
 
 
 def test_reviewed_boxes_and_verified_masks_remain_separate(
-    client: TestClient,
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project = create_project(client, "Coral heatmaps")
     image_id = import_one(client, project["id"])["successful"][0]["image_id"]
@@ -104,6 +105,9 @@ def test_reviewed_boxes_and_verified_masks_remain_separate(
     )
     assert saved.status_code == 200, saved.text
 
+    # The draft mask is retained in provenance but must not consume the
+    # two-object counting budget (one reviewed box plus one verified mask).
+    monkeypatch.setattr("reefvision.services.scientific_heatmaps.MAX_OBJECTS", 2)
     response = client.get(
         _url(project["id"], image_id),
         params={"columns": 4, "rows": 3},

@@ -150,9 +150,6 @@ class ScientificHeatmapService:
             .order_by(PredictionProposal.id)
         ).all()
 
-        if len(boxes) + len(masks) + len(predictions) > MAX_OBJECTS:
-            raise ValidationError("Heatmap object limit exceeded")
-
         if label_class_id is not None:
             boxes = [box for box in boxes if box.label_class_id == label_class_id]
             masks = [mask for mask in masks if mask.label_class_id == label_class_id]
@@ -161,6 +158,16 @@ class ScientificHeatmapService:
                 for prediction in predictions
                 if prediction.label_class_id == label_class_id
             ]
+
+        # Limit the evidence actually contributing to the grid. Draft masks,
+        # unreviewed boxes and other classes must not exhaust this budget.
+        counted_objects = (
+            (len(boxes) if image.annotation_status == "reviewed" else 0)
+            + sum(mask.status == "verified" for mask in masks)
+            + len(predictions)
+        )
+        if counted_objects > MAX_OBJECTS:
+            raise ValidationError("Heatmap object limit exceeded")
 
         reviewed_boxes = []
         verified_masks = []
