@@ -23,3 +23,22 @@ The frame label is **not** proof of coordinate registration, physical origin, su
 ## Revalidation of mutable review evidence
 
 Already-constructed Pydantic review instances can be modified after their initial schema validation. Both standalone 3D mesh and point-cloud preview engines now revalidate the complete independent calibration review record immediately before checking source bindings or recording provenance. This rejects later changes that make the reviewer identical to the operator (including case-only differences), replace a supported decision with an unknown status, blank the audit note, invalidate source hashes or coordinate-frame labels, or make the scale invalid. Existing valid and legacy records retain their previous semantics. The same engines execute persisted, typed Workflow Builder nodes, so saved-workflow artifacts retain standalone parity. Revalidation prevents invalid audit evidence from being accepted; it does **not** authenticate the reviewer, establish calibration accuracy, or turn provisional measurements into verified observations.
+
+## Longitudinal surface-area interval integrity
+
+The provisional `mesh_longitudinal_comparison` engine now checks each
+available `surface_area_scale_interval_m2` against that observation's
+`provenance.relative_scale_uncertainty`. The lower and upper endpoints must
+match the source preview's nominal area multiplied by `(1 - u)^2` and
+`(1 + u)^2`, respectively. A fabricated narrower or wider interval is
+rejected rather than used to understate uncertainty in cross-timepoint
+differences. A supplied interval is also rejected when the source explicitly
+reports unknown scale uncertainty. Malformed uncertainty metadata is rejected.
+
+Missing intervals remain unavailable, not zero-uncertainty evidence. Older
+artifacts without the provenance uncertainty field remain readable; they
+cannot be retrospectively audited against that field. These are **scale-only
+bounds**, not statistical confidence intervals: they exclude reconstruction,
+registration, segmentation, and specimen-identity uncertainty. Standalone
+comparisons and persisted typed Workflow Builder comparisons use the same
+validation engine and preserve provisional status.
