@@ -984,6 +984,10 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
     assert plan.status_code == 200, plan.text
 
     assert plan.json()["executable"] is True
+    # The saved workflow's omitted mode must resolve through the catalog's
+    # explicit auto default rather than an invalid null.
+    training_step = next(step for step in plan.json()["steps"] if step["node_id"] == "train")
+    assert training_step["parameters"]["initialization_mode"] == "auto"
 
     run_id, job_id = _save_and_queue(
         client,
