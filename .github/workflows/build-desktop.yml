@@ -91,6 +91,7 @@ jobs:
           apps/api/reefvision/tests/test_migration_partial_bulk_16.py
           apps/api/reefvision/tests/test_migration_bulk_defaults_16.py
           apps/api/reefvision/tests/test_migration_event_attribution_defaults_16.py
+          apps/api/reefvision/tests/test_migration_event_nullable_attribution_16.py
           apps/api/reefvision/tests/test_workflow_queue_multiprocess_16.py
           apps/api/reefvision/tests/test_workflow_queue_sqlite_contention_16.py
           apps/api/reefvision/tests/test_review_queue_bulk_sqlite_contention_16.py
