@@ -149,6 +149,14 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             for name in _BULK_COLUMNS - {"reason"}
             if name in bulk_columns and bulk_columns[name].get("nullable", True)
         )
+        # Server defaults on required audit fields can silently invent a
+        # reviewer, scope, action, or request identity when a write omits it.
+        # The 0041 migration declares no defaults for these fields.
+        defaulted_bulk = sorted(
+            name
+            for name in _BULK_COLUMNS - {"reason"}
+            if name in bulk_columns and bulk_columns[name].get("default") is not None
+        )
         bulk_primary_key = (
             inspector.get_pk_constraint(_BULK_TABLE).get("constrained_columns")
             if _BULK_TABLE in tables
@@ -187,12 +195,14 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             missing_bulk
             or bulk_primary_key != ["id"]
             or nullable_bulk
+            or defaulted_bulk
             or actual_foreign_keys != expected_foreign_keys
         ):
             raise RuntimeError(
                 "Unsafe ReefVision Alembic revision 0041 collision: "
                 f"bulk request registry missing columns={missing_bulk}; "
                 f"nullable required columns={nullable_bulk}; "
+                f"defaulted required columns={defaulted_bulk}; "
                 f"foreign keys={sorted(actual_foreign_keys)}; "
                 "or missing global primary key / required RESTRICT links. "
                 "Preserve the database "

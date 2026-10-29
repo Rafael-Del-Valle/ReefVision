@@ -16,24 +16,16 @@ from reefvision.db import session
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 
 
-def _seed_interrupted_bulk_registry(
-    engine: object, revision: str, *, populated: bool
-) -> None:
+def _seed_interrupted_bulk_registry(engine: object, revision: str, *, populated: bool) -> None:
     with engine.begin() as connection:
-        connection.execute(
-            text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
-        )
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
         connection.execute(
             text("INSERT INTO alembic_version VALUES (:revision)"),
             {"revision": revision},
         )
+        connection.execute(text("CREATE TABLE observations (id TEXT PRIMARY KEY, value TEXT)"))
         connection.execute(
-            text("CREATE TABLE observations (id TEXT PRIMARY KEY, value TEXT)")
-        )
-        connection.execute(
-            text(
-                "INSERT INTO observations VALUES ('coral-1', 'unmodified observation')"
-            )
+            text("INSERT INTO observations VALUES ('coral-1', 'unmodified observation')")
         )
         allowed = "'comment', 'assign', 'unassign'"
         if revision in {"0039", "0040"}:
@@ -84,16 +76,8 @@ def _snapshot(connection: object) -> tuple[object, ...]:
         schema,
         connection.scalar(text("SELECT version_num FROM alembic_version")),
         connection.scalar(text("SELECT value FROM observations WHERE id='coral-1'")),
-        tuple(
-            connection.execute(
-                text("SELECT id, actor FROM review_queue_item_events")
-            ).all()
-        ),
-        tuple(
-            connection.execute(
-                text("SELECT id, actor FROM review_queue_bulk_requests")
-            ).all()
-        ),
+        tuple(connection.execute(text("SELECT id, actor FROM review_queue_item_events")).all()),
+        tuple(connection.execute(text("SELECT id, actor FROM review_queue_bulk_requests")).all()),
     )
 
 
