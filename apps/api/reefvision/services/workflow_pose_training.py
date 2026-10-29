@@ -1183,6 +1183,18 @@ def create_pose_workflow_training_result(
             role="validation",
         )
 
+    # The registered seed was verified before launching the worker. Recheck
+    # its local bytes and schema binding after training: a concurrent change
+    # must not be published as reproducible checkpoint lineage.
+    if seed_model is not None:
+        _seed_pose_model(
+            session,
+            settings,
+            project_id=project_id,
+            payload={"model_id": seed_model.id, "sha256": seed_model.sha256},
+            dataset=dataset,
+        )
+
     if not run.result_checkpoint_path:
         raise ValidationError("Completed pose training did not produce a checkpoint")
 
