@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import base64
+from typing import Any
+
+from pydantic import ValidationError as PydanticValidationError
+
 from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO
@@ -13,6 +18,8 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import Project, SpatialSourceAsset
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.storage.projects import resolve_managed_project_path
 
 MAX_BYTES = 8 * 1024 * 1024
@@ -119,3 +126,48 @@ class SpatialSourceAssetService:
         if sha256(data).hexdigest() != asset.sha256:
             raise ValidationError("Spatial source original bytes failed SHA-256 verification")
         return data
+
+
+def preview_project_mesh(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    payload: MeshPreviewRequest,
+) -> dict[str, Any]:
+    """Run the same preview engine for inline or immutable project-owned source bytes."""
+    if payload.asset_id is None:
+        return preview_from_request(payload)
+    service = SpatialSourceAssetService(session, settings)
+    asset = service.get(project_id, payload.asset_id)
+    original = service.read_verified(project_id, asset.id)
+    if (
+        payload.expected_source_payload_sha256 is not None
+        and payload.expected_source_payload_sha256 != asset.sha256
+    ):
+        raise ValidationError("Project mesh asset SHA-256 differs from expected source")
+    fields = payload.model_dump(mode="python", exclude={"asset_id"})
+    fields["expected_source_payload_sha256"] = asset.sha256
+    if asset.source_format == "glb":
+        encoded = base64.b64encode(original).decode("ascii")
+        if len(encoded) > 350_000:
+            raise ValidationError("Project GLB exceeds bounded mesh preview limit")
+        fields["glb_base64"] = encoded
+    elif asset.source_format in {"obj", "ply"}:
+        try:
+            text = original.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise ValidationError("Project mesh preview requires UTF-8 OBJ or ASCII PLY") from exc
+        if len(text) > 256_000:
+            raise ValidationError("Project mesh exceeds bounded text preview limit")
+        fields["obj_text" if asset.source_format == "obj" else "ply_text"] = text
+    else:
+        raise ValidationError("Unsupported project mesh source format")
+    try:
+        resolved = MeshPreviewRequest.model_validate(fields)
+        result = preview_from_request(resolved)
+    except (PydanticValidationError, ValueError) as exc:
+        raise ValidationError(f"Invalid project mesh preview: {exc}") from exc
+    result["provenance"]["spatial_source_asset_id"] = asset.id
+    result["provenance"]["spatial_source_asset_sha256"] = asset.sha256
+    result["qc_warnings"].append("project_source_original_unreviewed")
+    return result
