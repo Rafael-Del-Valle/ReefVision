@@ -15,10 +15,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm import Session
 
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.review_queue_bulk import _is_sqlite_writer_contention
+from reefvision.services.review_queue_bulk import (
+    _is_sqlite_bulk_idempotency_collision,
+    _is_sqlite_writer_contention,
+)
 from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_workflow_review_queue_16 import _graph
 
@@ -146,3 +150,89 @@ def test_sqlite_busy_classifier_does_not_mask_unrelated_database_errors() -> Non
     assert not _is_sqlite_writer_contention(
         OperationalError("INSERT", {}, RuntimeError("unrelated database failure"))
     )
+
+
+def _real_sqlite_constraint(sql: str) -> IntegrityError:
+    """Return a real extended SQLite constraint error, not fabricated text."""
+    with sqlite3.connect(":memory:") as db:
+        db.executescript(
+            """
+            CREATE TABLE review_queue_bulk_requests (id TEXT PRIMARY KEY);
+            INSERT INTO review_queue_bulk_requests VALUES ('same');
+            CREATE TABLE review_queue_item_events (
+                review_queue_item_id TEXT, client_request_id TEXT,
+                UNIQUE (review_queue_item_id, client_request_id)
+            );
+            INSERT INTO review_queue_item_events VALUES ('item', 'request');
+            CREATE TABLE unrelated_science (name TEXT UNIQUE, count INTEGER NOT NULL);
+            INSERT INTO unrelated_science VALUES ('original', 1);
+            """
+        )
+        try:
+            db.execute(sql)
+        except sqlite3.IntegrityError as exc:
+            return IntegrityError(sql, {}, exc)
+    raise AssertionError("Expected a SQLite constraint violation")
+
+
+@pytest.mark.parametrize(
+    ("statement", "expected"),
+    [
+        ("INSERT INTO review_queue_bulk_requests VALUES ('same')", True),
+        ("INSERT INTO review_queue_item_events VALUES ('item', 'request')", True),
+        ("INSERT INTO unrelated_science VALUES ('original', 2)", False),
+        ("INSERT INTO unrelated_science VALUES ('new', NULL)", False),
+    ],
+)
+def test_only_bulk_identity_constraint_collisions_are_retryable(
+    statement: str, expected: bool
+) -> None:
+    error = _real_sqlite_constraint(statement)
+    assert _is_sqlite_bulk_idempotency_collision(error) is expected
+    assert not _is_sqlite_bulk_idempotency_collision(
+        IntegrityError(statement, {}, RuntimeError("UNIQUE constraint failed"))
+    )
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+def test_unrelated_bulk_integrity_error_is_not_hidden_as_idempotent_retry(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, saved_workflow: bool
+) -> None:
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    payload = {
+        "item_ids": item_ids,
+        "action": "start",
+        "actor": "local researcher",
+        "client_request_id": str(uuid4()),
+    }
+    unrelated = _real_sqlite_constraint(
+        "INSERT INTO unrelated_science VALUES ('original', 2)"
+    )
+
+    def reject_unrelated_constraint(_session: Session) -> None:
+        raise unrelated
+
+    # The failure occurs during the batch commit, after the in-memory item
+    # state and events have been prepared. Rollback must preserve the database
+    # and must not report a successful retry for a scientific schema defect.
+    with monkeypatch.context() as patch:
+        patch.setattr(Session, "commit", reject_unrelated_constraint)
+        with pytest.raises(IntegrityError, match="unrelated_science.name"):
+            client.post(url, json=payload)
+
+    pending = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert pending.status_code == 200, pending.text
+    assert {item["review_state"] for item in pending.json()["items"]} == {"pending"}
+    for item_id in item_ids:
+        events = client.get(f"/api/v1/review-queues/{queue_id}/items/{item_id}/events")
+        assert events.status_code == 200, events.text
+        assert events.json()["total"] == 0
+
+    retried = client.post(url, json=payload)
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["changed_count"] == len(item_ids)
+    assert retried.json()["requires_researcher_review"] is True
+    replay = client.post(url, json=payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["changed_count"] == 0
