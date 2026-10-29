@@ -309,3 +309,75 @@ def test_modified_review_does_not_mutate_original_measurement() -> None:
         preview_from_request(MeshPreviewRequest.model_validate(revised))
     for key, value in payload["calibration_review"].items():
         assert baseline["provenance"]["calibration_review_evidence"][key] == value
+
+
+@pytest.mark.parametrize(
+    ("reviewed_at_utc", "invalid"),
+    [
+        ("2026-10-01T06:59:59-05:00", True),
+        ("2026-10-01T07:00:00-05:00", False),
+        ("2026-10-02T07:00:00-05:00", False),
+    ],
+)
+def test_calibration_review_chronology_is_checked_as_timezone_aware_instants(
+    reviewed_at_utc: str, invalid: bool
+) -> None:
+    """A dated review cannot predate its claimed observation, even before execution."""
+    payload = _reviewed_mesh()
+    payload["calibration_review"]["reviewed_at_utc"] = reviewed_at_utc
+    if invalid:
+        with pytest.raises(PydanticValidationError, match="cannot predate bound observation"):
+            MeshPreviewRequest.model_validate(payload)
+        return
+
+    result = preview_from_request(MeshPreviewRequest.model_validate(payload))
+    assert result["provenance"]["calibration_verified"] is False
+    assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_review_chronology_fails_closed_in_saved_graph(client: TestClient) -> None:
+    """A persisted executable graph must not publish a preview with impossible review dates."""
+    project_id = str(create_project(client, "Calibration review chronology replay")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = _reviewed_imported_mesh()
+    params["calibration_review"]["reviewed_at_utc"] = "2026-09-30T12:00:00Z"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code in (400, 422), standalone.text
+    assert "cannot predate bound observation" in standalone.text
+
+    graph = {
+        "graph_id": "calibration-review-chronology-v14",
+        "name": "Reject impossible independent review chronology",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    assert (
+        saved.json()["graph_json"]["nodes"][1]["parameters"]["calibration_review"]
+        == params["calibration_review"]
+    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "mesh_measurement_preview"
+        for item in detail.json()["artifacts"]
+    )
