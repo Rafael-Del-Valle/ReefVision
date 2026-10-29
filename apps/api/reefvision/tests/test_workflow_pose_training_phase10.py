@@ -33,6 +33,7 @@ from reefvision.jobs.training import (
 )
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
+    execute_pose_training_dataset_adapter,
 )
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
@@ -839,6 +840,69 @@ def test_pose_workflow_rejects_explicitly_invalid_frozen_manifest_digest(
             processor=_fake_pose_processor,
         )
     assert valid["pose_training_dataset_id"] == dataset["id"]
+
+
+def test_pose_workflow_preserves_api_frozen_source_lineage_in_artifacts(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Produce the actual Workflow Builder dataset artifact from scientist-reviewed
+    # truth, then check that downstream training enforces its source lineage.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    project_id = str(project["id"])
+    with app.state.session_factory() as session:
+        produced = execute_pose_training_dataset_adapter(
+            session,
+            test_settings,
+            project_id,
+            {
+                "dataset_id": str(dataset["id"]),
+                "manifest_sha256": str(dataset["manifest_sha256"]),
+            },
+            {},
+        )
+    payload = produced[0]["payload"]
+    source_fields = (
+        "source_round_id",
+        "source_selection_sha256",
+        "source_retraining_manifest_sha256",
+    )
+    assert all(field in payload for field in source_fields)
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+
+    for field in source_fields:
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="source lineage no longer matches frozen truth"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload={**payload, field: f"tampered-{field}"},
+                parameters=parameters,
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(
+            select(TrainingRun.id).where(TrainingRun.project_id == project_id)
+        ) is None
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters=parameters,
+            processor=_fake_pose_processor,
+        )
+    assert result["pose_training_dataset_id"] == dataset["id"]
 
 
 def test_pose_workflow_rejects_falsy_non_object_resource_limits_from_verified_truth(
