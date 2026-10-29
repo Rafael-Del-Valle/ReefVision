@@ -141,6 +141,26 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
         else:
             raise ValidationError("Ecological population CSV invalid declared-unit status")
     elif row["row_type"] == "population_stratum":
+        if (
+            row["unit_status"] != "eligible_declared_units_only"
+            or row["experimental_unit_id"] != ""
+        ):
+            raise ValidationError("Ecological population CSV invalid population stratum identity")
+        try:
+            physical_units = json.loads(str(row["physical_units_json"]))
+            sampling_windows = json.loads(str(row["sampling_windows_utc_json"]))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(
+                "Ecological population CSV invalid population dimensions"
+            ) from exc
+        for dimension in (physical_units, sampling_windows):
+            if (
+                not isinstance(dimension, list)
+                or len(dimension) != 1
+                or not isinstance(dimension[0], str)
+                or not dimension[0].strip()
+            ):
+                raise ValidationError("Ecological population CSV invalid population dimensions")
         if declared < 1 or organisms < declared:
             raise ValidationError("Ecological population CSV invalid population denominator")
         # Independently check the serialized scientific review roster.
@@ -203,13 +223,10 @@ def _write_checked_row(writer: Any, values: tuple[object, ...]) -> None:
         if declared == 1:
             if any(value != "" for value in dispersions):
                 raise ValidationError("Ecological population CSV invalid unit dispersion")
-        elif any(
-            not isinstance(value, float)
-            or not math.isfinite(value)
-            or value < 0
-            for value in dispersions
-        ):
-            raise ValidationError("Ecological population CSV invalid unit dispersion")
+        else:
+            for value in dispersions:
+                if not isinstance(value, float) or not math.isfinite(value) or value < 0:
+                    raise ValidationError("Ecological population CSV invalid unit dispersion")
         if ("missing_parent_colony" in blockers) != bool(missing):
             raise ValidationError(
                 "Ecological population CSV missing-parent review blocker mismatch"
