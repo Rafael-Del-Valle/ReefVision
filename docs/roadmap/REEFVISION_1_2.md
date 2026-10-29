@@ -3673,3 +3673,33 @@ Scientist-reviewed calibrated longitudinal evidence, 1.1 migration
 reconciliation, representative real-data review and physical Windows
 installer/GUI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+## Paired-count exact-head CI recovery and persisted directional denominators (2026-10-29)
+
+The prior `75048416` head completed 17/19 Actions workflows successfully.
+Both failed backend suites executed 2,009 passing tests, 32 skips and two
+assertion failures: older test expectations still required algorithm `0006`
+although the organism-direction implementation intentionally emits `0007`.
+The two assertions now expect the current provenance contract.
+
+The versioned typed paired-count result schema now rejects a forged
+`0007` artifact if overcount/undercount/exact image counts do not add up to
+the paired-image denominator, if organism-direction votes do not add up to
+distinct caller-declared organisms, or if per-unit directional and biological
+denominators disagree with the overall record. This protects saved Workflow
+Builder artifacts against inflated image/organism sample sizes without
+mistaking balanced mean organism error for exact image matches. Older
+algorithm artifacts retain their additive-default decoding compatibility.
+
+Four parametrized schema-integrity regression cases cover corrupted global
+and per-unit counts. The saved executable workflow acceptance now includes
+one organism with opposing errors that cancel, demonstrating that a balanced
+organism is not an exact-match image. Shared-parent/two-tank saved-workflow
+acceptance checks the current algorithm and organism-vote parity. No new
+inference, authenticated parentage, or independent-replicate claim is made.
+
+Latest-head CI must pass before counting these changes as validated; local
+full-repository pytest/Ruff remain blocked by GitHub DNS resolution. Reviewed
+calibrated longitudinal measurements, the 1.1 migration divergence and
+physical Windows GUI/MSI acceptance remain blockers. **1.2 NOT RELEASE-READY;
+1.3 not started.**

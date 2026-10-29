@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import math
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.scientific_provenance import ScientificInputProvenance
@@ -169,3 +169,47 @@ class PairedCountComparisonResponse(BaseModel):
     percent_contributing_independent_unit_count: int | None = None
     percent_contributing_organism_count: int | None = None
     limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_current_directional_denominators(self) -> Self:
+        """Reject forged sample sizes in versioned, persisted paired-count results."""
+        if self.analysis_provenance.algorithm_version != "ecology-paired-count-0007":
+            # Older artifacts did not persist organism votes; do not invent them.
+            return self
+        if (
+            self.overcount_pair_count
+            + self.undercount_pair_count
+            + self.exact_match_pair_count
+            != self.paired_observation_count
+        ):
+            raise ValueError("Directional pair counts must match paired observations")
+        if (
+            self.overcount_organism_count
+            + self.undercount_organism_count
+            + self.balanced_organism_count
+            != self.observed_organism_count
+        ):
+            raise ValueError("Directional organism counts must match distinct organisms")
+        for unit in self.unit_summaries:
+            if (
+                unit.overcount_pair_count
+                + unit.undercount_pair_count
+                + unit.exact_match_pair_count
+                != unit.paired_observation_count
+            ):
+                raise ValueError("Directional unit pair counts must match paired observations")
+            if (
+                unit.overcount_organism_count
+                + unit.undercount_organism_count
+                + unit.balanced_organism_count
+                != unit.organism_count
+            ):
+                raise ValueError("Directional unit organism counts must match organisms")
+        if self.unit_summaries and (
+            sum(unit.paired_observation_count for unit in self.unit_summaries)
+            != self.paired_observation_count
+            or sum(unit.organism_count for unit in self.unit_summaries)
+            != self.observed_organism_count
+        ):
+            raise ValueError("Directional unit totals must match global denominators")
+        return self

@@ -211,7 +211,7 @@ def test_saved_repeated_organism_pairs_retain_frequency_qc(client: TestClient) -
         observation_id="image-3",
         reference_source_record_id="human-image-3",
         model_source_record_id="model-image-3",
-        model_count=14,
+        model_count=8,
     )
     pairs.append(repeat)
     graph = cast(dict[str, Any], _graph())
@@ -248,12 +248,13 @@ def test_saved_repeated_organism_pairs_retain_frequency_qc(client: TestClient) -
     assert standalone.status_code == 200, standalone.text
     assert artifact["observed_organism_count"] == 2
     assert artifact["repeated_pair_count_beyond_first_per_organism"] == 1
-    assert artifact["overcount_pair_count"] == 2
-    assert artifact["undercount_pair_count"] == 1
+    assert artifact["overcount_pair_count"] == 1
+    assert artifact["undercount_pair_count"] == 2
     assert artifact["exact_match_pair_count"] == 0
-    assert artifact["overcount_organism_count"] == 1
+    assert artifact["overcount_organism_count"] == 0
     assert artifact["undercount_organism_count"] == 1
-    assert artifact["balanced_organism_count"] == 0
+    assert artifact["balanced_organism_count"] == 1
+    assert artifact["unit_summaries"][0]["balanced_organism_count"] == 1
     assert artifact["unequal_pair_counts_across_organisms"] is True
     assert artifact["unit_summaries"][0]["unequal_pair_counts_within_unit"] is True
     for key in (

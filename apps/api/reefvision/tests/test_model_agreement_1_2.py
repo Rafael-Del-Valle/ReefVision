@@ -221,7 +221,7 @@ def test_directional_pair_frequencies_include_zero_reference_and_exact_matches()
         (unit.overcount_pair_count, unit.undercount_pair_count, unit.exact_match_pair_count)
         for unit in result.unit_summaries
     ] == [(1, 0, 1), (1, 1, 0)]
-    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0006"
+    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0007"
     assert result.review_status == "requires_source_verification"
     assert result.evidence_level == "caller_supplied_unverified"
 
@@ -286,3 +286,34 @@ def test_organism_direction_fields_remain_optional_for_old_saved_artifacts() -> 
     assert restored.undercount_organism_count == 0
     assert restored.balanced_organism_count == 0
     assert restored.unit_summaries[0].overcount_organism_count == 0
+
+
+@pytest.mark.parametrize(
+    ("scope", "field"),
+    [
+        ("global", "overcount_pair_count"),
+        ("global", "balanced_organism_count"),
+        ("unit", "undercount_pair_count"),
+        ("unit", "overcount_organism_count"),
+    ],
+)
+def test_current_directional_artifact_rejects_forged_denominators(
+    scope: str, field: str
+) -> None:
+    """A saved 0007 artifact cannot silently inflate image or organism sample size."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 12),
+                pair("b", "frag-B", "tank-2", 10, 8),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    target = payload if scope == "global" else payload["unit_summaries"][0]
+    target[field] += 1
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
