@@ -178,6 +178,16 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     tampered_precision["paired_differences"][0]["model_count"] = float(2**53)
     with pytest.raises(SchemaValidationError, match="safe-integer range"):
         PairedCountComparisonResponse.model_validate(tampered_precision)
+    # A saved typed artifact must not coerce a Boolean or numeric string
+    # into a purported human/model source count during scientific read-back.
+    for coerced_value in (True, "12"):
+        tampered_type = dict(payload)
+        tampered_type["paired_differences"] = [
+            dict(row) for row in payload["paired_differences"]
+        ]
+        tampered_type["paired_differences"][0]["model_count"] = coerced_value
+        with pytest.raises(SchemaValidationError, match="Directional persisted raw counts"):
+            PairedCountComparisonResponse.model_validate(tampered_type)
     assert payload["project_id"] == project_id
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"

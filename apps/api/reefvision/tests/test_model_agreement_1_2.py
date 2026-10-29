@@ -129,17 +129,19 @@ def test_forged_verification_and_nonfinite_counts_rejected() -> None:
         PairedCountComparisonRequest(reference_kind="human_consensus", pairs=data)
 
 
-def test_finite_large_bias_and_unit_means_do_not_overflow() -> None:
+def test_max_safe_integer_bias_and_unit_means_are_exact() -> None:
+    """Large *valid* counts remain stable without exceeding JSON precision."""
+    max_count = float(2**53 - 1)
     rows = [
-        pair("large-a", "frag-a", "tank-1", 0, 1e308),
-        pair("large-b", "frag-b", "tank-1", 0, 1e308),
+        pair("large-a", "frag-a", "tank-1", 0, max_count),
+        pair("large-b", "frag-b", "tank-1", 0, max_count),
     ]
     result = compare_paired_counts(
         PairedCountComparisonRequest(reference_kind="human_consensus", pairs=rows)
     )
-    assert result.mean_signed_bias == 1e308
-    assert result.mean_absolute_error == 1e308
-    assert result.unit_summaries[0].mean_signed_bias == 1e308
+    assert result.mean_signed_bias == max_count
+    assert result.mean_absolute_error == max_count
+    assert result.unit_summaries[0].mean_signed_bias == max_count
     assert result.zero_reference_count == 2
     assert result.mean_absolute_percent_deviation is None
     assert result.evidence_level == "caller_supplied_unverified"
@@ -706,6 +708,7 @@ def test_saved_paired_counts_reject_unsafe_integral_floats(field: str) -> None:
     with pytest.raises(SchemaValidationError, match="safe-integer range"):
         PairedCountComparisonResponse.model_validate(payload)
 
+
 @pytest.mark.parametrize(
     "mutation",
     [
@@ -751,3 +754,42 @@ def test_saved_comparison_rejects_forged_source_roster_and_unregistered_n(
         payload["percent_contributing_organism_count"] = 2
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(payload)
+
+
+@pytest.mark.parametrize("field", ["reference_count", "model_count"])
+@pytest.mark.parametrize("coerced_value", [True, "10"])
+def test_saved_current_comparison_rejects_coerced_raw_count_types(
+    field: str, coerced_value: object
+) -> None:
+    """A saved result cannot disguise a Boolean or string as a raw count."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    observations = [
+        pair("a", "frag-A", "tank-1", 10, 12),
+        pair("b", "frag-B", "tank-2", 20, 20),
+    ]
+    comparison = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_consensus", pairs=observations)
+    )
+    payload = comparison.model_dump(mode="json")
+    payload["paired_differences"][0][field] = coerced_value
+    with pytest.raises(SchemaValidationError, match="Directional persisted raw counts"):
+        PairedCountComparisonResponse.model_validate(payload)
+
+
+def test_historical_comparison_retains_previous_numeric_decoding() -> None:
+    """Read-only compatibility for pre-0007 unverified saved artifacts."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    observations = [
+        pair("a", "frag-A", "tank-1", 10, 12),
+        pair("b", "frag-B", "tank-2", 20, 20),
+    ]
+    comparison = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_consensus", pairs=observations)
+    )
+    payload = comparison.model_dump(mode="json")
+    payload["analysis_provenance"]["algorithm_version"] = "ecology-paired-count-0006"
+    payload["paired_differences"][0]["reference_count"] = "10"
+    restored = PairedCountComparisonResponse.model_validate(payload)
+    assert restored.paired_differences[0].reference_count == 10

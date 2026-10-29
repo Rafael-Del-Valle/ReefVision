@@ -177,6 +177,38 @@ class PairedCountComparisonResponse(BaseModel):
     percent_contributing_organism_count: int | None = None
     limitations: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_coerced_current_raw_counts(cls, value: object) -> object:
+        """Keep persisted current-version source counts as actual JSON numbers.
+
+        Pydantic would otherwise turn a saved Boolean or numeric string into a
+        float before the arithmetic and experimental-unit integrity checks.
+        Historical algorithm versions retain their previous decoding rules.
+        """
+        if not isinstance(value, dict):
+            return value
+        provenance = value.get("analysis_provenance")
+        version = (
+            provenance.get("algorithm_version")
+            if isinstance(provenance, dict)
+            else getattr(provenance, "algorithm_version", None)
+        )
+        if version != "ecology-paired-count-0007":
+            return value
+        rows = value.get("paired_differences")
+        if isinstance(rows, list):
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                for field_name in ("reference_count", "model_count"):
+                    raw_count = row.get(field_name)
+                    if isinstance(raw_count, bool) or not isinstance(raw_count, (int, float)):
+                        raise ValueError(
+                            "Directional persisted raw counts must be JSON numbers, not coerced"
+                        )
+        return value
+
     @model_validator(mode="after")
     def validate_current_directional_denominators(self) -> Self:
         """Reject forged sample sizes in versioned, persisted paired-count results."""

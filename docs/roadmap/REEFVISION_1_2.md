@@ -4029,3 +4029,30 @@ in the validator that caused **six mypy errors** on prior head
 three backend workflows failed at type checking). These new changes require
 exact-head CI confirmation; local full pytest/mypy/Ruff and physical Windows
 installer/GUI acceptance are not yet verified. **1.2 remains NOT RELEASE-READY.**
+
+## Persisted raw-count JSON type integrity and CI recovery (2026-10-29)
+
+Pre-edit exact HEAD `a9229cec01b3d36276c286873eb6b057b8fa741b`
+completed **16/19** GitHub Actions workflows. All three backend workflows
+failed at the same Ruff 0.17.3 blank-line formatting requirement in
+`test_model_agreement_1_2.py`, before scientific pytest ran; the formatter
+location is corrected. A stale scientific test expecting `1e308` organism
+counts conflicted with the existing IEEE-754 safe-integer contract; it now
+checks the largest precisely representable permitted count instead.
+
+For current `ecology-paired-count-0007` persisted results, raw human and
+model counts must remain JSON numeric values at deserialization. A saved
+Boolean or numeric string can otherwise be coerced by Pydantic to a float,
+evading raw-evidence type integrity while preserving valid arithmetic and
+unit-balanced summaries. The new pre-validation guard rejects that
+coercion, with focused positive/historical compatibility, negative
+scientific and saved executable Workflow Builder artifact regressions.
+Older algorithm-version artifacts retain their existing read-back policy.
+The standalone input schema already rejects these coerced types; no
+new node, migration, model download or verified-dataset promotion is added.
+
+These checks **do not authenticate** sources, biological identities,
+calibration, independent units or human consensus. Exact-new-head CI,
+1.1 migration reconciliation, representative verified longitudinal data,
+scientist review and physical Windows installer/GUI acceptance remain
+mandatory. **1.2 NOT RELEASE-READY; 1.3 not started.**
