@@ -255,7 +255,7 @@ class ComputedMetricService:
                 )
             if scientific_response.calibration_current is False:
                 raise ValidationError(
-                    "Computed metrics cannot use observations with stale image calibration"
+                    "Computed metrics require current calibration; stale image calibration is not eligible"
                 )
             if UNITS[scientific_response.unit][0] != spec.dimension:
                 raise ValidationError(
