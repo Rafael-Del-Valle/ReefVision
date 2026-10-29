@@ -108,6 +108,18 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         )
     revision = next(iter(review_revisions))
 
+    # A failed/interrupted 0041 upgrade can leave the bulk-request table
+    # behind while Alembic still reports 0038-0040. Retrying 0041 would
+    # attempt to create the table again and could overwrite or strand
+    # reviewer request identities. Refuse before any migration writes.
+    if revision != "0041" and _BULK_TABLE in tables:
+        raise RuntimeError(
+            f"Unsafe ReefVision Alembic revision {revision} partial 0041 schema: "
+            "unexpected bulk-request registry at an earlier review revision. "
+            "Preserve existing reviewer requests and reconcile the interrupted "
+            "migration without dropping tables, stamping, or rewriting history."
+        )
+
     unexpected_science = sorted(tables & _SCIENCE_TABLES)
     review_columns = inspector.get_columns(_REVIEW_TABLE) if _REVIEW_TABLE in tables else []
     actual_columns = {column["name"] for column in review_columns}
