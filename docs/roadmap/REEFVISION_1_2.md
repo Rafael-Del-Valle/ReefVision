@@ -3703,3 +3703,35 @@ full-repository pytest/Ruff remain blocked by GitHub DNS resolution. Reviewed
 calibrated longitudinal measurements, the 1.1 migration divergence and
 physical Windows GUI/MSI acceptance remain blockers. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+
+## Persisted paired-count row-integrity and CI recovery (2026-10-29)
+
+Pre-edit exact-head `c6d5ffe61e` completed **16 of 19** GitHub Actions
+workflows successfully. CI, Pose Workflow Validation and ReefVision 1.0
+Acceptance backend jobs failed at Ruff 0.17.3 formatting, before pytest.
+The formatter required two condensed pair-count expressions in
+`schemas/model_agreement.py` and a one-line parametrized test signature in
+`tests/test_model_agreement_1_2.py`; these were corrected without changing
+the descriptive paired-count algorithm.
+
+The version `ecology-paired-count-0007` typed result now additionally
+reconciles saved image-direction frequencies with actual signed paired rows,
+organism frequency/duplicate-image denominators with those rows, and zero
+versus nonzero human-reference denominators with those rows. Merely making
+over/under/exact counts add up is insufficient: an altered direction label
+must fail validation. Four parametrized regression cases cover swapped
+direction counts, fabricated organism frequencies, forged percentage
+eligibility and dropped paired rows. The preexisting standalone API and
+executable saved Workflow Builder use this same typed result; their existing
+source-review gates, persisted-artifact tests, and unverified provenance
+remain unchanged. No new verified scientific observations or experimental
+replicates are inferred. Older algorithm artifacts retain compatibility.
+
+Full exact-new-head CI, authenticated longitudinal calibration/organism
+identity, independent-unit verification, 1.1 migration reconciliation,
+representative scientific review, and physical Windows installed GUI/MSI
+acceptance remain required. This iteration could not execute local
+repository pytest/Ruff because the environment cannot resolve GitHub
+for checkout and has no installed Ruff. **1.2 NOT RELEASE-READY;
+1.3 not started.**
