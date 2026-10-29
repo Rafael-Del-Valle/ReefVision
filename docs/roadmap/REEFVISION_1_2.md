@@ -3809,3 +3809,29 @@ contract. Full exact-head CI, authenticated longitudinal measurement
 review, migration reconciliation with 1.1, real-data scientific review
 and physical Windows GUI/MSI acceptance remain required.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Exact JSON count precision and CI recovery (2026-10-29)
+
+The prior exact-head `529271eabeaa5f3303d2319a534449bc88472f86`
+completed 16/19 GitHub Actions workflows successfully. All three failed
+backend workflows stopped at Ruff formatting before pytest; this increment
+applies the exact formatter-reported changes to the paired-count schema and
+scientific regression test, without changing the comparison arithmetic.
+
+The paired-count input schema additionally rejects **JSON integer** human/model
+counts above the IEEE-754 safe-integer maximum (2^53 - 1). The schema stores
+counts as floating-point values; an integer such as 2^53 + 1 otherwise rounds
+to 2^53 before whole-number validation, silently altering a scientific source
+count. This narrowly protects exact JSON integer input and does **not** claim
+that arbitrary floating-point counts are exact or authenticated. The existing
+standalone endpoint and typed executable Workflow Builder share this contract.
+Focused tests cover both reference/model inputs, the largest safe integer,
+standalone HTTP 422, and failed saved-workflow execution without a successful
+comparison artifact. All evidence remains `caller_supplied_unverified`, with
+researcher review required and no changes to model weights, migrations or
+experimental-unit definitions.
+
+Exact new-head CI, authenticated calibrated longitudinal observations,
+1.1 migration reconciliation, real-dataset scientific review and installed
+Windows MSI/GUI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
+1.3 not started.**

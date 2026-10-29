@@ -522,6 +522,7 @@ def test_current_saved_nonzero_reference_requires_signed_percentage() -> None:
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(payload)
 
+
 @pytest.mark.parametrize(
     ("unit_field", "aggregate_field"),
     [

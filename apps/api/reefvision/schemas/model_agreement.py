@@ -58,6 +58,10 @@ class PairedCountObservation(BaseModel):
             raise ValueError("Count values must be numeric, not Boolean")
         if not isinstance(value, (int, float)):
             raise ValueError("Count values must be JSON numbers, not coerced")
+        # Pydantic stores counts as float. A larger JSON integer could be
+        # silently rounded before the whole-number check (2**53 + 1 -> 2**53).
+        if isinstance(value, int) and value > 2**53 - 1:
+            raise ValueError("JSON integer counts exceed the IEEE-754 safe-integer range")
         return value
 
     @field_validator("reference_count", "model_count")
@@ -407,21 +411,16 @@ class PairedCountComparisonResponse(BaseModel):
             organism_absolute_percents = [
                 finite_descriptive_mean(values)
                 for group in by_organism.values()
-                if (
-                    values := eligible([row.absolute_percent_deviation for row in group])
-                )
+                if (values := eligible([row.absolute_percent_deviation for row in group]))
             ]
             organism_signed_percents = [
                 finite_descriptive_mean(values)
                 for group in by_organism.values()
-                if (
-                    values := eligible([row.signed_percent_deviation for row in group])
-                )
+                if (values := eligible([row.signed_percent_deviation for row in group]))
             ]
-            if (
-                unit.nonzero_reference_count != len(absolute_percents)
-                or unit.percent_contributing_organism_count != len(organism_absolute_percents)
-            ):
+            if unit.nonzero_reference_count != len(
+                absolute_percents
+            ) or unit.percent_contributing_organism_count != len(organism_absolute_percents):
                 raise ValueError("Directional unit percentage denominators must match rows")
             for field_name, values in (
                 ("mean_signed_bias", [row.signed_difference for row in rows]),
@@ -449,9 +448,7 @@ class PairedCountComparisonResponse(BaseModel):
             self.balanced_organism_count,
         ):
             raise ValueError("Directional global organism votes must match source rows")
-        if self.unequal_pair_counts_across_organisms != (
-            len(set(observed_organisms.values())) > 1
-        ):
+        if self.unequal_pair_counts_across_organisms != (len(set(observed_organisms.values())) > 1):
             raise ValueError("Directional global repeated-image imbalance is inconsistent")
 
         for field_name, values in (
