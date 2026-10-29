@@ -448,6 +448,36 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     with app.state.session_factory() as session:
         assert session.scalars(select(TrainingRun.id)).all() == []
 
+    # Reuse the actual API-frozen scientist-reviewed dataset. A partial or
+    # blank saved-workflow identity must never launch an untraceable training
+    # job or bypass node-level replay protection.
+    for saved_run_id, saved_node_id in (
+        ("saved-pose-run", None),
+        (None, "saved-pose-node"),
+        (" ", "saved-pose-node"),
+        ("saved-pose-run", " "),
+    ):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="workflow lineage requires both non-blank IDs"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                parameters={"device": "cpu", "training_config": {"epochs": 1}},
+                workflow_run_id=saved_run_id,
+                workflow_node_run_id=saved_node_id,
+                processor=_fake_pose_processor,
+            )
+    with app.state.session_factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == []
+
     with app.state.session_factory() as session:
         result = create_pose_workflow_training_result(
             session,
