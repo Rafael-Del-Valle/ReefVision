@@ -61,6 +61,13 @@ class MeshCalibrationReviewEvidence(BaseModel):
             raise ValueError("Independent calibration review note cannot be blank")
         if not self.reviewed_calibration_evidence.strip():
             raise ValueError("Reviewed calibration evidence cannot be blank")
+        # Review chronology is source evidence, not proof of verified calibration.
+        # Reject impossible dates even before a mesh is loaded or a graph executes.
+        if (
+            self.reviewed_observed_at_utc is not None
+            and self.reviewed_at_utc < self.reviewed_observed_at_utc
+        ):
+            raise ValueError("Calibration independent review cannot predate bound observation")
         return self
 
 
@@ -394,7 +401,9 @@ class MeshReidentificationEvidence(BaseModel):
             observed is not None and self.independent_reviewed_at_utc < observed
             for observed in (self.before_observed_at_utc, self.after_observed_at_utc)
         ):
-            raise ValueError("Reidentification independent review cannot predate bound observations")
+            raise ValueError(
+                "Reidentification independent review cannot predate bound observations"
+            )
         return self
 
 
