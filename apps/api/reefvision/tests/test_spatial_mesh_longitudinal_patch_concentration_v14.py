@@ -207,7 +207,6 @@ def test_patch_distribution_rejects_zero_full_mesh_total(timepoint: int) -> None
         compare_mesh_observations(*observations)
 
 
-
 def test_degenerate_zero_area_meshes_keep_patch_distributions_unavailable() -> None:
     """A real zero-area reconstruction is not a forged missing distribution."""
     early, late = _meshes()
@@ -241,7 +240,6 @@ def test_zero_area_mesh_rejects_forged_patch_area_evidence(
     before["edge_connected_patch_surface_areas_m2"] = forged_areas
     with pytest.raises(ValueError, match="Patch concentration requires source area fractions"):
         compare_mesh_observations(before, after)
-
 
 
 def test_legacy_patch_fractions_without_area_breakdown_remain_readable() -> None:
