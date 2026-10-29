@@ -100,3 +100,26 @@ This is a defensive 1.6-only migration gate, **not** reconciliation with
 the independent 1.1 Alembic lineage. Exact-head integrated CI, Windows MSI
 upgrade/rollback, installed-GUI and biological-data acceptance are required
 before any release decision.
+
+## 2026-10-29 — interrupted 0041 bulk-request registry preflight (Track D)
+
+The Alembic 0041 migration creates a persistent, globally keyed bulk-review
+request registry. SQLite DDL may survive an interrupted upgrade while the
+version marker remains 0038, 0039, or 0040. Previously the guard validated
+the earlier review-event schema but did not reject the unexpected bulk table,
+so desktop startup could attempt to replay 0041 against existing reviewer
+request identities.
+
+The guard now **refuses** any 0038–0040 database containing
+`review_queue_bulk_requests`, before Alembic upgrade and without altering
+review events, bulk requests, research observations, or schema. A new
+parameterized regression covers all three stamps with empty and populated
+registries, plus two repeated desktop-start attempts that must never invoke
+Alembic upgrade. The tests compare exact SQLite schema and scientific/audit
+sentinels before and after each refusal.
+
+This does not reconcile the independent 1.1/1.6 revision-ID collision.
+Standalone and saved executable QC Workflow Builder regressions remain
+required; this is a startup safety guard, not a new workflow operation.
+Exact-head CI and native Windows installed-GUI/MSI upgrade/rollback and
+biological-data acceptance remain outstanding. **Release HOLD.**
