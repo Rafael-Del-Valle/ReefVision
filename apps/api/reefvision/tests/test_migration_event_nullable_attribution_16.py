@@ -42,7 +42,8 @@ def test_0041_rejects_nullable_audit_attribution_without_mutating_records(
                 "created_at",
             )
             fields = [
-                f"{name} TEXT" + ("" if name == nullable_field else " NOT NULL")
+                f"{name} TEXT"
+                + ("" if name == nullable_field else " NOT NULL")
                 + (" PRIMARY KEY" if name == "id" else "")
                 for name in required
             ]
