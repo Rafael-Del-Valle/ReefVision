@@ -42,3 +42,7 @@ bounds**, not statistical confidence intervals: they exclude reconstruction,
 registration, segmentation, and specimen-identity uncertainty. Standalone
 comparisons and persisted typed Workflow Builder comparisons use the same
 validation engine and preserve provisional status.
+
+## Longitudinal independent-review replay safeguards
+
+The `mesh_longitudinal_comparison` standalone endpoint and persisted, executable typed Workflow Builder node reject registration and specimen-reidentification review timestamps preceding either bound observation. Saved-graph regression tests also reject case-only reviewer/operator aliases (including `OPERATOR-1` versus `operator-1` and `OBSERVER-1` versus `observer-1`) without emitting a comparison artifact. Accepted comparisons preserve the caller-supplied review record, its original timestamp, and provisional verification flags in the saved artifact. These tests cover consistency of saved execution, **not** authenticated reviewer identity, durable review-record versioning, registration accuracy, or verified biological reidentification.
