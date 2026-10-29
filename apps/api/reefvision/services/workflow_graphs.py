@@ -60,6 +60,9 @@ _ACTIONS: dict[str, str] = {
     "computed_metric": (
         "Evaluate a safe unit-aware metric definition and persist the provenance-complete result."
     ),
+    "environmental_threshold": (
+        "Find bounded QC-eligible threshold samples with provenance, without event inference."
+    ),
     "project_images": "Resolve project images using the configured filters.",
     "dataset_version_source": "Load one immutable dataset version and its image membership.",
     "dataset_version_create": (

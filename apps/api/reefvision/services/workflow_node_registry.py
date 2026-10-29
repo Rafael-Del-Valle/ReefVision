@@ -90,6 +90,33 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="environmental_threshold",
+            display_name="Environmental Threshold Samples",
+            category="analysis",
+            description=(
+                "Evaluate bounded environmental observations against an explicit threshold "
+                "without interpolating values or inferring event durations."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[
+                _output(
+                    "samples",
+                    "Threshold Samples",
+                    "environmental_threshold_samples",
+                )
+            ],
+            required_parameters=["query"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "The query uses the validated environmental threshold request schema.",
+                "Only currently eligible QC-passing observations are included.",
+                "Persisted results contain original record IDs, checksums, and provenance.",
+                "An empty result is valid; this node does not infer event durations.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="project_images",
             display_name="Project Images",
             category="sources",

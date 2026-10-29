@@ -30,6 +30,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
+from reefvision.schemas.environmental_context import EnvironmentalThresholdRequest
 from reefvision.schemas.workflow_execution import (
     WorkflowArtifactResponse,
     WorkflowGraphRecordResponse,
@@ -41,6 +42,7 @@ from reefvision.schemas.workflow_execution import (
 )
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
 from reefvision.services.computed_metrics import ComputedMetricService
+from reefvision.services.environmental_context import EnvironmentalContextService
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
 from reefvision.services.scientific_data import ScientificDataService
 from reefvision.services.workflow_classification import (
@@ -64,6 +66,7 @@ EXECUTABLE_NODE_TYPES = {
     "project_source",
     "scientific_records_source",
     "computed_metric",
+    "environmental_threshold",
     "project_images",
     "dataset_version_source",
     "dataset_version_create",
@@ -456,6 +459,57 @@ class WorkflowExecutionService:
                         for symbol, record_id in response.input_record_ids.items()
                     },
                     "content_sha256": response.content_sha256,
+                },
+            )
+        ]
+
+    def _execute_environmental_threshold(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Environmental threshold project artifact is mismatched")
+        query = parameters.get("query")
+        if not isinstance(query, dict):
+            raise ValidationError("Environmental threshold requires an explicit query object")
+        try:
+            request = EnvironmentalThresholdRequest.model_validate(query)
+        except ValueError as exc:
+            raise ValidationError("Invalid environmental threshold query") from exc
+        result = EnvironmentalContextService(self.session).threshold_samples(project_id, request)
+        if len(result.matches) > 250:
+            raise ValidationError(
+                "Environmental threshold returned over 250 samples; narrow the query bounds"
+            )
+        return [
+            WorkflowArtifactSpec(
+                port_id="samples",
+                data_type="environmental_threshold_samples",
+                payload={
+                    "project_id": project_id,
+                    "workflow_run_id": run_id,
+                    "workflow_node_run_id": node_run.id,
+                    "query": request.model_dump(mode="json"),
+                    "method": result.method,
+                    "normalized_threshold": result.normalized_threshold,
+                    "normalized_unit": result.normalized_unit,
+                    "direction": result.direction,
+                    "sample_count": len(result.matches),
+                    "matches": [
+                        {
+                            "record_id": str(match.record.id),
+                            "content_sha256": match.record.content_sha256,
+                            "snapshot": match.model_dump(mode="json"),
+                        }
+                        for match in result.matches
+                    ],
                 },
             )
         ]
