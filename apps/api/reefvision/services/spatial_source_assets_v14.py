@@ -124,6 +124,15 @@ class SpatialSourceAssetService:
         expected_path = f"{project.storage_root}/spatial/originals/{asset.id}.{asset.source_format}"
         if asset.managed_path != expected_path:
             raise ValidationError("Spatial source path does not match immutable asset identity")
+        # The managed resolver follows symlinks. A link to another file under
+        # the same data root could otherwise replay identical bytes under the
+        # original asset ID and still satisfy the SHA-256 check. Inspect each
+        # lexical path component before resolving it, including parent folders.
+        lexical_path = self.settings.resolved_data_dir
+        for component in Path(expected_path).parts:
+            lexical_path = lexical_path / component
+            if lexical_path.is_symlink():
+                raise ValidationError("Spatial source original path contains a symlink")
         path = resolve_managed_project_path(self.settings, asset.managed_path)
         if path.is_symlink() or not path.is_file():
             raise ValidationError("Spatial source original bytes are missing or unsafe")
