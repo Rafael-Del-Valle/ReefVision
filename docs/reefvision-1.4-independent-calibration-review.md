@@ -63,3 +63,22 @@ Workflow Builder graphs. A substituted path must fail before a scientific
 measurement artifact is emitted. This is an integrity and reproducibility
 guard, **not** proof of original acquisition, authenticated operator identity,
 physical calibration, or verified coral specimen identity.
+
+## Symlink-safe replay of imported originals
+
+Before resolving a managed source path, the 1.4 asset reader checks each
+lexical path component for filesystem symlinks. This closes a distinct
+same-data-root substitution route: a symlink at the expected original path
+could otherwise resolve to a different file containing byte-identical data,
+passing the digest check while bypassing the intended asset-path identity.
+The check applies to OBJ meshes, PLY meshes/point clouds, and GLB meshes,
+including standalone previews and persisted executable Workflow Builder
+graphs. Regression cases require a symlinked original to fail without
+emitting a scientific measurement artifact.
+
+This is a best-effort check of the filesystem state at read time, **not**
+an atomic defense against an attacker who can concurrently mutate the data
+directory between validation and opening a file. Project storage still
+requires appropriate operating-system access controls. A matching SHA-256
+digest and path are not evidence of verified calibration, acquisition
+authenticity, or confirmed specimen identity.
