@@ -30,6 +30,8 @@ jobs:
       - run: python -m pytest apps/api/reefvision/tests
       - name: Test offline MSI/CAB provenance verifier (Python 3.11)
         run: python -m pytest scripts/tests/test_validate_msi_provenance.py
+      - name: Verify installed Windows upgrade evidence contract (no MSI required)
+        run: python -m unittest discover -s scripts/tests -p test_validate_windows_acceptance_report.py -v
       - name: Verify migrations
         shell: bash
         run: |
