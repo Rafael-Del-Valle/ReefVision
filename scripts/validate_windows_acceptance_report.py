@@ -82,7 +82,7 @@ def _windows_path(value: Any, label: str) -> PureWindowsPath:
             not part.endswith((" ", "."))
             and ":" not in part
             and not any(ord(character) < 32 for character in part)
-            and re.fullmatch(r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\\..*)?", part, re.IGNORECASE) is None,
+            and re.fullmatch(r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?", part, re.IGNORECASE) is None,
             f"{label} contains an unsafe Windows path component",
         )
     return path
