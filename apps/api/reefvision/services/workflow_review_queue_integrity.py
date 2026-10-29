@@ -160,7 +160,7 @@ def _valid_v3_scientific_explanation(item: Any) -> bool:
         for part in breakdown[:4]
         if part["contribution"] > 0
     )
-    return item.reason_summary == (expected_summary or None)
+    return bool(item.reason_summary == (expected_summary or None))
 
 
 def _valid_v3_signal_normalization(item: Any) -> bool:
