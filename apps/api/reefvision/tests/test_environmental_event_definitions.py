@@ -105,7 +105,7 @@ def test_invalid_event_units_and_tampered_definition_are_rejected(
         base,
         json={"name": "Invalid", "query": {**threshold_query(), "threshold_unit": "m/s"}},
     )
-    assert bad.status_code == 422, bad.text
+    assert bad.status_code == 400, bad.text
     assert client.get(base).json()["total"] == 0
     definition = _create(client, project["id"])
     with client.app.state.session_factory() as session:
