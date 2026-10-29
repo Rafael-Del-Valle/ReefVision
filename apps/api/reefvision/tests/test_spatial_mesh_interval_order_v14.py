@@ -11,11 +11,13 @@ from fastapi.testclient import TestClient
 
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.tests.test_annotations import create_project
-from reefvision.tests.test_spatial_mesh_longitudinal_v14 import _mesh
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.workflow_mesh_v14 import execute_mesh_longitudinal_comparison
-from reefvision.tests.test_spatial_mesh_longitudinal_v14 import _minimal_topology_pair
+from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_spatial_mesh_longitudinal_v14 import (
+    _mesh,
+    _minimal_topology_pair,
+)
 
 
 @pytest.mark.parametrize(
