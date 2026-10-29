@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -75,6 +77,25 @@ def _same(
     )
 
 
+def _is_sqlite_event_request_collision(exc: IntegrityError) -> bool:
+    """Only the event's own idempotency key permits a concurrent replay.
+
+    Unrelated UNIQUE/PRIMARY KEY, foreign-key and NOT NULL violations must
+    propagate after rollback; they are not evidence of an identical request.
+    """
+    if not isinstance(exc.orig, sqlite3.IntegrityError):
+        return False
+    return (
+        getattr(exc.orig, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_UNIQUE
+        and str(exc.orig)
+        == (
+            "UNIQUE constraint failed: "
+            "review_queue_item_events.review_queue_item_id, "
+            "review_queue_item_events.client_request_id"
+        )
+    )
+
+
 def create_review_event(
     session: Session, queue_id: str, item_id: str, payload: ReviewQueueEventCreate
 ) -> ReviewQueueEventResponse:
@@ -99,9 +120,12 @@ def create_review_event(
     session.add(event)
     try:
         session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         session.rollback()
-        # A concurrent identical retry may win the unique constraint.
+        # Only a collision on this event's idempotency key can represent a
+        # concurrent identical retry. Other integrity failures are defects.
+        if not _is_sqlite_event_request_collision(exc):
+            raise
         prior = _existing(session, item_id, request_id)
         if prior is None or not _same(prior, payload, queue_id=queue_id, item=item):
             raise ConflictError("Review event request ID conflict") from None
