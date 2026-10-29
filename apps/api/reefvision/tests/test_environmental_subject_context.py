@@ -118,9 +118,7 @@ def test_track_frame_context_does_not_reuse_another_frame_or_image_position(clie
     )
 
 
-def test_subject_position_limit_excludes_other_video_frames_before_counting(
-    client, monkeypatch
-):
+def test_subject_position_limit_excludes_other_video_frames_before_counting(client, monkeypatch):
     """A busy video must not hide a valid position for a specific frame."""
     from datetime import UTC, datetime, timedelta
 
