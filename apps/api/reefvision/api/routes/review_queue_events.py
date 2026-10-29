@@ -3,7 +3,11 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+
+from reefvision.domain.errors import ConflictError
+from reefvision.services.review_queue_bulk import _is_sqlite_writer_contention
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.review_queue_events import (
@@ -32,7 +36,15 @@ def add_review_event(
     session: DbSession,
 ) -> ReviewQueueEventResponse:
     """Append a self-labeled local comment or assignment; never approve data."""
-    return create_review_event(session, queue_id, item_id, payload)
+    try:
+        return create_review_event(session, queue_id, item_id, payload)
+    except OperationalError as exc:
+        # SQLite can reject the initial scope read or the eventual append.
+        # A failed append must never be reported as a successful review event.
+        session.rollback()
+        if session.get_bind().dialect.name != "sqlite" or not _is_sqlite_writer_contention(exc):
+            raise
+        raise ConflictError("SQLite review queue is busy; retry the same event request ID") from exc
 
 
 @router.get(
