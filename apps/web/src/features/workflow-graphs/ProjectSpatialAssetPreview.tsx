@@ -103,6 +103,18 @@ function ProjectSpatialAssetPreviewSession({
     try {
       const record = await importProjectSpatialAsset(projectId, file);
       if (version !== requestVersion.current) return;
+      if (
+        record.project_id !== projectId ||
+        !record.id.trim() ||
+        !/^[a-f0-9]{64}$/i.test(record.sha256) ||
+        record.measurement_status !== "source_unreviewed" ||
+        record.calibration_verified !== false ||
+        record.specimen_identity_verified !== false
+      ) {
+        throw new Error(
+          "Imported 3D original has invalid project ownership or unreviewed provenance.",
+        );
+      }
       setAssets((previous) =>
         previous.some((item) => item.id === record.id)
           ? previous
