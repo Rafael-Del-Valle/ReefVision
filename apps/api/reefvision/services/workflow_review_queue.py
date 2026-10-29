@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -139,7 +140,17 @@ def create_review_queue_workflow_artifact(
         validate_saved_queue_snapshot(existing, existing.items)
         queue = service.get_queue(existing.id)
     else:
-        queue = service.create_queue_for_project(project_id, request)
+        try:
+            queue = service.create_queue_for_project(project_id, request)
+        except IntegrityError as exc:
+            # A competing worker may have committed this workflow's stable
+            # queue primary key after our initial lookup. Never manufacture a
+            # replacement or reuse unvalidated evidence in a failed session.
+            # The persisted node can be retried after the winner commits.
+            session.rollback()
+            raise ValidationError(
+                "Concurrent QC review-queue creation detected; retry the saved workflow node"
+            ) from exc
 
     payload = {
         "schema_version": "workflow-qc-review-queue-0001",
