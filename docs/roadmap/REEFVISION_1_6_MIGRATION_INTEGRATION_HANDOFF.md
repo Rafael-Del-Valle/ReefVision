@@ -123,3 +123,30 @@ Standalone and saved executable QC Workflow Builder regressions remain
 required; this is a startup safety guard, not a new workflow operation.
 Exact-head CI and native Windows installed-GUI/MSI upgrade/rollback and
 biological-data acceptance remain outstanding. **Release HOLD.**
+
+## 2026-10-29 — 0041 nullable reviewer-attribution preflight (Track D)
+
+Audited the real 0038 audit-event DDL and existing 0041 guard. The guard already
+checked idempotency-key and event-type nullability, but a forged 0041 schema
+could still accept `NULL` for reviewer actor, queue/project scope, timestamp,
+or the SQLite noninteger primary identity. Such an event cannot substantiate a
+researcher's approval, even with an intact CHECK allowlist and request UNIQUE.
+
+The isolated 1.6 guard now refuses revision-0041 tables with nullable `id`,
+`review_queue_id`, `project_id`, `actor`, or `created_at`. It is read-only:
+no migration stamping, record rewriting or deletion. New parameterized SQLite
+regressions exercise a valid control plus all five forged nullable schemas,
+including a successfully persisted NULL audit event, then require two refused
+preflight attempts to preserve the exact schema, reviewer event, scientific
+observation and revision marker. The real Alembic-0041 test also asserts the
+five NOT NULL contracts. Windows MSI packaging preflight includes the test.
+
+The preceding exact-head CI run `40959201065` failed Ruff formatting in the
+two new audit-default regression files; the precise reported formatting
+changes were applied before the new nullable-attribution implementation.
+An independent SQLAlchemy/SQLite six-configuration reproduction passed, but
+it is **not** an integrated repository test. Exact new-head CI and physical
+Windows GUI/MSI upgrade/rollback remain unverified. The 1.1/1.6 revision-ID
+collision is still unresolved. Existing standalone and saved executable
+Workflow Builder QC review, provenance, typed units and human gates are
+preserved, not replaced. **HOLD; no release, merge or approval automation.**
