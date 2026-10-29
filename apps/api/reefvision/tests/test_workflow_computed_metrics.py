@@ -159,12 +159,8 @@ def test_workflow_metric_failure_is_persisted_without_result(
                 "organism_count",
                 12,
                 "count",
-                qc=(
-                    "rejected"
-                    if failure == "qc_rejected"
-                    else "suspect"
-                    if failure == "qc_suspect"
-                    else "unassessed"
+                qc={"qc_rejected": "rejected", "qc_suspect": "suspect"}.get(
+                    failure, "unassessed"
                 ),
             ),
             scientific_record("surveyed_area", 2, "m2"),
