@@ -236,9 +236,7 @@ class EnvironmentalContextService:
     ) -> EnvironmentalThresholdResponse:
         """Return qualifying samples, not inferred temporal events or event durations."""
         try:
-            threshold, unit = normalize_quantity(
-                request.threshold_value, request.threshold_unit
-            )
+            threshold, unit = normalize_quantity(request.threshold_value, request.threshold_unit)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
         expected_dimensions = {
@@ -249,8 +247,9 @@ class EnvironmentalContextService:
             "current_northward_velocity": "speed",
             "current_speed": "speed",
         }
-        expected = expected_dimensions.get(request.variable)
-        if expected is not None and UNITS[request.threshold_unit][0] != expected:
+        if request.variable not in expected_dimensions:
+            raise ValidationError("Unsupported environmental threshold variable")
+        if UNITS[request.threshold_unit][0] != expected_dimensions[request.variable]:
             raise ValidationError("Threshold unit must match the environmental variable")
         lookup = EnvironmentalLookup.model_validate(
             request.model_dump(exclude={"threshold_value", "threshold_unit", "direction"})
