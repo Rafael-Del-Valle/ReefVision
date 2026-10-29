@@ -49,7 +49,18 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     guard before combining the 1.1 and 1.6 development lineages.
     """
     inspector = inspect(connection)
+    tables = set(inspector.get_table_names())
+    # Interrupted 1.1 migrations can leave scientific tables even when their
+    # Alembic marker is still 0037 or missing. Refuse 1.6 writes in that case.
     if not inspector.has_table("alembic_version"):
+        unexpected_science = sorted(tables & _SCIENCE_TABLES)
+        if unexpected_science:
+            raise RuntimeError(
+                "Unsafe ReefVision unversioned scientific schema: "
+                f"unexpected scientific tables={unexpected_science}. "
+                "Preserve the database and reconcile the interrupted 1.1 "
+                "migration without stamping or deleting research records."
+            )
         return
     # Preserve row multiplicity: two identical stamps are still an invalid
     # Alembic state and must not be hidden by set deduplication.
@@ -59,6 +70,15 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     revisions = set(revision_rows)
     review_revisions = revisions & {"0038", "0039", "0040", "0041"}
     if not review_revisions:
+        unexpected_science = sorted(tables & _SCIENCE_TABLES)
+        if unexpected_science:
+            raise RuntimeError(
+                "Unsafe ReefVision pre-review scientific schema at "
+                f"revisions={sorted(revision_rows)}: "
+                f"unexpected scientific tables={unexpected_science}. "
+                "Preserve the database and reconcile the interrupted 1.1 "
+                "migration without stamping or deleting research records."
+            )
         return
     # Alembic can record unrelated branch heads in the same version table.
     # A review lineage combined with any other head is not an accepted
@@ -71,7 +91,6 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         )
     revision = next(iter(review_revisions))
 
-    tables = set(inspector.get_table_names())
     unexpected_science = sorted(tables & _SCIENCE_TABLES)
     review_columns = inspector.get_columns(_REVIEW_TABLE) if _REVIEW_TABLE in tables else []
     actual_columns = {column["name"] for column in review_columns}

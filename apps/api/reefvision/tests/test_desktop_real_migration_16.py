@@ -160,7 +160,6 @@ def test_real_0041_sqlite_enforces_reviewer_registry_foreign_keys(tmp_path: Path
         engine.dispose()
 
 
-
 def test_reused_desktop_sqlite_connection_restores_foreign_key_enforcement(
     tmp_path: Path,
 ) -> None:
@@ -517,6 +516,80 @@ def test_legacy_upgrade_keeps_distinct_local_user_class_visibility(tmp_path: Pat
                 )
                 == 2
             )
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("legacy_revision", [None, "0037"])
+def test_desktop_refuses_partial_science_migration_without_mutating_data(
+    tmp_path: Path, legacy_revision: str | None
+) -> None:
+    """An interrupted 1.1 migration must not become a 1.6 review lineage."""
+    data_dir = tmp_path / "interrupted-science"
+    settings = Settings(
+        env="test",
+        data_dir=data_dir,
+        database_url=f"sqlite:///{(data_dir / 'reefvision.db').as_posix()}",
+        background_worker_enabled=False,
+    )
+    settings.ensure_directories()
+
+    if legacy_revision is not None:
+        alembic_ini, migrations_dir = resolve_alembic_paths()
+        config = Config(str(alembic_ini))
+        config.attributes["configure_logger"] = False
+        config.attributes["desktop_database_url"] = settings.resolved_database_url
+        config.set_main_option("script_location", str(migrations_dir))
+        config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+        command.upgrade(config, legacy_revision)
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("CREATE TABLE scientific_records (id TEXT PRIMARY KEY, note TEXT)")
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO scientific_records (id, note) "
+                    "VALUES ('observation', 'retain original coral measurement')"
+                )
+            )
+        with engine.connect() as connection:
+            schema_before = tuple(
+                tuple(row)
+                for row in connection.execute(
+                    text("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name")
+                )
+            )
+    finally:
+        engine.dispose()
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="Unsafe ReefVision .*scientific schema"):
+            run_pending_migrations(settings)
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            schema_after = tuple(
+                tuple(row)
+                for row in connection.execute(
+                    text("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name")
+                )
+            )
+            assert schema_after == schema_before
+            assert (
+                connection.scalar(
+                    text("SELECT note FROM scientific_records WHERE id = 'observation'")
+                )
+                == "retain original coral measurement"
+            )
+            assert not inspect(connection).has_table("review_queue_item_events")
+            if legacy_revision is None:
+                assert not inspect(connection).has_table("alembic_version")
+            else:
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0037"
     finally:
         engine.dispose()
 

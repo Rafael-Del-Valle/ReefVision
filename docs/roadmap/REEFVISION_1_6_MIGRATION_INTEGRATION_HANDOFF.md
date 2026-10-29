@@ -60,3 +60,22 @@ they do not claim that the 1.1 collision has been reconciled.
 The exact-head GitHub Actions results and physical Windows acceptance
 must be checked independently. No scientific observations, local
 checkpoints, user assets or deployed services are changed by this note.
+
+## 2026-10-29 — interrupted scientific 0038 preflight (Track D)
+
+A partially applied 1.1 scientific revision 0038 can leave SQLite tables
+behind while Alembic still reports 0037 or has no version table. Previously
+the isolated 1.6 desktop guard returned early in those cases, potentially
+applying its incompatible review-event 0038 over preserved observations.
+
+The guard now rejects known 1.1 scientific tables **before** returning for
+unversioned/pre-review databases. The real desktop migration regression
+covers both states, verifies that an original coral observation and the
+entire schema survive two refused startup attempts, and requires that no
+1.6 review table is created. Existing 0038–0041 lineage validation and
+saved executable QC Workflow Builder tests remain unchanged. This does not
+reconcile the independent 1.1/1.6 revision collision.
+
+**HOLD:** exact-head Ruff/pytest/frontend/E2E, native Windows MSI
+upgrade/rollback, installed GUI, and biological-data acceptance. No merge,
+release, data deletion, or pretrained-weight download is authorized.
