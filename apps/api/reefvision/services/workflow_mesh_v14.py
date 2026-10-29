@@ -19,8 +19,8 @@ from reefvision.schemas.workflow_graphs import (
 )
 from reefvision.services import workflow_runtime_adapters as runtime_adapters
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
-from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.services.spatial_point_cloud_v14 import preview_point_cloud_from_request
+from reefvision.services.spatial_source_assets_v14 import preview_project_mesh
 
 NODE_TYPE = "mesh_surface_preview"
 POINT_NODE_TYPE = "point_cloud_preview"
@@ -59,6 +59,7 @@ def extend_mesh_registry(
                 "calibration_evidence",
             ],
             optional_parameters={
+                "asset_id": None,
                 "obj_text": None,
                 "ply_text": None,
                 "glb_base64": None,
@@ -80,7 +81,8 @@ def extend_mesh_registry(
                 "Uses the same bounded preview engine as the standalone API.",
                 "Geometry and calibration remain caller_supplied_unverified.",
                 "Independent calibration review is provisional geometry-bound audit evidence.",
-                "This is not a persistent 3D asset importer or full mesh viewer.",
+                "Project asset IDs are resolved from SHA-256-verified local originals at run time.",
+                "Large stored originals remain subject to bounded preview parser limits.",
                 "Optional source SHA-256 binding rejects changed OBJ/PLY/GLB bytes on replay.",
                 "Optional edge routes are not biologically verified branch lengths.",
             ],
@@ -189,13 +191,12 @@ def execute_mesh_preview(
     parameters: dict[str, Any],
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
-    del session, settings
     artifacts = inputs.get("project", [])
     if len(artifacts) != 1 or (artifacts[0].payload_json or {}).get("project_id") != project_id:
         raise ValidationError("Mesh preview requires the current project reference")
     try:
         request = MeshPreviewRequest.model_validate(parameters)
-        result = preview_from_request(request)
+        result = preview_project_mesh(session, settings, project_id, request)
     except (PydanticValidationError, ValueError) as exc:
         raise ValidationError(f"Invalid mesh preview: {exc}") from exc
     result["project_id"] = project_id
