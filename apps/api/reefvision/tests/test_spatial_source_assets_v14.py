@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from hashlib import sha256
 from typing import cast
 
@@ -13,6 +14,8 @@ from reefvision.db.models import SpatialSourceAsset
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
+from reefvision.tests.test_spatial_point_cloud_assets_v14 import PLY as CLOUD_PLY
 
 OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
 
@@ -268,6 +271,108 @@ def test_asset_path_identity_cannot_be_rebound_in_saved_workflow(
 
     content = client.get(f"{base}/spatial/assets/{asset['id']}/content")
     assert content.status_code == 400, content.text
+    standalone = client.post(f"{base}/spatial/{endpoint}", json=params)
+    assert standalone.status_code == 400, standalone.text
+
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(item["data_type"] == artifact_type for item in detail.json()["artifacts"])
+
+
+@pytest.mark.parametrize(
+    ("filename", "original", "endpoint", "node_type", "artifact_type"),
+    [
+        (
+            "coral.obj",
+            OBJ,
+            "mesh-preview",
+            "mesh_surface_preview",
+            "mesh_measurement_preview",
+        ),
+        (
+            "survey.ply",
+            CLOUD_PLY,
+            "point-cloud-preview",
+            "point_cloud_preview",
+            "point_cloud_measurement_preview",
+        ),
+        (
+            "model.glb",
+            base64.b64decode(make_glb()),
+            "mesh-preview",
+            "mesh_surface_preview",
+            "mesh_measurement_preview",
+        ),
+    ],
+    ids=["obj-mesh", "ply-point-cloud", "glb-mesh"],
+)
+def test_symlinked_original_with_matching_bytes_fails_standalone_and_saved_workflow(
+    client: TestClient,
+    filename: str,
+    original: bytes,
+    endpoint: str,
+    node_type: str,
+    artifact_type: str,
+) -> None:
+    """A matching digest must not authorize a link to a different original."""
+    project_id = str(create_project(client, "Reject symlinked 3D originals")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    imported = client.post(f"{base}/spatial/assets", files={"file": (filename, original)})
+    assert imported.status_code == 201, imported.text
+    asset = imported.json()
+    params = {
+        "asset_id": asset["id"],
+        "expected_source_payload_sha256": asset["sha256"],
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified survey ruler",
+        "relative_scale_uncertainty": 0.05,
+    }
+    baseline = client.post(f"{base}/spatial/{endpoint}", json=params)
+    assert baseline.status_code == 200, baseline.text
+    graph = {
+        "graph_id": f"symlink-guard-{node_type}",
+        "name": "Reject substituted 3D original",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "measure", "node_type": node_type, "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-measure",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "measure",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        record = session.get(SpatialSourceAsset, asset["id"])
+        assert record is not None
+        original_path = resolve_managed_project_path(app.state.settings, record.managed_path)
+    backup_path = original_path.with_name(f"alternate-{original_path.name}")
+    original_path.rename(backup_path)
+    try:
+        original_path.symlink_to(backup_path)
+    except (OSError, NotImplementedError):
+        backup_path.rename(original_path)
+        pytest.skip("Filesystem does not permit symlink creation")
+    assert original_path.resolve() == backup_path
+    assert sha256(original_path.read_bytes()).hexdigest() == asset["sha256"]
+
+    content = client.get(f"{base}/spatial/assets/{asset['id']}/content")
+    assert content.status_code == 400, content.text
+    assert "symlink" in content.text.lower()
     standalone = client.post(f"{base}/spatial/{endpoint}", json=params)
     assert standalone.status_code == 400, standalone.text
 
