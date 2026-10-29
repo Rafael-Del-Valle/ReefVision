@@ -279,6 +279,4 @@ def test_asset_path_identity_cannot_be_rebound_in_saved_workflow(
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
-    assert not any(
-        item["data_type"] == artifact_type for item in detail.json()["artifacts"]
-    )
+    assert not any(item["data_type"] == artifact_type for item in detail.json()["artifacts"])
