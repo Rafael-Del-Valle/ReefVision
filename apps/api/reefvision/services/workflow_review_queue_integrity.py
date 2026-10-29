@@ -203,8 +203,17 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
             expected = value
         if normalized.get(signal_id) != expected:
             return False
+    # The queue generator only ages a review state that is not "reviewed".
+    # A re-signed snapshot cannot claim a stale unreviewed observation while
+    # simultaneously claiming that the image had already been reviewed.
+    if raw["unreviewed_state"] == 0 and raw["stale_review_state"] != 0:
+        return False
+    # Minimum pending-prediction confidence cannot exceed its mean.
+    # The two stored priority signals are 1 - mean and 1 - minimum,
+    # respectively. Check the relation only when pending predictions exist.
+    if raw["pending_proposals"] > 0 and raw["low_min_confidence"] < raw["low_mean_confidence"]:
+        return False
     return True
-
 
 
 def _valid_v3_scientific_references(item: Any) -> bool:
@@ -235,8 +244,7 @@ def _valid_v3_scientific_references(item: Any) -> bool:
         (severity is None) != (len(issue_ids) == 0)
         or severity not in (None, *V3_QC_SEVERITY_SCORES)
         or not isinstance(raw_signals, dict)
-        or raw_signals.get("unresolved_qc_severity")
-        != V3_QC_SEVERITY_SCORES.get(severity, 0.0)
+        or raw_signals.get("unresolved_qc_severity") != V3_QC_SEVERITY_SCORES.get(severity, 0.0)
     ):
         return False
     checksum = getattr(item, "input_checksum", None)
