@@ -7,7 +7,10 @@ import {
   listProjectSpatialAssets,
   previewProjectSpatialAsset,
 } from "./workflowGraphApi";
-import type { MeshPreviewCalibration, SpatialSourceAsset } from "./workflowGraphApi";
+import type {
+  MeshPreviewCalibration,
+  SpatialSourceAsset,
+} from "./workflowGraphApi";
 
 interface ProjectSpatialAssetPreviewProps {
   projectId: string;
@@ -17,7 +20,9 @@ interface ProjectSpatialAssetPreviewProps {
 export function ProjectSpatialAssetPreview({
   projectId,
 }: ProjectSpatialAssetPreviewProps) {
-  return <ProjectSpatialAssetPreviewSession key={projectId} projectId={projectId} />;
+  return (
+    <ProjectSpatialAssetPreviewSession key={projectId} projectId={projectId} />
+  );
 }
 
 function ProjectSpatialAssetPreviewSession({
@@ -32,7 +37,9 @@ function ProjectSpatialAssetPreviewSession({
   const [scale, setScale] = useState("0.01");
   const [uncertainty, setUncertainty] = useState("");
   const [evidence, setEvidence] = useState("");
-  const [artifact, setArtifact] = useState<Record<string, unknown> | null>(null);
+  const [artifact, setArtifact] = useState<Record<string, unknown> | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -52,7 +59,9 @@ function ProjectSpatialAssetPreviewSession({
             return [
               ...previous,
               ...records.filter(
-                (record) => record.project_id === projectId && !existingIds.has(record.id),
+                (record) =>
+                  record.project_id === projectId &&
+                  !existingIds.has(record.id),
               ),
             ];
           });
@@ -60,7 +69,11 @@ function ProjectSpatialAssetPreviewSession({
       })
       .catch((reason: unknown) => {
         if (version === listVersion.current && !controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "Unable to list 3D assets.");
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Unable to list 3D assets.",
+          );
         }
       })
       .finally(() => {
@@ -101,7 +114,9 @@ function ProjectSpatialAssetPreviewSession({
       setImported(true);
     } catch (reason) {
       if (version === requestVersion.current) {
-        setError(reason instanceof Error ? reason.message : "3D import failed.");
+        setError(
+          reason instanceof Error ? reason.message : "3D import failed.",
+        );
       }
     } finally {
       if (version === requestVersion.current) setBusy(false);
@@ -115,17 +130,24 @@ function ProjectSpatialAssetPreviewSession({
     setError(null);
     setArtifact(null);
     try {
-      const result = await previewProjectSpatialAsset(projectId, selected, kind, {
-        meters_per_unit: Number(scale),
-        calibration_method: calibrationMethod,
-        calibration_evidence: evidence,
-        relative_scale_uncertainty:
-          uncertainty.trim() === "" ? null : Number(uncertainty),
-      });
+      const result = await previewProjectSpatialAsset(
+        projectId,
+        selected,
+        kind,
+        {
+          meters_per_unit: Number(scale),
+          calibration_method: calibrationMethod,
+          calibration_evidence: evidence,
+          relative_scale_uncertainty:
+            uncertainty.trim() === "" ? null : Number(uncertainty),
+        },
+      );
       if (version === requestVersion.current) setArtifact(result);
     } catch (reason) {
       if (version === requestVersion.current) {
-        setError(reason instanceof Error ? reason.message : "3D preview failed.");
+        setError(
+          reason instanceof Error ? reason.message : "3D preview failed.",
+        );
       }
     } finally {
       if (version === requestVersion.current) setBusy(false);
@@ -138,9 +160,9 @@ function ProjectSpatialAssetPreviewSession({
       <p className="muted-copy">
         Import immutable OBJ, PLY, or GLB source bytes (8 MiB maximum) or select
         an existing project original. Previews are provisional: matching SHA-256
-        verifies source integrity, not calibration, biological identity, or review.
-        Save an executable mesh or point-cloud workflow with the asset ID and
-        digest to persist scientific artifacts.
+        verifies source integrity, not calibration, biological identity, or
+        review. Save an executable mesh or point-cloud workflow with the asset
+        ID and digest to persist scientific artifacts.
       </p>
       <div className="feature-grid">
         <label>
@@ -149,10 +171,16 @@ function ProjectSpatialAssetPreviewSession({
             aria-label="Import 3D original"
             type="file"
             accept=".obj,.ply,.glb"
-            onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
+            onChange={(event) =>
+              setFile(event.currentTarget.files?.[0] ?? null)
+            }
           />
         </label>
-        <button type="button" disabled={!file || busy} onClick={() => void importFile()}>
+        <button
+          type="button"
+          disabled={!file || busy}
+          onClick={() => void importFile()}
+        >
           {busy ? "Working..." : "Import original"}
         </button>
         <label>
@@ -170,7 +198,8 @@ function ProjectSpatialAssetPreviewSession({
             <option value="">Select imported source</option>
             {assets.map((asset) => (
               <option key={asset.id} value={asset.id}>
-                {asset.original_filename} ({asset.source_format.toUpperCase()}; {asset.id.slice(0, 8)})
+                {asset.original_filename} ({asset.source_format.toUpperCase()};{" "}
+                {asset.id.slice(0, 8)})
               </option>
             ))}
           </select>
@@ -198,14 +227,17 @@ function ProjectSpatialAssetPreviewSession({
             value={calibrationMethod}
             onChange={(event) => {
               setCalibrationMethod(
-                event.target.value as MeshPreviewCalibration["calibration_method"],
+                event.target
+                  .value as MeshPreviewCalibration["calibration_method"],
               );
               invalidatePreview();
             }}
           >
             <option value="other">Other / unknown</option>
             <option value="ruler">Ruler</option>
-            <option value="photogrammetry_control">Photogrammetry control</option>
+            <option value="photogrammetry_control">
+              Photogrammetry control
+            </option>
             <option value="instrument">Instrument</option>
           </select>
         </label>
@@ -250,18 +282,33 @@ function ProjectSpatialAssetPreviewSession({
         </label>
       </div>
       {loadingList && <p role="status">Loading project originals...</p>}
-      {imported && <p role="status">Source imported; human scientific review remains required.</p>}
+      {imported && (
+        <p role="status">
+          Source imported; human scientific review remains required.
+        </p>
+      )}
       {selected && (
         <p className="muted-copy">
           Source SHA-256: <code>{selected.sha256}</code>. Source and calibration
-          remain unreviewed; mesh edges and point chords are not anatomical branch lengths.
+          remain unreviewed; mesh edges and point chords are not anatomical
+          branch lengths.
         </p>
       )}
-      <button type="button" disabled={!selected || busy} onClick={() => void preview()}>
+      <button
+        type="button"
+        disabled={!selected || busy}
+        onClick={() => void preview()}
+      >
         {busy ? "Working..." : "Preview imported source"}
       </button>
-      {error && <p role="alert" className="form-error">{error}</p>}
-      {artifact && kind === "mesh" && <MeshArtifactViewer artifact={artifact} />}
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
+      {artifact && kind === "mesh" && (
+        <MeshArtifactViewer artifact={artifact} />
+      )}
       {artifact && kind === "point_cloud" && (
         <PointCloudArtifactViewer artifact={artifact} />
       )}
