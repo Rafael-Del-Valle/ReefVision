@@ -521,6 +521,84 @@ def test_legacy_upgrade_keeps_distinct_local_user_class_visibility(tmp_path: Pat
 
 
 @pytest.mark.parametrize("legacy_revision", [None, "0037"])
+@pytest.mark.parametrize(
+    "interrupted_table",
+    ["review_queue_item_events", "review_queue_bulk_requests"],
+)
+def test_desktop_refuses_partial_qc_migration_without_mutating_audit(
+    tmp_path: Path, legacy_revision: str | None, interrupted_table: str
+) -> None:
+    """Interrupted QC DDL must not be mistaken for a clean 0037 installation."""
+    data_dir = tmp_path / "interrupted-qc"
+    settings = Settings(
+        env="test",
+        data_dir=data_dir,
+        database_url=f"sqlite:///{(data_dir / 'reefvision.db').as_posix()}",
+        background_worker_enabled=False,
+    )
+    settings.ensure_directories()
+
+    if legacy_revision is not None:
+        alembic_ini, migrations_dir = resolve_alembic_paths()
+        config = Config(str(alembic_ini))
+        config.attributes["configure_logger"] = False
+        config.attributes["desktop_database_url"] = settings.resolved_database_url
+        config.set_main_option("script_location", str(migrations_dir))
+        config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+        command.upgrade(config, legacy_revision)
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.begin() as connection:
+            assert not inspect(connection).has_table(interrupted_table)
+            connection.execute(
+                text(f"CREATE TABLE {interrupted_table} (id TEXT PRIMARY KEY, note TEXT NOT NULL)")
+            )
+            connection.execute(
+                text(
+                    f"INSERT INTO {interrupted_table} (id, note) "
+                    "VALUES ('review-1', 'preserve reviewer audit')"
+                )
+            )
+        with engine.connect() as connection:
+            schema_before = tuple(
+                tuple(row)
+                for row in connection.execute(
+                    text("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name")
+                )
+            )
+    finally:
+        engine.dispose()
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match=r"Unsafe ReefVision .*partial QC schema"):
+            run_pending_migrations(settings)
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            schema_after = tuple(
+                tuple(row)
+                for row in connection.execute(
+                    text("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name")
+                )
+            )
+            assert schema_after == schema_before
+            assert (
+                connection.scalar(
+                    text(f"SELECT note FROM {interrupted_table} WHERE id = 'review-1'")
+                )
+                == "preserve reviewer audit"
+            )
+            if legacy_revision is None:
+                assert not inspect(connection).has_table("alembic_version")
+            else:
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0037"
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("legacy_revision", [None, "0037"])
 def test_desktop_refuses_partial_science_migration_without_mutating_data(
     tmp_path: Path, legacy_revision: str | None
 ) -> None:
@@ -566,7 +644,7 @@ def test_desktop_refuses_partial_science_migration_without_mutating_data(
         engine.dispose()
 
     for _ in range(2):
-        with pytest.raises(RuntimeError, match="Unsafe ReefVision .*scientific schema"):
+        with pytest.raises(RuntimeError, match=r"Unsafe ReefVision .*scientific schema"):
             run_pending_migrations(settings)
 
     engine = create_database_engine(settings)
