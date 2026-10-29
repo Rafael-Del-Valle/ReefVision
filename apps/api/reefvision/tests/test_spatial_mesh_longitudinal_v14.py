@@ -1288,7 +1288,9 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
         "axis_aligned_bounding_box_diagonal_scale_interval_m": None,
     }
     # A legacy record with no source uncertainty cannot authenticate an interval.
-    with pytest.raises(ValueError, match="Bounding-box scale interval requires source uncertainty"):
+    with pytest.raises(
+        ValueError, match="Bounding-box scale interval requires source uncertainty"
+    ):
         compare_mesh_observations(early_extent, late_extent)
     early_extent["axis_aligned_bounding_box_diagonal_scale_interval_m"] = None
     extent_result = compare_mesh_observations(early_extent, late_extent)
@@ -1306,7 +1308,9 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
         **late_extent,
         "axis_aligned_bounding_box_diagonal_scale_interval_m": [2.1, 2.2],
     }
-    with pytest.raises(ValueError, match="Bounding-box scale interval requires source uncertainty"):
+    with pytest.raises(
+        ValueError, match="Bounding-box scale interval requires source uncertainty"
+    ):
         compare_mesh_observations(early_extent, malformed)
     with pytest.raises(ValueError, match="verification state"):
         compare_mesh_observations(
@@ -1353,7 +1357,9 @@ def test_mesh_comparison_rejects_unbound_legacy_scale_bounds(
     }
     record = before if invalid_timepoint == "before" else after
     record["surface_area_scale_interval_m2"] = invalid_interval
-    with pytest.raises(ValueError, match="Surface-area scale interval requires source uncertainty"):
+    with pytest.raises(
+        ValueError, match="Surface-area scale interval requires source uncertainty"
+    ):
         compare_mesh_observations(before, after)
 
 
@@ -1437,7 +1443,7 @@ def test_mesh_comparison_zero_baseline_extent_withholds_relative_change() -> Non
             "observed_at_utc": "2026-10-01T12:00:00Z",
             "calibration_verified": False,
             "geometry_sha256": "first-geometry",
-        "relative_scale_uncertainty": 0.1,
+            "relative_scale_uncertainty": 0.1,
         },
     }
     later = {
