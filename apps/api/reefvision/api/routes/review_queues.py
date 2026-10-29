@@ -3,10 +3,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.domain.errors import ConflictError
 from reefvision.schemas.review_queues import (
     ReviewQueueBulkRequest,
     ReviewQueueBulkResponse,
@@ -18,7 +20,10 @@ from reefvision.schemas.review_queues import (
     ReviewQueueItemSkipRequest,
     ReviewQueueResponse,
 )
-from reefvision.services.review_queue_bulk import bulk_triage_review_queue
+from reefvision.services.review_queue_bulk import (
+    _is_sqlite_writer_contention,
+    bulk_triage_review_queue,
+)
 from reefvision.services.review_queues import ReviewQueueService
 
 router = APIRouter(tags=["review_queues"])
@@ -135,8 +140,22 @@ def bulk_review_queue_items(
     payload: ReviewQueueBulkRequest,
     session: DbSession,
 ) -> ReviewQueueBulkResponse:
-    """Manual operator triage, never automatic scientific approval."""
-    return bulk_triage_review_queue(session, queue_id, payload)
+    """Manual operator triage, never automatic scientific approval.
+
+    SQLite can reject a read *before* the bulk service reaches its commit
+    handler when another local process holds an exclusive database lock.
+    Convert only genuine BUSY/LOCKED errors to retryable HTTP conflicts;
+    preserve unrelated database failures for diagnosis.
+    """
+    try:
+        return bulk_triage_review_queue(session, queue_id, payload)
+    except OperationalError as exc:
+        session.rollback()
+        if session.get_bind().dialect.name != "sqlite" or not _is_sqlite_writer_contention(exc):
+            raise
+        raise ConflictError(
+            "SQLite review queue is busy; retry the same bulk request ID"
+        ) from exc
 
 
 @router.post("/review-queue-items/{item_id}/start", response_model=ReviewQueueItemResponse)
