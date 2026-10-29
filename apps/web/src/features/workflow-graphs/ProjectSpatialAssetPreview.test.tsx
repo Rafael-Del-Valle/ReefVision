@@ -214,7 +214,7 @@ describe("ProjectSpatialAssetPreview", () => {
       await screen.findByRole("option", { name: /colony.ply/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: /foreign-asset/ }),
+      screen.queryByRole("option", { name: /foreign-/ }),
     ).not.toBeInTheDocument();
   });
 });
