@@ -349,9 +349,7 @@ class EnvironmentalContextService:
         )
         total = self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
         rows = self.session.scalars(
-            query.order_by(
-                EnvironmentalEventDefinition.created_at, EnvironmentalEventDefinition.id
-            )
+            query.order_by(EnvironmentalEventDefinition.created_at, EnvironmentalEventDefinition.id)
             .limit(limit)
             .offset(offset)
         ).all()

@@ -46,6 +46,7 @@ class EnvironmentalCacheEntry(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
+
 class EnvironmentalEventDefinition(Base):
     """Immutable researcher-authored query, independent of changing source observations."""
 

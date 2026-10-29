@@ -140,6 +140,7 @@ class EnvironmentalThresholdResponse(ScientificModel):
         "observed_sample_threshold_no_interpolation"
     )
 
+
 class EnvironmentalEventDefinitionCreate(ScientificModel):
     name: str = Field(min_length=1, max_length=200)
     query: EnvironmentalThresholdRequest

@@ -35,9 +35,12 @@ def test_event_definition_migration_round_trip(tmp_path, monkeypatch) -> None:
         assert "environmental_event_definitions" not in inspect(engine).get_table_names()
         assert "computed_metric_definitions" in inspect(engine).get_table_names()
         with engine.connect() as connection:
-            assert connection.scalar(
-                text("SELECT name FROM projects WHERE id=:id"), {"id": project_id}
-            ) == "Legacy"
+            assert (
+                connection.scalar(
+                    text("SELECT name FROM projects WHERE id=:id"), {"id": project_id}
+                )
+                == "Legacy"
+            )
     finally:
         engine.dispose()
         clear_settings_cache()
