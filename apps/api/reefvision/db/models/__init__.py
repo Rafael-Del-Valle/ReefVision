@@ -61,6 +61,7 @@ from reefvision.db.models.quality_control_run import QualityControlRun
 from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
 from reefvision.db.models.skeleton_analysis import SkeletonAnalysisRevision
+from reefvision.db.models.spatial_source_asset_v14 import SpatialSourceAsset
 from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
 from reefvision.db.models.video_asset import VideoAsset
@@ -120,6 +121,7 @@ __all__ = [
     "ReviewQueue",
     "ReviewQueueItem",
     "SkeletonAnalysisRevision",
+    "SpatialSourceAsset",
     "TrainingDraft",
     "TrainingRun",
     "VideoAsset",

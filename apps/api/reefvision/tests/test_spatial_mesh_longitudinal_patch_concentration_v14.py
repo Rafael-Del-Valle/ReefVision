@@ -429,6 +429,7 @@ def test_subnormal_patch_fraction_divergence_is_not_falsely_zero(
         assert "ranked_patch_area_divergence_below_numeric_resolution" not in result["qc_warnings"]
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
 
+
 @pytest.mark.parametrize("timepoint", [0, 1])
 @pytest.mark.parametrize("interval_factor", [0.5, 1.5])
 def test_longitudinal_rejects_forged_narrow_or_wide_scale_interval(
