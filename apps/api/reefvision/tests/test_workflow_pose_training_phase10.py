@@ -1862,6 +1862,9 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             settings: Settings,
             factory: sessionmaker[Session],
             job_id: str,
+            *,
+            manifest_field: str = field,
+            manifest_value: str = corrupted_value,
         ) -> bool:
             assert _fake_pose_processor(settings, factory, job_id)
             with factory() as child_session:
@@ -1871,7 +1874,7 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
                 assert run is not None
                 run.artifact_manifest_json = {
                     **dict(run.artifact_manifest_json or {}),
-                    field: corrupted_value,
+                    manifest_field: manifest_value,
                 }
                 child_session.commit()
             return True
