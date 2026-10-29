@@ -882,10 +882,16 @@ def create_pose_workflow_training_result(
         raise ValidationError("Pose training device must be a non-blank string")
     device = requested_device.strip()
 
+    # Ultralytics also accepts a seed in training_config. When no top-level
+    # seed is supplied, persist that effective seed in the training run rather
+    # than recording null while the worker trains with a different value.
+    configured_seed_supplied = "seed" in supplied_config
     # A coerced boolean, fractional float, or negative seed changes the
     # scientist's requested random state (or can crash before a job exists).
     # Preserve the legacy decimal-string input without silently truncating it.
     raw_seed = parameters.get("random_seed")
+    if raw_seed is None and configured_seed_supplied:
+        raw_seed = supplied_config["seed"]
     if raw_seed is None:
         random_seed = None
     elif isinstance(raw_seed, bool) or not (
@@ -908,6 +914,11 @@ def create_pose_workflow_training_result(
             ) from exc
         if not 0 <= random_seed <= (2**63 - 1):
             raise ValidationError("Pose training random_seed must be a non-negative integer")
+
+    # A conflicting second seed would make the saved scientific configuration
+    # disagree with the actual worker invocation (which uses random_seed).
+    if configured_seed_supplied and supplied_config["seed"] != random_seed:
+        raise ValidationError("Pose training_config.seed must match random_seed")
 
     resource_limits = parameters.get("resource_limits")
     if resource_limits is None:
