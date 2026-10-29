@@ -121,9 +121,7 @@ class SpatialSourceAssetService:
         # a file somewhere in the project originals directory. Otherwise a
         # changed managed_path could replay identical bytes under a different
         # asset identity while still passing the stored SHA-256 check.
-        expected_path = (
-            f"{project.storage_root}/spatial/originals/{asset.id}.{asset.source_format}"
-        )
+        expected_path = f"{project.storage_root}/spatial/originals/{asset.id}.{asset.source_format}"
         if asset.managed_path != expected_path:
             raise ValidationError("Spatial source path does not match immutable asset identity")
         path = resolve_managed_project_path(self.settings, asset.managed_path)
