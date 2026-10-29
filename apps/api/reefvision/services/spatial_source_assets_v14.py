@@ -120,11 +120,16 @@ class SpatialSourceAssetService:
         if not asset.managed_path.startswith(f"{project.storage_root}/spatial/originals/"):
             raise ValidationError("Spatial source path is outside its project")
         path = resolve_managed_project_path(self.settings, asset.managed_path)
-        if not path.is_file():
-            raise ValidationError("Spatial source original bytes are missing")
-        if path.stat().st_size != asset.size_bytes or asset.size_bytes > MAX_BYTES:
+        if path.is_symlink() or not path.is_file():
+            raise ValidationError("Spatial source original bytes are missing or unsafe")
+        if asset.size_bytes <= 0 or asset.size_bytes > MAX_BYTES:
+            raise ValidationError("Spatial source stored byte length is invalid")
+        # Read only the bounded import limit, then compare the bytes actually read.
+        # A separate stat/read_bytes sequence can race a growing original file.
+        with path.open("rb") as source:
+            data = source.read(MAX_BYTES + 1)
+        if len(data) != asset.size_bytes:
             raise ValidationError("Spatial source byte length no longer matches import")
-        data = path.read_bytes()
         if sha256(data).hexdigest() != asset.sha256:
             raise ValidationError("Spatial source original bytes failed SHA-256 verification")
         return data
