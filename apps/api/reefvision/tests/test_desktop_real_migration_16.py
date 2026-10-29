@@ -52,6 +52,69 @@ def test_desktop_fresh_sqlite_migration_persists_revision_across_restarts(
         reopened_engine.dispose()
 
 
+
+def test_real_0041_schema_enforces_reviewer_request_identity(tmp_path: Path) -> None:
+    """Inspect actual Alembic DDL, not a synthetic 0041 revision stamp."""
+    database = tmp_path / "audit-contract.sqlite"
+    settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{database.as_posix()}")
+    settings.ensure_directories()
+    run_pending_migrations(settings)
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+
+            events = "review_queue_item_events"
+            unique_constraints = inspector.get_unique_constraints(events)
+            assert any(
+                constraint["name"] == "uq_review_queue_item_event_request"
+                and constraint["column_names"]
+                == ["review_queue_item_id", "client_request_id"]
+                for constraint in unique_constraints
+            )
+            event_columns = {column["name"]: column for column in inspector.get_columns(events)}
+            assert event_columns["review_queue_item_id"]["nullable"] is False
+            assert event_columns["client_request_id"]["nullable"] is False
+            assert event_columns["event_type"]["nullable"] is False
+            checks = inspector.get_check_constraints(events)
+            assert any(
+                check["name"] == "ck_review_queue_item_event_type"
+                and "triage_complete" in check["sqltext"]
+                for check in checks
+            )
+
+            bulk = "review_queue_bulk_requests"
+            bulk_columns = {column["name"]: column for column in inspector.get_columns(bulk)}
+            for required in (
+                "id",
+                "review_queue_id",
+                "project_id",
+                "action",
+                "actor",
+                "item_ids_json",
+                "created_at",
+            ):
+                assert bulk_columns[required]["nullable"] is False
+            assert inspector.get_pk_constraint(bulk)["constrained_columns"] == ["id"]
+            foreign_keys = {
+                (
+                    fk["constrained_columns"][0],
+                    fk["referred_table"],
+                    fk["referred_columns"][0],
+                    (fk.get("options") or {}).get("ondelete"),
+                )
+                for fk in inspector.get_foreign_keys(bulk)
+            }
+            assert foreign_keys == {
+                ("review_queue_id", "review_queues", "id", "RESTRICT"),
+                ("project_id", "projects", "id", "RESTRICT"),
+            }
+    finally:
+        engine.dispose()
+
+
 def test_review_revision_roundtrip_commits_sqlite_version_markers(tmp_path: Path) -> None:
     """Real Alembic downgrade/re-upgrade must persist revision DML on SQLite.
 
