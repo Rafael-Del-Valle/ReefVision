@@ -19,8 +19,10 @@ from reefvision.schemas.workflow_graphs import (
 )
 from reefvision.services import workflow_runtime_adapters as runtime_adapters
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
-from reefvision.services.spatial_point_cloud_v14 import preview_point_cloud_from_request
-from reefvision.services.spatial_source_assets_v14 import preview_project_mesh
+from reefvision.services.spatial_source_assets_v14 import (
+    preview_project_mesh,
+    preview_project_point_cloud,
+)
 
 NODE_TYPE = "mesh_surface_preview"
 POINT_NODE_TYPE = "point_cloud_preview"
@@ -114,6 +116,7 @@ def extend_mesh_registry(
                 "calibration_evidence",
             ],
             optional_parameters={
+                "asset_id": None,
                 "ply_text": None,
                 "points": None,
                 "point_index_pairs": None,
@@ -137,7 +140,8 @@ def extend_mesh_registry(
                 "No surface area or biological branch length is inferred.",
                 "Selected point-pair chords are not biological branch lengths.",
                 "Optional source SHA-256 binding rejects changed ASCII PLY bytes on replay.",
-                "Not a persistent asset importer or interactive viewer.",
+                "Project-owned PLY originals are verified at run time, not on graph save.",
+                "Not an asset importer or a full interactive asset picker.",
             ],
         )
         nodes[LONGITUDINAL_NODE_TYPE] = WorkflowNodeDefinitionResponse(
@@ -216,13 +220,12 @@ def execute_point_cloud_preview(
     parameters: dict[str, Any],
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
-    del session, settings
     artifacts = inputs.get("project", [])
     if len(artifacts) != 1 or (artifacts[0].payload_json or {}).get("project_id") != project_id:
         raise ValidationError("Point-cloud preview requires the current project reference")
     try:
         request = PointCloudPreviewRequest.model_validate(parameters)
-        result = preview_point_cloud_from_request(request)
+        result = preview_project_point_cloud(session, settings, project_id, request)
     except (PydanticValidationError, ValueError) as exc:
         raise ValidationError(f"Invalid point-cloud preview: {exc}") from exc
     result["project_id"] = project_id
