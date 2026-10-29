@@ -61,6 +61,14 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "Preserve the database and reconcile the interrupted 1.1 "
                 "migration without stamping or deleting research records."
             )
+        unexpected_qc = sorted(tables & {_REVIEW_TABLE, _BULK_TABLE})
+        if unexpected_qc:
+            raise RuntimeError(
+                "Unsafe ReefVision unversioned partial QC schema: "
+                f"unexpected QC tables={unexpected_qc}. Preserve existing "
+                "reviewer history and reconcile the interrupted migration "
+                "without stamping or deleting audit records."
+            )
         return
     # Preserve row multiplicity: two identical stamps are still an invalid
     # Alembic state and must not be hidden by set deduplication.
@@ -78,6 +86,15 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 f"unexpected scientific tables={unexpected_science}. "
                 "Preserve the database and reconcile the interrupted 1.1 "
                 "migration without stamping or deleting research records."
+            )
+        unexpected_qc = sorted(tables & {_REVIEW_TABLE, _BULK_TABLE})
+        if unexpected_qc:
+            raise RuntimeError(
+                "Unsafe ReefVision pre-review partial QC schema at "
+                f"revisions={sorted(revision_rows)}: "
+                f"unexpected QC tables={unexpected_qc}. Preserve existing "
+                "reviewer history and reconcile the interrupted migration "
+                "without stamping or deleting audit records."
             )
         return
     # Alembic can record unrelated branch heads in the same version table.
