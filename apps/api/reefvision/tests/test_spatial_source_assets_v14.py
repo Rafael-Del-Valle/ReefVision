@@ -59,9 +59,7 @@ def test_import_deduplicates_and_isolates_original_bytes(
         ("too-large.obj", b"x" * (8 * 1024 * 1024 + 1)),
     ],
 )
-def test_invalid_source_is_rejected(
-    client: TestClient, filename: str, payload: bytes
-) -> None:
+def test_invalid_source_is_rejected(client: TestClient, filename: str, payload: bytes) -> None:
     project = str(create_project(client, "Reject spatial source")["id"])
     url = f"/api/v1/projects/{project}/spatial/assets"
     response = client.post(url, files={"file": (filename, payload)})
