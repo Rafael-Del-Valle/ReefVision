@@ -15,7 +15,10 @@ or biologically identified. No delete or remote publishing operation exists.
 
 Mesh measurement now also accepts a project-owned `asset_id` in the existing
 `POST /api/v1/projects/{project_id}/spatial/mesh-preview` request or in a
-saved `mesh_surface_preview` Workflow Builder node. `asset_id` is mutually
+saved `mesh_surface_preview` Workflow Builder node. The standalone
+`mesh-longitudinal-comparison` endpoint also resolves each observation's
+project-owned asset reference through the same verified source reader.
+`asset_id` is mutually
 exclusive with inline OBJ/PLY/GLB/triangle geometry. At **execution time**,
 ReefVision verifies project ownership, source byte count and SHA-256 before
 resolving the original into the same bounded measurement engine used for
