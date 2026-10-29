@@ -17,8 +17,10 @@ from reefvision.schemas.spatial_mesh_preview_v14 import (
 )
 from reefvision.schemas.spatial_point_cloud_v14 import PointCloudPreviewRequest
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
-from reefvision.services.spatial_point_cloud_v14 import preview_point_cloud_from_request
-from reefvision.services.spatial_source_assets_v14 import preview_project_mesh
+from reefvision.services.spatial_source_assets_v14 import (
+    preview_project_mesh,
+    preview_project_point_cloud,
+)
 
 router = APIRouter(tags=["spatial-mesh-preview"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -41,12 +43,16 @@ def preview_mesh_surface(
 
 @router.post("/projects/{project_id}/spatial/point-cloud-preview")
 def preview_point_cloud(
-    project_id: str, payload: PointCloudPreviewRequest, session: DbSession
+    project_id: str,
+    payload: PointCloudPreviewRequest,
+    request: Request,
+    session: DbSession,
 ) -> dict[str, Any]:
     if session.get(Project, project_id) is None:
         raise NotFoundError("Project not found")
+    settings: Settings = request.app.state.settings
     try:
-        result = preview_point_cloud_from_request(payload)
+        result = preview_project_point_cloud(session, settings, project_id, payload)
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
     result["project_id"] = project_id
