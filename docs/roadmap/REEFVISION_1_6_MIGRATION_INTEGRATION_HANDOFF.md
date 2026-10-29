@@ -79,3 +79,24 @@ reconcile the independent 1.1/1.6 revision collision.
 **HOLD:** exact-head Ruff/pytest/frontend/E2E, native Windows MSI
 upgrade/rollback, installed GUI, and biological-data acceptance. No merge,
 release, data deletion, or pretrained-weight download is authorized.
+
+## 2026-10-29 — interrupted QC audit DDL preflight (Track D)
+
+A partially applied 1.6 QC migration can leave `review_queue_item_events`
+or `review_queue_bulk_requests` behind while the Alembic marker remains
+0037 or is missing. The 1.6 guard previously checked only interrupted 1.1
+scientific tables in those states, allowing desktop migration to begin against
+ambiguous QC audit data. It now refuses these partial QC schemas before
+Alembic can write, without deleting, stamping, or rewriting reviewer records.
+
+Four real-database regression scenarios cover both QC table names with
+unversioned and 0037 databases. Each inserts an audit sentinel, snapshots the
+full SQLite schema, and requires two refused desktop startup attempts to
+preserve the sentinel, schema and original Alembic state. The existing partial
+science tests remain intact. The preceding CI's Ruff RUF043 failure is
+corrected by making the scientific-schema test's regex explicitly raw.
+
+This is a defensive 1.6-only migration gate, **not** reconciliation with
+the independent 1.1 Alembic lineage. Exact-head integrated CI, Windows MSI
+upgrade/rollback, installed-GUI and biological-data acceptance are required
+before any release decision.
