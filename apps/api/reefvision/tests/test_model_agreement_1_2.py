@@ -297,9 +297,7 @@ def test_organism_direction_fields_remain_optional_for_old_saved_artifacts() -> 
         ("unit", "overcount_organism_count"),
     ],
 )
-def test_current_directional_artifact_rejects_forged_denominators(
-    scope: str, field: str
-) -> None:
+def test_current_directional_artifact_rejects_forged_denominators(scope: str, field: str) -> None:
     """A saved 0007 artifact cannot silently inflate image or organism sample size."""
     from reefvision.schemas.model_agreement import PairedCountComparisonResponse
 
@@ -315,5 +313,44 @@ def test_current_directional_artifact_rejects_forged_denominators(
     payload = result.model_dump(mode="json")
     target = payload if scope == "global" else payload["unit_summaries"][0]
     target[field] += 1
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "swapped_direction_labels",
+        "forged_organism_frequency",
+        "forged_reference_denominator",
+        "missing_paired_row",
+    ],
+)
+def test_current_saved_directional_artifact_rejects_plausible_but_false_totals(
+    mutation: str,
+) -> None:
+    """A numerically plausible persisted summary cannot contradict its paired rows."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 12),
+                pair("b", "frag-B", "tank-2", 10, 8),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    if mutation == "swapped_direction_labels":
+        # Still sums to two, but contradicts the signed paired differences.
+        payload["overcount_pair_count"] = 0
+        payload["undercount_pair_count"] = 2
+    elif mutation == "forged_organism_frequency":
+        payload["observation_counts_by_organism"] = {"frag-A": 2}
+    elif mutation == "forged_reference_denominator":
+        payload["nonzero_reference_count"] = 1
+    else:
+        payload["paired_differences"].pop()
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(payload)
