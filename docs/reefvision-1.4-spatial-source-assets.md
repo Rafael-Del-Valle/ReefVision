@@ -73,6 +73,16 @@ photogrammetry control, instrument, or other/unknown; the default is
 scale, uncertainty, source, or evidence invalidates the displayed preview.
 These fields are caller-supplied metadata, not independent verification.
 
+Longitudinal mesh comparison also recomputes expected **bounding-box diagonal**
+scale-only intervals from each timepoint's recorded relative calibration
+uncertainty. A purported interval that is narrower or wider than its source
+calibration permits is rejected rather than used to infer apparent change.
+A recorded unknown uncertainty cannot be paired with an invented interval.
+This mirrors the existing squared-scale check for surface area; neither
+interval is a statistical confidence interval or evidence of coral growth.
+Standalone comparison and saved typed Workflow Builder execution share this
+validation, with regression coverage for both observation positions.
+
 This remains an initial persistence and preview slice, **not** a finished asset
 workspace. An 8 MiB stored source may still exceed the existing bounded mesh
 parser limits (256,000 text characters or 350,000 GLB base64 characters);
