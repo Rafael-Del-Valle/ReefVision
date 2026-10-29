@@ -838,8 +838,8 @@ def create_pose_workflow_training_result(
 
     # An explicitly supplied architecture is part of the training lineage.
     # Never turn False, zero, or an empty container into a default model.
-    requested_architecture = parameters.get("architecture")
-    if requested_architecture is not None:
+    if "architecture" in parameters:
+        requested_architecture = parameters["architecture"]
         if not isinstance(requested_architecture, str) or not requested_architecture.strip():
             raise ValidationError("Pose training architecture must be a non-blank string")
         architecture = requested_architecture.strip()
