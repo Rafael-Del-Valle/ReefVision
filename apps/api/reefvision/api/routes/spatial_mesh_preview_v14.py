@@ -17,7 +17,6 @@ from reefvision.schemas.spatial_mesh_preview_v14 import (
 )
 from reefvision.schemas.spatial_point_cloud_v14 import PointCloudPreviewRequest
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
-from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.services.spatial_point_cloud_v14 import preview_point_cloud_from_request
 from reefvision.services.spatial_source_assets_v14 import preview_project_mesh
 
@@ -56,13 +55,17 @@ def preview_point_cloud(
 
 @router.post("/projects/{project_id}/spatial/mesh-longitudinal-comparison")
 def preview_mesh_longitudinal_comparison(
-    project_id: str, payload: MeshLongitudinalComparisonRequest, session: DbSession
+    project_id: str,
+    payload: MeshLongitudinalComparisonRequest,
+    request: Request,
+    session: DbSession,
 ) -> dict[str, Any]:
     if session.get(Project, project_id) is None:
         raise NotFoundError("Project not found")
+    settings: Settings = request.app.state.settings
     try:
-        before = preview_from_request(payload.before)
-        after = preview_from_request(payload.after)
+        before = preview_project_mesh(session, settings, project_id, payload.before)
+        after = preview_project_mesh(session, settings, project_id, payload.after)
         before["project_id"] = project_id
         after["project_id"] = project_id
         return compare_mesh_observations(
