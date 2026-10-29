@@ -379,6 +379,16 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         seed = session.get(ModelRegistration, model_id)
         assert seed is not None
         seed_sha256 = seed.sha256
+        # These are the fields emitted by the real registered_model_source node.
+        seed_reference = {
+            "project_id": str(project["id"]),
+            "model_id": model_id,
+            "model_sha256": seed.sha256,
+            "purpose": seed.purpose,
+            "task": seed.task,
+            "provider_name": seed.provider_name,
+            "provider_version": seed.provider_version,
+        }
 
     # A saved model-reference artifact pins both project ownership and
     # registered checkpoint bytes. Neither assertion may be silently ignored
@@ -395,6 +405,26 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         (
             {"model_id": model_id, "source_model_sha256": "0" * 64},
             "seed artifact checksum changed",
+        ),
+        (
+            {"model_id": model_id, "model_sha256": "0" * 64},
+            "seed artifact checksum changed",
+        ),
+        (
+            {"model_id": model_id, "purpose": "classifier"},
+            "seed artifact metadata changed",
+        ),
+        (
+            {"model_id": model_id, "task": "detect"},
+            "seed artifact metadata changed",
+        ),
+        (
+            {"model_id": model_id, "provider_name": "other-provider"},
+            "seed artifact metadata changed",
+        ),
+        (
+            {"model_id": model_id, "provider_version": "unexpected-version"},
+            "seed artifact metadata changed",
         ),
     ):
         with (
@@ -428,11 +458,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
                 "dataset_id": (dataset["id"]),
                 "manifest_sha256": (dataset["manifest_sha256"]),
             },
-            initial_model_payload={
-                "model_id": model_id,
-                "project_id": str(project["id"]),
-                "sha256": seed_sha256,
-            },
+            initial_model_payload={**seed_reference, "sha256": seed_sha256},
             parameters={
                 "run_name": ("phase10-pose-retrain"),
                 "device": "cpu",
