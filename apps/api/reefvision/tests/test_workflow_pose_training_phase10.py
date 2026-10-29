@@ -1972,6 +1972,44 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             processor=substituted_checkpoint_processor,
         )
 
+    # Training can finish after another writer changes the registered seed
+    # checkpoint. First completion must reject that drift, not publish the
+    # output as though it used the originally verified seed bytes.
+    seed_model_id = _seed_model(app, project, dataset)
+    with app.state.session_factory() as session:
+        seed = session.get(ModelRegistration, seed_model_id)
+        assert seed is not None
+        seed_checkpoint = resolve_managed_project_path(test_settings, seed.managed_path)
+    original_seed_bytes = seed_checkpoint.read_bytes()
+
+    def changed_seed_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        seed_checkpoint.write_bytes(b"modified-after-pose-training-started")
+        return True
+
+    try:
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="seed checkpoint checksum changed"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload=payload,
+                initial_model_payload={"model_id": seed_model_id},
+                parameters={"training_config": {"epochs": 1}},
+                workflow_run_id="saved-pose-run",
+                workflow_node_run_id="changed-seed-checkpoint-node",
+                processor=changed_seed_processor,
+            )
+    finally:
+        seed_checkpoint.write_bytes(original_seed_bytes)
+
     # The legitimate saved-node lineage must still complete and expose a
     # checksummed checkpoint when its worker has not changed the child job.
     with app.state.session_factory() as session:
