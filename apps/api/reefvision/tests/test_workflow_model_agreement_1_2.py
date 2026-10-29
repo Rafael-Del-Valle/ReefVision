@@ -143,6 +143,12 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     assert payload["organism_and_unit_balanced_mean_signed_percent_deviation"] == 0
     assert payload["percent_contributing_independent_unit_count"] == 1
     assert payload["reference_source_record_ids"] == ["human-image-1", "human-image-2"]
+    assert payload["overcount_pair_count"] == 1
+    assert payload["undercount_pair_count"] == 1
+    assert payload["exact_match_pair_count"] == 0
+    assert payload["unit_summaries"][0]["overcount_pair_count"] == 1
+    assert payload["unit_summaries"][0]["undercount_pair_count"] == 1
+    assert payload["unit_summaries"][0]["exact_match_pair_count"] == 0
     assert payload["model_source_record_ids"] == ["model-image-1", "model-image-2"]
     standalone = client.post(
         "/api/v1/ecology/paired-count-comparison",
@@ -156,6 +162,9 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
         "repeated_pair_count_beyond_first_per_organism",
         "unequal_pair_counts_across_organisms",
         "unit_summaries",
+        "overcount_pair_count",
+        "undercount_pair_count",
+        "exact_match_pair_count",
         "mean_signed_percent_deviation",
         "unit_balanced_mean_signed_percent_deviation",
         "organism_and_unit_balanced_mean_signed_percent_deviation",
@@ -231,6 +240,9 @@ def test_saved_repeated_organism_pairs_retain_frequency_qc(client: TestClient) -
     assert standalone.status_code == 200, standalone.text
     assert artifact["observed_organism_count"] == 2
     assert artifact["repeated_pair_count_beyond_first_per_organism"] == 1
+    assert artifact["overcount_pair_count"] == 2
+    assert artifact["undercount_pair_count"] == 1
+    assert artifact["exact_match_pair_count"] == 0
     assert artifact["unequal_pair_counts_across_organisms"] is True
     assert artifact["unit_summaries"][0]["unequal_pair_counts_within_unit"] is True
     for key in (

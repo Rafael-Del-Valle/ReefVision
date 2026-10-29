@@ -3593,3 +3593,32 @@ response fields are optional when reading older persisted comparison artifacts.
 Domain, standalone API, and saved Workflow Builder tests assert direction,
 zero-reference handling, nested weighting and provenance parity. Full CI and
 Windows/scientific acceptance remain required.
+
+## Paired human–model direction-frequency audit and Ruff recovery (2026-10-29)
+
+The previous exact-head `e790bf2b` passed 16 of 19 Actions workflows.
+The three backend failures all stopped at Ruff formatting before pytest;
+CI identified two files: `model_agreement.py` and
+`test_model_agreement_1_2.py`. This increment applies the exact reported
+formatter corrections without changing signed percentage arithmetic.
+
+The standalone paired-count endpoint and executable, saved
+`ecology_paired_count_comparison` Workflow Builder node now persist
+**overcount, undercount and exact-match paired-image frequencies**, both
+across the entire comparison and within each declared experimental unit.
+Zero-reference observations still contribute to these signed-count categories
+and absolute error, but not to percentage-bias denominators. Repeated images
+are counted as pairs, **never** as independent biological replicates; the
+existing distinct-organism, unit and repeated-image denominators remain
+separate. No confidence intervals, ICC, p-values or verified reference claims
+are introduced. New fields default to zero when parsing older saved artifacts;
+new analyses use provenance algorithm `ecology-paired-count-0006`.
+
+Focused scientific regression cases cover all three directions, zero-human
+reference, repeated organisms and per-tank counts. Standalone API and saved
+Workflow Builder acceptance check persistence and output parity. All sources
+remain `caller_supplied_unverified` with mandatory researcher review.
+Exact new-head CI, authenticated calibrated longitudinal source records,
+1.1 migration reconciliation, real-data scientific review and installed
+Windows GUI/MSI acceptance remain required. **1.2 NOT RELEASE-READY;
+1.3 not started.**

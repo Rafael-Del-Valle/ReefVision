@@ -112,6 +112,9 @@ class PairedCountUnitSummary(BaseModel):
     mean_absolute_error: float
     organism_balanced_mean_signed_bias: float
     organism_balanced_mean_absolute_error: float
+    overcount_pair_count: int = Field(default=0, ge=0)
+    undercount_pair_count: int = Field(default=0, ge=0)
+    exact_match_pair_count: int = Field(default=0, ge=0)
     nonzero_reference_count: int = 0
     percent_contributing_organism_count: int = 0
     mean_absolute_percent_deviation: float | None = None
@@ -137,6 +140,9 @@ class PairedCountComparisonResponse(BaseModel):
     mean_absolute_error: float
     mean_absolute_percent_deviation: float | None
     paired_differences: list[PairedCountDifference]
+    overcount_pair_count: int = Field(default=0, ge=0)
+    undercount_pair_count: int = Field(default=0, ge=0)
+    exact_match_pair_count: int = Field(default=0, ge=0)
     # Optional fields preserve deserialization of older saved workflow artifacts.
     mean_signed_percent_deviation: float | None = None
     experimental_unit_type: str | None = None

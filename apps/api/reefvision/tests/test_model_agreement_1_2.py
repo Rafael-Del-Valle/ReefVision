@@ -45,10 +45,13 @@ def test_paired_bias_mae_and_independent_tank_denominator() -> None:
     assert result.mean_signed_percent_deviation == pytest.approx((20 - 20 + 60) / 3)
     assert result.unit_balanced_mean_signed_percent_deviation == pytest.approx(30)
     assert result.organism_and_unit_balanced_mean_signed_percent_deviation == pytest.approx(30)
-    assert [row.signed_percent_deviation for row in result.paired_differences] == [
-        20, -20, 60
-    ]
+    assert [row.signed_percent_deviation for row in result.paired_differences] == [20, -20, 60]
     assert result.declared_independent_unit_count == 2
+    assert result.overcount_pair_count == 2
+    assert result.undercount_pair_count == 1
+    assert result.exact_match_pair_count == 0
+    assert result.unit_summaries[0].overcount_pair_count == 1
+    assert result.unit_summaries[0].undercount_pair_count == 1
     assert result.unit_summaries[0].organism_count == 2
     assert result.unit_summaries[0].mean_signed_bias == pytest.approx(-1)
 
@@ -66,6 +69,9 @@ def test_zero_reference_excluded_from_percent_not_absolute_error() -> None:
     assert result.nonzero_reference_count == 1
     assert result.mean_absolute_percent_deviation == pytest.approx(20)
     assert result.mean_absolute_error == pytest.approx(2.5)
+    assert result.overcount_pair_count == 2
+    assert result.undercount_pair_count == 0
+    assert result.exact_match_pair_count == 0
     assert result.paired_differences[0].absolute_percent_deviation is None
     assert result.paired_differences[0].signed_percent_deviation is None
     assert result.mean_signed_percent_deviation == pytest.approx(20)
@@ -174,7 +180,7 @@ def test_pair_frequency_audit_exposes_nested_pseudoreplication_risk() -> None:
     assert result.organism_and_unit_balanced_mean_signed_percent_deviation == pytest.approx(-1.25)
     assert result.evidence_level == "caller_supplied_unverified"
     assert result.review_status == "requires_source_verification"
-    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0005"
+    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0006"
 
 
 def test_equal_pair_frequencies_do_not_raise_false_imbalance() -> None:
@@ -191,3 +197,30 @@ def test_equal_pair_frequencies_do_not_raise_false_imbalance() -> None:
     assert result.repeated_pair_count_beyond_first_per_organism == 2
     assert result.unequal_pair_counts_across_organisms is False
     assert result.unit_summaries[0].unequal_pair_counts_within_unit is False
+
+
+def test_directional_pair_frequencies_include_zero_reference_and_exact_matches() -> None:
+    """Directional counts describe image pairs, not independent organisms."""
+    rows = [
+        pair("zero-human", "frag-a", "tank-1", 0, 3),
+        pair("exact", "frag-a", "tank-1", 8, 8),
+        pair("under", "frag-b", "tank-2", 12, 9),
+        pair("over", "frag-b", "tank-2", 10, 11),
+    ]
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_consensus", pairs=rows)
+    )
+    assert result.paired_observation_count == 4
+    assert result.observed_organism_count == 2
+    assert result.declared_independent_unit_count == 2
+    assert result.zero_reference_count == 1
+    assert result.overcount_pair_count == 2
+    assert result.undercount_pair_count == 1
+    assert result.exact_match_pair_count == 1
+    assert [
+        (unit.overcount_pair_count, unit.undercount_pair_count, unit.exact_match_pair_count)
+        for unit in result.unit_summaries
+    ] == [(1, 0, 1), (1, 1, 0)]
+    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0006"
+    assert result.review_status == "requires_source_verification"
+    assert result.evidence_level == "caller_supplied_unverified"

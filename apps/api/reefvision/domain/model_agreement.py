@@ -83,9 +83,7 @@ def compare_paired_counts(
     for item in sorted(pairs, key=lambda pair: pair.observation_id):
         signed = item.model_count - item.reference_count
         absolute = abs(signed)
-        signed_percent = (
-            signed / item.reference_count * 100 if item.reference_count > 0 else None
-        )
+        signed_percent = signed / item.reference_count * 100 if item.reference_count > 0 else None
         percent = abs(signed_percent) if signed_percent is not None else None
         if any(not math.isfinite(value) for value in (signed, absolute)):
             raise ValidationError("Paired count difference is not finite")
@@ -164,6 +162,9 @@ def compare_paired_counts(
                 experimental_unit_id=unit_id,
                 paired_observation_count=len(rows),
                 organism_count=len(unit_organisms[unit_id]),
+                overcount_pair_count=sum(row.signed_difference > 0 for row in rows),
+                undercount_pair_count=sum(row.signed_difference < 0 for row in rows),
+                exact_match_pair_count=sum(row.signed_difference == 0 for row in rows),
                 observation_counts_by_organism=counts_by_organism,
                 repeated_pair_count_beyond_first_per_organism=(len(rows) - len(counts_by_organism)),
                 unequal_pair_counts_within_unit=len(set(counts_by_organism.values())) > 1,
@@ -261,7 +262,7 @@ def compare_paired_counts(
     return PairedCountComparisonResponse(
         reference_kind=request.reference_kind,
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-paired-count-0005",
+            algorithm_version="ecology-paired-count-0006",
             records=request.pairs,
             parameters={
                 "reference_kind": request.reference_kind,
@@ -271,6 +272,9 @@ def compare_paired_counts(
         ),
         metric_name=next(iter(metrics)),
         paired_observation_count=len(differences),
+        overcount_pair_count=sum(row.signed_difference > 0 for row in differences),
+        undercount_pair_count=sum(row.signed_difference < 0 for row in differences),
+        exact_match_pair_count=sum(row.signed_difference == 0 for row in differences),
         observed_organism_count=len(pair_counts_by_organism),
         observation_counts_by_organism=dict(sorted(pair_counts_by_organism.items())),
         repeated_pair_count_beyond_first_per_organism=(
@@ -299,9 +303,7 @@ def compare_paired_counts(
         unit_balanced_mean_absolute_percent_deviation=unit_balanced_percent,
         organism_and_unit_balanced_mean_absolute_percent_deviation=organism_and_unit_percent,
         unit_balanced_mean_signed_percent_deviation=unit_balanced_signed_percent,
-        organism_and_unit_balanced_mean_signed_percent_deviation=(
-            organism_and_unit_signed_percent
-        ),
+        organism_and_unit_balanced_mean_signed_percent_deviation=(organism_and_unit_signed_percent),
         percent_contributing_independent_unit_count=(
             len(percent_eligible_units) if unit_type is not None else None
         ),
@@ -313,6 +315,7 @@ def compare_paired_counts(
             "Paired image, organism and source identities are not authenticated.",
             "Percent deviation excludes zero-reference pairs; its denominator is reported.",
             "Signed percent is 100 * (model - human) / human: positive means overcount.",
+            "Directional frequencies count paired images, not independent biological units.",
             "Unit-balanced percent excludes units without nonzero human references.",
             "Nested percent excludes organisms without nonzero human references.",
             "Signed bias is model minus human reference; no ICC, limits of agreement or p-values.",
