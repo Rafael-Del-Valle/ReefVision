@@ -152,9 +152,9 @@ def test_saved_environmental_threshold_graph_reuses_current_noaa_snapshot(
             transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
         ) as http,
     ):
-        first_import = EnvironmentalContextService(
-            session, http=http, now=start
-        ).import_noaa(project["id"], import_request)
+        first_import = EnvironmentalContextService(session, http=http, now=start).import_noaa(
+            project["id"], import_request
+        )
     first_record_id = str(first_import.items[0].id)
 
     graph = threshold_graph(threshold_query())
