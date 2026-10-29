@@ -183,12 +183,10 @@ def test_saved_workflow_queue_collision_fails_closed_then_replays(
             )
         # The failed flush has been rolled back, leaving original evidence.
         assert session.get(ReviewQueue, queue_id) is not None
-        assert session.scalar(
-            select(ReviewQueue).where(ReviewQueue.id == queue_id)
-        ).created_by == "local_user"
         queue = session.get(ReviewQueue, queue_id)
         node = session.get(WorkflowNodeRun, node.id)
         assert queue is not None and node is not None
+        assert queue.created_by == "local_user"
         queue.created_by = owner
         node.output_artifact_ids_json = original_outputs
         session.commit()
