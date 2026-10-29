@@ -119,9 +119,12 @@ def test_persisted_obj_measurement_matches_saved_workflow_and_detects_tampering(
     run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
@@ -131,16 +134,23 @@ def test_persisted_obj_measurement_matches_saved_workflow_and_detects_tampering(
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact == result
-    assert client.post(
-        f"/api/v1/projects/{other_id}/spatial/mesh-preview", json=params
-    ).status_code == 404
-    assert client.post(
-        f"{base}/spatial/mesh-preview", json={**params, "obj_text": OBJ.decode()}
-    ).status_code == 422
-    assert client.post(
-        f"{base}/spatial/mesh-preview",
-        json={**params, "expected_source_payload_sha256": "0" * 64},
-    ).status_code == 400
+    assert (
+        client.post(f"/api/v1/projects/{other_id}/spatial/mesh-preview", json=params).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"{base}/spatial/mesh-preview", json={**params, "obj_text": OBJ.decode()}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            f"{base}/spatial/mesh-preview",
+            json={**params, "expected_source_payload_sha256": "0" * 64},
+        ).status_code
+        == 400
+    )
     with app.state.session_factory() as session:
         record = session.get(SpatialSourceAsset, asset_id)
         assert record is not None
@@ -179,6 +189,7 @@ def test_standalone_longitudinal_comparison_resolves_project_assets(client: Test
     )
     assert response.status_code == 200, response.text
     assert response.json()["delta_surface_area_m2"] == pytest.approx(0)
-    assert response.json()["provenance"]["before_geometry_sha256"] == response.json()[
-        "provenance"
-    ]["after_geometry_sha256"]
+    assert (
+        response.json()["provenance"]["before_geometry_sha256"]
+        == response.json()["provenance"]["after_geometry_sha256"]
+    )
