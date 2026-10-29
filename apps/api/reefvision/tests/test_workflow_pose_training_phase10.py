@@ -380,13 +380,26 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         assert seed is not None
         seed_sha256 = seed.sha256
 
-    # An upstream model-reference artifact can pin its registered weights.
-    # Reject a stale digest before queuing a training job, even though the
-    # model ID and its current on-disk checkpoint still validate.
-    for digest_field in ("sha256", "source_model_sha256"):
+    # A saved model-reference artifact pins both project ownership and
+    # registered checkpoint bytes. Neither assertion may be silently ignored
+    # even when the model ID itself still resolves to a valid local model.
+    for seed_artifact, expected_error in (
+        (
+            {"model_id": model_id, "project_id": "unrelated-project"},
+            "seed artifact project lineage changed",
+        ),
+        (
+            {"model_id": model_id, "sha256": "0" * 64},
+            "seed artifact checksum changed",
+        ),
+        (
+            {"model_id": model_id, "source_model_sha256": "0" * 64},
+            "seed artifact checksum changed",
+        ),
+    ):
         with (
             app.state.session_factory() as session,
-            pytest.raises(ValidationError, match="seed artifact checksum changed"),
+            pytest.raises(ValidationError, match=expected_error),
         ):
             create_pose_workflow_training_result(
                 session,
@@ -397,7 +410,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
                     "dataset_id": dataset["id"],
                     "manifest_sha256": dataset["manifest_sha256"],
                 },
-                initial_model_payload={"model_id": model_id, digest_field: "0" * 64},
+                initial_model_payload=seed_artifact,
                 parameters={"device": "cpu", "training_config": {"epochs": 1}},
                 processor=_fake_pose_processor,
             )
@@ -417,6 +430,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
             },
             initial_model_payload={
                 "model_id": model_id,
+                "project_id": str(project["id"]),
                 "sha256": seed_sha256,
             },
             parameters={

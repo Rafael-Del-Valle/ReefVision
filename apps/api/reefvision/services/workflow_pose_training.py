@@ -254,6 +254,11 @@ def _seed_pose_model(
     payload: dict[str, Any],
     dataset: PoseTrainingDataset,
 ) -> ModelRegistration:
+    # The model ID must resolve locally, but a persisted model-reference
+    # artifact must also retain its explicitly asserted project lineage.
+    if "project_id" in payload and payload["project_id"] != project_id:
+        raise ValidationError("Pose retraining seed artifact project lineage changed")
+
     model_id = str(payload.get("model_id") or "")
 
     if not model_id:
