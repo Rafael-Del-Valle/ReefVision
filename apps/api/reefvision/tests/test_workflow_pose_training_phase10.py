@@ -573,7 +573,9 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     # A persisted manifest must not advertise an optional checkpoint that
     # disappeared after training. The selected best.pt remains intact here,
     # so its valid digest alone must not authorize a missing last.pt artifact.
-    missing_last = str(result["result_checkpoint_path"]).removesuffix("best.pt") + "last.pt"
+    missing_last = (
+        str(result["result_checkpoint_path"]).removesuffix("best.pt") + "last.pt"
+    )
     assert missing_last != result["result_checkpoint_path"]
     assert not resolve_managed_project_path(test_settings, missing_last).is_file()
     with app.state.session_factory() as session:
