@@ -186,7 +186,7 @@ def test_saved_qc_workflow_retries_after_real_sqlite_writer_lock(
                 "create_queue_for_project",
                 raise_unrelated_constraint,
             )
-            with pytest.raises(IntegrityError, match="review_queues.created_by"):
+            with pytest.raises(IntegrityError, match=r"review_queues\.created_by"):
                 create_review_queue_workflow_artifact(
                     session=session,
                     settings=app.state.settings,
