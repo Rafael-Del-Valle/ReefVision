@@ -154,6 +154,60 @@ def test_synthetic_0041_review_fixture_preserves_per_item_request_idempotency(
         assert saved_events == 2
 
 
+
+@pytest.mark.parametrize(
+    "missing_field",
+    [
+        "id",
+        "review_queue_id",
+        "review_queue_item_id",
+        "project_id",
+        "client_request_id",
+        "event_type",
+        "actor",
+        "created_at",
+    ],
+)
+def test_synthetic_0041_fixture_rejects_missing_reviewer_provenance(
+    tmp_path: Path, missing_field: str
+) -> None:
+    """A positive startup fixture must not silently accept missing audit data."""
+    settings = _desktop_settings(tmp_path / f"missing-{missing_field}")
+    database = _stamp_database(settings, "0041")
+    _add_native_review_table(database)
+
+    evidence = {
+        "id": "event-1",
+        "review_queue_id": "queue-1",
+        "review_queue_item_id": "item-1",
+        "project_id": "project-1",
+        "client_request_id": "request-1",
+        "event_type": "comment",
+        "actor": "researcher",
+        "created_at": "2026-10-29T00:00:00",
+    }
+    del evidence[missing_field]
+    columns = ", ".join(evidence)
+    placeholders = ", ".join("?" for _ in evidence)
+    with sqlite3.connect(database) as connection:
+        original_schema = connection.execute(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'review_queue_item_events'"
+        ).fetchone()[0]
+        with pytest.raises(sqlite3.IntegrityError, match="NOT NULL constraint failed"):
+            connection.execute(
+                f"INSERT INTO review_queue_item_events ({columns}) VALUES ({placeholders})",
+                tuple(evidence.values()),
+            )
+        assert connection.execute(
+            "SELECT COUNT(*) FROM review_queue_item_events"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'review_queue_item_events'"
+        ).fetchone()[0] == original_schema
+
+
 def test_provider_runtime_dir_uses_desktop_data_dir_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
