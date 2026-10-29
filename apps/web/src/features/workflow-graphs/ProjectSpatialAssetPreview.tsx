@@ -7,7 +7,7 @@ import {
   listProjectSpatialAssets,
   previewProjectSpatialAsset,
 } from "./workflowGraphApi";
-import type { SpatialSourceAsset } from "./workflowGraphApi";
+import type { MeshPreviewCalibration, SpatialSourceAsset } from "./workflowGraphApi";
 
 interface ProjectSpatialAssetPreviewProps {
   projectId: string;
@@ -26,6 +26,8 @@ function ProjectSpatialAssetPreviewSession({
   const [assets, setAssets] = useState<SpatialSourceAsset[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [kind, setKind] = useState<"mesh" | "point_cloud">("mesh");
+  const [calibrationMethod, setCalibrationMethod] =
+    useState<MeshPreviewCalibration["calibration_method"]>("other");
   const [file, setFile] = useState<File | null>(null);
   const [scale, setScale] = useState("0.01");
   const [uncertainty, setUncertainty] = useState("");
@@ -109,7 +111,7 @@ function ProjectSpatialAssetPreviewSession({
     try {
       const result = await previewProjectSpatialAsset(projectId, selected, kind, {
         meters_per_unit: Number(scale),
-        calibration_method: "ruler",
+        calibration_method: calibrationMethod,
         calibration_evidence: evidence,
         relative_scale_uncertainty:
           uncertainty.trim() === "" ? null : Number(uncertainty),
@@ -181,6 +183,24 @@ function ProjectSpatialAssetPreviewSession({
             {selected?.source_format === "ply" && (
               <option value="point_cloud">PLY point cloud</option>
             )}
+          </select>
+        </label>
+        <label>
+          Calibration method (unverified)
+          <select
+            aria-label="Calibration method (unverified)"
+            value={calibrationMethod}
+            onChange={(event) => {
+              setCalibrationMethod(
+                event.target.value as MeshPreviewCalibration["calibration_method"],
+              );
+              invalidatePreview();
+            }}
+          >
+            <option value="other">Other / unknown</option>
+            <option value="ruler">Ruler</option>
+            <option value="photogrammetry_control">Photogrammetry control</option>
+            <option value="instrument">Instrument</option>
           </select>
         </label>
         <label>
