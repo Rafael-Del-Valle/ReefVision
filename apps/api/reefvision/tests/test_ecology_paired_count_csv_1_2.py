@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 from io import StringIO
-from typing import Any, cast
+from typing import Any, cast, get_args
 
 import pytest
 from fastapi import FastAPI
@@ -19,6 +19,7 @@ from reefvision.schemas.model_agreement import (
     PairedCountComparisonResponse,
 )
 from reefvision.services.ecology_paired_count_export import render_paired_count_csv
+from reefvision.schemas.workflow_graphs import WorkflowDataType, WorkflowPortDefinition
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_model_agreement_1_2 import _graph, _pairs
 
@@ -214,3 +215,14 @@ def test_csv_rechecks_tampered_results_and_provenance() -> None:
     )
     with pytest.raises(ValidationError, match="source roster"):
         render_paired_count_csv(bad_roster)
+
+
+def test_workflow_csv_type_is_declared_and_pydantic_validated() -> None:
+    """Prevent a registry-only port type from breaking every Workflow Builder graph."""
+    assert "paired_count_comparison_csv" in get_args(WorkflowDataType)
+    port = WorkflowPortDefinition(
+        port_id="csv",
+        display_name="Unverified paired count CSV",
+        accepted_types=["paired_count_comparison_csv"],
+    )
+    assert port.accepted_types == ["paired_count_comparison_csv"]
