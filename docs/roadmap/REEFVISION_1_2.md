@@ -3925,3 +3925,29 @@ Full exact-new-head CI, authenticated longitudinal calibration/identity,
 1.1 migration reconciliation, real-data scientific review and physical
 Windows GUI/MSI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+## Workflow Builder CSV type-contract recovery (2026-10-29)
+
+Pre-edit exact head `a100d79558d24c5a7ae3e718051009cab737700c`
+completed **15/19** GitHub Actions workflows successfully. Three backend
+workflows stopped at a Ruff 0.17.3 CSV list-comprehension formatting error.
+Milestone 10 Acceptance additionally reported **22 failed, 21 passed**:
+`ecology_paired_count_csv_export` advertised
+`paired_count_comparison_csv`, but `WorkflowDataType` omitted that literal,
+causing Pydantic validation to fail during node-registry construction and
+breaking unrelated saved workflow tests.
+
+The typed workflow data-type union now explicitly includes the unverified
+paired-count CSV artifact. The exporter follows the exact CI-reported Ruff
+formatting requirement. A focused regression asserts the CSV type is declared
+and can be constructed as a Pydantic workflow port; existing standalone API,
+saved executable graph, persistence, CSV parity and verified-dataset port
+rejection tests remain the full integration acceptance contract. The new
+port is **not** a verified annotation/dataset type, and its existing
+`caller_supplied_unverified` provenance and review restrictions remain.
+
+An isolated Pydantic literal-port smoke test passed, **not** a full repository
+pytest/Ruff run. Exact-head CI, authenticated longitudinal calibration and
+organism identity, experimental-design review, 1.1 migration reconciliation,
+representative biological data and installed Windows GUI/MSI acceptance are
+still required. **1.2 NOT RELEASE-READY; 1.3 not started.**
