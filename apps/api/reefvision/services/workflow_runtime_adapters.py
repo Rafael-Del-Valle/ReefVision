@@ -50,6 +50,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
     "ecology_paired_count_comparison",
+    "ecology_paired_count_csv_export",
 }
 
 
@@ -1044,6 +1045,50 @@ def _ecology_paired_count_comparison(
     ]
 
 
+def _ecology_paired_count_csv_export(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    """Recheck a saved comparison and persist an unverified CSV artifact."""
+    import hashlib
+
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+    from reefvision.services.ecology_paired_count_export import render_paired_count_csv
+
+    del session, settings
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    if set(parameters) - runtime_keys:
+        raise ValidationError("Paired count CSV export accepts no parameters")
+    payload = _single_payload(inputs, "comparison")
+    if payload.get("project_id") != project_id:
+        raise ValidationError("Paired count CSV export requires current project sources")
+    comparison = PairedCountComparisonResponse.model_validate(payload)
+    csv_text = render_paired_count_csv(comparison)
+    return [
+        {
+            "port_id": "csv",
+            "data_type": "paired_count_comparison_csv",
+            "payload": {
+                "schema_version": "ecology-paired-count-csv-0001",
+                "project_id": project_id,
+                "source_input_sha256": (
+                    comparison.analysis_provenance.canonical_input_sha256
+                ),
+                "source_record_ids": comparison.analysis_provenance.source_record_ids,
+                "algorithm_version": comparison.analysis_provenance.algorithm_version,
+                "csv_sha256": hashlib.sha256(csv_text.encode("utf-8")).hexdigest(),
+                "csv_text": csv_text,
+                "evidence_level": "caller_supplied_unverified",
+                "review_status": "requires_source_verification",
+                "independent_unit_inference_allowed": False,
+            },
+        }
+    ]
+
+
 _ADAPTERS = {
     "segmentation_inference": _segmentation_inference,
     "classification_inference": _classification_inference,
@@ -1061,6 +1106,7 @@ _ADAPTERS = {
     "ecology_measurement_csv_export": _ecology_measurement_csv_export,
     "ecology_population_csv_export": _ecology_population_csv_export,
     "ecology_paired_count_comparison": _ecology_paired_count_comparison,
+    "ecology_paired_count_csv_export": _ecology_paired_count_csv_export,
 }
 
 

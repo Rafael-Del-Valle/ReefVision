@@ -1,0 +1,162 @@
+"""Deterministic, unverified human-model comparison CSV for scientist review."""
+
+from __future__ import annotations
+
+import csv
+import json
+from io import StringIO
+
+from pydantic import ValidationError as SchemaValidationError
+
+from reefvision.domain.errors import ValidationError
+from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+from reefvision.services.ecology_candidate_report_export import _csv_identifier
+
+_EXPORT_VERSION = "ecology-paired-count-csv-0001"
+_COLUMNS = (
+    "export_schema_version",
+    "source_input_sha256",
+    "algorithm_version",
+    "evidence_level",
+    "review_status",
+    "reference_kind",
+    "metric_name",
+    "row_type",
+    "experimental_unit_type",
+    "experimental_unit_id",
+    "organism_id",
+    "observation_id",
+    "reference_source_record_id",
+    "model_source_record_id",
+    "reference_count",
+    "model_count",
+    "signed_difference",
+    "absolute_difference",
+    "signed_percent_deviation",
+    "absolute_percent_deviation",
+    "paired_observation_count",
+    "observed_organism_count",
+    "nonzero_reference_count",
+    "mean_signed_bias",
+    "mean_absolute_error",
+    "mean_signed_percent_deviation",
+    "mean_absolute_percent_deviation",
+    "declared_independent_unit_count",
+    "shared_parent_colony_ids_json",
+    "summary_json",
+)
+
+
+def _optional_number(value: float | int | None) -> float | int | str:
+    return "" if value is None else value
+
+
+def _json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
+    """Export raw pairs, declared-unit summaries, and one global descriptive row.
+
+    This is not an authenticated measurement or independent-replicate report.
+    The typed result is revalidated on read-back, including workflow artifacts.
+    """
+    if comparison.analysis_provenance.algorithm_version != "ecology-paired-count-0007":
+        raise ValidationError("Paired count CSV requires the current validated result contract")
+    try:
+        checked = PairedCountComparisonResponse.model_validate(
+            comparison.model_dump(mode="json")
+        )
+    except SchemaValidationError as exc:
+        raise ValidationError("Paired count CSV source artifact failed integrity checks") from exc
+
+    source_ids = [
+        source
+        for pair in checked.paired_differences
+        for source in (pair.reference_source_record_id, pair.model_source_record_id)
+    ]
+    if sorted(source_ids) != sorted(checked.analysis_provenance.source_record_ids):
+        raise ValidationError("Paired count CSV source roster disagrees with provenance")
+
+    unit_by_organism = {
+        organism: unit.experimental_unit_id
+        for unit in checked.unit_summaries
+        for organism in unit.observation_counts_by_organism
+    }
+    common = {
+        "export_schema_version": _EXPORT_VERSION,
+        "source_input_sha256": checked.analysis_provenance.canonical_input_sha256,
+        "algorithm_version": checked.analysis_provenance.algorithm_version,
+        "evidence_level": checked.evidence_level,
+        "review_status": checked.review_status,
+        "reference_kind": checked.reference_kind,
+        "metric_name": _csv_identifier(checked.metric_name),
+        "experimental_unit_type": _csv_identifier(checked.experimental_unit_type or ""),
+    }
+    output = StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=_COLUMNS, lineterminator="\n")
+    writer.writeheader()
+
+    def write(row_type: str, **values: object) -> None:
+        writer.writerow({**common, "row_type": row_type, **values})
+
+    for pair in sorted(checked.paired_differences, key=lambda row: row.observation_id):
+        write(
+            "pair",
+            experimental_unit_id=_csv_identifier(
+                unit_by_organism.get(pair.organism_id, "")
+            ),
+            organism_id=_csv_identifier(pair.organism_id),
+            observation_id=_csv_identifier(pair.observation_id),
+            reference_source_record_id=_csv_identifier(pair.reference_source_record_id),
+            model_source_record_id=_csv_identifier(pair.model_source_record_id),
+            reference_count=pair.reference_count,
+            model_count=pair.model_count,
+            signed_difference=pair.signed_difference,
+            absolute_difference=pair.absolute_difference,
+            signed_percent_deviation=_optional_number(pair.signed_percent_deviation),
+            absolute_percent_deviation=_optional_number(pair.absolute_percent_deviation),
+        )
+
+    for unit in sorted(checked.unit_summaries, key=lambda row: row.experimental_unit_id):
+        write(
+            "declared_unit",
+            experimental_unit_id=_csv_identifier(unit.experimental_unit_id),
+            paired_observation_count=unit.paired_observation_count,
+            observed_organism_count=unit.organism_count,
+            nonzero_reference_count=unit.nonzero_reference_count,
+            mean_signed_bias=unit.mean_signed_bias,
+            mean_absolute_error=unit.mean_absolute_error,
+            mean_signed_percent_deviation=_optional_number(
+                unit.mean_signed_percent_deviation
+            ),
+            mean_absolute_percent_deviation=_optional_number(
+                unit.mean_absolute_percent_deviation
+            ),
+            summary_json=_json(unit.model_dump(mode="json")),
+        )
+
+    write(
+        "overall",
+        paired_observation_count=checked.paired_observation_count,
+        observed_organism_count=checked.observed_organism_count,
+        nonzero_reference_count=checked.nonzero_reference_count,
+        mean_signed_bias=checked.mean_signed_bias,
+        mean_absolute_error=checked.mean_absolute_error,
+        mean_signed_percent_deviation=_optional_number(
+            checked.mean_signed_percent_deviation
+        ),
+        mean_absolute_percent_deviation=_optional_number(
+            checked.mean_absolute_percent_deviation
+        ),
+        declared_independent_unit_count=_optional_number(
+            checked.declared_independent_unit_count
+        ),
+        shared_parent_colony_ids_json=_json(
+            checked.cross_unit_shared_parent_colony_ids
+        ),
+        summary_json=_json(
+            checked.model_dump(mode="json", exclude={"paired_differences"})
+        ),
+    )
+    return output.getvalue()

@@ -688,6 +688,7 @@ def test_current_saved_paired_rows_preserve_source_uniqueness_and_integer_counts
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(payload)
 
+
 @pytest.mark.parametrize("field", ["reference_count", "model_count"])
 def test_saved_paired_counts_reject_unsafe_integral_floats(field: str) -> None:
     """Persisted rows cannot manufacture enormous exact-match raw counts."""

@@ -3872,3 +3872,30 @@ artifacts retain their existing compatibility path. This numerical safeguard
 does not authenticate biological counts, calibration, experimental units or
 source reviews; evidence remains `caller_supplied_unverified`. Full CI,
 scientific dataset review and Windows installed-GUI acceptance are pending.
+
+## Reproducible paired human–model CSV and executable export (2026-10-29)
+
+A new standalone POST `/api/v1/ecology/paired-count-comparison/report.csv`
+and typed executable Workflow Builder `ecology_paired_count_csv_export`
+consume the same descriptive comparison contract. The workflow node accepts
+`paired_count_comparison` and persists `paired_count_comparison_csv` with
+CSV SHA-256, canonical input fingerprint, source IDs, project binding and
+explicit unverified evidence/review restrictions. Both export paired-image
+rows, declared-unit summaries and one overall descriptive summary, without
+turning repeated photographs into independent biological samples. Null
+zero-reference percentages remain blank; identifiers are spreadsheet-formula
+escaped. Saved artifacts are revalidated against their source-row arithmetic
+and provenance source roster before CSV creation. Historical result contracts
+are not silently promoted to the current export contract.
+
+Standalone API and saved-workflow acceptance tests cover deterministic
+input-order parity, CSV denominators, formula safety, project binding,
+provenance, persisted output and refusal of verified-dataset port wiring.
+The prior head `cd5d1924` passed 16/19 workflows; three backend jobs
+stopped at a Ruff blank-line formatting error, corrected in this increment.
+This export remains **caller-supplied/unverified** and is not a substitute
+for authenticated annotations, calibrated longitudinal evidence, registered
+independent experimental units, ICC/Bland–Altman, or scientist review.
+Exact-head CI, migration reconciliation with 1.1, representative data and
+native Windows GUI/MSI acceptance remain required. **1.2 NOT RELEASE-READY;
+1.3 not started.**

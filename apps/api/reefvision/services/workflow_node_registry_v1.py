@@ -874,4 +874,40 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
     )
 
+    registry["ecology_paired_count_csv_export"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_paired_count_csv_export",
+        display_name="Export Unverified Human-Model Count CSV",
+        category="Scientific analysis",
+        description=(
+            "Export paired image rows, declared biological-unit summaries and "
+            "source provenance without asserting independent replication."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="comparison",
+                display_name="Unverified paired human-model comparison",
+                accepted_types=["paired_count_comparison"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="csv",
+                display_name="Unverified paired-count CSV",
+                accepted_types=["paired_count_comparison_csv"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Revalidates the current typed comparison result before export.",
+            "Persists CSV, source IDs, SHA-256 and unverified review restrictions.",
+            "No ICC, limits of agreement, significance or verified replication.",
+            "Cannot feed verified-dataset ports without separate source review.",
+        ],
+    )
+
     return registry
