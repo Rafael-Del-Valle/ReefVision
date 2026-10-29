@@ -282,6 +282,5 @@ def test_point_cloud_review_chronology_fails_saved_workflow(client: TestClient) 
     assert saved["completed"] is False
     assert saved["run"]["status"] == "failed"
     assert not any(
-        item["data_type"] == "point_cloud_measurement_preview"
-        for item in saved["artifacts"]
+        item["data_type"] == "point_cloud_measurement_preview" for item in saved["artifacts"]
     )
