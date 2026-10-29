@@ -1718,3 +1718,32 @@ Backend API regressions cover missing/false/nonboolean confirmation, absence of 
   Windows multi-process behavior. MSI upgrade/rollback, interactive installed
   GUI, 1.1/1.6 independent revision-0038 reconciliation and representative
   biological-data acceptance remain release blockers. Do not merge/release.
+
+## 2026-10-29 — Manual bulk QC writer contention (Track D)
+
+- **Gap audited:** 1.6 already supports persisted class visibility, manual
+  review/assignment/comments/bulk triage, and a saved executable
+  `project_source -> qc_review_queue` Workflow Builder node. Its queue
+  creation adapter already handles SQLite BUSY/LOCKED, but a *separate*
+  bulk-triage transaction only handled integrity collisions. Two local
+  reviewers could therefore receive an unhandled HTTP 500 when the second
+  SQLite writer encountered a lock during manual triage.
+- **Implementation:** `review_queue_bulk.py` now rolls back a failed bulk
+  transaction and returns a controlled retryable conflict for actual SQLite
+  BUSY/LOCKED primary or extended error codes. Other database operational
+  errors propagate; no reviewer state is claimed committed on a lock.
+  Reusing the original client request UUID after the lock clears remains the
+  idempotent retry path. No automatic acceptance of scientific observations.
+- **Tests:** `test_review_queue_bulk_sqlite_contention_16.py` uses a real
+  second SQLite writer, both standalone QC queues and a persisted executable
+  Workflow Builder graph, and verifies zero partial events/state changes,
+  typed dimensionless review artifacts, successful keyed retry, append-only
+  researcher history, and unchanged unverified annotations. A negative test
+  rejects misclassifying an unrelated SQLite operational failure. The Windows
+  MSI build preflight now includes these tests.
+- **Evidence:** isolated commits `655166a4`, `05337cfa`, `7b73592d`.
+  Repository read-back and exact-head CI still required; no local full
+  pytest/Ruff/Windows PowerShell run is claimed because the container cannot
+  resolve github.com for a checkout. Windows installed GUI, real MSI upgrade
+  and rollback, independent 1.1/1.6 Alembic 0038 reconciliation, and
+  representative biological-data acceptance remain **HOLD**.
