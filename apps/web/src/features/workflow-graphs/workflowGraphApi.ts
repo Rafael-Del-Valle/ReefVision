@@ -318,6 +318,26 @@ export function previewProjectSpatialAsset(
   kind: "mesh" | "point_cloud",
   calibration: MeshPreviewCalibration,
 ): Promise<Record<string, unknown>> {
+  if (
+    asset.project_id !== projectId ||
+    !asset.id.trim() ||
+    !/^[a-f0-9]{64}$/i.test(asset.sha256) ||
+    !["obj", "ply", "glb"].includes(asset.source_format) ||
+    asset.measurement_status !== "source_unreviewed" ||
+    asset.calibration_verified !== false ||
+    asset.specimen_identity_verified !== false
+  ) {
+    throw new Error(
+      "Selected 3D original must belong to this project and retain unreviewed source provenance.",
+    );
+  }
+  if (
+    !["ruler", "photogrammetry_control", "instrument", "other"].includes(
+      calibration.calibration_method,
+    )
+  ) {
+    throw new Error("Calibration method must identify an unverified evidence source.");
+  }
   if (kind === "point_cloud" && asset.source_format !== "ply") {
     throw new Error("Only imported PLY originals support point-cloud preview.");
   }
