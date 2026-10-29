@@ -422,6 +422,43 @@ def test_population_csv_rejects_forged_parent_lineage_at_serialization(
 @pytest.mark.parametrize(
     ("field", "forged_value", "error"),
     [
+        ("unit_status", "candidate", "population stratum identity"),
+        ("experimental_unit_id", "tank-A", "population stratum identity"),
+        ("physical_units_json", "[]", "population dimensions"),
+        ("physical_units_json", '["mm","cm"]', "population dimensions"),
+        ("physical_units_json", '[""]', "population dimensions"),
+        ("sampling_windows_utc_json", "not-json", "population dimensions"),
+        ("sampling_windows_utc_json", "{}", "population dimensions"),
+        ("sampling_windows_utc_json", '[""]', "population dimensions"),
+    ],
+)
+def test_population_csv_rejects_forged_stratum_dimensions(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    forged_value: str,
+    error: str,
+) -> None:
+    """A serializer must not mislabel eligible unit-balanced population rows."""
+    source = _dated_artifact(client)
+    original = exporter._write_checked_row
+
+    def corrupt_population_row(writer: Any, values: tuple[object, ...]) -> None:
+        if values[exporter._COLUMNS.index("row_type")] != "population_stratum":
+            original(writer, values)
+            return
+        altered = list(values)
+        altered[exporter._COLUMNS.index(field)] = forged_value
+        original(writer, tuple(altered))
+
+    monkeypatch.setattr(exporter, "_write_checked_row", corrupt_population_row)
+    with pytest.raises(ValidationError, match=error):
+        render_ecology_population_csv(source)
+
+
+@pytest.mark.parametrize(
+    ("field", "forged_value", "error"),
+    [
         ("experimental_unit_ids_json", '["tank-B"]', "declared-unit roster"),
         ("experimental_unit_ids_json", '["tank-A","tank-B"]', "declared-unit roster"),
         ("design_review_blockers_json", "[]", "declared-unit review gate"),
@@ -528,6 +565,12 @@ def test_saved_workflow_population_csv_matches_standalone_and_blocks_promotion(
     )
     assert standalone.status_code == 200, standalone.text
     assert payload["csv_text"] == standalone.text
+    for row in _rows(payload["csv_text"]):
+        if row["row_type"] == "population_stratum":
+            assert row["unit_status"] == "eligible_declared_units_only"
+            assert row["experimental_unit_id"] == ""
+            assert len(json.loads(row["physical_units_json"])) == 1
+            assert len(json.loads(row["sampling_windows_utc_json"])) == 1
     assert payload["source_fingerprint_rechecked"] is True
     assert payload["evidence_level"] == "linked_unverified"
     assert payload["review_gate"] == "scientist_review_required"
