@@ -247,6 +247,33 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "reconcile through a reviewed data-preserving migration."
             )
 
+    # The original 0038 audit migration supplies no defaults for reviewer
+    # identity, queue/item/project attribution, request identity, or event
+    # timestamps. A forged schema with a server default could fabricate
+    # provenance even when the event-type CHECK and idempotency UNIQUE pass.
+    # Inspect only: never rewrite existing reviewer history at startup.
+    event_columns_by_name = {column["name"]: column for column in review_columns}
+    defaulted_event_fields = sorted(
+        name
+        for name in (
+            "id",
+            "review_queue_id",
+            "review_queue_item_id",
+            "project_id",
+            "client_request_id",
+            "actor",
+            "created_at",
+        )
+        if event_columns_by_name[name].get("default") is not None
+    )
+    if defaulted_event_fields:
+        raise RuntimeError(
+            f"Unsafe ReefVision Alembic revision {revision} collision: "
+            "review-event audit identity or attribution has unexpected server "
+            f"defaults on fields={defaulted_event_fields}. Preserve reviewer "
+            "history and reconcile through a reviewed data-preserving migration."
+        )
+
     # SQL CHECK constraints do not reject NULL in SQLite. An event_type
     # column that became nullable would allow untyped audit events despite
     # an otherwise correct named allowlist. The original 0038 migration
