@@ -29,7 +29,9 @@ def test_review_event_attribution_defaults_fail_closed_without_writes(
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
         with engine.begin() as connection:
-            connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+            connection.execute(
+                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+            )
             connection.execute(
                 text("INSERT INTO alembic_version VALUES (:revision)"),
                 {"revision": revision},
@@ -105,7 +107,9 @@ def test_review_event_attribution_defaults_fail_closed_without_writes(
                 if defaulted_field is None:
                     assert_compatible_revision_0038(connection)
                 else:
-                    with pytest.raises(RuntimeError, match="unexpected server defaults"):
+                    with pytest.raises(
+                        RuntimeError, match="unexpected server defaults"
+                    ):
                         assert_compatible_revision_0038(connection)
                 assert tuple(
                     connection.execute(
@@ -126,8 +130,8 @@ def test_review_event_attribution_defaults_fail_closed_without_writes(
                 assert connection.scalar(text("SELECT value FROM preserved")) == (
                     "original coral observation"
                 )
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                    revision
-                )
+                assert connection.scalar(
+                    text("SELECT version_num FROM alembic_version")
+                ) == revision
     finally:
         engine.dispose()
