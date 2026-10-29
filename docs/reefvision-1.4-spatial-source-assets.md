@@ -15,7 +15,6 @@ SHA-256. This avoids unbounded reads if a source grows between filesystem
 metadata inspection and the read. A matching digest establishes byte integrity
 only; it does not establish scale or biological identity.
 
-
 The project 3D preview client rejects inconsistent source-format/kind pairs
 (PLY is `mesh_or_point_cloud`; OBJ/GLB are `mesh`), empty, fractional, or
 oversized reported source byte counts, and forged source verification flags
@@ -57,6 +56,14 @@ saved graphs retain the ID, not a second copy of source bytes. Tests cover
 artifact equality, cross-project rejection, altered originals, and mixed
 inline/stored geometry. Matching digests do **not** verify physical scale,
 coordinate registration, specimen identity, or biological branch length.
+
+Independent calibration review evidence can be attached to either an imported
+OBJ mesh or an imported PLY point cloud using the existing source/geometry,
+observation, coordinate-frame, calibration, and reviewer bindings. The same
+provisional evidence is retained in saved executable Workflow Builder nodes;
+regression tests compare standalone and persisted artifacts and reject reviews
+reused after a scale change. Even a reviewer decision of `supports_scale`
+remains unverified QC, not proof of scale, specimen identity, or registration.
 
 The Workflow Graph workspace now has an interactive project-scoped source
 picker and import/preview panel. It can display provisional mesh or ASCII PLY
