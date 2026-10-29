@@ -725,3 +725,21 @@ calculation. Regression tests cover known values, patch reordering,
 different patch counts, zero divergence, symmetry, legacy absence,
 disputed identity, and saved-workflow artifact parity. Release remains
 blocked on full scientific and installed-Windows acceptance.
+
+## Persisted independent-review chronology regression (Track C)
+
+The 1.4 longitudinal comparison regression suite now replays independently
+attributed registration and specimen-reidentification review evidence through
+saved, executable, typed Workflow Builder graphs. Six cases exercise review
+timestamps before, exactly at, and after the second observation, including
+non-UTC timezone offsets. Valid saved comparison artifacts must match the
+standalone API payload and retain the original reviewer timestamp and
+provisional verification flags. An impossible review date must fail both
+standalone validation and saved execution without publishing a longitudinal
+comparison artifact. The source mesh previews may remain as independent
+provisional measurements; a failed comparison is not a biological finding.
+
+These tests check chronology and replay consistency, **not** reviewer
+identity authentication, durable versioned human review records, verified
+registration, verified organism reidentification, or biological growth.
+Those scientific acceptance and installed-Windows gates remain outstanding.
