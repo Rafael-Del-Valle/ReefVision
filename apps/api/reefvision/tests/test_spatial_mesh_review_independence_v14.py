@@ -87,3 +87,41 @@ def test_case_variant_self_review_rejected_in_schema_and_standalone_api(
     # A separately attributed reviewer is still accepted as provisional evidence.
     independently_attributed = {**evidence, "independent_reviewer_id": "reviewer-2"}
     assert schema.model_validate(independently_attributed).independent_reviewer_id == "reviewer-2"
+
+@pytest.mark.parametrize(
+    ("operator_id", "reviewer_id", "expected_error"),
+    [
+        (None, None, None),
+        ("operator-1", None, None),
+        (None, "reviewer-2", "requires operator attribution"),
+        ("Operator.A", "operator.a", "Registration reviewer must differ"),
+        ("Operator.A", "reviewer-2", None),
+    ],
+)
+def test_registration_review_optional_operator_is_narrowed_safely(
+    operator_id: str | None, reviewer_id: str | None, expected_error: str | None
+) -> None:
+    """Unreviewed evidence remains valid, but a reviewer requires a distinct operator."""
+    evidence = {
+        "source_frame_id": "survey-a",
+        "target_frame_id": "survey-b",
+        "method": "landmark",
+        "rms_residual_m": 0.02,
+        "correspondence_count": 6,
+        "evidence_note": "Unverified registration; no automatic approval",
+    }
+    if operator_id is not None:
+        evidence["registration_operator_id"] = operator_id
+    if reviewer_id is not None:
+        evidence.update(
+            independent_reviewer_id=reviewer_id,
+            independent_review_decision="supports_alignment",
+            independent_review_note="Caller-attributed independent review; still provisional",
+        )
+    if expected_error is not None:
+        with pytest.raises(ValueError, match=expected_error):
+            MeshRegistrationEvidence.model_validate(evidence)
+    else:
+        validated = MeshRegistrationEvidence.model_validate(evidence)
+        assert validated.registration_operator_id == operator_id
+        assert validated.independent_reviewer_id == reviewer_id
