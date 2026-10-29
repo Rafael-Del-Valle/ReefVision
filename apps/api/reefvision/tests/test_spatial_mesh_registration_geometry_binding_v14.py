@@ -233,7 +233,10 @@ def test_registration_review_cannot_predate_later_observation() -> None:
     before, after = _observations()
     evidence = _reviewed_evidence()
     evidence["independent_reviewed_at_utc"] = "2026-10-01T12:00:00Z"
-    with pytest.raises(ValueError, match="predates the later observation"):
+    with pytest.raises(PydanticValidationError, match="cannot predate bound observations"):
+        MeshRegistrationEvidence.model_validate(evidence)
+    # The standalone comparison intentionally wraps invalid caller evidence.
+    with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
         compare_mesh_observations(before, after, registration_evidence=evidence)
 
 
