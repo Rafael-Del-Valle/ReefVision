@@ -144,6 +144,14 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     tampered_mean["mean_signed_bias"] = 999
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(tampered_mean)
+    # A saved workflow artifact cannot conceal a forged tank-level mean by
+    # changing the corresponding grand mean to match it.
+    tampered_unit = dict(payload)
+    tampered_unit["unit_summaries"] = [dict(row) for row in payload["unit_summaries"]]
+    tampered_unit["unit_summaries"][0]["mean_absolute_error"] += 1
+    tampered_unit["unit_balanced_mean_absolute_error"] += 1
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(tampered_unit)
     assert payload["project_id"] == project_id
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"
