@@ -3473,3 +3473,20 @@ of parentage, organism identity, calibration, or statistical inference.
 New-head CI, real scientist-reviewed longitudinal evidence, migration
 reconciliation with 1.1 and installed Windows GUI/MSI acceptance remain
 outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Population CSV stratum identity and dimensions (2026-10-28)
+
+The shared standalone and executable, persisted Workflow Builder population
+CSV renderer now independently rejects population rows that masquerade as a
+candidate unit, acquire a single-unit ID, or serialize missing/multiple/blank
+physical units or UTC sampling-window labels. Eligible population strata
+retain exactly one physical unit and one sampling-window label. This is an
+export-boundary integrity check in addition to the existing source-fingerprint,
+source-recomputation and experimental-unit review gates; it does **not**
+authenticate biological independence, convert candidates to verified data,
+or imply inference. Eight parametrized corruption cases and saved-workflow
+CSV assertions cover the contract. The preceding exact-head Ruff format
+failure at `ecology_population_export.py:207` was also corrected.
+
+Validation of this new commit remains pending until exact-head CI completes;
+no local Ruff/pytest or physical Windows installed-GUI acceptance was run.
