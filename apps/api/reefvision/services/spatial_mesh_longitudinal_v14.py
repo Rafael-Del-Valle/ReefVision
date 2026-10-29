@@ -234,8 +234,39 @@ def compare_mesh_observations(
     # Independent per-timepoint scale bounds: subtract worst-case endpoints.
     # Never infer zero uncertainty when a calibration interval is absent.
     bounds: list[list[float]] = []
-    for record in (before, after):
+    for record, metadata in zip((before, after), (first, second), strict=True):
         pair = record.get("surface_area_scale_interval_m2")
+        # A supplied interval must agree with the source preview's scale
+        # uncertainty. Merely enclosing the nominal area would permit a
+        # forged, arbitrarily narrow longitudinal uncertainty interval.
+        if "relative_scale_uncertainty" in metadata:
+            uncertainty = metadata["relative_scale_uncertainty"]
+            if uncertainty is not None and (
+                type(uncertainty) not in (int, float)
+                or not isfinite(uncertainty)
+                or not 0 <= uncertainty <= 1
+            ):
+                raise ValueError("Source relative scale uncertainty must be finite in [0, 1]")
+            if pair is not None:
+                if uncertainty is None:
+                    raise ValueError("Surface-area scale interval requires source uncertainty")
+                if (
+                    isinstance(pair, list)
+                    and len(pair) == 2
+                    and all(type(value) in (int, float) and isfinite(value) for value in pair)
+                ):
+                    nominal = record["surface_area_m2"]
+                    expected = (
+                        nominal * (1 - uncertainty) ** 2,
+                        nominal * (1 + uncertainty) ** 2,
+                    )
+                    if not all(
+                        isclose(value, bound, rel_tol=1e-9, abs_tol=0.0)
+                        for value, bound in zip(pair, expected, strict=True)
+                    ):
+                        raise ValueError(
+                            "Surface-area scale interval contradicts source uncertainty"
+                        )
         if (
             not isinstance(pair, list)
             or len(pair) != 2
