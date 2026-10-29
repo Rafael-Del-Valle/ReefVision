@@ -122,13 +122,13 @@ class AcceptanceEvidenceTests(unittest.TestCase):
     def test_acceptance_roots_reject_nonlocal_or_ambiguous_windows_paths(self) -> None:
         report = good_report()
         unsafe_paths = (
-            ("acceptance_root", r"\\\\server\\share\\acceptance"),
-            ("acceptance_root", r"\\\\?\\C:\\disposable\\reefvision-acceptance"),
+            ("acceptance_root", r"\\server\share\acceptance"),
+            ("acceptance_root", r"\\?\C:\disposable\reefvision-acceptance"),
             ("acceptance_root", "C:/disposable/CON.txt/reefvision-acceptance"),
             ("acceptance_root", "C:/disposable/reefvision-acceptance:alternate"),
             ("acceptance_root", "C:/disposable/reefvision-acceptance."),
             ("acceptance_root", "C:/disposable/reefvision-acceptance "),
-            ("acceptance_root", "C:/disposable/\\x01/reefvision-acceptance"),
+            ("acceptance_root", "C:/disposable/\x01/reefvision-acceptance"),
             (
                 "isolated_data_root",
                 "C:/disposable/reefvision-acceptance/reefvision-clean-a1b2c3d4e5f6/data:alternate",
