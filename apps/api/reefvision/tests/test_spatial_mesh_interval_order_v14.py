@@ -52,9 +52,43 @@ def test_later_forged_scale_bounds_rejected_when_earlier_bounds_missing(
     # The executable typed Workflow Builder adapter must reject exactly the
     # same scientific evidence, not emit an apparently usable comparison.
     artifacts = {
-        port: [
-            SimpleNamespace(data_type="mesh_measurement_preview", payload_json=record)
-        ]
+        port: [SimpleNamespace(data_type="mesh_measurement_preview", payload_json=record)]
+        for port, record in (("before", before), ("after", after))
+    }
+    with pytest.raises(ValidationError, match=error):
+        execute_mesh_longitudinal_comparison(None, None, "project-1", {}, artifacts)
+
+
+@pytest.mark.parametrize(
+    ("field", "interval", "error"),
+    [
+        (
+            "surface_area_scale_interval_m2",
+            [1.0, 1.0],
+            "Surface-area scale interval requires source uncertainty",
+        ),
+        (
+            "axis_aligned_bounding_box_diagonal_scale_interval_m",
+            [2.0, 2.0],
+            "Bounding-box scale interval requires source uncertainty",
+        ),
+    ],
+)
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+def test_legacy_interval_without_source_uncertainty_is_rejected(
+    field: str, interval: list[float], error: str, timepoint: str
+) -> None:
+    before, after = _minimal_topology_pair()
+    for record in (before, after):
+        record["axis_aligned_bounding_box_diagonal_m"] = 2.0
+    # Older artifacts may lack the uncertainty field entirely. Their
+    # claimed scale intervals cannot be trusted merely for enclosing a value.
+    target = before if timepoint == "before" else after
+    target[field] = interval
+    with pytest.raises(ValueError, match=error):
+        compare_mesh_observations(before, after)
+    artifacts = {
+        port: [SimpleNamespace(data_type="mesh_measurement_preview", payload_json=record)]
         for port, record in (("before", before), ("after", after))
     }
     with pytest.raises(ValidationError, match=error):
@@ -71,9 +105,7 @@ def test_missing_early_bounds_still_withhold_combined_intervals() -> None:
     result = compare_mesh_observations(before, after)
     assert result["delta_surface_area_scale_interval_m2"] is None
     assert result["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
-    assert result["measurement_status"] == (
-        "provisional_unverified_longitudinal_comparison"
-    )
+    assert result["measurement_status"] == ("provisional_unverified_longitudinal_comparison")
 
 
 def test_incomplete_scale_bounds_standalone_and_saved_graph_parity(
@@ -134,9 +166,7 @@ def test_incomplete_scale_bounds_standalone_and_saved_graph_parity(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
