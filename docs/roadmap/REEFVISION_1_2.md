@@ -3735,3 +3735,29 @@ acceptance remain required. This iteration could not execute local
 repository pytest/Ruff because the environment cannot resolve GitHub
 for checkout and has no installed Ruff. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+## Paired-count saved-artifact arithmetic and unit-roster integrity (2026-10-29)
+
+Previous exact-head `87c35f67` CI completed **16/19** workflows
+successfully. CI, Pose Workflow Validation and ReefVision 1.0 Acceptance
+backend jobs all failed before pytest at the same Ruff 0.17.3 formatting
+location in `schemas/model_agreement.py`; the exact formatter-required
+expression is corrected.
+
+The existing version `ecology-paired-count-0007` typed response now
+fails closed when persisted paired rows contradict raw human/model counts,
+absolute error, signed/absolute percentage, or zero-reference eligibility.
+For declared experimental units it also rejects duplicate unit IDs,
+organisms counted across multiple units, fabricated within-unit image
+frequencies/repeats/imbalance, and inconsistent nested percentage-eligible
+denominators. These are internal consistency checks, **not** evidence
+authentication or cryptographic verification. Historical pre-0007 artifacts
+retain their previous decoding path. The existing standalone API and
+executable saved Workflow Builder share the result schema and mandatory
+`caller_supplied_unverified` / source-review gate.
+
+Fourteen parametrized negative scientific regressions and an executable
+saved-workflow artifact-tampering/parity check were added. Full new-head
+CI, authenticated calibrated longitudinal sources, experimental-design
+review, 1.1 migration reconciliation and physical Windows installer/GUI
+acceptance remain mandatory. **1.2 NOT RELEASE-READY; 1.3 not started.**

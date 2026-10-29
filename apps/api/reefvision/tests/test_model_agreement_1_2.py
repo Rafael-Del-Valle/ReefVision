@@ -354,3 +354,95 @@ def test_current_saved_directional_artifact_rejects_plausible_but_false_totals(
         payload["paired_differences"].pop()
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "signed_difference",
+        "absolute_difference",
+        "signed_percent",
+        "absolute_percent",
+        "zero_reference_percent",
+        "negative_model",
+    ],
+)
+def test_current_saved_paired_rows_reject_forged_arithmetic(mutation: str) -> None:
+    """A plausible direction tally cannot conceal altered model/reference arithmetic."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 12),
+                pair("b", "frag-B", "tank-2", 0, 8),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    first, second = payload["paired_differences"]
+    if mutation == "signed_difference":
+        first["signed_difference"] = -2
+    elif mutation == "absolute_difference":
+        first["absolute_difference"] = 1
+    elif mutation == "signed_percent":
+        first["signed_percent_deviation"] = -20
+    elif mutation == "absolute_percent":
+        first["absolute_percent_deviation"] = 40
+    elif mutation == "zero_reference_percent":
+        second["absolute_percent_deviation"] = 0
+    else:
+        first["model_count"] = -1
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "duplicate_unit_id",
+        "duplicate_organism",
+        "forged_unit_frequency",
+        "forged_repeat",
+        "forged_imbalance",
+        "forged_percent_units",
+        "forged_percent_organisms",
+        "missing_unit_summaries",
+    ],
+)
+def test_current_saved_unit_roster_rejects_pseudoreplicate_tampering(
+    mutation: str,
+) -> None:
+    """Two caller-declared tanks cannot silently become duplicate biological units."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 12),
+                pair("b", "frag-B", "tank-2", 10, 8),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    first, second = payload["unit_summaries"]
+    if mutation == "duplicate_unit_id":
+        second["experimental_unit_id"] = first["experimental_unit_id"]
+    elif mutation == "duplicate_organism":
+        second["observation_counts_by_organism"] = {"frag-A": 1}
+    elif mutation == "forged_unit_frequency":
+        first["observation_counts_by_organism"] = {"frag-A": 2}
+    elif mutation == "forged_repeat":
+        first["repeated_pair_count_beyond_first_per_organism"] = 1
+    elif mutation == "forged_imbalance":
+        first["unequal_pair_counts_within_unit"] = True
+    elif mutation == "forged_percent_units":
+        payload["percent_contributing_independent_unit_count"] = 1
+    elif mutation == "forged_percent_organisms":
+        payload["percent_contributing_organism_count"] = 1
+    else:
+        payload["unit_summaries"] = []
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)

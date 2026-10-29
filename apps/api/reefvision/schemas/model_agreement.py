@@ -193,6 +193,47 @@ class PairedCountComparisonResponse(BaseModel):
         # add up to a plausible total after direction labels are swapped.
         if len(self.paired_differences) != self.paired_observation_count:
             raise ValueError("Directional paired rows must match paired observations")
+        # Current artifacts must reconcile derived rows with their raw counts.
+        # A forged signed difference could otherwise satisfy every direction tally.
+        for row in self.paired_differences:
+            values = (
+                row.reference_count,
+                row.model_count,
+                row.signed_difference,
+                row.absolute_difference,
+            )
+            if any(not math.isfinite(value) for value in values):
+                raise ValueError("Directional paired values must be finite")
+            if row.reference_count < 0 or row.model_count < 0:
+                raise ValueError("Directional raw counts must be nonnegative")
+            if row.signed_difference != row.model_count - row.reference_count:
+                raise ValueError("Directional signed differences must match raw counts")
+            if row.absolute_difference != abs(row.signed_difference):
+                raise ValueError("Directional absolute differences must match raw counts")
+            if row.reference_count == 0:
+                if (
+                    row.absolute_percent_deviation is not None
+                    or row.signed_percent_deviation is not None
+                ):
+                    raise ValueError("Directional zero-reference percentages must be null")
+                continue
+            expected_percent = row.signed_difference / row.reference_count * 100
+            if not math.isfinite(expected_percent):
+                raise ValueError("Directional paired percentages must be finite")
+            if row.absolute_percent_deviation is None or not math.isclose(
+                row.absolute_percent_deviation,
+                abs(expected_percent),
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError("Directional absolute percentages must match raw counts")
+            if row.signed_percent_deviation is not None and not math.isclose(
+                row.signed_percent_deviation,
+                expected_percent,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError("Directional signed percentages must match raw counts")
         observed_directions = (
             sum(row.signed_difference > 0 for row in self.paired_differences),
             sum(row.signed_difference < 0 for row in self.paired_differences),
@@ -212,13 +253,64 @@ class PairedCountComparisonResponse(BaseModel):
             != self.paired_observation_count - len(observed_organisms)
         ):
             raise ValueError("Directional organism frequencies must match paired differences")
-        if (
-            self.nonzero_reference_count
-            != sum(row.reference_count > 0 for row in self.paired_differences)
-            or self.zero_reference_count
-            != sum(row.reference_count == 0 for row in self.paired_differences)
+        if self.nonzero_reference_count != sum(
+            row.reference_count > 0 for row in self.paired_differences
+        ) or self.zero_reference_count != sum(
+            row.reference_count == 0 for row in self.paired_differences
         ):
             raise ValueError("Directional reference denominators must match paired differences")
+        # Validate the nested biological denominator independently of its totals.
+        # A duplicate organism across tanks must not become two replicates.
+        if bool(self.unit_summaries) != (self.experimental_unit_type is not None):
+            raise ValueError("Directional unit summaries must match declared unit type")
+        if self.unit_summaries:
+            unit_ids = [unit.experimental_unit_id for unit in self.unit_summaries]
+            if len(set(unit_ids)) != len(unit_ids):
+                raise ValueError("Directional experimental unit IDs must be unique")
+            if self.declared_independent_unit_count != len(unit_ids):
+                raise ValueError("Directional independent-unit denominator must match units")
+            unit_organism_counts: Counter[str] = Counter()
+            for unit in self.unit_summaries:
+                observed = unit.observation_counts_by_organism
+                if (
+                    len(observed) != unit.organism_count
+                    or sum(observed.values()) != unit.paired_observation_count
+                    or any(count < 1 for count in observed.values())
+                ):
+                    raise ValueError("Directional unit organism frequencies must match pairs")
+                if unit_organism_counts.keys() & observed.keys():
+                    raise ValueError("Directional organism cannot span independent units")
+                unit_organism_counts.update(observed)
+                if (
+                    unit.repeated_pair_count_beyond_first_per_organism
+                    != unit.paired_observation_count - unit.organism_count
+                ):
+                    raise ValueError("Directional repeated-image denominator must match unit")
+                if unit.unequal_pair_counts_within_unit != (len(set(observed.values())) > 1):
+                    raise ValueError("Directional unit image imbalance flag is inconsistent")
+            if dict(unit_organism_counts) != self.observation_counts_by_organism:
+                raise ValueError("Directional unit membership must match global organisms")
+            for field in (
+                "overcount_pair_count",
+                "undercount_pair_count",
+                "exact_match_pair_count",
+                "overcount_organism_count",
+                "undercount_organism_count",
+                "balanced_organism_count",
+                "nonzero_reference_count",
+            ):
+                if sum(getattr(unit, field) for unit in self.unit_summaries) != getattr(
+                    self, field
+                ):
+                    raise ValueError(f"Directional unit {field} must match global totals")
+            if self.percent_contributing_independent_unit_count != sum(
+                unit.nonzero_reference_count > 0 for unit in self.unit_summaries
+            ):
+                raise ValueError("Directional percent-eligible unit count is inconsistent")
+            if self.percent_contributing_organism_count != sum(
+                unit.percent_contributing_organism_count for unit in self.unit_summaries
+            ):
+                raise ValueError("Directional percent-eligible organism count is inconsistent")
         for unit in self.unit_summaries:
             if (
                 unit.overcount_pair_count + unit.undercount_pair_count + unit.exact_match_pair_count

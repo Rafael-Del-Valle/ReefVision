@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as SchemaValidationError
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.model_agreement import PairedCountComparisonResponse
 from reefvision.tests.test_annotations import create_project
 
 
@@ -129,6 +132,14 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
         row for row in detail.json()["artifacts"] if row["data_type"] == "paired_count_comparison"
     )
     payload = artifact["payload_json"]
+    assert PairedCountComparisonResponse.model_validate(payload).paired_observation_count == 2
+    # The persisted typed artifact must reject tampering even when the raw
+    # direction-frequency totals themselves have not been modified.
+    tampered = dict(payload)
+    tampered["paired_differences"] = [dict(row) for row in payload["paired_differences"]]
+    tampered["paired_differences"][0]["signed_difference"] = 99
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(tampered)
     assert payload["project_id"] == project_id
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"
@@ -160,6 +171,9 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
         json={"pairs": _pairs(), "reference_kind": "human_consensus"},
     )
     assert standalone.status_code == 200, standalone.text
+    assert PairedCountComparisonResponse.model_validate(
+        standalone.json()
+    ).paired_observation_count == 2
     assert payload["analysis_provenance"] == standalone.json()["analysis_provenance"]
     for key in (
         "observed_organism_count",
