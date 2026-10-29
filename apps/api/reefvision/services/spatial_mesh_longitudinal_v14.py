@@ -276,7 +276,7 @@ def compare_mesh_observations(
             or pair[1] < record["surface_area_m2"]
         ):
             bounds = []
-            break
+            continue
         bounds.append(pair)
     difference_bounds = (
         [bounds[1][0] - bounds[0][1], bounds[1][1] - bounds[0][0]] if len(bounds) == 2 else None
@@ -329,9 +329,7 @@ def compare_mesh_observations(
             if "relative_scale_uncertainty" in metadata and pair is not None:
                 uncertainty = metadata["relative_scale_uncertainty"]
                 if uncertainty is None:
-                    raise ValueError(
-                        "Bounding-box scale interval requires source uncertainty"
-                    )
+                    raise ValueError("Bounding-box scale interval requires source uncertainty")
                 if (
                     nominal is not None
                     and isinstance(pair, list)
@@ -358,7 +356,7 @@ def compare_mesh_observations(
                 or pair[1] < nominal
             ):
                 extent_intervals = []
-                break
+                continue
             extent_intervals.append(pair)
     extent_delta_bounds = (
         [
