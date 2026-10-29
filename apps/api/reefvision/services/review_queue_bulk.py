@@ -41,6 +41,32 @@ def _is_sqlite_writer_contention(exc: OperationalError) -> bool:
     }
 
 
+
+def _is_sqlite_bulk_idempotency_collision(exc: IntegrityError) -> bool:
+    """Retry only collisions on the persisted bulk key or its audit event key.
+
+    SQLite reports actual constraint columns in its error text. Require both
+    an extended SQLite constraint code and the exact known key; unrelated
+    UNIQUE, foreign-key, and NOT NULL failures must remain diagnosable.
+    """
+    if not isinstance(exc.orig, sqlite3.IntegrityError):
+        return False
+    code = getattr(exc.orig, "sqlite_errorcode", None)
+    detail = str(exc.orig)
+    return (
+        code in {sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY, sqlite3.SQLITE_CONSTRAINT_UNIQUE}
+        and detail == "UNIQUE constraint failed: review_queue_bulk_requests.id"
+    ) or (
+        code == sqlite3.SQLITE_CONSTRAINT_UNIQUE
+        and detail
+        == (
+            "UNIQUE constraint failed: "
+            "review_queue_item_events.review_queue_item_id, "
+            "review_queue_item_events.client_request_id"
+        )
+    )
+
+
 def bulk_triage_review_queue(
     session: Session, queue_id: str, request: ReviewQueueBulkRequest
 ) -> ReviewQueueBulkResponse:
@@ -272,12 +298,15 @@ def bulk_triage_review_queue(
             )
         try:
             session.commit()
-        except IntegrityError:
+        except IntegrityError as exc:
             session.rollback()
-            # Another request may have committed the identical batch.
-            # Never silently accept conflicting/partial audit history.
+            # Another request may have committed the identical batch. Only
+            # the known registry/audit identity constraints permit replay;
+            # unrelated scientific database integrity failures must surface.
             if not keyed_ids:
-                raise ConflictError("Bulk review request ID conflict") from None
+                raise ConflictError("Bulk review request ID conflict") from exc
+            if not _is_sqlite_bulk_idempotency_collision(exc):
+                raise
             winner = session.get(ReviewQueueBulkRequestRecord, str(request_id))
             if winner is not None and not matching_registry(winner):
                 raise ConflictError("Bulk review request ID conflict") from None
