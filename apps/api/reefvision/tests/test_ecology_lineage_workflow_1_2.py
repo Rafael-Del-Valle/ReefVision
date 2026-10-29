@@ -65,7 +65,6 @@ def test_saved_workflow_fails_closed_on_mixed_colony_lineage(client: TestClient)
     assert not any(row["data_type"] == "paired_count_comparison" for row in body["artifacts"])
 
 
-
 def test_saved_workflow_rejects_same_organism_in_two_tanks(client: TestClient) -> None:
     """Repeated images of one organism cannot create a second tank replicate."""
     project = create_project(client, "Cross-tank organism identity guard")
