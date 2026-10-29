@@ -113,4 +113,34 @@ describe("project spatial source API", () => {
     ).rejects.toThrow("OBJ, PLY, or GLB");
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("rejects cross-project and forged 3D provenance before sending a preview", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const invalidAssets: SpatialSourceAsset[] = [
+      { ...asset, project_id: "different-project" },
+      { ...asset, id: "" },
+      { ...asset, sha256: "not-a-digest" },
+      { ...asset, source_format: "xyz" as SpatialSourceAsset["source_format"] },
+      { ...asset, calibration_verified: true as false },
+      { ...asset, specimen_identity_verified: true as false },
+      {
+        ...asset,
+        measurement_status: "verified" as SpatialSourceAsset["measurement_status"],
+      },
+    ];
+    for (const invalid of invalidAssets) {
+      await expect(
+        previewProjectSpatialAsset("project 1", invalid, "mesh", calibration),
+      ).rejects.toThrow("unreviewed source provenance");
+    }
+    await expect(
+      previewProjectSpatialAsset("project 1", asset, "mesh", {
+        ...calibration,
+        calibration_method: "fabricated" as typeof calibration.calibration_method,
+      }),
+    ).rejects.toThrow("Calibration method");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
 });
