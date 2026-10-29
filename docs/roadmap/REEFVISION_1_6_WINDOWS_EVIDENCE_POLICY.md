@@ -33,3 +33,21 @@ packaged API and database checks, real upgrade/rollback, and interactive
 installed-GUI scientific acceptance remain separate gates. No merge, tag,
 release, deployment, pretrained-model download, or user-data mutation is
 authorized by this policy.
+
+## Disposable path alias and device-namespace rejection (2026-10-29)
+
+The report verifier requires both `acceptance_root` and
+`isolated_data_root` to use ordinary absolute local drive paths. UNC shares,
+Windows extended/device namespace paths, NTFS alternate-data-stream
+components, reserved device names (including names with extensions), trailing
+spaces/dots and control characters cannot substantiate the marker-gated
+disposable data boundary. This is an additional read-only report-evidence
+check; it does not modify or clean any research directory.
+
+Standalone negative-path regressions cover those aliases, while the existing
+valid local-drive and case-insensitive Windows path tests remain. The native
+PowerShell harness must still independently verify filesystem ancestry and
+reparse points. A structurally valid report is **not** evidence that an MSI
+upgrade, rollback or installed interactive GUI was executed. Exact-head CI,
+native Windows acceptance, cross-version Alembic reconciliation and biological
+validation remain release blockers.
