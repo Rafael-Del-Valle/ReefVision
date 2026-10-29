@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import shutil
 import zipfile
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO
 from uuid import uuid4
@@ -21,6 +22,7 @@ from reefvision.db.models import (
     ClassificationPrediction,
     DatasetVersion,
     DatasetVersionItem,
+    EnvironmentalCacheEntry,
     ExperimentRecord,
     ImageAsset,
     ImageLabel,
@@ -29,11 +31,13 @@ from reefvision.db.models import (
     MaskAnnotation,
     ModelRegistration,
     PredictionProposal,
+    Project,
     ProjectExchangePackage,
     QualityControlIssue,
     QualityControlRun,
     ReviewQueue,
     ReviewQueueItem,
+    ScientificRecord,
     TrainingRun,
     VideoAsset,
     VideoTrack,
@@ -52,11 +56,18 @@ from reefvision.services.project_exchange_inspection import (
     MANIFEST_NAME,
     inspect_project_exchange,
 )
+from reefvision.services.project_exchange_scientific import (
+    SCIENCE_SECTIONS,
+    remap_scientific_sections,
+    validate_exchange_records,
+)
 from reefvision.services.projects import ProjectService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
 SECTION_MODELS: dict[str, type[Any]] = {
+    "scientific_records": ScientificRecord,
+    "environmental_cache_entries": EnvironmentalCacheEntry,
     "label_classes": LabelClass,
     "images": ImageAsset,
     "videos": VideoAsset,
@@ -112,6 +123,8 @@ SECTION_ORDER = [
     "workflow_runs",
     "workflow_node_runs",
     "workflow_artifacts",
+    "scientific_records",
+    "environmental_cache_entries",
 ]
 
 MEDIA_KIND_BY_SECTION = {
@@ -237,6 +250,7 @@ def import_project_exchange(
     settings: Settings,
     *,
     project_name: str | None = None,
+    finalize: Callable[[Project, ProjectExchangePackage], None] | None = None,
 ) -> ProjectExchangeImportResponse:
     """Import a compatible archive into a newly created project.
 
@@ -290,28 +304,6 @@ def import_project_exchange(
             str(raw_height_evidence).strip() if raw_height_evidence is not None else None
         ) or None
 
-        project = ProjectService(session, settings).create_project(
-            ProjectCreate(
-                name=requested_name,
-                description=(
-                    str(source_project["description"])
-                    if source_project.get("description") is not None
-                    else None
-                ),
-                template="blank",
-            )
-        )
-        # Preserve legacy numeric offsets even when older packages have no datum evidence.
-        # Such projects remain intentionally unavailable for production georeferencing
-        # until evidence is supplied.
-        project.georeference_height_offset_m = georeference_height_offset_m
-        project.georeference_height_evidence = georeference_height_evidence
-        project.default_annotation_type = str(
-            source_project.get("default_annotation_type") or project.default_annotation_type
-        )
-        session.commit()
-        session.refresh(project)
-
         section_rows: dict[str, list[dict[str, Any]]] = {}
         for section_name, descriptor_value in sections_descriptor.items():
             if section_name == "project" or not isinstance(descriptor_value, dict):
@@ -320,38 +312,65 @@ def import_project_exchange(
             if isinstance(member, str):
                 section_rows[section_name] = _read_jsonl(archive, member)
 
-        id_map: dict[str, str] = {old_project_id: project.id}
-        for section_name, rows in section_rows.items():
-            if section_name not in SECTION_MODELS:
-                continue
-            for row in rows:
-                old_id = row.get("id")
-                if isinstance(old_id, str) and old_id:
-                    id_map[old_id] = str(uuid4())
+        validate_exchange_records(old_project_id, section_rows, SECTION_MODELS)
 
-        # Immutable revision-series identifiers are not primary keys, but they
-        # still must be remapped when a package is imported more than once.
-        # This keeps every imported project scientifically independent.
-        for rows in section_rows.values():
-            for row in rows:
-                for field in (
-                    "ethogram_series_id",
-                    "bout_series_id",
-                    "observation_series_id",
-                    "analysis_series_id",
-                ):
-                    value = row.get(field)
-                    if isinstance(value, str) and value:
-                        id_map.setdefault(value, str(uuid4()))
-
-        media = _media_inventory(manifest)
-        warnings = list(inspection.warnings)
-        imported_counts: dict[str, int] = {}
-        copied_media_count = 0
-        dataset_parent_links: list[tuple[DatasetVersion, str]] = []
-        imported_graphs: dict[str, WorkflowGraphRecord] = {}
-
+        project: Project | None = None
         try:
+            project = ProjectService(session, settings).create_project(
+                ProjectCreate(
+                    name=requested_name,
+                    description=(
+                        str(source_project["description"])
+                        if source_project.get("description") is not None
+                        else None
+                    ),
+                    template="blank",
+                ),
+                commit=False,
+            )
+            # Preserve legacy numeric offsets even when older packages have no datum evidence.
+            # Such projects remain intentionally unavailable for production georeferencing
+            # until evidence is supplied.
+            project.georeference_height_offset_m = georeference_height_offset_m
+            project.georeference_height_evidence = georeference_height_evidence
+            project.default_annotation_type = str(
+                source_project.get("default_annotation_type") or project.default_annotation_type
+            )
+            session.flush()
+            session.refresh(project)
+
+            id_map: dict[str, str] = {old_project_id: project.id}
+            for section_name, rows in section_rows.items():
+                if section_name not in SECTION_MODELS:
+                    continue
+                for row in rows:
+                    old_id = row.get("id")
+                    if isinstance(old_id, str) and old_id:
+                        id_map[old_id] = str(uuid4())
+
+            # Immutable revision-series identifiers are not primary keys, but they
+            # still must be remapped when a package is imported more than once.
+            # This keeps every imported project scientifically independent.
+            for rows in section_rows.values():
+                for row in rows:
+                    for field in (
+                        "ethogram_series_id",
+                        "bout_series_id",
+                        "observation_series_id",
+                        "analysis_series_id",
+                    ):
+                        value = row.get(field)
+                        if isinstance(value, str) and value:
+                            id_map.setdefault(value, str(uuid4()))
+
+            scientific_rows = remap_scientific_sections(section_rows, id_map)
+            media = _media_inventory(manifest)
+            warnings = list(inspection.warnings)
+            imported_counts: dict[str, int] = {}
+            copied_media_count = 0
+            dataset_parent_links: list[tuple[DatasetVersion, str]] = []
+            imported_graphs: dict[str, WorkflowGraphRecord] = {}
+
             for section_name in SECTION_ORDER:
                 model = SECTION_MODELS[section_name]
                 rows = section_rows.get(section_name, [])
@@ -359,10 +378,16 @@ def import_project_exchange(
                     imported_counts[section_name] = 0
                     continue
                 created: list[Any] = []
-                for source_row in rows:
+                for row_index, source_row in enumerate(rows):
                     row = dict(source_row)
                     old_id = row.get("id")
-                    values = _coerce_row(model, row, id_map)
+                    if section_name in SCIENCE_SECTIONS:
+                        mapped = scientific_rows[section_name][row_index]
+                        # Preserve JSON evidence; only scalar foreign keys use the shared mapper.
+                        values = _coerce_row(model, {**mapped, "payload_json": {}}, id_map)
+                        values["payload_json"] = mapped["payload_json"]
+                    else:
+                        values = _coerce_row(model, row, id_map)
                     _rewrite_project_paths(
                         values,
                         model,
@@ -470,22 +495,21 @@ def import_project_exchange(
                     "source_project_id": old_project_id,
                     "source_project_name": source_project.get("name"),
                     "id_remapped": True,
+                    "id_map": id_map,
                     "copied_media_count": copied_media_count,
                 },
-                completed_at=datetime.now().astimezone(),
+                completed_at=datetime.now(UTC),
             )
             session.add(package)
+            session.flush()
+            if finalize is not None:
+                finalize(project, package)
             session.commit()
             session.refresh(project)
             session.refresh(package)
         except Exception:
             session.rollback()
-            try:
-                doomed = session.get(type(project), project.id)
-                if doomed is not None:
-                    session.delete(doomed)
-                    session.commit()
-            finally:
+            if project is not None:
                 project_root = resolve_managed_project_path(settings, project.storage_root)
                 shutil.rmtree(project_root, ignore_errors=True)
             raise

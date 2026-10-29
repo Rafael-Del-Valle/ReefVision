@@ -1,3 +1,4 @@
+import { EnvironmentalSubjectInspector } from "../environmental-context/EnvironmentalSubjectInspector";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   startTransition,
@@ -2696,6 +2697,10 @@ export function AnnotationEditor({
           </button>
         </aside>
         <aside className="annotation-editor-sidebar">
+          <EnvironmentalSubjectInspector
+            projectId={project.id}
+            subject={{ image_id: image.id }}
+          />
           <div className="annotation-inspector-heading">
             <p className="eyebrow">Inspector</p>
             <h3>Image annotations</h3>

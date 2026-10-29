@@ -1032,58 +1032,51 @@ def import_project_exchange_v1(
     """Import the complete 1.0 portable record inventory into a new project."""
 
     _register_v1_sections()
-    result = base_import.import_project_exchange(
-        source,
-        session,
-        settings,
-        project_name=project_name,
-    )
-    project = session.get(Project, result.project_id)
-    if project is None:
-        raise RuntimeError("Imported project disappeared before artifact restoration")
+    copied_generated = 0
 
-    try:
+    def finalize(project: Project, package: ProjectExchangePackage) -> None:
+        nonlocal copied_generated
         _mark_imported_georeferencing_stale(session, project.id)
         _refresh_class_operation_checksums(session, project.id)
         _refresh_review_queue_checksums(session, project.id)
         _refresh_active_learning_checksums(session, project.id)
-        _refresh_pose_training_exchange_integrity(
-            session,
-            project.id,
-        )
-        copied_telemetry_sidecars = _restore_telemetry_sidecars(
+        _refresh_pose_training_exchange_integrity(session, project.id)
+        # Validate canonical ownership/run lineage after remapping, before commit.
+        from reefvision.db.models import ScientificRecord
+        from reefvision.schemas.scientific_data import ScientificRecordCreate
+        from reefvision.services.scientific_data import ScientificDataService
+
+        science = ScientificDataService(session)
+        for row in session.scalars(
+            select(ScientificRecord).where(ScientificRecord.project_id == project.id)
+        ):
+            item = ScientificRecordCreate.model_validate(
+                {
+                    key: value
+                    for key, value in row.payload_json.items()
+                    if key in ScientificRecordCreate.model_fields
+                }
+            )
+            science.validate_subject(project.id, item.subject, item.pixel)
+            science.response(row)
+        copied_telemetry = _restore_telemetry_sidecars(
             source,
             project=project,
             session=session,
             settings=settings,
-            manifest=dict(result.package.manifest_json),
+            manifest=dict(package.manifest_json),
         )
-
         copied_generated = _restore_generated_artifacts(
-            source,
-            project=project,
-            settings=settings,
-            manifest=dict(result.package.manifest_json),
+            source, project=project, settings=settings, manifest=dict(package.manifest_json)
         )
-        package = session.get(ProjectExchangePackage, result.package.id)
-        if package is None:
-            raise RuntimeError("Imported exchange provenance record disappeared")
         package.options_json = {
             **dict(package.options_json or {}),
             "copied_generated_artifact_count": copied_generated,
-            "copied_telemetry_sidecar_count": copied_telemetry_sidecars,
+            "copied_telemetry_sidecar_count": copied_telemetry,
         }
-        session.commit()
-        session.refresh(package)
-        result.copied_generated_artifact_count = copied_generated
-        result.package = type(result.package).model_validate(package)
-        return result
-    except Exception:
-        session.rollback()
-        project_root = resolve_managed_project_path(settings, project.storage_root)
-        doomed = session.get(Project, result.project_id)
-        if doomed is not None:
-            session.delete(doomed)
-            session.commit()
-        shutil.rmtree(project_root, ignore_errors=True)
-        raise
+
+    result = base_import.import_project_exchange(
+        source, session, settings, project_name=project_name, finalize=finalize
+    )
+    result.copied_generated_artifact_count = copied_generated
+    return result

@@ -1,0 +1,291 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { OceanCurrentWorkspace } from "./OceanCurrentWorkspace";
+vi.mock("../video/OpenStreetMapView", () => ({
+  OpenStreetMapView: ({
+    currentVectors,
+    showCurrentArrows,
+    showCurrentSpeedHeatmap,
+  }: {
+    currentVectors: { id: string }[];
+    showCurrentArrows: boolean;
+    showCurrentSpeedHeatmap: boolean;
+  }) => (
+    <div
+      aria-label="Current map"
+      data-current-count={currentVectors.length}
+      data-show-arrows={String(showCurrentArrows)}
+      data-show-heatmap={String(showCurrentSpeedHeatmap)}
+    />
+  ),
+}));
+const rows = [0, 1].flatMap((hour) =>
+  [5, 10].flatMap((depth) =>
+    ["eastward", "northward"].map((direction) => ({
+      id: `${hour}-${depth}-${direction}`,
+      project_id: "project",
+      variable: `current_${direction}_velocity`,
+      value:
+        hour === 0
+          ? direction === "eastward"
+            ? 3
+            : 4
+          : direction === "eastward"
+            ? 0
+            : 2,
+      unit: "m/s",
+      normalized_value:
+        hour === 0
+          ? direction === "eastward"
+            ? 3
+            : 4
+          : direction === "eastward"
+            ? 0
+            : 2,
+      normalized_unit: "m/s",
+      normalized_uncertainty:
+        hour === 0 && depth === 5 && direction === "eastward" ? 0.25 : null,
+      uncertainty:
+        hour === 0 && depth === 5 && direction === "eastward"
+          ? { value: 0.25, kind: "standard_deviation" }
+          : null,
+      observed_at: `2026-04-03T0${hour}:00:00Z`,
+      depth_m: depth,
+      depth_reference: "sea_surface",
+      source_kind: "modeled",
+      location: { latitude: 32.5, longitude: -79.5 },
+      qc: "unassessed",
+      provenance: {
+        source: "Copernicus Marine",
+        dataset_id: "synthetic",
+        model_version: "202601",
+        acquired_at: "2026-04-04T00:00:00Z",
+      },
+    })),
+  ),
+);
+function setup(datasetRows = rows) {
+  const fetch = vi.fn().mockImplementation((input: string) => {
+    const path = new URL(input).pathname;
+    if (path === "/api/v1/projects/project/environment/datasets")
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            total: 1,
+            items: [
+              {
+                cache_key: "cache",
+                provider: "copernicus_marine",
+                record_count: datasetRows.length,
+                fetched_at: "2026-04-04T00:00:00Z",
+                expires_at: "2026-04-05T00:00:00Z",
+              },
+            ],
+          }),
+        ),
+      );
+    if (path === "/api/v1/projects/project/environment/datasets/cache")
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            items: datasetRows,
+            cache_status: "stale_offline",
+            fetched_at: "2026-04-04T00:00:00Z",
+            expires_at: "2026-04-05T00:00:00Z",
+          }),
+        ),
+      );
+    return Promise.resolve(new Response("{}", { status: 404 }));
+  });
+  vi.stubGlobal("fetch", fetch);
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <OceanCurrentWorkspace projectId="project" />
+    </QueryClientProvider>,
+  );
+  return fetch;
+}
+afterEach(() => vi.unstubAllGlobals());
+it("shows a local sample heatmap without forcing current arrows or online tiles", async () => {
+  setup();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  await screen.findByText("5.000 m/s");
+  const map = screen.getByLabelText("Current map");
+  expect(map).toHaveAttribute("data-current-count", "1");
+  expect(map).toHaveAttribute("data-show-heatmap", "false");
+  fireEvent.click(screen.getByLabelText("Show current vectors"));
+  expect(map).toHaveAttribute("data-current-count", "0");
+  fireEvent.click(screen.getByLabelText("Current speed sample heatmap"));
+  expect(map).toHaveAttribute("data-current-count", "1");
+  expect(map).toHaveAttribute("data-show-arrows", "false");
+  expect(map).toHaveAttribute("data-show-heatmap", "true");
+  expect(screen.getByLabelText("Online basemap tiles")).not.toBeChecked();
+  expect(screen.getByText(/No interpolation,/)).toBeInTheDocument();
+});
+it("opens cached currents with time, depth and provenance", async () => {
+  const fetch = setup();
+  expect(fetch).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  expect(await screen.findByText("5.000 m/s")).toBeInTheDocument();
+  const measurements = screen.getByRole("list", {
+    name: "Current measurements",
+  });
+  expect(measurements).toHaveTextContent("36.9° toward true north");
+  expect(screen.getByText(/stale_offline/)).toBeInTheDocument();
+  expect(
+    screen.getByRole("region", { name: "Current slice descriptive metrics" }),
+  ).toHaveTextContent("Mean speed: 5.000 m/s");
+  expect(screen.getByText(/not independent replicates/)).toBeInTheDocument();
+  expect(screen.getByText(/Modeled.*synthetic.*202601/)).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Export current vector summary CSV" }),
+  ).toBeEnabled();
+  expect(
+    screen.getByText(
+      /East component uncertainty: 0\.250 m\/s \(standard deviation\)/,
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/North component uncertainty: unknown/),
+  ).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Current time (UTC)"), {
+    target: { value: "2026-04-03T01:00:00Z" },
+  });
+  expect(await screen.findByText("2.000 m/s")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Current depth and datum"), {
+    target: { value: JSON.stringify([10, "sea_surface"]) },
+  });
+  expect(screen.getByText(/32.5, -79.5 · 10 m/)).toBeInTheDocument();
+  expect(screen.getByLabelText("Online basemap tiles")).not.toBeChecked();
+});
+it("filters unpaired times and separates depth datums", async () => {
+  const earlierOrphan = {
+    ...rows[0],
+    id: "earlier-orphan",
+    observed_at: "2026-04-02T00:00:00Z",
+  };
+  const selectedTime = "2026-04-03T00:00:00Z";
+  const alternateDatum = rows
+    .filter((row) => row.observed_at === selectedTime && row.depth_m === 5)
+    .map((row) => ({
+      ...row,
+      id: `alternate-${row.id}`,
+      depth_reference: "chart_datum",
+      value: row.value * 2,
+      normalized_value: row.normalized_value * 2,
+    }));
+  setup([earlierOrphan, ...rows, ...alternateDatum]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  await screen.findByRole("option", { name: "5 m (sea_surface)" });
+  expect(screen.getByLabelText("Current time (UTC)")).toHaveValue(
+    "2026-04-03T00:00:00Z",
+  );
+  expect(
+    screen.queryByRole("option", { name: /2026-04-02/ }),
+  ).not.toBeInTheDocument();
+  const depthSelect = screen.getByLabelText("Current depth and datum");
+  expect(
+    screen.getByRole("option", { name: "5 m (chart_datum)" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("option", { name: "5 m (sea_surface)" }),
+  ).toBeInTheDocument();
+  fireEvent.change(depthSelect, {
+    target: { value: JSON.stringify([5, "sea_surface"]) },
+  });
+  expect(screen.getByText("5.000 m/s")).toBeInTheDocument();
+  fireEvent.change(depthSelect, {
+    target: { value: JSON.stringify([5, "chart_datum"]) },
+  });
+  expect(screen.getByText("10.000 m/s")).toBeInTheDocument();
+  expect(screen.queryByText("5.000 m/s")).not.toBeInTheDocument();
+  const datumLabel = screen.getByText(/32.5, -79.5 · 5 m/);
+  expect(datumLabel).toHaveTextContent("(chart_datum)");
+});
+it("withholds metrics across incompatible source provenance", async () => {
+  const selectedTime = "2026-04-03T00:00:00Z";
+  const alternateSource = rows
+    .filter((row) => row.observed_at === selectedTime && row.depth_m === 5)
+    .map((row) => ({
+      ...row,
+      id: `alternate-source-${row.id}`,
+      location: { latitude: 32.6, longitude: -79.6 },
+      provenance: { ...row.provenance, dataset_id: "different-model" },
+    }));
+  setup([...rows, ...alternateSource]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  const withheld = await screen.findByText(/metrics withheld/);
+  expect(withheld).toBeInTheDocument();
+  const list = screen.getByRole("list", { name: "Current measurements" });
+  expect(list.querySelectorAll("li")).toHaveLength(2);
+  const metrics = screen.queryByRole("region", {
+    name: "Current slice descriptive metrics",
+  });
+  expect(metrics).not.toBeInTheDocument();
+});
+it("explains caches with no QC-compatible current pair", async () => {
+  setup([rows[0]]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  const emptyState = await screen.findByText(/No QC-compatible/);
+  expect(emptyState).toBeInTheDocument();
+  const timeSelect = screen.getByLabelText("Current time (UTC)");
+  const depthSelect = screen.getByLabelText("Current depth and datum");
+  const exportButton = screen.getByRole("button", {
+    name: "Export current vector summary CSV",
+  });
+  expect(timeSelect).toBeDisabled();
+  expect(depthSelect).toBeDisabled();
+  expect(exportButton).toBeDisabled();
+});
+it("never presents an empty or failed cache as measured currents", async () => {
+  const fetch = setup();
+  fetch.mockImplementation(() =>
+    Promise.resolve(
+      new Response(JSON.stringify({ detail: "Cache integrity failure" }), {
+        status: 409,
+      }),
+    ),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  expect(
+    await screen.findByText("Cache integrity failure"),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("5.000 m/s")).not.toBeInTheDocument();
+});

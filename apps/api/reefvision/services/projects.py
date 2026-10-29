@@ -175,7 +175,7 @@ class ProjectService:
             suffix += 1
         return candidate
 
-    def create_project(self, payload: ProjectCreate) -> Project:
+    def create_project(self, payload: ProjectCreate, *, commit: bool = True) -> Project:
         project_id = str(uuid4())
         if payload.slug is not None:
             slug = slugify(payload.slug)
@@ -197,7 +197,10 @@ class ProjectService:
         self.projects.add(project)
 
         try:
-            self.session.commit()
+            if commit:
+                self.session.commit()
+            else:
+                self.session.flush()
         except IntegrityError as exc:
             self.session.rollback()
             remove_empty_project_directory(self.settings, storage_root)

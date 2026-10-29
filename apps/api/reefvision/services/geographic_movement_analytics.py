@@ -4,6 +4,8 @@ import math
 from collections.abc import Sequence
 from itertools import pairwise
 
+from geographiclib.geodesic import Geodesic
+
 from reefvision.schemas.geographic_movement_analytics import (
     GeographicCoordinate,
     GeographicMovementObservation,
@@ -253,6 +255,15 @@ def calculate_movement_segment(
         end.latitude_deg,
         end.longitude_deg,
     )
+    geodesic = Geodesic.WGS84.Inverse(
+        start.latitude_deg,
+        start.longitude_deg,
+        end.latitude_deg,
+        end.longitude_deg,
+    )
+    # The initial azimuth describes displacement between sampled locations;
+    # it does not estimate the organism's body orientation or intervening path.
+    initial_bearing_deg = float(geodesic["azi1"]) % 360.0 if geodesic["s12"] > 0.0 else None
 
     elapsed_time_s = end.frame_time_s - start.frame_time_s
 
@@ -279,6 +290,7 @@ def calculate_movement_segment(
         end_location=_coordinate(end),
         distance_m=distance_m,
         speed_m_s=speed_m_s,
+        initial_bearing_deg=initial_bearing_deg,
         cumulative_distance_m=(cumulative_distance_before_m + distance_m),
         speed_valid=speed_valid,
         invalid_reason=invalid_reason,

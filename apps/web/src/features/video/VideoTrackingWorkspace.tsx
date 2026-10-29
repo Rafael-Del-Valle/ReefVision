@@ -1,3 +1,4 @@
+import { EnvironmentalSubjectInspector } from "../environmental-context/EnvironmentalSubjectInspector";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { BehaviorDynamicsPanel } from "./BehaviorDynamicsPanel";
@@ -2713,6 +2714,17 @@ export function VideoTrackingWorkspace({
           </div>
         )}
       </section>
+
+      {selectedVideo && (
+        <EnvironmentalSubjectInspector
+          projectId={project.id}
+          subject={{
+            video_id: selectedVideo.id,
+            frame_index: frameIndex,
+            track_id: selectedTrackId || null,
+          }}
+        />
+      )}
 
       <GeographicMovementAnalyticsPanel
         state={geographicMovementAnalyticsState}

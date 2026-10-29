@@ -959,6 +959,7 @@ describe("VideoTrackingWorkspace", () => {
           end_location: location,
           distance_m: 5,
           speed_m_s: 5,
+          initial_bearing_deg: null,
           cumulative_distance_m: 5,
           speed_valid: true,
           invalid_reason: null,
