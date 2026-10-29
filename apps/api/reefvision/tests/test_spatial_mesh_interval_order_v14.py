@@ -71,7 +71,9 @@ def test_missing_early_bounds_still_withhold_combined_intervals() -> None:
     result = compare_mesh_observations(before, after)
     assert result["delta_surface_area_scale_interval_m2"] is None
     assert result["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
-    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+    assert result["measurement_status"] == (
+        "provisional_unverified_longitudinal_comparison"
+    )
 
 
 def test_incomplete_scale_bounds_standalone_and_saved_graph_parity(
@@ -97,8 +99,16 @@ def test_incomplete_scale_bounds_standalone_and_saved_graph_parity(
         "name": "Provisional comparison with incomplete calibration bounds",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": early},
-            {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": late},
+            {
+                "node_id": "early",
+                "node_type": "mesh_surface_preview",
+                "parameters": early,
+            },
+            {
+                "node_id": "late",
+                "node_type": "mesh_surface_preview",
+                "parameters": late,
+            },
             {"node_id": "compare", "node_type": "mesh_longitudinal_comparison"},
         ],
         "edges": [
@@ -124,7 +134,9 @@ def test_incomplete_scale_bounds_standalone_and_saved_graph_parity(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
