@@ -257,7 +257,7 @@ class MeshRegistrationEvidence(BaseModel):
             raise ValueError("Independent registration review requires operator attribution")
         if (
             self.independent_reviewer_id is not None
-            and self.independent_reviewer_id == self.registration_operator_id
+            and self.independent_reviewer_id.casefold() == self.registration_operator_id.casefold()
         ):
             raise ValueError("Registration reviewer must differ from registration operator")
         transform = self.source_to_target_transform_m
@@ -376,7 +376,10 @@ class MeshReidentificationEvidence(BaseModel):
             )
         if self.independent_reviewed_at_utc is not None and self.independent_reviewer_id is None:
             raise ValueError("Dated independent review requires a separately attributed reviewer")
-        if self.independent_reviewer_id == self.observer_id:
+        if (
+            self.independent_reviewer_id is not None
+            and self.independent_reviewer_id.casefold() == self.observer_id.casefold()
+        ):
             raise ValueError("Independent reviewer must differ from matching observer")
         return self
 
