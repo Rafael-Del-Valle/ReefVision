@@ -425,9 +425,18 @@ def test_concurrent_review_heads_fail_closed_without_modifying_research_assets(
 
 _REVIEW_QUEUE_FK = ", FOREIGN KEY(review_queue_id) REFERENCES review_queues(id) ON DELETE RESTRICT"
 _PROJECT_FK = ", FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE RESTRICT"
-_REVIEW_REQUEST_SCHEMA = REVIEW_SCHEMA.replace(
-    "review_queue_item_id TEXT", "review_queue_item_id TEXT NOT NULL"
-).replace("client_request_id TEXT", "client_request_id TEXT NOT NULL")
+# A positive 0041 fixture must satisfy the complete 0038 audit-attribution
+# contract, not merely the two-column idempotency key. Negative fixtures below
+# intentionally retain malformed schemas to verify fail-closed behavior.
+_REVIEW_REQUEST_SCHEMA = (
+    REVIEW_SCHEMA.replace("id TEXT PRIMARY KEY", "id TEXT NOT NULL PRIMARY KEY")
+    .replace("review_queue_id TEXT", "review_queue_id TEXT NOT NULL")
+    .replace("review_queue_item_id TEXT", "review_queue_item_id TEXT NOT NULL")
+    .replace("project_id TEXT", "project_id TEXT NOT NULL")
+    .replace("client_request_id TEXT", "client_request_id TEXT NOT NULL")
+    .replace("actor TEXT", "actor TEXT NOT NULL")
+    .replace("created_at TEXT", "created_at TEXT NOT NULL")
+)
 
 
 def test_revision_0041_requires_global_bulk_request_registry() -> None:
