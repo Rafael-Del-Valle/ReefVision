@@ -150,4 +150,71 @@ describe("ProjectSpatialAssetPreview", () => {
     expect(screen.getByLabelText("Project 3D source")).toHaveValue("");
     expect(screen.queryByRole("option", { name: /colony.ply/ })).not.toBeInTheDocument();
   });
+
+  it("keeps project originals when an upload fails before listing finishes", async () => {
+    let resolveList!: (records: SpatialSourceAsset[]) => void;
+    vi.mocked(listProjectSpatialAssets).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveList = resolve;
+        }),
+    );
+    vi.mocked(importProjectSpatialAsset).mockRejectedValue(
+      new Error("Upload unavailable"),
+    );
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    const file = new File(["ply"], "another.ply");
+    fireEvent.change(screen.getByLabelText("Import 3D original"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import original" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Upload unavailable",
+    );
+    resolveList([asset]);
+    expect(
+      await screen.findByRole("option", { name: /colony.ply/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("preserves a completed import when an older empty asset list arrives", async () => {
+    let resolveList!: (records: SpatialSourceAsset[]) => void;
+    vi.mocked(listProjectSpatialAssets).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveList = resolve;
+        }),
+    );
+    vi.mocked(importProjectSpatialAsset).mockResolvedValue(asset);
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    const file = new File(["ply"], "colony.ply");
+    fireEvent.change(screen.getByLabelText("Import 3D original"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import original" }));
+    expect(
+      await screen.findByText(/human scientific review remains required/),
+    ).toBeInTheDocument();
+    resolveList([]);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Project 3D source")).toHaveValue("asset-1"),
+    );
+    expect(
+      screen.getByRole("option", { name: /colony.ply/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not expose cross-project originals returned by a stale list", async () => {
+    vi.mocked(listProjectSpatialAssets).mockResolvedValue([
+      asset,
+      { ...asset, id: "foreign-asset", project_id: "another-project" },
+    ]);
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    expect(
+      await screen.findByRole("option", { name: /colony.ply/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /foreign-asset/ }),
+    ).not.toBeInTheDocument();
+  });
 });
