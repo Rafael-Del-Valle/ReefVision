@@ -12,6 +12,11 @@ on:
       - apps/api/reefvision/services/images.py
       - apps/api/reefvision/tests/test_camera_jpeg_regression_103.py
       - apps/api/reefvision/tests/test_image_import_collision_103.py
+      - apps/api/reefvision/api/routes/training.py
+      - apps/api/reefvision/tests/test_training_log_tail_103.py
+      - apps/web/src-tauri/src/main.rs
+      - scripts/test-training-console-readonly.ps1
+      - scripts/test-training-console-sanitizer.ps1
       - apps/web/src/features/gallery/**
       - apps/web/src/features/annotation-editor/ImageViewport*
       - apps/web/tests/e2e/gallery-viewport-103.spec.ts
@@ -59,6 +64,18 @@ jobs:
           REEFVISION_BACKGROUND_WORKER_ENABLED: "false"
         run: |
           python -m pytest apps/api/reefvision/tests/test_camera_jpeg_regression_103.py apps/api/reefvision/tests/test_image_import_collision_103.py -q
+      - name: Verify read-only training log tail and symlink security
+        shell: pwsh
+        env:
+          REEFVISION_ENV: test
+          REEFVISION_BACKGROUND_WORKER_ENABLED: "false"
+        run: |
+          python -m pytest apps/api/reefvision/tests/test_training_log_tail_103.py -q
+      - name: Verify embedded PowerShell monitor reads real losses without controlling jobs
+        shell: pwsh
+        run: |
+          ./scripts/test-training-console-sanitizer.ps1
+          ./scripts/test-training-console-readonly.ps1
 
   chromium-initial-image-gallery:
     name: Chromium first image, wheel navigation, and gallery
