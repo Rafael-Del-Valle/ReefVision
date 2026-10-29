@@ -768,9 +768,8 @@ def create_pose_workflow_training_result(
         {},
     )
 
-    if supplied_config is None:
-        supplied_config = {}
-
+    # An omitted config uses defaults; an explicit null is not a valid
+    # saved scientific configuration and must not silently become defaults.
     if not isinstance(
         supplied_config,
         dict,
