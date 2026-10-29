@@ -110,6 +110,51 @@ def test_saved_environmental_threshold_workflow_persists_provenance(client: Test
     assert history.json()["total"] == len(record_ids)
 
 
+def test_saved_environmental_threshold_workflow_excludes_foreign_project_evidence(
+    client: TestClient,
+) -> None:
+    """Identical time/location observations from another project must not enter an artifact."""
+    project = create_project(client, "Environmental threshold project isolation")
+    foreign = create_project(client, "Other project's environmental evidence")
+    records_url = "/api/v1/projects/{project_id}/scientific-records"
+    local_saved = client.post(
+        records_url.format(project_id=project["id"]),
+        json={"records": [observation(value=22, unit="degC", qc="accepted")]},
+    )
+    foreign_saved = client.post(
+        records_url.format(project_id=foreign["id"]),
+        json={"records": [observation(value=35, unit="degC", qc="accepted")]},
+    )
+    assert local_saved.status_code == 201, local_saved.text
+    assert foreign_saved.status_code == 201, foreign_saved.text
+    local_id = local_saved.json()["items"][0]["id"]
+    foreign_id = foreign_saved.json()["items"][0]["id"]
+
+    threshold_url = f"/api/v1/projects/{project['id']}/environment/events/threshold"
+    direct = client.post(threshold_url, json=threshold_query())
+    assert direct.status_code == 200, direct.text
+    assert [match["record"]["id"] for match in direct.json()["matches"]] == [local_id]
+
+    run = save_and_queue(client, project["id"], threshold_graph(threshold_query()))
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "environmental_threshold_samples"
+    )
+    snapshot = artifact["payload_json"]
+    assert snapshot["sample_count"] == 1
+    assert [match["record_id"] for match in snapshot["matches"]] == [local_id]
+    assert foreign_id not in [match["record_id"] for match in snapshot["matches"]]
+    assert len(artifact["payload_sha256"]) == 64
+
+
 def test_saved_environmental_threshold_inclusive_boundary_survives_reload(
     client: TestClient,
 ) -> None:
@@ -133,8 +178,7 @@ def test_saved_environmental_threshold_inclusive_boundary_survives_reload(
     assert saved_graphs.status_code == 200, saved_graphs.text
     assert any(
         item["id"] == run["workflow_graph_record_id"]
-        and item["graph_json"]["nodes"][1]["parameters"]["query"]["direction"]
-        == "at_or_above"
+        and item["graph_json"]["nodes"][1]["parameters"]["query"]["direction"] == "at_or_above"
         for item in saved_graphs.json()
     )
     app = cast(FastAPI, client.app)

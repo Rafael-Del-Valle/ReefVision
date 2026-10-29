@@ -265,9 +265,7 @@ class EnvironmentalContextService:
             "at_or_below": le,
         }[request.direction]
         matches = [
-            match
-            for match in candidates
-            if compare(match.record.normalized_value, threshold)
+            match for match in candidates if compare(match.record.normalized_value, threshold)
         ]
         matches.sort(key=lambda item: (item.record.observed_at, str(item.record.id)))
         return EnvironmentalThresholdResponse(
