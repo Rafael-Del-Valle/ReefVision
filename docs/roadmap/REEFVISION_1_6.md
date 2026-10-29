@@ -1641,3 +1641,32 @@ Backend API regressions cover missing/false/nonboolean confirmation, absence of 
 - **Acceptance remains HOLD:** exact-new-head CI, independent 1.1/1.6
   migration reconciliation, real MSI upgrade/rollback, installed GUI and
   representative biological-data testing are still required.
+
+
+## 2026-10-28 — SQLite concurrent-writer retry contract (Track D)
+
+- Audited existing 1.6 deterministic workflow-owned queue IDs, saved
+  `project_source -> qc_review_queue` execution, manual QC review history,
+  and prior exact-head CI. Previous commit `bc59a451` passed its push
+  backend/frontend CI, but Windows installed-GUI and cross-version migration
+  acceptance remain separate blockers.
+- The deterministic UUIDv5 primary key already rejects a competing writer
+  that reaches an INSERT after another has committed (`IntegrityError`).
+  When the other SQLite writer still holds its transaction, SQLite instead
+  raises `SQLITE_BUSY` or `SQLITE_LOCKED` (`OperationalError`).
+  The saved-workflow adapter now converts only those specific SQLite
+  contention codes into a controlled, rollback-safe validation error
+  instructing an explicit retry. Other SQL/database errors propagate.
+- Added an actual two-connection SQLite busy-lock regression and an
+  executable persisted workflow regression. The latter simulates an
+  interrupted initial queue creation, holds a separate SQLite write lock,
+  requires fail-closed rejection without altering independent manual
+  reviewer comments, releases the lock, then verifies two idempotent
+  retries with the same queue ID, typed dimensionless output, and
+  researcher-approval requirement. The fixture modifies only disposable
+  test data, never user research assets.
+- No migration, background auto-retry loop, cloud dependency, automatic
+  annotation approval or cross-version branch integration was introduced.
+  **Acceptance HOLD:** exact-new-head Ruff/mypy/pytest and relevant CI,
+  1.1/1.6 revision-0038 reconciliation, native Windows MSI upgrade/rollback,
+  installed-GUI testing, and representative biological-data checks.
