@@ -44,7 +44,9 @@ describe("project spatial source API", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
-    expect(await listProjectSpatialAssets("project 1", controller.signal)).toEqual([asset]);
+    expect(await listProjectSpatialAssets("project 1", controller.signal)).toEqual([
+      asset,
+    ]);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/projects/project%201/spatial/assets",
       expect.objectContaining({ signal: controller.signal }),
@@ -96,18 +98,27 @@ describe("project spatial source API", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(
       previewProjectSpatialAsset(
-        "p",
+        "project 1",
         { ...asset, source_format: "glb", source_kind: "mesh" },
         "point_cloud",
         calibration,
       ),
     ).rejects.toThrow("PLY");
     await expect(
-      previewProjectSpatialAsset("p", asset, "mesh", {
+      previewProjectSpatialAsset("project 1", asset, "mesh", {
         ...calibration,
         relative_scale_uncertainty: Number.NaN,
       }),
     ).rejects.toThrow("Relative scale uncertainty");
+    await expect(
+      previewProjectSpatialAsset("project 1", asset, "volume" as "mesh", calibration),
+    ).rejects.toThrow("Unsupported spatial preview geometry mode");
+    await expect(
+      previewProjectSpatialAsset("project 1", asset, "mesh", {
+        ...calibration,
+        coordinate_frame_id: "../foreign-frame",
+      }),
+    ).rejects.toThrow("Spatial source frame ID");
     await expect(
       importProjectSpatialAsset("p", new File(["x"], "image.jpg")),
     ).rejects.toThrow("OBJ, PLY, or GLB");
@@ -142,5 +153,4 @@ describe("project spatial source API", () => {
     ).rejects.toThrow("Calibration method");
     expect(fetchMock).not.toHaveBeenCalled();
   });
-
 });
