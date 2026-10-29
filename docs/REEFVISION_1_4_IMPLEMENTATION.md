@@ -594,6 +594,15 @@ times through both scientific schemas and the standalone comparison endpoint.
 The executable typed saved-workflow adapter uses the same schema validation,
 while full installed-Windows acceptance is still outstanding.
 
+Independent **calibration** reviews now also reject a `reviewed_at_utc` instant
+earlier than their explicitly bound `reviewed_observed_at_utc` at schema
+validation time, before the source mesh is loaded. The standalone endpoint and
+an executable persisted mesh-preview workflow reject impossible review
+chronology without producing a scientific measurement artifact. Regression
+tests cover timezone offsets, exact observation-time equality, and failed
+saved-workflow execution. This check does not authenticate the reviewer,
+establish physical scale, or promote provisional calibration to verified.
+
 ### Withholding longitudinal organism changes after a disputed match
 
 When an independently attributed reidentification reviewer explicitly
