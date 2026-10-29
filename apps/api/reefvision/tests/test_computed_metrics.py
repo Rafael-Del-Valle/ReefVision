@@ -381,9 +381,8 @@ def test_calculation_rejects_qc_ineligible_observations(client: TestClient, qc: 
     )
     assert response.status_code == 400, response.text
     assert "suspect or rejected" in response.json()["detail"]
-    assert client.get(
-        f"/api/v1/projects/{project['id']}/computed-metric-results"
-    ).json()["total"] == 0
+    assert (
+        client.get(f"/api/v1/projects/{project['id']}/computed-metric-results").json()["total"] == 0
 
 
 def test_calculation_rejects_superseded_noaa_snapshot_but_accepts_current(client: TestClient):
@@ -439,9 +438,8 @@ def test_calculation_rejects_superseded_noaa_snapshot_but_accepts_current(client
     )
     assert current.status_code == 201, current.text
     assert current.json()["value"] == pytest.approx(21.0)
-    assert client.get(
-        f"/api/v1/projects/{project['id']}/computed-metric-results"
-    ).json()["total"] == 1
+    assert (
+        client.get(f"/api/v1/projects/{project['id']}/computed-metric-results").json()["total"] == 1
 
 
 def test_calculation_rejects_stale_calibration_even_for_count_metrics(
@@ -476,6 +474,5 @@ def test_calculation_rejects_stale_calibration_even_for_count_metrics(
     )
     assert response.status_code == 400, response.text
     assert "current calibration" in response.json()["detail"]
-    assert client.get(
-        f"/api/v1/projects/{project['id']}/computed-metric-results"
-    ).json()["total"] == 0
+    assert (
+        client.get(f"/api/v1/projects/{project['id']}/computed-metric-results").json()["total"] == 0
