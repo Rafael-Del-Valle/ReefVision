@@ -3981,3 +3981,29 @@ source-identity protection and standalone parity tests remain in force.
 Integrated exact-head CI, migration reconciliation with 1.1, source-authenticated
 calibrated longitudinal measurements, biological review and physical Windows
 GUI/MSI acceptance are still required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Explicit directional votes in descriptive paired-count CSV (2026-10-29)
+
+Export contract `ecology-paired-count-csv-0004` now exposes distinct
+**paired-image** overcount/undercount/exact-match frequencies and
+**organism-mean** overcount/undercount/balanced frequencies in separate
+CSV columns. Organism, declared-unit and overall rows disclose their
+appropriate counts; unit/overall rows also expose repeated photographs
+beyond the first per organism. An organism with opposing image errors
+can have a balanced mean without any exact-match image, and the export
+now makes that distinction directly inspectable without parsing nested
+JSON. All directional values come from the existing validated typed
+comparison result, not new inference or invented independent sample sizes.
+
+A focused API regression exercises a balanced organism with opposite
+signed image errors, a second undercounted organism, one declared tank,
+and repeated photographs. The existing standalone and saved executable
+Workflow Builder exporters share this renderer and retain the same
+source fingerprint, typed ports, persisted SHA-256, unverified evidence
+and researcher-review gate. The prior exact head `6c1b2b9c` completed
+16/19 workflows successfully; three backend workflows failed Ruff
+formatting before pytest. This increment also applies the two exact
+CI-reported formatter corrections. Latest-head CI, authenticated
+organism/calibration records, migration reconciliation, representative
+scientific acceptance and installed Windows GUI/MSI checks remain pending.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

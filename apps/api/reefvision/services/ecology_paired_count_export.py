@@ -14,7 +14,7 @@ from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.model_agreement import PairedCountComparisonResponse
 from reefvision.services.ecology_candidate_report_export import _csv_identifier
 
-_EXPORT_VERSION = "ecology-paired-count-csv-0003"
+_EXPORT_VERSION = "ecology-paired-count-csv-0004"
 _COLUMNS = (
     "export_schema_version",
     "source_input_sha256",
@@ -41,6 +41,12 @@ _COLUMNS = (
     "repeated_observation_count",
     "observed_organism_count",
     "nonzero_reference_count",
+    "overcount_pair_count",
+    "undercount_pair_count",
+    "exact_match_pair_count",
+    "overcount_organism_count",
+    "undercount_organism_count",
+    "balanced_organism_count",
     "mean_signed_bias",
     "mean_absolute_error",
     "mean_signed_percent_deviation",
@@ -146,6 +152,7 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
             for row in rows
             if row.absolute_percent_deviation is not None
         ]
+        organism_bias = finite_descriptive_mean(row.signed_difference for row in rows)
         write(
             "organism_descriptive",
             experimental_unit_id=_csv_identifier(unit_by_organism.get(organism_id, "")),
@@ -154,7 +161,13 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
             repeated_observation_count=len(rows) - 1,
             observed_organism_count=1,
             nonzero_reference_count=len(eligible_absolute),
-            mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in rows),
+            overcount_pair_count=sum(row.signed_difference > 0 for row in rows),
+            undercount_pair_count=sum(row.signed_difference < 0 for row in rows),
+            exact_match_pair_count=sum(row.signed_difference == 0 for row in rows),
+            overcount_organism_count=int(organism_bias > 0),
+            undercount_organism_count=int(organism_bias < 0),
+            balanced_organism_count=int(organism_bias == 0),
+            mean_signed_bias=organism_bias,
             mean_absolute_error=finite_descriptive_mean(row.absolute_difference for row in rows),
             mean_signed_percent_deviation=(
                 finite_descriptive_mean(eligible_signed) if eligible_signed else ""
@@ -178,6 +191,13 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
             paired_observation_count=unit.paired_observation_count,
             observed_organism_count=unit.organism_count,
             nonzero_reference_count=unit.nonzero_reference_count,
+            repeated_observation_count=unit.repeated_pair_count_beyond_first_per_organism,
+            overcount_pair_count=unit.overcount_pair_count,
+            undercount_pair_count=unit.undercount_pair_count,
+            exact_match_pair_count=unit.exact_match_pair_count,
+            overcount_organism_count=unit.overcount_organism_count,
+            undercount_organism_count=unit.undercount_organism_count,
+            balanced_organism_count=unit.balanced_organism_count,
             mean_signed_bias=unit.mean_signed_bias,
             mean_absolute_error=unit.mean_absolute_error,
             mean_signed_percent_deviation=_optional_number(unit.mean_signed_percent_deviation),
@@ -199,12 +219,21 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
         paired_observation_count=checked.paired_observation_count,
         observed_organism_count=checked.observed_organism_count,
         nonzero_reference_count=checked.nonzero_reference_count,
+        repeated_observation_count=checked.repeated_pair_count_beyond_first_per_organism,
+        overcount_pair_count=checked.overcount_pair_count,
+        undercount_pair_count=checked.undercount_pair_count,
+        exact_match_pair_count=checked.exact_match_pair_count,
+        overcount_organism_count=checked.overcount_organism_count,
+        undercount_organism_count=checked.undercount_organism_count,
+        balanced_organism_count=checked.balanced_organism_count,
         mean_signed_bias=checked.mean_signed_bias,
         mean_absolute_error=checked.mean_absolute_error,
         mean_signed_percent_deviation=_optional_number(checked.mean_signed_percent_deviation),
         mean_absolute_percent_deviation=_optional_number(checked.mean_absolute_percent_deviation),
         unit_balanced_mean_signed_bias=_optional_number(checked.unit_balanced_mean_signed_bias),
-        unit_balanced_mean_absolute_error=_optional_number(checked.unit_balanced_mean_absolute_error),
+        unit_balanced_mean_absolute_error=_optional_number(
+            checked.unit_balanced_mean_absolute_error
+        ),
         unit_balanced_mean_signed_percent_deviation=_optional_number(
             checked.unit_balanced_mean_signed_percent_deviation
         ),
