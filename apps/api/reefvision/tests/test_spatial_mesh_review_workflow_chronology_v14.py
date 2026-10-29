@@ -65,26 +65,34 @@ def _review(evidence_key: str, project_id: str, reviewed_at_utc: str) -> dict:
     }
 
 
+@pytest.mark.parametrize("evidence_key", ["registration_evidence", "reidentification_evidence"])
 @pytest.mark.parametrize(
-    "evidence_key", ["registration_evidence", "reidentification_evidence"]
-)
-@pytest.mark.parametrize(
-    ("reviewed_at_utc", "valid"),
+    ("reviewed_at_utc", "valid", "case_variant_self_review"),
     [
-        ("2026-10-02T06:59:59-05:00", False),
-        ("2026-10-02T07:00:00-05:00", True),
-        ("2026-10-03T07:00:00-05:00", True),
+        ("2026-10-02T06:59:59-05:00", False, False),
+        ("2026-10-02T07:00:00-05:00", True, False),
+        ("2026-10-03T07:00:00-05:00", True, False),
+        # A caller cannot impersonate an independent reviewer with a case-only alias.
+        ("2026-10-03T07:00:00-05:00", False, True),
     ],
 )
 def test_saved_longitudinal_review_chronology_matches_standalone(
-    client: TestClient, evidence_key: str, reviewed_at_utc: str, valid: bool
+    client: TestClient,
+    evidence_key: str,
+    reviewed_at_utc: str,
+    valid: bool,
+    case_variant_self_review: bool,
 ) -> None:
-    """A saved typed graph must reject impossible dates without comparison artifacts."""
+    """Saved graphs reject impossible chronology and case-only reviewer impersonation."""
     project_id = str(create_project(client, "Independent review replay QC")["id"])
     base = f"/api/v1/projects/{project_id}"
     before = _observation("survey-1", "2026-10-01T12:00:00Z")
     after = _observation("survey-2", "2026-10-02T12:00:00Z")
     evidence = _review(evidence_key, project_id, reviewed_at_utc)
+    if case_variant_self_review:
+        evidence["independent_reviewer_id"] = (
+            "OPERATOR-1" if evidence_key == "registration_evidence" else "OBSERVER-1"
+        )
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after, evidence_key: evidence},
@@ -98,7 +106,10 @@ def test_saved_longitudinal_review_chronology_matches_standalone(
         assert expected["provenance"]["coordinate_registration_verified"] is False
     else:
         assert standalone.status_code in (400, 422), standalone.text
-        assert "cannot predate bound observations" in standalone.text
+        if case_variant_self_review:
+            assert "reviewer must differ" in standalone.text.lower()
+        else:
+            assert "cannot predate bound observations" in standalone.text
 
     graph = {
         "graph_id": f"review-chronology-{evidence_key}-{valid}",
@@ -150,9 +161,7 @@ def test_saved_longitudinal_review_chronology_matches_standalone(
     saved_parameters = saved.json()["graph_json"]["nodes"][3]["parameters"]
     assert saved_parameters[evidence_key] == evidence
 
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     completed = process_workflow_run_job(
