@@ -138,6 +138,10 @@ describe("project spatial source API", () => {
       { ...asset, id: "" },
       { ...asset, sha256: "not-a-digest" },
       { ...asset, source_format: "xyz" as SpatialSourceAsset["source_format"] },
+      { ...asset, source_kind: "mesh" },
+      { ...asset, size_bytes: 0 },
+      { ...asset, size_bytes: 8 * 1024 * 1024 + 1 },
+      { ...asset, size_bytes: 1.5 },
       { ...asset, calibration_verified: true as false },
       { ...asset, specimen_identity_verified: true as false },
       {
