@@ -1,0 +1,116 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
+import {
+  importProjectSpatialAsset,
+  listProjectSpatialAssets,
+  previewProjectSpatialAsset,
+} from "./workflowGraphApi";
+import type { SpatialSourceAsset } from "./workflowGraphApi";
+
+vi.mock("./workflowGraphApi", () => ({
+  importProjectSpatialAsset: vi.fn(),
+  listProjectSpatialAssets: vi.fn(),
+  previewProjectSpatialAsset: vi.fn(),
+}));
+vi.mock("./MeshArtifactViewer", () => ({
+  MeshArtifactViewer: () => <p>Unreviewed mesh artifact</p>,
+}));
+vi.mock("./PointCloudArtifactViewer", () => ({
+  PointCloudArtifactViewer: () => <p>Unreviewed cloud artifact</p>,
+}));
+
+const asset: SpatialSourceAsset = {
+  id: "asset-1",
+  project_id: "reef-project",
+  original_filename: "colony.ply",
+  source_format: "ply",
+  source_kind: "mesh_or_point_cloud",
+  sha256: "b".repeat(64),
+  size_bytes: 256,
+  created_at: "2026-10-28T00:00:00Z",
+  measurement_status: "source_unreviewed",
+  calibration_verified: false,
+  specimen_identity_verified: false,
+};
+
+beforeEach(() => {
+  vi.mocked(listProjectSpatialAssets).mockReset();
+  vi.mocked(importProjectSpatialAsset).mockReset();
+  vi.mocked(previewProjectSpatialAsset).mockReset();
+  vi.mocked(listProjectSpatialAssets).mockResolvedValue([asset]);
+  vi.mocked(previewProjectSpatialAsset).mockResolvedValue({
+    measurement_status: "caller_supplied_unverified",
+  });
+});
+
+describe("ProjectSpatialAssetPreview", () => {
+  it("selects an imported PLY and previews provisional point-cloud geometry", async () => {
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    await screen.findByRole("option", { name: /colony.ply/ });
+    fireEvent.change(screen.getByLabelText("Project 3D source"), {
+      target: { value: "asset-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Preview geometry"), {
+      target: { value: "point_cloud" },
+    });
+    fireEvent.change(screen.getByLabelText("Calibration evidence (unverified)"), {
+      target: { value: "Unreviewed ruler" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview imported source" }));
+    expect(await screen.findByText("Unreviewed cloud artifact")).toBeInTheDocument();
+    expect(previewProjectSpatialAsset).toHaveBeenCalledWith(
+      "reef-project",
+      asset,
+      "point_cloud",
+      expect.objectContaining({
+        meters_per_unit: 0.01,
+        calibration_evidence: "Unreviewed ruler",
+        relative_scale_uncertainty: null,
+      }),
+    );
+    expect(screen.getByText(/not calibration, biological identity, or review/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Meters per source unit (unverified)"), {
+      target: { value: "0.02" },
+    });
+    expect(screen.queryByText("Unreviewed cloud artifact")).not.toBeInTheDocument();
+  });
+
+  it("imports a new original and keeps scientific review explicitly pending", async () => {
+    vi.mocked(listProjectSpatialAssets).mockResolvedValue([]);
+    vi.mocked(importProjectSpatialAsset).mockResolvedValue(asset);
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    await waitFor(() => expect(listProjectSpatialAssets).toHaveBeenCalled());
+    const file = new File(["ply"], "colony.ply");
+    fireEvent.change(screen.getByLabelText("Import 3D original"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import original" }));
+    expect(
+      await screen.findByText(/human scientific review remains required/),
+    ).toBeInTheDocument();
+    expect(importProjectSpatialAsset).toHaveBeenCalledWith("reef-project", file);
+    expect(screen.getByLabelText("Project 3D source")).toHaveValue("asset-1");
+  });
+
+  it("resets selection and measurement evidence when switching projects", async () => {
+    vi.mocked(listProjectSpatialAssets)
+      .mockResolvedValueOnce([asset])
+      .mockResolvedValueOnce([]);
+    const view = render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    await screen.findByRole("option", { name: /colony.ply/ });
+    fireEvent.change(screen.getByLabelText("Project 3D source"), {
+      target: { value: "asset-1" },
+    });
+    view.rerender(<ProjectSpatialAssetPreview projectId="other-project" />);
+    await waitFor(() =>
+      expect(listProjectSpatialAssets).toHaveBeenCalledWith(
+        "other-project",
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(screen.getByLabelText("Project 3D source")).toHaveValue("");
+    expect(screen.queryByRole("option", { name: /colony.ply/ })).not.toBeInTheDocument();
+  });
+});
