@@ -102,6 +102,10 @@ class PairedCountUnitSummary(BaseModel):
     experimental_unit_id: str
     paired_observation_count: int
     organism_count: int
+    # Source-pair frequency is not an independently verified biological sample size.
+    observation_counts_by_organism: dict[str, int] = Field(default_factory=dict)
+    repeated_pair_count_beyond_first_per_organism: int = Field(default=0, ge=0)
+    unequal_pair_counts_within_unit: bool = False
     mean_signed_bias: float
     mean_absolute_error: float
     organism_balanced_mean_signed_bias: float
@@ -119,6 +123,10 @@ class PairedCountComparisonResponse(BaseModel):
     analysis_provenance: ScientificInputProvenance
     metric_name: str
     paired_observation_count: int
+    observed_organism_count: int = Field(default=0, ge=0)
+    observation_counts_by_organism: dict[str, int] = Field(default_factory=dict)
+    repeated_pair_count_beyond_first_per_organism: int = Field(default=0, ge=0)
+    unequal_pair_counts_across_organisms: bool = False
     nonzero_reference_count: int
     zero_reference_count: int
     mean_signed_bias: float

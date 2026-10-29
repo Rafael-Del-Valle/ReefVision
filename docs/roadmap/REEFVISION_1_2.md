@@ -3490,3 +3490,26 @@ failure at `ecology_population_export.py:207` was also corrected.
 
 Validation of this new commit remains pending until exact-head CI completes;
 no local Ruff/pytest or physical Windows installed-GUI acceptance was run.
+
+
+## Paired-count biological denominator and image-weighting audit (2026-10-28)
+
+The existing standalone paired human–model comparison and executable, saved
+`ecology_paired_count_comparison` Workflow Builder node now expose the number
+of **distinct caller-declared organisms** separately from the number of paired
+images. A deterministic per-organism pair-frequency roster, number of pairs
+beyond each organism's first, and unequal-frequency QC flags are available at
+the overall and declared-unit levels. These diagnostics reveal when repeated
+images could dominate a pair-weighted mean; existing nested organism/unit
+balanced means remain unchanged. A repeat pair is not assumed to be a new
+biological replicate or a confirmed technical replicate: acquisition times,
+identity and true experimental independence remain unauthenticated.
+
+The output/provenance contract advances to `ecology-paired-count-0004`;
+older persisted artifacts retain their original algorithm and remain readable
+through additive defaulted fields. Focused domain, standalone API and saved
+Workflow Builder tests cover unequal and equal image frequencies, biological
+sample denominators, deterministic provenance, and persisted artifact parity.
+Full exact-head CI, authenticated sources, real-data scientific acceptance,
+1.1 migration reconciliation and installed Windows GUI/MSI acceptance remain
+outstanding. No inferential sample-size or model-agreement validity is claimed.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -74,6 +74,9 @@ def test_standalone_paired_comparison_returns_unverified_evidence(
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"
     assert payload["paired_observation_count"] == 2
+    assert payload["observed_organism_count"] == 2
+    assert payload["repeated_pair_count_beyond_first_per_organism"] == 0
+    assert payload["unequal_pair_counts_across_organisms"] is False
     assert payload["declared_independent_unit_count"] == 1
     assert payload["mean_signed_bias"] == -1
     assert payload["mean_absolute_error"] == 3
@@ -127,6 +130,10 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"
     assert payload["mean_signed_bias"] == -1
+    assert payload["observed_organism_count"] == 2
+    assert payload["observation_counts_by_organism"] == {
+        "fragment-A": 1, "fragment-B": 1
+    }
     assert payload["declared_independent_unit_count"] == 1
     assert payload["organism_and_unit_balanced_mean_signed_bias"] == -1
     assert payload["unit_balanced_mean_absolute_percent_deviation"] == 20
@@ -139,6 +146,14 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     )
     assert standalone.status_code == 200, standalone.text
     assert payload["analysis_provenance"] == standalone.json()["analysis_provenance"]
+    for key in (
+        "observed_organism_count",
+        "observation_counts_by_organism",
+        "repeated_pair_count_beyond_first_per_organism",
+        "unequal_pair_counts_across_organisms",
+        "unit_summaries",
+    ):
+        assert payload[key] == standalone.json()[key]
 
 
 def test_unverified_comparison_cannot_enter_verified_dataset(
@@ -160,3 +175,60 @@ def test_unverified_comparison_cannot_enter_verified_dataset(
     assert response.status_code == 200, response.text
     assert response.json()["valid"] is False
     assert any(issue["code"] == "incompatible_port_types" for issue in response.json()["issues"])
+
+
+def test_saved_repeated_organism_pairs_retain_frequency_qc(client: TestClient) -> None:
+    """Saved typed analysis must expose repeat-pair risk, not image-level N."""
+    project = create_project(client, "Repeated organism count review")
+    project_id = str(project["id"])
+    pairs = _pairs()
+    repeat = dict(pairs[0])
+    repeat.update(
+        observation_id="image-3",
+        reference_source_record_id="human-image-3",
+        model_source_record_id="model-image-3",
+        model_count=14,
+    )
+    pairs.append(repeat)
+    graph = cast(dict[str, Any], _graph())
+    graph["nodes"][1]["parameters"]["pairs"] = pairs
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+    ) is True
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        row for row in detail.json()["artifacts"] if row["data_type"] == "paired_count_comparison"
+    )["payload_json"]
+    standalone = client.post(
+        "/api/v1/ecology/paired-count-comparison",
+        json={"pairs": pairs, "reference_kind": "human_consensus"},
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert artifact["observed_organism_count"] == 2
+    assert artifact["repeated_pair_count_beyond_first_per_organism"] == 1
+    assert artifact["unequal_pair_counts_across_organisms"] is True
+    assert artifact["unit_summaries"][0]["unequal_pair_counts_within_unit"] is True
+    for key in (
+        "analysis_provenance",
+        "observed_organism_count",
+        "observation_counts_by_organism",
+        "repeated_pair_count_beyond_first_per_organism",
+        "unequal_pair_counts_across_organisms",
+        "unit_summaries",
+    ):
+        assert artifact[key] == standalone.json()[key]
+    assert artifact["evidence_level"] == "caller_supplied_unverified"
+    assert artifact["review_status"] == "requires_source_verification"

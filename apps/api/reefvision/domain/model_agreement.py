@@ -74,6 +74,7 @@ def compare_paired_counts(
     validate_declared_lineage(pairs, experimental_unit_type=unit_type)
 
     differences: list[PairedCountDifference] = []
+    pair_counts_by_organism: dict[str, int] = defaultdict(int)
     by_unit: dict[str, list[PairedCountDifference]] = defaultdict(list)
     unit_organisms: dict[str, set[str]] = defaultdict(set)
     by_unit_organism: dict[str, dict[str, list[PairedCountDifference]]] = defaultdict(
@@ -99,6 +100,7 @@ def compare_paired_counts(
             absolute_percent_deviation=percent,
         )
         differences.append(row)
+        pair_counts_by_organism[item.organism_id] += 1
         if unit_type is not None:
             assert item.experimental_unit_id is not None
             by_unit[item.experimental_unit_id].append(row)
@@ -114,6 +116,9 @@ def compare_paired_counts(
     percent_contributing_organisms = 0
     for unit_id, rows in sorted(by_unit.items()):
         organism_rows = by_unit_organism[unit_id]
+        counts_by_organism = {
+            organism: len(organism_rows[organism]) for organism in sorted(organism_rows)
+        }
         # Repeated images must not outweigh another organism in the same unit.
         organism_biases = [
             finite_descriptive_mean(row.signed_difference for row in organism_rows[organism])
@@ -143,6 +148,11 @@ def compare_paired_counts(
                 experimental_unit_id=unit_id,
                 paired_observation_count=len(rows),
                 organism_count=len(unit_organisms[unit_id]),
+                observation_counts_by_organism=counts_by_organism,
+                repeated_pair_count_beyond_first_per_organism=(
+                    len(rows) - len(counts_by_organism)
+                ),
+                unequal_pair_counts_within_unit=len(set(counts_by_organism.values())) > 1,
                 mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in rows),
                 mean_absolute_error=finite_descriptive_mean(
                     row.absolute_difference for row in rows
@@ -205,7 +215,7 @@ def compare_paired_counts(
     return PairedCountComparisonResponse(
         reference_kind=request.reference_kind,
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-paired-count-0003",
+            algorithm_version="ecology-paired-count-0004",
             records=request.pairs,
             parameters={
                 "reference_kind": request.reference_kind,
@@ -215,6 +225,14 @@ def compare_paired_counts(
         ),
         metric_name=next(iter(metrics)),
         paired_observation_count=len(differences),
+        observed_organism_count=len(pair_counts_by_organism),
+        observation_counts_by_organism=dict(sorted(pair_counts_by_organism.items())),
+        repeated_pair_count_beyond_first_per_organism=(
+            len(differences) - len(pair_counts_by_organism)
+        ),
+        unequal_pair_counts_across_organisms=(
+            len(set(pair_counts_by_organism.values())) > 1
+        ),
         nonzero_reference_count=len(valid_percent),
         zero_reference_count=len(differences) - len(valid_percent),
         mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in differences),
@@ -247,6 +265,8 @@ def compare_paired_counts(
             "Nested percent excludes organisms without nonzero human references.",
             "Signed bias is model minus human reference; no ICC, limits of agreement or p-values.",
             "Images and fragments are not independent replicates; unit means are descriptive.",
+            "Repeated pairs per organism are disclosed, not counted as biological replicates.",
+            "Unequal image counts can change pair-weighted versus nested unit means.",
             "Pair means weight observations; unit means weight declared units equally.",
             "Nested means average images per organism, organisms per unit, then units.",
             "Sampling dates and technical-replicate identity are not verified.",
