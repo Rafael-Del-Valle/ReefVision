@@ -521,3 +521,123 @@ def test_current_saved_nonzero_reference_requires_signed_percentage() -> None:
     payload["paired_differences"][0]["signed_percent_deviation"] = None
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(payload)
+
+@pytest.mark.parametrize(
+    ("unit_field", "aggregate_field"),
+    [
+        ("mean_signed_bias", "unit_balanced_mean_signed_bias"),
+        ("mean_absolute_error", "unit_balanced_mean_absolute_error"),
+        (
+            "organism_balanced_mean_signed_bias",
+            "organism_and_unit_balanced_mean_signed_bias",
+        ),
+        (
+            "organism_balanced_mean_absolute_error",
+            "organism_and_unit_balanced_mean_absolute_error",
+        ),
+        (
+            "mean_absolute_percent_deviation",
+            "unit_balanced_mean_absolute_percent_deviation",
+        ),
+        (
+            "organism_balanced_mean_absolute_percent_deviation",
+            "organism_and_unit_balanced_mean_absolute_percent_deviation",
+        ),
+        (
+            "mean_signed_percent_deviation",
+            "unit_balanced_mean_signed_percent_deviation",
+        ),
+        (
+            "organism_balanced_mean_signed_percent_deviation",
+            "organism_and_unit_balanced_mean_signed_percent_deviation",
+        ),
+    ],
+)
+def test_saved_unit_mean_cannot_be_forged_with_matching_aggregate(
+    unit_field: str, aggregate_field: str
+) -> None:
+    """Changing a tank mean and the corresponding grand mean must fail closed."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 12),
+                pair("b", "frag-B", "tank-1", 20, 16),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    payload["unit_summaries"][0][unit_field] += 1
+    payload[aggregate_field] += 1
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
+
+
+@pytest.mark.parametrize("vote_kind", ["pair", "organism"])
+def test_saved_tank_direction_swap_rejected_despite_unchanged_global_totals(
+    vote_kind: str,
+) -> None:
+    """Opposite-sign tanks cannot exchange directional votes in persisted results."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 12),
+                pair("b", "frag-B", "tank-2", 10, 8),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    over = f"overcount_{vote_kind}_count"
+    under = f"undercount_{vote_kind}_count"
+    for unit in payload["unit_summaries"]:
+        unit[over], unit[under] = unit[under], unit[over]
+    assert sum(unit[over] for unit in payload["unit_summaries"]) == payload[over]
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
+
+
+def test_saved_global_organism_votes_reject_relabeling_without_units() -> None:
+    """Even ungrouped comparisons cannot relabel all organism directions."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    pairs = [
+        pair("a", "frag-A", "tank-1", 10, 12),
+        pair("b", "frag-B", "tank-1", 10, 13),
+    ]
+    for observation in pairs:
+        observation.pop("experimental_unit_id")
+        observation.pop("experimental_unit_type")
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_observer", pairs=pairs)
+    )
+    payload = result.model_dump(mode="json")
+    payload["overcount_organism_count"] = 0
+    payload["undercount_organism_count"] = 2
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
+
+
+def test_saved_global_repeat_imbalance_flag_must_match_rows() -> None:
+    """Repeated organism images must not be hidden by changing a boolean flag."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(
+            reference_kind="human_consensus",
+            pairs=[
+                pair("a", "frag-A", "tank-1", 10, 12),
+                pair("b", "frag-A", "tank-1", 10, 9),
+                pair("c", "frag-B", "tank-1", 10, 11),
+            ],
+        )
+    )
+    payload = result.model_dump(mode="json")
+    assert payload["unequal_pair_counts_across_organisms"] is True
+    payload["unequal_pair_counts_across_organisms"] = False
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
