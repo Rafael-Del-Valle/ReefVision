@@ -242,6 +242,18 @@ class EnvironmentalContextService:
                 ScientificRecord.image_id == subject["image_id"],
                 ScientificRecord.video_id == subject["video_id"],
                 ScientificRecord.track_id == subject["track_id"],
+                ScientificRecord.model_run_id == subject["model_run_id"],
+                # Match the complete scientific subject *before* the bounded query.
+                # Otherwise positions from other video frames or image objects
+                # can exhaust the 1,000-row cap and hide the requested evidence.
+                ScientificRecord.payload_json["subject"]["frame_index"].as_integer()
+                == subject["frame_index"],
+                ScientificRecord.payload_json["subject"]["annotation_id"].as_string()
+                == subject["annotation_id"],
+                ScientificRecord.payload_json["subject"]["mask_id"].as_string()
+                == subject["mask_id"],
+                ScientificRecord.payload_json["subject"]["prediction_id"].as_string()
+                == subject["prediction_id"],
             )
             .order_by(ScientificRecord.created_at, ScientificRecord.id)
             .limit(1001)
