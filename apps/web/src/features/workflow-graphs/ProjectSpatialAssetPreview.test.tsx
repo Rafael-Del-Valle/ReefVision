@@ -263,4 +263,47 @@ describe("ProjectSpatialAssetPreview", () => {
       screen.queryByRole("option", { name: /foreign-/ }),
     ).not.toBeInTheDocument();
   });
+
+  it("rejects imported originals whose response belongs to another project", async () => {
+    vi.mocked(listProjectSpatialAssets).mockResolvedValue([]);
+    vi.mocked(importProjectSpatialAsset).mockResolvedValue({
+      ...asset,
+      project_id: "foreign-project",
+    });
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    const file = new File(["ply"], "colony.ply");
+    fireEvent.change(screen.getByLabelText("Import 3D original"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import original" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "invalid project ownership or unreviewed provenance",
+    );
+    expect(screen.getByLabelText("Project 3D source")).toHaveValue("");
+    expect(
+      screen.queryByRole("option", { name: /colony.ply/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/human scientific review remains required/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rejects imported originals with invalid integrity digests", async () => {
+    vi.mocked(listProjectSpatialAssets).mockResolvedValue([]);
+    vi.mocked(importProjectSpatialAsset).mockResolvedValue({
+      ...asset,
+      sha256: "not-a-digest",
+    });
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    const file = new File(["ply"], "colony.ply");
+    fireEvent.change(screen.getByLabelText("Import 3D original"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import original" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "invalid project ownership or unreviewed provenance",
+    );
+    expect(screen.getByLabelText("Project 3D source")).toHaveValue("");
+  });
+
 });
