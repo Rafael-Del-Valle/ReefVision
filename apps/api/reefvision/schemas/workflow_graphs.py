@@ -32,6 +32,7 @@ WorkflowDataType = Literal[
     "ecology_population_csv",
     "ecology_candidate_report",
     "paired_count_comparison",
+    "paired_count_comparison_csv",
     "relative_depth_maps",
     "training_result",
     "video_tracks",
