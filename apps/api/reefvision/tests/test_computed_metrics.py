@@ -360,3 +360,122 @@ def test_tampered_definition_or_result_is_never_returned_as_valid(client: TestCl
     assert (
         client.get(f"/api/v1/projects/{project['id']}/computed-metric-results").status_code == 409
     )
+
+
+@pytest.mark.parametrize("qc", ["suspect", "rejected"])
+def test_calculation_rejects_qc_ineligible_observations(client: TestClient, qc: str) -> None:
+    project = create_project(client, "QC-eligible metric")
+    organisms, area = add_records(
+        client,
+        project["id"],
+        [
+            scientific_record("organism_count", 12, "count", qc=qc),
+            scientific_record("surveyed_area", 2, "m2", qc="accepted"),
+        ],
+    )
+    definition = create_density_definition(client, project["id"])
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/computed-metric-definitions/"
+        f"{definition['id']}/calculate",
+        json={"inputs": {"organisms": organisms["id"], "surveyed_area": area["id"]}},
+    )
+    assert response.status_code == 400, response.text
+    assert "suspect or rejected" in response.json()["detail"]
+    assert client.get(
+        f"/api/v1/projects/{project['id']}/computed-metric-results"
+    ).json()["total"] == 0
+
+
+def test_calculation_rejects_superseded_noaa_snapshot_but_accepts_current(client: TestClient):
+    from datetime import timedelta
+
+    import httpx
+
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+    from reefvision.tests.test_environmental_context import noaa_fixture
+
+    project = create_project(client, "Environmental snapshot metric")
+    raw = noaa_fixture()
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
+        ) as http,
+    ):
+        original = EnvironmentalContextService(session, http=http, now=now).import_noaa(
+            project["id"], request
+        )
+        raw["data"][0]["v"] = "21.0"
+        refreshed = EnvironmentalContextService(
+            session, http=http, now=now + timedelta(days=1)
+        ).import_noaa(project["id"], request)
+    assert original.items[0].id != refreshed.items[0].id
+
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/computed-metric-definitions",
+        json={
+            "name": "Observed temperature",
+            "expression": "temperature",
+            "inputs": [{"symbol": "temperature", "dimension": "temperature"}],
+            "output_unit": "degC",
+        },
+    )
+    assert created.status_code == 201, created.text
+    url = (
+        f"/api/v1/projects/{project['id']}/computed-metric-definitions/"
+        f"{created.json()['id']}/calculate"
+    )
+    stale = client.post(
+        url, json={"inputs": {"temperature": str(original.items[0].id)}}
+    )
+    assert stale.status_code == 400, stale.text
+    assert "superseded environmental" in stale.json()["detail"]
+
+    current = client.post(
+        url, json={"inputs": {"temperature": str(refreshed.items[0].id)}}
+    )
+    assert current.status_code == 201, current.text
+    assert current.json()["value"] == pytest.approx(21.0)
+    assert client.get(
+        f"/api/v1/projects/{project['id']}/computed-metric-results"
+    ).json()["total"] == 1
+
+
+def test_calculation_rejects_stale_calibration_even_for_count_metrics(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Count calibration provenance")
+    image_id = import_one(client, project["id"])["successful"][0]["image_id"]
+    calibration_url = f"/api/v1/images/{image_id}/measurement-calibration"
+    first = client.put(calibration_url, json={"distance_per_pixel": 0.1, "unit": "mm"})
+    assert first.status_code == 200, first.text
+    count = add_records(
+        client,
+        project["id"],
+        [scientific_record("organism_count", 12, "count", subject={"image_id": image_id})],
+    )[0]
+    definition = client.post(
+        f"/api/v1/projects/{project['id']}/computed-metric-definitions",
+        json={
+            "name": "Image organism count",
+            "expression": "organisms",
+            "inputs": [{"symbol": "organisms", "dimension": "count"}],
+            "output_unit": "count",
+        },
+    )
+    assert definition.status_code == 201, definition.text
+    changed = client.put(calibration_url, json={"distance_per_pixel": 0.2, "unit": "mm"})
+    assert changed.status_code == 200, changed.text
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/computed-metric-definitions/"
+        f"{definition.json()['id']}/calculate",
+        json={"inputs": {"organisms": count["id"]}},
+    )
+    assert response.status_code == 400, response.text
+    assert "current calibration" in response.json()["detail"]
+    assert client.get(
+        f"/api/v1/projects/{project['id']}/computed-metric-results"
+    ).json()["total"] == 0
