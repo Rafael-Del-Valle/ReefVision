@@ -1887,6 +1887,16 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             "substituted-training-output/weights/best.pt",
             "worker checkpoint path changed",
         ),
+        (
+            "best_checkpoint_path",
+            "substituted-training-output/weights/best.pt",
+            "checkpoint artifact path changed",
+        ),
+        (
+            "last_checkpoint_path",
+            "substituted-training-output/weights/last.pt",
+            "checkpoint artifact path changed",
+        ),
     ):
 
         def conflicting_checkpoint_manifest_processor(
