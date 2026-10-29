@@ -9,6 +9,13 @@ and byte-content retrieval are project-scoped. Content reads recheck the
 stored byte length and SHA-256 and reject missing or modified originals.
 The managed filesystem path is never exposed by the API.
 
+The verified reader rejects symbolic-link originals and reads at most the
+8 MiB import limit plus one byte before checking the actual byte count and
+SHA-256. This avoids unbounded reads if a source grows between filesystem
+metadata inspection and the read. A matching digest establishes byte integrity
+only; it does not establish scale or biological identity.
+
+
 The project 3D preview client rejects inconsistent source-format/kind pairs
 (PLY is `mesh_or_point_cloud`; OBJ/GLB are `mesh`), empty, fractional, or
 oversized reported source byte counts, and forged source verification flags
