@@ -174,6 +174,27 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["pose_schema_revision"] == dataset["pose_schema_revision"]
     assert payload["pose_schema_content_hash"] == dataset["pose_schema_content_hash"]
 
+    # A digest-valid artifact is not trustworthy if its saved producer has
+    # changed. The run-detail API must reject that lineage drift, not merely
+    # the provenance-export endpoint.
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert artifact is not None
+        original_producer = artifact.producer_node_run_id
+        artifact.producer_node_run_id = "substituted-pose-producer"
+        session.commit()
+
+    producer_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert producer_detail.status_code == 409, producer_detail.text
+    assert "output produced by another node" in producer_detail.json()["detail"]
+
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert artifact is not None
+        artifact.producer_node_run_id = original_producer
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
+
     # A completed saved workflow must not expose a changed scientific output
     # through the run-detail API, even when its original digest remains stored.
     with app.state.session_factory() as session:
