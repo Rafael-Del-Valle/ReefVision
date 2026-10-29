@@ -8,6 +8,13 @@ bytes of the same format deduplicate within one project. List, detail,
 and byte-content retrieval are project-scoped. Content reads recheck the
 stored byte length and SHA-256 and reject missing or modified originals.
 The managed filesystem path is never exposed by the API.
+On each verified read, the server also requires the persisted source kind to
+match the format's import classification (OBJ/GLB: mesh; PLY:
+mesh_or_point_cloud). Corrupted format/kind metadata fails closed even if the
+original bytes and SHA-256 remain unchanged. Standalone measurement and saved
+executable Workflow Builder replay both enforce this rule; regression tests
+cover all three formats and require failed workflows to publish no measurement
+artifact. This does not verify mesh topology, calibration, or specimen identity.
 
 The verified reader rejects symbolic-link originals and reads at most the
 8 MiB import limit plus one byte before checking the actual byte count and
