@@ -56,9 +56,7 @@ def test_project_original_review_replays_identically_in_saved_workflow(
 ) -> None:
     project_id = str(create_project(client, "Reviewed 3D source replay")["id"])
     base = f"/api/v1/projects/{project_id}"
-    imported = client.post(
-        f"{base}/spatial/assets", files={"file": (filename, original)}
-    )
+    imported = client.post(f"{base}/spatial/assets", files={"file": (filename, original)})
     assert imported.status_code == 201, imported.text
     asset = imported.json()
     params = {
@@ -128,9 +126,7 @@ def test_project_original_review_replays_identically_in_saved_workflow(
         saved.json()["graph_json"]["nodes"][1]["parameters"]["calibration_review"]
         == params["calibration_review"]
     )
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -166,9 +162,7 @@ def test_original_read_is_bounded_even_if_file_grows_during_read(
     with app.state.session_factory() as session:
         record = session.get(SpatialSourceAsset, asset_id)
         assert record is not None
-        original_path = resolve_managed_project_path(
-            app.state.settings, record.managed_path
-        )
+        original_path = resolve_managed_project_path(app.state.settings, record.managed_path)
 
     # Simulate replacement between path checks and the actual file read.
     read_sizes: list[int] = []
