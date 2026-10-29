@@ -213,6 +213,22 @@ def _pose_dataset(
         ):
             raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
 
+    # Explicit source-round and active-learning digests are scientific
+    # lineage assertions, even when the dataset ID and manifest still resolve.
+    source_lineage_fields = (
+        ("source_round_id", dataset.source_round_id),
+        ("source_selection_sha256", dataset.source_selection_sha256),
+        ("source_retraining_manifest_sha256", dataset.source_retraining_manifest_sha256),
+    )
+    if any(
+        payload[field] != expected
+        for field, expected in source_lineage_fields
+        if field in payload
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset artifact source lineage no longer matches frozen truth"
+        )
+
     # Downstream training must not silently accept a stale or substituted
     # landmark schema identity from a persisted Workflow Builder artifact.
     schema_fields = (
@@ -1247,6 +1263,9 @@ def execute_pose_training_dataset_adapter(
                 "project_id": project_id,
                 "dataset_id": dataset.id,
                 "manifest_sha256": dataset.manifest_sha256,
+                "source_round_id": dataset.source_round_id,
+                "source_selection_sha256": dataset.source_selection_sha256,
+                "source_retraining_manifest_sha256": dataset.source_retraining_manifest_sha256,
                 "pose_schema_id": dataset.pose_schema_id,
                 "pose_schema_revision": dataset.pose_schema_revision,
                 "pose_schema_content_hash": dataset.pose_schema_content_hash,
