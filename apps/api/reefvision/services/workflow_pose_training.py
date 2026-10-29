@@ -563,7 +563,9 @@ def _reused_pose_training_result(
             advertised_checkpoint.resolve() != (expected_weights_dir / filename).resolve()
             or not advertised_checkpoint.is_file()
         ):
-            raise ValidationError("Recovered pose-training checkpoint artifact path changed or is missing")
+            raise ValidationError(
+                "Recovered pose-training checkpoint artifact path changed or is missing"
+            )
 
     if not checkpoint.is_file():
         raise ValidationError("Recovered pose training checkpoint is missing")
