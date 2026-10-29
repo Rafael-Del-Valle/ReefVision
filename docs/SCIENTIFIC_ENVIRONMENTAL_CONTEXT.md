@@ -245,3 +245,25 @@ reference differs across records. These are descriptive statistics of eligible
 records, not independent experimental replicates. No spatial weighting,
 uncertainty propagation, confidence interval, organism transport, or advection
 is inferred. Original immutable component records remain authoritative.
+
+## Bounded environmental threshold samples (1.1 development)
+
+POST `/api/v1/projects/{project_id}/environment/events/threshold` accepts the
+same required location, UTC timestamp, distance/time bounds, optional depth
+bounds and source-kind filters as `/environment/lookup`, plus
+`threshold_value`, explicit `threshold_unit`, and `direction` (`above` or
+`below`). For example, a threshold of 68 `degF` for `water_temperature`
+is normalized to 20 `degC` before comparison. Incompatible physical units
+are rejected; comparisons are strict, so equality is not an exceedance.
+
+The response contains the original immutable scientific records, their
+provenance and QC, and the space/time/depth offsets. Suspect, rejected,
+calibration-stale and superseded-provider observations are excluded by the
+bounded lookup. The method label is
+`observed_sample_threshold_no_interpolation`: results identify **individual
+samples**, not inferred onset/cessation times, durations, independent events,
+or causal environmental effects. Sample uncertainty remains attached to its
+source record; the threshold comparison does not claim statistical certainty.
+This endpoint is read-only and does not persist new event artifacts. Event
+aggregation, persisted event definitions and typed Workflow Builder execution
+remain future work before 1.1 release acceptance.
