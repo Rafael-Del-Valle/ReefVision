@@ -137,9 +137,35 @@ def validate_report(
     if expected_upgrade == "passed":
         _require(upgrade == "PASS", "Real MSI upgrade did not PASS")
         _verified_pass(report, "upgrade", started=start, completed=end)
-        _require(bool(report.get("previous_installer_path")) and bool(report.get("previous_installer_version")), "Missing previous MSI evidence")
+        previous_path = report.get("previous_installer_path")
+        previous_digest = report.get("previous_installer_sha256")
+        _require(
+            isinstance(previous_path, str) and previous_path.lower().endswith(".msi"),
+            "Missing previous MSI path",
+        )
+        _require(
+            isinstance(previous_digest, str) and SHA256.fullmatch(previous_digest) is not None,
+            "Missing or invalid previous MSI SHA-256",
+        )
+        _require(
+            previous_digest.lower() != report["installer_sha256"].lower(),
+            "Previous and target MSI SHA-256 digests are identical",
+        )
+        _require(bool(report.get("previous_installer_version")), "Missing previous MSI version")
         previous_version = _msi_version(report["previous_installer_version"], "previous MSI version")
         _require(previous_version < target_version, "Target MSI is not newer than previous MSI")
+        # The CLI supplies --installer. In that mode, bind the upgrade claim to
+        # both actual MSI files rather than trusting a path/version string.
+        if installer is not None:
+            previous_msi = Path(previous_path)
+            _require(previous_msi.is_file(), "Previous MSI is missing")
+            _require(previous_msi.resolve() != installer.resolve(), "Previous MSI is the target MSI")
+            with previous_msi.open("rb") as stream:
+                actual_digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            _require(
+                actual_digest == previous_digest.lower(),
+                "Previous MSI hash differs from report",
+            )
     else:
         _require(upgrade == "SKIPPED", "Clean-install-only report must not claim upgrade acceptance")
         _require(

@@ -64,6 +64,9 @@ $report = [ordered]@{
     installer_path = $InstallerPath
     installer_sha256 = $InstallerHash
     previous_installer_path = if ($PreviousInstallerPath) { $PreviousInstallerPath } else { $null }
+    previous_installer_sha256 = if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        (Get-FileHash -LiteralPath $PreviousInstallerPath -Algorithm SHA256).Hash
+    } else { $null }
     previous_installer_version = $PreviousProductVersion
     windows_version = [Environment]::OSVersion.VersionString
     architecture = $env:PROCESSOR_ARCHITECTURE

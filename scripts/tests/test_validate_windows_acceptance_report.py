@@ -100,6 +100,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 report["reefvision_version"] = "2.0.0"
                 report["upgrade"] = pass_evidence()
                 report["previous_installer_path"] = "C:/previous.msi"
+                report["previous_installer_sha256"] = "b" * 64
                 report["previous_installer_version"] = version
                 with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "MSI numeric limits"):
                     MODULE.validate_report(report, expected_version="2.0.0", expected_upgrade="passed")
@@ -116,6 +117,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         report["reefvision_version"] = "1.0.3"
         report["upgrade"] = pass_evidence()
         report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        report["previous_installer_sha256"] = "b" * 64
         report["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
         for version in ("1.0.3", "1.0.4", "invalid"):
@@ -165,11 +167,52 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         upgraded["reefvision_version"] = "1.0.3"
         upgraded["upgrade"] = pass_evidence()
         upgraded["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        upgraded["previous_installer_sha256"] = "b" * 64
         upgraded["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(upgraded, expected_version="1.0.3", expected_upgrade="passed")
         upgraded["upgrade"]["detail"] = "  "
         with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "PASS evidence detail"):
             MODULE.validate_report(upgraded, expected_version="1.0.3", expected_upgrade="passed")
+
+    def test_upgrade_requires_hashes_of_both_real_msi_files(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            previous = Path(folder) / "previous.msi"
+            target = Path(folder) / "target.msi"
+            previous.write_bytes(b"disposable previous MSI fixture")
+            target.write_bytes(b"disposable target MSI fixture")
+            report = good_report()
+            report["reefvision_version"] = "1.0.3"
+            report["installer_path"] = str(target)
+            report["installer_sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+            report["upgrade"] = pass_evidence()
+            report["previous_installer_path"] = str(previous)
+            report["previous_installer_version"] = "1.0.2"
+            report["previous_installer_sha256"] = hashlib.sha256(previous.read_bytes()).hexdigest()
+            MODULE.validate_report(
+                report, expected_version="1.0.3", expected_upgrade="passed", installer=target
+            )
+
+            for field, value in (
+                ("previous_installer_sha256", None),
+                ("previous_installer_sha256", "invalid"),
+                ("previous_installer_sha256", report["installer_sha256"]),
+                ("previous_installer_path", str(Path(folder) / "missing.msi")),
+                ("previous_installer_path", str(target)),
+            ):
+                with self.subTest(field=field, value=value):
+                    changed = copy.deepcopy(report)
+                    changed[field] = value
+                    with self.assertRaises(MODULE.AcceptanceEvidenceError):
+                        MODULE.validate_report(
+                            changed, expected_version="1.0.3", expected_upgrade="passed",
+                            installer=target
+                        )
+
+            previous.write_bytes(b"tampered previous MSI")
+            with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "Previous MSI hash differs"):
+                MODULE.validate_report(
+                    report, expected_version="1.0.3", expected_upgrade="passed", installer=target
+                )
 
     def test_upgrade_skip_must_be_explicit(self) -> None:
         report = good_report()
