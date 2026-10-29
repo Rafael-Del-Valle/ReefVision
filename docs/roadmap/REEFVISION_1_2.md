@@ -3776,3 +3776,36 @@ schema. These consistency checks **do not** authenticate source records,
 registered units, biological identity or human consensus. Previous algorithm
 versions remain readable. CI and Windows scientific/GUI acceptance remain
 required before release.
+
+## Per-tank paired-count evidence reconciliation (2026-10-29)
+
+Pre-edit exact head `5dbe713c51f55f16dee269f68d867643852f9457`
+completed 16/19 GitHub Actions workflows successfully. All three backend
+failures stopped at the same Ruff formatting discrepancy (a missing blank
+line at `schemas/model_agreement.py:335`), before running pytest. The
+formatting issue was corrected.
+
+For current `ecology-paired-count-0007` persisted results, the existing
+typed comparison contract now independently reconstructs each declared
+tank's paired-image directions, organism-mean directional votes, eight
+pair/organism-balanced signed/absolute statistics, and percentage-eligible
+denominators from the organisms assigned to that tank. It also verifies
+global organism-direction votes and unequal repeated-image flags against
+the underlying paired rows. Altering a tank mean and its grand mean
+together, or swapping two tanks' directional labels while preserving
+global totals, must fail validation. The existing standalone endpoint
+and saved executable `ecology_paired_count_comparison` Workflow Builder
+share this typed contract, and a saved-workflow tampering regression
+exercises it. Twelve new focused negative regression variants cover
+unit means, directional vote swaps, ungrouped organism votes and repeated
+image imbalance.
+
+These are **internal arithmetic and roster consistency checks only**:
+caller-declared organism IDs, tank IDs, human reference counts and
+calibration are still unverified. No inferential independence, validated
+parentage, new statistical significance or verified biological evidence
+is claimed. Older algorithm artifacts retain their previous decoding
+contract. Full exact-head CI, authenticated longitudinal measurement
+review, migration reconciliation with 1.1, real-data scientific review
+and physical Windows GUI/MSI acceptance remain required.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
