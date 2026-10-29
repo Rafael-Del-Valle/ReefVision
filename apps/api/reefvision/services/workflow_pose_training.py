@@ -1208,10 +1208,26 @@ def create_pose_workflow_training_result(
 
     checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
 
+    # A worker may have already recorded a checkpoint identity. Do not
+    # overwrite conflicting evidence when finalizing a saved workflow node.
+    # Otherwise first completion could conceal an altered worker manifest,
+    # while a subsequent replay would appear to have valid provenance.
+    worker_manifest = dict(run.artifact_manifest_json or {})
+    if (
+        "result_checkpoint_sha256" in worker_manifest
+        and worker_manifest["result_checkpoint_sha256"] != checkpoint_sha256
+    ):
+        raise ValidationError("Completed pose training worker checkpoint checksum changed")
+    if (
+        "result_checkpoint_path" in worker_manifest
+        and worker_manifest["result_checkpoint_path"] != run.result_checkpoint_path
+    ):
+        raise ValidationError("Completed pose training worker checkpoint path changed")
+
     # Bind the completed training result to its on-disk checkpoint so a
     # retried Workflow Builder node cannot reuse different model weights.
     run.artifact_manifest_json = {
-        **dict(run.artifact_manifest_json or {}),
+        **worker_manifest,
         "result_checkpoint_path": run.result_checkpoint_path,
         "result_checkpoint_sha256": checkpoint_sha256,
     }
