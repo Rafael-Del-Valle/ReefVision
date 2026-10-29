@@ -3622,3 +3622,27 @@ Exact new-head CI, authenticated calibrated longitudinal source records,
 1.1 migration reconciliation, real-data scientific review and installed
 Windows GUI/MSI acceptance remain required. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+
+## Paired-count exact-head CI provenance regression (2026-10-29)
+
+Pre-edit exact-head `14e63d7e` Actions completed **17/19** successfully.
+The CI and ReefVision 1.0 Acceptance backend jobs each completed their test
+suites except for the same stale lineage acceptance assertion at
+`test_ecology_lineage_workflow_1_2.py:128`: the test expected the historical
+`ecology-paired-count-0004` identifier, but the implemented and independently
+regressed directional-frequency algorithm correctly emits `0006`. Ruff,
+strict typing, the frontend job and the separate Pose Workflow Validation
+workflow passed at that head. The lineage regression now expects `0006` and
+checks that two tank units sharing a declared parent preserve two biological
+units, opposite signed count directions, both nonzero-reference percentage
+contributors, zero balanced signed-percent bias and standalone/persisted
+Workflow Builder artifact parity. This is a regression/acceptance repair,
+not a change to production statistics or source verification.
+
+No full local checkout was possible (GitHub DNS resolution failed); no new-head
+pytest, Ruff, mypy, migration, Windows installed-GUI or MSI/CAB acceptance
+passes are claimed before their actual execution. Reviewed source-backed
+longitudinal calibration, organism identity, study-design independence and
+1.1 Alembic-head reconciliation remain release blockers.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
