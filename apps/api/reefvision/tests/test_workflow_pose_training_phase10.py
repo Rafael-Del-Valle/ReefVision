@@ -1517,6 +1517,32 @@ def test_pose_workflow_rejects_lossy_initialization_mode_from_verified_truth(
             processor=_fake_pose_processor,
         )
 
+    # A connected but empty seed-model artifact must not be interpreted as
+    # an unconnected optional port and silently produce random-init science.
+    for requested_parameters, expected_error in (
+        (
+            {"training_config": {"epochs": 1}},
+            "Pose retraining requires a registered seed model",
+        ),
+        (
+            {"initialization_mode": "random", "training_config": {"epochs": 1}},
+            "Random initialization cannot use an initial model",
+        ),
+    ):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=expected_error),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                initial_model_payload={},
+                parameters=requested_parameters,
+                processor=_fake_pose_processor,
+            )
+
     with app.state.session_factory() as session:
         assert session.scalar(select(TrainingRun.id)) is None
         result = create_pose_workflow_training_result(
