@@ -96,9 +96,7 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
                 if defaulted_field is None:
                     assert_compatible_revision_0038(connection)
                 else:
-                    with pytest.raises(
-                        RuntimeError, match="defaulted required columns"
-                    ):
+                    with pytest.raises(RuntimeError, match="defaulted required columns"):
                         assert_compatible_revision_0038(connection)
                 after_schema = tuple(
                     connection.execute(
@@ -109,7 +107,10 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
                     ).all()
                 )
                 assert after_schema == before_schema
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version"))
+                    == "0041"
+                )
                 assert connection.scalar(text("SELECT value FROM observations")) == (
                     "original coral observation"
                 )
