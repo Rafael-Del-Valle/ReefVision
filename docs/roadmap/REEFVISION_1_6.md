@@ -1,5 +1,28 @@
 # ReefVision 1.6 — QC workflow integration (development)
 
+## 2026-10-28 — Saved QC cross-signal scientific consistency (Track D)
+
+- Inspected 1.6's existing queue generator, versioned integrity validator, executable
+  saved Workflow Builder node, standalone regression suite and CI at predecessor
+  `3915dd55`. The exact-head backend job failed at Ruff formatting in
+  `workflow_review_queue_integrity.py:209,236`; frontend passed.
+- Repaired the two CI-reported formatting differences and strengthened **v3-only**
+  persisted scientific evidence validation: a nonzero stale-review-age signal
+  cannot coexist with an image marked reviewed, and when pending predictions
+  exist, the minimum-confidence deficit cannot be lower than the
+  mean-confidence deficit. Both rules reproduce the existing deterministic
+  queue generator, not live rescoring or an external model.
+- Added re-signed, internally score-consistent contradiction regressions and
+  valid positive cases, retaining mutable reviewer decisions. Updated the
+  existing valid pending-count tests to reflect real confidence ordering.
+  The existing persisted `project_source -> qc_review_queue` regression
+  exercises this shared validator on saved-run replay; full exact-head CI
+  is still required to confirm compatibility.
+- **HOLD:** independent 1.1/1.6 Alembic 0038 reconciliation, exact-head
+  lint/type/backend/frontend/E2E, Windows MSI upgrade/rollback and installed
+  GUI, and representative biological-data validation. No merge/release.
+
+
 **Status:** draft implementation, not release acceptance. Master coordination: issue #76.
 
 
