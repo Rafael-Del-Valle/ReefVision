@@ -77,6 +77,8 @@ def test_real_0041_schema_enforces_reviewer_request_identity(tmp_path: Path) -> 
             assert event_columns["review_queue_item_id"]["nullable"] is False
             assert event_columns["client_request_id"]["nullable"] is False
             assert event_columns["event_type"]["nullable"] is False
+            for required in ("id", "review_queue_id", "project_id", "actor", "created_at"):
+                assert event_columns[required]["nullable"] is False
             checks = inspector.get_check_constraints(events)
             assert any(
                 check["name"] == "ck_review_queue_item_event_type"
