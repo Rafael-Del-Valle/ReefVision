@@ -153,9 +153,7 @@ def bulk_review_queue_items(
         session.rollback()
         if session.get_bind().dialect.name != "sqlite" or not _is_sqlite_writer_contention(exc):
             raise
-        raise ConflictError(
-            "SQLite review queue is busy; retry the same bulk request ID"
-        ) from exc
+        raise ConflictError("SQLite review queue is busy; retry the same bulk request ID") from exc
 
 
 @router.post("/review-queue-items/{item_id}/start", response_model=ReviewQueueItemResponse)
