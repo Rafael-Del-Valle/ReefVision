@@ -116,3 +116,56 @@ def test_track_frame_context_does_not_reuse_another_frame_or_image_position(clie
         context(client, project["id"], {**subject, "frame_index": 1}).json()["status"]
         == "unavailable"
     )
+
+
+def test_subject_position_limit_excludes_other_video_frames_before_counting(
+    client, monkeypatch
+):
+    """A busy video must not hide a valid position for a specific frame."""
+    from datetime import UTC, datetime, timedelta
+
+    from reefvision.schemas.scientific_data import ScientificRecordCreate
+    from reefvision.services.scientific_data import ScientificDataService
+    from reefvision.tests.test_video_track_exchange_phase6 import _video
+
+    project = create_project(client)
+    video = _video(client, project["id"], monkeypatch)
+    unrelated_frame = {"video_id": video["id"], "frame_index": 1}
+    requested_frame = {"video_id": video["id"], "frame_index": 0}
+    start = datetime(2026, 4, 3, 13, tzinfo=UTC)
+
+    with client.app.state.session_factory() as session:
+        science = ScientificDataService(session)
+        unrelated = [
+            ScientificRecordCreate.model_validate(
+                observation(
+                    variable="geographic_position",
+                    value=1,
+                    unit="1",
+                    subject=unrelated_frame,
+                    observed_at=(start + timedelta(seconds=index)).isoformat(),
+                )
+            )
+            for index in range(1001)
+        ]
+        science.add_records(project["id"], unrelated)
+        target = science.add_records(
+            project["id"],
+            [
+                ScientificRecordCreate.model_validate(
+                    observation(
+                        variable="geographic_position",
+                        value=1,
+                        unit="1",
+                        subject=requested_frame,
+                    )
+                )
+            ],
+        )[0]
+        target_id = target.id
+        session.commit()
+
+    response = context(client, project["id"], requested_frame)
+    assert response.status_code == 200, response.text
+    assert [row["id"] for row in response.json()["positions"]] == [target_id]
+    assert response.json()["position"]["id"] == target_id
