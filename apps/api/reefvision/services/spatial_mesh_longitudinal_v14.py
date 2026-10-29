@@ -322,6 +322,31 @@ def compare_mesh_observations(
     if extent_delta is not None:
         for record, nominal in zip((before, after), extents, strict=True):
             pair = record.get("axis_aligned_bounding_box_diagonal_scale_interval_m")
+            # A caller cannot substitute narrower scale-only extent bounds
+            # than those implied by the source preview's uncertainty.
+            if "relative_scale_uncertainty" in metadata and pair is not None:
+                uncertainty = metadata["relative_scale_uncertainty"]
+                if uncertainty is None:
+                    raise ValueError(
+                        "Bounding-box scale interval requires source uncertainty"
+                    )
+                if (
+                    nominal is not None
+                    and isinstance(pair, list)
+                    and len(pair) == 2
+                    and all(type(value) in (int, float) and isfinite(value) for value in pair)
+                ):
+                    expected = (
+                        nominal * (1 - uncertainty),
+                        nominal * (1 + uncertainty),
+                    )
+                    if not all(
+                        isclose(value, bound, rel_tol=1e-9, abs_tol=0.0)
+                        for value, bound in zip(pair, expected, strict=True)
+                    ):
+                        raise ValueError(
+                            "Bounding-box scale interval contradicts source uncertainty"
+                        )
             if (
                 nominal is None
                 or not isinstance(pair, list)
