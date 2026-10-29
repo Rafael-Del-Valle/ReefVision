@@ -1,3 +1,27 @@
+## 2026-10-28 — SQLite integrity errors are not all retryable (Track D)
+
+- Inspected the isolated 1.6 PR #77, issue #76, branch scope, existing
+  class/QC/Workflow Builder implementation and run 40807532420. Backend
+  failed Ruff formatting in the QC adapter and SQLite contention regression;
+  frontend passed. No other version branch was integrated.
+- The QC adapter previously converted **every** SQLAlchemy IntegrityError
+  during queue creation into a concurrency retry. This could hide unrelated
+  database constraint defects as benign collisions. The adapter now converts
+  only a real SQLite PRIMARY KEY failure on `review_queues.id` into the
+  existing controlled retry, and propagates all other integrity errors.
+  The SQLITE_BUSY/LOCKED handling remains separate and narrow.
+- Added real SQLite extended-error-code tests for the deterministic queue
+  identity versus an unrelated UNIQUE constraint, plus an executable saved
+  `project_source -> qc_review_queue` regression proving unrelated integrity
+  failure is not swallowed. The same saved graph still tests lock recovery,
+  typed dimensionless output, human-review gate, reviewer-comment preservation
+  and unchanged unverified annotations. Fixed both exact CI-reported Ruff
+  formatting failures from run 40807532420.
+- No migration, cross-version merge, auto-approval, pretrained weights,
+  deployment or research-data deletion. **HOLD:** exact-head CI, native
+  multi-process/Windows SQLite testing, 1.1/1.6 Alembic 0038 reconciliation,
+  MSI upgrade/rollback, installed GUI and representative biological data.
+
 ## 2026-10-28 — Stable workflow QC ownership under competing writers (Track D)
 
 - Audited existing class/visibility, QC, dense-editor, onboarding and executable
