@@ -21,6 +21,7 @@ import {
 } from "./workflowTemplates";
 import { LocalMeshPreview } from "./LocalMeshPreview";
 import { LocalPointCloudPreview } from "./LocalPointCloudPreview";
+import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
@@ -267,6 +268,7 @@ export function WorkflowGraphWorkspace({
         </p>
       </div>
 
+      <ProjectSpatialAssetPreview projectId={project.id} />
       <LocalMeshPreview projectId={project.id} />
       <LocalPointCloudPreview projectId={project.id} />
 
