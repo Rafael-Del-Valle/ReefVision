@@ -52,7 +52,6 @@ def test_desktop_fresh_sqlite_migration_persists_revision_across_restarts(
         reopened_engine.dispose()
 
 
-
 def test_real_0041_schema_enforces_reviewer_request_identity(tmp_path: Path) -> None:
     """Inspect actual Alembic DDL, not a synthetic 0041 revision stamp."""
     database = tmp_path / "audit-contract.sqlite"
