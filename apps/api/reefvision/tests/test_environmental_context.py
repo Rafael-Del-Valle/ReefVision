@@ -399,8 +399,62 @@ def test_threshold_samples_preserve_source_records_and_unit_contract(client):
     assert [item["record"]["id"] for item in below.json()["matches"]] == source_ids[1:2]
     wrong_units = client.post(url, json={**payload, "threshold_unit": "m/s"})
     assert wrong_units.status_code == 400, wrong_units.text
+    unsupported = client.post(url, json={**payload, "variable": "organism_count"})
+    assert unsupported.status_code == 400, unsupported.text
     nonfinite = client.post(url, json={**payload, "threshold_value": "NaN"})
     assert nonfinite.status_code == 422, nonfinite.text
     history = client.get(records_url)
     assert history.status_code == 200, history.text
     assert history.json()["total"] == len(source_ids)
+
+
+def test_threshold_samples_exclude_superseded_noaa_evidence(client):
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+
+    project = create_project(client)
+    raw = noaa_fixture()
+    request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
+        ) as http,
+    ):
+        original = EnvironmentalContextService(session, http=http, now=now).import_noaa(
+            project["id"], request
+        )
+        raw["data"][0]["v"] = "19.0"
+        corrected = EnvironmentalContextService(
+            session, http=http, now=now + timedelta(days=1)
+        ).import_noaa(project["id"], request)
+
+    url = f"/api/v1/projects/{project['id']}/environment/events/threshold"
+    payload = {
+        "variable": "water_temperature",
+        "location": {"latitude": 32.75, "longitude": -79.93},
+        "observed_at": "2026-04-03T13:00:00Z",
+        "max_distance_m": 1000,
+        "max_time_delta_s": 60,
+        "source_kinds": ["observed"],
+        "threshold_value": 19.5,
+        "threshold_unit": "degC",
+        "direction": "above",
+    }
+    above = client.post(url, json=payload)
+    assert above.status_code == 200, above.text
+    assert above.json()["matches"] == []
+
+    below = client.post(url, json={**payload, "direction": "below"})
+    assert below.status_code == 200, below.text
+    assert [item["record"]["id"] for item in below.json()["matches"]] == [
+        str(corrected.items[0].id)
+    ]
+    history = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
+    assert history.status_code == 200, history.text
+    assert history.json()["total"] == len(original.items) + len(corrected.items)
+    previous = next(
+        item for item in history.json()["items"] if item["id"] == str(original.items[0].id)
+    )
+    assert previous["environmental_snapshot_current"] is False
