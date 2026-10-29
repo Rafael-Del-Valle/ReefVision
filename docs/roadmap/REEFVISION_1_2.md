@@ -3526,3 +3526,28 @@ test files; it does not alter biological calculations, source-review boundaries,
 or experimental-unit weighting. Full latest-head CI, authenticated calibration
 and longitudinal identities, migration reconciliation and installed Windows
 GUI/MSI acceptance are still required. **1.2 NOT RELEASE-READY.**
+
+## Paired-count exact-head CI regression and shared-parent workflow parity (2026-10-28)
+
+The exact-head GitHub Actions CI and ReefVision 1.0 Acceptance backend jobs at
+`2d4e677e` each completed 2,005 passing tests, 32 skips and **one failed
+assertion**: a legacy standalone parent-lineage test still expected
+`ecology-paired-count-0003` after the biological-denominator contract had
+intentionally advanced to `ecology-paired-count-0004`. Ruff check and format
+passed before pytest. The assertion now checks the current provenance contract,
+and the positive case explicitly verifies disclosure of a parent colony shared
+between two separately declared tank experimental units.
+
+A new executable saved-Workflow-Builder regression checks the same
+shared-parent/two-tank design from plan through persisted typed artifact. It
+requires the shared-parent disclosure, two distinct declared tank units,
+one organism per unit, mandatory unverified evidence and source-review gate,
+and parity with the standalone API for provenance and nested summaries.
+These checks do not establish true tank independence or verify parent identity.
+They do not change the production statistical algorithm.
+
+The new head awaits its own CI verification; local full-repository checkout is
+blocked by GitHub DNS resolution. Real authenticated calibrated longitudinal
+measurements, 1.1 migration reconciliation, scientist review, and physical
+Windows GUI/MSI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
+1.3 not started.**
