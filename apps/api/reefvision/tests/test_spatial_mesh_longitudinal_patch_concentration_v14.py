@@ -195,7 +195,7 @@ def test_patch_distribution_rejects_tampered_full_mesh_areas(corruption, timepoi
 def test_patch_distribution_rejects_tampered_full_mesh_total() -> None:
     observations = [_preview(payload) for payload in _meshes()]
     observations[0]["surface_area_m2"] *= 2
-    with pytest.raises(ValueError, match="Patch surface areas"):
+    with pytest.raises(ValueError, match="Surface-area scale interval"):
         compare_mesh_observations(*observations)
 
 
@@ -203,7 +203,7 @@ def test_patch_distribution_rejects_tampered_full_mesh_total() -> None:
 def test_patch_distribution_rejects_zero_full_mesh_total(timepoint: int) -> None:
     observations = [_preview(payload) for payload in _meshes()]
     observations[timepoint]["surface_area_m2"] = 0.0
-    with pytest.raises(ValueError, match="Patch surface areas"):
+    with pytest.raises(ValueError, match="Surface-area scale interval"):
         compare_mesh_observations(*observations)
 
 
@@ -211,7 +211,10 @@ def test_degenerate_zero_area_meshes_keep_patch_distributions_unavailable() -> N
     """A real zero-area reconstruction is not a forged missing distribution."""
     early, late = _meshes()
     for source in (early, late):
-        source["vertices"] = [[0, 0, 0] for _ in source["vertices"]]
+        source["vertices"] = [
+            [0, 0, 0], [1, 0, 0], [2, 0, 0],
+            [10, 0, 0], [11, 0, 0], [12, 0, 0],
+        ]
     before, after = _preview(early), _preview(late)
     assert before["surface_area_m2"] == after["surface_area_m2"] == 0.0
     assert before["edge_connected_patch_surface_area_fractions"] is None
@@ -235,7 +238,10 @@ def test_zero_area_mesh_rejects_forged_patch_area_evidence(
 ) -> None:
     early, late = _meshes()
     for source in (early, late):
-        source["vertices"] = [[0, 0, 0] for _ in source["vertices"]]
+        source["vertices"] = [
+            [0, 0, 0], [1, 0, 0], [2, 0, 0],
+            [10, 0, 0], [11, 0, 0], [12, 0, 0],
+        ]
     before, after = _preview(early), _preview(late)
     before["edge_connected_patch_surface_areas_m2"] = forged_areas
     with pytest.raises(ValueError, match="Patch concentration requires source area fractions"):
