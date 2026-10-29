@@ -65,6 +65,53 @@ def test_saved_workflow_fails_closed_on_mixed_colony_lineage(client: TestClient)
     assert not any(row["data_type"] == "paired_count_comparison" for row in body["artifacts"])
 
 
+
+def test_saved_workflow_rejects_same_organism_in_two_tanks(client: TestClient) -> None:
+    """Repeated images of one organism cannot create a second tank replicate."""
+    project = create_project(client, "Cross-tank organism identity guard")
+    project_id = str(project["id"])
+    pairs = _pairs()
+    pairs[1]["organism_id"] = pairs[0]["organism_id"]
+    pairs[1]["experimental_unit_id"] = "tank-B"
+    standalone = client.post(
+        "/api/v1/ecology/paired-count-comparison",
+        json={"pairs": pairs, "reference_kind": "human_consensus"},
+    )
+    assert standalone.status_code == 400, standalone.text
+    assert "change experimental units" in standalone.json()["detail"]
+
+    graph = _graph()
+    graph["nodes"][1]["parameters"]["pairs"] = pairs
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    body = detail.json()
+    assert body["run"]["status"] == "failed"
+    assert "change experimental units" in body["run"]["error_message"]
+    assert not any(row["data_type"] == "paired_count_comparison" for row in body["artifacts"])
+
+
 def test_standalone_accepts_parent_fragments_in_separate_tanks(client: TestClient) -> None:
     pairs = _pairs()
     for index, row in enumerate(pairs):
@@ -102,7 +149,6 @@ def test_parent_lineage_changes_canonical_fingerprint(client: TestClient) -> Non
         before.json()["analysis_provenance"]["canonical_input_sha256"]
         != after.json()["analysis_provenance"]["canonical_input_sha256"]
     )
-
 
 
 def test_saved_workflow_discloses_shared_parent_across_tanks(client: TestClient) -> None:
@@ -155,6 +201,13 @@ def test_saved_workflow_discloses_shared_parent_across_tanks(client: TestClient)
     payload = artifacts[0]
     assert payload["project_id"] == project_id
     assert payload["declared_independent_unit_count"] == 2
+    assert {unit["experimental_unit_id"] for unit in payload["unit_summaries"]} == {
+        "tank-0",
+        "tank-1",
+    }
+    assert payload["observed_organism_count"] == 2
+    assert payload["paired_observation_count"] == 2
+    assert payload["repeated_pair_count_beyond_first_per_organism"] == 0
     assert payload["cross_unit_shared_parent_colony_ids"] == ["same-parent"]
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"
