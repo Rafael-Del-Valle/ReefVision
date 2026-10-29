@@ -1482,7 +1482,7 @@ def test_pose_workflow_rejects_lossy_initialization_mode_from_verified_truth(
         "dataset_id": dataset["id"],
         "manifest_sha256": dataset["manifest_sha256"],
     }
-    for invalid_mode in (False, 0, [], {}, ""):
+    for invalid_mode in (None, False, 0, [], {}, ""):
         with (
             app.state.session_factory() as session,
             pytest.raises(
