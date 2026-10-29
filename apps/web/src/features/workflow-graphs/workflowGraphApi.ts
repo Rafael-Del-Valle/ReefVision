@@ -260,7 +260,6 @@ export function cancelWorkflowRunJob(
   );
 }
 
-
 /** Project-owned originals are immutable and remain unreviewed scientific evidence. */
 export interface SpatialSourceAsset {
   id: string;
@@ -290,8 +289,14 @@ export async function importProjectSpatialAsset(
   projectId: string,
   file: File,
 ): Promise<SpatialSourceAsset> {
-  if (!/\.(obj|ply|glb)$/i.test(file.name) || !file.size || file.size > 8 * 1024 * 1024) {
-    throw new Error("Import requires a nonempty OBJ, PLY, or GLB file of at most 8 MiB.");
+  if (
+    !/\.(obj|ply|glb)$/i.test(file.name) ||
+    !file.size ||
+    file.size > 8 * 1024 * 1024
+  ) {
+    throw new Error(
+      "Import requires a nonempty OBJ, PLY, or GLB file of at most 8 MiB.",
+    );
   }
   const body = new FormData();
   body.append("file", file);
@@ -336,7 +341,12 @@ export function previewProjectSpatialAsset(
       calibration.calibration_method,
     )
   ) {
-    throw new Error("Calibration method must identify an unverified evidence source.");
+    throw new Error(
+      "Calibration method must identify an unverified evidence source.",
+    );
+  }
+  if (kind !== "mesh" && kind !== "point_cloud") {
+    throw new Error("Unsupported spatial preview geometry mode.");
   }
   if (kind === "point_cloud" && asset.source_format !== "ply") {
     throw new Error("Only imported PLY originals support point-cloud preview.");
@@ -348,7 +358,9 @@ export function previewProjectSpatialAsset(
     !calibration.calibration_evidence.trim() ||
     calibration.calibration_evidence.length > 2_000
   ) {
-    throw new Error("Provide a positive scale and bounded calibration evidence.");
+    throw new Error(
+      "Provide a positive scale and bounded calibration evidence.",
+    );
   }
   if (
     calibration.relative_scale_uncertainty != null &&
@@ -357,6 +369,12 @@ export function previewProjectSpatialAsset(
       calibration.relative_scale_uncertainty > 1)
   ) {
     throw new Error("Relative scale uncertainty must be between 0 and 1.");
+  }
+  if (
+    calibration.coordinate_frame_id != null &&
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(calibration.coordinate_frame_id)
+  ) {
+    throw new Error("Spatial source frame ID must be a bounded label.");
   }
   return request<Record<string, unknown>>(
     `/projects/${encodeURIComponent(projectId)}/spatial/${kind === "mesh" ? "mesh-preview" : "point-cloud-preview"}`,
