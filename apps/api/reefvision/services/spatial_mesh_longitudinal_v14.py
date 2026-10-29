@@ -320,7 +320,9 @@ def compare_mesh_observations(
     extent_rate = extent_delta / elapsed_days if extent_delta is not None else None
     extent_intervals: list[list[float]] = []
     if extent_delta is not None:
-        for record, nominal in zip((before, after), extents, strict=True):
+        for record, nominal, metadata in zip(
+            (before, after), extents, (first, second), strict=True
+        ):
             pair = record.get("axis_aligned_bounding_box_diagonal_scale_interval_m")
             # A caller cannot substitute narrower scale-only extent bounds
             # than those implied by the source preview's uncertainty.
