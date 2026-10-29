@@ -317,7 +317,7 @@ export async function importProjectSpatialAsset(
   return (await response.json()) as SpatialSourceAsset;
 }
 
-export function previewProjectSpatialAsset(
+export async function previewProjectSpatialAsset(
   projectId: string,
   asset: SpatialSourceAsset,
   kind: "mesh" | "point_cloud",
@@ -328,6 +328,11 @@ export function previewProjectSpatialAsset(
     !asset.id.trim() ||
     !/^[a-f0-9]{64}$/i.test(asset.sha256) ||
     !["obj", "ply", "glb"].includes(asset.source_format) ||
+    asset.source_kind !==
+      (asset.source_format === "ply" ? "mesh_or_point_cloud" : "mesh") ||
+    !Number.isSafeInteger(asset.size_bytes) ||
+    asset.size_bytes <= 0 ||
+    asset.size_bytes > 8 * 1024 * 1024 ||
     asset.measurement_status !== "source_unreviewed" ||
     asset.calibration_verified !== false ||
     asset.specimen_identity_verified !== false
