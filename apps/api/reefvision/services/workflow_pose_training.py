@@ -728,7 +728,7 @@ def create_pose_workflow_training_result(
     # An explicit falsy mode must not silently become random initialization
     # (or registered-model initialization when a seed artifact is connected).
     requested_mode = parameters.get("initialization_mode")
-    if requested_mode is None:
+    if "initialization_mode" not in parameters:
         initialization_mode = "registered_model" if initial_model_payload is not None else "random"
     elif not isinstance(requested_mode, str) or not requested_mode:
         raise ValidationError("Pose initialization_mode must be random or registered_model")
