@@ -1858,7 +1858,6 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             "worker checkpoint path changed",
         ),
     ):
-
         def conflicting_checkpoint_manifest_processor(
             settings: Settings,
             factory: sessionmaker[Session],
