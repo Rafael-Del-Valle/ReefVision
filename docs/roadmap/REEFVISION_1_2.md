@@ -3551,3 +3551,27 @@ blocked by GitHub DNS resolution. Real authenticated calibrated longitudinal
 measurements, 1.1 migration reconciliation, scientist review, and physical
 Windows GUI/MSI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+## Cross-tank organism identity saved-workflow regression (2026-10-28)
+
+Exact-head Actions for `905e5b8b` completed **16 of 19 workflows successfully**.
+The three failed backend workflows (CI, Pose Workflow Validation, ReefVision
+1.0 Acceptance) stopped at the same Ruff formatter error: an extra blank line
+before `test_saved_workflow_discloses_shared_parent_across_tanks` in
+`test_ecology_lineage_workflow_1_2.py:107`. The formatter issue is corrected.
+
+A new negative executable saved-workflow regression uses two paired images of
+the **same organism** but falsely assigns them to different tank experimental
+units. Both standalone API and saved Workflow Builder execution must reject
+this pseudoreplicate, the workflow run must fail, and no
+`paired_count_comparison` artifact may persist. The positive saved-workflow
+case additionally checks distinct tank IDs, organism denominator, paired-image
+denominator and absence of repeat-image inflation while disclosing a shared
+parent colony. No verified parentage or independence is inferred.
+
+The source file was read back after the correction; no full local pytest/Ruff
+run was possible because the environment cannot clone GitHub and Ruff is not
+installed. New-head CI is required before crediting passing tests. Authenticated
+calibrated longitudinal source review, 1.1 migration reconciliation and
+physical Windows installer/GUI acceptance remain outstanding.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
