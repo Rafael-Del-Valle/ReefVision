@@ -257,6 +257,7 @@ class MeshRegistrationEvidence(BaseModel):
             raise ValueError("Independent registration review requires operator attribution")
         if (
             self.independent_reviewer_id is not None
+            and self.registration_operator_id is not None
             and self.independent_reviewer_id.casefold() == self.registration_operator_id.casefold()
         ):
             raise ValueError("Registration reviewer must differ from registration operator")
