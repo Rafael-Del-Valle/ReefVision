@@ -1,3 +1,30 @@
+## 2026-10-28 — Stable workflow QC ownership under competing writers (Track D)
+
+- Audited existing class/visibility, QC, dense-editor, onboarding and executable
+  Workflow Builder scope against main and 1.6. The immediate gap was a race:
+  two workers could both miss a workflow owner's queue and insert distinct
+  UUIDv4 review queues before either committed. Replay then rejected ambiguous
+  ownership, but the database had already accumulated duplicate evidence.
+- New workflow-owned queue creation derives a stable UUIDv5 primary key from
+  the project and persisted workflow run/node owner. SQLite's existing
+  `review_queues.id` primary key now arbitrates competing first-writer
+  insertions **without changing an applied Alembic migration**. Standalone,
+  regenerated and preexisting workflow queues retain their original IDs.
+- An insertion collision now rolls back the failed SQLAlchemy session and
+  raises an explicit retryable validation error; it cannot silently create
+  replacement scientific evidence. On retry, the existing queue must still
+  pass all saved source, digest, typed output and researcher-review checks.
+- Added standalone duplicate-insert/independent-queue regression and a real
+  saved `project_source -> qc_review_queue` graph regression that verifies
+  stable IDs, dimensionless output, researcher comment preservation, failure
+  on ownership-damaged evidence and successful replay after restoration.
+- **Limit:** this prevents duplicate IDs for *new* workflow-owned queues;
+  legacy random-ID queues and manually altered databases still require the
+  existing duplicate-owner fail-closed check. No cross-process simultaneous
+  Windows/SQLite load test has yet been run. Exact-head backend/frontend CI,
+  Windows MSI/installed-GUI, biological-data acceptance and the independent
+  1.1/1.6 revision-0038 conflict remain release blockers. No auto-approval.
+
 # ReefVision 1.6 — QC workflow integration (development)
 
 ## 2026-10-28 — Saved QC cross-signal scientific consistency (Track D)
