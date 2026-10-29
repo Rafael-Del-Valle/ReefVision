@@ -302,15 +302,14 @@ def test_full_backup_preserves_scientific_records_and_offline_provider_cache(cli
     finally:
         engine.dispose()
 
+
 def test_lookup_excludes_stale_calibration_but_preserves_unlinked_station_observations(client):
     from reefvision.tests.test_annotations import import_one
 
     project = create_project(client)
     image_id = import_one(client, project["id"])["successful"][0]["image_id"]
     calibration_url = f"/api/v1/images/{image_id}/measurement-calibration"
-    calibration = client.put(
-        calibration_url, json={"distance_per_pixel": 0.1, "unit": "mm"}
-    )
+    calibration = client.put(calibration_url, json={"distance_per_pixel": 0.1, "unit": "mm"})
     assert calibration.status_code == 200, calibration.text
 
     records_url = f"/api/v1/projects/{project['id']}/scientific-records"
@@ -345,19 +344,13 @@ def test_lookup_excludes_stale_calibration_but_preserves_unlinked_station_observ
         unlinked_record["id"],
     }
 
-    changed = client.put(
-        calibration_url, json={"distance_per_pixel": 0.2, "unit": "mm"}
-    )
+    changed = client.put(calibration_url, json={"distance_per_pixel": 0.2, "unit": "mm"})
     assert changed.status_code == 200, changed.text
     history = client.get(records_url)
     assert history.status_code == 200, history.text
-    stale = next(
-        row for row in history.json()["items"] if row["id"] == image_record["id"]
-    )
+    stale = next(row for row in history.json()["items"] if row["id"] == image_record["id"])
     assert stale["calibration_current"] is False
 
     after = client.post(lookup_url, json=request)
     assert after.status_code == 200, after.text
-    assert [match["record"]["id"] for match in after.json()["matches"]] == [
-        unlinked_record["id"]
-    ]
+    assert [match["record"]["id"] for match in after.json()["matches"]] == [unlinked_record["id"]]
