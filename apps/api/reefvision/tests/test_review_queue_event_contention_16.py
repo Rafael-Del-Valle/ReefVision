@@ -7,6 +7,7 @@ executable Workflow Builder QC queues. No annotation is automatically verified.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
@@ -25,7 +26,7 @@ from reefvision.tests.test_review_queue_bulk_sqlite_contention_16 import _make_q
 
 def _real_constraint(statement: str) -> IntegrityError:
     """Construct a real SQLite extended error code rather than fake text."""
-    with sqlite3.connect(":memory:") as connection:
+    with closing(sqlite3.connect(":memory:")) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
         connection.executescript(
             """
