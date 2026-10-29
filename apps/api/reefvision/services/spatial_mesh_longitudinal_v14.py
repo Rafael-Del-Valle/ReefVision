@@ -246,7 +246,7 @@ def compare_mesh_observations(
                 or not isfinite(uncertainty)
                 or not 0 <= uncertainty <= 1
             ):
-                raise ValueError("Source relative scale uncertainty must be finite in [0, 1]")
+                raise ValueError("Source relative scale uncertainty invalid")
             if pair is not None:
                 if uncertainty is None:
                     raise ValueError("Surface-area scale interval requires source uncertainty")
