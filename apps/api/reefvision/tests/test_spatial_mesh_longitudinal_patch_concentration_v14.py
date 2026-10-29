@@ -212,8 +212,12 @@ def test_degenerate_zero_area_meshes_keep_patch_distributions_unavailable() -> N
     early, late = _meshes()
     for source in (early, late):
         source["vertices"] = [
-            [0, 0, 0], [1, 0, 0], [2, 0, 0],
-            [10, 0, 0], [11, 0, 0], [12, 0, 0],
+            [0, 0, 0],
+            [1, 0, 0],
+            [2, 0, 0],
+            [10, 0, 0],
+            [11, 0, 0],
+            [12, 0, 0],
         ]
     before, after = _preview(early), _preview(late)
     assert before["surface_area_m2"] == after["surface_area_m2"] == 0.0
@@ -239,8 +243,12 @@ def test_zero_area_mesh_rejects_forged_patch_area_evidence(
     early, late = _meshes()
     for source in (early, late):
         source["vertices"] = [
-            [0, 0, 0], [1, 0, 0], [2, 0, 0],
-            [10, 0, 0], [11, 0, 0], [12, 0, 0],
+            [0, 0, 0],
+            [1, 0, 0],
+            [2, 0, 0],
+            [10, 0, 0],
+            [11, 0, 0],
+            [12, 0, 0],
         ]
     before, after = _preview(early), _preview(late)
     before["edge_connected_patch_surface_areas_m2"] = forged_areas
