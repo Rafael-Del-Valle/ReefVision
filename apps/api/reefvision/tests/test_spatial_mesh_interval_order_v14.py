@@ -45,16 +45,12 @@ def test_later_forged_scale_bounds_rejected_when_earlier_bounds_missing(
     # same scientific evidence, not emit an apparently usable comparison.
     artifacts = {
         port: [
-            SimpleNamespace(
-                data_type="mesh_measurement_preview", payload_json=record
-            )
+            SimpleNamespace(data_type="mesh_measurement_preview", payload_json=record)
         ]
         for port, record in (("before", before), ("after", after))
     }
     with pytest.raises(ValidationError, match=error):
-        execute_mesh_longitudinal_comparison(
-            None, None, "project-1", {}, artifacts
-        )
+        execute_mesh_longitudinal_comparison(None, None, "project-1", {}, artifacts)
 
 
 def test_missing_early_bounds_still_withhold_combined_intervals() -> None:
