@@ -88,6 +88,7 @@ def test_case_variant_self_review_rejected_in_schema_and_standalone_api(
     independently_attributed = {**evidence, "independent_reviewer_id": "reviewer-2"}
     assert schema.model_validate(independently_attributed).independent_reviewer_id == "reviewer-2"
 
+
 @pytest.mark.parametrize(
     ("operator_id", "reviewer_id", "expected_error"),
     [
@@ -125,3 +126,84 @@ def test_registration_review_optional_operator_is_narrowed_safely(
         validated = MeshRegistrationEvidence.model_validate(evidence)
         assert validated.registration_operator_id == operator_id
         assert validated.independent_reviewer_id == reviewer_id
+
+@pytest.mark.parametrize("evidence_key", ["registration_evidence", "reidentification_evidence"])
+@pytest.mark.parametrize(
+    ("reviewed_at_utc", "predates_observation"),
+    [
+        ("2026-09-30T12:00:00Z", True),
+        ("2026-10-01T12:00:00Z", True),
+        ("2026-10-03T12:00:00Z", False),
+    ],
+)
+def test_mesh_independent_review_cannot_predate_bound_survey(
+    client: TestClient,
+    evidence_key: str,
+    reviewed_at_utc: str,
+    predates_observation: bool,
+) -> None:
+    """A caller cannot attach a review dated before either bound observation."""
+    if evidence_key == "registration_evidence":
+        schema = MeshRegistrationEvidence
+        evidence = {
+            "source_frame_id": "survey-local",
+            "target_frame_id": "survey-local",
+            "method": "landmark",
+            "rms_residual_m": 0.02,
+            "correspondence_count": 6,
+            "evidence_note": "Unverified landmark registration",
+            "registration_operator_id": "operator-1",
+            "independent_reviewer_id": "reviewer-2",
+            "independent_review_decision": "supports_alignment",
+            "independent_review_note": "Caller-attributed review only",
+            "source_observed_at_utc": "2026-10-01T12:00:00Z",
+            "target_observed_at_utc": "2026-10-02T12:00:00Z",
+            "independent_reviewed_at_utc": reviewed_at_utc,
+        }
+    else:
+        schema = MeshReidentificationEvidence
+        evidence = {
+            "before_observation_id": "survey-1",
+            "after_observation_id": "survey-2",
+            "method": "photo_match",
+            "observer_id": "observer-1",
+            "evidence_note": "Provisional morphology comparison",
+            "independent_reviewer_id": "reviewer-2",
+            "independent_review_decision": "supports_match",
+            "independent_review_note": "Caller-attributed review only",
+            "before_observed_at_utc": "2026-10-01T12:00:00Z",
+            "after_observed_at_utc": "2026-10-02T12:00:00Z",
+            "independent_reviewed_at_utc": reviewed_at_utc,
+        }
+
+    if not predates_observation:
+        assert schema.model_validate(evidence).independent_reviewer_id == "reviewer-2"
+        return
+
+    with pytest.raises(ValueError, match="cannot predate bound observations"):
+        schema.model_validate(evidence)
+
+    project_id = str(create_project(client, "Mesh review chronology QC")["id"])
+    before = {
+        "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+        "faces": [[0, 1, 2]],
+        "meters_per_unit": 1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified field ruler",
+        "relative_scale_uncertainty": 0.1,
+        "specimen_id": "colony-16",
+        "observation_id": "survey-1",
+        "observed_at_utc": "2026-10-01T12:00:00Z",
+        "coordinate_frame_id": "survey-local",
+    }
+    after = {
+        **before,
+        "observation_id": "survey-2",
+        "observed_at_utc": "2026-10-02T12:00:00Z",
+    }
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after, evidence_key: evidence},
+    )
+    assert response.status_code == 422, response.text
+    assert "cannot predate bound observations" in response.text
