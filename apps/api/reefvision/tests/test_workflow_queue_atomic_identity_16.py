@@ -49,9 +49,7 @@ def test_new_workflow_queue_identity_prevents_duplicate_insert(
         # A second writer that missed the ownership lookup cannot commit a
         # second snapshot. The existing SQLite primary key is the arbiter.
         with pytest.raises(IntegrityError):
-            service.create_queue_for_project(
-                project_id, ReviewQueueCreateRequest(created_by=owner)
-            )
+            service.create_queue_for_project(project_id, ReviewQueueCreateRequest(created_by=owner))
         session.rollback()
         owned = session.scalars(
             select(ReviewQueue).where(
