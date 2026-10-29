@@ -303,6 +303,45 @@ test("initial image and gallery scrolling", async ({ page }) => {
   );
   await assertDecodedAndContained(1600, 1200);
 
+  // A WebView2 window may be resized after its first camera image loads.
+  // Refit both a standard image and a panorama without stale transforms,
+  // unexpected document scrolling, or a change to the focused image.
+  await page.setViewportSize({ width: 1024, height: 720 });
+  await assertDecodedAndContained(1600, 1200);
+  await expect(
+    workbench.getByRole("listitem", { name: "Focus camera-01.JPEG" }),
+  ).toHaveAttribute("aria-current", "true");
+  await focused.hover();
+  const resizedImageBounds = await focused.boundingBox();
+  const resizedImageSource = await focused.getAttribute("src");
+  const resizedPageScroll = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  await page.mouse.wheel(0, 360);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(await focused.boundingBox()).toEqual(resizedImageBounds);
+  expect(await focused.getAttribute("src")).toBe(resizedImageSource);
+  expect(
+    await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+  ).toEqual(resizedPageScroll);
+
+  await lastImage.click();
+  await assertDecodedAndContained(6000, 400);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await assertDecodedAndContained(6000, 400);
+  await workbench.focus();
+  await page.keyboard.press("Home");
+  await assertDecodedAndContained(1600, 1200);
+  await expect(
+    workbench.getByRole("listitem", { name: "Focus camera-01.JPEG" }),
+  ).toHaveAttribute("aria-current", "true");
+
   expect(displayRequests).toContain("image-1");
   expect(displayRequests).toContain("image-12");
 });
