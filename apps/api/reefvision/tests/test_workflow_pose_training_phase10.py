@@ -890,6 +890,22 @@ def test_pose_workflow_preserves_api_frozen_source_lineage_in_artifacts(
         "training_config": {"epochs": 1},
     }
 
+    # A persisted artifact that explicitly asserts null/false/foreign project
+    # ownership must not be accepted as if its project_id were omitted.
+    for invalid_project_id in (None, False, "foreign-project"):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="dataset belongs to another project"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload={**payload, "project_id": invalid_project_id},
+                parameters=parameters,
+                processor=_fake_pose_processor,
+            )
+
     for field in source_fields:
         with (
             app.state.session_factory() as session,
