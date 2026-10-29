@@ -164,9 +164,7 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     # Even a saved typed workflow artifact must reject unsafe integral
     # floating-point raw counts before checking derived statistical means.
     tampered_precision = dict(payload)
-    tampered_precision["paired_differences"] = [
-        dict(row) for row in payload["paired_differences"]
-    ]
+    tampered_precision["paired_differences"] = [dict(row) for row in payload["paired_differences"]]
     tampered_precision["paired_differences"][0]["model_count"] = float(2**53)
     with pytest.raises(SchemaValidationError, match="safe-integer range"):
         PairedCountComparisonResponse.model_validate(tampered_precision)
