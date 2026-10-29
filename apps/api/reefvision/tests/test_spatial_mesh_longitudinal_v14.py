@@ -1287,6 +1287,10 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
         "axis_aligned_bounding_box_diagonal_m": 2.0,
         "axis_aligned_bounding_box_diagonal_scale_interval_m": None,
     }
+    # A legacy record with no source uncertainty cannot authenticate an interval.
+    with pytest.raises(ValueError, match="Bounding-box scale interval requires source uncertainty"):
+        compare_mesh_observations(early_extent, late_extent)
+    early_extent["axis_aligned_bounding_box_diagonal_scale_interval_m"] = None
     extent_result = compare_mesh_observations(early_extent, late_extent)
     assert extent_result["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(1)
     assert extent_result["relative_axis_aligned_bounding_box_diagonal_change_percent"] == (
@@ -1302,8 +1306,8 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
         **late_extent,
         "axis_aligned_bounding_box_diagonal_scale_interval_m": [2.1, 2.2],
     }
-    malformed_result = compare_mesh_observations(early_extent, malformed)
-    assert malformed_result["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
+    with pytest.raises(ValueError, match="Bounding-box scale interval requires source uncertainty"):
+        compare_mesh_observations(early_extent, malformed)
     with pytest.raises(ValueError, match="verification state"):
         compare_mesh_observations(
             {**base, "provenance": {**base["provenance"], "calibration_verified": True}},
@@ -1320,15 +1324,15 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
         ("after", [1.8, 1.9]),
     ],
 )
-def test_mesh_comparison_withholds_scale_bounds_excluding_nominal_area(
+def test_mesh_comparison_rejects_unbound_legacy_scale_bounds(
     invalid_timepoint: str, invalid_interval: list[float]
 ) -> None:
-    """Unreviewed scale intervals must enclose their reported nominal areas."""
+    """A legacy interval cannot claim scale bounds without source uncertainty."""
     before = {
         "schema_version": "mesh-preview-0001",
         "measurement_status": "caller_supplied_unverified",
         "surface_area_m2": 1.0,
-        "surface_area_scale_interval_m2": [0.8, 1.2],
+        "surface_area_scale_interval_m2": None,
         "project_id": "project-1",
         "provenance": {
             "specimen_id": "colony-16",
@@ -1340,7 +1344,7 @@ def test_mesh_comparison_withholds_scale_bounds_excluding_nominal_area(
     after = {
         **before,
         "surface_area_m2": 2.0,
-        "surface_area_scale_interval_m2": [1.8, 2.2],
+        "surface_area_scale_interval_m2": None,
         "provenance": {
             **before["provenance"],
             "observation_id": "second",
@@ -1349,12 +1353,8 @@ def test_mesh_comparison_withholds_scale_bounds_excluding_nominal_area(
     }
     record = before if invalid_timepoint == "before" else after
     record["surface_area_scale_interval_m2"] = invalid_interval
-    result = compare_mesh_observations(before, after)
-    assert result["delta_surface_area_m2"] == pytest.approx(1.0)
-    assert result["delta_surface_area_scale_interval_m2"] is None
-    assert result["relative_surface_area_scale_interval_percent"] is None
-    assert result["average_surface_area_change_scale_interval_m2_per_day"] is None
-    assert "scale_uncertainty_interval_unavailable" in result["qc_warnings"]
+    with pytest.raises(ValueError, match="Surface-area scale interval requires source uncertainty"):
+        compare_mesh_observations(before, after)
 
 
 def test_mesh_comparison_average_rate_preserves_negative_change(
@@ -1437,6 +1437,7 @@ def test_mesh_comparison_zero_baseline_extent_withholds_relative_change() -> Non
             "observed_at_utc": "2026-10-01T12:00:00Z",
             "calibration_verified": False,
             "geometry_sha256": "first-geometry",
+        "relative_scale_uncertainty": 0.1,
         },
     }
     later = {
