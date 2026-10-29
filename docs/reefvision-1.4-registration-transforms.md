@@ -238,3 +238,18 @@ Standalone longitudinal analysis and persisted executable typed Workflow
 Builder graphs use the same comparison engine. Regression coverage includes
 matching bindings in a saved workflow, stale uncertainty revisions, partial
 and malformed evidence, mutated model instances, and legacy compatibility.
+
+## Independent reviewer identifier integrity
+
+Registration and specimen reidentification reviews now reject an independent
+reviewer identifier that differs from the attributed registration operator or
+matching observer **only by letter case** (for example, `Operator.A` versus
+`operator.a`). This matches the existing calibration-review rule and prevents
+case-only aliases from being counted as independent human attribution.
+The check applies to typed standalone requests and to evidence passed through
+the shared longitudinal comparison engine used by saved Workflow Builder
+executions. Regression tests cover both evidence types and the standalone API.
+Distinct reviewer identifiers remain caller-supplied audit metadata, **not**
+authenticated identities or proof of independent review. Existing supporting
+reviews do not change `specimen_identity_verified` or
+`coordinate_registration_verified` from `false`.
