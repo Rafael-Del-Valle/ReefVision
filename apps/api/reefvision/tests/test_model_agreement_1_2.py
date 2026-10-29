@@ -705,3 +705,49 @@ def test_saved_paired_counts_reject_unsafe_integral_floats(field: str) -> None:
     payload["paired_differences"][0][field] = float(2**53)
     with pytest.raises(SchemaValidationError, match="safe-integer range"):
         PairedCountComparisonResponse.model_validate(payload)
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_source",
+        "fabricated_source",
+        "reordered_sources",
+        "invented_independent_units",
+        "invented_percent_eligible_units",
+        "invented_percent_eligible_organisms",
+    ],
+)
+def test_saved_comparison_rejects_forged_source_roster_and_unregistered_n(
+    mutation: str,
+) -> None:
+    """A saved descriptive result cannot invent provenance or biological replication."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    observations = [
+        pair("a", "frag-A", "tank-1", 10, 12),
+        pair("b", "frag-B", "tank-2", 20, 20),
+    ]
+    for observation in observations:
+        observation.pop("experimental_unit_id")
+        observation.pop("experimental_unit_type")
+    comparison = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_consensus", pairs=observations)
+    )
+    payload = comparison.model_dump(mode="json")
+    assert payload["declared_independent_unit_count"] is None
+    assert payload["percent_contributing_independent_unit_count"] is None
+    assert payload["percent_contributing_organism_count"] is None
+    if mutation == "missing_source":
+        payload["analysis_provenance"]["source_record_ids"].pop()
+    elif mutation == "fabricated_source":
+        payload["analysis_provenance"]["source_record_ids"][0] = "fabricated-human-source"
+    elif mutation == "reordered_sources":
+        payload["analysis_provenance"]["source_record_ids"].reverse()
+    elif mutation == "invented_independent_units":
+        payload["declared_independent_unit_count"] = 2
+    elif mutation == "invented_percent_eligible_units":
+        payload["percent_contributing_independent_unit_count"] = 2
+    else:
+        payload["percent_contributing_organism_count"] = 2
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)
