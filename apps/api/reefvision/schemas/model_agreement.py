@@ -148,6 +148,10 @@ class PairedCountComparisonResponse(BaseModel):
     overcount_pair_count: int = Field(default=0, ge=0)
     undercount_pair_count: int = Field(default=0, ge=0)
     exact_match_pair_count: int = Field(default=0, ge=0)
+    # One mean-signed-bias direction per caller-declared organism, not per image.
+    overcount_organism_count: int = Field(default=0, ge=0)
+    undercount_organism_count: int = Field(default=0, ge=0)
+    balanced_organism_count: int = Field(default=0, ge=0)
     # Optional fields preserve deserialization of older saved workflow artifacts.
     mean_signed_percent_deviation: float | None = None
     experimental_unit_type: str | None = None
