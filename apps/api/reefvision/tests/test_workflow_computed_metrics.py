@@ -145,7 +145,15 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(client: Tes
 
 @pytest.mark.parametrize(
     "failure",
-    ["missing_record", "outside_source", "duplicate_binding", "qc_rejected", "qc_suspect"],
+    [
+        "missing_record",
+        "outside_source",
+        "duplicate_binding",
+        "qc_rejected",
+        "qc_suspect",
+        "area_qc_rejected",
+        "area_qc_suspect",
+    ],
 )
 def test_workflow_metric_failure_is_persisted_without_result(
     client: TestClient, failure: str
@@ -162,7 +170,14 @@ def test_workflow_metric_failure_is_persisted_without_result(
                 "count",
                 qc=qc_by_failure.get(failure, "unassessed"),
             ),
-            scientific_record("surveyed_area", 2, "m2"),
+            scientific_record(
+                "surveyed_area",
+                2,
+                "m2",
+                qc={"area_qc_rejected": "rejected", "area_qc_suspect": "suspect"}.get(
+                    failure, "unassessed"
+                ),
+            ),
         ],
     )
     definition = create_density_definition(client, project["id"])
@@ -186,8 +201,7 @@ def test_workflow_metric_failure_is_persisted_without_result(
     detail = client.get(f"/api/v1/workflow-runs/{run['id']}").json()
     assert detail["run"]["status"] == "failed"
     assert not any(
-        artifact["data_type"] == "computed_metric_result"
-        for artifact in detail["artifacts"]
+        artifact["data_type"] == "computed_metric_result" for artifact in detail["artifacts"]
     )
     assert (
         client.get(f"/api/v1/projects/{project['id']}/computed-metric-results").json()["total"] == 0
@@ -208,5 +222,5 @@ def test_workflow_metric_failure_is_persisted_without_result(
         assert failed_node is not None
         if failure == "duplicate_binding":
             assert "distinct scientific record" in (failed_node.error_message or "")
-        if failure in {"qc_rejected", "qc_suspect"}:
+        if failure in {"qc_rejected", "qc_suspect", "area_qc_rejected", "area_qc_suspect"}:
             assert "suspect or rejected" in (failed_node.error_message or "")
