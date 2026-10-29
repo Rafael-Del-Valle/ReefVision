@@ -48,9 +48,7 @@ def test_sqlite_busy_is_distinguished_from_unrelated_database_errors(tmp_path: P
 def _sqlite_constraint_error(*, duplicate_id: bool) -> sqlite3.IntegrityError:
     """Use real SQLite extended error codes, not fabricated exception text."""
     with sqlite3.connect(":memory:") as db:
-        db.execute(
-            "CREATE TABLE review_queues (id TEXT PRIMARY KEY, created_by TEXT UNIQUE)"
-        )
+        db.execute("CREATE TABLE review_queues (id TEXT PRIMARY KEY, created_by TEXT UNIQUE)")
         db.execute("INSERT INTO review_queues VALUES ('first', 'researcher')")
         try:
             if duplicate_id:
@@ -68,9 +66,7 @@ def test_only_review_queue_primary_key_collision_is_retryable() -> None:
     assert identity_error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
     assert unrelated_error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_UNIQUE
     assert _is_sqlite_queue_identity_collision(IntegrityError("INSERT", {}, identity_error))
-    assert not _is_sqlite_queue_identity_collision(
-        IntegrityError("INSERT", {}, unrelated_error)
-    )
+    assert not _is_sqlite_queue_identity_collision(IntegrityError("INSERT", {}, unrelated_error))
     assert not _is_sqlite_queue_identity_collision(
         IntegrityError("INSERT", {}, RuntimeError("review_queues.id"))
     )
@@ -176,9 +172,7 @@ def test_saved_qc_workflow_retries_after_real_sqlite_writer_lock(
 
     # A distinct SQLite UNIQUE violation must propagate; it is not a
     # competing writer for this workflow's deterministic queue identity.
-    unrelated = IntegrityError(
-        "INSERT", {}, _sqlite_constraint_error(duplicate_id=False)
-    )
+    unrelated = IntegrityError("INSERT", {}, _sqlite_constraint_error(duplicate_id=False))
 
     def raise_unrelated_constraint(*_args: object, **_kwargs: object) -> None:
         raise unrelated
