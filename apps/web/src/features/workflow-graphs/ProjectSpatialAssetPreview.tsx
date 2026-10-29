@@ -68,12 +68,14 @@ function ProjectSpatialAssetPreviewSession({
     requestVersion.current += 1;
     setArtifact(null);
     setError(null);
+    setBusy(false);
   }
 
   async function importFile(): Promise<void> {
     if (!file) return;
     const version = ++requestVersion.current;
     listVersion.current += 1;
+    setLoadingList(false);
     setBusy(true);
     setError(null);
     setArtifact(null);
