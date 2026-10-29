@@ -136,7 +136,8 @@ def test_real_0041_sqlite_enforces_reviewer_registry_foreign_keys(tmp_path: Path
             connection.execute(
                 text(
                     "INSERT INTO review_queue_bulk_requests "
-                    "(id, review_queue_id, project_id, action, actor, item_ids_json, created_at) "
+                    "(id, review_queue_id, project_id, action, actor, "
+                    "item_ids_json, created_at) "
                     "VALUES (:id, :queue, :project, :action, :actor, :items, :created)"
                 ),
                 {
