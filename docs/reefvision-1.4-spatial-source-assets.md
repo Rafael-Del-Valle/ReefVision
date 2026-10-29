@@ -81,7 +81,11 @@ A recorded unknown uncertainty cannot be paired with an invented interval.
 This mirrors the existing squared-scale check for surface area; neither
 interval is a statistical confidence interval or evidence of coral growth.
 Standalone comparison and saved typed Workflow Builder execution share this
-validation, with regression coverage for both observation positions.
+validation, with regression coverage for both observation positions. Both
+observations are checked independently even when one lacks a scale interval:
+missing early bounds withhold the combined interval, but cannot conceal a
+fabricated later interval. This rule applies to both surface area and
+bounding-box diagonal scale bounds, and does not certify biological growth.
 
 This remains an initial persistence and preview slice, **not** a finished asset
 workspace. An 8 MiB stored source may still exceed the existing bounded mesh
