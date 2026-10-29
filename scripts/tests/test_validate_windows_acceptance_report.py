@@ -36,6 +36,10 @@ def good_report() -> dict:
         "reefvision_version": "1.0.2",
         "installer_path": "C:/ReefVision_1.0.2_x64_en-US.msi",
         "installer_sha256": "a" * 64,
+        "acceptance_root": "C:/disposable/reefvision-acceptance",
+        "isolated_data_root": (
+            "C:/disposable/reefvision-acceptance/reefvision-clean-a1b2c3d4e5f6/data"
+        ),
         "migration": {
             "schema_status": "up_to_date",
             "current_revision": "0040",
@@ -90,6 +94,38 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 report[field] = value
                 with self.assertRaises(MODULE.AcceptanceEvidenceError):
                     MODULE.validate_report(report, expected_version="1.0.2")
+
+    def test_acceptance_data_root_must_be_disposable_and_inside_selected_root(self) -> None:
+        valid = good_report()
+        MODULE.validate_report(valid, expected_version="1.0.2")
+        for field, value in (
+            ("acceptance_root", None),
+            ("acceptance_root", ""),
+            ("acceptance_root", "relative/acceptance"),
+            ("acceptance_root", "C:/"),
+            ("acceptance_root", "C:/disposable/../reefvision-acceptance"),
+            ("isolated_data_root", None),
+            ("isolated_data_root", "C:/Users/researcher/AppData/Roaming/org.reefvision.desktop"),
+            ("isolated_data_root", "C:/disposable/reefvision-acceptance-other/reefvision-clean-a1b2c3d4e5f6/data"),
+            ("isolated_data_root", "C:/disposable/reefvision-acceptance/data"),
+            ("isolated_data_root", "C:/disposable/reefvision-acceptance/reefvision-clean-invalid/data"),
+            ("isolated_data_root", "C:/disposable/reefvision-acceptance/reefvision-clean-a1b2c3d4e5f6/other"),
+            ("isolated_data_root", "C:/disposable/reefvision-acceptance/reefvision-clean-a1b2c3d4e5f6/../data"),
+            ("isolated_data_root", "D:/disposable/reefvision-acceptance/reefvision-clean-a1b2c3d4e5f6/data"),
+        ):
+            with self.subTest(field=field, value=value):
+                changed = copy.deepcopy(valid)
+                changed[field] = value
+                with self.assertRaises(MODULE.AcceptanceEvidenceError):
+                    MODULE.validate_report(changed, expected_version="1.0.2")
+
+    def test_acceptance_root_is_case_insensitive_for_windows_paths(self) -> None:
+        report = good_report()
+        report["acceptance_root"] = r"C:\\DISPOSABLE\\ReefVision-Acceptance"
+        report["isolated_data_root"] = (
+            r"c:\\disposable\\reefvision-acceptance\\reefvision-clean-A1B2C3D4E5F6\\DATA"
+        )
+        MODULE.validate_report(report, expected_version="1.0.2")
 
     def test_windows_installer_numeric_limits_are_enforced(self) -> None:
         for version in ("256.0.0", "1.256.0", "1.0.65536"):
