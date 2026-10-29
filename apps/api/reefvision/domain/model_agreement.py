@@ -149,9 +149,7 @@ def compare_paired_counts(
                 paired_observation_count=len(rows),
                 organism_count=len(unit_organisms[unit_id]),
                 observation_counts_by_organism=counts_by_organism,
-                repeated_pair_count_beyond_first_per_organism=(
-                    len(rows) - len(counts_by_organism)
-                ),
+                repeated_pair_count_beyond_first_per_organism=(len(rows) - len(counts_by_organism)),
                 unequal_pair_counts_within_unit=len(set(counts_by_organism.values())) > 1,
                 mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in rows),
                 mean_absolute_error=finite_descriptive_mean(
@@ -230,9 +228,7 @@ def compare_paired_counts(
         repeated_pair_count_beyond_first_per_organism=(
             len(differences) - len(pair_counts_by_organism)
         ),
-        unequal_pair_counts_across_organisms=(
-            len(set(pair_counts_by_organism.values())) > 1
-        ),
+        unequal_pair_counts_across_organisms=(len(set(pair_counts_by_organism.values())) > 1),
         nonzero_reference_count=len(valid_percent),
         zero_reference_count=len(differences) - len(valid_percent),
         mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in differences),

@@ -131,9 +131,7 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     assert payload["review_status"] == "requires_source_verification"
     assert payload["mean_signed_bias"] == -1
     assert payload["observed_organism_count"] == 2
-    assert payload["observation_counts_by_organism"] == {
-        "fragment-A": 1, "fragment-B": 1
-    }
+    assert payload["observation_counts_by_organism"] == {"fragment-A": 1, "fragment-B": 1}
     assert payload["declared_independent_unit_count"] == 1
     assert payload["organism_and_unit_balanced_mean_signed_bias"] == -1
     assert payload["unit_balanced_mean_absolute_percent_deviation"] == 20
@@ -203,9 +201,14 @@ def test_saved_repeated_organism_pairs_retain_frequency_qc(client: TestClient) -
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"

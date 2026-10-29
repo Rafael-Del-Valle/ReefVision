@@ -145,7 +145,9 @@ def test_pair_frequency_audit_exposes_nested_pseudoreplication_risk() -> None:
     assert result.observed_organism_count == 3
     assert result.declared_independent_unit_count == 2
     assert result.observation_counts_by_organism == {
-        "fragment-A": 2, "fragment-B": 1, "fragment-C": 1
+        "fragment-A": 2,
+        "fragment-B": 1,
+        "fragment-C": 1,
     }
     assert result.repeated_pair_count_beyond_first_per_organism == 1
     assert result.unequal_pair_counts_across_organisms is True

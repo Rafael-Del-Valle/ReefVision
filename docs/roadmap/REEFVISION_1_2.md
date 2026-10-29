@@ -3513,3 +3513,16 @@ sample denominators, deterministic provenance, and persisted artifact parity.
 Full exact-head CI, authenticated sources, real-data scientific acceptance,
 1.1 migration reconciliation and installed Windows GUI/MSI acceptance remain
 outstanding. No inferential sample-size or model-agreement validity is claimed.
+
+## Paired-count CI recovery checkpoint (2026-10-28)
+
+The prior paired-count denominator audit at `c4601804` completed 15 of 19
+GitHub Actions workflows successfully, with one workflow still running at
+inspection. The three failed backend workflows (CI, Pose Workflow Validation,
+and ReefVision 1.0 Acceptance) all stopped at Ruff formatting before pytest.
+This checkpoint applies the five exact Ruff 0.17.3 formatter replacements
+reported by CI in the existing domain, scientific regression and saved-workflow
+test files; it does not alter biological calculations, source-review boundaries,
+or experimental-unit weighting. Full latest-head CI, authenticated calibration
+and longitudinal identities, migration reconciliation and installed Windows
+GUI/MSI acceptance are still required. **1.2 NOT RELEASE-READY.**
