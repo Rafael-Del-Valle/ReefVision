@@ -206,9 +206,7 @@ def test_unrelated_bulk_integrity_error_is_not_hidden_as_idempotent_retry(
         "actor": "local researcher",
         "client_request_id": str(uuid4()),
     }
-    unrelated = _real_sqlite_constraint(
-        "INSERT INTO unrelated_science VALUES ('original', 2)"
-    )
+    unrelated = _real_sqlite_constraint("INSERT INTO unrelated_science VALUES ('original', 2)")
 
     def reject_unrelated_constraint(_session: Session) -> None:
         raise unrelated

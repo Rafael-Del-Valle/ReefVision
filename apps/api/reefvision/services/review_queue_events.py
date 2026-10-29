@@ -85,14 +85,12 @@ def _is_sqlite_event_request_collision(exc: IntegrityError) -> bool:
     """
     if not isinstance(exc.orig, sqlite3.IntegrityError):
         return False
-    return (
-        getattr(exc.orig, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_UNIQUE
-        and str(exc.orig)
-        == (
-            "UNIQUE constraint failed: "
-            "review_queue_item_events.review_queue_item_id, "
-            "review_queue_item_events.client_request_id"
-        )
+    return getattr(exc.orig, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_UNIQUE and str(
+        exc.orig
+    ) == (
+        "UNIQUE constraint failed: "
+        "review_queue_item_events.review_queue_item_id, "
+        "review_queue_item_events.client_request_id"
     )
 
 

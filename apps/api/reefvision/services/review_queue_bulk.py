@@ -41,7 +41,6 @@ def _is_sqlite_writer_contention(exc: OperationalError) -> bool:
     }
 
 
-
 def _is_sqlite_bulk_idempotency_collision(exc: IntegrityError) -> bool:
     """Retry only collisions on the persisted bulk key or its audit event key.
 

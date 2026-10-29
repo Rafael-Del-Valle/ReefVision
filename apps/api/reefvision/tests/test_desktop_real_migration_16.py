@@ -11,6 +11,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 
 from reefvision.config import Settings
 from reefvision.db.session import create_database_engine
@@ -69,8 +70,7 @@ def test_real_0041_schema_enforces_reviewer_request_identity(tmp_path: Path) -> 
             unique_constraints = inspector.get_unique_constraints(events)
             assert any(
                 constraint["name"] == "uq_review_queue_item_event_request"
-                and constraint["column_names"]
-                == ["review_queue_item_id", "client_request_id"]
+                and constraint["column_names"] == ["review_queue_item_id", "client_request_id"]
                 for constraint in unique_constraints
             )
             event_columns = {column["name"]: column for column in inspector.get_columns(events)}
@@ -110,6 +110,49 @@ def test_real_0041_schema_enforces_reviewer_request_identity(tmp_path: Path) -> 
                 ("review_queue_id", "review_queues", "id", "RESTRICT"),
                 ("project_id", "projects", "id", "RESTRICT"),
             }
+    finally:
+        engine.dispose()
+
+
+def test_real_0041_sqlite_enforces_reviewer_registry_foreign_keys(tmp_path: Path) -> None:
+    """The actual migrated desktop engine must reject orphaned QC audit batches."""
+    database = tmp_path / "review-foreign-keys.sqlite"
+    settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{database.as_posix()}")
+    settings.ensure_directories()
+    run_pending_migrations(settings)
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            assert connection.scalar(text("PRAGMA foreign_keys")) == 1
+            assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
+
+        # A declared RESTRICT foreign key is insufficient if the installed
+        # SQLite connection does not actually enable FK enforcement.
+        with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO review_queue_bulk_requests "
+                        "(id, review_queue_id, project_id, action, actor, item_ids_json, created_at) "
+                        "VALUES (:id, :queue, :project, :action, :actor, :items, :created)"
+                    ),
+                    {
+                        "id": "orphaned-review-attempt",
+                        "queue": "nonexistent-queue",
+                        "project": "nonexistent-project",
+                        "action": "start",
+                        "actor": "local researcher",
+                        "items": "[]",
+                        "created": "2026-10-29T00:00:00Z",
+                    },
+                )
+
+        # A failed review request cannot persist a registry marker that could
+        # later be misinterpreted as proof of a human-reviewed workflow.
+        with engine.connect() as connection:
+            assert connection.scalar(text("PRAGMA foreign_keys")) == 1
+            assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
     finally:
         engine.dispose()
 
