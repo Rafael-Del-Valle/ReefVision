@@ -90,9 +90,7 @@ def test_paired_counts_reject_fractional_organisms(
 
 
 @pytest.mark.parametrize("field", ["reference_count", "model_count"])
-def test_paired_counts_reject_unsafe_json_integer_precision(
-    client: TestClient, field: str
-) -> None:
+def test_paired_counts_reject_unsafe_json_integer_precision(client: TestClient, field: str) -> None:
     """Reject integers that would silently round when parsed as floats."""
     pairs = paired_observations()
     pairs[0][field] = 2**53 + 1

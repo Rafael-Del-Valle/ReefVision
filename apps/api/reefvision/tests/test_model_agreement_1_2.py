@@ -642,3 +642,48 @@ def test_saved_global_repeat_imbalance_flag_must_match_rows() -> None:
     payload["unequal_pair_counts_across_organisms"] = False
     with pytest.raises(SchemaValidationError, match="Directional"):
         PairedCountComparisonResponse.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "duplicate_observation",
+        "duplicate_reference_source",
+        "duplicate_model_source",
+        "cross_role_source_reuse",
+        "fractional_reference_and_model",
+    ],
+)
+def test_current_saved_paired_rows_preserve_source_uniqueness_and_integer_counts(
+    mutation: str,
+) -> None:
+    """Even arithmetic-consistent saved rows cannot manufacture source evidence."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    rows = [
+        pair("a", "frag-A", "tank-1", 10, 10),
+        pair("b", "frag-B", "tank-1", 20, 20),
+    ]
+    for row in rows:
+        row.pop("experimental_unit_id")
+        row.pop("experimental_unit_type")
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_consensus", pairs=rows)
+    )
+    payload = result.model_dump(mode="json")
+    first, second = payload["paired_differences"]
+    if mutation == "duplicate_observation":
+        second["observation_id"] = first["observation_id"]
+    elif mutation == "duplicate_reference_source":
+        second["reference_source_record_id"] = first["reference_source_record_id"]
+    elif mutation == "duplicate_model_source":
+        second["model_source_record_id"] = first["model_source_record_id"]
+    elif mutation == "cross_role_source_reuse":
+        second["model_source_record_id"] = first["reference_source_record_id"]
+    else:
+        # Both raw counts change together: signed/absolute differences,
+        # percentages, directional votes and all aggregate means stay exact.
+        first["reference_count"] = 10.5
+        first["model_count"] = 10.5
+    with pytest.raises(SchemaValidationError, match="Directional"):
+        PairedCountComparisonResponse.model_validate(payload)

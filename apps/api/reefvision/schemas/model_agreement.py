@@ -198,6 +198,19 @@ class PairedCountComparisonResponse(BaseModel):
         # add up to a plausible total after direction labels are swapped.
         if len(self.paired_differences) != self.paired_observation_count:
             raise ValueError("Directional paired rows must match paired observations")
+        # Repeated source or observation IDs cannot create additional evidence.
+        # This must also hold when a saved typed artifact is read back, not
+        # only when the original caller-supplied request is validated.
+        observation_ids = [row.observation_id for row in self.paired_differences]
+        reference_ids = [row.reference_source_record_id for row in self.paired_differences]
+        model_ids = [row.model_source_record_id for row in self.paired_differences]
+        if any(
+            len(set(identifiers)) != len(identifiers)
+            for identifiers in (observation_ids, reference_ids, model_ids)
+        ):
+            raise ValueError("Directional paired observation and source IDs must be unique")
+        if set(reference_ids) & set(model_ids):
+            raise ValueError("Directional human and model source IDs must be disjoint")
         # Current artifacts must reconcile derived rows with their raw counts.
         # A forged signed difference could otherwise satisfy every direction tally.
         for row in self.paired_differences:
@@ -211,6 +224,8 @@ class PairedCountComparisonResponse(BaseModel):
                 raise ValueError("Directional paired values must be finite")
             if row.reference_count < 0 or row.model_count < 0:
                 raise ValueError("Directional raw counts must be nonnegative")
+            if not row.reference_count.is_integer() or not row.model_count.is_integer():
+                raise ValueError("Directional raw counts must be whole numbers")
             if row.signed_difference != row.model_count - row.reference_count:
                 raise ValueError("Directional signed differences must match raw counts")
             if row.absolute_difference != abs(row.signed_difference):

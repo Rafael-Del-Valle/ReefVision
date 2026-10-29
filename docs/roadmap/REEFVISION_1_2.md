@@ -3835,3 +3835,24 @@ Exact new-head CI, authenticated calibrated longitudinal observations,
 1.1 migration reconciliation, real-dataset scientific review and installed
 Windows MSI/GUI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+## Persisted paired-source identity and whole-count integrity (2026-10-29)
+
+The current `ecology-paired-count-0007` typed result now rechecks that saved
+paired observation IDs, human-reference source IDs, and model source IDs are
+individually unique and that reference/model source sets do not overlap.
+It also rejects fractional raw organism counts in reloaded result rows, even
+when paired differences, percentages, direction counts, and summary means
+have been adjusted to remain internally consistent. These are result
+read-back checks, complementary to existing standalone request validation;
+older versioned artifacts retain their prior compatibility policy.
+
+Scientific regression cases cover repeated image/source IDs, cross-role source
+reuse and fractional exact-match pairs. Executable saved Workflow Builder
+acceptance rejects a source-ID-tampered persisted artifact without changing
+typed ports, provenance, or the `caller_supplied_unverified` review gate.
+The prior exact-head CI identified a Ruff formatter discrepancy in the
+strict-input regression test, which is corrected here. No evidence is
+promoted to verified status; authenticated source linkage, registered
+experimental designs, calibration review, migration reconciliation, and
+native Windows acceptance remain required.
