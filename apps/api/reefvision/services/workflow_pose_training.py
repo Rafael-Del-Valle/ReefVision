@@ -278,9 +278,15 @@ def _seed_pose_model(
     # A model-reference artifact may pin the original registered checkpoint.
     # Its digest is an explicit lineage assertion, not a hint to discard when
     # the model ID still resolves to an intact but different registration.
-    for digest_field in ("sha256", "source_model_sha256"):
+    for digest_field in ("sha256", "source_model_sha256", "model_sha256"):
         if digest_field in payload and payload[digest_field] != model.sha256:
             raise ValidationError("Pose retraining seed artifact checksum changed")
+
+    # The actual registered_model_source node also pins the model's type and
+    # provider. Reject altered metadata before using its local checkpoint.
+    for metadata_field in ("purpose", "task", "provider_name", "provider_version"):
+        if metadata_field in payload and payload[metadata_field] != getattr(model, metadata_field):
+            raise ValidationError("Pose retraining seed artifact metadata changed")
 
     binding = session.get(
         PoseModelSchemaBinding,
