@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, ScientificRecord
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.domain.scientific_units import UNITS, normalize_quantity
 from reefvision.schemas.environmental_context import (
     ENVIRONMENTAL_VARIABLES,
     EnvironmentalDatasetPage,
@@ -22,6 +23,8 @@ from reefvision.schemas.environmental_context import (
     EnvironmentalMatch,
     EnvironmentalSubjectContext,
     EnvironmentalSubjectLookup,
+    EnvironmentalThresholdRequest,
+    EnvironmentalThresholdResponse,
     NOAAImportRequest,
 )
 from reefvision.schemas.scientific_data import ScientificRecordCreate
@@ -227,6 +230,50 @@ class EnvironmentalContextService:
             key=lambda item: (abs(item.time_delta_s), item.distance_m, str(item.record.id))
         )
         return EnvironmentalLookupResponse(matches=matches)
+
+    def threshold_samples(
+        self, project_id: str, request: EnvironmentalThresholdRequest
+    ) -> EnvironmentalThresholdResponse:
+        """Return qualifying samples, not inferred temporal events or event durations."""
+        try:
+            threshold, unit = normalize_quantity(
+                request.threshold_value, request.threshold_unit
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        expected_dimensions = {
+            "water_temperature": "temperature",
+            "water_potential_temperature": "temperature",
+            "practical_salinity": "practical_salinity",
+            "current_eastward_velocity": "speed",
+            "current_northward_velocity": "speed",
+            "current_speed": "speed",
+        }
+        expected = expected_dimensions.get(request.variable)
+        if expected is not None and UNITS[request.threshold_unit][0] != expected:
+            raise ValidationError("Threshold unit must match the environmental variable")
+        lookup = EnvironmentalLookup.model_validate(
+            request.model_dump(exclude={"threshold_value", "threshold_unit", "direction"})
+        )
+        candidates = self.lookup(project_id, lookup).matches
+        if any(match.record.normalized_unit != unit for match in candidates):
+            raise ValidationError("Threshold unit must match the normalized observation unit")
+        matches = [
+            match
+            for match in candidates
+            if (
+                match.record.normalized_value > threshold
+                if request.direction == "above"
+                else match.record.normalized_value < threshold
+            )
+        ]
+        matches.sort(key=lambda item: (item.record.observed_at, str(item.record.id)))
+        return EnvironmentalThresholdResponse(
+            matches=matches,
+            normalized_threshold=threshold,
+            normalized_unit=unit,
+            direction=request.direction,
+        )
 
     def subject_context(
         self, project_id: str, request: EnvironmentalSubjectLookup
