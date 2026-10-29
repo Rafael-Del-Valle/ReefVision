@@ -43,9 +43,18 @@ artifact equality, cross-project rejection, altered originals, and mixed
 inline/stored geometry. Matching digests do **not** verify physical scale,
 coordinate registration, specimen identity, or biological branch length.
 
-This remains a first persistence slice, **not** a finished asset workspace.
-An 8 MiB stored source may still exceed the existing bounded mesh parser
-limits (256,000 text characters or 350,000 GLB base64 characters); such
-sources are retained but cannot yet be previewed. An interactive asset picker, large-file streaming, migration/Windows
-installation verification, and all remaining scientific release gates remain
-open. No asset is automatically calibrated, registered or biologically verified.
+The Workflow Graph workspace now has an interactive project-scoped source
+picker and import/preview panel. It can display provisional mesh or ASCII PLY
+point-cloud previews. Calibration method is selected explicitly from ruler,
+photogrammetry control, instrument, or other/unknown; the default is
+**other/unknown**, never an invented ruler observation. Changing the method,
+scale, uncertainty, source, or evidence invalidates the displayed preview.
+These fields are caller-supplied metadata, not independent verification.
+
+This remains an initial persistence and preview slice, **not** a finished asset
+workspace. An 8 MiB stored source may still exceed the existing bounded mesh
+parser limits (256,000 text characters or 350,000 GLB base64 characters);
+such sources are retained but cannot yet be previewed. Large-file streaming,
+migration/Windows installation verification, and all remaining scientific
+release gates remain open. No asset is automatically calibrated, registered,
+or biologically verified.
