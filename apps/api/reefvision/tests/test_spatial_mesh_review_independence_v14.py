@@ -127,6 +127,7 @@ def test_registration_review_optional_operator_is_narrowed_safely(
         assert validated.registration_operator_id == operator_id
         assert validated.independent_reviewer_id == reviewer_id
 
+
 @pytest.mark.parametrize("evidence_key", ["registration_evidence", "reidentification_evidence"])
 @pytest.mark.parametrize(
     ("reviewed_at_utc", "predates_observation"),
