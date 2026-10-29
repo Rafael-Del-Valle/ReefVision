@@ -77,12 +77,12 @@ def test_review_is_provisional_and_attributed(decision: str, warning: str | None
         ("reviewed_geometry_sha256", "f" * 64, "source geometry"),
         ("reviewed_specimen_id", "coral-2", "source observation"),
         ("reviewed_observation_id", "survey-2", "source observation"),
-        ("reviewed_observed_at_utc", "2026-10-03T12:00:00Z", "source observation"),
+        ("reviewed_observed_at_utc", "2026-10-01T13:00:00Z", "source observation"),
         ("reviewed_meters_per_unit", 0.02, "calibration inputs"),
         ("reviewed_calibration_method", "instrument", "calibration inputs"),
         ("reviewed_calibration_evidence", "different ruler", "calibration inputs"),
         ("reviewed_relative_scale_uncertainty", 0.2, "calibration inputs"),
-        ("reviewed_at_utc", "2026-09-30T12:00:00Z", "predates"),
+        ("reviewed_at_utc", "2026-09-30T12:00:00Z", "cannot predate bound observation"),
     ],
 )
 def test_stale_review_is_rejected(field: str, value: object, message: str) -> None:
@@ -238,4 +238,50 @@ def test_changed_reviewed_coordinate_frame_fails_saved_workflow(client: TestClie
     assert saved["run"]["status"] == "failed"
     assert not any(
         item["data_type"] == "point_cloud_measurement_preview" for item in saved["artifacts"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("reviewed_at_utc", "invalid"),
+    [
+        ("2026-10-01T06:59:59-05:00", True),
+        ("2026-10-01T07:00:00-05:00", False),
+        ("2026-10-02T07:00:00-05:00", False),
+    ],
+)
+def test_point_cloud_review_chronology_uses_timezone_aware_instants(
+    reviewed_at_utc: str, invalid: bool
+) -> None:
+    params = _reviewed_cloud()
+    params["calibration_review"]["reviewed_at_utc"] = reviewed_at_utc
+    if invalid:
+        with pytest.raises(PydanticValidationError, match="cannot predate bound observation"):
+            PointCloudPreviewRequest.model_validate(params)
+        return
+
+    result = preview_point_cloud_from_request(PointCloudPreviewRequest.model_validate(params))
+    assert result["provenance"]["calibration_verified"] is False
+    assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_point_cloud_review_chronology_fails_saved_workflow(client: TestClient) -> None:
+    """Invalid review chronology must not produce a persisted measurement artifact."""
+    project_id = str(create_project(client, "Point-cloud review chronology")["id"])
+    params = _reviewed_cloud()
+    params["calibration_review"]["reviewed_at_utc"] = "2026-09-30T12:00:00Z"
+
+    with pytest.raises(PydanticValidationError, match="cannot predate bound observation"):
+        PointCloudPreviewRequest.model_validate(params)
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/point-cloud-preview", json=params
+    )
+    assert response.status_code in (400, 422), response.text
+    assert "cannot predate bound observation" in response.text
+
+    saved = _run_saved_cloud(client, project_id, params)
+    assert saved["completed"] is False
+    assert saved["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "point_cloud_measurement_preview"
+        for item in saved["artifacts"]
     )
