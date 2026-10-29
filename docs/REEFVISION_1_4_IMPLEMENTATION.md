@@ -579,6 +579,21 @@ and does not certify calibration, alignment, uncertainty or coral movement.
 Standalone and persisted typed Workflow Builder comparisons use the same
 validation engine and preserve review provenance in their artifacts.
 
+### Review chronology validation (Track C, 2026-10-29)
+
+When optional UTC observation-time bindings and an independently attributed
+review timestamp are both supplied, registration and reidentification schemas
+reject a review dated before **either** bound survey observation. Offset-aware
+timestamps are compared as absolute instants. A review recorded at or after
+both observations remains caller-attributed **provisional** evidence; chronology
+alone does not authenticate a reviewer or validate a specimen match.
+
+Undated legacy reviews and unbound survey dates remain readable rather than
+having dates invented. New parametrized tests cover earlier and later review
+times through both scientific schemas and the standalone comparison endpoint.
+The executable typed saved-workflow adapter uses the same schema validation,
+while full installed-Windows acceptance is still outstanding.
+
 ### Withholding longitudinal organism changes after a disputed match
 
 When an independently attributed reidentification reviewer explicitly
