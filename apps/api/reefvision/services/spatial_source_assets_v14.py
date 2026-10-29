@@ -117,6 +117,11 @@ class SpatialSourceAssetService:
     def read_verified(self, project_id: str, asset_id: str) -> bytes:
         asset = self.get(project_id, asset_id)
         project = self._project(project_id)
+        # Source kind is derived from the imported format. Reject corrupted
+        # metadata before replaying an original, even when its bytes still hash
+        # correctly. PLY deliberately remains ambiguous until parsed.
+        if KINDS.get(asset.source_format) != asset.source_kind:
+            raise ValidationError("Spatial source format and kind metadata do not match")
         # Bind the immutable original to its database identity, not merely to
         # a file somewhere in the project originals directory. Otherwise a
         # changed managed_path could replay identical bytes under a different
