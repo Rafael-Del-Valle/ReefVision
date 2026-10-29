@@ -63,3 +63,29 @@ Not run in this pass:
 - full desktop packaged smoke test;
 - NSIS installer rebuild;
 - Playwright desktop workflow suite.
+
+
+## 2026-10-29 — QC bulk constraint discrimination (Track D)
+
+The persisted manual bulk-QC service now treats **only** real SQLite
+idempotency-key collisions as potential competing-reviewer retries. A
+matching primary key on `review_queue_bulk_requests.id` or matching
+composite audit key on `review_queue_item_events` can be replayed only
+after the existing registry, item-selection and event-provenance checks.
+Unrelated UNIQUE, NOT NULL, foreign-key and non-SQLite integrity errors
+are not converted into successful replay or ordinary reviewer conflicts.
+The initial-read SQLite BUSY/LOCKED handler is also Ruff-formatted.
+
+Added regressions for real extended SQLite constraint codes and for
+commit-time unrelated-constraint rollback against **both standalone QC
+queues and saved, executable Workflow Builder graphs**. The tests require
+unchanged annotations and reviewer events after a failed commit, followed
+by a successful keyed retry and no duplicate audit events.
+
+Portable independent SQLite/SQLAlchemy check: four real constraint cases
+passed (bulk primary key, audit composite unique, unrelated unique and
+unrelated NOT NULL). This is **not** a full ReefVision test pass.
+Full pytest, Ruff, mypy, frontend/E2E and native Windows installed-GUI
+acceptance must be checked against the exact PR head before release.
+The independent 1.1/1.6 Alembic revision-0038 collision remains unresolved;
+do not merge unaccepted version branches or rewrite installed migrations.
