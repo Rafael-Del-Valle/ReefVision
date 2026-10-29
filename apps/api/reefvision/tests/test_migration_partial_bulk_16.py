@@ -85,10 +85,14 @@ def _snapshot(connection: object) -> tuple[object, ...]:
         connection.scalar(text("SELECT version_num FROM alembic_version")),
         connection.scalar(text("SELECT value FROM observations WHERE id='coral-1'")),
         tuple(
-            connection.execute(text("SELECT id, actor FROM review_queue_item_events")).all()
+            connection.execute(
+                text("SELECT id, actor FROM review_queue_item_events")
+            ).all()
         ),
         tuple(
-            connection.execute(text("SELECT id, actor FROM review_queue_bulk_requests")).all()
+            connection.execute(
+                text("SELECT id, actor FROM review_queue_bulk_requests")
+            ).all()
         ),
     )
 
