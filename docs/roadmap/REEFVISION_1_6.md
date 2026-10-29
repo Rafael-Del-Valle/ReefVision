@@ -1694,3 +1694,27 @@ Backend API regressions cover missing/false/nonboolean confirmation, absence of 
   **Acceptance HOLD:** exact-new-head Ruff/mypy/pytest and relevant CI,
   1.1/1.6 revision-0038 reconciliation, native Windows MSI upgrade/rollback,
   installed-GUI testing, and representative biological-data checks.
+
+
+## 2026-10-29 — Native Windows QC workflow concurrency acceptance gate (Track D)
+
+- Audited existing class visibility, review queue controls, saved executable
+  `project_source -> qc_review_queue` Workflow Builder tests, 1.6 roadmap,
+  and exact predecessor `eb0621d2` CI (backend and frontend succeeded).
+- The Windows MSI build previously ran desktop migration and model-package
+  smoke tests but **did not run** the existing independent-process SQLite QC
+  workflow race regression. This left an explicit native Windows concurrency
+  acceptance gap even though the portable backend suite ran on Linux.
+- Added `test_workflow_queue_multiprocess_16.py` and
+  `test_workflow_queue_sqlite_contention_16.py` to the Windows installer
+  build's focused backend pytest preflight, before the MSI build. The tests
+  exercise a real saved workflow, SQLite writer contention, stable typed
+  `review_queue_reference` output with dimensionless scores, mandatory human
+  review, and preservation of independent manual reviewer history. Failure
+  blocks the installer artifact build; no migration, model download, data
+  mutation, or production workflow behavior is introduced by this change.
+- **Acceptance is not yet proven** until exact-head Windows Actions execute
+  the tests successfully. A green Linux CI result alone does not prove native
+  Windows multi-process behavior. MSI upgrade/rollback, interactive installed
+  GUI, 1.1/1.6 independent revision-0038 reconciliation and representative
+  biological-data acceptance remain release blockers. Do not merge/release.
