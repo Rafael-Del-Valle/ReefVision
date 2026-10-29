@@ -18,6 +18,8 @@ from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvi
 
 
 class PointCloudPreviewRequest(BaseModel):
+    # Project-owned immutable PLY original, resolved and SHA-256 checked at execution.
+    asset_id: str | None = Field(default=None, min_length=1, max_length=64)
     ply_text: str | None = Field(default=None, max_length=256_000)
     points: list[list[float]] | None = Field(default=None, min_length=1, max_length=2_000)
     meters_per_unit: float = Field(gt=0, le=1_000_000)
@@ -67,8 +69,15 @@ class PointCloudPreviewRequest(BaseModel):
     def geometry_is_unambiguous(self) -> PointCloudPreviewRequest:
         if not self.calibration_evidence.strip():
             raise ValueError("Point-cloud calibration evidence cannot be blank")
-        if (self.ply_text is None) == (self.points is None):
+        if self.asset_id is not None:
+            if self.ply_text is not None or self.points is not None:
+                raise ValueError("Project asset ID cannot be combined with inline point geometry")
+        elif (self.ply_text is None) == (self.points is None):
             raise ValueError("Provide exactly one of vertex-only ASCII PLY or XYZ points")
-        if self.expected_source_payload_sha256 is not None and self.ply_text is None:
-            raise ValueError("Source SHA-256 binding requires an imported ASCII PLY point cloud")
+        if (
+            self.expected_source_payload_sha256 is not None
+            and self.ply_text is None
+            and self.asset_id is None
+        ):
+            raise ValueError("Source SHA-256 binding requires ASCII PLY or a project asset")
         return self
