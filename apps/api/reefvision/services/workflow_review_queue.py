@@ -34,6 +34,20 @@ def _is_sqlite_writer_contention(exc: OperationalError) -> bool:
     }
 
 
+def _is_sqlite_queue_identity_collision(exc: IntegrityError) -> bool:
+    """Match only the deterministic review-queue primary-key collision.
+
+    An unrelated constraint failure is not a safe retry signal: it may
+    indicate broken scientific lineage or another database integrity defect.
+    """
+    if not isinstance(exc.orig, sqlite3.IntegrityError):
+        return False
+    return (
+        getattr(exc.orig, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
+        and str(exc.orig) == "UNIQUE constraint failed: review_queues.id"
+    )
+
+
 def create_review_queue_workflow_artifact(
     session: Session,
     settings: Settings,
@@ -155,10 +169,14 @@ def create_review_queue_workflow_artifact(
         try:
             queue = service.create_queue_for_project(project_id, request)
         except IntegrityError as exc:
-            # A competing worker may have committed this workflow's stable
-            # queue primary key after our initial lookup. Never manufacture a
-            # replacement or reuse unvalidated evidence in a failed session.
-            # The persisted node can be retried after the winner commits.
+            # Only the stable review-queue primary-key collision means another
+            # writer owns this workflow's identity. Unrelated constraint
+            # failures must surface instead of being mislabeled retryable.
+            if (
+                session.get_bind().dialect.name != "sqlite"
+                or not _is_sqlite_queue_identity_collision(exc)
+            ):
+                raise
             session.rollback()
             raise ValidationError(
                 "Concurrent QC review-queue creation detected; retry the saved workflow node"
@@ -169,10 +187,7 @@ def create_review_queue_workflow_artifact(
             # SQLITE_BUSY/LOCKED rather than IntegrityError. Fail closed and
             # permit an explicit saved-node retry after the writer releases it.
             # Do not mask unrelated I/O, schema or database errors.
-            if (
-                session.get_bind().dialect.name != "sqlite"
-                or not _is_sqlite_writer_contention(exc)
-            ):
+            if session.get_bind().dialect.name != "sqlite" or not _is_sqlite_writer_contention(exc):
                 raise
             session.rollback()
             raise ValidationError(
