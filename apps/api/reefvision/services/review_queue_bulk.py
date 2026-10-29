@@ -6,11 +6,12 @@ All items are validated before any state is changed; one transaction commits the
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime
 from uuid import uuid4, uuid5
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import ReviewQueue, ReviewQueueItem
@@ -22,6 +23,22 @@ from reefvision.schemas.review_queues import (
     ReviewQueueBulkResponse,
     ReviewQueueItemResponse,
 )
+
+
+def _is_sqlite_writer_contention(exc: OperationalError) -> bool:
+    """Only a genuine SQLite writer lock is a controlled, retryable conflict.
+
+    Do not reclassify missing tables, I/O failures, or other database defects
+    as ordinary reviewer contention. Extended SQLite result codes retain the
+    BUSY/LOCKED primary code in their low eight bits.
+    """
+    if not isinstance(exc.orig, sqlite3.OperationalError):
+        return False
+    code = getattr(exc.orig, "sqlite_errorcode", None)
+    return isinstance(code, int) and (code & 0xFF) in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }
 
 
 def bulk_triage_review_queue(
@@ -267,6 +284,18 @@ def bulk_triage_review_queue(
             if not validate_prior(prior_events()):
                 raise ConflictError("Bulk review request ID conflict") from None
             changed = 0
+        except OperationalError as exc:
+            # SQLite can reject the write before its uniqueness constraints
+            # are checked when another local reviewer holds the writer lock.
+            # Roll back the entire attempted batch; the caller can retry the
+            # same request UUID after the competing transaction finishes.
+            # Never claim that a human review action committed on a lock error.
+            session.rollback()
+            if not _is_sqlite_writer_contention(exc):
+                raise
+            raise ConflictError(
+                "SQLite review queue is busy; retry the same bulk request ID"
+            ) from exc
         for item in ordered:
             session.refresh(item)
     return ReviewQueueBulkResponse(
