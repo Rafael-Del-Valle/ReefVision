@@ -44,9 +44,9 @@ describe("project spatial source API", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
-    expect(await listProjectSpatialAssets("project 1", controller.signal)).toEqual([
-      asset,
-    ]);
+    expect(
+      await listProjectSpatialAssets("project 1", controller.signal),
+    ).toEqual([asset]);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/projects/project%201/spatial/assets",
       expect.objectContaining({ signal: controller.signal }),
@@ -111,7 +111,12 @@ describe("project spatial source API", () => {
       }),
     ).rejects.toThrow("Relative scale uncertainty");
     await expect(
-      previewProjectSpatialAsset("project 1", asset, "volume" as "mesh", calibration),
+      previewProjectSpatialAsset(
+        "project 1",
+        asset,
+        "volume" as "mesh",
+        calibration,
+      ),
     ).rejects.toThrow("Unsupported spatial preview geometry mode");
     await expect(
       previewProjectSpatialAsset("project 1", asset, "mesh", {
@@ -137,7 +142,8 @@ describe("project spatial source API", () => {
       { ...asset, specimen_identity_verified: true as false },
       {
         ...asset,
-        measurement_status: "verified" as SpatialSourceAsset["measurement_status"],
+        measurement_status:
+          "verified" as SpatialSourceAsset["measurement_status"],
       },
     ];
     for (const invalid of invalidAssets) {
@@ -148,7 +154,8 @@ describe("project spatial source API", () => {
     await expect(
       previewProjectSpatialAsset("project 1", asset, "mesh", {
         ...calibration,
-        calibration_method: "fabricated" as typeof calibration.calibration_method,
+        calibration_method:
+          "fabricated" as typeof calibration.calibration_method,
       }),
     ).rejects.toThrow("Calibration method");
     expect(fetchMock).not.toHaveBeenCalled();
