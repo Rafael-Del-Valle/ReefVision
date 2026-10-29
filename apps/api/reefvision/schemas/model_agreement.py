@@ -212,16 +212,18 @@ class PairedCountComparisonResponse(BaseModel):
             raise ValueError("Directional paired observation and source IDs must be unique")
         if set(reference_ids) & set(model_ids):
             raise ValueError("Directional human and model source IDs must be disjoint")
+        if self.analysis_provenance.source_record_ids != sorted([*reference_ids, *model_ids]):
+            raise ValueError("Directional provenance source roster must match paired rows")
         # Current artifacts must reconcile derived rows with their raw counts.
         # A forged signed difference could otherwise satisfy every direction tally.
         for row in self.paired_differences:
-            values = (
+            raw_values = (
                 row.reference_count,
                 row.model_count,
                 row.signed_difference,
                 row.absolute_difference,
             )
-            if any(not math.isfinite(value) for value in values):
+            if any(not math.isfinite(value) for value in raw_values):
                 raise ValueError("Directional paired values must be finite")
             if row.reference_count < 0 or row.model_count < 0:
                 raise ValueError("Directional raw counts must be nonnegative")
@@ -286,6 +288,15 @@ class PairedCountComparisonResponse(BaseModel):
         # A duplicate organism across tanks must not become two replicates.
         if bool(self.unit_summaries) != (self.experimental_unit_type is not None):
             raise ValueError("Directional unit summaries must match declared unit type")
+        if not self.unit_summaries and any(
+            count is not None
+            for count in (
+                self.declared_independent_unit_count,
+                self.percent_contributing_independent_unit_count,
+                self.percent_contributing_organism_count,
+            )
+        ):
+            raise ValueError("Directional unregistered units cannot have independent denominators")
         if self.unit_summaries:
             unit_ids = [unit.experimental_unit_id for unit in self.unit_summaries]
             if len(set(unit_ids)) != len(unit_ids):
