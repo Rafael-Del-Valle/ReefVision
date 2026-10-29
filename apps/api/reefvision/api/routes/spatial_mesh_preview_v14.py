@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.config import Settings
 from reefvision.db.models import Project
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.spatial_mesh_preview_v14 import (
@@ -18,6 +19,7 @@ from reefvision.schemas.spatial_point_cloud_v14 import PointCloudPreviewRequest
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.services.spatial_point_cloud_v14 import preview_point_cloud_from_request
+from reefvision.services.spatial_source_assets_v14 import preview_project_mesh
 
 router = APIRouter(tags=["spatial-mesh-preview"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -25,12 +27,13 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 
 @router.post("/projects/{project_id}/spatial/mesh-preview")
 def preview_mesh_surface(
-    project_id: str, payload: MeshPreviewRequest, session: DbSession
+    project_id: str, payload: MeshPreviewRequest, request: Request, session: DbSession
 ) -> dict[str, Any]:
     if session.get(Project, project_id) is None:
         raise NotFoundError("Project not found")
+    settings: Settings = request.app.state.settings
     try:
-        result = preview_from_request(payload)
+        result = preview_project_mesh(session, settings, project_id, payload)
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
     result["project_id"] = project_id
