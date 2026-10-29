@@ -117,8 +117,15 @@ class SpatialSourceAssetService:
     def read_verified(self, project_id: str, asset_id: str) -> bytes:
         asset = self.get(project_id, asset_id)
         project = self._project(project_id)
-        if not asset.managed_path.startswith(f"{project.storage_root}/spatial/originals/"):
-            raise ValidationError("Spatial source path is outside its project")
+        # Bind the immutable original to its database identity, not merely to
+        # a file somewhere in the project originals directory. Otherwise a
+        # changed managed_path could replay identical bytes under a different
+        # asset identity while still passing the stored SHA-256 check.
+        expected_path = (
+            f"{project.storage_root}/spatial/originals/{asset.id}.{asset.source_format}"
+        )
+        if asset.managed_path != expected_path:
+            raise ValidationError("Spatial source path does not match immutable asset identity")
         path = resolve_managed_project_path(self.settings, asset.managed_path)
         if path.is_symlink() or not path.is_file():
             raise ValidationError("Spatial source original bytes are missing or unsafe")
