@@ -38,14 +38,10 @@ def _make_queue(client: TestClient, *, saved_workflow: bool) -> tuple[str, list[
 
     if saved_workflow:
         graph = _graph()
-        plan = client.post(
-            f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-        )
+        plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
         assert plan.status_code == 200, plan.text
         assert plan.json()["valid"] and plan.json()["executable"]
-        saved = client.post(
-            f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-        )
+        saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
         assert saved.status_code == 201, saved.text
         queued = client.post(
             f"/api/v1/projects/{project_id}/workflow-runs",
@@ -82,8 +78,9 @@ def _make_queue(client: TestClient, *, saved_workflow: bool) -> tuple[str, list[
 
 
 @pytest.mark.parametrize("saved_workflow", [False, True])
-def test_busy_writer_fails_closed_then_same_bulk_request_retries(
-    client: TestClient, saved_workflow: bool
+@pytest.mark.parametrize("lock_mode", ["IMMEDIATE", "EXCLUSIVE"])
+def test_sqlite_lock_fails_closed_then_same_bulk_request_retries(
+    client: TestClient, saved_workflow: bool, lock_mode: str
 ) -> None:
     queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
     app = cast(FastAPI, client.app)
@@ -98,12 +95,12 @@ def test_busy_writer_fails_closed_then_same_bulk_request_retries(
     }
     url = f"/api/v1/review-queues/{queue_id}/items/bulk"
 
-    # BEGIN IMMEDIATE permits SELECT but reserves SQLite's only writer slot.
-    # The API must reject the entire batch rather than report a 500 or
-    # manufacture a reviewer event while another process holds that slot.
+    # BEGIN IMMEDIATE permits SELECT but reserves the writer slot. BEGIN
+    # EXCLUSIVE also blocks the initial queue SELECT (before session.commit).
+    # Neither path may report a 500, apply partial triage, or create an event.
     blocker = sqlite3.connect(db_path, timeout=0.2, isolation_level=None)
     try:
-        blocker.execute("BEGIN IMMEDIATE")
+        blocker.execute("BEGIN IMMEDIATE" if lock_mode == "IMMEDIATE" else "BEGIN EXCLUSIVE")
         blocked = client.post(url, json=payload)
         assert blocked.status_code == 409, blocked.text
         assert "busy" in blocked.text.lower()
@@ -143,9 +140,7 @@ def test_sqlite_busy_classifier_does_not_mask_unrelated_database_errors() -> Non
     try:
         with pytest.raises(sqlite3.OperationalError) as missing:
             connection.execute("SELECT * FROM missing_research_table")
-        assert not _is_sqlite_writer_contention(
-            OperationalError("SELECT", {}, missing.value)
-        )
+        assert not _is_sqlite_writer_contention(OperationalError("SELECT", {}, missing.value))
     finally:
         connection.close()
     assert not _is_sqlite_writer_contention(
