@@ -305,5 +305,4 @@ describe("ProjectSpatialAssetPreview", () => {
     );
     expect(screen.getByLabelText("Project 3D source")).toHaveValue("");
   });
-
 });
