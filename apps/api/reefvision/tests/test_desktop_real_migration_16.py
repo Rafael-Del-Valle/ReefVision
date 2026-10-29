@@ -129,27 +129,83 @@ def test_real_0041_sqlite_enforces_reviewer_registry_foreign_keys(tmp_path: Path
 
         # A declared RESTRICT foreign key is insufficient if the installed
         # SQLite connection does not actually enable FK enforcement.
-        with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
-            with engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "INSERT INTO review_queue_bulk_requests "
-                        "(id, review_queue_id, project_id, action, actor, item_ids_json, created_at) "
-                        "VALUES (:id, :queue, :project, :action, :actor, :items, :created)"
-                    ),
-                    {
-                        "id": "orphaned-review-attempt",
-                        "queue": "nonexistent-queue",
-                        "project": "nonexistent-project",
-                        "action": "start",
-                        "actor": "local researcher",
-                        "items": "[]",
-                        "created": "2026-10-29T00:00:00Z",
-                    },
-                )
+        with (
+            pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"),
+            engine.begin() as connection,
+        ):
+            connection.execute(
+                text(
+                    "INSERT INTO review_queue_bulk_requests "
+                    "(id, review_queue_id, project_id, action, actor, item_ids_json, created_at) "
+                    "VALUES (:id, :queue, :project, :action, :actor, :items, :created)"
+                ),
+                {
+                    "id": "orphaned-review-attempt",
+                    "queue": "nonexistent-queue",
+                    "project": "nonexistent-project",
+                    "action": "start",
+                    "actor": "local researcher",
+                    "items": "[]",
+                    "created": "2026-10-29T00:00:00Z",
+                },
+            )
 
         # A failed review request cannot persist a registry marker that could
         # later be misinterpreted as proof of a human-reviewed workflow.
+        with engine.connect() as connection:
+            assert connection.scalar(text("PRAGMA foreign_keys")) == 1
+            assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
+    finally:
+        engine.dispose()
+
+
+
+def test_reused_desktop_sqlite_connection_restores_foreign_key_enforcement(
+    tmp_path: Path,
+) -> None:
+    """A pooled local connection must not retain disabled QC audit foreign keys."""
+    database = tmp_path / "reused-foreign-keys.sqlite"
+    settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{database.as_posix()}")
+    settings.ensure_directories()
+    run_pending_migrations(settings)
+
+    engine = create_database_engine(settings)
+    try:
+        # Simulate a local caller disabling the PRAGMA on a pooled connection.
+        # Returning it to the pool must not compromise subsequent review writes.
+        with engine.connect() as connection:
+            assert connection.scalar(text("PRAGMA foreign_keys")) == 1
+            connection.commit()
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            assert connection.scalar(text("PRAGMA foreign_keys")) == 0
+
+        with engine.connect() as connection:
+            assert connection.scalar(text("PRAGMA foreign_keys")) == 1
+            assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
+            assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
+
+        with (
+            pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"),
+            engine.begin() as connection,
+        ):
+            connection.execute(
+                text(
+                    "INSERT INTO review_queue_bulk_requests "
+                    "(id, review_queue_id, project_id, action, actor, "
+                    "item_ids_json, created_at) "
+                    "VALUES (:id, :queue, :project, :action, :actor, :items, :created)"
+                ),
+                {
+                    "id": "pooled-orphan-attempt",
+                    "queue": "missing-queue",
+                    "project": "missing-project",
+                    "action": "start",
+                    "actor": "local researcher",
+                    "items": "[]",
+                    "created": "2026-10-29T00:00:00Z",
+                },
+            )
+
         with engine.connect() as connection:
             assert connection.scalar(text("PRAGMA foreign_keys")) == 1
             assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
