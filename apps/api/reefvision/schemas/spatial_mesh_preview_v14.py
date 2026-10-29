@@ -261,6 +261,13 @@ class MeshRegistrationEvidence(BaseModel):
             and self.independent_reviewer_id.casefold() == self.registration_operator_id.casefold()
         ):
             raise ValueError("Registration reviewer must differ from registration operator")
+        # A review cannot document inspection of a survey that had not occurred.
+        # Missing legacy timepoint bindings remain provisional, not authenticated.
+        if self.independent_reviewed_at_utc is not None and any(
+            observed is not None and self.independent_reviewed_at_utc < observed
+            for observed in (self.source_observed_at_utc, self.target_observed_at_utc)
+        ):
+            raise ValueError("Registration independent review cannot predate bound observations")
         transform = self.source_to_target_transform_m
         centroid_bounds = (
             self.source_centroid_position_error_bound_m,
@@ -382,6 +389,12 @@ class MeshReidentificationEvidence(BaseModel):
             and self.independent_reviewer_id.casefold() == self.observer_id.casefold()
         ):
             raise ValueError("Independent reviewer must differ from matching observer")
+        # Reject impossible review chronology without fabricating missing dates.
+        if self.independent_reviewed_at_utc is not None and any(
+            observed is not None and self.independent_reviewed_at_utc < observed
+            for observed in (self.before_observed_at_utc, self.after_observed_at_utc)
+        ):
+            raise ValueError("Reidentification independent review cannot predate bound observations")
         return self
 
 
