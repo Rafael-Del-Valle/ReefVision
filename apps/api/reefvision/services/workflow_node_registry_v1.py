@@ -539,7 +539,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
         required_parameters=[],
         optional_parameters={
-            "initialization_mode": None,
+            # "auto" resolves to the connected seed model, or random init when absent.
+            "initialization_mode": "auto",
             "architecture": "yolo11n-pose.yaml",
             "run_name": "workflow-pose-retrain",
             "notes": None,
