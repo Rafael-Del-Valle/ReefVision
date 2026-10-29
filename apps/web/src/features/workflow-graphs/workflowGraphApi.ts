@@ -260,6 +260,97 @@ export function cancelWorkflowRunJob(
   );
 }
 
+
+/** Project-owned originals are immutable and remain unreviewed scientific evidence. */
+export interface SpatialSourceAsset {
+  id: string;
+  project_id: string;
+  original_filename: string;
+  source_format: "obj" | "ply" | "glb";
+  source_kind: "mesh" | "mesh_or_point_cloud";
+  sha256: string;
+  size_bytes: number;
+  created_at: string;
+  measurement_status: "source_unreviewed";
+  calibration_verified: false;
+  specimen_identity_verified: false;
+}
+
+export function listProjectSpatialAssets(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<SpatialSourceAsset[]> {
+  return request<SpatialSourceAsset[]>(
+    `/projects/${encodeURIComponent(projectId)}/spatial/assets`,
+    { signal },
+  );
+}
+
+export async function importProjectSpatialAsset(
+  projectId: string,
+  file: File,
+): Promise<SpatialSourceAsset> {
+  if (!/\.(obj|ply|glb)$/i.test(file.name) || !file.size || file.size > 8 * 1024 * 1024) {
+    throw new Error("Import requires a nonempty OBJ, PLY, or GLB file of at most 8 MiB.");
+  }
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch(
+    `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}/spatial/assets`,
+    { method: "POST", body },
+  );
+  if (!response.ok) {
+    let message = `Spatial source import failed with HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (typeof payload.detail === "string") message = payload.detail;
+    } catch {
+      // Keep HTTP fallback for non-JSON errors.
+    }
+    throw new Error(message);
+  }
+  return (await response.json()) as SpatialSourceAsset;
+}
+
+export function previewProjectSpatialAsset(
+  projectId: string,
+  asset: SpatialSourceAsset,
+  kind: "mesh" | "point_cloud",
+  calibration: MeshPreviewCalibration,
+): Promise<Record<string, unknown>> {
+  if (kind === "point_cloud" && asset.source_format !== "ply") {
+    throw new Error("Only imported PLY originals support point-cloud preview.");
+  }
+  if (
+    !Number.isFinite(calibration.meters_per_unit) ||
+    calibration.meters_per_unit <= 0 ||
+    calibration.meters_per_unit > 1_000_000 ||
+    !calibration.calibration_evidence.trim() ||
+    calibration.calibration_evidence.length > 2_000
+  ) {
+    throw new Error("Provide a positive scale and bounded calibration evidence.");
+  }
+  if (
+    calibration.relative_scale_uncertainty != null &&
+    (!Number.isFinite(calibration.relative_scale_uncertainty) ||
+      calibration.relative_scale_uncertainty < 0 ||
+      calibration.relative_scale_uncertainty > 1)
+  ) {
+    throw new Error("Relative scale uncertainty must be between 0 and 1.");
+  }
+  return request<Record<string, unknown>>(
+    `/projects/${encodeURIComponent(projectId)}/spatial/${kind === "mesh" ? "mesh-preview" : "point-cloud-preview"}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...calibration,
+        asset_id: asset.id,
+        expected_source_payload_sha256: asset.sha256,
+      }),
+    },
+  );
+}
+
 /** Bounded local file preview. No asset persistence or calibration verification. */
 export interface MeshPreviewCalibration {
   meters_per_unit: number;
