@@ -4007,3 +4007,25 @@ CI-reported formatter corrections. Latest-head CI, authenticated
 organism/calibration records, migration reconciliation, representative
 scientific acceptance and installed Windows GUI/MSI checks remain pending.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Persisted paired-count provenance and denominator integrity (2026-10-29)
+
+The existing `ecology-paired-count-0007` typed result validator now
+reconciles its sorted human/model `analysis_provenance.source_record_ids`
+with the actual persisted paired rows. A missing, fabricated or reordered
+source roster fails read-back even when the numerical means and directional
+votes remain unchanged. Comparisons with no declared independent units also
+reject invented unit counts and percentage-eligible organism/unit denominators
+instead of silently accepting biological replication that was never registered.
+The same validator is used for standalone analysis results and saved executable
+Workflow Builder comparison artifacts; no new node, migration or verification
+claim is introduced. The paired-count source schema, `caller_supplied_unverified`
+evidence level, review restrictions, and existing CSV export remain unchanged.
+
+Regression coverage includes six malformed persisted-artifact scenarios and a
+saved-workflow provenance tamper case. Corrected a shadowed `values` local
+in the validator that caused **six mypy errors** on prior head
+`452d68007c44021b24e9227c1c5bbd82598105a6` (16/19 Actions passed;
+three backend workflows failed at type checking). These new changes require
+exact-head CI confirmation; local full pytest/mypy/Ruff and physical Windows
+installer/GUI acceptance are not yet verified. **1.2 remains NOT RELEASE-READY.**
