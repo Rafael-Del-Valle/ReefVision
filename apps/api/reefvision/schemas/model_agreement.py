@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections import Counter
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -177,9 +178,7 @@ class PairedCountComparisonResponse(BaseModel):
             # Older artifacts did not persist organism votes; do not invent them.
             return self
         if (
-            self.overcount_pair_count
-            + self.undercount_pair_count
-            + self.exact_match_pair_count
+            self.overcount_pair_count + self.undercount_pair_count + self.exact_match_pair_count
             != self.paired_observation_count
         ):
             raise ValueError("Directional pair counts must match paired observations")
@@ -190,11 +189,39 @@ class PairedCountComparisonResponse(BaseModel):
             != self.observed_organism_count
         ):
             raise ValueError("Directional organism counts must match distinct organisms")
+        # Persisted denominators must agree with actual paired rows, not merely
+        # add up to a plausible total after direction labels are swapped.
+        if len(self.paired_differences) != self.paired_observation_count:
+            raise ValueError("Directional paired rows must match paired observations")
+        observed_directions = (
+            sum(row.signed_difference > 0 for row in self.paired_differences),
+            sum(row.signed_difference < 0 for row in self.paired_differences),
+            sum(row.signed_difference == 0 for row in self.paired_differences),
+        )
+        if observed_directions != (
+            self.overcount_pair_count,
+            self.undercount_pair_count,
+            self.exact_match_pair_count,
+        ):
+            raise ValueError("Directional pair counts must match paired differences")
+        observed_organisms = Counter(row.organism_id for row in self.paired_differences)
+        if (
+            dict(observed_organisms) != self.observation_counts_by_organism
+            or len(observed_organisms) != self.observed_organism_count
+            or self.repeated_pair_count_beyond_first_per_organism
+            != self.paired_observation_count - len(observed_organisms)
+        ):
+            raise ValueError("Directional organism frequencies must match paired differences")
+        if (
+            self.nonzero_reference_count
+            != sum(row.reference_count > 0 for row in self.paired_differences)
+            or self.zero_reference_count
+            != sum(row.reference_count == 0 for row in self.paired_differences)
+        ):
+            raise ValueError("Directional reference denominators must match paired differences")
         for unit in self.unit_summaries:
             if (
-                unit.overcount_pair_count
-                + unit.undercount_pair_count
-                + unit.exact_match_pair_count
+                unit.overcount_pair_count + unit.undercount_pair_count + unit.exact_match_pair_count
                 != unit.paired_observation_count
             ):
                 raise ValueError("Directional unit pair counts must match paired observations")
