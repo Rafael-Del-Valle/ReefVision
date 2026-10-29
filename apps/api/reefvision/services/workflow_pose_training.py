@@ -285,10 +285,7 @@ def _seed_pose_model(
     # The actual registered_model_source node also pins the model's type and
     # provider. Reject altered metadata before using its local checkpoint.
     for metadata_field in ("purpose", "task", "provider_name", "provider_version"):
-        if (
-            metadata_field in payload
-            and payload[metadata_field] != getattr(model, metadata_field)
-        ):
+        if metadata_field in payload and payload[metadata_field] != getattr(model, metadata_field):
             raise ValidationError("Pose retraining seed artifact metadata changed")
 
     binding = session.get(
