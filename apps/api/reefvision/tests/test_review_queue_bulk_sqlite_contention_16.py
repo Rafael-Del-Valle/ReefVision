@@ -218,7 +218,7 @@ def test_unrelated_bulk_integrity_error_is_not_hidden_as_idempotent_retry(
     # and must not report a successful retry for a scientific schema defect.
     with monkeypatch.context() as patch:
         patch.setattr(Session, "commit", reject_unrelated_constraint)
-        with pytest.raises(IntegrityError, match="unrelated_science.name"):
+        with pytest.raises(IntegrityError, match=r"unrelated_science\.name"):
             client.post(url, json=payload)
 
     pending = client.get(f"/api/v1/review-queues/{queue_id}/items")
