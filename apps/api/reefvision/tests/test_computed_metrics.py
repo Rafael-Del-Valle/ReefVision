@@ -430,20 +430,18 @@ def test_calculation_rejects_superseded_noaa_snapshot_but_accepts_current(
         f"/api/v1/projects/{project['id']}/computed-metric-definitions/"
         f"{created.json()['id']}/calculate"
     )
-    stale = client.post(
-        url, json={"inputs": {"temperature": str(original.items[0].id)}}
-    )
+    results_url = f"/api/v1/projects/{project['id']}/computed-metric-results"
+    stale_inputs = {"inputs": {"temperature": str(original.items[0].id)}}
+    stale = client.post(url, json=stale_inputs)
     assert stale.status_code == 400, stale.text
     assert "superseded environmental" in stale.json()["detail"]
+    assert client.get(results_url).json()["total"] == 0
 
-    current = client.post(
-        url, json={"inputs": {"temperature": str(refreshed.items[0].id)}}
-    )
+    current_inputs = {"inputs": {"temperature": str(refreshed.items[0].id)}}
+    current = client.post(url, json=current_inputs)
     assert current.status_code == 201, current.text
     assert current.json()["value"] == pytest.approx(21.0)
-    assert (
-        client.get(f"/api/v1/projects/{project['id']}/computed-metric-results").json()["total"] == 1
-    )
+    assert client.get(results_url).json()["total"] == 1
 
 
 def test_calculation_rejects_stale_calibration_even_for_count_metrics(
