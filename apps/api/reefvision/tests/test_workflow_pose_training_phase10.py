@@ -375,6 +375,36 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     )
 
     with app.state.session_factory() as session:
+        seed = session.get(ModelRegistration, model_id)
+        assert seed is not None
+        seed_sha256 = seed.sha256
+
+    # An upstream model-reference artifact can pin its registered weights.
+    # Reject a stale digest before queuing a training job, even though the
+    # model ID and its current on-disk checkpoint still validate.
+    for digest_field in ("sha256", "source_model_sha256"):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="seed artifact checksum changed"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                initial_model_payload={"model_id": model_id, digest_field: "0" * 64},
+                parameters={"device": "cpu", "training_config": {"epochs": 1}},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == []
+
+    with app.state.session_factory() as session:
         result = create_pose_workflow_training_result(
             session,
             test_settings,
@@ -386,6 +416,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
             },
             initial_model_payload={
                 "model_id": model_id,
+                "sha256": seed_sha256,
             },
             parameters={
                 "run_name": ("phase10-pose-retrain"),
