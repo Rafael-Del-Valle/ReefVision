@@ -725,13 +725,13 @@ def create_pose_workflow_training_result(
             "This pose retraining configuration requires a separate frozen validation dataset"
         )
 
-    # An explicit falsy mode must not silently become random initialization
-    # (or registered-model initialization when a seed artifact is connected).
-    requested_mode = parameters.get("initialization_mode")
-    if "initialization_mode" not in parameters:
-        initialization_mode = "registered_model" if initial_model_payload is not None else "random"
-    elif not isinstance(requested_mode, str) or not requested_mode:
+    # The planner's explicit "auto" default resolves from the connected
+    # seed artifact; an explicit null/falsy mode remains invalid.
+    requested_mode = parameters.get("initialization_mode", "auto")
+    if not isinstance(requested_mode, str) or not requested_mode:
         raise ValidationError("Pose initialization_mode must be random or registered_model")
+    if requested_mode == "auto":
+        initialization_mode = "registered_model" if initial_model_payload is not None else "random"
     else:
         initialization_mode = requested_mode
     if initialization_mode not in {"random", "registered_model"}:
