@@ -27,7 +27,9 @@ def test_0041_rejects_nullable_audit_attribution_without_mutating_records(
             connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
             connection.execute(text("INSERT INTO alembic_version VALUES ('0041')"))
             connection.execute(text("CREATE TABLE observations (value TEXT NOT NULL)"))
-            connection.execute(text("INSERT INTO observations VALUES ('original coral observation')"))
+            connection.execute(
+                text("INSERT INTO observations VALUES ('original coral observation')")
+            )
 
             required = (
                 "id",
@@ -50,7 +52,8 @@ def test_0041_rejects_nullable_audit_attribution_without_mutating_records(
                     "assignee TEXT",
                     "CONSTRAINT uq_review_queue_item_event_request "
                     "UNIQUE (review_queue_item_id, client_request_id)",
-                    f"CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({_EVENT_TYPES}))",
+                    "CONSTRAINT ck_review_queue_item_event_type "
+                    f"CHECK (event_type IN ({_EVENT_TYPES}))",
                 ]
             )
             connection.execute(text(f"CREATE TABLE review_queue_item_events ({', '.join(fields)})"))
