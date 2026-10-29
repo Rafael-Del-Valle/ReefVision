@@ -73,6 +73,18 @@ def _windows_path(value: Any, label: str) -> PureWindowsPath:
     )
     path = PureWindowsPath(value)
     _require(path.is_absolute() and path.anchor != str(path), f"{label} must be absolute")
+    # Windows installer acceptance must use an ordinary local drive. UNC,
+    # extended/device namespaces, and alternate data streams cannot establish
+    # the disposable directory boundary used by the native harness.
+    _require(re.fullmatch(r"[A-Za-z]:", path.drive) is not None, f"{label} must use a local drive")
+    for part in path.parts[1:]:
+        _require(
+            not part.endswith((" ", "."))
+            and ":" not in part
+            and not any(ord(character) < 32 for character in part)
+            and re.fullmatch(r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\\..*)?", part, re.IGNORECASE) is None,
+            f"{label} contains an unsafe Windows path component",
+        )
     return path
 
 
