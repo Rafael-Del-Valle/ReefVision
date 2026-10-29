@@ -871,6 +871,67 @@ def test_v3_accepts_real_pending_count_normalization(pending_count: int | float)
         )
         part["raw_value"] = pending_count
         part["normalized_value"] = normalized
+        if pending_count > 0:
+            # An actual pending prediction must have min confidence <= mean.
+            # The synthetic fixture has no predictions until this test adds them.
+            minimum = item.signal_values_json["low_mean_confidence"]
+            item.signal_values_json["low_min_confidence"] = minimum
+            item.normalized_signals_json["low_min_confidence"] = minimum
+            minimum_part = next(
+                part
+                for part in item.score_breakdown_json
+                if part["signal_id"] == "low_min_confidence"
+            )
+            minimum_part["raw_value"] = minimum
+            minimum_part["normalized_value"] = minimum
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    validate_saved_queue_snapshot(queue, items)
+
+
+def _set_v3_unweighted_signal(item: SimpleNamespace, signal_id: str, value: float) -> None:
+    """Update a zero-weight raw signal and its matching scientific explanation."""
+    assert item.weights_json[signal_id] == 0.0
+    normalized = min(value / 10.0, 1.0) if signal_id == "pending_proposals" else value
+    item.signal_values_json[signal_id] = value
+    item.normalized_signals_json[signal_id] = normalized
+    part = next(part for part in item.score_breakdown_json if part["signal_id"] == signal_id)
+    part["raw_value"] = value
+    part["normalized_value"] = normalized
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"unreviewed_state": 0.0, "stale_review_state": 0.25},
+        {"pending_proposals": 1.0, "low_min_confidence": 0.1},
+    ],
+)
+def test_v3_rejects_resigned_cross_signal_scientific_contradictions(
+    changes: dict[str, float],
+) -> None:
+    """Coherent scores and digests cannot authorize contradictory QC observations."""
+    queue, items = _v3_snapshot()
+    item = items[0]
+    item.review_state = "in_progress"
+    for signal_id, value in changes.items():
+        _set_v3_unweighted_signal(item, signal_id, value)
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+    assert item.review_state == "in_progress"
+
+
+def test_v3_accepts_coherent_cross_signal_scientific_observations() -> None:
+    """A genuinely unreviewed old image and valid pending confidence remain readable."""
+    queue, items = _v3_snapshot()
+    item = items[0]
+    for signal_id, value in {
+        "unreviewed_state": 1.0,
+        "stale_review_state": 0.25,
+        "pending_proposals": 1.0,
+        "low_min_confidence": 0.9,
+    }.items():
+        _set_v3_unweighted_signal(item, signal_id, value)
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
     validate_saved_queue_snapshot(queue, items)
 
