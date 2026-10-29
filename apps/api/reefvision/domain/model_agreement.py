@@ -83,10 +83,13 @@ def compare_paired_counts(
     for item in sorted(pairs, key=lambda pair: pair.observation_id):
         signed = item.model_count - item.reference_count
         absolute = abs(signed)
-        percent = absolute / item.reference_count * 100 if item.reference_count > 0 else None
+        signed_percent = (
+            signed / item.reference_count * 100 if item.reference_count > 0 else None
+        )
+        percent = abs(signed_percent) if signed_percent is not None else None
         if any(not math.isfinite(value) for value in (signed, absolute)):
             raise ValidationError("Paired count difference is not finite")
-        if percent is not None and not math.isfinite(percent):
+        if signed_percent is not None and not math.isfinite(signed_percent):
             raise ValidationError("Paired percent deviation is not finite")
         row = PairedCountDifference(
             observation_id=item.observation_id,
@@ -98,6 +101,7 @@ def compare_paired_counts(
             signed_difference=signed,
             absolute_difference=absolute,
             absolute_percent_deviation=percent,
+            signed_percent_deviation=signed_percent,
         )
         differences.append(row)
         pair_counts_by_organism[item.organism_id] += 1
@@ -111,6 +115,11 @@ def compare_paired_counts(
         row.absolute_percent_deviation
         for row in differences
         if row.absolute_percent_deviation is not None
+    ]
+    valid_signed_percent = [
+        row.signed_percent_deviation
+        for row in differences
+        if row.signed_percent_deviation is not None
     ]
     unit_summaries = []
     percent_contributing_organisms = 0
@@ -134,14 +143,21 @@ def compare_paired_counts(
             if row.absolute_percent_deviation is not None
         ]
         organism_percents = []
+        organism_signed_percents = []
         for organism in sorted(organism_rows):
             eligible = [
                 row.absolute_percent_deviation
                 for row in organism_rows[organism]
                 if row.absolute_percent_deviation is not None
             ]
+            signed_eligible = [
+                row.signed_percent_deviation
+                for row in organism_rows[organism]
+                if row.signed_percent_deviation is not None
+            ]
             if eligible:
                 organism_percents.append(finite_descriptive_mean(eligible))
+                organism_signed_percents.append(finite_descriptive_mean(signed_eligible))
         percent_contributing_organisms += len(organism_percents)
         unit_summaries.append(
             PairedCountUnitSummary(
@@ -164,6 +180,20 @@ def compare_paired_counts(
                 ),
                 organism_balanced_mean_absolute_percent_deviation=(
                     finite_descriptive_mean(organism_percents) if organism_percents else None
+                ),
+                mean_signed_percent_deviation=(
+                    finite_descriptive_mean(
+                        row.signed_percent_deviation
+                        for row in rows
+                        if row.signed_percent_deviation is not None
+                    )
+                    if valid_unit_percent
+                    else None
+                ),
+                organism_balanced_mean_signed_percent_deviation=(
+                    finite_descriptive_mean(organism_signed_percents)
+                    if organism_signed_percents
+                    else None
                 ),
             )
         )
@@ -210,10 +240,28 @@ def compare_paired_counts(
         if percent_eligible_units
         else None
     )
+    unit_balanced_signed_percent = (
+        finite_descriptive_mean(
+            row.mean_signed_percent_deviation
+            for row in percent_eligible_units
+            if row.mean_signed_percent_deviation is not None
+        )
+        if percent_eligible_units
+        else None
+    )
+    organism_and_unit_signed_percent = (
+        finite_descriptive_mean(
+            row.organism_balanced_mean_signed_percent_deviation
+            for row in percent_eligible_units
+            if row.organism_balanced_mean_signed_percent_deviation is not None
+        )
+        if percent_eligible_units
+        else None
+    )
     return PairedCountComparisonResponse(
         reference_kind=request.reference_kind,
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-paired-count-0004",
+            algorithm_version="ecology-paired-count-0005",
             records=request.pairs,
             parameters={
                 "reference_kind": request.reference_kind,
@@ -236,6 +284,9 @@ def compare_paired_counts(
         mean_absolute_percent_deviation=(
             finite_descriptive_mean(valid_percent) if valid_percent else None
         ),
+        mean_signed_percent_deviation=(
+            finite_descriptive_mean(valid_signed_percent) if valid_signed_percent else None
+        ),
         paired_differences=differences,
         experimental_unit_type=unit_type,
         declared_independent_unit_count=len(by_unit) if unit_type is not None else None,
@@ -247,6 +298,10 @@ def compare_paired_counts(
         organism_and_unit_balanced_mean_absolute_error=organism_and_unit_error,
         unit_balanced_mean_absolute_percent_deviation=unit_balanced_percent,
         organism_and_unit_balanced_mean_absolute_percent_deviation=organism_and_unit_percent,
+        unit_balanced_mean_signed_percent_deviation=unit_balanced_signed_percent,
+        organism_and_unit_balanced_mean_signed_percent_deviation=(
+            organism_and_unit_signed_percent
+        ),
         percent_contributing_independent_unit_count=(
             len(percent_eligible_units) if unit_type is not None else None
         ),
@@ -257,6 +312,7 @@ def compare_paired_counts(
             "Both human reference and model predictions are caller-supplied and unverified.",
             "Paired image, organism and source identities are not authenticated.",
             "Percent deviation excludes zero-reference pairs; its denominator is reported.",
+            "Signed percent is 100 * (model - human) / human: positive means overcount.",
             "Unit-balanced percent excludes units without nonzero human references.",
             "Nested percent excludes organisms without nonzero human references.",
             "Signed bias is model minus human reference; no ICC, limits of agreement or p-values.",

@@ -42,6 +42,12 @@ def test_paired_bias_mae_and_independent_tank_denominator() -> None:
     assert result.mean_signed_bias == pytest.approx(1 / 3)
     assert result.mean_absolute_error == pytest.approx(3)
     assert result.mean_absolute_percent_deviation == pytest.approx((20 + 20 + 60) / 3)
+    assert result.mean_signed_percent_deviation == pytest.approx((20 - 20 + 60) / 3)
+    assert result.unit_balanced_mean_signed_percent_deviation == pytest.approx(30)
+    assert result.organism_and_unit_balanced_mean_signed_percent_deviation == pytest.approx(30)
+    assert [row.signed_percent_deviation for row in result.paired_differences] == [
+        20, -20, 60
+    ]
     assert result.declared_independent_unit_count == 2
     assert result.unit_summaries[0].organism_count == 2
     assert result.unit_summaries[0].mean_signed_bias == pytest.approx(-1)
@@ -61,6 +67,9 @@ def test_zero_reference_excluded_from_percent_not_absolute_error() -> None:
     assert result.mean_absolute_percent_deviation == pytest.approx(20)
     assert result.mean_absolute_error == pytest.approx(2.5)
     assert result.paired_differences[0].absolute_percent_deviation is None
+    assert result.paired_differences[0].signed_percent_deviation is None
+    assert result.mean_signed_percent_deviation == pytest.approx(20)
+    assert result.percent_contributing_independent_unit_count == 1
 
 
 def test_duplicate_sources_and_cross_unit_organism_rejected() -> None:
@@ -160,9 +169,12 @@ def test_pair_frequency_audit_exposes_nested_pseudoreplication_risk() -> None:
     assert second.unequal_pair_counts_within_unit is False
     assert result.mean_signed_bias == pytest.approx(1)
     assert result.organism_and_unit_balanced_mean_signed_bias == pytest.approx(-0.125)
+    assert result.mean_signed_percent_deviation == pytest.approx(10)
+    assert result.unit_balanced_mean_signed_percent_deviation == pytest.approx(0)
+    assert result.organism_and_unit_balanced_mean_signed_percent_deviation == pytest.approx(-1.25)
     assert result.evidence_level == "caller_supplied_unverified"
     assert result.review_status == "requires_source_verification"
-    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0004"
+    assert result.analysis_provenance.algorithm_version == "ecology-paired-count-0005"
 
 
 def test_equal_pair_frequencies_do_not_raise_false_imbalance() -> None:

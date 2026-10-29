@@ -96,6 +96,8 @@ class PairedCountDifference(BaseModel):
     signed_difference: float
     absolute_difference: float
     absolute_percent_deviation: float | None
+    # Optional for previously persisted unverified comparison artifacts.
+    signed_percent_deviation: float | None = None
 
 
 class PairedCountUnitSummary(BaseModel):
@@ -114,6 +116,8 @@ class PairedCountUnitSummary(BaseModel):
     percent_contributing_organism_count: int = 0
     mean_absolute_percent_deviation: float | None = None
     organism_balanced_mean_absolute_percent_deviation: float | None = None
+    mean_signed_percent_deviation: float | None = None
+    organism_balanced_mean_signed_percent_deviation: float | None = None
 
 
 class PairedCountComparisonResponse(BaseModel):
@@ -133,6 +137,8 @@ class PairedCountComparisonResponse(BaseModel):
     mean_absolute_error: float
     mean_absolute_percent_deviation: float | None
     paired_differences: list[PairedCountDifference]
+    # Optional fields preserve deserialization of older saved workflow artifacts.
+    mean_signed_percent_deviation: float | None = None
     experimental_unit_type: str | None = None
     declared_independent_unit_count: int | None = None
     cross_unit_shared_parent_colony_ids: list[str] = Field(default_factory=list)
@@ -143,6 +149,8 @@ class PairedCountComparisonResponse(BaseModel):
     organism_and_unit_balanced_mean_absolute_error: float | None = None
     unit_balanced_mean_absolute_percent_deviation: float | None = None
     organism_and_unit_balanced_mean_absolute_percent_deviation: float | None = None
+    unit_balanced_mean_signed_percent_deviation: float | None = None
+    organism_and_unit_balanced_mean_signed_percent_deviation: float | None = None
     percent_contributing_independent_unit_count: int | None = None
     percent_contributing_organism_count: int | None = None
     limitations: list[str] = Field(default_factory=list)

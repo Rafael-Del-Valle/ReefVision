@@ -3575,3 +3575,21 @@ installed. New-head CI is required before crediting passing tests. Authenticated
 calibrated longitudinal source review, 1.1 migration reconciliation and
 physical Windows installer/GUI acceptance remain outstanding.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Directional human–model percentage bias (2026-10-29)
+
+The existing paired-count standalone API and executable saved Workflow Builder
+node now report **signed percentage bias** (100 × [model − human] / human)
+alongside the existing absolute percentage deviation. Positive values mean
+model overcount and negative values mean undercount; zero human-reference
+counts are excluded from *both* percentage denominators, never from signed
+count bias or absolute error. Pair-weighted, declared-unit-weighted, and
+organism-then-unit-weighted signed percentages are reported separately.
+Repeated images cannot silently masquerade as independent organisms or tanks.
+All values remain `caller_supplied_unverified`, with explicit source-review
+gates and no inferential significance or verified reference consensus.
+The provenance algorithm advances to `ecology-paired-count-0005`; new
+response fields are optional when reading older persisted comparison artifacts.
+Domain, standalone API, and saved Workflow Builder tests assert direction,
+zero-reference handling, nested weighting and provenance parity. Full CI and
+Windows/scientific acceptance remain required.
