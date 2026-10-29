@@ -570,6 +570,35 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
 
+    # A persisted manifest must not advertise an optional checkpoint that
+    # disappeared after training. The selected best.pt remains intact here,
+    # so its valid digest alone must not authorize a missing last.pt artifact.
+    missing_last = str(result["result_checkpoint_path"]).removesuffix("best.pt") + "last.pt"
+    assert missing_last != result["result_checkpoint_path"]
+    assert not resolve_managed_project_path(test_settings, missing_last).is_file()
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_manifest = dict(persisted.artifact_manifest_json or {})
+        persisted.artifact_manifest_json = {
+            **original_manifest,
+            "last_checkpoint_path": missing_last,
+        }
+        session.commit()
+
+    with pytest.raises(
+        ValidationError, match="checkpoint artifact path changed or is missing"
+    ):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.artifact_manifest_json = original_manifest
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # Changing the saved node's requested run name cannot relabel or reuse
     # an already completed scientist-verified training result.
     with pytest.raises(ValidationError, match="configuration changed"):
