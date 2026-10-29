@@ -1847,6 +1847,51 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             processor=substituted_artifact_processor,
         )
 
+    # A worker may assert a checkpoint digest or path before completion.
+    # Finalization must reject contradictory assertions rather than replacing
+    # them with the current file identity and concealing provenance drift.
+    for field, corrupted_value, expected_error in (
+        ("result_checkpoint_sha256", "0" * 64, "worker checkpoint checksum changed"),
+        (
+            "result_checkpoint_path",
+            "substituted-training-output/weights/best.pt",
+            "worker checkpoint path changed",
+        ),
+    ):
+
+        def conflicting_checkpoint_manifest_processor(
+            settings: Settings,
+            factory: sessionmaker[Session],
+            job_id: str,
+        ) -> bool:
+            assert _fake_pose_processor(settings, factory, job_id)
+            with factory() as child_session:
+                job = child_session.get(Job, job_id)
+                assert job is not None
+                run = child_session.get(TrainingRun, str(job.request_json["training_run_id"]))
+                assert run is not None
+                run.artifact_manifest_json = {
+                    **dict(run.artifact_manifest_json or {}),
+                    field: corrupted_value,
+                }
+                child_session.commit()
+            return True
+
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=expected_error),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload=payload,
+                parameters={"training_config": {"epochs": 1}},
+                workflow_run_id="saved-pose-run",
+                workflow_node_run_id=f"conflicting-{field}-node",
+                processor=conflicting_checkpoint_manifest_processor,
+            )
+
     # A worker must not silently relabel the model architecture after training
     # and expose a checkpoint under different scientific configuration.
     def substituted_configuration_processor(
