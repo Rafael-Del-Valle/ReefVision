@@ -145,9 +145,7 @@ def test_two_processes_cannot_duplicate_saved_workflow_qc_queue(
             )
         )
         assert queue is not None
-        expected_id = str(
-            uuid5(NAMESPACE_URL, f"reefvision:qc-queue:v1:{project_id}:{owner}")
-        )
+        expected_id = str(uuid5(NAMESPACE_URL, f"reefvision:qc-queue:v1:{project_id}:{owner}"))
         assert queue.id == expected_id
         node_id, source_id = node.id, source.id
         node.output_artifact_ids_json = []
@@ -225,8 +223,6 @@ def test_two_processes_cannot_duplicate_saved_workflow_qc_queue(
         assert replay[0]["payload"]["priority_score_unit"] == "dimensionless"
         assert replay[0]["payload"]["review_status"] == "requires_researcher_review"
 
-    annotations = client.get(
-        f"/api/v1/images/{imported['successful'][0]['image_id']}/annotations"
-    )
+    annotations = client.get(f"/api/v1/images/{imported['successful'][0]['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
