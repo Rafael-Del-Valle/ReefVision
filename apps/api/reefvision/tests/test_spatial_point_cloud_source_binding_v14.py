@@ -134,7 +134,7 @@ def test_malformed_expected_source_hash_is_rejected(invalid_sha: str) -> None:
 
 
 def test_raw_xyz_cannot_claim_imported_ply_file_binding() -> None:
-    with pytest.raises(PydanticValidationError, match="requires an imported"):
+    with pytest.raises(PydanticValidationError, match="requires ASCII PLY or a project asset"):
         PointCloudPreviewRequest.model_validate(
             {
                 "points": [[0, 0, 0], [1, 2, 3]],
