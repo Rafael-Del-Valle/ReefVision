@@ -428,3 +428,43 @@ def test_subnormal_patch_fraction_divergence_is_not_falsely_zero(
         assert result["ranked_patch_area_jensen_shannon_divergence_bits"] > 0
         assert "ranked_patch_area_divergence_below_numeric_resolution" not in result["qc_warnings"]
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+@pytest.mark.parametrize("timepoint", [0, 1])
+@pytest.mark.parametrize("interval_factor", [0.5, 1.5])
+def test_longitudinal_rejects_forged_narrow_or_wide_scale_interval(
+    timepoint: int, interval_factor: float
+) -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    record = observations[timepoint]
+    nominal = record["surface_area_m2"]
+    lower, upper = record["surface_area_scale_interval_m2"]
+    record["surface_area_scale_interval_m2"] = [
+        nominal + (lower - nominal) * interval_factor,
+        nominal + (upper - nominal) * interval_factor,
+    ]
+    with pytest.raises(ValueError, match="Surface-area scale interval contradicts"):
+        compare_mesh_observations(*observations)
+
+
+@pytest.mark.parametrize("timepoint", [0, 1])
+def test_longitudinal_rejects_invented_interval_when_scale_uncertainty_unknown(
+    timepoint: int,
+) -> None:
+    sources = list(_meshes())
+    sources[timepoint]["relative_scale_uncertainty"] = None
+    observations = [_preview(payload) for payload in sources]
+    record = observations[timepoint]
+    nominal = record["surface_area_m2"]
+    record["surface_area_scale_interval_m2"] = [nominal, nominal]
+    with pytest.raises(ValueError, match="Surface-area scale interval requires"):
+        compare_mesh_observations(*observations)
+
+
+@pytest.mark.parametrize("invalid_uncertainty", [True, -0.1, 1.1, float("nan"), "0.1"])
+def test_longitudinal_rejects_invalid_source_uncertainty_metadata(
+    invalid_uncertainty: object,
+) -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    observations[0]["provenance"]["relative_scale_uncertainty"] = invalid_uncertainty
+    with pytest.raises(ValueError, match="Source relative scale uncertainty"):
+        compare_mesh_observations(*observations)
