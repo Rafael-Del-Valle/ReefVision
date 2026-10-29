@@ -40,6 +40,9 @@ OPTIONAL_APPROVAL_GATES = ("sam2_live", "confidence_review")
 MSI_VERSION = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,5}\Z")
 SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
 ACCEPTANCE_RUN = re.compile(r"reefvision-clean-[0-9a-fA-F]{12}\Z")
+WINDOWS_RESERVED_NAME = re.compile(
+    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?", re.IGNORECASE
+)
 
 
 def _require(condition: bool, message: str) -> None:
@@ -82,7 +85,7 @@ def _windows_path(value: Any, label: str) -> PureWindowsPath:
             not part.endswith((" ", "."))
             and ":" not in part
             and not any(ord(character) < 32 for character in part)
-            and re.fullmatch(r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?", part, re.IGNORECASE) is None,
+            and WINDOWS_RESERVED_NAME.fullmatch(part) is None,
             f"{label} contains an unsafe Windows path component",
         )
     return path
