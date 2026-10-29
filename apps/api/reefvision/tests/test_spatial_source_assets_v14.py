@@ -147,3 +147,38 @@ def test_persisted_obj_measurement_matches_saved_workflow_and_detects_tampering(
         original_path = resolve_managed_project_path(app.state.settings, record.managed_path)
         original_path.write_bytes(b" " + OBJ[1:])  # same size, changed digest
     assert client.post(f"{base}/spatial/mesh-preview", json=params).status_code == 400
+
+
+def test_standalone_longitudinal_comparison_resolves_project_assets(client: TestClient) -> None:
+    project_id = str(create_project(client, "Asset-bound longitudinal comparison")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    imported = client.post(f"{base}/spatial/assets", files={"file": ("coral.obj", OBJ)})
+    assert imported.status_code == 201, imported.text
+    asset_id = imported.json()["id"]
+    common = {
+        "asset_id": asset_id,
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified field ruler",
+        "specimen_id": "colony:16",
+    }
+    response = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={
+            "before": {
+                **common,
+                "observation_id": "survey-1",
+                "observed_at_utc": "2026-10-01T12:00:00Z",
+            },
+            "after": {
+                **common,
+                "observation_id": "survey-2",
+                "observed_at_utc": "2026-10-02T12:00:00Z",
+            },
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["delta_surface_area_m2"] == pytest.approx(0)
+    assert response.json()["provenance"]["before_geometry_sha256"] == response.json()[
+        "provenance"
+    ]["after_geometry_sha256"]
