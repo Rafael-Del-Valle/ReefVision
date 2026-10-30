@@ -27,6 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The offline MSI preflight requires an existing Python 3.11+.
+      # Provision the interpreter deterministically before that preflight;
+      # this installs no ReefVision dependencies or pretrained model weights.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       # Fast safety checks run before bootstrap / the multi-GB MSI build.
       - name: Validate Windows clean-install harness safeguards
         shell: pwsh
@@ -39,10 +46,6 @@ jobs:
       - name: Validate MSI updater paths and junction protections
         shell: pwsh
         run: ./scripts/test-reefvision-msi-update.ps1
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
       - name: Validate installed-Windows evidence policy regressions
         shell: pwsh
