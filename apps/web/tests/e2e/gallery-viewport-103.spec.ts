@@ -72,7 +72,9 @@ test("initial image and gallery scrolling", async ({ page }) => {
 
   const displayRequests: string[] = [];
   const imageTwoRetryValues: Array<string | null> = [];
+  const imageSevenRetryValues: Array<string | null> = [];
   let imageTwoFailures = 0;
+  let imageSevenFailures = 0;
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("/health")) {
@@ -106,6 +108,19 @@ test("initial image and gallery scrolling", async ({ page }) => {
               status: 503,
               contentType: "text/plain",
               body: "Camera rendition temporarily unavailable",
+            });
+            return;
+          }
+        }
+        if (match[1] === "image-7") {
+          imageSevenRetryValues.push(url.searchParams.get("rv_retry"));
+          if (imageSevenFailures++ === 0) {
+            // A server can return HTTP 200 with corrupt camera bytes. The
+            // browser must reject the decode rather than report a loaded image.
+            await route.fulfill({
+              status: 200,
+              contentType: "image/jpeg",
+              body: Buffer.from("corrupted camera JPEG payload"),
             });
             return;
           }
@@ -400,6 +415,24 @@ test("initial image and gallery scrolling", async ({ page }) => {
     await expect(aliasImage).toHaveAttribute("aria-current", "true");
     expect(displayRequests).toContain(`image-${number}`);
   }
+
+  // A 200 response containing invalid camera JPEG bytes must not leave the
+  // first preview in a false loaded state. Retry fetches the actual JPEG
+  // without replacing or editing the scientific image record.
+  const corruptImage = workbench.getByRole("listitem", {
+    name: "Focus camera-07.JPEG",
+  });
+  await corruptImage.click();
+  await expect(workbench.getByRole("alert")).toContainText(
+    "Image could not be displayed",
+  );
+  await expect(focused).toHaveCount(0);
+  await expect(corruptImage).toHaveAttribute("aria-current", "true");
+  await workbench.getByRole("button", { name: "Retry image" }).click();
+  await assertDecodedAndContained(1600, 1200);
+  await expect(workbench.getByRole("alert")).toHaveCount(0);
+  await expect(corruptImage).toHaveAttribute("aria-current", "true");
+  expect(imageSevenRetryValues).toEqual([null, "1"]);
 
   expect(displayRequests).toContain("image-1");
   expect(displayRequests).toContain("image-12");
