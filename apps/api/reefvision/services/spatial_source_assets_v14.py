@@ -176,6 +176,14 @@ def preview_project_mesh(
 ) -> dict[str, Any]:
     """Run the same preview engine for inline or immutable project-owned source bytes."""
     if payload.asset_id is None:
+        # Inline geometry has no project-owned imported source identity.
+        if (
+            payload.calibration_review is not None
+            and payload.calibration_review.reviewed_spatial_source_asset_id is not None
+        ):
+            raise ValidationError(
+                "Asset-bound calibration review requires an imported spatial source asset"
+            )
         return preview_from_request(payload)
     service = SpatialSourceAssetService(session, settings)
     asset = service.get(project_id, payload.asset_id)
@@ -232,6 +240,14 @@ def preview_project_point_cloud(
 ) -> dict[str, Any]:
     """Resolve a project-owned ASCII PLY through the shared point-cloud engine."""
     if payload.asset_id is None:
+        # Inline XYZ/PLY bytes have no project-owned imported source identity.
+        if (
+            payload.calibration_review is not None
+            and payload.calibration_review.reviewed_spatial_source_asset_id is not None
+        ):
+            raise ValidationError(
+                "Asset-bound calibration review requires an imported spatial source asset"
+            )
         return preview_point_cloud_from_request(payload)
     service = SpatialSourceAssetService(session, settings)
     asset = service.get(project_id, payload.asset_id)
