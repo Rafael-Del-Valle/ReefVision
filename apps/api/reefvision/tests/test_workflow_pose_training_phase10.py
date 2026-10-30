@@ -764,6 +764,29 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # A v2 snapshot cannot evade its frozen provider-registry check by
+    # changing only the schema marker to a historical version or null.
+    for downgraded_schema in ("pose-workflow-training-snapshot-0001", None):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.draft_snapshot_json = {
+                **original_snapshot,
+                "schema_version": downgraded_schema,
+            }
+            session.commit()
+
+        with pytest.raises(ValidationError, match="snapshot schema changed"):
+            retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.draft_snapshot_json = original_snapshot
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # The experiment registry is a second persisted scientific record, not
     # merely an ID to expose downstream. A replay must reject inconsistent
     # metadata or checkpoint evidence without starting another training run.
