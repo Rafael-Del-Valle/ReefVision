@@ -4453,3 +4453,26 @@ CSV parity. This increment also repairs the Ruff format failures at previous
 head `25f4cf9c`. No migration or new environmental-context implementation.
 Latest-head CI and representative biological/Windows acceptance are still
 required; **1.2 NOT RELEASE-READY; 1.3 not started**.
+
+
+## Persisted identity design consistency gate (2026-10-30)
+
+A project-owned identity revision previously checked independent-unit labels
+when received through the standalone API, but its persisted
+`EcologyIdentityRow` schema did not repeat those checks when reading saved
+Workflow Builder artifacts or ecological source evidence. The row schema now
+rejects technical units (images/frames/cameras), half-declared unit type/ID
+pairs, blank unit IDs, and parent-colony references on non-fragments. This
+is applied to the same typed history consumed by standalone CSV and saved
+`ecology_identity_registry_source` artifacts; it does not introduce a
+parallel analysis node, database migration or 1.1 environmental feature.
+Acceptance coverage uses an executed saved workflow plus invalid standalone
+registration requests. This iteration also applies the exact Ruff formatter
+correction diagnosed from prior-head CI for the legacy-source regression.
+
+This is **structural design QC only**: it does not authenticate the study's
+experimental-unit registry, certify biological independence, review growth
+measurements, or promote data to a verified dataset. Full exact-head CI,
+representative scientific review, 1.1 migration reconciliation and installed
+Windows GUI/MSI acceptance remain mandatory. **1.2 NOT RELEASE-READY;
+1.3 not started.**

@@ -68,6 +68,26 @@ class EcologyIdentityRow(BaseModel):
     reason: str
     created_at: datetime
 
+    @model_validator(mode="after")
+    def require_recorded_design_integrity(self) -> EcologyIdentityRow:
+        """Recheck persisted identity assignments, not just incoming API requests.
+
+        Saved Workflow Builder artifacts and scientific exports must reject
+        technical observations masquerading as independent sampling units.
+        This validates declarations, not actual biological independence.
+        """
+        if (self.experimental_unit_type is None) != (self.experimental_unit_id is None):
+            raise ValueError(
+                "Recorded ecological experimental unit type and ID must be declared together"
+            )
+        if self.experimental_unit_type is not None:
+            require_ecological_unit_type(self.experimental_unit_type)
+        if self.experimental_unit_id is not None and not self.experimental_unit_id.strip():
+            raise ValueError("Recorded ecological experimental unit ID cannot be blank")
+        if self.parent_colony_key is not None and self.kind != "fragment":
+            raise ValueError("Only recorded fragments can reference a parent colony")
+        return self
+
 
 class EcologyImageEvidenceCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")

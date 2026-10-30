@@ -10,6 +10,7 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as SchemaValidationError
 from sqlalchemy import select
 
 from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
@@ -327,9 +328,9 @@ def test_history_csv_flags_legacy_unfrozen_source_metadata_with_workflow_parity(
     assert rows[0]["review_gate"] == "scientist_review_required"
     assert rows[0]["design_change_prior_legacy_unfrozen_image_evidence_ids_json"] == ""
     assert rows[1]["revision_image_metadata_qc_status"] == "no_image_evidence"
-    assert json.loads(
-        rows[1]["design_change_prior_legacy_unfrozen_image_evidence_ids_json"]
-    ) == [linked.json()["id"]]
+    assert json.loads(rows[1]["design_change_prior_legacy_unfrozen_image_evidence_ids_json"]) == [
+        linked.json()["id"]
+    ]
     assert json.loads(rows[1]["design_change_prior_image_evidence_ids_json"]) == [
         linked.json()["id"]
     ]
@@ -341,3 +342,57 @@ def test_history_csv_flags_legacy_unfrozen_source_metadata_with_workflow_parity(
     assert len(artifacts) == 1
     typed = EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
     assert render_ecology_identity_history_csv(typed) == response.text
+
+
+def test_saved_workflow_identity_rows_reject_invalid_experimental_design(
+    client: TestClient,
+) -> None:
+    """Standalone API and persisted workflow evidence enforce the same design gate."""
+    project_id = str(create_project(client, "Persisted ecological unit validation")["id"])
+    _register(
+        client,
+        project_id,
+        "specimen-design",
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
+    )
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
+    assert len(artifacts) == 1
+    original = artifacts[0]["payload_json"]
+    assert EcologyIdentityRegistryResponse.model_validate(original)
+
+    invalid_designs = (
+        ("individual", None, "image", "image-1", "technical replicates"),
+        ("individual", None, None, "tank-A", "type and ID"),
+        ("individual", None, "tank", None, "type and ID"),
+        ("individual", None, "tank", "  ", "cannot be blank"),
+        ("colony", "parent-A", "tank", "tank-A", "Only recorded fragments"),
+    )
+    for index, (kind, parent, unit_type, unit_id, message) in enumerate(invalid_designs):
+        # Simulate an altered persisted workflow artifact. The row validator
+        # must reject invalid design claims before they can be reported.
+        altered = json.loads(json.dumps(original))
+        for collection in ("identities", "identity_history"):
+            row = altered[collection][0]
+            row["kind"] = kind
+            row["parent_colony_key"] = parent
+            row["experimental_unit_type"] = unit_type
+            row["experimental_unit_id"] = unit_id
+        with pytest.raises(SchemaValidationError, match=message):
+            EcologyIdentityRegistryResponse.model_validate(altered)
+
+        # The ordinary standalone registration endpoint must also reject it.
+        response = client.post(
+            f"/api/v1/projects/{project_id}/ecology/organisms",
+            json={
+                "organism_key": f"invalid-design-{index}",
+                "kind": kind,
+                "parent_colony_key": parent,
+                "experimental_unit_type": unit_type,
+                "experimental_unit_id": unit_id,
+                "reason": "Reject unsupported independent sampling design",
+            },
+        )
+        assert response.status_code == 422, response.text
