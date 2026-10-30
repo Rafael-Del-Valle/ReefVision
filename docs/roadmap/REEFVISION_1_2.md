@@ -4431,3 +4431,25 @@ migration, 1.1 environmental-context duplication or verified-dataset
 promotion is introduced. Exact-new-head CI, migration reconciliation,
 independent biological review and physical Windows GUI/MSI acceptance remain
 required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Legacy source review across identity-design corrections (2026-10-30)
+
+The existing identity-history CSV now includes
+`design_change_prior_legacy_unfrozen_image_evidence_ids_json`. On a recorded
+change of biological identity, parent colony or experimental-unit assignment,
+this deterministic list identifies **earlier-revision image links without a
+frozen source-metadata fingerprint**. It is a subset of the existing prior-image
+review queue, not a count of independent biological observations. Revisions
+without a design correction leave the field blank; a correction without earlier
+legacy links records `[]`. No source link is reassigned, upgraded to verified,
+or omitted from the history.
+
+The existing typed `ecology_identity_registry_source` Workflow Builder node
+and standalone CSV endpoint reuse the same source registry and provenance
+checks. Regression coverage exercises a real legacy image link, a subsequent
+tank-assignment correction, empty/blank cases, and exact persisted saved-workflow
+CSV parity. This increment also repairs the Ruff format failures at previous
+head `25f4cf9c`. No migration or new environmental-context implementation.
+Latest-head CI and representative biological/Windows acceptance are still
+required; **1.2 NOT RELEASE-READY; 1.3 not started**.
