@@ -4518,3 +4518,35 @@ This does not change stored identity evidence, migrate records, or promote
 any unverified observation. Fresh exact-head CI, authenticated biological
 measurement review, migration reconciliation and Windows GUI/MSI acceptance
 remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Persisted projected endpoint replay arithmetic (2026-10-30)
+
+The existing typed `EcologyProjectedEndpointChange` now revalidates the
+arithmetic and source-date ordering of projected endpoints when decoding
+saved Workflow Builder artifacts, as well as when created by the standalone
+source-linked analysis. Baseline/final timestamps must be timezone-aware,
+represent different ordered **UTC** sampling dates, and refer to distinct
+image IDs. The stored elapsed days, absolute/percent changes, and optional
+per-day rates must agree (within numerical tolerance) with the baseline,
+final value, and actual UTC elapsed time. Earlier persisted artifacts
+without the optional slope fields remain readable. Replayed artifacts with
+altered derived values or timestamp/source identity fail closed.
+
+The focused regression exercises an existing project-owned source chain,
+compares standalone candidate output to a **persisted executed**
+`ecology_identity_registry_source` Workflow Builder artifact, then tests
+valid typed endpoint replay, legacy missing rates, equivalent UTC offsets,
+and eight independent tampering cases through both endpoint and persisted
+candidate-response deserialization. The tampering fixture adds a synthetic
+endpoint to the real typed source response; it does **not** represent an
+authenticated, independently reviewed biological observation or prove
+source-to-endpoint linkage. No migration, new node, new pretrained weights,
+or 1.1 environmental-context feature is introduced.
+
+The prior branch head `0b83bee5` passed all 19 PR-triggered GitHub
+Actions workflows (including backend CI and Windows build), but that is
+**pre-change** evidence. Exact-new-head CI, authenticated scientist-reviewed
+longitudinal measurement promotion, independent study-design verification,
+1.1 migration reconciliation, representative biological data, and installed
+Windows GUI/MSI acceptance remain open. **1.2 NOT RELEASE-READY; 1.3
+not started.**
