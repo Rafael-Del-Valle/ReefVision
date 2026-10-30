@@ -1091,7 +1091,26 @@ function ReefVisionMainApp() {
               // existing create-project dialog; never create data implicitly.
               setSelectedProjectId(null);
               setActiveView("gallery");
-              if (destination === "create_project") setShowCreate(true);
+              if (destination === "create_project") {
+                setShowCreate(true);
+              } else {
+                // Onboarding unmounts before the next animation frame. Focus
+                // an existing project, or the New project action if none exist,
+                // rather than leaving keyboard users on the document body.
+                window.requestAnimationFrame(() => {
+                  const launcher = document.querySelector<HTMLElement>(
+                    '[aria-label="ReefVision project launcher"]',
+                  );
+                  const target =
+                    launcher?.querySelector<HTMLButtonElement>(
+                      ".rv-project-launcher-open",
+                    ) ??
+                    launcher?.querySelector<HTMLButtonElement>(
+                      ".rv-launcher-actions button",
+                    );
+                  target?.focus();
+                });
+              }
               return;
             }
             if (destination === "system") setSelectedProjectId(null);
