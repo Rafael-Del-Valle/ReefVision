@@ -394,6 +394,10 @@ def test_original_io_failure_fails_standalone_and_saved_workflow(
         monkeypatch.setattr(Path, "open", missing_open)
         expected_error = "original bytes could not be read"
 
+    content_response = client.get(f"{base}/spatial/assets/{asset['id']}/content")
+    assert content_response.status_code == 400, content_response.text
+    assert expected_error in content_response.text
+
     standalone = client.post(f"{base}/spatial/{endpoint}", json=params)
     assert standalone.status_code == 400, standalone.text
     assert expected_error in standalone.text
