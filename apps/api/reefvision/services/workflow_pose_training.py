@@ -670,10 +670,18 @@ def _reused_pose_training_result(
         ):
             raise ValidationError("Recovered pose-training experiment provenance changed")
 
-        # Older experiment records may predate checkpoint digests. Preserve
-        # their readability, but never accept conflicting recorded evidence.
+        # Older experiment records may predate these fields. For current
+        # workflow snapshots, however, removing a frozen lineage assertion
+        # must not downgrade the experiment registry to unchecked evidence.
         experiment_manifest = dict(experiment.artifact_manifest_json or {})
         for field in (
+            "pose_training_dataset_id",
+            "pose_validation_dataset_id",
+            "pose_schema_id",
+            "pose_schema_revision",
+            "pose_schema_content_hash",
+            "pose_split_manifest",
+            "pose_split_manifest_sha256",
             "result_checkpoint_path",
             "result_checkpoint_sha256",
             "best_checkpoint_path",
@@ -681,6 +689,8 @@ def _reused_pose_training_result(
             "last_checkpoint_path",
             "last_checkpoint_sha256",
         ):
+            if is_current_snapshot and field in frozen_checkpoint and field not in experiment_manifest:
+                raise ValidationError("Recovered pose-training experiment provenance changed")
             if field in experiment_manifest and experiment_manifest[field] != frozen_checkpoint.get(
                 field
             ):
