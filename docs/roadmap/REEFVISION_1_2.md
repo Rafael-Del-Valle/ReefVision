@@ -4307,3 +4307,27 @@ scientist approval, biological identity, calibration accuracy, or
 experimental-unit independence. Migration reconciliation with 1.1,
 representative ecological acceptance and physical Windows GUI testing
 remain required before release.
+
+## Per-revision experimental-design corrections in identity CSV (2026-10-30)
+
+The existing standalone `identity-registry/history.csv` export now includes
+`design_revision_change_json` on the exact append-only revision that
+changed an organism's kind, parent colony, experimental-unit level or unit ID.
+The field carries the complete typed before/after audit event and changed
+field list; unchanged/reason-only revisions retain a blank value. The
+existing signed history digest, latest-snapshot digest, design-audit
+reconciliation, CSV formula escaping and review restrictions are preserved.
+
+Regression coverage checks tank reassignment and reversion, exact revision
+alignment, deterministic standalone CSV equality with the persisted
+`ecology_identity_registry_source` Workflow Builder artifact, and blank
+change details on legacy artifacts whose design audit is unavailable. This
+closes a reporting gap where a CSV disclosed only the number of design
+corrections, not their actual assignment changes. It does **not** establish
+that a correction is a biological movement, a verified study-design
+registration, or independent replication.
+
+1.2 remains **NOT RELEASE-READY** pending exact-head CI, authenticated
+scientist-reviewed longitudinal measurements and design approval, migration
+reconciliation with unmerged 1.1, representative biological acceptance and
+installed Windows MSI/GUI testing. 1.3 remains unstarted.
