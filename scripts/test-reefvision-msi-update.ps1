@@ -64,6 +64,22 @@ try {
         throw 'Offline provenance fallback did not select the existing system Python.'
     }
     $passed++
+    # A stale/broken repository Python must not force a dependency bootstrap
+    # or prevent fallback to a compatible Python already installed on PATH.
+    $venvScripts = Join-Path $repo '.venv\Scripts'
+    New-Item -ItemType Directory -Path $venvScripts -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $venvScripts 'python.exe') -Value 'invalid executable' -Encoding ASCII
+    $recoveredPython = Resolve-ReefVisionProvenancePython -RepoPath $repo
+    if ($recoveredPython -ne $systemPython.Source) {
+        throw 'Broken local Python prevented offline provenance fallback.'
+    }
+    $passed++
+    # The resolver must not run Windows Store App Execution Aliases.
+    $resolverSource = (Get-Command Resolve-ReefVisionProvenancePython).ScriptBlock.ToString()
+    if (-not $resolverSource.Contains('WindowsApps')) {
+        throw 'Offline provenance resolver no longer excludes Windows Store aliases.'
+    }
+    $passed++
     Assert-Throws {
         Assert-ReefVisionMsiPayload -InstallerPath $msi -RepoPath $repo -ExpectedVersion '1.0.2' -ExpectedCommit ('a' * 40)
     } 'MSI provenance validator is missing'
