@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
@@ -20,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
+from reefvision.schemas.review_queue_events import ReviewQueueEventResponse
 from reefvision.services.review_queue_events import _is_sqlite_event_request_collision
 from reefvision.tests.test_review_queue_bulk_sqlite_contention_16 import _make_queue
 
@@ -188,3 +190,64 @@ def test_unrelated_event_integrity_failure_propagates_without_audit_write(
     assert replay.status_code == 201, replay.text
     assert replay.json()["id"] == committed.json()["id"]
     assert client.get(url).json()["total"] == 1
+
+
+@pytest.mark.parametrize(
+    "stored_timestamp",
+    ["2026-10-29T00:00:00", "2026-10-29T02:00:00+02:00"],
+)
+def test_reviewer_audit_schema_normalizes_legacy_and_offset_timestamps(
+    stored_timestamp: str,
+) -> None:
+    """Older SQLite timestamps are UTC even if the driver drops tzinfo."""
+    event = ReviewQueueEventResponse.model_validate(
+        {
+            "id": str(uuid4()),
+            "review_queue_id": str(uuid4()),
+            "review_queue_item_id": str(uuid4()),
+            "project_id": str(uuid4()),
+            "client_request_id": str(uuid4()),
+            "event_type": "comment",
+            "actor": "local researcher",
+            "comment": "Inspect branching",
+            "assignee": None,
+            "created_at": stored_timestamp,
+        }
+    )
+    assert event.created_at == datetime(2026, 10, 29, tzinfo=UTC)
+    assert event.model_dump(mode="json")["created_at"].endswith("Z")
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+def test_manual_review_history_has_explicit_utc_provenance(
+    client: TestClient, saved_workflow: bool
+) -> None:
+    """API and saved Workflow Builder QC histories agree on UTC evidence."""
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    url = f"/api/v1/review-queues/{queue_id}/items/{item_ids[0]}/events"
+    payload = {
+        "client_request_id": str(uuid4()),
+        "event_type": "comment",
+        "actor": "local researcher",
+        "comment": "Inspect coral polyp boundaries",
+    }
+    created = client.post(url, json=payload)
+    assert created.status_code == 201, created.text
+    replay = client.post(url, json=payload)
+    assert replay.status_code == 201, replay.text
+    assert replay.json()["id"] == created.json()["id"]
+
+    history = client.get(url)
+    assert history.status_code == 200, history.text
+    assert history.json()["requires_researcher_review"] is True
+    assert history.json()["total"] == 1
+    for response in (created.json(), replay.json(), history.json()["items"][0]):
+        timestamp = datetime.fromisoformat(response["created_at"].replace("Z", "+00:00"))
+        assert timestamp.tzinfo is not None
+        assert timestamp.utcoffset() == UTC.utcoffset(None)
+        assert response["created_at"].endswith("Z")
+    assert history.json()["items"][0]["id"] == created.json()["id"]
+
+    items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert items.status_code == 200, items.text
+    assert {item["review_state"] for item in items.json()["items"]} == {"pending"}
