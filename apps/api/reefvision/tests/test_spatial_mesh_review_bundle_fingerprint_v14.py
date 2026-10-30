@@ -337,15 +337,18 @@ def test_checked_import_review_bundle_matches_saved_workflow(client: TestClient)
     assert bundle["before_source_payload_integrity_checked"] is False
     assert provenance["specimen_identity_verified"] is False
     assert provenance["calibration_verified"] is False
-    assert sha256(
-        dumps(
-            bundle,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode("utf-8")
-    ).hexdigest() == provenance["review_evidence_bundle_sha256"]
+    assert (
+        sha256(
+            dumps(
+                bundle,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        == provenance["review_evidence_bundle_sha256"]
+    )
 
     # The same imported bytes without an expected SHA are not a checked source.
     unchecked_params = dict(after_params)
@@ -353,8 +356,9 @@ def test_checked_import_review_bundle_matches_saved_workflow(client: TestClient)
     unchecked = compare_mesh_observations(
         before, preview(unchecked_params), reidentification_evidence=review
     )
-    assert unchecked["provenance"]["review_evidence_bundle_sha256"] != (
-        provenance["review_evidence_bundle_sha256"]
+    assert (
+        unchecked["provenance"]["review_evidence_bundle_sha256"]
+        != (provenance["review_evidence_bundle_sha256"])
     )
 
     standalone = client.post(
@@ -415,9 +419,7 @@ def test_checked_import_review_bundle_matches_saved_workflow(client: TestClient)
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -432,3 +434,30 @@ def test_checked_import_review_bundle_matches_saved_workflow(client: TestClient)
         if item["data_type"] == "mesh_longitudinal_comparison"
     ]
     assert comparisons == [expected]
+
+
+@pytest.mark.parametrize(
+    ("source_format", "source_size", "message"),
+    [
+        ("indexed_triangles", 10, "requires an imported mesh format"),
+        (None, 10, "requires an imported mesh format"),
+        ("obj", None, "requires a positive source byte count"),
+        ("obj", 0, "requires a positive source byte count"),
+    ],
+)
+def test_checked_source_evidence_requires_actual_imported_bytes(
+    source_format: str | None, source_size: int | None, message: str
+) -> None:
+    """Do not fingerprint unsupported claims that inline or empty files were checked."""
+    before = _observation("early", 1)
+    after = _observation("late", 2)
+    after["provenance"].update(
+        source_format=source_format,
+        source_payload_sha256="a" * 64,
+        source_payload_size_bytes=source_size,
+        source_payload_integrity_checked=True,
+    )
+    with pytest.raises(ValueError, match=message):
+        compare_mesh_observations(
+            before, after, reidentification_evidence=_review(before, after)
+        )
