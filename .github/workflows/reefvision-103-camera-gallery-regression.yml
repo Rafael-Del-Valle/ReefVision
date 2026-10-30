@@ -24,6 +24,9 @@ on:
       - apps/web/src/features/gallery/**
       - apps/web/src/App.tsx
       - apps/web/src/App.test.tsx
+      # Assistant history persistence must not crash first-open WebView2 when
+      # localStorage is denied; App.test.tsx exercises this integration path.
+      - apps/web/src/features/assistant/ReefVisionAssistant.tsx
       - apps/web/src/features/workflow-graphs/**
       - apps/api/reefvision/api/routes/workflow_graphs.py
       - apps/api/reefvision/services/workflow_graphs.py
