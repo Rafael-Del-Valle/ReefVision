@@ -1,3 +1,29 @@
+## 2026-10-30 — First-run existing-project keyboard handoff (Track D)
+
+- Audited the current 1.6 branch against main and the earlier 1.0–1.5
+  roadmap: class visibility, QC coordination, dense-object viewport rendering,
+  typed executable saved QC workflows, and project creation already exist.
+  This change fixes a remaining **keyboard accessibility** gap in onboarding
+  rather than duplicating scientific functionality.
+- **Choose an existing project** now transfers keyboard focus, after the
+  onboarding dialog unmounts, to the first existing project in the local
+  launcher. With no saved projects, focus moves to **New project**. The
+  onboarding focus trap no longer restores focus behind the launcher.
+  No project is created, selected or changed by this navigation.
+- Added application-level regression checks for both project-present and
+  project-empty handoffs, including absence of implicit project POSTs.
+  Existing project creation still requires explicit form submission.
+- Extended the failing frontend CI diagnostic to print the exact Prettier diff
+  for all frontend files, rather than a stale hard-coded shortlist. Applied
+  the exact formatting fix for `OnboardingModal.test.tsx` shown by CI job
+  123928724320 (run 41014842961). This is diagnostic-only and does not
+  silently format or commit source files in CI.
+- **Acceptance HOLD:** exact-head CI, native Windows installed-GUI keyboard
+  acceptance, Windows MSI upgrade/rollback, independent 1.1/1.6 Alembic
+  revision-0038 reconciliation, and representative biological-data checks.
+  Existing Workflow Builder typed QC/review-gate behavior is unchanged.
+  No merge, release, model download, deployment or user-data deletion.
+
 ## 2026-10-30 — First-run project handoff regression and CI formatting gate (Track D)
 
 - Inspected draft PR #77, master issue #76, version branches, existing onboarding/project-management implementation and exact-head Actions run 41003937711. Backend lint, mypy, pytest and migrations passed; frontend stopped at Prettier in `OnboardingModal.test.tsx` before typecheck, tests, E2E or build.
