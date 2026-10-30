@@ -208,17 +208,19 @@ def test_history_export_detects_tampering_and_marks_legacy_unknown(client: TestC
     assert response.status_code == 200, response.text
     typed = EcologyIdentityRegistryResponse.model_validate(response.json())
     assert "design_changes_require_review" in render_ecology_identity_history_csv(typed)
+    # Full typed evidence validation runs before the derived-audit checks.
+    # Tampering must fail closed even when the outer model was copied.
     forged = typed.model_copy(deep=True)
     forged.design_change_events.clear()
-    with pytest.raises(ValidationError, match="design-change audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(forged)
     forged = typed.model_copy(deep=True)
     forged.design_change_count = 0
-    with pytest.raises(ValidationError, match="design-change audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(forged)
     forged = typed.model_copy(deep=True)
     forged.design_history_status = "no_design_changes_recorded"
-    with pytest.raises(ValidationError, match="design-change audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(forged)
     legacy_payload = response.json()
     for key in ("design_history_status", "design_change_count", "design_change_events"):
