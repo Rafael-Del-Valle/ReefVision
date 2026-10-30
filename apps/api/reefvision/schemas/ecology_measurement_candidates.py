@@ -105,9 +105,11 @@ class EcologyMeasurementCandidate(BaseModel):
                 self.unit
             ):
                 raise ValueError("Box geometry requires a linear measurement and unit")
-        elif self.metric != "mask_projected_area" or not self.unit.endswith(
-            "^2"
-        ) or not self._linear_unit_syntax(self.unit[:-2]):
+        elif (
+            self.metric != "mask_projected_area"
+            or not self.unit.endswith("^2")
+            or not self._linear_unit_syntax(self.unit[:-2])
+        ):
             raise ValueError("Mask projected area requires a squared measurement unit")
         return self
 
