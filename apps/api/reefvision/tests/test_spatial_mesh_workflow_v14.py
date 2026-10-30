@@ -129,7 +129,8 @@ def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(client: TestClien
     )
     assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] is None
     assert "mesh_shape_ratio_unavailable_numeric_underflow" in artifact["qc_warnings"]
-    assert artifact["provenance"]["geometry_sha256"] == measurement["provenance"]["geometry_sha256"]
+    expected_sha = measurement["provenance"]["geometry_sha256"]
+    assert artifact["provenance"]["geometry_sha256"] == expected_sha
 
 
 @pytest.mark.parametrize(
