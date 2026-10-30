@@ -1038,9 +1038,30 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
     checkpoint = resolve_managed_project_path(test_settings, result["result_checkpoint_path"])
+    original_checkpoint_bytes = checkpoint.read_bytes()
     checkpoint.write_bytes(b"changed-after-scientist-verified-pose-training")
     with pytest.raises(ValidationError, match=r"checkpoint (?:artifact )?checksum changed"):
         retry_completed_node()
+    checkpoint.write_bytes(original_checkpoint_bytes)
+
+    # A newly completed workflow always creates a persisted experiment.
+    # Losing that registry record must not silently publish experiment_id=None
+    # on replay of this scientist-reviewed frozen training dataset.
+    with app.state.session_factory() as session:
+        experiment = session.scalar(
+            select(ExperimentRecord).where(
+                ExperimentRecord.training_run_id == result["training_run_id"]
+            )
+        )
+        assert experiment is not None
+        session.delete(experiment)
+        session.commit()
+
+    with pytest.raises(ValidationError, match="experiment registry record is missing"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == [result["training_run_id"]]
 
 
 def test_pose_workflow_rejects_explicitly_invalid_frozen_manifest_digest(
