@@ -1,15 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   completeReviewQueueItem,
+  createReviewQueue,
   getDatasetVersionQualityControlRuns,
   getDatasetVersionReviewQueues,
   getDatasetVersions,
   getQualityControlRuns,
   getReviewQueueItems,
   getReviewQueues,
+  regenerateReviewQueue,
   startReviewQueueItem,
   type Project,
   type ReviewQueueItem,
@@ -19,6 +21,8 @@ import { ReviewQueueDashboard } from "./ReviewQueueDashboard";
 
 vi.mock("../../api/client", () => ({
   completeReviewQueueItem: vi.fn(),
+  createReviewQueue: vi.fn(),
+  regenerateReviewQueue: vi.fn(),
   startReviewQueueItem: vi.fn(),
   skipReviewQueueItem: vi.fn(),
   returnReviewQueueItem: vi.fn(),
@@ -321,4 +325,74 @@ describe("ReviewQueueDashboard scope isolation", () => {
       confirm.mockRestore();
     }
   });
+  it("keeps the new project's selected queue after an old project generation completes", async () => {
+    let resolveOld!: (value: ReviewQueueRecord) => void;
+    const pendingOld = new Promise<ReviewQueueRecord>((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(createReviewQueue).mockReturnValueOnce(pendingOld);
+    const { rerender, view, onSelectedQueueChange } = mount();
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-a",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate queue" }));
+    await waitFor(() =>
+      expect(createReviewQueue).toHaveBeenCalledWith(
+        "project-a",
+        expect.any(Object),
+      ),
+    );
+
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b"),
+    );
+    await act(async () => {
+      resolveOld(queue("generated-a"));
+      await pendingOld;
+    });
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
+    expect(screen.getByText("Selected queue")).toBeTruthy();
+    expect(
+      vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0],
+    ).toBe("queue-b");
+  });
+
+  it("keeps the new project's selected queue after old queue regeneration completes", async () => {
+    let resolveOld!: (value: ReviewQueueRecord) => void;
+    const pendingOld = new Promise<ReviewQueueRecord>((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pendingOld);
+    const { rerender, view, onSelectedQueueChange } = mount();
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-a",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+    await waitFor(() =>
+      expect(regenerateReviewQueue).toHaveBeenCalledWith("queue-a"),
+    );
+
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b"),
+    );
+    await act(async () => {
+      resolveOld(queue("regenerated-a"));
+      await pendingOld;
+    });
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
+    expect(
+      vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0],
+    ).toBe("queue-b");
+  });
+
 });
