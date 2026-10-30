@@ -295,9 +295,7 @@ def test_huge_review_history_pages_preserve_audit_summary(
     first_page = client.get(url, params={"page": 1, "page_size": 1})
     assert first_page.status_code == 200, first_page.text
     assert first_page.json()["total"] == 1
-    assert [event["id"] for event in first_page.json()["items"]] == [
-        created.json()["id"]
-    ]
+    assert [event["id"] for event in first_page.json()["items"]] == [created.json()["id"]]
     assert first_page.json()["current_assignee"] == "reviewer-two"
     items = client.get(f"/api/v1/review-queues/{queue_id}/items")
     assert items.status_code == 200, items.text
