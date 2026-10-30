@@ -1324,6 +1324,19 @@ def create_pose_workflow_training_result(
         run.result_checkpoint_path,
     )
 
+    # Reject worker-substituted output paths before reading or hashing their
+    # bytes. Replay enforces this same run-local checkpoint contract, but
+    # first completion must not hash an unrelated managed model first.
+    expected_weights_dir = resolve_managed_project_path(
+        settings,
+        f"{project.storage_root}/training/{run.id}/runs/pose/weights",
+    )
+    if (
+        checkpoint.resolve().parent != expected_weights_dir.resolve()
+        or checkpoint.name not in {"best.pt", "last.pt"}
+    ):
+        raise ValidationError("Completed pose training checkpoint belongs to another output")
+
     if not checkpoint.is_file():
         raise ValidationError("Completed pose training checkpoint is missing")
 
@@ -1348,10 +1361,6 @@ def create_pose_workflow_training_result(
     # Pin all advertised checkpoint bytes, not just the selected result.
     # Validate their exact run-local paths before hashing so a worker cannot
     # point provenance checks at an unrelated managed file.
-    expected_weights_dir = resolve_managed_project_path(
-        settings,
-        f"{project.storage_root}/training/{run.id}/runs/pose/weights",
-    )
     checkpoint_digests: dict[str, str] = {}
     for path_field, digest_field, filename in (
         ("best_checkpoint_path", "best_checkpoint_sha256", "best.pt"),
