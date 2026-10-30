@@ -4226,3 +4226,20 @@ Exact-head CI, scientist-reviewed longitudinal data, experimental-design
 approval, 1.1 migration reconciliation, representative ecological acceptance
 and installed Windows GUI/MSI tests remain required.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Projected geometry unit syntax integrity (2026-10-30)
+
+The existing source-linked calibrated-measurement candidate schema now rejects
+dimension-encoded linear units even when written with Unicode superscripts,
+trailing digits, or higher exponents (for example `mm²`, `mm2`, `mm^3`,
+`mm⁴`). Mask projected areas still require a single `^2` suffix on a
+linear base unit. This closes a relabeling gap in persisted standalone and
+executable saved Workflow Builder artifacts and in re-signed source-series CSV
+exports. Tests cover valid `mm`/`µm` and `mm^2`/`µm^2`, invalid
+dimensions, saved-workflow tampering, and re-signed CSV tampering.
+
+This is a **unit-syntax consistency check**, not a verified physical unit
+registry, calibration attestation, identity verification, or biological growth
+claim. Unreviewed evidence remains gated; experimental-unit independence and
+installed Windows/scientific acceptance are not established.
