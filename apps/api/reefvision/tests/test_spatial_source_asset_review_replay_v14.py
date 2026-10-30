@@ -197,6 +197,38 @@ def test_project_original_review_replays_identically_in_saved_workflow(
             item["data_type"] == artifact_type for item in rejected_detail.json()["artifacts"]
         )
 
+        # An inline copy may have identical geometry and SHA-256, but it is
+        # not the project-owned asset named in the independent review.
+        inline_params = {key: value for key, value in params.items() if key != "asset_id"}
+        inline_params["obj_text" if endpoint == "mesh-preview" else "ply_text"] = (
+            original.decode("ascii")
+        )
+        inline_rejected = client.post(f"{base}/spatial/{endpoint}", json=inline_params)
+        assert inline_rejected.status_code == 400, inline_rejected.text
+        assert "requires an imported spatial source asset" in inline_rejected.text
+        inline_graph = {
+            **graph,
+            "graph_id": f"inline-asset-review-{node_type}",
+            "nodes": [
+                graph["nodes"][0],
+                {**graph["nodes"][1], "parameters": inline_params},
+            ],
+        }
+        inline_saved = client.post(f"{base}/workflow-graphs", json={"graph": inline_graph})
+        assert inline_saved.status_code == 201, inline_saved.text
+        inline_run = client.post(
+            f"{base}/workflow-runs",
+            json={"graph_record_id": inline_saved.json()["id"]},
+        )
+        assert inline_run.status_code == 202, inline_run.text
+        assert not process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(inline_run.json()["job_id"])
+        )
+        inline_detail = client.get(f"/api/v1/workflow-runs/{inline_run.json()['id']}")
+        assert inline_detail.status_code == 200, inline_detail.text
+        assert inline_detail.json()["run"]["status"] == "failed"
+        assert not any(item["data_type"] == artifact_type for item in inline_detail.json()["artifacts"])
+
     # Reusing a review after changing physical scale must fail closed.
     stale = client.post(
         f"{base}/spatial/{endpoint}",
@@ -231,9 +263,7 @@ def test_project_original_review_replays_identically_in_saved_workflow(
     stale_detail = client.get(f"/api/v1/workflow-runs/{stale_run.json()['id']}")
     assert stale_detail.status_code == 200, stale_detail.text
     assert stale_detail.json()["run"]["status"] == "failed"
-    assert not any(
-        item["data_type"] == artifact_type for item in stale_detail.json()["artifacts"]
-    )
+    assert not any(item["data_type"] == artifact_type for item in stale_detail.json()["artifacts"])
 
 
 def test_original_read_is_bounded_even_if_file_grows_during_read(
