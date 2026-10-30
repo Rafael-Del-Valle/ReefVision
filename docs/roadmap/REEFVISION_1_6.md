@@ -1,3 +1,19 @@
+## 2026-10-29 — First-run project access from onboarding (Track D)
+
+- Audited the existing 1.6 onboarding, project launcher, class visibility, QC
+  and executable Workflow Builder integrations before changing the UI.
+- First-run help previously disabled class/QC/workflow actions until a project
+  was selected but offered no direct way to create or choose one. Added explicit
+  **Create a project** and **Choose an existing project** actions when no
+  project is active. These route through the existing Home/project-creation
+  UI; they never create a project without researcher confirmation.
+- Added focused frontend regressions for both actions, dismissal semantics,
+  and project-scoped visibility. No database migration, model download,
+  scientific record mutation or Workflow Builder node change.
+- **HOLD:** frontend CI and installed Windows GUI acceptance still required;
+  the independent 1.1/1.6 Alembic revision-0038 collision, MSI upgrade/rollback
+  and biological validation remain unresolved.
+
 ## 2026-10-28 — SQLite integrity errors are not all retryable (Track D)
 
 - Inspected the isolated 1.6 PR #77, issue #76, branch scope, existing
