@@ -581,6 +581,11 @@ def _reused_pose_training_result(
     # as the original scientific result. Legacy runs without a recorded digest
     # remain readable; newly completed runs always persist one below.
     frozen_checkpoint = dict(run.artifact_manifest_json or {})
+    snapshot = dict(run.draft_snapshot_json or {})
+    is_current_snapshot = (
+        snapshot.get("schema_version") == "pose-workflow-training-snapshot-0001"
+        or "pose_training_dataset_manifest_sha256" in snapshot
+    )
     # A saved node can advertise both best.pt and last.pt. Verify the bytes
     # of every checkpoint that was checksummed on first completion, not only
     # the selected result checkpoint. Older runs without these digests remain
@@ -590,6 +595,10 @@ def _reused_pose_training_result(
         ("last_checkpoint_path", "last_checkpoint_sha256"),
     ):
         if digest_field not in frozen_checkpoint:
+            if is_current_snapshot and frozen_checkpoint.get(path_field) is not None:
+                raise ValidationError(
+                    "Recovered pose-training checkpoint artifact checksum is missing"
+                )
             continue
         expected_digest = frozen_checkpoint[digest_field]
         advertised = frozen_checkpoint.get(path_field)
@@ -628,11 +637,6 @@ def _reused_pose_training_result(
     # New workflow-created training runs always persist both fields. Missing
     # metadata must not turn a verified checkpoint into an unchecked legacy
     # replay; only older snapshots may use the backwards-compatible fallback.
-    snapshot = dict(run.draft_snapshot_json or {})
-    is_current_snapshot = (
-        snapshot.get("schema_version") == "pose-workflow-training-snapshot-0001"
-        or "pose_training_dataset_manifest_sha256" in snapshot
-    )
     if is_current_snapshot and (
         not isinstance(expected_sha256, str)
         or not expected_sha256

@@ -328,6 +328,32 @@ def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
 
     replayed = execute(processor_with_secondary_checkpoint)
     assert replayed["training_run_id"] == result["training_run_id"]
+
+    # A current workflow must not become unchecked when a secondary checkpoint
+    # digest is removed while its advertised file path remains intact.
+    for digest_field in ("best_checkpoint_sha256", "last_checkpoint_sha256"):
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, result["training_run_id"])
+            assert run is not None
+            original_manifest = dict(run.artifact_manifest_json or {})
+            tampered_manifest = dict(original_manifest)
+            tampered_manifest.pop(digest_field)
+            run.artifact_manifest_json = tampered_manifest
+            session.commit()
+
+        with pytest.raises(ValidationError, match="checkpoint artifact checksum is missing"):
+            execute(processor_with_secondary_checkpoint)
+
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, result["training_run_id"])
+            assert run is not None
+            run.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert execute(processor_with_secondary_checkpoint)["training_run_id"] == result[
+            "training_run_id"
+        ]
+
     with app.state.session_factory() as session:
         assert session.scalars(select(TrainingRun.id)).all() == [result["training_run_id"]]
 
