@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import (
+    ExperimentRecord,
     Job,
     ModelRegistration,
     PoseLandmarkSchema,
@@ -638,6 +639,23 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         assert (
             persisted.artifact_manifest_json["result_checkpoint_path"]
             == result["result_checkpoint_path"]
+        )
+        experiment = session.scalar(
+            select(ExperimentRecord).where(
+                ExperimentRecord.training_run_id == result["training_run_id"]
+            )
+        )
+        assert experiment is not None
+        assert experiment.project_id == project["id"]
+        assert experiment.artifact_manifest_json["result_checkpoint_path"] == result[
+            "result_checkpoint_path"
+        ]
+        assert experiment.artifact_manifest_json["result_checkpoint_sha256"] == result[
+            "result_checkpoint_sha256"
+        ]
+        assert (
+            experiment.artifact_manifest_json["best_checkpoint_sha256"]
+            == result["result_checkpoint_sha256"]
         )
 
     def retry_completed_node(
