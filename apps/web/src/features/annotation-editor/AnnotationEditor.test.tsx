@@ -1460,6 +1460,12 @@ describe("AnnotationEditor", () => {
         ) {
           return delayedSave;
         }
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(session);
+        }
         const shared = handleDefaultEditorRequests(url, init);
         if (shared) return shared;
         throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
@@ -1493,10 +1499,7 @@ describe("AnnotationEditor", () => {
       ...buildVisibilityBundle(),
       user_identity: "local-user:second",
     };
-    queryClient.setQueryData(
-      ["class-visibility", project.id],
-      otherUser,
-    );
+    queryClient.setQueryData(["class-visibility", project.id], otherUser);
     await act(async () => {
       resolveSave(
         jsonResponse({
@@ -1508,6 +1511,11 @@ describe("AnnotationEditor", () => {
       );
       await delayedSave;
     });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Save as My Preference" }),
+      ).not.toBeDisabled(),
+    );
     expect(
       queryClient.getQueryData<ClassVisibilityBundle>([
         "class-visibility",
