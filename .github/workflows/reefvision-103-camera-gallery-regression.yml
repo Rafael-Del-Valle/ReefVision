@@ -22,6 +22,8 @@ on:
       - scripts/lib/windows-clean-acceptance.ps1
       - scripts/verify-windows-msi.ps1
       - apps/web/src/features/gallery/**
+      - apps/web/src/App.tsx
+      - apps/web/src/App.test.tsx
       - apps/web/src/features/workflow-graphs/**
       - apps/api/reefvision/api/routes/workflow_graphs.py
       - apps/api/reefvision/services/workflow_graphs.py
@@ -162,7 +164,7 @@ jobs:
         working-directory: apps/web
         run: |
           npm run typecheck
-          npx vitest run --config vite.config.mjs --configLoader runner src/features/gallery/Gallery.test.tsx src/features/gallery/galleryNavigation.test.ts src/features/annotation-editor/ImageViewport.test.tsx src/features/workflow-graphs/WorkflowGraphWorkspace.test.tsx src/features/workflow-graphs/WorkflowVisualEditor.test.tsx src/features/workflow-graphs/workflowTemplates.test.ts
+          npx vitest run --config vite.config.mjs --configLoader runner src/App.test.tsx src/features/gallery/Gallery.test.tsx src/features/gallery/galleryNavigation.test.ts src/features/annotation-editor/ImageViewport.test.tsx src/features/workflow-graphs/WorkflowGraphWorkspace.test.tsx src/features/workflow-graphs/WorkflowVisualEditor.test.tsx src/features/workflow-graphs/workflowTemplates.test.ts
       - name: Install Chromium for browser-level acceptance
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
