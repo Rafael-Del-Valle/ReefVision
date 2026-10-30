@@ -22,10 +22,10 @@ import {
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { WorkspaceShell } from "../../components/ui/WorkspaceShell";
 import {
-  readGalleryPreference,
+  readBrowserGalleryPreference,
   resolveGalleryNavigation,
   shouldIgnoreGalleryShortcut,
-  writeGalleryPreference,
+  writeBrowserGalleryPreference,
   type GalleryNavigationAction,
 } from "./galleryNavigation";
 
@@ -480,7 +480,7 @@ function GalleryContent({
   // Keep imports serialized so progress and per-file reports cannot race.
   const importInFlight = useRef(false);
   const initialPreference = useRef(
-    readGalleryPreference(window.localStorage, project.id),
+    readBrowserGalleryPreference(project.id),
   );
   const activeThumbnail = useRef<HTMLButtonElement | null>(null);
   const filmstripRef = useRef<HTMLDivElement | null>(null);
@@ -658,7 +658,7 @@ function GalleryContent({
 
   useEffect(() => {
     if (!focusedImage) return;
-    writeGalleryPreference(window.localStorage, project.id, {
+    writeBrowserGalleryPreference(project.id, {
       imageId: focusedImage.id,
       page,
       wrap: wrapNavigation,

@@ -172,6 +172,38 @@ describe("Gallery pending thumbnail refresh", () => {
 });
 
 describe("Gallery", () => {
+  it("displays the first image when WebView2 blocks localStorage access", async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
+    if (!descriptor) throw new Error("Expected a localStorage property descriptor");
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("Storage access denied", "SecurityError");
+      },
+    });
+
+    try {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        jsonResponse({
+          items: [image],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        }),
+      );
+      renderGallery();
+      expect(
+        await screen.findByAltText("Focused project image: swiftia-01.png"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("region", { name: "Image workbench" }),
+      ).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "localStorage", descriptor);
+    }
+  });
+
   it("edits image grouping and annotation status", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
