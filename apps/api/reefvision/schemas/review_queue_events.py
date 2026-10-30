@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ReviewEventType = Literal[
     "comment",
@@ -59,6 +59,17 @@ class ReviewQueueEventResponse(BaseModel):
     comment: str | None
     assignee: str | None
     created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def explicit_utc_timestamp(cls, value: datetime) -> datetime:
+        """SQLite strips timezone offsets from UTC audit timestamps on read.
+
+        Existing ReefVision audit events were created with utc_now(), so
+        legacy naive SQLite values represent UTC, not local workstation time.
+        Emit explicit UTC for both new events and persisted workflow replays.
+        """
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 class ReviewQueueEventsPage(BaseModel):
