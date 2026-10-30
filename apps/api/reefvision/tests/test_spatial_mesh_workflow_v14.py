@@ -75,7 +75,7 @@ def test_mesh_shape_ratio_withholds_zero_diagonal(client: TestClient) -> None:
         f"/api/v1/projects/{project['id']}/spatial/mesh-preview",
         json={
             **MESH,
-            "obj_text": "v 0 0 0\\nv 0 0 0\\nv 0 0 0\\nf 1 2 3\\n",
+            "obj_text": "v 0 0 0\nv 0 0 0\nv 0 0 0\nf 1 2 3\n",
         },
     )
     assert response.status_code == 200, response.text
