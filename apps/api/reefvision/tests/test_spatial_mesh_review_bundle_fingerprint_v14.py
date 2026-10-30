@@ -165,11 +165,16 @@ def test_review_bundle_detects_revised_observation_provenance(
     original = compare_mesh_observations(before, after, reidentification_evidence=review)
     amended_after = {**after, "provenance": {**after["provenance"]}}
     amended_after["provenance"][provenance_key] = revised_value
-    revised = compare_mesh_observations(before, amended_after, reidentification_evidence=review)
+    revised = compare_mesh_observations(
+        before, amended_after, reidentification_evidence=review
+    )
     assert (
         original["provenance"]["review_evidence_bundle_sha256"]
         != revised["provenance"]["review_evidence_bundle_sha256"]
     )
-    assert revised["provenance"]["review_evidence_bundle_schema_version"] == "mesh-review-bundle-0002"
+    assert (
+        revised["provenance"]["review_evidence_bundle_schema_version"]
+        == "mesh-review-bundle-0002"
+    )
     assert revised["provenance"]["specimen_identity_verified"] is False
     assert revised["provenance"]["calibration_verified"] is False
