@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -389,44 +389,58 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             )
         return self
 
-    @model_validator(mode="after")
-    def require_current_payload_fingerprint(self) -> EcologyMeasurementCandidatesResponse:
-        """Recheck the v0021 source digest when replaying persisted workflow data.
+    @model_validator(mode="before")
+    @classmethod
+    def require_current_payload_fingerprint(cls, raw: Any) -> Any:
+        """Hash stored v0021 rows before optional historical fields default.
 
-        A valid digest proves only internal artifact consistency, not biological
-        review, independent sampling units, or trusted source ownership.
-        Earlier fingerprint contracts remain readable without reinterpretation.
+        This verifies internal artifact integrity, not scientific approval.
         """
-        if self.source_fingerprint_contract != "ecology-measurement-candidates-0021":
-            return self
-        if self.candidate_count != len(self.candidates):
+        if (
+            not isinstance(raw, dict)
+            or raw.get("source_fingerprint_contract")
+            != "ecology-measurement-candidates-0021"
+        ):
+            return raw
+        candidates = raw.get("candidates", [])
+        if not isinstance(candidates, list):
+            return raw
+        if raw.get("candidate_count") != len(candidates):
             raise ValueError("Current ecological candidate count differs from source rows")
+
+        def persisted_rows(field: str) -> object:
+            rows = raw.get(field, [])
+            if not isinstance(rows, list):
+                return rows
+            return [
+                row.model_dump(mode="json") if isinstance(row, BaseModel) else row
+                for row in rows
+            ]
+
         payload = {
             "algorithm_version": "ecology-measurement-candidates-0021",
-            "project_id": self.project_id,
-            "registry_history_sha256": self.source_registry_history_sha256,
-            "registry_image_evidence_sha256": self.source_image_evidence_sha256,
-            "registry_annotation_evidence_sha256": self.source_annotation_evidence_sha256,
-            "registry_calibration_evidence_sha256": self.source_calibration_evidence_sha256,
-            "candidates": [row.model_dump(mode="json") for row in self.candidates],
-            "sampling_date_qc": [row.model_dump(mode="json") for row in self.sampling_date_qc],
-            "projected_visit_coverage": [
-                row.model_dump(mode="json") for row in self.projected_visit_coverage
-            ],
-            "projected_endpoint_changes": [
-                row.model_dump(mode="json") for row in self.projected_endpoint_changes
-            ],
-            "projected_unit_summaries": [
-                row.model_dump(mode="json") for row in self.projected_unit_summaries
-            ],
-            "projected_population_summaries": [
-                row.model_dump(mode="json") for row in self.projected_population_summaries
-            ],
-            "exclusions": [row.model_dump(mode="json") for row in self.exclusions],
+            "project_id": raw.get("project_id"),
+            "registry_history_sha256": raw.get("source_registry_history_sha256"),
+            "registry_image_evidence_sha256": raw.get("source_image_evidence_sha256"),
+            "registry_annotation_evidence_sha256": raw.get(
+                "source_annotation_evidence_sha256"
+            ),
+            "registry_calibration_evidence_sha256": raw.get(
+                "source_calibration_evidence_sha256"
+            ),
+            "candidates": persisted_rows("candidates"),
+            "sampling_date_qc": persisted_rows("sampling_date_qc"),
+            "projected_visit_coverage": persisted_rows("projected_visit_coverage"),
+            "projected_endpoint_changes": persisted_rows("projected_endpoint_changes"),
+            "projected_unit_summaries": persisted_rows("projected_unit_summaries"),
+            "projected_population_summaries": persisted_rows(
+                "projected_population_summaries"
+            ),
+            "exclusions": persisted_rows("exclusions"),
         }
-        if canonical_json_sha256(payload) != self.input_sha256:
+        if canonical_json_sha256(payload) != raw.get("input_sha256"):
             raise ValueError("Current ecological candidate source fingerprint mismatch")
-        return self
+        return raw
 
 
 def has_complete_ecology_lineage_digests(
