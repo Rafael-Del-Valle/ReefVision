@@ -670,6 +670,17 @@ def _reused_pose_training_result(
         ):
             raise ValidationError("Recovered pose-training experiment provenance changed")
 
+        # Current workflow experiments are also the source of comparison
+        # metrics and warnings. A replay must not expose an experiment ID
+        # whose scientific summary disagrees with its completed training run.
+        # Preserve legacy replay for records created before this contract.
+        if is_current_snapshot and (
+            experiment.dataset_version_id != run.dataset_version_id
+            or dict(experiment.summary_metrics_json or {}) != dict(run.metrics_json or {})
+            or list(experiment.comparison_warnings_json or []) != list(run.warnings_json or [])
+        ):
+            raise ValidationError("Recovered pose-training experiment provenance changed")
+
         # Older experiment records may predate these fields. For current
         # workflow snapshots, however, removing a frozen lineage assertion
         # must not downgrade the experiment registry to unchecked evidence.
