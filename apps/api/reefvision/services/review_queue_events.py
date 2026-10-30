@@ -145,16 +145,26 @@ def list_review_events(
     total = (
         session.scalar(select(func.count()).select_from(ReviewQueueItemEvent).where(*filters)) or 0
     )
-    events = list(
-        session.scalars(
-            select(ReviewQueueItemEvent)
-            .where(*filters)
-            .order_by(
-                ReviewQueueItemEvent.created_at,
-                ReviewQueueItemEvent.id,
+    # SQLite LIMIT/OFFSET parameters are signed 64-bit integers. Very large
+    # valid page numbers otherwise raise OverflowError at the DB driver,
+    # turning a read-only QC history request into an HTTP 500. An offset
+    # outside that range is necessarily beyond any SQLite result set; return
+    # an empty page while still reporting the real total and current assignee.
+    offset = (page - 1) * page_size
+    events = (
+        []
+        if offset > (1 << 63) - 1
+        else list(
+            session.scalars(
+                select(ReviewQueueItemEvent)
+                .where(*filters)
+                .order_by(
+                    ReviewQueueItemEvent.created_at,
+                    ReviewQueueItemEvent.id,
+                )
+                .offset(offset)
+                .limit(page_size)
             )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
         )
     )
     assignment = session.scalar(
