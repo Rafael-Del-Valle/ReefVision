@@ -122,6 +122,15 @@ Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab') -A
 Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab', 'RV1.CAB') -AvailableCabinets @('rv1.cab') | Out-Null } 'Duplicate Media cabinet declarations must fail case-insensitively.'
 Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#../embedded.cab', 'rv1.cab') -AvailableCabinets @('rv1.cab') | Out-Null } 'Malformed embedded cabinet names must fail.'
 Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#', 'rv1.cab') -AvailableCabinets @('rv1.cab') | Out-Null } 'Empty embedded cabinet names must fail.'
+# Windows reserves DOS device basenames even when an extension is present.
+# Reject those names from both the MSI Media table and the external payload;
+# harmless longer basenames such as CONSOLE.cab must still be accepted.
+foreach ($deviceCab in @('CON.cab', 'prn.CAB', 'AUX.cab', 'nul.cab', 'com1.cab', 'LPT9.CAB')) {
+    Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @($deviceCab) -AvailableCabinets @($deviceCab) | Out-Null } "Reserved MSI cabinet basename $deviceCab must fail."
+    Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab') -AvailableCabinets @('rv1.cab', $deviceCab) | Out-Null } "Reserved external cabinet basename $deviceCab must fail."
+}
+$ordinaryCab = Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('CONSOLE.cab') -AvailableCabinets @('console.CAB')
+Assert-True ($ordinaryCab.Count -eq 1) 'Non-device cabinet basename must remain valid.'
 # Verification must reject symlinked MSI/CAB inputs before opening or extracting
 # any package, without actually installing software in this harness.
 $msiVerifier = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verify-windows-msi.ps1') -Raw
