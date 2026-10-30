@@ -2165,6 +2165,55 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             processor=altered_experiment_lineage_processor,
         )
 
+    # The first completion must not commit newly pinned checkpoint digests
+    # when the worker's independent experiment summary contradicts its run.
+    # Exercise both comparison metrics and warnings from the API-frozen truth.
+    for field, corrupted in (
+        ("summary_metrics_json", {"metrics/mAP50-95(P)": 0.0}),
+        ("comparison_warnings_json", ["altered-scientific-warning"]),
+    ):
+        created_run_ids: list[str] = []
+
+        def altered_experiment_summary_processor(
+            settings: Settings,
+            factory: sessionmaker[Session],
+            job_id: str,
+        ) -> bool:
+            assert _fake_pose_processor(settings, factory, job_id)
+            with factory() as child_session:
+                job = child_session.get(Job, job_id)
+                assert job is not None
+                run_id = str(job.request_json["training_run_id"])
+                created_run_ids.append(run_id)
+                experiment = child_session.scalar(
+                    select(ExperimentRecord).where(ExperimentRecord.training_run_id == run_id)
+                )
+                assert experiment is not None
+                setattr(experiment, field, corrupted)
+                child_session.commit()
+            return True
+
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="experiment summary provenance changed"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload=payload,
+                parameters={"training_config": {"epochs": 1}},
+                workflow_run_id="saved-pose-run",
+                workflow_node_run_id=f"altered-experiment-{field}",
+                processor=altered_experiment_summary_processor,
+            )
+        assert len(created_run_ids) == 1
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, created_run_ids[0])
+            assert run is not None
+            assert run.status == "completed"
+            assert "result_checkpoint_sha256" not in dict(run.artifact_manifest_json or {})
+
     # A worker may assert a checkpoint digest or path before completion.
     # Finalization must reject contradictory assertions rather than replacing
     # them with the current file identity and concealing provenance drift.

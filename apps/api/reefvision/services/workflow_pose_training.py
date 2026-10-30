@@ -1422,6 +1422,16 @@ def create_pose_workflow_training_result(
         or experiment.architecture != run.architecture
     ):
         raise ValidationError("Completed pose training experiment provenance changed")
+    # Reject a worker-altered experiment summary before committing checkpoint
+    # provenance. A replay would detect the mismatch, but only after the
+    # first-completion transaction had already finalized the run's manifest.
+    if (
+        experiment.dataset_version_id != run.dataset_version_id
+        or dict(experiment.summary_metrics_json or {}) != dict(run.metrics_json or {})
+        or list(experiment.comparison_warnings_json or []) != list(run.warnings_json or [])
+    ):
+        raise ValidationError("Completed pose training experiment summary provenance changed")
+
     # The worker's experiment registry is independent persisted scientific
     # evidence. Check its frozen dataset and schema lineage before updating
     # checkpoint digests; otherwise a changed experiment record would be
