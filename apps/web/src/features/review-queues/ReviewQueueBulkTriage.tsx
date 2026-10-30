@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   bulkTriageReviewQueueItems,
@@ -60,8 +60,12 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [actor, setActor] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
-  const [reviewedConfirmed, setReviewedConfirmed] = useState(false);
+  const [confirmedSelectionKey, setConfirmedSelectionKey] = useState<
+    string | null
+  >(null);
+  const [reviewedSelectionKey, setReviewedSelectionKey] = useState<
+    string | null
+  >(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [uncertainRequest, setUncertainRequest] = useState<BulkRequest | null>(
     null,
@@ -70,13 +74,30 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
   const selectedIds = selected.filter((id) =>
     available.some((item) => item.id === id),
   );
+  // A background refetch can change eligibility after manual confirmation.
+  // Bind both confirmations to the exact visible scientific review scope.
+  const selectionKey = JSON.stringify({
+    queueId,
+    action,
+    items: selectedIds.map((id) => {
+      const item = available.find((candidate) => candidate.id === id);
+      return [id, item?.image_id, item?.rank_position, item?.review_state];
+    }),
+  });
+  const confirmed = confirmedSelectionKey === selectionKey;
+  const reviewedConfirmed = reviewedSelectionKey === selectionKey;
+  useEffect(() => {
+    // Prevent stale confirmations from reactivating if a state changes back.
+    setConfirmedSelectionKey(null);
+    setReviewedSelectionKey(null);
+  }, [selectionKey]);
   const mutation = useMutation({
     mutationFn: (payload: BulkRequest) =>
       bulkTriageReviewQueueItems(queueId, payload),
     onSuccess: async (result) => {
       setSelected([]);
-      setConfirmed(false);
-      setReviewedConfirmed(false);
+      setConfirmedSelectionKey(null);
+      setReviewedSelectionKey(null);
       setUncertainRequest(null);
       setLastResult(
         `${result.changed_count} items updated; scientific review remains required.`,
@@ -138,8 +159,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           value={actor}
           onChange={(event) => {
             setActor(event.target.value);
-            setConfirmed(false);
-            setReviewedConfirmed(false);
+            setConfirmedSelectionKey(null);
+            setReviewedSelectionKey(null);
           }}
         />
       </label>
@@ -152,8 +173,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           onChange={(event) => {
             setAction(event.target.value as ReviewQueueBulkAction);
             setSelected([]);
-            setConfirmed(false);
-            setReviewedConfirmed(false);
+            setConfirmedSelectionKey(null);
+            setReviewedSelectionKey(null);
             setLastResult(null);
           }}
         >
@@ -170,8 +191,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           disabled={locked || available.length === 0}
           onClick={() => {
             setSelected(available.slice(0, 100).map((item) => item.id));
-            setConfirmed(false);
-            setReviewedConfirmed(false);
+            setConfirmedSelectionKey(null);
+            setReviewedSelectionKey(null);
           }}
         >
           Select eligible on page ({available.length})
@@ -182,8 +203,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           disabled={locked || selected.length === 0}
           onClick={() => {
             setSelected([]);
-            setConfirmed(false);
-            setReviewedConfirmed(false);
+            setConfirmedSelectionKey(null);
+            setReviewedSelectionKey(null);
           }}
         >
           Clear selection
@@ -202,8 +223,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
                     ? [...current, item.id]
                     : current.filter((id) => id !== item.id),
                 );
-                setConfirmed(false);
-                setReviewedConfirmed(false);
+                setConfirmedSelectionKey(null);
+                setReviewedSelectionKey(null);
               }}
             />
             Rank {item.rank_position} — image {item.image_id} (
@@ -221,7 +242,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
             value={reason}
             onChange={(event) => {
               setReason(event.target.value);
-              setConfirmed(false);
+              setConfirmedSelectionKey(null);
             }}
           />
         </label>
@@ -233,7 +254,9 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
             aria-label="Confirm each item was manually reviewed"
             disabled={locked || selectedIds.length === 0}
             checked={reviewedConfirmed}
-            onChange={(event) => setReviewedConfirmed(event.target.checked)}
+            onChange={(event) =>
+              setReviewedSelectionKey(event.target.checked ? selectionKey : null)
+            }
           />
           I personally inspected every selected item. Completion is queue
           bookkeeping, not acceptance of model predictions or annotations.
@@ -245,7 +268,9 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           aria-label="Confirm manual triage"
           disabled={locked || selectedIds.length === 0}
           checked={confirmed}
-          onChange={(event) => setConfirmed(event.target.checked)}
+          onChange={(event) =>
+          setConfirmedSelectionKey(event.target.checked ? selectionKey : null)
+        }
         />
         I confirm this queue-only action; biological verification remains
         manual.
@@ -277,8 +302,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
             onClick={() => {
               setUncertainRequest(null);
               setSelected([]);
-              setConfirmed(false);
-              setReviewedConfirmed(false);
+              setConfirmedSelectionKey(null);
+              setReviewedSelectionKey(null);
               mutation.reset();
               void queryClient.invalidateQueries({
                 queryKey: ["review_queue_items", queueId],

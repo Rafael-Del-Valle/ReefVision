@@ -46,6 +46,19 @@ function mount(visible = items) {
   return invalidate;
 }
 
+function mountChangingItems(visible = items) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const panel = (rows: ReviewQueueItem[]) => (
+    <QueryClientProvider client={client}>
+      <ReviewQueueBulkTriage queueId="queue-1" items={rows} />
+    </QueryClientProvider>
+  );
+  const view = render(panel(visible));
+  return (rows: ReviewQueueItem[]) => view.rerender(panel(rows));
+}
+
 describe("ReviewQueueBulkTriage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -195,5 +208,98 @@ describe("ReviewQueueBulkTriage", () => {
         review_confirmed: true,
       }),
     );
+  });
+  it("requires renewed confirmation after a selected item changes state while still eligible", async () => {
+    const rerenderItems = mountChangingItems();
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "lab reviewer" },
+    });
+    fireEvent.change(screen.getByLabelText("Triage action"), {
+      target: { value: "skip" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select eligible on page/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Bulk skip reason"), {
+      target: { value: "Cannot inspect polyp margins" },
+    });
+    const confirm = screen.getByLabelText(
+      "Confirm manual triage",
+    ) as HTMLInputElement;
+    fireEvent.click(confirm);
+    const apply = screen.getByRole("button", {
+      name: "Apply skip to 2 items",
+    }) as HTMLButtonElement;
+    expect(apply.disabled).toBe(false);
+
+    // IDs and count are unchanged, but the item state changed after approval.
+    rerenderItems(
+      items.map((item) =>
+        item.id === "pending-1"
+          ? ({ ...item, review_state: "in_progress" } as ReviewQueueItem)
+          : item,
+      ),
+    );
+    expect(confirm.checked).toBe(false);
+    expect(apply.disabled).toBe(true);
+    expect(bulkTriageReviewQueueItems).not.toHaveBeenCalled();
+
+    fireEvent.click(confirm);
+    fireEvent.click(apply);
+    await waitFor(() =>
+      expect(bulkTriageReviewQueueItems).toHaveBeenCalledWith(
+        "queue-1",
+        expect.objectContaining({
+          item_ids: ["pending-1", "active-2"],
+          action: "skip",
+          reason: "Cannot inspect polyp margins",
+        }),
+      ),
+    );
+  });
+
+  it("does not revive completion confirmation when eligibility disappears and returns", () => {
+    const rerenderItems = mountChangingItems();
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "lab reviewer" },
+    });
+    fireEvent.change(screen.getByLabelText("Triage action"), {
+      target: { value: "complete" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select eligible on page/ }),
+    );
+    const confirm = screen.getByLabelText(
+      "Confirm manual triage",
+    ) as HTMLInputElement;
+    const reviewed = screen.getByLabelText(
+      "Confirm each item was manually reviewed",
+    ) as HTMLInputElement;
+    fireEvent.click(confirm);
+    fireEvent.click(reviewed);
+    expect(
+      (screen.getByRole("button", {
+        name: "Apply complete to 1 items",
+      }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+
+    rerenderItems(
+      items.map((item) =>
+        item.id === "active-2"
+          ? ({ ...item, review_state: "skipped" } as ReviewQueueItem)
+          : item,
+      ),
+    );
+    expect(confirm.checked).toBe(false);
+    expect(reviewed.checked).toBe(false);
+    rerenderItems(items);
+    expect(confirm.checked).toBe(false);
+    expect(reviewed.checked).toBe(false);
+    expect(
+      (screen.getByRole("button", {
+        name: "Apply complete to 1 items",
+      }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(bulkTriageReviewQueueItems).not.toHaveBeenCalled();
   });
 });
