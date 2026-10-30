@@ -180,9 +180,9 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
         ).append(image_link.id)
     annotation_ids_by_image: dict[str, list[str]] = {}
     for annotation_link in registry.annotation_evidence_links:
-        annotation_ids_by_image.setdefault(
-            annotation_link.image_evidence_id, []
-        ).append(annotation_link.id)
+        annotation_ids_by_image.setdefault(annotation_link.image_evidence_id, []).append(
+            annotation_link.id
+        )
     calibration_ids_by_annotation: dict[str, list[str]] = {}
     for calibration_link in registry.calibration_evidence_links:
         calibration_ids_by_annotation.setdefault(
@@ -192,6 +192,8 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
     # A design correction can affect the interpretation of source links made
     # under earlier identity revisions; flag them for review, not reassignment.
     previous_image_ids_by_organism: dict[str, list[str]] = {}
+    previous_annotation_ids_by_organism: dict[str, list[str]] = {}
+    previous_calibration_ids_by_organism: dict[str, list[str]] = {}
     output = StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(
@@ -224,6 +226,8 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             "revision_annotation_evidence_ids_json",
             "revision_calibration_evidence_ids_json",
             "design_change_prior_image_evidence_ids_json",
+            "design_change_prior_annotation_evidence_ids_json",
+            "design_change_prior_calibration_evidence_ids_json",
         )
     )
     for row in history:
@@ -244,6 +248,12 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             }
         )
         prior_image_ids = sorted(previous_image_ids_by_organism.get(row.organism_key, []))
+        prior_annotation_ids = sorted(
+            previous_annotation_ids_by_organism.get(row.organism_key, [])
+        )
+        prior_calibration_ids = sorted(
+            previous_calibration_ids_by_organism.get(row.organism_key, [])
+        )
         design_changed = (
             revision_key in design_events_by_revision
             and registry.design_history_status != "history_unavailable"
@@ -295,7 +305,19 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
                 json.dumps(annotation_ids, separators=(",", ":")),
                 json.dumps(calibration_ids, separators=(",", ":")),
                 json.dumps(prior_image_ids, separators=(",", ":")) if design_changed else "",
+                json.dumps(prior_annotation_ids, separators=(",", ":"))
+                if design_changed
+                else "",
+                json.dumps(prior_calibration_ids, separators=(",", ":"))
+                if design_changed
+                else "",
             )
         )
         previous_image_ids_by_organism.setdefault(row.organism_key, []).extend(image_ids)
+        previous_annotation_ids_by_organism.setdefault(row.organism_key, []).extend(
+            annotation_ids
+        )
+        previous_calibration_ids_by_organism.setdefault(row.organism_key, []).extend(
+            calibration_ids
+        )
     return output.getvalue()
