@@ -4056,3 +4056,30 @@ calibration, independent units or human consensus. Exact-new-head CI,
 1.1 migration reconciliation, representative verified longitudinal data,
 scientist review and physical Windows installer/GUI acceptance remain
 mandatory. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Canonical persisted paired-row identity and backend CI recovery (2026-10-29)
+
+The previous exact HEAD `c81242e79b86413ba5af20495dc6227236237ab3`
+completed 16/19 GitHub Actions workflows successfully. All three failed
+backend workflows stopped at one Ruff 0.17.3 formatting discrepancy in
+`test_workflow_model_agreement_1_2.py`; the exact formatter-requested
+one-line list comprehension is applied.
+
+The existing `ecology-paired-count-0007` result reader now requires
+persisted paired rows to retain the producer's sorted observation order and
+canonical nonblank, whitespace-trimmed observation, organism and human/model
+source identifiers. Reordering rows can otherwise change reproducible CSV
+output without changing summary arithmetic or the input SHA-256 fingerprint;
+padding an observation ID can silently change its biological source identity.
+The producer already sorts and trims these fields, so valid generated reports
+retain their existing contract. Older algorithm-version artifacts retain
+their prior read-back compatibility.
+
+Focused scientific regression cases cover reordered rows and altered IDs,
+and executable saved Workflow Builder artifact acceptance rejects a reordered
+result. The unverified-evidence review gate, source-provenance checks,
+experimental-unit safeguards and existing typed ports remain unchanged.
+Full exact-head CI, verified longitudinal calibration/identity, registered
+experimental designs, migration reconciliation, representative scientific
+acceptance and physical Windows GUI/MSI tests remain required.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

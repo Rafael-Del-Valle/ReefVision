@@ -237,6 +237,20 @@ class PairedCountComparisonResponse(BaseModel):
         observation_ids = [row.observation_id for row in self.paired_differences]
         reference_ids = [row.reference_source_record_id for row in self.paired_differences]
         model_ids = [row.model_source_record_id for row in self.paired_differences]
+        # The producer emits sorted, trimmed source-linked rows. A reordered
+        # saved artifact would otherwise change report bytes without changing
+        # the scientific input fingerprint or the summary arithmetic.
+        if observation_ids != sorted(observation_ids):
+            raise ValueError("Directional paired rows must retain canonical observation order")
+        for row in self.paired_differences:
+            for name in (
+                row.observation_id,
+                row.organism_id,
+                row.reference_source_record_id,
+                row.model_source_record_id,
+            ):
+                if not name or name.strip() != name:
+                    raise ValueError("Directional paired identifiers must be canonical and nonblank")
         if any(
             len(set(identifiers)) != len(identifiers)
             for identifiers in (observation_ids, reference_ids, model_ids)

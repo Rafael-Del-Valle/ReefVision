@@ -182,12 +182,16 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     # into a purported human/model source count during scientific read-back.
     for coerced_value in (True, "12"):
         tampered_type = dict(payload)
-        tampered_type["paired_differences"] = [
-            dict(row) for row in payload["paired_differences"]
-        ]
+        tampered_type["paired_differences"] = [dict(row) for row in payload["paired_differences"]]
         tampered_type["paired_differences"][0]["model_count"] = coerced_value
         with pytest.raises(SchemaValidationError, match="Directional persisted raw counts"):
             PairedCountComparisonResponse.model_validate(tampered_type)
+    # Reordered saved rows can preserve every numerical summary but would
+    # change deterministic report output without changing input provenance.
+    tampered_order = dict(payload)
+    tampered_order["paired_differences"] = list(reversed(payload["paired_differences"]))
+    with pytest.raises(SchemaValidationError, match="canonical observation order"):
+        PairedCountComparisonResponse.model_validate(tampered_order)
     assert payload["project_id"] == project_id
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["review_status"] == "requires_source_verification"

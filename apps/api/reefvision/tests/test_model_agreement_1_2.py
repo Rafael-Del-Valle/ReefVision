@@ -777,6 +777,35 @@ def test_saved_current_comparison_rejects_coerced_raw_count_types(
         PairedCountComparisonResponse.model_validate(payload)
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    ["reverse_rows", "padded_observation_id", "blank_observation_id"],
+)
+def test_current_saved_comparison_requires_canonical_paired_identity(
+    mutation: str,
+) -> None:
+    """Saved source order and canonical IDs must agree with reproducible reports."""
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+
+    observations = [
+        pair("a", "frag-A", "tank-1", 10, 12),
+        pair("b", "frag-B", "tank-2", 20, 20),
+    ]
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_consensus", pairs=observations)
+    )
+    payload = result.model_dump(mode="json")
+    assert PairedCountComparisonResponse.model_validate(payload).paired_observation_count == 2
+    if mutation == "reverse_rows":
+        payload["paired_differences"].reverse()
+    elif mutation == "padded_observation_id":
+        payload["paired_differences"][0]["observation_id"] = " a "
+    else:
+        payload["paired_differences"][0]["observation_id"] = " "
+    with pytest.raises(SchemaValidationError, match="Directional paired"):
+        PairedCountComparisonResponse.model_validate(payload)
+
+
 def test_historical_comparison_retains_previous_numeric_decoding() -> None:
     """Read-only compatibility for pre-0007 unverified saved artifacts."""
     from reefvision.schemas.model_agreement import PairedCountComparisonResponse
