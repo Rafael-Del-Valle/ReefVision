@@ -75,12 +75,21 @@ inline/stored geometry. Matching digests do **not** verify physical scale,
 coordinate registration, specimen identity, or biological branch length.
 
 Independent calibration review evidence can be attached to either an imported
-OBJ mesh or an imported PLY point cloud using the existing source/geometry,
-observation, coordinate-frame, calibration, and reviewer bindings. The same
-provisional evidence is retained in saved executable Workflow Builder nodes;
-regression tests compare standalone and persisted artifacts and reject reviews
-reused after a scale change. Even a reviewer decision of `supports_scale`
-remains unverified QC, not proof of scale, specimen identity, or registration.
+OBJ/GLB mesh or an imported PLY point cloud using the existing source/geometry,
+observation, coordinate-frame, calibration, and reviewer bindings. An optional
+`reviewed_spatial_source_asset_id` binds the caller-supplied review to the
+specific project-owned imported original in addition to its byte digest.
+A mismatched asset ID fails closed, even when another project's original has
+identical bytes. Older reviews without an asset ID remain readable but receive
+`independent_calibration_review_source_asset_unbound` QC. This extra binding
+is enforced when a project-owned asset is resolved; inline-only previews do
+not establish an asset identity. The same provisional evidence is retained in
+saved executable Workflow Builder nodes; regression tests compare standalone
+and persisted artifacts, reject cross-project asset-review replay, and reject
+reviews reused after a scale change. Even a reviewer decision of
+`supports_scale` remains unverified QC, not proof of scale, specimen identity,
+reviewer authentication, or registration. This does not yet persist a separate
+versioned scientific review record.
 
 The Workflow Graph workspace now has an interactive project-scoped source
 picker and import/preview panel. It can display provisional mesh or ASCII PLY
