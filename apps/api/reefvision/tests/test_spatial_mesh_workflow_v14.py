@@ -26,6 +26,7 @@ def test_mesh_preview_api_is_unverified(client: TestClient) -> None:
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["surface_area_m2"] == pytest.approx(0.0003)
+    assert result["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(3 / 13)
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
     homogeneous = client.post(
@@ -48,6 +49,37 @@ def test_mesh_preview_api_is_unverified(client: TestClient) -> None:
         json={**MESH, "obj_text": "v 0 0 0\nf 1 2 3"},
     )
     assert invalid.status_code == 400
+
+
+@pytest.mark.parametrize("scale", [0.001, 0.01, 10.0])
+@pytest.mark.parametrize("uncertainty", [None, 0.0, 0.5])
+def test_mesh_shape_ratio_cancels_common_scale_only(
+    client: TestClient, scale: float, uncertainty: float | None
+) -> None:
+    project = create_project(client, "Mesh shape ratio")
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/spatial/mesh-preview",
+        json={**MESH, "meters_per_unit": scale, "relative_scale_uncertainty": uncertainty},
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
+        3 / 13
+    )
+    assert result["provenance"]["calibration_verified"] is False
+
+
+def test_mesh_shape_ratio_withholds_zero_diagonal(client: TestClient) -> None:
+    project = create_project(client, "Degenerate mesh shape ratio")
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/spatial/mesh-preview",
+        json={
+            **MESH,
+            "obj_text": "v 0 0 0\\nv 0 0 0\\nv 0 0 0\\nf 1 2 3\\n",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["surface_area_to_bounding_diagonal_squared_ratio"] is None
 
 
 @pytest.mark.parametrize(
@@ -114,6 +146,9 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> Non
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"]["surface_area_m2"] == pytest.approx(0.0003)
+    assert artifact["payload_json"]["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
+        3 / 13
+    )
     assert artifact["payload_json"]["project_id"] == project_id
     assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     assert len(artifact["payload_sha256"]) == 64
@@ -134,6 +169,9 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> Non
     assert standalone.status_code == 200, standalone.text
     assert artifact["payload_json"]["surface_area_m2"] == pytest.approx(
         standalone.json()["surface_area_m2"]
+    )
+    assert artifact["payload_json"]["surface_area_to_bounding_diagonal_squared_ratio"] == (
+        standalone.json()["surface_area_to_bounding_diagonal_squared_ratio"]
     )
     assert (
         artifact["payload_json"]["provenance"]["geometry_sha256"]
