@@ -4574,3 +4574,38 @@ must pass before treating this change as validated end-to-end. Real reviewed
 longitudinal measurements, migration reconciliation, representative biological
 acceptance, and installed Windows MSI/GUI acceptance remain mandatory.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Current-contract saved ecological payload fingerprint replay (2026-10-30)
+
+The v0021 ecological measurement response now recomputes its canonical
+source-input SHA-256 from the **actual deserialized** candidates, sampling-date
+QC, projected visit coverage, projected endpoint changes, unit and population
+summaries, exclusions, project ID and four lineage digests. A mismatched saved
+Workflow Builder payload fails closed even when its individual projected
+endpoint arithmetic is internally consistent. It also rejects a current
+candidate count that differs from its source rows. This closes a gap where
+saved typed responses previously checked the *shape* of lineage digests but
+did not recompute the source-input digest after replay.
+
+The existing standalone project endpoint and executed
+`ecology_identity_registry_source` Workflow Builder node share this response
+contract; the focused acceptance test checks both payloads, rejects edited
+candidate values, counts, QC and digests, and confirms a synthetic endpoint
+cannot be appended while retaining the old fingerprint. Earlier v0018–v0020
+fingerprint contracts remain readable without asserting they follow the
+v0021 canonical algorithm. The test's synthetic two-date endpoint is
+**unverified projected geometry**, not a scientist-approved growth observation.
+A SHA-256 integrity check is not authentication or biological verification:
+a party able to rewrite the entire payload and its digest could still forge
+the artifact. Immutable source records and independent scientist review
+remain required.
+
+Pre-change head `276e254a` passed all **19** associated GitHub Actions
+workflows, including backend CI and Windows Desktop Build. That evidence
+does not validate this new commit. No new migration, environmental context,
+model-weight download or parallel Workflow Builder node was introduced.
+Release gates remain authenticated reviewed longitudinal measurements,
+registered experimental-unit independence, migration reconciliation with
+unmerged 1.1, representative ecological datasets, exact-head CI, and
+physical Windows MSI/GUI acceptance. **1.2 NOT RELEASE-READY; 1.3 not
+started.**
