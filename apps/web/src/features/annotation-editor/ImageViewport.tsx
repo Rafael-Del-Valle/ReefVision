@@ -29,6 +29,7 @@ export function ImageViewport({
     fitTransform({ width, height }, FALLBACK_SIZE),
   );
   const dragRef = useRef<{
+    pointerId: number;
     x: number;
     y: number;
     view: ViewportTransform;
@@ -82,25 +83,31 @@ export function ImageViewport({
   useEffect(() => {
     const move = (event: PointerEvent) => {
       const drag = dragRef.current;
-      if (!drag) return;
+      // Ignore unrelated mouse, pen, or touch pointers during an active pan.
+      if (!drag || event.pointerId !== drag.pointerId) return;
       updateView({
         ...drag.view,
         offsetX: drag.view.offsetX + event.clientX - drag.x,
         offsetY: drag.view.offsetY + event.clientY - drag.y,
       });
     };
-    const cancel = () => {
+    const cancelPointer = (event: PointerEvent) => {
+      if (dragRef.current?.pointerId === event.pointerId) {
+        dragRef.current = null;
+      }
+    };
+    const cancelAll = () => {
       dragRef.current = null;
     };
     window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", cancel);
-    window.addEventListener("pointercancel", cancel);
-    window.addEventListener("blur", cancel);
+    window.addEventListener("pointerup", cancelPointer);
+    window.addEventListener("pointercancel", cancelPointer);
+    window.addEventListener("blur", cancelAll);
     return () => {
       window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", cancel);
-      window.removeEventListener("pointercancel", cancel);
-      window.removeEventListener("blur", cancel);
+      window.removeEventListener("pointerup", cancelPointer);
+      window.removeEventListener("pointercancel", cancelPointer);
+      window.removeEventListener("blur", cancelAll);
     };
   }, [updateView]);
 
@@ -148,9 +155,12 @@ export function ImageViewport({
     ) {
       return;
     }
+    // A second pointer must not steal a drag already in progress.
+    if (dragRef.current) return;
     event.preventDefault();
     event.stopPropagation();
     dragRef.current = {
+      pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
       view: viewRef.current,

@@ -111,6 +111,48 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toBe(initial);
   });
 
+
+  it("ignores other pointers and only ends a pan for its originating pointer", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Multi-pointer viewport">
+        <svg data-testid="fixed-overlay" viewBox="0 0 1600 1200">
+          <polygon points="10,10 50,10 50,50" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Multi-pointer viewport" });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const polygon = screen.getByTestId("fixed-overlay").querySelector("polygon");
+    const originalGeometry = polygon?.getAttribute("points");
+    const initial = transform.style.transform;
+
+    fireEvent.pointerDown(frame, {
+      button: 0, altKey: true, pointerId: 11, clientX: 50, clientY: 60,
+    });
+    fireEvent.pointerMove(window, { pointerId: 12, clientX: 180, clientY: 200 });
+    fireEvent.pointerUp(window, { pointerId: 12 });
+    expect(transform.style.transform).toBe(initial);
+
+    // A second pointerdown must not replace the original pan anchor.
+    fireEvent.pointerDown(frame, {
+      button: 0, altKey: true, pointerId: 12, clientX: 100, clientY: 100,
+    });
+    fireEvent.pointerMove(window, { pointerId: 11, clientX: 90, clientY: 110 });
+    const afterOwnerMove = transform.style.transform;
+    expect(afterOwnerMove).not.toBe(initial);
+    expect(polygon).toHaveAttribute("points", originalGeometry);
+
+    fireEvent.pointerCancel(window, { pointerId: 12 });
+    fireEvent.pointerMove(window, { pointerId: 11, clientX: 95, clientY: 115 });
+    expect(transform.style.transform).not.toBe(afterOwnerMove);
+
+    fireEvent.pointerUp(window, { pointerId: 11 });
+    const finished = transform.style.transform;
+    fireEvent.pointerMove(window, { pointerId: 11, clientX: 150, clientY: 170 });
+    expect(transform.style.transform).toBe(finished);
+    expect(polygon).toHaveAttribute("points", originalGeometry);
+  });
+
   it("preserves Alt-modified polygon vertex gestures", () => {
     const onPointerDown = vi.fn();
     render(
