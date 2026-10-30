@@ -356,6 +356,32 @@ def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
             == result["training_run_id"]
         )
 
+    # A persisted digest without its corresponding checkpoint path is not
+    # verifiable lineage. Removing the path must not downgrade replay checks.
+    for path_field in ("best_checkpoint_path", "last_checkpoint_path"):
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, result["training_run_id"])
+            assert run is not None
+            original_manifest = dict(run.artifact_manifest_json or {})
+            tampered_manifest = dict(original_manifest)
+            tampered_manifest.pop(path_field)
+            run.artifact_manifest_json = tampered_manifest
+            session.commit()
+
+        with pytest.raises(ValidationError, match="checkpoint artifact path is missing"):
+            execute(processor_with_secondary_checkpoint)
+
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, result["training_run_id"])
+            assert run is not None
+            run.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert (
+            execute(processor_with_secondary_checkpoint)["training_run_id"]
+            == result["training_run_id"]
+        )
+
     with app.state.session_factory() as session:
         assert session.scalars(select(TrainingRun.id)).all() == [result["training_run_id"]]
 
