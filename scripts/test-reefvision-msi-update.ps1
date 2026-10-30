@@ -51,6 +51,37 @@ try {
     Assert-Throws {
         Assert-ReefVisionMsiLocalPath -InstallerPath (Join-Path $bundle 'missing.msi') -RepoPath $repo
     } 'missing from the local build directory'
+    # The recorded Git SHA must describe the actual MSI build input. Exercise
+    # the real helper against a disposable repository, never the user's data.
+    $sourceRepo = Join-Path $root 'source-repo'
+    New-Item -ItemType Directory -Path $sourceRepo -Force | Out-Null
+    & git -C $sourceRepo init --quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot initialize disposable Git source fixture.' }
+    $tracked = Join-Path $sourceRepo 'tracked.txt'
+    Set-Content -LiteralPath $tracked -Value 'baseline' -Encoding ASCII
+    & git -C $sourceRepo add -- tracked.txt | Out-Null
+    & git -C $sourceRepo -c user.name=ReefVisionCI -c user.email=ci@example.invalid commit --quiet -m baseline | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot commit disposable Git source fixture.' }
+    $sourceCommit = (& git -C $sourceRepo rev-parse HEAD).Trim()
+    Assert-ReefVisionSourceTreeClean -RepoPath $sourceRepo -ExpectedCommit $sourceCommit
+    $passed++
+    Assert-Throws {
+        Assert-ReefVisionSourceTreeClean -RepoPath $sourceRepo -ExpectedCommit ('a' * 40)
+    } 'HEAD changed during MSI packaging'
+    Set-Content -LiteralPath $tracked -Value 'edited' -Encoding ASCII
+    Assert-Throws {
+        Assert-ReefVisionSourceTreeClean -RepoPath $sourceRepo -ExpectedCommit $sourceCommit
+    } 'uncommitted or untracked'
+    Set-Content -LiteralPath $tracked -Value 'baseline' -Encoding ASCII
+    $untracked = Join-Path $sourceRepo 'untracked.txt'
+    Set-Content -LiteralPath $untracked -Value 'not in provenance' -Encoding ASCII
+    Assert-Throws {
+        Assert-ReefVisionSourceTreeClean -RepoPath $sourceRepo -ExpectedCommit $sourceCommit
+    } 'uncommitted or untracked'
+    Remove-Item -LiteralPath $untracked -Force
+    Assert-ReefVisionSourceTreeClean -RepoPath $sourceRepo -ExpectedCommit $sourceCommit
+    $passed++
+
     # A valid, locally pinned MSI must not replace a newer installed desktop.
     # Three-component MSI versions compare against four-component FileVersion.
     foreach ($case in @(
@@ -153,6 +184,11 @@ try {
     # reintroduce NSIS execution or direct portable-backend overwrites.
     $updateScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'update-reefvision.ps1') -Raw
     $installerScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'install-reefvision-commands.ps1') -Raw
+    if ([regex]::Matches($updateScript,
+        'Assert-ReefVisionSourceTreeClean -RepoPath \\$repoPath -ExpectedCommit \\$expectedSourceCommit').Count -ne 2) {
+        throw 'MSI updater must check source cleanliness both before and after building.'
+    }
+    $passed++
     if ($updateScript.Contains('$installer = Get-ReefVisionFreshInstaller')) {
         throw 'Updater still selects the legacy NSIS installer.'
     }
