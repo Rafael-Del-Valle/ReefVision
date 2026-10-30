@@ -153,8 +153,6 @@ def test_synthetic_0041_review_fixture_preserves_per_item_request_idempotency(
         ).fetchone()[0]
         assert saved_events == 2
 
-
-
 @pytest.mark.parametrize(
     "missing_field",
     [
@@ -199,13 +197,16 @@ def test_synthetic_0041_fixture_rejects_missing_reviewer_provenance(
                 f"INSERT INTO review_queue_item_events ({columns}) VALUES ({placeholders})",
                 tuple(evidence.values()),
             )
-        assert connection.execute(
-            "SELECT COUNT(*) FROM review_queue_item_events"
-        ).fetchone()[0] == 0
-        assert connection.execute(
-            "SELECT sql FROM sqlite_master "
-            "WHERE type = 'table' AND name = 'review_queue_item_events'"
-        ).fetchone()[0] == original_schema
+        assert (
+            connection.execute("SELECT COUNT(*) FROM review_queue_item_events").fetchone()[0] == 0
+        )
+        assert (
+            connection.execute(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'table' AND name = 'review_queue_item_events'"
+            ).fetchone()[0]
+            == original_schema
+        )
 
 
 def test_provider_runtime_dir_uses_desktop_data_dir_environment(
