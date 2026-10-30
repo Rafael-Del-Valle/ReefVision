@@ -113,6 +113,21 @@ try {
     } 'Windows Installer numeric limits'
     $passed += 4
 
+    # An existing unversioned executable or orphaned install registration
+    # must not be treated as a clean installation by the downgrade guard.
+    $unversionedDesktop = Join-Path $root 'unversioned-desktop.exe'
+    Set-Content -LiteralPath $unversionedDesktop -Value 'no version resource' -Encoding ASCII
+    Assert-Throws {
+        Assert-ReefVisionInstalledDesktopVersionKnown -InstalledExecutablePath $unversionedDesktop -InstalledVersion $null -RegisteredInstall $false
+    } 'no readable version'
+    Assert-Throws {
+        Assert-ReefVisionInstalledDesktopVersionKnown -InstalledExecutablePath $null -InstalledVersion $null -RegisteredInstall $true
+    } 'registered but its version cannot be verified'
+    Assert-ReefVisionInstalledDesktopVersionKnown -InstalledExecutablePath $null -InstalledVersion $null -RegisteredInstall $false
+    $passed++
+    Assert-ReefVisionInstalledDesktopVersionKnown -InstalledExecutablePath $unversionedDesktop -InstalledVersion '1.0.2' -RegisteredInstall $true
+    $passed++
+
     # A valid, locally pinned MSI must not replace a newer installed desktop.
     # Three-component MSI versions compare against four-component FileVersion.
     foreach ($case in @(
@@ -300,6 +315,14 @@ try {
     if ($downgradePreflight -le $verificationPosition -or $downgradePreflight -ge $stopPosition) {
         throw 'Downgrade preflight must run after MSI verification and before desktop shutdown.'
     }
+    $installedIdentityPreflight = $updateScript.IndexOf(
+        'Assert-ReefVisionInstalledDesktopVersionKnown -InstalledExecutablePath $installedDesktopPath -InstalledVersion $installedVersion -RegisteredInstall $registeredInstall'
+    )
+    if ($installedIdentityPreflight -le $verificationPosition -or
+        $installedIdentityPreflight -ge $downgradePreflight) {
+        throw 'Existing installation identity must be checked after MSI verification and before downgrade/shutdown.'
+    }
+    $passed++
     $passed++
     $passed++
     if ($updateScript -notmatch '(?s)if \(\$process\.ExitCode -eq 3010\) \{\s*Write-Warning[^\r\n]*\s*return\s*\}') {
