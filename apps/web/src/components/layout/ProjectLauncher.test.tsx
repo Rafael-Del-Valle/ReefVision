@@ -140,4 +140,78 @@ describe("ProjectLauncher", () => {
       screen.getByRole("heading", { name: "No projects yet" }),
     ).toBeInTheDocument();
   });
+
+  it("keeps projects beyond the twelve-card preview accessible without creating data", async () => {
+    const manyProjects = Array.from({ length: 13 }, (_, index) => ({
+      ...project,
+      id: `project-${index + 1}`,
+      name: index === 12 ? "Historical Survey" : `Coral Study ${index + 1}`,
+      description: index === 12 ? "Deep Sea Transects" : "Recent coral imagery",
+      updated_at: new Date(Date.UTC(2026, 9, 31 - index)).toISOString(),
+    }));
+    const handlers = renderLauncher(manyProjects);
+
+    expect(
+      screen.queryByRole("button", { name: "Open Historical Survey" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show all 13 matching projects" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Historical Survey" }),
+    );
+
+    expect(handlers.onOpenProject).toHaveBeenCalledWith("project-13");
+    expect(handlers.onCreateProject).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Show fewer projects" }),
+    ).toBeInTheDocument();
+  });
+
+  it("finds older projects by name or description without changing saved records", async () => {
+    const manyProjects = Array.from({ length: 13 }, (_, index) => ({
+      ...project,
+      id: `project-${index + 1}`,
+      name: index === 12 ? "Historical Survey" : `Coral Study ${index + 1}`,
+      description: index === 12 ? "Deep Sea Transects" : "Recent coral imagery",
+      updated_at: new Date(Date.UTC(2026, 9, 31 - index)).toISOString(),
+    }));
+    const handlers = renderLauncher(manyProjects);
+    const search = screen.getByRole("searchbox", {
+      name: "Find a saved project",
+    });
+
+    await userEvent.type(search, "dEEP sEA");
+    expect(
+      screen.getByRole("button", { name: "Open Historical Survey" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open Coral Study 1" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.clear(search);
+    await userEvent.type(search, "historical");
+    expect(
+      screen.getByRole("button", { name: "Open Historical Survey" }),
+    ).toBeInTheDocument();
+    expect(handlers.onCreateProject).not.toHaveBeenCalled();
+    expect(handlers.onOpenProject).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes an unmatched search from an empty project collection", async () => {
+    const handlers = renderLauncher();
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Find a saved project" }),
+      "not-a-saved-study",
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "No matching projects" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "No projects yet" }),
+    ).not.toBeInTheDocument();
+    expect(handlers.onCreateProject).not.toHaveBeenCalled();
+  });
 });
