@@ -4407,3 +4407,27 @@ independent experimental-unit approval, or verified growth. Exact-head CI,
 1.1 migration reconciliation, representative ecological acceptance and
 installed Windows MSI/GUI tests remain release gates. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+
+## Identity-revision image metadata QC in history exports (2026-10-30)
+
+The existing identity-history CSV now reports the image-metadata evidence state
+for each append-only identity revision. `revision_image_metadata_qc_status`
+distinguishes `no_image_evidence`, `frozen_metadata_linked_unverified`, and
+`legacy_unfrozen_requires_review`; the companion
+`revision_legacy_unfrozen_image_evidence_ids_json` lists the exact legacy
+source links needing follow-up. A frozen metadata fingerprint is only a
+reproducibility check, **not** an authenticated scientist-reviewed specimen,
+image, annotation, calibration or growth measurement. Historical links remain
+visible and unverified rather than silently appearing fully frozen.
+
+The existing executable `ecology_identity_registry_source` Workflow Builder
+node continues to persist the same typed source registry; standalone CSV and
+saved-workflow parity regressions cover current frozen links, revisions with
+no image links, and pre-migration legacy-unfrozen links. This iteration also
+corrects the exact Ruff formatting failure at previous head `b964a1c1`
+in the history exporter (three backend workflows failed). No new database
+migration, 1.1 environmental-context duplication or verified-dataset
+promotion is introduced. Exact-new-head CI, migration reconciliation,
+independent biological review and physical Windows GUI/MSI acceptance remain
+required. **1.2 NOT RELEASE-READY; 1.3 not started.**

@@ -10,19 +10,21 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
 from reefvision.services.ecology_identity_history_export import render_ecology_identity_history_csv
 from reefvision.storage.datasets import canonical_json_sha256
-from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
     _link_calibration,
     _prepared_annotation,
     _save_calibration,
 )
-from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
+from reefvision.tests.test_ecology_image_evidence_1_2 import _link, _workflow
 
 
 def _register(client: TestClient, project_id: str, organism_key: str, **kwargs: Any) -> None:
@@ -214,6 +216,10 @@ def test_history_csv_traces_revision_sources_and_prior_design_change_evidence(
     annotation_id_link = registry["annotation_evidence_links"][0]["id"]
     calibration_id_link = registry["calibration_evidence_links"][0]["id"]
     assert json.loads(rows[0]["revision_image_evidence_ids_json"]) == [image_id_link]
+    assert rows[0]["revision_image_metadata_qc_status"] == "frozen_metadata_linked_unverified"
+    assert json.loads(rows[0]["revision_legacy_unfrozen_image_evidence_ids_json"]) == []
+    assert rows[1]["revision_image_metadata_qc_status"] == "no_image_evidence"
+    assert json.loads(rows[1]["revision_legacy_unfrozen_image_evidence_ids_json"]) == []
     assert json.loads(rows[0]["revision_annotation_evidence_ids_json"]) == [annotation_id_link]
     assert json.loads(rows[0]["revision_calibration_evidence_ids_json"]) == [calibration_id_link]
     for field in (
@@ -260,3 +266,50 @@ def test_history_csv_traces_revision_sources_and_prior_design_change_evidence(
         setattr(getattr(forged, collection)[0], field, invalid)
         with pytest.raises(ValidationError, match="source evidence integrity check failed"):
             render_ecology_identity_history_csv(forged)
+
+
+def test_history_csv_flags_legacy_unfrozen_source_metadata_with_workflow_parity(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Legacy ecological source metadata QC")["id"])
+    _register(client, project_id, "specimen-legacy")
+    image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
+    linked = _link(client, project_id, "specimen-legacy", image_id)
+    assert linked.status_code == 201, linked.text
+    assert linked.json()["source_metadata_evidence_status"] == "frozen"
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        evidence = session.scalar(
+            select(EcologyIdentityImageEvidence).where(
+                EcologyIdentityImageEvidence.project_id == project_id
+            )
+        )
+        assert evidence is not None
+        evidence.source_metadata_sha256 = None
+        session.commit()
+
+    url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
+    registry = client.get(url)
+    assert registry.status_code == 200, registry.text
+    assert registry.json()["image_evidence_links"][0]["source_metadata_evidence_status"] == (
+        "legacy_unfrozen"
+    )
+    response = client.get(f"{url}/history.csv")
+    assert response.status_code == 200, response.text
+    rows = list(csv.DictReader(StringIO(response.text)))
+    assert len(rows) == 1
+    assert rows[0]["revision_image_metadata_qc_status"] == "legacy_unfrozen_requires_review"
+    assert json.loads(rows[0]["revision_legacy_unfrozen_image_evidence_ids_json"]) == [
+        linked.json()["id"]
+    ]
+    assert rows[0]["review_gate"] == "scientist_review_required"
+
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    typed = EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
+    assert render_ecology_identity_history_csv(typed) == response.text

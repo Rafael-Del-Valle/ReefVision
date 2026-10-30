@@ -174,6 +174,10 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
     # Use distinct loop variables: these are different Pydantic row types.
     # Reusing one name across the three collections confuses strict mypy and
     # obscures the image -> annotation -> calibration evidence chain.
+    image_metadata_status_by_id = {
+        image_link.id: image_link.source_metadata_evidence_status
+        for image_link in registry.image_evidence_links
+    }
     for image_link in registry.image_evidence_links:
         image_ids_by_revision.setdefault(
             (image_link.organism_key, image_link.identity_revision), []
@@ -223,6 +227,8 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             "annotation_evidence_sha256",
             "calibration_evidence_sha256",
             "revision_image_evidence_ids_json",
+            "revision_image_metadata_qc_status",
+            "revision_legacy_unfrozen_image_evidence_ids_json",
             "revision_annotation_evidence_ids_json",
             "revision_calibration_evidence_ids_json",
             "design_change_prior_image_evidence_ids_json",
@@ -233,6 +239,17 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
     for row in history:
         revision_key = (row.organism_key, row.revision)
         image_ids = sorted(image_ids_by_revision.get(revision_key, []))
+        legacy_unfrozen_image_ids = [
+            image_id
+            for image_id in image_ids
+            if image_metadata_status_by_id[image_id] == "legacy_unfrozen"
+        ]
+        if not image_ids:
+            image_metadata_qc_status = "no_image_evidence"
+        elif legacy_unfrozen_image_ids:
+            image_metadata_qc_status = "legacy_unfrozen_requires_review"
+        else:
+            image_metadata_qc_status = "frozen_metadata_linked_unverified"
         annotation_ids = sorted(
             {
                 annotation_id
@@ -248,9 +265,7 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             }
         )
         prior_image_ids = sorted(previous_image_ids_by_organism.get(row.organism_key, []))
-        prior_annotation_ids = sorted(
-            previous_annotation_ids_by_organism.get(row.organism_key, [])
-        )
+        prior_annotation_ids = sorted(previous_annotation_ids_by_organism.get(row.organism_key, []))
         prior_calibration_ids = sorted(
             previous_calibration_ids_by_organism.get(row.organism_key, [])
         )
@@ -302,6 +317,8 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
                 registry.annotation_evidence_sha256 or "",
                 registry.calibration_evidence_sha256 or "",
                 json.dumps(image_ids, separators=(",", ":")),
+                image_metadata_qc_status,
+                json.dumps(legacy_unfrozen_image_ids, separators=(",", ":")),
                 json.dumps(annotation_ids, separators=(",", ":")),
                 json.dumps(calibration_ids, separators=(",", ":")),
                 json.dumps(prior_image_ids, separators=(",", ":")) if design_changed else "",
