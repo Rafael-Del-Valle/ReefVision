@@ -154,9 +154,10 @@ def test_design_reassignment_reversion_and_saved_workflow_parity(client: TestCli
     assert [row["design_revision_change_json"] for row in rows[:2]] == ["", ""]
     exported_events = [json.loads(row["design_revision_change_json"]) for row in rows[2:]]
     assert exported_events == events
-    assert [(row["revision"], event["to_revision"]) for row, event in zip(
-        rows[2:], exported_events, strict=True
-    )] == [("3", 3), ("4", 4)]
+    assert [
+        (row["revision"], event["to_revision"])
+        for row, event in zip(rows[2:], exported_events, strict=True)
+    ] == [("3", 3), ("4", 4)]
     assert exported_events[0]["previous_experimental_unit_id"] == "tank-A"
     assert exported_events[0]["current_experimental_unit_id"] == "tank-B"
     assert exported_events[1]["current_experimental_unit_id"] == "tank-A"
