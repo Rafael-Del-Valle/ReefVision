@@ -497,7 +497,10 @@ def test_checked_source_evidence_requires_actual_imported_bytes(
     ],
 )
 def test_unchecked_source_metadata_cannot_fabricate_an_import(
-    source_format: str | None, source_digest: str | None, source_size: int | None, message: str
+    source_format: str | None,
+    source_digest: str | None,
+    source_size: int | None,
+    message: str,
 ) -> None:
     """Unverified previews still cannot claim impossible source-file metadata."""
     before = _observation("early", 1)
