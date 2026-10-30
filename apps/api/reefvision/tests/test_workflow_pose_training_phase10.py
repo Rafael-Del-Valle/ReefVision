@@ -2165,6 +2165,53 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             processor=altered_experiment_lineage_processor,
         )
 
+    # The worker's experiment registry also copies native training rows.
+    # If those rows change independently, first completion must reject the
+    # record instead of overwriting it with the training run's manifest.
+    altered_native_run_ids: list[str] = []
+
+    def altered_experiment_native_metrics_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run_id = str(job.request_json["training_run_id"])
+            altered_native_run_ids.append(run_id)
+            experiment = child_session.scalar(
+                select(ExperimentRecord).where(ExperimentRecord.training_run_id == run_id)
+            )
+            assert experiment is not None
+            experiment.artifact_manifest_json = {
+                **dict(experiment.artifact_manifest_json or {}),
+                "native_results_rows": [{"epoch": 1, "metrics/mAP50-95(P)": 0.0}],
+            }
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="experiment artifact provenance changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-experiment-native-metrics-node",
+            processor=altered_experiment_native_metrics_processor,
+        )
+    assert len(altered_native_run_ids) == 1
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, altered_native_run_ids[0])
+        assert run is not None
+        assert "result_checkpoint_sha256" not in dict(run.artifact_manifest_json or {})
+
     # The first completion must not commit newly pinned checkpoint digests
     # when the worker's independent experiment summary contradicts its run.
     # Exercise both comparison metrics and warnings from the API-frozen truth.
