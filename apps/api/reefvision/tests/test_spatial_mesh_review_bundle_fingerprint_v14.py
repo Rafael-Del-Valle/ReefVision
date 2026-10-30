@@ -173,7 +173,8 @@ def test_review_fingerprint_binds_observations_but_does_not_certify_legacy_evide
         ("source_payload_sha256", "a" * 64),
         ("source_format", "ply_ascii"),
         ("source_payload_size_bytes", 120),
-        ("source_payload_integrity_checked", True),
+        # A true integrity flag without a source SHA-256 is invalid; test
+        # successful source checks with actual imported bytes separately.
         ("coordinate_frame_id", "survey-local"),
         ("calibration_review_evidence", {"independent_review_note": "Amended"}),
     ],
