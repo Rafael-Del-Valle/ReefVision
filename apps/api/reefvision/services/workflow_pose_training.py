@@ -1422,6 +1422,26 @@ def create_pose_workflow_training_result(
         or experiment.architecture != run.architecture
     ):
         raise ValidationError("Completed pose training experiment provenance changed")
+    # The worker's experiment registry is independent persisted scientific
+    # evidence. Check its frozen dataset and schema lineage before updating
+    # checkpoint digests; otherwise a changed experiment record would be
+    # silently overwritten by finalization and appear valid on replay.
+    experiment_manifest = dict(experiment.artifact_manifest_json or {})
+    immutable_fields = (
+        "pose_training_dataset_id",
+        "pose_validation_dataset_id",
+        "pose_schema_id",
+        "pose_schema_revision",
+        "pose_schema_content_hash",
+        "pose_split_manifest",
+        "pose_split_manifest_sha256",
+    )
+    if any(
+        experiment_manifest.get(field) != worker_manifest.get(field)
+        for field in immutable_fields
+    ):
+        raise ValidationError("Completed pose training experiment artifact provenance changed")
+
     experiment.artifact_manifest_json = dict(run.artifact_manifest_json)
     session.commit()
 
