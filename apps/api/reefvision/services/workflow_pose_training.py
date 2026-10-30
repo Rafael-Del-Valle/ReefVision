@@ -676,8 +676,9 @@ def _reused_pose_training_result(
             "last_checkpoint_path",
             "last_checkpoint_sha256",
         ):
-            if field in experiment_manifest and experiment_manifest[field] != frozen_checkpoint.get(
-                field
+            if (
+                field in experiment_manifest
+                and experiment_manifest[field] != frozen_checkpoint.get(field)
             ):
                 raise ValidationError("Recovered pose-training experiment provenance changed")
 
