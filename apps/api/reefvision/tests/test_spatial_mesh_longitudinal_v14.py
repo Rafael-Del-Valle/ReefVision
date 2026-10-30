@@ -147,7 +147,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert review_bundle["after_source_payload_size_bytes"] is None
     assert review_bundle["before_source_payload_integrity_checked"] is False
     assert review_bundle["after_source_payload_integrity_checked"] is False
-    assert review_digest == sha256(
+    canonical_digest = sha256(
         dumps(
             review_bundle,
             sort_keys=True,
@@ -156,6 +156,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
             allow_nan=False,
         ).encode("utf-8")
     ).hexdigest()
+    assert review_digest == canonical_digest
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert expected["before_reconstruction_qc_rates"]["boundary_edges_per_face"] == 3.0
     assert expected["after_reconstruction_qc_rates"]["degenerate_face_fraction"] == 0.0
