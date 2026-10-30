@@ -743,3 +743,26 @@ These tests check chronology and replay consistency, **not** reviewer
 identity authentication, durable versioned human review records, verified
 registration, verified organism reidentification, or biological growth.
 Those scientific acceptance and installed-Windows gates remain outstanding.
+
+## Longitudinal full-mesh shape-ratio QC (Track C)
+
+The existing provisional mesh comparison now carries
+`before_surface_area_to_bounding_diagonal_squared_ratio`,
+`after_surface_area_to_bounding_diagonal_squared_ratio`, and
+`delta_surface_area_to_bounding_diagonal_squared_ratio`.
+These values are derived from each complete-mesh preview, not the decimated
+render sample. The descriptor is dimensionless and cancels a common isotropic
+calibration scale, but the axis-aligned bounding diagonal **changes with
+orientation**. Different reconstruction coverage, camera registration,
+meshing, and disconnected patches can change the ratio without biological
+growth or health changes. No reconstruction uncertainty is estimated.
+
+Malformed non-finite, negative, boolean, or nonnumeric stored descriptors are
+rejected. Missing legacy values produce `null` and an explicit QC warning,
+not an invented comparison. A disputed or inconclusive independent specimen
+reidentification review withholds the cross-timepoint delta while retaining
+the separate source observations. The standalone longitudinal endpoint and
+persisted typed `mesh_longitudinal_comparison` Workflow Builder node share
+this behavior; regression tests cover saved-artifact parity, malformed and
+legacy evidence, and review-based withholding. This does **not** certify
+calibration, specimen identity, registration, or biological condition.
