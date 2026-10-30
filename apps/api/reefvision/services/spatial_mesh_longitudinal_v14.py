@@ -334,13 +334,13 @@ def compare_mesh_observations(
             # extreme scales, area or squared extent can underflow to zero.
             area = record["surface_area_m2"]
             if area > 0 and extent is not None and extent > 0:
-                expected = (area / extent) / extent
-                if expected > 0 and isfinite(expected) and not isclose(
-                    value, expected, rel_tol=1e-8, abs_tol=0.0
+                # Compare in log space so extreme, but finite, calibrated
+                # values cannot bypass integrity checks via overflow/underflow.
+                expected_log_ratio = log(area) - 2 * log(extent)
+                if value <= 0 or not isclose(
+                    log(value), expected_log_ratio, rel_tol=0.0, abs_tol=1e-8
                 ):
-                    raise ValueError(
-                        "Mesh shape ratio contradicts calibrated area and extent"
-                    )
+                    raise ValueError("Mesh shape ratio contradicts calibrated area and extent")
             shape_ratios.append(float(value))
         else:
             raise ValueError("Mesh shape ratios must be finite and nonnegative")
