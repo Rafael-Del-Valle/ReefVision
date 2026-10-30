@@ -17,6 +17,10 @@ on:
       - apps/web/src-tauri/**
       - scripts/test-training-console-readonly.ps1
       - scripts/test-training-console-sanitizer.ps1
+      - scripts/test-windows-clean-install-harness.ps1
+      - scripts/acceptance-windows-clean-install.ps1
+      - scripts/lib/windows-clean-acceptance.ps1
+      - scripts/verify-windows-msi.ps1
       - apps/web/src/features/gallery/**
       - apps/web/src/features/workflow-graphs/**
       - apps/api/reefvision/api/routes/workflow_graphs.py
@@ -89,6 +93,12 @@ jobs:
         run: |
           ./scripts/test-training-console-sanitizer.ps1
           ./scripts/test-training-console-readonly.ps1
+      - name: Verify disposable Windows clean-install acceptance safety without installing
+        shell: pwsh
+        run: |
+          # This harness tests protected paths, junctions, immutable JPEG
+          # evidence and report semantics; it never invokes msiexec.
+          ./scripts/test-windows-clean-install-harness.ps1
       - name: Verify Tauri desktop Rust lifecycle and training-run ID safety
         shell: pwsh
         run: |
