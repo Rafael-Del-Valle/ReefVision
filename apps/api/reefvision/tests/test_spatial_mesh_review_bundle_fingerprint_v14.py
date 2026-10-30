@@ -237,3 +237,52 @@ def test_review_fingerprint_detects_changed_obj_bytes_with_same_geometry() -> No
         != revised["provenance"]["review_evidence_bundle_sha256"]
     )
     assert revised["provenance"]["specimen_identity_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value", "message"),
+    [
+        ("source_payload_sha256", "not-a-digest", "Source payload SHA-256"),
+        ("source_payload_sha256", "A" * 64, "Source payload SHA-256"),
+        ("source_payload_size_bytes", -1, "Source payload size"),
+        ("source_payload_size_bytes", True, "Source payload size"),
+        ("source_payload_integrity_checked", "yes", "Source payload integrity check"),
+        (
+            "source_payload_integrity_checked",
+            True,
+            "Source payload integrity check requires a source SHA-256",
+        ),
+    ],
+)
+def test_longitudinal_rejects_malformed_source_integrity_evidence(
+    field: str, bad_value: object, message: str
+) -> None:
+    """Malformed stored import evidence must not enter an auditable review hash."""
+    before = _observation("early", 1)
+    after = _observation("late", 2)
+    review = _review(before, after)
+    altered = {**after, "provenance": {**after["provenance"], field: bad_value}}
+    with pytest.raises(ValueError, match=message):
+        compare_mesh_observations(before, altered, reidentification_evidence=review)
+
+
+def test_longitudinal_legacy_missing_source_integrity_stays_unverified() -> None:
+    """Missing historical source metadata remains unknown, not a verified check."""
+    before = _observation("early", 1)
+    after = _observation("late", 2)
+    for record in (before, after):
+        for key in (
+            "source_payload_sha256",
+            "source_payload_size_bytes",
+            "source_payload_integrity_checked",
+        ):
+            record["provenance"].pop(key, None)
+    result = compare_mesh_observations(
+        before, after, reidentification_evidence=_review(before, after)
+    )
+    bundle = result["provenance"]["review_evidence_bundle"]
+    assert bundle["before_source_payload_sha256"] is None
+    assert bundle["after_source_payload_size_bytes"] is None
+    assert bundle["before_source_payload_integrity_checked"] is None
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["calibration_verified"] is False
