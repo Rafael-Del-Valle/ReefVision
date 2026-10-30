@@ -59,7 +59,11 @@ export function OnboardingModal({
   }, []);
 
   function navigateTo(destination: OnboardingDestination) {
-    if (destination === "create_project") handoffFocusRef.current = true;
+    // Both project destinations hand keyboard focus to the next workspace.
+    // Restoring the old trigger would leave focus behind the launcher.
+    if (destination === "create_project" || destination === "projects") {
+      handoffFocusRef.current = true;
+    }
     onNavigate(destination);
     onClose();
   }
