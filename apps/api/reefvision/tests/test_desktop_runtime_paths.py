@@ -153,6 +153,7 @@ def test_synthetic_0041_review_fixture_preserves_per_item_request_idempotency(
         ).fetchone()[0]
         assert saved_events == 2
 
+
 @pytest.mark.parametrize(
     "missing_field",
     [
