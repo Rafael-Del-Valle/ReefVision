@@ -53,7 +53,9 @@ test("initial image and gallery scrolling", async ({ page }) => {
       ["JPE", "JFIF", "jfi", "jif"][index - 2] ?? "JPEG"
     }`,
     managed_path: `projects/project-1/images/originals/camera-${index + 1}.jpg`,
-    thumbnail_path: null,
+    // One camera rendition has a persisted fallback for corrupt full-resolution bytes.
+    thumbnail_path:
+      index === 7 ? "projects/project-1/images/thumbnails/camera-8.jpg" : null,
     sha256: "a".repeat(64),
     width_px: index === 11 ? 6000 : 1600,
     height_px: index === 11 ? 400 : 1200,
@@ -73,8 +75,10 @@ test("initial image and gallery scrolling", async ({ page }) => {
   const displayRequests: string[] = [];
   const imageTwoRetryValues: Array<string | null> = [];
   const imageSevenRetryValues: Array<string | null> = [];
+  const imageEightRetryValues: Array<string | null> = [];
   let imageTwoFailures = 0;
   let imageSevenFailures = 0;
+  let imageEightFailures = 0;
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("/health")) {
@@ -96,6 +100,11 @@ test("initial image and gallery scrolling", async ({ page }) => {
         json: { items: images, total: 12, page: 1, page_size: 24, pages: 1 },
       });
     } else {
+      const thumbnailMatch = url.pathname.match(/\/images\/(image-\d+)\/thumbnail$/);
+      if (thumbnailMatch?.[1] === "image-8") {
+        await route.fulfill({ status: 200, contentType: "image/jpeg", body: standard });
+        return;
+      }
       const match = url.pathname.match(/\/images\/(image-\d+)\/display$/);
       if (match) {
         displayRequests.push(match[1]);
@@ -121,6 +130,17 @@ test("initial image and gallery scrolling", async ({ page }) => {
               status: 200,
               contentType: "image/jpeg",
               body: Buffer.from("corrupted camera JPEG payload"),
+            });
+            return;
+          }
+        }
+        if (match[1] === "image-8") {
+          imageEightRetryValues.push(url.searchParams.get("rv_retry"));
+          if (imageEightFailures++ === 0) {
+            await route.fulfill({
+              status: 200,
+              contentType: "image/jpeg",
+              body: Buffer.from("invalid full-resolution JPEG bytes"),
             });
             return;
           }
@@ -433,6 +453,24 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await expect(workbench.getByRole("alert")).toHaveCount(0);
   await expect(corruptImage).toHaveAttribute("aria-current", "true");
   expect(imageSevenRetryValues).toEqual([null, "1"]);
+
+  // A corrupt full-resolution camera JPEG must fall back to its real JPEG
+  // thumbnail, clearly label the reduced resolution, and allow a fresh
+  // full-resolution retry without changing the focused image or its metadata.
+  const thumbnailFallback = workbench.getByRole("listitem", {
+    name: "Focus camera-08.JPEG",
+  });
+  await thumbnailFallback.click();
+  await expect(
+    workbench.getByText(/Full-resolution image unavailable/),
+  ).toBeVisible();
+  await assertDecodedAndContained(1600, 1200);
+  await expect(thumbnailFallback).toHaveAttribute("aria-current", "true");
+  await workbench.getByRole("button", { name: "Retry full-resolution image" }).click();
+  await assertDecodedAndContained(1600, 1200);
+  await expect(workbench.getByText(/Full-resolution image unavailable/)).toHaveCount(0);
+  await expect(thumbnailFallback).toHaveAttribute("aria-current", "true");
+  expect(imageEightRetryValues).toEqual([null, "1"]);
 
   expect(displayRequests).toContain("image-1");
   expect(displayRequests).toContain("image-12");
