@@ -150,3 +150,17 @@ A genuinely clean install, or an existing executable with a known version,
 continues through the existing numeric downgrade guard. Disposable Windows
 preflight regressions cover both failures, both valid cases and call ordering.
 This is not a claim of native installed-GUI or MSI rollback acceptance.
+
+## Per-machine MSI registration safeguard (2026-10-30)
+
+The WiX MSI declares `InstallScope="perMachine"`; Windows normally registers
+it under a GUID-named uninstall entry in HKLM rather than the historical HKCU
+ReefVision key. The updater now checks the HKCU and both native/WOW6432Node HKLM
+uninstall views for an **exact** ReefVision DisplayName, in addition to the
+legacy keys. If an installation is registered but its executable version is
+unreadable, the existing fail-closed version guard stops **before** desktop
+shutdown. Registry inspection is read-only. Disposable HKCU test entries
+exercise absent, unrelated, similarly named, and exact product registrations
+without modifying actual installation keys. Native Windows CI must pass before
+this is accepted; this does not substitute for a real MSI upgrade/rollback or
+installed-GUI validation.

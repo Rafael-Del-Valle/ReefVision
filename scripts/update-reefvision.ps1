@@ -206,22 +206,6 @@ function Get-ReefVisionReleaseArtifacts {
     }
 }
 
-function Get-ReefVisionCurrentUserRegistrationPaths {
-    @(
-        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ReefVision",
-        "HKCU:\Software\reefvision\ReefVision"
-    )
-}
-
-function Test-ReefVisionCurrentUserInstallRegistration {
-    foreach ($path in Get-ReefVisionCurrentUserRegistrationPaths) {
-        if (Test-Path $path) {
-            return $true
-        }
-    }
-    return $false
-}
-
 function Resolve-ReefVisionPortableInstallDirectory {
     param(
         [string]$PreferredExecutablePath
@@ -395,7 +379,7 @@ $msiDir = Get-ReefVisionMsiDirectory -RepoPath $repoPath
 $latestInstaller = Get-ReefVisionLatestMsi -RepoPath $repoPath -ExpectedVersion $expectedVersion
 $installedDesktopPath = Resolve-ReefVisionInstalledDesktopPath
 $installedVersion = Get-ReefVisionExecutableVersion -ExecutablePath $installedDesktopPath
-$registeredInstall = Test-ReefVisionCurrentUserInstallRegistration
+$registeredInstall = Test-ReefVisionInstalledDesktopRegistration
 $portableInstallDirectory = Resolve-ReefVisionPortableInstallDirectory -PreferredExecutablePath $installedDesktopPath
 $installedBackendBundlePresent = Test-ReefVisionInstalledBackendBundle -InstallDirectory $portableInstallDirectory
 

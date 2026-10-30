@@ -254,6 +254,55 @@ try {
     }
     $passed++
 
+    # WiX uses InstallScope=perMachine and GUID-named uninstall entries.
+    # A missing executable with an HKLM registration must not look clean.
+    # Exercise the actual registry-scanning helper with a disposable HKCU
+    # fixture; never write to HKLM or any installed ReefVision key.
+    $registrationRoots = @(Get-ReefVisionUninstallRegistryRoots)
+    if ($registrationRoots -notcontains 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -or
+        $registrationRoots -notcontains 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall') {
+        throw 'Per-machine MSI uninstall roots are missing from the preflight.'
+    }
+    $passed++
+    $fixtureRoot = 'HKCU:\Software\ReefVisionMsiPreflight-' + [guid]::NewGuid().ToString('N')
+    try {
+        New-Item -Path $fixtureRoot -Force | Out-Null
+        $fixtureEntry = Join-Path $fixtureRoot '{DISPOSABLE-TEST-PRODUCT}'
+        New-Item -Path $fixtureEntry -Force | Out-Null
+        if (Test-ReefVisionInstalledDesktopRegistration -LegacyPaths @() -UninstallRoots @($fixtureRoot)) {
+            throw 'Unrelated uninstall key was mistaken for ReefVision.'
+        }
+        $passed++
+        New-ItemProperty -LiteralPath $fixtureEntry -Name DisplayName -PropertyType String -Value 'ReefVision Tools' -Force | Out-Null
+        if (Test-ReefVisionInstalledDesktopRegistration -LegacyPaths @() -UninstallRoots @($fixtureRoot)) {
+            throw 'A different product with a similar name was mistaken for ReefVision.'
+        }
+        $passed++
+        Set-ItemProperty -LiteralPath $fixtureEntry -Name DisplayName -Value 'ReefVision'
+        if (-not (Test-ReefVisionInstalledDesktopRegistration -LegacyPaths @() -UninstallRoots @($fixtureRoot))) {
+            throw 'GUID-named ReefVision uninstall registration was not detected.'
+        }
+        $passed++
+        if (-not (Test-ReefVisionInstalledDesktopRegistration -LegacyPaths @($fixtureEntry) -UninstallRoots @())) {
+            throw 'Legacy ReefVision registration path was not detected.'
+        }
+        $passed++
+        Assert-Throws {
+            Assert-ReefVisionInstalledDesktopVersionKnown -InstalledExecutablePath $null -InstalledVersion $null -RegisteredInstall (
+                Test-ReefVisionInstalledDesktopRegistration -LegacyPaths @() -UninstallRoots @($fixtureRoot)
+            )
+        } 'registered but its version cannot be verified'
+    }
+    finally {
+        if (Test-Path -LiteralPath $fixtureRoot) {
+            Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
+        }
+    }
+    if (-not $updateScript.Contains('$registeredInstall = Test-ReefVisionInstalledDesktopRegistration')) {
+        throw 'Updater no longer uses the per-machine-aware registration preflight.'
+    }
+    $passed++
+
     # Evaluate the actual updater setup expression without executing an
     # installer. A pinned --install-only must not bootstrap dependencies even
     # when the repository has missing environments or a changed signature.

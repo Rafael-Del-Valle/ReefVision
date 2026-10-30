@@ -74,6 +74,49 @@ function Assert-ReefVisionSourceTreeClean {
     }
 }
 
+# WiX installs ReefVision per-machine. Its uninstall key is normally a
+# product GUID under HKLM, not the legacy HKCU\\...\\ReefVision key.
+# Detect registered installations before treating an absent executable as a
+# clean install; never alter registry state during this read-only preflight.
+function Get-ReefVisionInstallRegistrationPaths {
+    @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ReefVision',
+        'HKCU:\Software\reefvision\ReefVision'
+    )
+}
+
+function Get-ReefVisionUninstallRegistryRoots {
+    @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+}
+
+function Test-ReefVisionInstalledDesktopRegistration {
+    param(
+        [string[]]$LegacyPaths = @(Get-ReefVisionInstallRegistrationPaths),
+        [string[]]$UninstallRoots = @(Get-ReefVisionUninstallRegistryRoots)
+    )
+
+    foreach ($path in $LegacyPaths) {
+        if (Test-Path -LiteralPath $path) { return $true }
+    }
+    foreach ($root in $UninstallRoots) {
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) { continue }
+        # Do not rely on a fixed uninstall key name: MSI registers a GUID.
+        # Fail closed if an existing uninstall entry cannot be inspected.
+        foreach ($entry in @(Get-ChildItem -LiteralPath $root -ErrorAction Stop)) {
+            $properties = Get-ItemProperty -LiteralPath $entry.PSPath -ErrorAction Stop
+            $displayName = $properties.PSObject.Properties['DisplayName']
+            if ($null -ne $displayName -and [string]$displayName.Value -ieq 'ReefVision') {
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
 # An unreadable installed executable must not be mistaken for a clean install.
 # A stale registration is also evidence of an existing installation, even if
 # its executable cannot currently be resolved. Fail before desktop shutdown.
