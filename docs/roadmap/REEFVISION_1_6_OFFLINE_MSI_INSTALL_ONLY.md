@@ -87,3 +87,25 @@ not proof of a real Windows upgrade/rollback. Native installed-GUI acceptance,
 representative biological data, cross-version Alembic 0038 reconciliation,
 and complete exact-head CI remain release HOLD gates.
 
+
+## Build source-provenance gate (2026-10-30)
+
+The updater already recorded the Git HEAD as MSI provenance, but did not
+reject a dirty working tree or a source change during compilation. An MSI
+could therefore claim a clean source commit while containing uncommitted or
+untracked local changes. The 1.6 updater now calls
+`Assert-ReefVisionSourceTreeClean` immediately before and after the desktop
+build. It requires the same full 40-character Git SHA and no tracked or
+untracked source changes. If either condition fails, the updater refuses to
+select or cache the newly built installer; it does not stop the installed
+application. Ignored build outputs remain permitted. This is a fail-closed
+source-integrity guard, not a claim that Git commits are cryptographically
+signed or that the MSI is reproducible byte-for-byte.
+
+The disposable Windows Git fixture exercises a clean source, mismatched HEAD,
+dirty tracked file, untracked file, and clean recovery. The preflight also
+asserts both call sites in the actual updater. The guard is deliberately not
+run for `--install-only`, which relies on its previously pinned digest and
+independent MSI/CAB provenance checks. No migrations or scientific Workflow
+Builder nodes are introduced by this packaging-only change. A native Windows
+MSI installation, rollback and installed-GUI acceptance are still required.
