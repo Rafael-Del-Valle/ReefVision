@@ -127,7 +127,6 @@ def test_measurement_csv_rejects_modified_source_even_if_qc_counts_unchanged(
         render_ecology_measurements_csv(altered)
 
 
-
 def test_measurement_csv_discloses_partial_historical_lineage_without_verification(
     client: TestClient,
 ) -> None:
@@ -167,9 +166,7 @@ def test_measurement_lineage_presence_requires_four_well_formed_digests(
     )
     assert response.status_code == 200, response.text
     source = EcologyMeasurementCandidatesResponse.model_validate(response.json())
-    altered = source.model_copy(
-        update={"source_calibration_evidence_sha256": invalid_digest}
-    )
+    altered = source.model_copy(update={"source_calibration_evidence_sha256": invalid_digest})
     assert four_layer_source_digests_present(altered) is False
 
 
