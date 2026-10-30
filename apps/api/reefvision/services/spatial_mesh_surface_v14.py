@@ -203,10 +203,19 @@ def measure_mesh_preview(
         for minimum, maximum in zip(preview_min_m, preview_max_m, strict=True)
     ]
     preview_camera_radius_m = dist(preview_min_m, preview_max_m) / 2
-    dimensions = [
-        (max(p[axis] for p in referenced_points) - min(p[axis] for p in referenced_points)) * scale
+    source_dimensions = [
+        max(p[axis] for p in referenced_points) - min(p[axis] for p in referenced_points)
         for axis in range(3)
     ]
+    dimensions = [dimension * scale for dimension in source_dimensions]
+    # A scale-invariant reconstruction shape diagnostic. Use source units to
+    # avoid squaring a potentially underflowed calibrated bounding diagonal.
+    # Global-axis bounds are orientation-sensitive and include gaps between
+    # disconnected patches: this is NOT a biological condition or growth score.
+    source_diagonal = dist((0.0, 0.0, 0.0), source_dimensions)
+    shape_ratio = (
+        raw_area / (source_diagonal * source_diagonal) if source_diagonal > 0 else None
+    )
     boundary = sum(count == 1 for count in edges.values())
     nonmanifold = sum(count > 2 for count in edges.values())
     # Group by shared edges, never by shared vertices alone. Sort patches by
@@ -485,6 +494,7 @@ def measure_mesh_preview(
     return {
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
+        "surface_area_to_bounding_diagonal_squared_ratio": shape_ratio,
         "enclosed_volume_m3": enclosed_volume_m3,
         "edge_connected_patch_enclosed_volumes_m3": patch_volumes_m3,
         "enclosed_volume_scale_interval_m3": (
