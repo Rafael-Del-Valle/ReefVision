@@ -217,9 +217,7 @@ def test_history_csv_traces_revision_sources_and_prior_design_change_evidence(
     ):
         assert json.loads(rows[1][field]) == []
     assert rows[0]["design_change_prior_image_evidence_ids_json"] == ""
-    assert json.loads(rows[1]["design_change_prior_image_evidence_ids_json"]) == [
-        image_id_link
-    ]
+    assert json.loads(rows[1]["design_change_prior_image_evidence_ids_json"]) == [image_id_link]
     for row in rows:
         for name in (
             "image_evidence_sha256",
