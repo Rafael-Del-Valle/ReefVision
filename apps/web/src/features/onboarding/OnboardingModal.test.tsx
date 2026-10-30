@@ -24,6 +24,32 @@ function OnboardingHarness() {
   );
 }
 
+function ProjectCreationHandoffHarness() {
+  const [onboardingOpen, setOnboardingOpen] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  return (
+    <>
+      <button type="button">Help</button>
+      {onboardingOpen && (
+        <OnboardingModal
+          version="1.6"
+          hasProject={false}
+          onNavigate={(destination) => {
+            if (destination === "create_project") setCreateOpen(true);
+          }}
+          onClose={() => setOnboardingOpen(false)}
+          onDismissPermanently={() => setOnboardingOpen(false)}
+        />
+      )}
+      {createOpen && (
+        <section role="dialog" aria-label="Create project">
+          <input aria-label="Project name" autoFocus />
+        </section>
+      )}
+    </>
+  );
+}
+
 describe("onboarding local usability", () => {
   it("focuses the modal and restores the original control after Escape", () => {
     render(<OnboardingHarness />);
@@ -153,6 +179,16 @@ describe("onboarding local usability", () => {
     expect(onNavigate).toHaveBeenCalledWith("create_project");
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onDismissPermanently).not.toHaveBeenCalled();
+  });
+
+  it("hands keyboard focus to the project-creation dialog", () => {
+    render(<ProjectCreationHandoffHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Create a project" }));
+    expect(screen.queryByRole("heading", { name: /Welcome to ReefVision/ })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Create project" })).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole("textbox", { name: "Project name" }),
+    );
   });
 
   it("opens existing-project selection without requiring a project first", () => {
