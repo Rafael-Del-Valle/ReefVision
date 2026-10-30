@@ -1122,6 +1122,54 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("recovers the project list after a read failure without creating or selecting data", async () => {
+    window.localStorage.clear();
+    const fetchMock = mockApi({ projects: [project] });
+    const originalFetch = fetchMock.getMockImplementation();
+    let summaryRequests = 0;
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        String(input).endsWith("/project-summaries") &&
+        (!init?.method || init.method === "GET")
+      ) {
+        summaryRequests += 1;
+        if (summaryRequests === 1) {
+          return Promise.resolve(jsonResponse({ detail: "Unavailable" }, 503));
+        }
+      }
+      return originalFetch!(input, init);
+    });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Choose an existing project" }),
+    );
+    const launcher = screen.getByLabelText("ReefVision project launcher");
+    expect(
+      await within(launcher).findByRole("heading", {
+        name: "Local projects could not be loaded",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(launcher).queryByRole("heading", { name: "No projects yet" }),
+    ).not.toBeInTheDocument();
+
+    const retry = within(launcher).getByRole("button", { name: "Retry" });
+    await waitFor(() => expect(retry).toHaveFocus());
+    await userEvent.click(retry);
+    const openProject = await within(launcher).findByRole("button", {
+      name: "Open CPT Coral Study",
+    });
+    await waitFor(() => expect(openProject).toHaveFocus());
+    expect(summaryRequests).toBe(2);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/projects") && options?.method === "POST",
+      ),
+    ).toHaveLength(0);
+  });
+
   it("opens the shared keyboard shortcut reference and restores focus", async () => {
     mockApi({ projects: [] });
     renderApp();

@@ -21,8 +21,12 @@ const project: ProjectSummary = {
   active_label_class_count: 6,
 };
 
-function renderLauncher(projects: ProjectSummary[] = [project]) {
+function renderLauncher(
+  projects: ProjectSummary[] = [project],
+  projectsState: "pending" | "ready" | "error" = "ready",
+) {
   const handlers = {
+    onRetryProjects: vi.fn(),
     onCreateProject: vi.fn(),
     onQuickStart: vi.fn(),
     onOpenProject: vi.fn(),
@@ -34,6 +38,7 @@ function renderLauncher(projects: ProjectSummary[] = [project]) {
   render(
     <ProjectLauncher
       projects={projects}
+      projectsState={projectsState}
       version="1.0.5"
       serviceState="ready"
       {...handlers}
@@ -86,6 +91,36 @@ describe("ProjectLauncher", () => {
     expect(handlers.onQuickStart).toHaveBeenNthCalledWith(1, "blank");
     expect(handlers.onQuickStart).toHaveBeenNthCalledWith(2, "blank");
     expect(screen.queryByText(/six-class octocoral/i)).not.toBeInTheDocument();
+  });
+
+  it("does not mistake pending project summaries for an empty installation", () => {
+    renderLauncher([], "pending");
+
+    expect(
+      screen.getByRole("heading", { name: "Loading local projects" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Loading projects")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "No projects yet" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a read-only retry instead of claiming lost projects on API failure", async () => {
+    const handlers = renderLauncher([], "error");
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Local projects could not be loaded",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Project list unavailable")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "No projects yet" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(handlers.onRetryProjects).toHaveBeenCalledTimes(1);
+    expect(handlers.onCreateProject).not.toHaveBeenCalled();
+    expect(handlers.onOpenProject).not.toHaveBeenCalled();
   });
 
   it("allows project import on a fresh installation", async () => {

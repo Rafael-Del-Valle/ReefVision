@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { ProjectSummary } from "../../api/client";
+import { ErrorState, LoadingState } from "../ui/AsyncState";
 import { StatusBadge } from "../ui/StatusBadge";
 
 const PINNED_PROJECTS_KEY = "reefvision.ui.pinned-projects.v1";
@@ -31,8 +32,10 @@ function formatUpdatedAt(value: string): string {
 
 export function ProjectLauncher({
   projects,
+  projectsState,
   version,
   serviceState,
+  onRetryProjects,
   onCreateProject,
   onQuickStart,
   onOpenProject,
@@ -41,8 +44,10 @@ export function ProjectLauncher({
   onOpenOnboarding,
 }: {
   projects: ProjectSummary[];
+  projectsState: "pending" | "ready" | "error";
   version: string;
   serviceState: "pending" | "ready" | "unavailable";
+  onRetryProjects: () => void;
   onCreateProject: () => void;
   onQuickStart: (template: "blank") => void;
   onOpenProject: (projectId: string) => void;
@@ -155,7 +160,7 @@ export function ProjectLauncher({
             </div>
             <div>
               <dt>Projects</dt>
-              <dd>{projects.length}</dd>
+              <dd>{projectsState === "ready" ? projects.length : "Unknown"}</dd>
             </div>
             <div>
               <dt>Execution</dt>
@@ -178,11 +183,28 @@ export function ProjectLauncher({
           </h3>
         </div>
         <span>
-          {projects.length} local project{projects.length === 1 ? "" : "s"}
+          {projectsState === "ready"
+            ? `${projects.length} local project${projects.length === 1 ? "" : "s"}`
+            : projectsState === "pending"
+              ? "Loading projects"
+              : "Project list unavailable"}
         </span>
       </div>
 
-      {projectCollection.length > 0 ? (
+      {projectsState === "pending" ? (
+        <LoadingState
+          title="Loading local projects"
+          description="Checking saved project summaries without changing research data."
+        />
+      ) : projectsState === "error" ? (
+        <div className="rv-launcher-recovery">
+          <ErrorState
+            title="Local projects could not be loaded"
+            message="The project list is unavailable. This does not mean saved projects were deleted or that the workspace is empty."
+            onRetry={onRetryProjects}
+          />
+        </div>
+      ) : projectCollection.length > 0 ? (
         <div className="rv-project-launcher-grid">
           {projectCollection.slice(0, 12).map((project) => {
             const pinned = pinnedIds.includes(project.id);

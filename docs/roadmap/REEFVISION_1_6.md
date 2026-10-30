@@ -1820,3 +1820,10 @@ Backend API regressions cover missing/false/nonboolean confirmation, absence of 
   resolve github.com for a checkout. Windows installed GUI, real MSI upgrade
   and rollback, independent 1.1/1.6 Alembic 0038 reconciliation, and
   representative biological-data acceptance remain **HOLD**.
+
+## 2026-10-30 — Fail-closed project-list loading and recovery (Track D)
+
+- Audited main/1.6 class visibility, project launcher, first-run onboarding and existing typed saved QC Workflow Builder. At predecessor `0953f4b7`, exact-head CI run 41022119797 completed successfully (frontend and backend). No 1.0–1.5 branch was blended.
+- Fixed the launcher treating pending or failed `/project-summaries` requests as `[]` and reporting **No projects yet / 0 local projects**, which could incorrectly imply research assets were lost when the local service was unavailable. The launcher now distinguishes loading, unavailable and verified-empty states; only a successful empty response displays **No projects yet**. The error state provides an explicit read-only Retry.
+- First-run **Choose an existing project** now focuses the recovery action when loading fails, waits for a retried request to finish and focuses the saved project after successful recovery without implicitly creating/selecting a project or modifying annotations. Unit and application-level tests cover loading, failure, recovery, focus and no project writes.
+- No schema migration or new Workflow Builder node is appropriate for this UI-only recovery behavior. Existing executable, typed and persisted QC nodes and researcher review gates remain unchanged. Full new-head CI, Windows installed-GUI/MSI upgrade/rollback, representative biological-data checks and the independent 1.1/1.6 Alembic revision-0038 collision remain release HOLD blockers.

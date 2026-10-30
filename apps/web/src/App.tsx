@@ -317,7 +317,7 @@ function ReefVisionMainApp() {
     // Wait for the actual project summaries before choosing a focus target.
     // A one-shot timeout can otherwise focus "New project" while a saved
     // project is still loading, leaving keyboard users on the wrong action.
-    if (projectSummaries.isPending) return;
+    if (projectSummaries.isPending || projectSummaries.isFetching) return;
     // Do not steal focus if the researcher already moved to another control.
     const focused = document.activeElement;
     if (
@@ -331,9 +331,10 @@ function ReefVisionMainApp() {
     const launcher = document.querySelector<HTMLElement>(
       '[aria-label="ReefVision project launcher"]',
     );
-    const target =
-      launcher?.querySelector<HTMLButtonElement>(".rv-project-launcher-open") ??
-      launcher?.querySelector<HTMLButtonElement>(".rv-launcher-actions button");
+    const target = projectSummaries.isError
+      ? launcher?.querySelector<HTMLButtonElement>(".rv-launcher-recovery button")
+      : (launcher?.querySelector<HTMLButtonElement>(".rv-project-launcher-open") ??
+        launcher?.querySelector<HTMLButtonElement>(".rv-launcher-actions button"));
     target?.focus();
     setFocusProjectLauncher(false);
   }, [
@@ -343,6 +344,8 @@ function ReefVisionMainApp() {
     selectedProjectId,
     activeView,
     projectSummaries.isPending,
+    projectSummaries.isFetching,
+    projectSummaries.isError,
   ]);
 
   useEffect(() => {
@@ -731,6 +734,17 @@ function ReefVisionMainApp() {
         {!selectedProjectId && activeView !== "system" && (
           <ProjectLauncher
             projects={projectSummaries.data ?? []}
+            projectsState={
+              projectSummaries.isError
+                ? "error"
+                : projectSummaries.isPending || projectSummaries.isFetching
+                  ? "pending"
+                  : "ready"
+            }
+            onRetryProjects={() => {
+              setFocusProjectLauncher(true);
+              void projectSummaries.refetch();
+            }}
             version={health.data?.version ?? applicationVersion}
             serviceState={
               health.isPending
