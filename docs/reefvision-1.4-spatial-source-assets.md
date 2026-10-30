@@ -86,7 +86,10 @@ is enforced when a project-owned asset is resolved; inline-only previews do
 not establish an asset identity. The same provisional evidence is retained in
 saved executable Workflow Builder nodes; regression tests compare standalone
 and persisted artifacts, reject cross-project asset-review replay, and reject
-reviews reused after a scale change. Even a reviewer decision of
+reviews reused after a scale change. The stale-scale regression also replays
+a previously saved typed workflow and requires a failed run with no published
+mesh or point-cloud measurement artifact, not merely standalone API rejection.
+Even a reviewer decision of
 `supports_scale` remains unverified QC, not proof of scale, specimen identity,
 reviewer authentication, or registration. This does not yet persist a separate
 versioned scientific review record.
