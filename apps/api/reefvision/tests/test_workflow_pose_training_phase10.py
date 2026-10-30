@@ -258,6 +258,81 @@ def _fake_pose_processor(
     return True
 
 
+
+def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze scientist-reviewed pose truth through the real API, then exercise
+    # persisted checkpoint provenance with a lightweight training worker.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    secondary_bytes = b"phase10-secondary-pose-checkpoint"
+
+    def processor_with_secondary_checkpoint(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as session:
+            job = session.get(Job, job_id)
+            assert job is not None
+            run = session.get(TrainingRun, str(job.request_json["training_run_id"]))
+            assert run is not None and run.result_checkpoint_path is not None
+            assert run.result_checkpoint_path.endswith("/best.pt")
+            last_path = run.result_checkpoint_path.removesuffix("best.pt") + "last.pt"
+            resolve_managed_project_path(settings, last_path).write_bytes(secondary_bytes)
+            run.artifact_manifest_json = {
+                **dict(run.artifact_manifest_json or {}),
+                "last_checkpoint_path": last_path,
+            }
+            session.commit()
+        return True
+
+    def execute(processor: Any) -> dict[str, Any]:
+        with app.state.session_factory() as session:
+            return create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=payload,
+                parameters={"device": "cpu", "training_config": {"epochs": 1}},
+                workflow_run_id="secondary-checkpoint-workflow",
+                workflow_node_run_id="secondary-checkpoint-node",
+                processor=processor,
+            )
+
+    result = execute(processor_with_secondary_checkpoint)
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, result["training_run_id"])
+        assert run is not None
+        manifest = dict(run.artifact_manifest_json or {})
+    assert manifest["best_checkpoint_sha256"] == result["result_checkpoint_sha256"]
+    assert manifest["last_checkpoint_sha256"] == hashlib.sha256(secondary_bytes).hexdigest()
+
+    last_checkpoint = resolve_managed_project_path(
+        test_settings, str(manifest["last_checkpoint_path"])
+    )
+    try:
+        last_checkpoint.write_bytes(b"altered-secondary-checkpoint")
+        with pytest.raises(ValidationError, match="checkpoint artifact checksum changed"):
+            execute(processor_with_secondary_checkpoint)
+    finally:
+        last_checkpoint.write_bytes(secondary_bytes)
+
+    replayed = execute(processor_with_secondary_checkpoint)
+    assert replayed["training_run_id"] == result["training_run_id"]
+    with app.state.session_factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == [result["training_run_id"]]
+
+
 def _pose_export_zip(
     marker: bytes,
 ) -> bytes:
