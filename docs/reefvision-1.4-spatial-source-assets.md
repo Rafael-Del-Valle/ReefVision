@@ -16,6 +16,16 @@ executable Workflow Builder replay both enforce this rule; regression tests
 cover all three formats and require failed workflows to publish no measurement
 artifact. This does not verify mesh topology, calibration, or specimen identity.
 
+The verified reader also rechecks the original filename's import-time
+lexical safety and case-insensitive extension against the recorded OBJ/PLY/GLB
+format. A corrupted database filename (including an unsafe parent path,
+empty name, or mismatched extension) fails before content retrieval, standalone
+measurement, or execution of a saved typed Workflow Builder graph, even when
+the original bytes and digest remain intact. Regression cases cover each
+source format and require failed workflows to produce no measurement artifact.
+This protects audit metadata consistency; it does not authenticate the
+original submitter or prove specimen identity.
+
 The verified reader rejects symbolic-link originals and reads at most the
 8 MiB import limit plus one byte before checking the actual byte count and
 SHA-256. This avoids unbounded reads if a source grows between filesystem
