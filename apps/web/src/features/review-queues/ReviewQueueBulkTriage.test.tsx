@@ -209,7 +209,7 @@ describe("ReviewQueueBulkTriage", () => {
       }),
     );
   });
-  it("requires renewed confirmation after a selected item changes state while still eligible", async () => {
+  it("reconfirms changed eligible items before bulk skip", async () => {
     const rerenderItems = mountChangingItems();
     fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
       target: { value: "lab reviewer" },
@@ -258,7 +258,7 @@ describe("ReviewQueueBulkTriage", () => {
     );
   });
 
-  it("does not revive completion confirmation when eligibility disappears and returns", () => {
+  it("does not revive confirmation after eligibility returns", () => {
     const rerenderItems = mountChangingItems();
     fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
       target: { value: "lab reviewer" },
@@ -277,11 +277,10 @@ describe("ReviewQueueBulkTriage", () => {
     ) as HTMLInputElement;
     fireEvent.click(confirm);
     fireEvent.click(reviewed);
-    expect(
-      (screen.getByRole("button", {
-        name: "Apply complete to 1 items",
-      }) as HTMLButtonElement).disabled,
-    ).toBe(false);
+    const apply = screen.getByRole("button", {
+      name: "Apply complete to 1 items",
+    }) as HTMLButtonElement;
+    expect(apply.disabled).toBe(false);
 
     rerenderItems(
       items.map((item) =>
@@ -295,11 +294,7 @@ describe("ReviewQueueBulkTriage", () => {
     rerenderItems(items);
     expect(confirm.checked).toBe(false);
     expect(reviewed.checked).toBe(false);
-    expect(
-      (screen.getByRole("button", {
-        name: "Apply complete to 1 items",
-      }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect(apply.disabled).toBe(true);
     expect(bulkTriageReviewQueueItems).not.toHaveBeenCalled();
   });
 });
