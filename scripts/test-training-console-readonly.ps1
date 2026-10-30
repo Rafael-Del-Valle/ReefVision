@@ -225,9 +225,9 @@ foreach ($expected in @(
   'Temporary loopback outage',
   'Status: training',
   'Status: completed',
-  'train/box_loss\\s+0\\.25',
-  'train/dfl_loss\\s+0\\.08',
-  'Run ended\\. This window can now be closed\\.'
+  'train/box_loss\s+0\.25',
+  'train/dfl_loss\s+0\.08',
+  'Run ended\. This window can now be closed\.'
 )) {
   if ($recoveryOutput -notmatch $expected) {
     throw "Missing transient-recovery monitor output: $expected"
