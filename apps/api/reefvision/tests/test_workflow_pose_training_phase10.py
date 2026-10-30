@@ -726,6 +726,44 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
 
+    # The saved workflow must retain the provider parameter-registry version
+    # used to configure this actual scientist-verified training run. Neither
+    # rewriting the run nor removing its frozen assertion may authorize replay.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_registry = persisted.parameter_registry_version
+        original_snapshot = dict(persisted.draft_snapshot_json or {})
+        assert original_snapshot["schema_version"] == "pose-workflow-training-snapshot-0002"
+        assert original_snapshot["parameter_registry_version"] == original_registry
+        persisted.parameter_registry_version = "substituted-provider-registry"
+        session.commit()
+
+    with pytest.raises(ValidationError, match="provider registry version changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.parameter_registry_version = original_registry
+        persisted.draft_snapshot_json = {
+            key: value
+            for key, value in original_snapshot.items()
+            if key != "parameter_registry_version"
+        }
+        session.commit()
+
+    with pytest.raises(ValidationError, match="provider registry version changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.draft_snapshot_json = original_snapshot
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # The experiment registry is a second persisted scientific record, not
     # merely an ID to expose downstream. A replay must reject inconsistent
     # metadata or checkpoint evidence without starting another training run.
