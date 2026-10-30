@@ -31,14 +31,10 @@ def _mesh(observation: str, date: str, height: int) -> dict:
 @pytest.mark.parametrize("tampered_ratio", [0.0, 0.8])
 def test_longitudinal_rejects_forged_shape_ratio(tampered_ratio: float) -> None:
     before = preview_from_request(
-        MeshPreviewRequest.model_validate(
-            _mesh("early", "2026-10-01T12:00:00Z", 1)
-        )
+        MeshPreviewRequest.model_validate(_mesh("early", "2026-10-01T12:00:00Z", 1))
     )
     after = preview_from_request(
-        MeshPreviewRequest.model_validate(
-            _mesh("late", "2026-10-02T12:00:00Z", 2)
-        )
+        MeshPreviewRequest.model_validate(_mesh("late", "2026-10-02T12:00:00Z", 2))
     )
     before["project_id"] = after["project_id"] = "morphology-study"
     after["surface_area_to_bounding_diagonal_squared_ratio"] = tampered_ratio
