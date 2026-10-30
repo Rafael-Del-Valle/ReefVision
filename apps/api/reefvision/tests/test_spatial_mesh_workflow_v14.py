@@ -146,9 +146,8 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> Non
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"]["surface_area_m2"] == pytest.approx(0.0003)
-    assert artifact["payload_json"]["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
-        3 / 13
-    )
+    shape_ratio = artifact["payload_json"]["surface_area_to_bounding_diagonal_squared_ratio"]
+    assert shape_ratio == pytest.approx(3 / 13)
     assert artifact["payload_json"]["project_id"] == project_id
     assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     assert len(artifact["payload_sha256"]) == 64
