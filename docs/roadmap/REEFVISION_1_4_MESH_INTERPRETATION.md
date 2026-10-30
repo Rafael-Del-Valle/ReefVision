@@ -811,3 +811,21 @@ verified source reconstruction, scale, biological identity, or growth rate.
 Standalone comparisons and persisted executable Workflow Builder graphs share
 this validation; regression tests cover contradictory summaries and saved
 graph replay.
+
+### Checked imported-mesh provenance must have source bytes (October 30, 2026)
+
+A longitudinal comparison now rejects a claimed successful
+`source_payload_integrity_checked=true` unless the source has a lowercase
+SHA-256 digest, a positive integer source-byte count, and one of the supported
+imported mesh formats (`obj`, `ply_ascii`, or `glb_2_0`). An inline
+`indexed_triangles` observation cannot claim that imported file bytes were
+checked. Zero-byte and missing-byte-count checked claims are rejected.
+Historical records with missing source-integrity evidence remain readable as
+unknown rather than being promoted to checked or verified evidence.
+
+The standalone comparison and saved typed Workflow Builder graphs share this
+validation service. Regression tests reject contradictory checked-source
+metadata, while an actual checked OBJ import is compared against the
+corresponding saved-workflow artifact. A caller-supplied digest or check flag
+does **not** authenticate a source file, reviewer, calibration, or specimen
+identity. Durable, versioned human-review persistence remains outstanding.
