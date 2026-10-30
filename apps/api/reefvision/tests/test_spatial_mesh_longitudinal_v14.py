@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
+from json import dumps
 from math import sqrt
 from typing import cast
 
@@ -130,8 +132,26 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     review_digest = expected["provenance"]["review_evidence_bundle_sha256"]
     assert isinstance(review_digest, str) and len(review_digest) == 64
     assert expected["provenance"]["review_evidence_bundle_schema_version"] == (
-        "mesh-review-bundle-0001"
+        "mesh-review-bundle-0003"
     )
+    # The published v0003 audit bundle must be independently reproducible.
+    # It binds source import metadata and calibration evidence, but is not a
+    # signature or a claim that a human review has been authenticated.
+    review_bundle = expected["provenance"]["review_evidence_bundle"]
+    assert review_bundle["schema_version"] == "mesh-review-bundle-0003"
+    assert review_bundle["before_calibration_method"] == "ruler"
+    assert review_bundle["after_calibration_method"] == "ruler"
+    assert review_bundle["before_source_format"] is None
+    assert review_bundle["after_source_format"] is None
+    assert review_digest == sha256(
+        dumps(
+            review_bundle,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert expected["before_reconstruction_qc_rates"]["boundary_edges_per_face"] == 3.0
     assert expected["after_reconstruction_qc_rates"]["degenerate_face_fraction"] == 0.0
@@ -379,6 +399,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert artifact["payload_json"] == expected
     assert artifact["payload_json"]["provenance"]["review_evidence_bundle_sha256"] == review_digest
+    assert artifact["payload_json"]["provenance"]["review_evidence_bundle"] == review_bundle
     assert len(artifact["payload_sha256"]) == 64
 
     # A disputed registration must not yield apparently usable centroid
