@@ -31,8 +31,11 @@ the user requested only installation of a cached MSI.
   is permitted, running with -I -S -B (isolated, no site packages, no bytecode
   writes). No interpreter or packages are downloaded. If neither interpreter
   exists, installation fails closed **before** the running desktop is stopped.
-  This is not a Python-free installer; native MSI/GUI acceptance remains
-  required.
+  If the .venv interpreter is broken or older than 3.11, the resolver
+  checks other already-installed Python executables on PATH in order, never
+  launching Windows Store App Execution Aliases. An unusable candidate does
+  not trigger package installation or desktop shutdown. This is not a
+  Python-free installer; native MSI/GUI acceptance remains required.
 - Installation still requires a pinned MSI, matching SHA-256, verified
   embedded source commit/version, safe local MSI/log paths, and successful
   Windows Installer execution. No automatic pretrained model downloads,
@@ -46,10 +49,13 @@ fixture, and checks five cases: install-only with and without skip-setup,
 normal dependency mismatch, explicit skip-setup, and explicit setup.
 It also checks for the conflicting-option guard. The Windows preflight
 now exercises the actual Python resolver against a disposable repository
-without .venv, verifies selection of an existing Python executable, and
-confirms a missing validator still fails before installation. The existing
-`.github/workflows/build-desktop.yml` Windows preflight already invokes
-this test before building an MSI.
+without .venv, verifies selection of an existing Python executable, checks
+recovery from a corrupt local .venv executable, and confirms a missing
+validator still fails before installation. The Windows build workflow
+provisions a known Python 3.12 interpreter before this preflight (without
+installing ReefVision dependencies), rather than relying on the runner's
+ambient PATH. The existing `.github/workflows/build-desktop.yml` Windows
+preflight invokes the test before building an MSI.
 
 This check does not execute `msiexec`, perform an actual upgrade/rollback,
 or verify an installed GUI. Native Windows test results, MSI upgrade and
