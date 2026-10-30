@@ -75,13 +75,22 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     available.some((item) => item.id === id),
   );
   // A background refetch can change eligibility after manual confirmation.
-  // Bind both confirmations to the exact visible scientific review scope.
+  // Bind both confirmations to the visible review scope and source-evidence\n  // fingerprint. A refreshed score, checksum, severity, or item update must\n  // invalidate confirmation even when the same IDs remain eligible.
   const selectionKey = JSON.stringify({
     queueId,
     action,
     items: selectedIds.map((id) => {
       const item = available.find((candidate) => candidate.id === id);
-      return [id, item?.image_id, item?.rank_position, item?.review_state];
+      return [
+        id,
+        item?.image_id,
+        item?.rank_position,
+        item?.review_state,
+        item?.input_checksum,
+        item?.score,
+        item?.highest_qc_severity,
+        item?.updated_at,
+      ];
     }),
   });
   const confirmed = confirmedSelectionKey === selectionKey;
@@ -255,7 +264,9 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
             disabled={locked || selectedIds.length === 0}
             checked={reviewedConfirmed}
             onChange={(event) =>
-              setReviewedSelectionKey(event.target.checked ? selectionKey : null)
+              setReviewedSelectionKey(
+                event.target.checked ? selectionKey : null,
+              )
             }
           />
           I personally inspected every selected item. Completion is queue
