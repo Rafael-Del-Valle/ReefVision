@@ -151,10 +151,10 @@ def list_review_events(
     # outside that range is necessarily beyond any SQLite result set; return
     # an empty page while still reporting the real total and current assignee.
     offset = (page - 1) * page_size
-    events = (
-        []
-        if offset > (1 << 63) - 1
-        else list(
+    if offset > (1 << 63) - 1:
+        events = []
+    else:
+        events = list(
             session.scalars(
                 select(ReviewQueueItemEvent)
                 .where(*filters)
@@ -166,7 +166,6 @@ def list_review_events(
                 .limit(page_size)
             )
         )
-    )
     assignment = session.scalar(
         select(ReviewQueueItemEvent)
         .where(
