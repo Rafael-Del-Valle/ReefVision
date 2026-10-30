@@ -85,7 +85,7 @@ def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(client: TestClien
     base = f"/api/v1/projects/{project_id}"
     params = {
         **MESH,
-        "obj_text": "v 0 0 0\\nv 1e-200 0 0\\nv 0 1e-200 0\\nf 1 2 3\\n",
+        "obj_text": "v 0 0 0\nv 1e-200 0 0\nv 0 1e-200 0\nf 1 2 3\n",
     }
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
