@@ -182,7 +182,22 @@ def test_shared_parent_tanks_api_csv_and_saved_workflow(client: TestClient) -> N
     restored = EcologyIdentityRegistryResponse.model_validate(pre_detail)
     assert restored.cross_unit_parent_audit_status == "shared_parent_requires_review"
     assert restored.cross_unit_parent_details == []
+    assert "cross_unit_parent_details" not in restored.model_fields_set
     assert render_ecology_identity_history_csv(restored) == csv_response.text
+    # In-place mutation of a defaulted legacy field must not be discarded
+    # while reconstructing the saved scientific provenance audit.
+    altered_legacy = restored.model_copy(deep=True)
+    altered_legacy.cross_unit_parent_details.append(
+        EcologyCrossUnitParentDetail(
+            parent_colony_key="parent-A",
+            experimental_unit_level="tank",
+            experimental_unit_ids=["tank-1", "tank-2"],
+            fragment_keys=["fragment-A", "fragment-B"],
+        )
+    )
+    assert "cross_unit_parent_details" not in altered_legacy.model_fields_set
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
+        render_ecology_identity_history_csv(altered_legacy)
 
 
 def test_no_false_cross_unit_parent_claims_and_csv_tampering(client: TestClient) -> None:
@@ -387,4 +402,12 @@ def test_historical_parent_unit_exposure_api_workflow_and_csv(
     old = EcologyIdentityRegistryResponse.model_validate(legacy)
     assert old.historical_cross_unit_parent_audit_status == "unavailable"
     assert old.historical_cross_unit_parent_details == []
+    assert "historical_cross_unit_parent_details" not in old.model_fields_set
     assert "unavailable" in render_ecology_identity_history_csv(old)
+    altered_legacy = old.model_copy(deep=True)
+    altered_detail = typed.historical_cross_unit_parent_details[0].model_copy(deep=True)
+    altered_detail.assignments.pop()
+    altered_legacy.historical_cross_unit_parent_details.append(altered_detail)
+    assert "historical_cross_unit_parent_details" not in altered_legacy.model_fields_set
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
+        render_ecology_identity_history_csv(altered_legacy)

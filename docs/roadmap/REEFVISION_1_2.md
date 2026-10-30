@@ -4497,3 +4497,24 @@ requires fresh exact-head CI before claiming a pass. Authenticated biological
 review, longitudinal measurement acceptance, 1.1 migration reconciliation
 and installed Windows MSI/GUI testing remain outstanding. **1.2 NOT
 RELEASE-READY; 1.3 not started.**
+
+## Legacy audit-field replay and tamper integrity (2026-10-30)
+
+Exact-head CI at `a7733650` reported 17 successful workflows and two
+failed backend workflows. The backend suite reached 2,147 passes, 32 skips,
+and one failure: a previously saved registry without the later-added
+`cross_unit_parent_details` field was rejected during CSV revalidation.
+Pydantic's default `model_dump()` made the omitted legacy field appear
+explicitly present as `[]`, which incorrectly asserted a modern audit.
+
+The existing identity-history exporter now preserves the absent-field
+semantics for only the two optional derived parent-audit detail lists, and
+only while their default values remain empty. Explicitly supplied modern
+lists and in-place modifications to previously absent lists remain subject
+to full schema revalidation and fail-closed provenance checks. Regression
+coverage exercises current API/workflow CSV parity, historical saved
+artifacts, and in-place tampering of both legacy parent-audit lists.
+This does not change stored identity evidence, migrate records, or promote
+any unverified observation. Fresh exact-head CI, authenticated biological
+measurement review, migration reconciliation and Windows GUI/MSI acceptance
+remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**

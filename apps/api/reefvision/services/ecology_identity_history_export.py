@@ -109,8 +109,17 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
 
     # A typed object may have been modified after deserialization. Recheck
     # linked source evidence before exporting a claimed provenance trail.
+    # Pydantic includes omitted default fields in model_dump(). In legacy
+    # artifacts the derived parent-detail lists did not exist, and treating
+    # their default [] as an explicitly asserted modern audit falsely rejects
+    # valid historical snapshots. Preserve absence only while the default
+    # remains empty: in-place changes to an omitted list must still fail closed.
+    replay = registry.model_dump(mode="json")
+    for field in ("cross_unit_parent_details", "historical_cross_unit_parent_details"):
+        if field not in registry.model_fields_set and not getattr(registry, field):
+            replay.pop(field, None)
     try:
-        EcologyIdentityRegistryResponse.model_validate(registry.model_dump(mode="json"))
+        EcologyIdentityRegistryResponse.model_validate(replay)
     except SchemaValidationError as exc:
         raise ValidationError("Ecological identity source evidence integrity check failed") from exc
 
