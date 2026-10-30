@@ -1,3 +1,24 @@
+## 2026-10-30 — Asynchronous first-run project focus handoff (Track D)
+
+- Audited PR #77, issue #76, exact-head CI (previous head `440cf242`
+  succeeded), the existing 1.0–1.5 project/visibility/QC/Workflow Builder
+  capabilities, and the onboarding/project-launcher implementation.
+- Corrected the **Choose an existing project** keyboard handoff when the
+  project-summary API responds after the onboarding dialog closes. Previously
+  a one-shot zero-delay timer focused **New project** before saved projects
+  loaded, even when projects existed. Focus now waits for query settlement,
+  targets the first saved project if present (or **New project** if empty),
+  and does not steal focus from a researcher who has already moved elsewhere.
+- Added application-level delayed-fetch regressions for correct focus
+  ownership and absence of implicit project creation. No data writes,
+  migration, scientific-record changes, model downloads or Workflow Builder
+  alterations. Existing typed persisted QC workflows and researcher-review
+  gates are preserved.
+- **Acceptance HOLD:** exact-new-head frontend/backend CI, native Windows
+  installed-GUI keyboard checks and MSI upgrade/rollback, representative
+  biological-data validation, and independent 1.1/1.6 Alembic revision-0038
+  reconciliation remain outstanding. No merge, release or deployment.
+
 ## 2026-10-30 — First-run existing-project keyboard handoff (Track D)
 
 - Audited the current 1.6 branch against main and the earlier 1.0–1.5
