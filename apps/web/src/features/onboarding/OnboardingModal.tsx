@@ -137,7 +137,10 @@ export function OnboardingModal({
             </p>
             {!hasProject && (
               <>
-                <p>Select or create a project to open class, QC, or workflow tools.</p>
+                <p>
+                  Select or create a project to open class, QC, or workflow
+                  tools.
+                </p>
                 <div className="onboarding-card-actions">
                   <button
                     type="button"
