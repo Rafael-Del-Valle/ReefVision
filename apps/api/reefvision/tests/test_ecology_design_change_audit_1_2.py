@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 from typing import cast
 
@@ -148,6 +149,20 @@ def test_design_reassignment_reversion_and_saved_workflow_parity(client: TestCli
     rows = list(csv.DictReader(StringIO(exported.text)))
     assert all(row["design_history_status"] == "design_changes_require_review" for row in rows)
     assert all(row["design_change_count"] == "2" for row in rows)
+    # Each change is exported on its actual append-only revision, rather
+    # than leaving reviewers with an aggregate count and no assignment trail.
+    assert [row["design_revision_change_json"] for row in rows[:2]] == ["", ""]
+    exported_events = [json.loads(row["design_revision_change_json"]) for row in rows[2:]]
+    assert exported_events == events
+    assert [(row["revision"], event["to_revision"]) for row, event in zip(
+        rows[2:], exported_events, strict=True
+    )] == [("3", 3), ("4", 4)]
+    assert exported_events[0]["previous_experimental_unit_id"] == "tank-A"
+    assert exported_events[0]["current_experimental_unit_id"] == "tank-B"
+    assert exported_events[1]["current_experimental_unit_id"] == "tank-A"
+    assert render_ecology_identity_history_csv(
+        EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
+    ) == exported.text
 
 
 def test_parent_change_is_flagged_and_not_promoted_to_verified(client: TestClient) -> None:
@@ -206,4 +221,7 @@ def test_history_export_detects_tampering_and_marks_legacy_unknown(client: TestC
         legacy_payload.pop(key)
     legacy = EcologyIdentityRegistryResponse.model_validate(legacy_payload)
     assert legacy.design_history_status == "history_unavailable"
-    assert "history_unavailable" in render_ecology_identity_history_csv(legacy)
+    legacy_rows = list(csv.DictReader(StringIO(render_ecology_identity_history_csv(legacy))))
+    assert legacy_rows
+    assert all(row["design_history_status"] == "history_unavailable" for row in legacy_rows)
+    assert all(row["design_revision_change_json"] == "" for row in legacy_rows)
