@@ -395,6 +395,15 @@ def _completed_workflow_pose_training_run(
         ):
             raise ValidationError("Recovered pose-training node snapshot schema changed")
 
+        # Only snapshot 0002 introduced a frozen provider-registry assertion.
+        # A replay must not accept a schema downgrade that leaves this
+        # assertion in place, silently skipping the version integrity check.
+        if (
+            snapshot_version != "pose-workflow-training-snapshot-0002"
+            and "parameter_registry_version" in snapshot
+        ):
+            raise ValidationError("Recovered pose-training node snapshot schema changed")
+
         # Version 0002 freezes the provider parameter registry used for the
         # actual run. Never replay a model under silently rewritten registry
         # provenance; version 0001 remains readable for historical runs.
