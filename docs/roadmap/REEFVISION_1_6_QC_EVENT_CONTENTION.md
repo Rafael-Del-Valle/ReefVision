@@ -43,6 +43,23 @@ event; retrying after removal must succeed exactly once.
 The Windows MSI build's focused backend preflight includes the new test file.
 This is a **test gate**, not evidence of successful native installation.
 
+## Read-only QC history under local SQLite contention
+
+A separate gap affected `GET /review-queues/{queue_id}/items/{item_id}/events`:
+when another local process held an EXCLUSIVE SQLite transaction, the
+read-only history endpoint propagated the raw lock as a server error.
+It now rolls back the read session and returns retryable HTTP 409 **only**
+for genuine SQLite BUSY/LOCKED errors. Unrelated database failures still
+propagate; no audit record, review state, or scientific annotation is changed.
+
+The same `test_review_queue_event_contention_16.py` suite now exercises this
+history-read path against both standalone QC queues and persisted, executable
+Workflow Builder QC queues. It verifies the conflict during an EXCLUSIVE
+lock, a successful history read after lock release, no synthetic assignments,
+unchanged pending review state, and continued researcher-approval requirements.
+The independent SQLite reproduction confirms the lock/read/recovery semantics,
+but does **not** replace exact-code repository CI or installed Windows GUI tests.
+
 ## Outstanding acceptance
 
 - Exact-head CI: Ruff, mypy, backend pytest, frontend checks and Playwright.
