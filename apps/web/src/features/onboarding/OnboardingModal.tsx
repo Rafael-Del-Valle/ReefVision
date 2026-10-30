@@ -1,7 +1,12 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
 export type OnboardingDestination =
-  "classes" | "review_queue" | "workflows" | "system";
+  | "classes"
+  | "review_queue"
+  | "workflows"
+  | "system"
+  | "create_project"
+  | "projects";
 
 interface OnboardingModalProps {
   version: string;
@@ -131,7 +136,24 @@ export function OnboardingModal({
               replace researcher verification.
             </p>
             {!hasProject && (
-              <p>Select a project to open class, QC, or workflow tools.</p>
+              <>
+                <p>Select or create a project to open class, QC, or workflow tools.</p>
+                <div className="onboarding-card-actions">
+                  <button
+                    type="button"
+                    onClick={() => navigateTo("create_project")}
+                  >
+                    Create a project
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => navigateTo("projects")}
+                  >
+                    Choose an existing project
+                  </button>
+                </div>
+              </>
             )}
             <div className="onboarding-card-actions">
               <button
