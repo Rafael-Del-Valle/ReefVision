@@ -733,6 +733,13 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         ("comparison_warnings_json", ["altered scientific warning"]),
         (
             "artifact_manifest_json",
+            {
+                **result["artifact_manifest"],
+                "native_results_rows": [{"epoch": 1, "metrics/mAP50-95(P)": 0.01}],
+            },
+        ),
+        (
+            "artifact_manifest_json",
             {**result["artifact_manifest"], "result_checkpoint_sha256": "0" * 64},
         ),
         ("artifact_manifest_json", missing_checkpoint_digest),
