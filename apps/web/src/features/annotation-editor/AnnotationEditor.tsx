@@ -3327,7 +3327,7 @@ export function AnnotationEditor({
                   Save and reset controls require loaded visibility settings.
                   Session-only visibility changes remain available.
                 </p>
-              )
+              )}
               <p className="annotation-helper">
                 My Preference:{" "}
                 {currentLayerVisibility.userPreference.saved
