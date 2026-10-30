@@ -37,16 +37,10 @@ def _observation(observation_id: str, height: int) -> dict:
     result["project_id"] = "study-1"
     return result
 
- 
+
 def _imported_observation(observation_id: str, height: int) -> dict:
     """Construct genuine imported-source metadata rather than spoofing inline geometry."""
-    obj_text = (
-        "# provisional reconstruction\n"
-        "v 0 0 0\n"
-        "v 1 0 0\n"
-        f"v 0 {height} 0\n"
-        "f 1 2 3\n"
-    )
+    obj_text = f"# provisional reconstruction\nv 0 0 0\nv 1 0 0\nv 0 {height} 0\nf 1 2 3\n"
     result = preview_from_request(
         MeshPreviewRequest.model_validate(
             {
@@ -57,9 +51,7 @@ def _imported_observation(observation_id: str, height: int) -> dict:
                 "specimen_id": "colony-1",
                 "observation_id": observation_id,
                 "observed_at_utc": (
-                    "2026-10-01T12:00:00Z"
-                    if observation_id == "early"
-                    else "2026-10-02T12:00:00Z"
+                    "2026-10-01T12:00:00Z" if observation_id == "early" else "2026-10-02T12:00:00Z"
                 ),
             }
         )
@@ -500,10 +492,12 @@ def test_checked_source_evidence_requires_actual_imported_bytes(
         ("indexed_triangles", "a" * 64, None, "Inline indexed triangles"),
         ("indexed_triangles", None, 10, "Inline indexed triangles"),
         ("unrecognized_mesh", None, None, "Unsupported mesh source format"),
+        (None, "a" * 64, 10, "Source payload metadata requires an imported mesh format"),
+        (None, None, 10, "Source payload metadata requires an imported mesh format"),
     ],
 )
 def test_unchecked_source_metadata_cannot_fabricate_an_import(
-    source_format: str, source_digest: str | None, source_size: int | None, message: str
+    source_format: str | None, source_digest: str | None, source_size: int | None, message: str
 ) -> None:
     """Unverified previews still cannot claim impossible source-file metadata."""
     before = _observation("early", 1)
