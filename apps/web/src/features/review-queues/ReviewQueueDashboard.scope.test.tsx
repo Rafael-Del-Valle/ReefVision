@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -108,7 +114,7 @@ function mount() {
     </QueryClientProvider>
   );
   const result = render(view("project-a"));
-  return { ...result, view, onSelectedQueueChange };
+  return { ...result, view, onSelectedQueueChange, client };
 }
 
 describe("ReviewQueueDashboard scope isolation", () => {
@@ -357,9 +363,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
     });
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
     expect(screen.getByText("Selected queue")).toBeTruthy();
-    expect(
-      vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0],
-    ).toBe("queue-b");
+    expect(vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0]).toBe(
+      "queue-b",
+    );
   });
 
   it("keeps the new project's selected queue after old queue regeneration completes", async () => {
@@ -390,9 +396,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
       await pendingOld;
     });
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
-    expect(
-      vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0],
-    ).toBe("queue-b");
+    expect(vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0]).toBe(
+      "queue-b",
+    );
   });
 
   it("does not revive an old generation after leaving and returning to the same project", async () => {
@@ -425,9 +431,112 @@ describe("ReviewQueueDashboard scope isolation", () => {
       await pendingOld;
     });
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
-    expect(
-      vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0],
-    ).toBe("queue-a");
+    expect(vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0]).toBe(
+      "queue-a",
+    );
   });
 
+  it("invalidates the originating queue after a delayed single-item start", async () => {
+    let resolveStart!: (value: Awaited<ReturnType<typeof startReviewQueueItem>>) => void;
+    const pendingStart = new Promise<Awaited<ReturnType<typeof startReviewQueueItem>>>(
+      (resolve) => {
+        resolveStart = resolve;
+      },
+    );
+    vi.mocked(startReviewQueueItem).mockReturnValueOnce(pendingStart);
+    vi.mocked(getReviewQueueItems).mockImplementation(async (id) => ({
+      items: [reviewItem(id === "queue-a" ? "item-a" : "item-b", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    }));
+    const { rerender, view, client } = mount();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    await screen.findByRole("button", { name: "Start review" });
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "  original-reviewer  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start review" }));
+    await waitFor(() =>
+      expect(startReviewQueueItem).toHaveBeenCalledWith(
+        "item-a",
+        "original-reviewer",
+      ),
+    );
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-b",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    await act(async () => {
+      resolveStart({} as Awaited<ReturnType<typeof startReviewQueueItem>>);
+      await pendingStart;
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["review_queue_items", "queue-a"],
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["review_queue_events", "queue-a"],
+    });
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: ["review_queue_items", "queue-b"],
+    });
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: ["review_queue_events", "queue-b"],
+    });
+  });
+
+  it("does not close a new project's quick review after an old completion", async () => {
+    let resolveComplete!: (value: Awaited<ReturnType<typeof completeReviewQueueItem>>) => void;
+    const pendingComplete = new Promise<
+      Awaited<ReturnType<typeof completeReviewQueueItem>>
+    >((resolve) => {
+      resolveComplete = resolve;
+    });
+    vi.mocked(completeReviewQueueItem).mockReturnValueOnce(pendingComplete);
+    vi.mocked(getReviewQueueItems).mockImplementation(async (id) => ({
+      items: [reviewItem(id === "queue-a" ? "item-a" : "item-b", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    }));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const { rerender, view } = mount();
+      fireEvent.click(await screen.findByRole("button", { name: "Quick review" }));
+      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+        target: { value: "reviewer-a" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Quick modal complete" }));
+      await waitFor(() =>
+        expect(completeReviewQueueItem).toHaveBeenCalledWith(
+          "item-a",
+          "reviewer-a",
+          true,
+        ),
+      );
+      rerender(view("project-b"));
+      await waitFor(() =>
+        expect(getReviewQueueItems).toHaveBeenCalledWith(
+          "queue-b",
+          expect.any(Object),
+          expect.anything(),
+        ),
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "Quick review" }));
+      expect(screen.getByRole("button", { name: "Quick modal complete" })).toBeTruthy();
+      await act(async () => {
+        resolveComplete({} as Awaited<ReturnType<typeof completeReviewQueueItem>>);
+        await pendingComplete;
+      });
+      expect(screen.getByRole("button", { name: "Quick modal complete" })).toBeTruthy();
+    } finally {
+      confirm.mockRestore();
+    }
+  });
 });
