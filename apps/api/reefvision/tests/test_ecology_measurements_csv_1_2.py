@@ -54,8 +54,14 @@ def test_measurement_csv_preserves_all_source_links_and_saved_workflow_parity(
         assert row["source_fingerprint_contract"] == payload["source_fingerprint_contract"]
         assert row["source_registry_history_sha256"] == payload["source_registry_history_sha256"]
         assert row["source_image_evidence_sha256"] == payload["source_image_evidence_sha256"]
-        assert row["source_annotation_evidence_sha256"] == payload["source_annotation_evidence_sha256"]
-        assert row["source_calibration_evidence_sha256"] == payload["source_calibration_evidence_sha256"]
+        assert (
+            row["source_annotation_evidence_sha256"]
+            == payload["source_annotation_evidence_sha256"]
+        )
+        assert (
+            row["source_calibration_evidence_sha256"]
+            == payload["source_calibration_evidence_sha256"]
+        )
         assert row["independent_unit_inference_allowed"] == "false"
         assert row["organism_key"] == source.organism_key
         assert row["identity_revision"] == str(source.identity_revision)
