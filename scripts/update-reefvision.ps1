@@ -373,6 +373,10 @@ if ($runSetup -and $skipSetup) {
     throw "--setup and --skip-setup cannot be used together."
 }
 
+if ($installOnly -and $runSetup) {
+    throw "--install-only cannot be combined with --setup. Run setup separately before installing a pinned MSI."
+}
+
 $repoPath = Resolve-ReefVisionRepoPath
 if ($null -eq $repoPath) {
     throw "A ReefVision repository is required. Run update-reefvision --configure-repo PATH first."
@@ -435,11 +439,13 @@ try {
         Write-ReefVisionCommandNote "Git status: $gitStatus"
     }
 
-    $setupNeeded = $runSetup -or (-not $skipSetup -and (
+    # Installing an already verified, pinned MSI must remain offline and must
+    # never bootstrap Python/Node dependencies or fetch packages.
+    $setupNeeded = -not $installOnly -and ($runSetup -or (-not $skipSetup -and (
         $dependencySignature -ne $config.dependency_signature -or
         -not (Test-Path (Join-Path $repoPath ".venv") -PathType Container) -or
         -not (Test-Path (Join-Path $repoPath "apps\web\node_modules") -PathType Container)
-    ))
+    )))
 
     if ($dryRun) {
         [pscustomobject]@{
