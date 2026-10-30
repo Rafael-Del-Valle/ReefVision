@@ -48,6 +48,8 @@ def _candidate_payload() -> dict[str, object]:
         ("box", "box_width", "mm"),
         ("box", "box_height", "cm"),
         ("mask", "mask_projected_area", "mm^2"),
+        ("box", "box_width", "µm"),
+        ("mask", "mask_projected_area", "µm^2"),
     ],
 )
 def test_projected_geometry_accepts_matching_length_and_area_units(
@@ -71,6 +73,13 @@ def test_projected_geometry_accepts_matching_length_and_area_units(
         ("box", "box_width", "mm^2", "Box geometry"),
         ("mask", "mask_projected_area", "mm", "Mask projected area"),
         ("mask", "mask_projected_area", "mm^2^2", "Mask projected area"),
+        ("box", "box_width", "mm²", "Box geometry"),
+        ("box", "box_width", "mm2", "Box geometry"),
+        ("box", "box_width", "mm^3", "Box geometry"),
+        ("box", "box_width", "mm⁴", "Box geometry"),
+        ("box", "box_width", " mm", "Box geometry"),
+        ("mask", "mask_projected_area", "mm²", "Mask projected area"),
+        ("mask", "mask_projected_area", "mm⁴^2", "Mask projected area"),
     ],
 )
 def test_projected_geometry_rejects_incompatible_source_dimensions(
@@ -229,6 +238,9 @@ def test_saved_workflow_source_rejects_swapped_geometry_dimensions(
         ("annotation_kind", "mask", "Mask projected area"),
         ("metric", "mask_projected_area", "Box geometry"),
         ("unit", "mm^2", "Box geometry"),
+        ("unit", "mm²", "Box geometry"),
+        ("unit", "mm2", "Box geometry"),
+        ("unit", "mm^3", "Box geometry"),
     ):
         tampered = deepcopy(saved)
         tampered["candidates"][0][field] = bad_value
