@@ -80,7 +80,9 @@ def test_mesh_shape_ratio_withholds_zero_diagonal(client: TestClient) -> None:
     assert response.json()["surface_area_to_bounding_diagonal_squared_ratio"] is None
 
 
-def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(client: TestClient) -> None:
+def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(
+    client: TestClient,
+) -> None:
     project_id = str(create_project(client, "Tiny mesh shape ratio")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = {
@@ -91,7 +93,9 @@ def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(client: TestClien
     assert standalone.status_code == 200, standalone.text
     measurement = standalone.json()
     assert measurement["surface_area_to_bounding_diagonal_squared_ratio"] is None
-    assert "mesh_shape_ratio_unavailable_numeric_underflow" in measurement["qc_warnings"]
+    assert (
+        "mesh_shape_ratio_unavailable_numeric_underflow" in measurement["qc_warnings"]
+    )
     assert measurement["provenance"]["calibration_verified"] is False
 
     graph = {
@@ -99,7 +103,11 @@ def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(client: TestClien
         "name": "Underflow-safe mesh diagnostic",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": params,
+            },
         ],
         "edges": [
             {
@@ -113,7 +121,9 @@ def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(client: TestClien
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
