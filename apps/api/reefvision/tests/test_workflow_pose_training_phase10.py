@@ -647,12 +647,14 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         )
         assert experiment is not None
         assert experiment.project_id == project["id"]
-        assert experiment.artifact_manifest_json["result_checkpoint_path"] == result[
-            "result_checkpoint_path"
-        ]
-        assert experiment.artifact_manifest_json["result_checkpoint_sha256"] == result[
-            "result_checkpoint_sha256"
-        ]
+        assert (
+            experiment.artifact_manifest_json["result_checkpoint_path"]
+            == result["result_checkpoint_path"]
+        )
+        assert (
+            experiment.artifact_manifest_json["result_checkpoint_sha256"]
+            == result["result_checkpoint_sha256"]
+        )
         assert (
             experiment.artifact_manifest_json["best_checkpoint_sha256"]
             == result["result_checkpoint_sha256"]
