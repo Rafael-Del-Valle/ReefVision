@@ -2126,6 +2126,45 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             processor=substituted_artifact_processor,
         )
 
+    # A completed worker may leave an experiment record with altered frozen
+    # schema lineage even when the training run itself is still intact.
+    # Finalization must reject that independent evidence before syncing digests.
+    def altered_experiment_lineage_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run_id = str(job.request_json["training_run_id"])
+            experiment = child_session.scalar(
+                select(ExperimentRecord).where(ExperimentRecord.training_run_id == run_id)
+            )
+            assert experiment is not None
+            experiment.artifact_manifest_json = {
+                **dict(experiment.artifact_manifest_json or {}),
+                "pose_schema_content_hash": "altered-experiment-schema",
+            }
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="experiment artifact provenance changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-experiment-artifact-node",
+            processor=altered_experiment_lineage_processor,
+        )
+
     # A worker may assert a checkpoint digest or path before completion.
     # Finalization must reject contradictory assertions rather than replacing
     # them with the current file identity and concealing provenance drift.
