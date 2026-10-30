@@ -1248,6 +1248,88 @@ describe("App", () => {
     expect(projectWrites()).toHaveLength(0);
   });
 
+  it("waits for delayed project summaries before focusing the saved project", async () => {
+    window.localStorage.clear();
+    const fetchMock = mockApi({ projects: [project] });
+    const originalFetch = fetchMock.getMockImplementation();
+    let resolveProjects: (response: Response) => void = () => {
+      throw new Error("Project request was not started");
+    };
+    const delayedProjects = new Promise<Response>((resolve) => {
+      resolveProjects = resolve;
+    });
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        String(input).endsWith("/projects") &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return delayedProjects;
+      }
+      return originalFetch!(input, init);
+    });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Choose an existing project" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Open CPT Coral Study" }),
+    ).not.toBeInTheDocument();
+
+    resolveProjects(jsonResponse([project]));
+    const openProject = await screen.findByRole("button", {
+      name: "Open CPT Coral Study",
+    });
+    await waitFor(() => expect(openProject).toHaveFocus());
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/projects") && options?.method === "POST",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("does not steal focus after the researcher navigates while projects load", async () => {
+    window.localStorage.clear();
+    const fetchMock = mockApi({ projects: [project] });
+    const originalFetch = fetchMock.getMockImplementation();
+    let resolveProjects: (response: Response) => void = () => {
+      throw new Error("Project request was not started");
+    };
+    const delayedProjects = new Promise<Response>((resolve) => {
+      resolveProjects = resolve;
+    });
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        String(input).endsWith("/projects") &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return delayedProjects;
+      }
+      return originalFetch!(input, init);
+    });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Choose an existing project" }),
+    );
+    const newProject = screen.getByRole("button", { name: "New project" });
+    newProject.focus();
+    expect(newProject).toHaveFocus();
+
+    resolveProjects(jsonResponse([project]));
+    expect(
+      await screen.findByRole("button", { name: "Open CPT Coral Study" }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(newProject).toHaveFocus());
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/projects") && options?.method === "POST",
+      ),
+    ).toHaveLength(0);
+  });
+
   it("offers existing projects from first-run help without creating or selecting data", async () => {
     window.localStorage.clear();
     const fetchMock = mockApi({ projects: [project] });
