@@ -594,6 +594,8 @@ def _reused_pose_training_result(
         ("best_checkpoint_path", "best_checkpoint_sha256"),
         ("last_checkpoint_path", "last_checkpoint_sha256"),
     ):
+        if digest_field in frozen_checkpoint and path_field not in frozen_checkpoint:
+            raise ValidationError("Recovered pose-training checkpoint artifact path is missing")
         if digest_field not in frozen_checkpoint:
             if is_current_snapshot and frozen_checkpoint.get(path_field) is not None:
                 raise ValidationError(
@@ -1368,6 +1370,8 @@ def create_pose_workflow_training_result(
     ):
         advertised = worker_manifest.get(path_field)
         if advertised is None:
+            if digest_field in worker_manifest:
+                raise ValidationError("Completed pose training checkpoint artifact path is missing")
             continue
         if not isinstance(advertised, str):
             raise ValidationError("Completed pose training checkpoint artifact path changed")
