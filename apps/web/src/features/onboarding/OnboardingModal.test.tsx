@@ -127,14 +127,13 @@ describe("onboarding local usability", () => {
       expect(button.hasAttribute("disabled")).toBe(true);
       fireEvent.click(button);
     }
-    expect(screen.getByText(/Select a project to open class/)).toBeTruthy();
+    expect(screen.getByText(/Select or create a project to open class/)).toBeTruthy();
     expect(onNavigate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Open System status" }));
     expect(onNavigate).toHaveBeenCalledTimes(1);
     expect(onNavigate).toHaveBeenCalledWith("system");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
-
 
   it("offers explicit project creation from first-run help without creating data", () => {
     const onNavigate = vi.fn();
@@ -150,7 +149,8 @@ describe("onboarding local usability", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Create a project" }));
-    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("create_project");
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith("create_project");
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onDismissPermanently).not.toHaveBeenCalled();
   });
@@ -170,7 +170,8 @@ describe("onboarding local usability", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Choose an existing project" }),
     );
-    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("projects");
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith("projects");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -184,7 +185,9 @@ describe("onboarding local usability", () => {
         onDismissPermanently={vi.fn()}
       />,
     );
-    expect(screen.queryByRole("button", { name: "Create a project" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Create a project" }),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Choose an existing project" }),
     ).toBeNull();
