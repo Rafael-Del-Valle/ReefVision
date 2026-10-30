@@ -136,6 +136,19 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         "nonmanifold_edges_per_face": 0.0,
     }
     assert "reconstruction_qc_rates_not_biological_condition" in expected["qc_warnings"]
+    assert expected["before_surface_area_to_bounding_diagonal_squared_ratio"] == (
+        pytest.approx(0.25)
+    )
+    assert expected["after_surface_area_to_bounding_diagonal_squared_ratio"] == (
+        pytest.approx(0.2)
+    )
+    assert expected["delta_surface_area_to_bounding_diagonal_squared_ratio"] == (
+        pytest.approx(-0.05)
+    )
+    assert (
+        "mesh_shape_ratio_change_is_orientation_sensitive_reconstruction_qc"
+        in expected["qc_warnings"]
+    )
     assert expected["delta_surface_area_m2"] == pytest.approx(0.5)
     assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
@@ -577,6 +590,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert inconclusive_response.status_code == 200, inconclusive_response.text
     inconclusive_result = inconclusive_response.json()
+    assert inconclusive_result["delta_surface_area_to_bounding_diagonal_squared_ratio"] is None
     assert inconclusive_result["delta_surface_area_m2"] is None
     assert inconclusive_result["registered_surface_centroid_separation_m"] is None
     assert (
@@ -2611,3 +2625,34 @@ def test_registered_centroid_rms_ratio_is_unknown_without_centroids() -> None:
     )
     assert result["registered_centroid_separation_to_registration_rms_ratio"] is None
     assert "registered_surface_centroid_comparison_unavailable" in result["qc_warnings"]
+
+
+@pytest.mark.parametrize("invalid", [-1.0, float("nan"), float("inf"), True, "0.25"])
+def test_longitudinal_shape_ratio_rejects_invalid_source_summary(invalid: object) -> None:
+    before = preview_from_request(
+        MeshPreviewRequest.model_validate(_mesh("early", "2026-10-01T00:00:00Z", 1))
+    )
+    after = preview_from_request(
+        MeshPreviewRequest.model_validate(_mesh("late", "2026-10-02T00:00:00Z", 2))
+    )
+    before["project_id"] = after["project_id"] = "shape-ratio-study"
+    before["surface_area_to_bounding_diagonal_squared_ratio"] = invalid
+    with pytest.raises(ValueError, match="Mesh shape ratios must be finite and nonnegative"):
+        compare_mesh_observations(before, after)
+
+
+def test_longitudinal_shape_ratio_missing_legacy_evidence_is_not_invented() -> None:
+    before = preview_from_request(
+        MeshPreviewRequest.model_validate(_mesh("early", "2026-10-01T00:00:00Z", 1))
+    )
+    after = preview_from_request(
+        MeshPreviewRequest.model_validate(_mesh("late", "2026-10-02T00:00:00Z", 2))
+    )
+    before["project_id"] = after["project_id"] = "shape-ratio-study"
+    before.pop("surface_area_to_bounding_diagonal_squared_ratio")
+    result = compare_mesh_observations(before, after)
+    assert result["before_surface_area_to_bounding_diagonal_squared_ratio"] is None
+    assert result["after_surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(0.2)
+    assert result["delta_surface_area_to_bounding_diagonal_squared_ratio"] is None
+    assert "mesh_shape_ratio_comparison_unavailable" in result["qc_warnings"]
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
