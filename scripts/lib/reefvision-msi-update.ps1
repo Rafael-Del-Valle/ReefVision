@@ -70,25 +70,37 @@ function Assert-ReefVisionCachedMsi {
 # Never bootstrap a Python environment or fetch packages in this resolver.
 function Resolve-ReefVisionProvenancePython {
     param([Parameter(Mandatory = $true)][string]$RepoPath)
-    $python = Join-Path $RepoPath '.venv\Scripts\python.exe'
-    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-        $command = Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if ($null -eq $command) {
-            throw "Python 3.11+ is required for offline MSI provenance verification. Install Python separately or retain the existing ReefVision .venv; no packages were downloaded."
+    # Prefer the repository interpreter, but do not let a broken or outdated
+    # .venv block an already installed, compatible offline system Python.
+    $candidates = @()
+    $venvPython = Join-Path $RepoPath '.venv\Scripts\python.exe'
+    if (Test-Path -LiteralPath $venvPython -PathType Leaf) {
+        $candidates += $venvPython
+    }
+    foreach ($command in @(Get-Command python.exe -All -CommandType Application -ErrorAction SilentlyContinue)) {
+        if (-not [string]::IsNullOrWhiteSpace($command.Source) -and $command.Source -notin $candidates) {
+            $candidates += $command.Source
         }
-        $python = $command.Source
     }
-    try {
-        $version = & $python -I -S -B -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>$null
+    foreach ($candidate in $candidates) {
+        $python = [System.IO.Path]::GetFullPath($candidate)
+        # Windows App Execution Aliases can open the Microsoft Store instead
+        # of running Python; never invoke them during an offline MSI install.
+        if ($python -match '(?i)[\\/]WindowsApps[\\/]') { continue }
+        if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { continue }
+        try {
+            $version = & $python -I -S -B -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>$null
+            if ($LASTEXITCODE -eq 0 -and [string]$version -match '^3\.(\d+)$' -and [int]$Matches[1] -ge 11) {
+                return $python
+            }
+        }
+        catch {
+            # A corrupt .venv or incompatible interpreter is not sufficient
+            # reason to stop searching installed, offline alternatives.
+            continue
+        }
     }
-    catch {
-        throw "The available Python cannot run isolated MSI provenance verification; no installation was attempted."
-    }
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '^3\.(\d+)$' -or [int]$Matches[1] -lt 11) {
-        throw "Python 3.11+ is required for isolated MSI provenance verification; no installation was attempted."
-    }
-    return $python
+    throw "Python 3.11+ is required for isolated MSI provenance verification. No usable local interpreter was found; no installation or package download was attempted."
 }
 
 function Assert-ReefVisionMsiPayload {
