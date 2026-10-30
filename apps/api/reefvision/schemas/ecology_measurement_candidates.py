@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -200,6 +201,51 @@ class EcologyProjectedEndpointChange(BaseModel):
     observed_timepoint_count: int = Field(ge=2)
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+
+    @model_validator(mode="after")
+    def require_replayable_endpoint_arithmetic(self) -> EcologyProjectedEndpointChange:
+        """Fail closed on edited saved-workflow endpoint arithmetic.
+
+        A typed source-linked change is still unverified projected geometry,
+        never an approved growth measurement or independent biological unit.
+        """
+        start = self.baseline_capture_timestamp_utc
+        end = self.final_capture_timestamp_utc
+        if (
+            start.tzinfo is None
+            or start.utcoffset() is None
+            or end.tzinfo is None
+            or end.utcoffset() is None
+        ):
+            raise ValueError("Projected endpoints require timezone-aware capture times")
+        start_utc = start.astimezone(UTC)
+        end_utc = end.astimezone(UTC)
+        if start_utc.date() >= end_utc.date():
+            raise ValueError("Projected endpoints require distinct ordered UTC sampling dates")
+        if self.baseline_image_id == self.final_image_id:
+            raise ValueError("Projected endpoints cannot reuse one source image")
+
+        elapsed = (end_utc - start_utc).total_seconds() / 86400.0
+        if not math.isclose(self.elapsed_days, elapsed, rel_tol=1e-9, abs_tol=0.0):
+            raise ValueError("Projected endpoint elapsed days do not match source times")
+        difference = self.final_value - self.baseline_value
+        percent = 100 * (difference / self.baseline_value)
+        expected = (
+            (self.absolute_change, difference),
+            (self.percent_change, percent),
+        )
+        if self.projected_absolute_change_per_day is not None:
+            expected += ((self.projected_absolute_change_per_day, difference / elapsed),)
+        if self.projected_baseline_percent_change_per_day is not None:
+            expected += ((self.projected_baseline_percent_change_per_day, percent / elapsed),)
+        if any(
+            not math.isfinite(derived)
+            or not math.isclose(actual, derived, rel_tol=1e-9, abs_tol=1e-12)
+            for actual, derived in expected
+        ):
+            raise ValueError("Projected endpoint arithmetic does not match source values")
+        return self
 
 
 class EcologyProjectedUnitSummary(BaseModel):
