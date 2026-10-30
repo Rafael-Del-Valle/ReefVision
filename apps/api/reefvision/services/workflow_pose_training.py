@@ -689,7 +689,11 @@ def _reused_pose_training_result(
             "last_checkpoint_path",
             "last_checkpoint_sha256",
         ):
-            if is_current_snapshot and field in frozen_checkpoint and field not in experiment_manifest:
+            if (
+                is_current_snapshot
+                and field in frozen_checkpoint
+                and field not in experiment_manifest
+            ):
                 raise ValidationError("Recovered pose-training experiment provenance changed")
             if field in experiment_manifest and experiment_manifest[field] != frozen_checkpoint.get(
                 field
