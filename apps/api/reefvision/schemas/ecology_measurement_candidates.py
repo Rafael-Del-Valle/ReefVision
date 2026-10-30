@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
+from reefvision.storage.datasets import canonical_json_sha256
 
 
 class EcologyMeasurementCandidate(BaseModel):
@@ -386,6 +387,47 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             raise ValueError(
                 "Current ecological source fingerprint requires four complete lineage digests"
             )
+        return self
+
+    @model_validator(mode="after")
+    def require_current_payload_fingerprint(self) -> EcologyMeasurementCandidatesResponse:
+        """Recheck the v0021 source digest when replaying persisted workflow data.
+
+        A valid digest proves only internal artifact consistency, not biological
+        review, independent sampling units, or trusted source ownership.
+        Earlier fingerprint contracts remain readable without reinterpretation.
+        """
+        if self.source_fingerprint_contract != "ecology-measurement-candidates-0021":
+            return self
+        if self.candidate_count != len(self.candidates):
+            raise ValueError("Current ecological candidate count differs from source rows")
+        payload = {
+            "algorithm_version": "ecology-measurement-candidates-0021",
+            "project_id": self.project_id,
+            "registry_history_sha256": self.source_registry_history_sha256,
+            "registry_image_evidence_sha256": self.source_image_evidence_sha256,
+            "registry_annotation_evidence_sha256": self.source_annotation_evidence_sha256,
+            "registry_calibration_evidence_sha256": self.source_calibration_evidence_sha256,
+            "candidates": [row.model_dump(mode="json") for row in self.candidates],
+            "sampling_date_qc": [
+                row.model_dump(mode="json") for row in self.sampling_date_qc
+            ],
+            "projected_visit_coverage": [
+                row.model_dump(mode="json") for row in self.projected_visit_coverage
+            ],
+            "projected_endpoint_changes": [
+                row.model_dump(mode="json") for row in self.projected_endpoint_changes
+            ],
+            "projected_unit_summaries": [
+                row.model_dump(mode="json") for row in self.projected_unit_summaries
+            ],
+            "projected_population_summaries": [
+                row.model_dump(mode="json") for row in self.projected_population_summaries
+            ],
+            "exclusions": [row.model_dump(mode="json") for row in self.exclusions],
+        }
+        if canonical_json_sha256(payload) != self.input_sha256:
+            raise ValueError("Current ecological candidate source fingerprint mismatch")
         return self
 
 
