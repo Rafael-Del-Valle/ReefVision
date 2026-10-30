@@ -131,11 +131,10 @@ class SpatialSourceAssetService:
         # The filename is original audit metadata. A later database edit must
         # not silently relabel the imported bytes as another file or format.
         # Reapply the import safety constraints without changing legacy case.
-        if (
-            not _safe_original_filename(asset.original_filename)
-            or Path(asset.original_filename).suffix.casefold().lstrip(".")
-            != asset.source_format
-        ):
+        if not _safe_original_filename(asset.original_filename):
+            raise ValidationError("Spatial source original filename metadata is invalid")
+        original_format = Path(asset.original_filename).suffix.casefold().lstrip(".")
+        if original_format != asset.source_format:
             raise ValidationError("Spatial source original filename metadata is invalid")
         # Bind the immutable original to its database identity, not merely to
         # a file somewhere in the project originals directory. Otherwise a
