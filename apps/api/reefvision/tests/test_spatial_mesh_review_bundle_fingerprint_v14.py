@@ -458,6 +458,48 @@ def test_checked_source_evidence_requires_actual_imported_bytes(
         source_payload_integrity_checked=True,
     )
     with pytest.raises(ValueError, match=message):
-        compare_mesh_observations(
-            before, after, reidentification_evidence=_review(before, after)
-        )
+        compare_mesh_observations(before, after, reidentification_evidence=_review(before, after))
+
+
+@pytest.mark.parametrize(
+    ("source_format", "source_digest", "source_size", "message"),
+    [
+        ("indexed_triangles", "a" * 64, None, "Inline indexed triangles"),
+        ("indexed_triangles", None, 10, "Inline indexed triangles"),
+        ("unrecognized_mesh", None, None, "Unsupported mesh source format"),
+    ],
+)
+def test_unchecked_source_metadata_cannot_fabricate_an_import(
+    source_format: str, source_digest: str | None, source_size: int | None, message: str
+) -> None:
+    """Unverified previews still cannot claim impossible source-file metadata."""
+    before = _observation("early", 1)
+    after = _observation("late", 2)
+    after["provenance"].update(
+        source_format=source_format,
+        source_payload_sha256=source_digest,
+        source_payload_size_bytes=source_size,
+        source_payload_integrity_checked=False,
+    )
+    with pytest.raises(ValueError, match=message):
+        compare_mesh_observations(before, after, reidentification_evidence=_review(before, after))
+
+
+def test_unchecked_import_keeps_source_evidence_provisional() -> None:
+    """An unverified digest may be recorded but is not a successful check."""
+    before = _observation("early", 1)
+    after = _observation("late", 2)
+    after["provenance"].update(
+        source_format="obj",
+        source_payload_sha256="a" * 64,
+        source_payload_size_bytes=42,
+        source_payload_integrity_checked=False,
+    )
+    result = compare_mesh_observations(
+        before, after, reidentification_evidence=_review(before, after)
+    )
+    bundle = result["provenance"]["review_evidence_bundle"]
+    assert bundle["after_source_payload_sha256"] == "a" * 64
+    assert bundle["after_source_payload_integrity_checked"] is False
+    assert result["provenance"]["calibration_verified"] is False
+    assert result["provenance"]["specimen_identity_verified"] is False
