@@ -154,15 +154,15 @@ function New-ReefVisionMsiArguments {
     # Start-Process joins ArgumentList into one command line. Embedded quotes
     # or newlines could escape an argument and alter the msiexec operation.
     foreach ($value in @($PackageOrProduct, $LogPath)) {
-        if ([string]::IsNullOrWhiteSpace($value) -or $value -match '[\r\n"]') {
-            throw 'MSI package/product and log arguments must be nonempty and cannot contain quotes or newlines.'
+        if ([string]::IsNullOrWhiteSpace($value) -or $value -match '[\r\n"]' -or $value -match '[\\/]$') {
+            throw 'MSI package/product and log arguments must be nonempty and cannot contain quotes, newlines, or trailing separators.'
         }
     }
     if ($Action -eq 'Install') {
         # Acceptance installs must never silently fall back to the real
         # default installation directory if the disposable root is omitted.
-        if ([string]::IsNullOrWhiteSpace($InstallRoot) -or $InstallRoot -match '[\r\n"]') {
-            throw 'MSI acceptance installation requires a safe, nonempty INSTALLDIR without quotes or newlines.'
+        if ([string]::IsNullOrWhiteSpace($InstallRoot) -or $InstallRoot -match '[\r\n"]' -or $InstallRoot -match '[\\/]$') {
+            throw 'MSI acceptance installation requires a safe, nonempty INSTALLDIR without quotes, newlines, or trailing separators.'
         }
     } elseif (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
         throw 'MSI uninstall must not supply INSTALLDIR.'
@@ -186,8 +186,8 @@ function New-ReefVisionMsiAdministrativeArguments {
         [Parameter(Mandatory = $true)][string]$LogPath
     )
     foreach ($value in @($PackagePath, $ExtractRoot, $LogPath)) {
-        if ([string]::IsNullOrWhiteSpace($value) -or $value.Contains('"')) {
-            throw 'MSI administrative extraction paths must be nonempty and cannot contain quotes.'
+        if ([string]::IsNullOrWhiteSpace($value) -or $value -match '[\r\n"]' -or $value -match '[\\/]$') {
+            throw 'MSI administrative extraction paths must be nonempty and cannot contain quotes, newlines, or trailing separators.'
         }
     }
     return @(

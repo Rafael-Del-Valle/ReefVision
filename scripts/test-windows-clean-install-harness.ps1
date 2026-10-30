@@ -78,6 +78,10 @@ Assert-Throws { New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:
 Assert-Throws { New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00000000-0000-0000-0000-000000000000}' -InstallRoot 'C:\rv-test' -LogPath 'C:\uninstall.log' | Out-Null } 'Uninstall must not accept INSTALLDIR.'
 Assert-Throws { New-ReefVisionMsiArguments -Action Install -PackageOrProduct "C:\build\`nReefVision.msi" -InstallRoot 'C:\rv-test' -LogPath 'C:\install.log' | Out-Null } 'Newline in MSI package argument must fail.'
 Assert-Throws { New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00000000-0000-0000-0000-000000000000}' -LogPath "C:\logs\`r`nuninstall.log" | Out-Null } 'Newline in MSI log argument must fail.'
+# Windows command-line parsers can treat a backslash immediately before a
+# closing quote as an escape, so reject trailing separators in quoted arguments.
+Assert-Throws { New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -InstallRoot 'C:\rv-test\' -LogPath 'C:\install.log' | Out-Null } 'Trailing slash in INSTALLDIR must fail.'
+Assert-Throws { New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -InstallRoot 'C:\rv-test' -LogPath 'C:\logs\' | Out-Null } 'Trailing slash in MSI log path must fail.'
 Assert-True ((ConvertTo-ReefVisionVersionString ' 1.0.3 ') -eq '1.0.3') 'MSI version comparison did not normalize COM padding.'
 
 
@@ -90,6 +94,9 @@ Assert-True ($adminArgs[1] -ceq '"C:\camera dataset\ReefVision.msi"') 'MSI path 
 Assert-True ($adminArgs[3] -ceq 'TARGETDIR="C:\rv validation\extract"') 'Administrative extraction root containing spaces must be quoted.'
 Assert-True ($adminArgs[5] -ceq '"C:\User Name\Temp\msi.log"') 'MSI log path containing spaces must be quoted.'
 Assert-Throws { New-ReefVisionMsiAdministrativeArguments -PackagePath 'C:\unsafe"payload.msi' -ExtractRoot 'C:\rv-test' -LogPath 'C:\msi.log' | Out-Null } 'MSI path containing quotes must be rejected.'
+Assert-Throws { New-ReefVisionMsiAdministrativeArguments -PackagePath ([string]::Concat('C:\build', [char]10, 'ReefVision.msi')) -ExtractRoot 'C:\rv-test' -LogPath 'C:\msi.log' | Out-Null } 'Administrative MSI path containing newline must fail.'
+Assert-Throws { New-ReefVisionMsiAdministrativeArguments -PackagePath 'C:\build\ReefVision.msi' -ExtractRoot 'C:\rv-test\' -LogPath 'C:\msi.log' | Out-Null } 'Administrative extraction root with trailing slash must fail.'
+Assert-Throws { New-ReefVisionMsiAdministrativeArguments -PackagePath 'C:\build\ReefVision.msi' -ExtractRoot 'C:\rv-test' -LogPath ([string]::Concat('C:\logs', [char]13, [char]10, 'msi.log')) | Out-Null } 'Administrative MSI log containing newline must fail.'
 
 # MSI Media table CAB contract: fail closed on missing, unexpected, duplicate,
 # or path-traversing payloads before any administrative extraction is attempted.
