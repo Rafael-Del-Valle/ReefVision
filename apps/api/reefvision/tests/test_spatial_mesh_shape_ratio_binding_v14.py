@@ -38,9 +38,7 @@ def test_longitudinal_rejects_forged_shape_ratio(tampered_ratio: float) -> None:
     )
     before["project_id"] = after["project_id"] = "morphology-study"
     after["surface_area_to_bounding_diagonal_squared_ratio"] = tampered_ratio
-    with pytest.raises(
-        ValueError, match="Mesh shape ratio contradicts calibrated area and extent"
-    ):
+    with pytest.raises(ValueError, match="Mesh shape ratio contradicts calibrated area and extent"):
         compare_mesh_observations(before, after)
 
 
@@ -58,9 +56,7 @@ def test_shape_ratio_binding_standalone_and_saved_graph(client: TestClient) -> N
     assert expected["before_surface_area_to_bounding_diagonal_squared_ratio"] == (
         pytest.approx(0.25)
     )
-    assert expected["after_surface_area_to_bounding_diagonal_squared_ratio"] == (
-        pytest.approx(0.2)
-    )
+    assert expected["after_surface_area_to_bounding_diagonal_squared_ratio"] == (pytest.approx(0.2))
     assert expected["delta_surface_area_to_bounding_diagonal_squared_ratio"] == (
         pytest.approx(-0.05)
     )
@@ -140,12 +136,29 @@ def test_shape_ratio_binding_standalone_and_saved_graph(client: TestClient) -> N
     assert artifact["before_surface_area_to_bounding_diagonal_squared_ratio"] == (
         pytest.approx(0.25)
     )
-    assert artifact["after_surface_area_to_bounding_diagonal_squared_ratio"] == (
-        pytest.approx(0.2)
-    )
+    assert artifact["after_surface_area_to_bounding_diagonal_squared_ratio"] == (pytest.approx(0.2))
     assert artifact["measurement_status"] == expected["measurement_status"]
     assert artifact["provenance"]["specimen_identity_verified"] is False
     assert (
         "mesh_shape_ratio_change_is_orientation_sensitive_reconstruction_qc"
         in artifact["qc_warnings"]
     )
+
+
+def test_shape_ratio_binding_rejects_overflow_and_underflow_bypasses() -> None:
+    before = preview_from_request(
+        MeshPreviewRequest.model_validate(_mesh("early", "2026-10-01T12:00:00Z", 1))
+    )
+    after = preview_from_request(
+        MeshPreviewRequest.model_validate(_mesh("late", "2026-10-02T12:00:00Z", 2))
+    )
+    before["project_id"] = after["project_id"] = "morphology-study"
+    # The old (area / extent) / extent check silently skipped comparisons
+    # when intermediate arithmetic overflowed to infinity or underflowed
+    # to zero. These finite inputs must not certify a forged shape ratio.
+    for area, extent in ((1e300, 1e-300), (1e-300, 1e300)):
+        tampered = dict(before)
+        tampered["surface_area_m2"] = area
+        tampered["axis_aligned_bounding_box_diagonal_m"] = extent
+        with pytest.raises(ValueError, match="Mesh shape ratio contradicts"):
+            compare_mesh_observations(tampered, after)
