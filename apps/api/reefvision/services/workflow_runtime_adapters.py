@@ -893,6 +893,7 @@ def _ecology_measurement_csv_export(
         EcologyMeasurementCandidatesResponse,
     )
     from reefvision.services.ecology_candidate_measurements_export import (
+        MEASUREMENT_CSV_SCHEMA_VERSION,
         render_ecology_measurements_csv,
     )
 
@@ -915,11 +916,17 @@ def _ecology_measurement_csv_export(
             "port_id": "csv",
             "data_type": "ecology_measurement_csv",
             "payload": {
-                "schema_version": "ecology-measurement-export-0001",
+                "schema_version": MEASUREMENT_CSV_SCHEMA_VERSION,
                 "project_id": project_id,
                 "source_input_sha256": source.input_sha256,
                 "report_sha256": report.report_sha256,
                 "source_fingerprint_rechecked": fingerprint_rechecked,
+                "source_fingerprint_contract": source.source_fingerprint_contract,
+                "source_registry_history_sha256": source.source_registry_history_sha256,
+                "source_image_evidence_sha256": source.source_image_evidence_sha256,
+                "source_annotation_evidence_sha256": source.source_annotation_evidence_sha256,
+                "source_calibration_evidence_sha256": source.source_calibration_evidence_sha256,
+                "independent_unit_inference_allowed": False,
                 "csv_text": csv_text,
                 "evidence_level": "linked_unverified",
                 "review_gate": "scientist_review_required",
