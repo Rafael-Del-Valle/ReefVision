@@ -652,6 +652,34 @@ def _reused_pose_training_result(
     experiment = session.scalar(
         select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
     )
+    if experiment is not None:
+        # A saved workflow replay exposes this experiment ID to downstream
+        # research. Verify the registry still describes the same frozen run.
+        if (
+            experiment.project_id != run.project_id
+            or experiment.dataset_manifest_sha256 != run.dataset_manifest_sha256
+            or experiment.split_manifest_sha256 != run.split_manifest_sha256
+            or experiment.task != run.task
+            or experiment.provider_id != run.provider_id
+            or experiment.architecture != run.architecture
+        ):
+            raise ValidationError("Recovered pose-training experiment provenance changed")
+
+        # Older experiment records may predate checkpoint digests. Preserve
+        # their readability, but never accept conflicting recorded evidence.
+        experiment_manifest = dict(experiment.artifact_manifest_json or {})
+        for field in (
+            "result_checkpoint_path",
+            "result_checkpoint_sha256",
+            "best_checkpoint_path",
+            "best_checkpoint_sha256",
+            "last_checkpoint_path",
+            "last_checkpoint_sha256",
+        ):
+            if field in experiment_manifest and experiment_manifest[field] != frozen_checkpoint.get(
+                field
+            ):
+                raise ValidationError("Recovered pose-training experiment provenance changed")
 
     validation_mode = str(dict(run.evaluation_config_json or {}).get("validation_mode") or "none")
 
