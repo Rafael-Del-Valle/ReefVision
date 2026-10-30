@@ -14,7 +14,7 @@ from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.model_agreement import PairedCountComparisonResponse
 from reefvision.services.ecology_candidate_report_export import _csv_identifier
 
-_EXPORT_VERSION = "ecology-paired-count-csv-0004"
+PAIRED_COUNT_CSV_SCHEMA_VERSION = "ecology-paired-count-csv-0004"
 _COLUMNS = (
     "export_schema_version",
     "source_input_sha256",
@@ -106,7 +106,7 @@ def render_paired_count_csv(comparison: PairedCountComparisonResponse) -> str:
         for organism in unit.observation_counts_by_organism
     }
     common = {
-        "export_schema_version": _EXPORT_VERSION,
+        "export_schema_version": PAIRED_COUNT_CSV_SCHEMA_VERSION,
         "source_input_sha256": checked.analysis_provenance.canonical_input_sha256,
         "algorithm_version": checked.analysis_provenance.algorithm_version,
         "evidence_level": checked.evidence_level,

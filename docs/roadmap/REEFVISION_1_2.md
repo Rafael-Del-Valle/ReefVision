@@ -4083,3 +4083,31 @@ Full exact-head CI, verified longitudinal calibration/identity, registered
 experimental designs, migration reconciliation, representative scientific
 acceptance and physical Windows GUI/MSI tests remain required.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Exact-head backend CI recovery: executable CSV planner and schema parity (2026-10-29)
+
+Pre-edit 1.2 HEAD `122f7d6a5833270b75e1db8bb54776690aae8f59`
+completed 17/19 Actions workflows successfully. The two failing backend
+workflows executed the full pytest suite (2,094 passed, 32 skipped) and
+identified three regressions: a missing `ecology_paired_count_csv_export`
+planner action, a stale test expecting the detailed source-roster message
+instead of the deliberately generic integrity error, and a stale test
+expecting `finite` rather than the current IEEE-754 safe-integer validation
+message. The CSV workflow adapter also persisted schema `0003` while the
+standalone CSV renderer and saved-workflow acceptance expected `0004`.
+
+The planner now advertises the existing executable CSV node action. Both
+standalone CSV rows and persisted workflow artifacts share one version
+constant, `PAIRED_COUNT_CSV_SCHEMA_VERSION`, preventing future schema drift.
+The two test assertions now reflect the actual fail-closed validation and
+non-disclosing public error contract. The existing saved executable workflow
+regression exercises typed ports, plan, persisted output, exact CSV parity,
+source SHA-256 and rejection by verified-dataset ports. No new biological
+claims, identity verification, calibration, model weights, migration or
+cross-version changes are introduced.
+
+These edits require **new-head CI** confirmation; repository pytest/Ruff
+cannot run locally in this environment because GitHub DNS blocks checkout.
+Authenticated longitudinal measurement, real study-design review, migration
+reconciliation and physical installed Windows GUI/MSI acceptance remain
+outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**

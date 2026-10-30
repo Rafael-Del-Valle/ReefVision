@@ -1056,7 +1056,10 @@ def _ecology_paired_count_csv_export(
     import hashlib
 
     from reefvision.schemas.model_agreement import PairedCountComparisonResponse
-    from reefvision.services.ecology_paired_count_export import render_paired_count_csv
+    from reefvision.services.ecology_paired_count_export import (
+        PAIRED_COUNT_CSV_SCHEMA_VERSION,
+        render_paired_count_csv,
+    )
 
     del session, settings
     runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
@@ -1072,7 +1075,7 @@ def _ecology_paired_count_csv_export(
             "port_id": "csv",
             "data_type": "paired_count_comparison_csv",
             "payload": {
-                "schema_version": "ecology-paired-count-csv-0003",
+                "schema_version": PAIRED_COUNT_CSV_SCHEMA_VERSION,
                 "project_id": project_id,
                 "source_input_sha256": (comparison.analysis_provenance.canonical_input_sha256),
                 "source_record_ids": comparison.analysis_provenance.source_record_ids,

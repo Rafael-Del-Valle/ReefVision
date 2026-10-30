@@ -125,7 +125,7 @@ def test_forged_verification_and_nonfinite_counts_rejected() -> None:
         PairedCountComparisonRequest(reference_kind="human_consensus", pairs=data)
     data[0].pop("verified")
     data[0]["model_count"] = float("inf")
-    with pytest.raises(SchemaValidationError, match="finite"):
+    with pytest.raises(SchemaValidationError, match="safe-integer range"):
         PairedCountComparisonRequest(reference_kind="human_consensus", pairs=data)
 
 

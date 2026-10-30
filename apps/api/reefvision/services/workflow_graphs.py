@@ -145,6 +145,9 @@ _ACTIONS: dict[str, str] = {
     "ecology_paired_count_comparison": (
         "Compare human-model counts without claiming verified agreement."
     ),
+    "ecology_paired_count_csv_export": (
+        "Export source-linked human-model CSV with unverified evidence and review restrictions."
+    ),
 }
 
 

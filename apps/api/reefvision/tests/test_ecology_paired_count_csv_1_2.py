@@ -341,7 +341,8 @@ def test_csv_rechecks_tampered_results_and_provenance() -> None:
             )
         }
     )
-    with pytest.raises(ValidationError, match="source roster"):
+    # The public exporter deliberately does not disclose internal provenance details.
+    with pytest.raises(ValidationError, match="source artifact failed integrity checks"):
         render_paired_count_csv(bad_roster)
 
 
