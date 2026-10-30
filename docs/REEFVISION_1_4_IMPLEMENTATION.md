@@ -766,3 +766,17 @@ persisted typed `mesh_longitudinal_comparison` Workflow Builder node share
 this behavior; regression tests cover saved-artifact parity, malformed and
 legacy evidence, and review-based withholding. This does **not** certify
 calibration, specimen identity, registration, or biological condition.
+
+### Shape-ratio numeric underflow safeguard (Track C)
+
+The complete-mesh dimensionless surface-area/bounding-diagonal-squared
+ratio is withheld as `null` if a nonzero source-frame diagonal is so small
+that squaring it underflows to zero in floating-point arithmetic. Such cases
+carry the explicit `mesh_shape_ratio_unavailable_numeric_underflow` QC warning.
+This avoids a divide-by-zero error and, more importantly, avoids claiming a
+precise geometric descriptor where the floating-point input cannot support it.
+The standalone mesh endpoint and persisted typed `mesh_surface_preview`
+Workflow Builder node use the same calculation and retain the original
+unverified calibration and geometry provenance. This safeguard does **not**
+validate physical calibration, reconstruct missing triangles, or establish
+biological condition or longitudinal growth.
