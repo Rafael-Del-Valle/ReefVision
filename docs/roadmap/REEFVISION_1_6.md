@@ -1,3 +1,10 @@
+## 2026-10-30 — First-run project handoff regression and CI formatting gate (Track D)
+
+- Inspected draft PR #77, master issue #76, version branches, existing onboarding/project-management implementation and exact-head Actions run 41003937711. Backend lint, mypy, pytest and migrations passed; frontend stopped at Prettier in `OnboardingModal.test.tsx` before typecheck, tests, E2E or build.
+- Corrected the exact frontend formatting failure. Added application-level regressions for first-run **Choose an existing project** (show existing projects, no project creation or create dialog) and **Create a project** (no POST before explicit form submit; exactly one POST with the selected project name and blank template after submit). These test the existing project-management handoff without adding another workflow subsystem.
+- Existing typed, saved, executable QC Workflow Builder and manual researcher-review gates are unchanged. No migration, project records, scientific assets or local model weights were modified.
+- **HOLD:** new-head CI, 1.1/1.6 Alembic 0038 collision, native Windows MSI upgrade/rollback and installed-GUI, representative biological-data acceptance. A GitHub-hosted frontend test pass is not equivalent to Windows installed-GUI validation.
+
 ## 2026-10-29 — First-run project access from onboarding (Track D)
 
 - Audited the existing 1.6 onboarding, project launcher, class visibility, QC
