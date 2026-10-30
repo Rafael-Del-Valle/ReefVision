@@ -17,13 +17,13 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
-from reefvision.services.ecology_candidate_report_export import render_ecology_series_qc_csv
 from reefvision.services.ecology_candidate_measurements_export import (
     MEASUREMENT_CSV_SCHEMA_VERSION,
     _utc_capture,
     four_layer_source_digests_present,
     render_ecology_measurements_csv,
 )
+from reefvision.services.ecology_candidate_report_export import render_ecology_series_qc_csv
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
 from reefvision.tests.test_ecology_projected_visit_coverage_1_2 import _source
@@ -347,7 +347,7 @@ def test_current_lineage_digest_contract_fails_closed_for_api_and_saved_artifact
                 with pytest.raises(SchemaValidationError, match="four complete lineage"):
                     EcologyMeasurementCandidatesResponse.model_validate(tampered)
             # The exporter must also reject unchecked model_copy mutations,
-            # including an artifact with an otherwise recomputed source hash.
+            # without relying only on a later source-fingerprint comparison.
             source = EcologyMeasurementCandidatesResponse.model_validate(payload)
             bypass = source.model_copy(update={field: invalid})
             with pytest.raises(ValidationError, match="four complete lineage"):
