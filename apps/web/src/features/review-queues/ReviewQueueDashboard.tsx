@@ -49,6 +49,7 @@ type QueueMutationScope = {
   projectId: string;
   scopeType: "project" | "dataset_version";
   datasetVersionId: string;
+  navigationEpoch: number;
 };
 
 type CreateQueueRequest = QueueMutationScope & {
@@ -61,7 +62,8 @@ function sameQueueScope(a: QueueMutationScope, b: QueueMutationScope): boolean {
   return (
     a.projectId === b.projectId &&
     a.scopeType === b.scopeType &&
-    a.datasetVersionId === b.datasetVersionId
+    a.datasetVersionId === b.datasetVersionId &&
+    a.navigationEpoch === b.navigationEpoch
   );
 }
 
@@ -83,6 +85,7 @@ export function ReviewQueueDashboard({
     projectId: project.id,
     scopeType: "project",
     datasetVersionId: "",
+    navigationEpoch: 0,
   });
   const [scopeProjectId, setScopeProjectId] = useState(project.id);
   const [scopeType, setScopeType] = useState<"project" | "dataset_version">(
@@ -111,7 +114,19 @@ export function ReviewQueueDashboard({
 
   // Mutation completions must never select a queue from a project or dataset
   // that the researcher has since navigated away from.
-  currentScope.current = { projectId: project.id, scopeType, datasetVersionId };
+  const previousScope = currentScope.current;
+  const nextScope = {
+    projectId: project.id,
+    scopeType,
+    datasetVersionId,
+    navigationEpoch: previousScope.navigationEpoch,
+  };
+  if (!sameQueueScope(previousScope, nextScope)) {
+    // Even A -> B -> A is a new navigation. A response from the first
+    // visit must not replace the researcher's newer queue selection.
+    nextScope.navigationEpoch += 1;
+  }
+  currentScope.current = nextScope;
 
   // A dataset-version scope without a selected version is not a project scope.
   const scopeReady =
@@ -467,9 +482,7 @@ export function ReviewQueueDashboard({
                 }
                 onClick={() =>
                   createQueue.mutate({
-                    projectId: project.id,
-                    scopeType,
-                    datasetVersionId,
+                    ...currentScope.current,
                     sourceRunId: selectedRunId,
                     weights: { ...weights },
                     reviewBelowConfidence,
@@ -484,9 +497,7 @@ export function ReviewQueueDashboard({
                   className="secondary"
                   onClick={() =>
                     regenerateQueue.mutate({
-                      projectId: project.id,
-                      scopeType,
-                      datasetVersionId,
+                      ...currentScope.current,
                       queueId: selectedQueue.id,
                     })
                   }
