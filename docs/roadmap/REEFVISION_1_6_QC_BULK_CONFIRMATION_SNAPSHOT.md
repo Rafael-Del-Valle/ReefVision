@@ -16,7 +16,7 @@ changed, allowing a different bulk action scope than the one reviewed.
 
 Bind both manual triage and individual-inspection confirmations to a local
 snapshot containing queue ID, requested action, selected item IDs, image IDs,
-rank positions and review states. A changed snapshot immediately unchecks the
+rank positions, review states, source input checksums, QC scores, highest QC\nseverity, and item update timestamps. Even when item IDs and eligibility stay\nunchanged, a background scientific-evidence refresh requires new confirmation. A changed snapshot immediately unchecks the
 controls and disables submission; changing away and back also clears old
 confirmation tokens. The researcher must reconfirm the currently visible
 eligible items. This is a UI safety guard, not an authorization substitute:
@@ -27,14 +27,14 @@ and the separate explicit human review gates remain authoritative.
 
 Component tests simulate an in-place background item refresh while two skip
 items remain eligible, then a completion candidate becoming ineligible and
-returning. Both cases require fresh confirmation and forbid implicit API calls.
+returning. Both cases require fresh confirmation and forbid implicit API calls. Four\nparameterized completion regressions additionally simulate checksum, score,\nseverity and timestamp changes without altering the selected item IDs or review\nstate. Returning to an earlier snapshot cannot restore approval.
 The existing explicit confirmed-completion and same-request-ID retry tests
 remain in place. No new scientific workflow node is appropriate for this
 manual UI confirmation: the existing executable `qc_review_queue` node,
 typed dimensionless score artifact, saved graphs/runs, provenance and review
 gates are unchanged.
 
-Release HOLD until exact-head frontend formatting/type/Vitest/E2E/build,
+The previous head `c2682782` failed frontend Prettier on a single checkbox\ncallback; backend CI passed. The exact formatter change is included with this\nevidence-refresh hardening. No native GUI or Windows MSI acceptance is claimed.\n\nRelease HOLD until exact-head frontend formatting/type/Vitest/E2E/build,
 backend CI, migration lineage integration, native Windows MSI upgrade/rollback,
 installed-GUI and representative biological-data acceptance are verified.
 No merge, release, paid hosting, pretrained weights or user-data deletion.
