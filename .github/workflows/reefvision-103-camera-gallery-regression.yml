@@ -96,7 +96,38 @@ jobs:
           # assertions. --locked prevents unreviewed dependency resolution.
           cargo --version
           cargo fmt --manifest-path apps/web/src-tauri/Cargo.toml -- --check
-          cargo test --manifest-path apps/web/src-tauri/Cargo.toml --locked
+          if ($LASTEXITCODE -ne 0) { throw "Rust formatting check failed." }
+
+          # Tauri validates every configured resource path even for debug
+          # unit tests. Release resources are generated separately by the
+          # Windows packaging pipeline and must never be synthesized there.
+          # Provide disposable, explicitly non-release placeholders ONLY for
+          # this cargo test invocation. build.rs still requires the genuine
+          # PyInstaller backend and model catalog when PROFILE=release.
+          $resourceDirs = @(
+            ".desktop/release-1.0.3/backend",
+            ".desktop/release-1.0.3/bundled-models"
+          )
+          foreach ($dir in $resourceDirs) {
+            if (Test-Path -LiteralPath $dir) {
+              throw "Unexpected pre-existing staged resource directory: $dir"
+            }
+          }
+          try {
+            foreach ($dir in $resourceDirs) {
+              New-Item -ItemType Directory -Path $dir -Force | Out-Null
+              Set-Content -LiteralPath (Join-Path $dir "CI-DEBUG-ONLY.txt") -Value "Not a release resource. Debug Rust unit tests only."
+            }
+            cargo test --manifest-path apps/web/src-tauri/Cargo.toml --locked
+            if ($LASTEXITCODE -ne 0) { throw "Tauri Rust unit tests failed." }
+          }
+          finally {
+            foreach ($dir in $resourceDirs) {
+              if (Test-Path -LiteralPath $dir) {
+                Remove-Item -LiteralPath $dir -Recurse -Force
+              }
+            }
+          }
 
   chromium-initial-image-gallery:
     name: Chromium first image, wheel navigation, and gallery
