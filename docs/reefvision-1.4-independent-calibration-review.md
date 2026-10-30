@@ -98,3 +98,18 @@ existing exact-asset binding and legacy-unbound QC behavior.
 This prevents a misleading source-asset provenance claim. It does not
 establish authenticated reviewers, durable versioned review records, verified
 physical calibration, or biological specimen identity.
+
+## Saved-workflow stale review matrix
+
+The imported-original replay regression now tests six changes to a previously
+reviewed source: meters-per-unit scale, calibration method, calibration evidence,
+relative scale uncertainty, specimen label, and coordinate-frame label. Each
+case is exercised against both the standalone endpoint and a **saved, executed**
+typed Workflow Builder graph for OBJ mesh and ASCII PLY point-cloud originals,
+with both asset-bound and legacy-unbound independent reviews. A mismatch must
+fail execution without publishing a measurement artifact. The regression also
+checks that valid reviewed results replay with identical provisional provenance.
+
+These tests verify that saved graph execution cannot silently reuse stale
+caller-supplied review evidence. They do not authenticate the reviewer, establish
+calibration accuracy, or supply persistent, versioned review records.
