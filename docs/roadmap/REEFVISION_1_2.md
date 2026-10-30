@@ -4331,3 +4331,29 @@ registration, or independent replication.
 scientist-reviewed longitudinal measurements and design approval, migration
 reconciliation with unmerged 1.1, representative biological acceptance and
 installed Windows MSI/GUI testing. 1.3 remains unstarted.
+
+
+## Per-revision source-evidence traceability for design corrections (2026-10-30)
+
+The existing project-owned identity-history CSV now enumerates the exact
+image-evidence, reviewed-annotation-evidence and frozen-calibration-evidence
+link IDs attached to **each identity revision**. Three source-collection
+SHA-256 digests are included for reproducibility. A design-correction row
+separately lists all earlier-revision image-evidence link IDs for that organism,
+so a tank/colony reassignment or identity correction exposes earlier evidence
+that requires a scientist to reconsider. A missing link is represented as an
+empty JSON array; unchanged revisions leave the prior-evidence warning blank.
+The exporter revalidates typed source-link provenance to reject in-memory
+tampering before writing these new columns.
+
+The same existing executable `ecology_identity_registry_source` Workflow
+Builder node persists the typed registry used by the standalone CSV endpoint;
+regression coverage exercises a real image -> human annotation -> calibration
+link chain, a later study-design correction, saved-workflow parity, and
+tampered image/annotation/calibration links. No parallel node or migration is
+introduced. These are **linked but unverified source claims**, not scientist
+approval of organism identity, true experimental-unit independence, or
+verified longitudinal measurements. The review gate remains
+`scientist_review_required`. Real-data acceptance, 1.1 migration-lineage
+reconciliation, full exact-head CI and installed Windows GUI testing remain
+required.

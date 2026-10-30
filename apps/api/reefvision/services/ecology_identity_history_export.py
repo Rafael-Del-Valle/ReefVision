@@ -10,6 +10,8 @@ import csv
 import json
 from io import StringIO
 
+from pydantic import ValidationError as SchemaValidationError
+
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_identity import (
     EcologyCrossUnitParentDetail,
@@ -105,6 +107,13 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
     if snapshot_digest != registry.snapshot_sha256:
         raise ValidationError("Ecological identity latest snapshot fingerprint mismatch")
 
+    # A typed object may have been modified after deserialization. Recheck
+    # linked source evidence before exporting a claimed provenance trail.
+    try:
+        EcologyIdentityRegistryResponse.model_validate(registry.model_dump(mode="json"))
+    except SchemaValidationError as exc:
+        raise ValidationError("Ecological identity source evidence integrity check failed") from exc
+
     # Old saved artifacts remain explicitly unknown, not silently stable.
     if registry.design_history_status != "history_unavailable":
         changes = derive_ecology_design_changes(history)
@@ -161,6 +170,21 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
     elif registry.historical_cross_unit_parent_details:
         raise ValidationError("Unavailable historical parent audit cannot claim details")
 
+    image_ids_by_revision: dict[tuple[str, int], list[str]] = {}
+    for link in registry.image_evidence_links:
+        image_ids_by_revision.setdefault((link.organism_key, link.identity_revision), []).append(
+            link.id
+        )
+    annotation_ids_by_image: dict[str, list[str]] = {}
+    for link in registry.annotation_evidence_links:
+        annotation_ids_by_image.setdefault(link.image_evidence_id, []).append(link.id)
+    calibration_ids_by_annotation: dict[str, list[str]] = {}
+    for link in registry.calibration_evidence_links:
+        calibration_ids_by_annotation.setdefault(link.annotation_evidence_id, []).append(link.id)
+
+    # A design correction can affect the interpretation of source links made
+    # under earlier identity revisions; flag them for review, not reassignment.
+    previous_image_ids_by_organism: dict[str, list[str]] = {}
     output = StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(
@@ -186,9 +210,37 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             "cross_unit_parent_details_json",
             "historical_cross_unit_parent_audit_status",
             "historical_cross_unit_parent_details_json",
+            "image_evidence_sha256",
+            "annotation_evidence_sha256",
+            "calibration_evidence_sha256",
+            "revision_image_evidence_ids_json",
+            "revision_annotation_evidence_ids_json",
+            "revision_calibration_evidence_ids_json",
+            "design_change_prior_image_evidence_ids_json",
         )
     )
     for row in history:
+        revision_key = (row.organism_key, row.revision)
+        image_ids = sorted(image_ids_by_revision.get(revision_key, []))
+        annotation_ids = sorted(
+            {
+                annotation_id
+                for image_id in image_ids
+                for annotation_id in annotation_ids_by_image.get(image_id, [])
+            }
+        )
+        calibration_ids = sorted(
+            {
+                calibration_id
+                for annotation_id in annotation_ids
+                for calibration_id in calibration_ids_by_annotation.get(annotation_id, [])
+            }
+        )
+        prior_image_ids = sorted(previous_image_ids_by_organism.get(row.organism_key, []))
+        design_changed = (
+            revision_key in design_events_by_revision
+            and registry.design_history_status != "history_unavailable"
+        )
         writer.writerow(
             (
                 registry.project_id,
@@ -229,6 +281,14 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
+                registry.image_evidence_sha256 or "",
+                registry.annotation_evidence_sha256 or "",
+                registry.calibration_evidence_sha256 or "",
+                json.dumps(image_ids, separators=(",", ":")),
+                json.dumps(annotation_ids, separators=(",", ":")),
+                json.dumps(calibration_ids, separators=(",", ":")),
+                json.dumps(prior_image_ids, separators=(",", ":")) if design_changed else "",
             )
         )
+        previous_image_ids_by_organism.setdefault(row.organism_key, []).extend(image_ids)
     return output.getvalue()

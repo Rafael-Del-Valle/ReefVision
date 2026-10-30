@@ -161,9 +161,12 @@ def test_design_reassignment_reversion_and_saved_workflow_parity(client: TestCli
     assert exported_events[0]["previous_experimental_unit_id"] == "tank-A"
     assert exported_events[0]["current_experimental_unit_id"] == "tank-B"
     assert exported_events[1]["current_experimental_unit_id"] == "tank-A"
-    assert render_ecology_identity_history_csv(
-        EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
-    ) == exported.text
+    assert (
+        render_ecology_identity_history_csv(
+            EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
+        )
+        == exported.text
+    )
 
 
 def test_parent_change_is_flagged_and_not_promoted_to_verified(client: TestClient) -> None:

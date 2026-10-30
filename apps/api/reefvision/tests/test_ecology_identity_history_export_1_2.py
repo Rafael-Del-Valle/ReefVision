@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 from typing import Any, cast
 
@@ -16,6 +17,12 @@ from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
 from reefvision.services.ecology_identity_history_export import render_ecology_identity_history_csv
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
+    _link_calibration,
+    _prepared_annotation,
+    _save_calibration,
+)
+from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
 
 
 def _register(client: TestClient, project_id: str, organism_key: str, **kwargs: Any) -> None:
@@ -167,3 +174,77 @@ def test_identity_history_csv_escapes_spreadsheet_formulas(client: TestClient) -
     assert row["experimental_unit_id"] == "'=2+2"
     assert row["reason"] == "'=HYPERLINK(1,2)"
     assert row["review_gate"] == "scientist_review_required"
+
+
+def test_history_csv_traces_revision_sources_and_prior_design_change_evidence(
+    client: TestClient,
+) -> None:
+    project_id, image_id, annotation = _prepared_annotation(client)
+    _save_calibration(client, image_id)
+    linked = _link_calibration(client, project_id, annotation)
+    assert linked.status_code == 201, linked.text
+
+    revised = client.post(
+        f"/api/v1/projects/{project_id}/ecology/organisms/colony-a/revisions",
+        json={
+            "expected_revision": 1,
+            "kind": "colony",
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-A",
+            "reason": "Correct study design after checking original tank records",
+        },
+    )
+    assert revised.status_code == 201, revised.text
+    url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
+    response = client.get(url)
+    assert response.status_code == 200, response.text
+    registry = response.json()
+    csv_response = client.get(f"{url}/history.csv")
+    assert csv_response.status_code == 200, csv_response.text
+    rows = list(csv.DictReader(StringIO(csv_response.text)))
+    assert len(rows) == 2
+
+    image_id_link = registry["image_evidence_links"][0]["id"]
+    annotation_id_link = registry["annotation_evidence_links"][0]["id"]
+    calibration_id_link = registry["calibration_evidence_links"][0]["id"]
+    assert json.loads(rows[0]["revision_image_evidence_ids_json"]) == [image_id_link]
+    assert json.loads(rows[0]["revision_annotation_evidence_ids_json"]) == [annotation_id_link]
+    assert json.loads(rows[0]["revision_calibration_evidence_ids_json"]) == [calibration_id_link]
+    for field in (
+        "revision_image_evidence_ids_json",
+        "revision_annotation_evidence_ids_json",
+        "revision_calibration_evidence_ids_json",
+    ):
+        assert json.loads(rows[1][field]) == []
+    assert rows[0]["design_change_prior_image_evidence_ids_json"] == ""
+    assert json.loads(rows[1]["design_change_prior_image_evidence_ids_json"]) == [
+        image_id_link
+    ]
+    for row in rows:
+        for name in (
+            "image_evidence_sha256",
+            "annotation_evidence_sha256",
+            "calibration_evidence_sha256",
+        ):
+            assert row[name] == registry[name]
+        assert row["evidence_level"] == "registered_unverified"
+        assert row["review_gate"] == "scientist_review_required"
+
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    artifacts = [
+        item for item in run["artifacts"] if item["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    typed = EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
+    assert render_ecology_identity_history_csv(typed) == csv_response.text
+
+    for collection, field, invalid in (
+        ("image_evidence_links", "identity_revision", 2),
+        ("annotation_evidence_links", "image_evidence_id", "unknown-image-link"),
+        ("calibration_evidence_links", "annotation_evidence_id", "unknown-annotation-link"),
+    ):
+        forged = typed.model_copy(deep=True)
+        setattr(getattr(forged, collection)[0], field, invalid)
+        with pytest.raises(ValidationError, match="source evidence integrity check failed"):
+            render_ecology_identity_history_csv(forged)
