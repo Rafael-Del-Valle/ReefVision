@@ -42,6 +42,18 @@ def _validate_source_import_provenance(metadata: dict[str, Any]) -> None:
         raise ValueError("Source payload size must be a nonnegative integer")
     if checked is not None and type(checked) is not bool:
         raise ValueError("Source payload integrity check must be boolean")
+    source_format = metadata.get("source_format")
+    if source_format is not None and source_format not in (
+        "indexed_triangles",
+        "obj",
+        "ply_ascii",
+        "glb_2_0",
+    ):
+        raise ValueError("Unsupported mesh source format")
+    # Inline indexed triangles have no imported original. Reject contradictory
+    # source-byte claims even when the caller has not requested a hash check.
+    if source_format == "indexed_triangles" and (digest is not None or size is not None):
+        raise ValueError("Inline indexed triangles cannot carry imported source payload")
     if checked is True and digest is None:
         raise ValueError("Source payload integrity check requires a source SHA-256")
     # A checked digest must refer to actual imported bytes. Indexed triangles
