@@ -332,9 +332,15 @@ function ReefVisionMainApp() {
       '[aria-label="ReefVision project launcher"]',
     );
     const target = projectSummaries.isError
-      ? launcher?.querySelector<HTMLButtonElement>(".rv-launcher-recovery button")
-      : (launcher?.querySelector<HTMLButtonElement>(".rv-project-launcher-open") ??
-        launcher?.querySelector<HTMLButtonElement>(".rv-launcher-actions button"));
+      ? launcher?.querySelector<HTMLButtonElement>(
+          ".rv-launcher-recovery button",
+        )
+      : (launcher?.querySelector<HTMLButtonElement>(
+          ".rv-project-launcher-open",
+        ) ??
+        launcher?.querySelector<HTMLButtonElement>(
+          ".rv-launcher-actions button",
+        ));
     target?.focus();
     setFocusProjectLauncher(false);
   }, [
