@@ -43,6 +43,17 @@ Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $Root -RepositoryRoot 
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $defaultData -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Normal app-data root must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Split-Path -Parent $defaultData) -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Parent of normal app-data root must be rejected.'
 
+# A disposable root in the local Temp folder is supported, but the Windows
+# user profile is not a blanket exception: accepting Documents/Downloads
+# would allow an install or cleanup run to overlap unrelated researcher data.
+$localTempRoot = Join-Path $env:LOCALAPPDATA 'Temp\reefvision-disposable-acceptance'
+Assert-True ((Assert-ReefVisionSafeAcceptanceRoot -Path $localTempRoot -RepositoryRoot $Root -DefaultDataRoot $defaultData) -eq (Resolve-ReefVisionAcceptancePath $localTempRoot)) 'Disposable local Temp acceptance root was rejected.'
+Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $env:USERPROFILE 'Documents\reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'User Documents acceptance root must be rejected.'
+Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $env:USERPROFILE 'Downloads\reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'User Downloads acceptance root must be rejected.'
+Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $env:USERPROFILE 'Desktop\reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'User Desktop acceptance root must be rejected.'
+Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $env:LOCALAPPDATA 'reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'User AppData Local outside Temp must be rejected.'
+
+
 # Lexical containment is insufficient: a junction beneath a disposable path
 # could redirect MSI install/cleanup operations into non-disposable user data.
 $junctionRoot = Join-Path $env:TEMP ('reefvision-reparse-' + [guid]::NewGuid().ToString('N'))
