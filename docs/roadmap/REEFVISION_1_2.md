@@ -4614,3 +4614,19 @@ registered experimental-unit independence, migration reconciliation with
 unmerged 1.1, representative ecological datasets, exact-head CI, and
 physical Windows MSI/GUI acceptance. **1.2 NOT RELEASE-READY; 1.3 not
 started.**
+
+## Exact-head CI lint repair (2026-10-30)
+
+At head `180795b65e9a04c1fc015b35a69f47132104b24d`, 16 of 19
+GitHub Actions workflows passed, including Windows Desktop Build. Backend CI,
+Pose Workflow Validation and ReefVision 1.0 Acceptance failed before tests
+because Ruff found one unsorted import and two non-raw `pytest.raises(match=)`
+regular-expression literals in
+`test_ecology_endpoint_replay_integrity_1_2.py` (I001, RUF043).
+The dedicated 1.2 branch corrects only these test-source lint violations;
+no measurement calculations, source fingerprints, review gates, migrations,
+Workflow Builder ports or verified-dataset semantics changed. The exact
+post-fix head must pass all applicable CI workflows before this is considered
+validated. Local Ruff/pytest remain unavailable without repository checkout
+and dependencies; Windows installed-GUI and independent ecological review
+remain required for release readiness.
