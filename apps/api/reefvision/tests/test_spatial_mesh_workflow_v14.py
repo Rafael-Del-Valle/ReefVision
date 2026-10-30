@@ -63,9 +63,7 @@ def test_mesh_shape_ratio_cancels_common_scale_only(
     )
     assert response.status_code == 200, response.text
     result = response.json()
-    assert result["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
-        3 / 13
-    )
+    assert result["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(3 / 13)
     assert result["provenance"]["calibration_verified"] is False
 
 
@@ -80,6 +78,58 @@ def test_mesh_shape_ratio_withholds_zero_diagonal(client: TestClient) -> None:
     )
     assert response.status_code == 200, response.text
     assert response.json()["surface_area_to_bounding_diagonal_squared_ratio"] is None
+
+
+def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(client: TestClient) -> None:
+    project_id = str(create_project(client, "Tiny mesh shape ratio")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        **MESH,
+        "obj_text": "v 0 0 0\\nv 1e-200 0 0\\nv 0 1e-200 0\\nf 1 2 3\\n",
+    }
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    measurement = standalone.json()
+    assert measurement["surface_area_to_bounding_diagonal_squared_ratio"] is None
+    assert "mesh_shape_ratio_unavailable_numeric_underflow" in measurement["qc_warnings"]
+    assert measurement["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "tiny-mesh-shape-ratio-v14",
+        "name": "Underflow-safe mesh diagnostic",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] is None
+    assert "mesh_shape_ratio_unavailable_numeric_underflow" in artifact["qc_warnings"]
+    assert artifact["provenance"]["geometry_sha256"] == measurement["provenance"]["geometry_sha256"]
 
 
 @pytest.mark.parametrize(
@@ -169,8 +219,9 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> Non
     assert artifact["payload_json"]["surface_area_m2"] == pytest.approx(
         standalone.json()["surface_area_m2"]
     )
-    assert artifact["payload_json"]["surface_area_to_bounding_diagonal_squared_ratio"] == (
-        standalone.json()["surface_area_to_bounding_diagonal_squared_ratio"]
+    assert (
+        artifact["payload_json"]["surface_area_to_bounding_diagonal_squared_ratio"]
+        == (standalone.json()["surface_area_to_bounding_diagonal_squared_ratio"])
     )
     assert (
         artifact["payload_json"]["provenance"]["geometry_sha256"]
