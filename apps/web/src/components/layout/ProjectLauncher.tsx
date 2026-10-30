@@ -56,6 +56,8 @@ export function ProjectLauncher({
   onOpenOnboarding: () => void;
 }) {
   const [pinnedIds, setPinnedIds] = useState<string[]>(readPinnedProjects);
+  const [projectQuery, setProjectQuery] = useState("");
+  const [showAllProjects, setShowAllProjects] = useState(false);
 
   const recentProjects = useMemo(
     () =>
@@ -89,6 +91,20 @@ export function ProjectLauncher({
           ),
         ]
       : recentProjects;
+
+  // The first twelve cards are a quick preview, not the complete project list.
+  // Researchers must be able to reopen older projects without changing data.
+  const normalizedQuery = projectQuery.trim().toLocaleLowerCase();
+  const matchingProjects = normalizedQuery
+    ? projectCollection.filter((project) =>
+        `${project.name} ${project.description ?? ""}`
+          .toLocaleLowerCase()
+          .includes(normalizedQuery),
+      )
+    : projectCollection;
+  const visibleProjects = showAllProjects
+    ? matchingProjects
+    : matchingProjects.slice(0, 12);
 
   return (
     <section className="rv-launcher" aria-label="ReefVision project launcher">
@@ -191,6 +207,21 @@ export function ProjectLauncher({
         </span>
       </div>
 
+      {projectsState === "ready" && projects.length > 0 && (
+        <label className="rv-project-launcher-search">
+          Find a saved project
+          <input
+            type="search"
+            value={projectQuery}
+            onChange={(event) => {
+              setProjectQuery(event.target.value);
+              setShowAllProjects(false);
+            }}
+            placeholder="Search project names or descriptions"
+          />
+        </label>
+      )}
+
       {projectsState === "pending" ? (
         <LoadingState
           title="Loading local projects"
@@ -204,9 +235,10 @@ export function ProjectLauncher({
             onRetry={onRetryProjects}
           />
         </div>
-      ) : projectCollection.length > 0 ? (
-        <div className="rv-project-launcher-grid">
-          {projectCollection.slice(0, 12).map((project) => {
+      ) : matchingProjects.length > 0 ? (
+        <div>
+          <div className="rv-project-launcher-grid">
+            {visibleProjects.map((project) => {
             const pinned = pinnedIds.includes(project.id);
             return (
               <article className="rv-project-launcher-card" key={project.id}>
@@ -241,7 +273,24 @@ export function ProjectLauncher({
                 </button>
               </article>
             );
-          })}
+            })}
+          </div>
+          {matchingProjects.length > 12 && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setShowAllProjects((current) => !current)}
+            >
+              {showAllProjects
+                ? "Show fewer projects"
+                : `Show all ${matchingProjects.length} matching projects`}
+            </button>
+          )}
+        </div>
+      ) : normalizedQuery ? (
+        <div className="rv-launcher-empty" role="status">
+          <h3>No matching projects</h3>
+          <p>Try another name or description. Saved projects have not been changed.</p>
         </div>
       ) : (
         <div className="rv-launcher-empty">
