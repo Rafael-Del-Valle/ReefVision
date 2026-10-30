@@ -24,9 +24,7 @@ def _observation(observation_id: str, height: int) -> dict:
                 "specimen_id": "colony-1",
                 "observation_id": observation_id,
                 "observed_at_utc": (
-                    "2026-10-01T12:00:00Z"
-                    if observation_id == "early"
-                    else "2026-10-02T12:00:00Z"
+                    "2026-10-01T12:00:00Z" if observation_id == "early" else "2026-10-02T12:00:00Z"
                 ),
             }
         )
@@ -60,7 +58,7 @@ def test_review_fingerprint_is_canonical_and_sensitive_to_review_revision() -> N
     result = compare_mesh_observations(before, after, reidentification_evidence=review)
     provenance = result["provenance"]
     digest = provenance["review_evidence_bundle_sha256"]
-    assert provenance["review_evidence_bundle_schema_version"] == "mesh-review-bundle-0001"
+    assert provenance["review_evidence_bundle_schema_version"] == "mesh-review-bundle-0002"
     assert isinstance(digest, str) and len(digest) == 64
     assert provenance["specimen_identity_verified"] is False
     assert provenance["reidentification_evidence_review_status"] == "caller_supplied_unverified"
@@ -68,7 +66,7 @@ def test_review_fingerprint_is_canonical_and_sensitive_to_review_revision() -> N
 
     # Verify the published canonical digest, not just its format.
     canonical = {
-        "schema_version": "mesh-review-bundle-0001",
+        "schema_version": "mesh-review-bundle-0002",
         "project_id": "study-1",
         "specimen_id": "colony-1",
         "before_observation_id": "early",
@@ -77,6 +75,20 @@ def test_review_fingerprint_is_canonical_and_sensitive_to_review_revision() -> N
         "after_observed_at_utc": "2026-10-02T12:00:00Z",
         "before_geometry_sha256": before["provenance"]["geometry_sha256"],
         "after_geometry_sha256": after["provenance"]["geometry_sha256"],
+        "before_source_payload_sha256": None,
+        "after_source_payload_sha256": None,
+        "before_coordinate_frame_id": None,
+        "after_coordinate_frame_id": None,
+        "before_calibration_method": "ruler",
+        "after_calibration_method": "ruler",
+        "before_calibration_evidence": "Unverified ruler",
+        "after_calibration_evidence": "Unverified ruler",
+        "before_meters_per_mesh_unit": 1.0,
+        "after_meters_per_mesh_unit": 1.0,
+        "before_relative_scale_uncertainty": None,
+        "after_relative_scale_uncertainty": None,
+        "before_calibration_review_evidence": None,
+        "after_calibration_review_evidence": None,
         "registration_evidence": None,
         "reidentification_evidence": provenance["reidentification_evidence"],
     }
@@ -92,16 +104,16 @@ def test_review_fingerprint_is_canonical_and_sensitive_to_review_revision() -> N
     assert digest == expected
     reversed_review = dict(reversed(list(review.items())))
     assert (
-        compare_mesh_observations(
-            before, after, reidentification_evidence=reversed_review
-        )["provenance"]["review_evidence_bundle_sha256"]
+        compare_mesh_observations(before, after, reidentification_evidence=reversed_review)[
+            "provenance"
+        ]["review_evidence_bundle_sha256"]
         == digest
     )
     amended = {**review, "independent_review_note": "Second review changed interpretation"}
     assert (
-        compare_mesh_observations(before, after, reidentification_evidence=amended)[
-            "provenance"
-        ]["review_evidence_bundle_sha256"]
+        compare_mesh_observations(before, after, reidentification_evidence=amended)["provenance"][
+            "review_evidence_bundle_sha256"
+        ]
         != digest
     )
 
@@ -129,6 +141,35 @@ def test_review_fingerprint_binds_observations_but_does_not_certify_legacy_evide
     # A supplied geometry binding is still validated; a digest cannot excuse
     # stale evidence or turn a mismatched review into a valid measurement.
     with pytest.raises(ValueError, match="source geometry fingerprints"):
-        compare_mesh_observations(
-            before, changed, reidentification_evidence=_review(before, after)
-        )
+        compare_mesh_observations(before, changed, reidentification_evidence=_review(before, after))
+
+
+@pytest.mark.parametrize(
+    ("provenance_key", "revised_value"),
+    [
+        ("calibration_method", "photogrammetry"),
+        ("calibration_evidence", "Revised unverified scale note"),
+        ("relative_scale_uncertainty", 0.2),
+        ("source_payload_sha256", "a" * 64),
+        ("coordinate_frame_id", "survey-local"),
+        ("calibration_review_evidence", {"independent_review_note": "Amended"}),
+    ],
+)
+def test_review_bundle_detects_revised_observation_provenance(
+    provenance_key: str, revised_value: object
+) -> None:
+    """Geometry alone cannot certify that the same calibration was reviewed."""
+    before = _observation("early", 1)
+    after = _observation("late", 2)
+    review = _review(before, after)
+    original = compare_mesh_observations(before, after, reidentification_evidence=review)
+    amended_after = {**after, "provenance": {**after["provenance"]}}
+    amended_after["provenance"][provenance_key] = revised_value
+    revised = compare_mesh_observations(before, amended_after, reidentification_evidence=review)
+    assert (
+        original["provenance"]["review_evidence_bundle_sha256"]
+        != revised["provenance"]["review_evidence_bundle_sha256"]
+    )
+    assert revised["provenance"]["review_evidence_bundle_schema_version"] == "mesh-review-bundle-0002"
+    assert revised["provenance"]["specimen_identity_verified"] is False
+    assert revised["provenance"]["calibration_verified"] is False
