@@ -27,6 +27,25 @@ def _is_sha256_fingerprint(value: Any) -> bool:
     )
 
 
+def _validate_source_import_provenance(metadata: dict[str, Any]) -> None:
+    """Reject malformed source-integrity claims without certifying imported bytes.
+
+    Older previews may omit source fields; missing evidence remains unknown.
+    A caller-supplied hash or check flag is never proof of source authenticity.
+    """
+    digest = metadata.get("source_payload_sha256")
+    size = metadata.get("source_payload_size_bytes")
+    checked = metadata.get("source_payload_integrity_checked")
+    if digest is not None and not _is_sha256_fingerprint(digest):
+        raise ValueError("Source payload SHA-256 must be lowercase hexadecimal")
+    if size is not None and (type(size) is not int or size < 0):
+        raise ValueError("Source payload size must be a nonnegative integer")
+    if checked is not None and type(checked) is not bool:
+        raise ValueError("Source payload integrity check must be boolean")
+    if checked is True and digest is None:
+        raise ValueError("Source payload integrity check requires a source SHA-256")
+
+
 def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | None:
     """Recompute scale-invariant patch concentration from complete-mesh fractions.
 
@@ -129,6 +148,8 @@ def compare_mesh_observations(
     second = after.get("provenance")
     if not isinstance(first, dict) or not isinstance(second, dict):
         raise ValueError("Both observations require provenance dictionaries")
+    for metadata in (first, second):
+        _validate_source_import_provenance(metadata)
     specimen = first.get("specimen_id")
     if not isinstance(specimen, str) or not specimen or specimen != second.get("specimen_id"):
         raise ValueError("Two observations require the same nonempty provisional specimen_id")
