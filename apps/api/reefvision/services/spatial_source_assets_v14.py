@@ -159,8 +159,14 @@ class SpatialSourceAssetService:
             raise ValidationError("Spatial source stored byte length is invalid")
         # Read only the bounded import limit, then compare the bytes actually read.
         # A separate stat/read_bytes sequence can race a growing original file.
-        with path.open("rb") as source:
-            data = source.read(MAX_BYTES + 1)
+        try:
+            with path.open("rb") as source:
+                data = source.read(MAX_BYTES + 1)
+        except OSError as exc:
+            # The original can disappear or become unreadable between the
+            # path check and the bounded read. Treat that as invalid source
+            # evidence, not an unexpected server failure or measurement.
+            raise ValidationError("Spatial source original bytes could not be read") from exc
         if len(data) != asset.size_bytes:
             raise ValidationError("Spatial source byte length no longer matches import")
         if sha256(data).hexdigest() != asset.sha256:
