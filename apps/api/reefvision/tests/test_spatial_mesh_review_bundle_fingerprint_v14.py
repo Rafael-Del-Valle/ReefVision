@@ -210,9 +210,13 @@ def test_review_fingerprint_detects_changed_obj_bytes_with_same_geometry() -> No
 
     first = imported("source revision one")
     second = imported("source revision two")
-    assert first["provenance"]["geometry_sha256"] == second["provenance"]["geometry_sha256"]
-    assert first["provenance"]["source_payload_sha256"] != (
-        second["provenance"]["source_payload_sha256"]
+    assert (
+        first["provenance"]["geometry_sha256"]
+        == second["provenance"]["geometry_sha256"]
+    )
+    assert (
+        first["provenance"]["source_payload_sha256"]
+        != second["provenance"]["source_payload_sha256"]
     )
     review = _review(before, first)
     initial = compare_mesh_observations(before, first, reidentification_evidence=review)
