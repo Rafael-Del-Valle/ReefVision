@@ -90,3 +90,26 @@ and backend lint but failed Ruff format on one blank line in
 formatting failure. New-head integrated CI, native Windows installed-GUI/MSI,
 representative biological acceptance, and the independent 1.1/1.6 Alembic
 revision-0038 conflict remain release blockers. No merge or release.
+
+## 2026-10-29 — Safe large-page review-history reads
+
+A valid but extremely large `page` query can produce a SQLite OFFSET larger
+than its signed 64-bit binding range. Previously this raised an uncaught
+`OverflowError` and turned a read-only QC history request into HTTP 500.
+The event-history service now skips only the impossible page query when the
+calculated offset exceeds `2**63 - 1`, while still querying and returning the
+true event count and latest reviewer assignment. The maximum representable
+offset is still handled normally; ordinary page ordering is unchanged.
+
+The same read-only service powers standalone review queues and saved executable
+`project_source -> qc_review_queue` Workflow Builder queues. Added six
+parameterized API regressions across both paths, including the signed-64-bit
+boundary, one-above-boundary, and a large page with 100 entries per page.
+The tests require an empty page, real total/assignment, unchanged pending
+review state, and explicit researcher-review status. No migrations, reviewer
+events, model approvals, or scientific observations are modified.
+
+An isolated SQLite reproduction confirmed that out-of-range integer OFFSET
+parameters raise `OverflowError`, whereas the maximum signed-64-bit OFFSET
+returns an empty result. Repository pytest/CI and Windows installed-GUI
+acceptance are separate required gates; this reproduction is not full acceptance.
