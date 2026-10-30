@@ -794,3 +794,20 @@ the spacing of disconnected patches. No orientation registration, independent
 scale validation, biological reidentification, or reconstruction-error
 uncertainty is implied. Persisted-workflow and standalone regressions check
 the same value, calibration-scale invariance, and the zero-diagonal case.
+
+### Saved morphology-summary consistency during longitudinal replay
+
+A saved mesh shape descriptor is not independent evidence of coral condition.
+The longitudinal comparison engine now cross-checks a present
+`surface_area_to_bounding_diagonal_squared_ratio` against the same observation's
+calibrated surface area and bounding-box diagonal, where both are positive and
+the quotient is representable. Contradictory stored summaries are rejected
+instead of allowing an edited descriptor to fabricate cross-timepoint change.
+Legacy artifacts without the descriptor remain readable, with no invented
+replacement. If a calibrated area or extent has underflowed to zero, the
+engine does not pretend that those numbers can authenticate the source-frame
+descriptor. This check detects inconsistent artifact metadata, **not** a
+verified source reconstruction, scale, biological identity, or growth rate.
+Standalone comparisons and persisted executable Workflow Builder graphs share
+this validation; regression tests cover contradictory summaries and saved
+graph replay.
