@@ -251,3 +251,54 @@ def test_manual_review_history_has_explicit_utc_provenance(
     items = client.get(f"/api/v1/review-queues/{queue_id}/items")
     assert items.status_code == 200, items.text
     assert {item["review_state"] for item in items.json()["items"]} == {"pending"}
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+@pytest.mark.parametrize(
+    ("page", "page_size"),
+    [
+        (2**62, 100),
+        (2**63, 1),
+        (2**63 + 1, 1),
+    ],
+)
+def test_huge_review_history_pages_preserve_audit_summary(
+    client: TestClient, saved_workflow: bool, page: int, page_size: int
+) -> None:
+    """An out-of-range SQLite OFFSET is an empty page, never HTTP 500.
+
+    Both standalone and saved executable Workflow Builder queues must retain
+    the real event count, latest assignment, and human-review gate.
+    """
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    item_id = item_ids[0]
+    url = f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+    payload = {
+        "client_request_id": str(uuid4()),
+        "event_type": "assign",
+        "actor": "local researcher",
+        "assignee": "reviewer-two",
+    }
+    created = client.post(url, json=payload)
+    assert created.status_code == 201, created.text
+
+    history = client.get(url, params={"page": page, "page_size": page_size})
+    assert history.status_code == 200, history.text
+    body = history.json()
+    assert body["page"] == page
+    assert body["page_size"] == page_size
+    assert body["items"] == []
+    assert body["total"] == 1
+    assert body["current_assignee"] == "reviewer-two"
+    assert body["requires_researcher_review"] is True
+
+    first_page = client.get(url, params={"page": 1, "page_size": 1})
+    assert first_page.status_code == 200, first_page.text
+    assert first_page.json()["total"] == 1
+    assert [event["id"] for event in first_page.json()["items"]] == [
+        created.json()["id"]
+    ]
+    assert first_page.json()["current_assignee"] == "reviewer-two"
+    items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert items.status_code == 200, items.text
+    assert {item["review_state"] for item in items.json()["items"]} == {"pending"}
