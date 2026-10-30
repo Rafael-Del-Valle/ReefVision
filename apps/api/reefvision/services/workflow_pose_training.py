@@ -1437,8 +1437,7 @@ def create_pose_workflow_training_result(
         "pose_split_manifest_sha256",
     )
     if any(
-        experiment_manifest.get(field) != worker_manifest.get(field)
-        for field in immutable_fields
+        experiment_manifest.get(field) != worker_manifest.get(field) for field in immutable_fields
     ):
         raise ValidationError("Completed pose training experiment artifact provenance changed")
 
