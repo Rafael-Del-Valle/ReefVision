@@ -37,6 +37,36 @@ def _observation(observation_id: str, height: int) -> dict:
     result["project_id"] = "study-1"
     return result
 
+ 
+def _imported_observation(observation_id: str, height: int) -> dict:
+    """Construct genuine imported-source metadata rather than spoofing inline geometry."""
+    obj_text = (
+        "# provisional reconstruction\n"
+        "v 0 0 0\n"
+        "v 1 0 0\n"
+        f"v 0 {height} 0\n"
+        "f 1 2 3\n"
+    )
+    result = preview_from_request(
+        MeshPreviewRequest.model_validate(
+            {
+                "obj_text": obj_text,
+                "meters_per_unit": 1,
+                "calibration_method": "ruler",
+                "calibration_evidence": "Unverified ruler",
+                "specimen_id": "colony-1",
+                "observation_id": observation_id,
+                "observed_at_utc": (
+                    "2026-10-01T12:00:00Z"
+                    if observation_id == "early"
+                    else "2026-10-02T12:00:00Z"
+                ),
+            }
+        )
+    )
+    result["project_id"] = "study-1"
+    return result
+
 
 def _review(before: dict, after: dict) -> dict:
     return {
@@ -190,6 +220,9 @@ def test_review_bundle_detects_revised_observation_provenance(
     """Geometry alone cannot certify that the same calibration was reviewed."""
     before = _observation("early", 1)
     after = _observation("late", 2)
+    if provenance_key.startswith("source_"):
+        # Imported-byte provenance cannot be attached to inline triangles.
+        after = _imported_observation("late", 2)
     review = _review(before, after)
     original = compare_mesh_observations(before, after, reidentification_evidence=review)
     amended_after = {**after, "provenance": {**after["provenance"]}}
@@ -439,7 +472,7 @@ def test_checked_import_review_bundle_matches_saved_workflow(client: TestClient)
 @pytest.mark.parametrize(
     ("source_format", "source_size", "message"),
     [
-        ("indexed_triangles", 10, "requires an imported mesh format"),
+        ("indexed_triangles", 10, "Inline indexed triangles"),
         (None, 10, "requires an imported mesh format"),
         ("obj", None, "requires a positive source byte count"),
         ("obj", 0, "requires a positive source byte count"),
@@ -486,20 +519,18 @@ def test_unchecked_source_metadata_cannot_fabricate_an_import(
 
 
 def test_unchecked_import_keeps_source_evidence_provisional() -> None:
-    """An unverified digest may be recorded but is not a successful check."""
+    """An actual imported digest without an expected hash is not a successful check."""
     before = _observation("early", 1)
-    after = _observation("late", 2)
-    after["provenance"].update(
-        source_format="obj",
-        source_payload_sha256="a" * 64,
-        source_payload_size_bytes=42,
-        source_payload_integrity_checked=False,
-    )
+    after = _imported_observation("late", 2)
+    assert after["provenance"]["source_format"] == "obj"
+    assert after["provenance"]["source_payload_integrity_checked"] is False
+    source_digest = after["provenance"]["source_payload_sha256"]
+    assert isinstance(source_digest, str) and len(source_digest) == 64
     result = compare_mesh_observations(
         before, after, reidentification_evidence=_review(before, after)
     )
     bundle = result["provenance"]["review_evidence_bundle"]
-    assert bundle["after_source_payload_sha256"] == "a" * 64
+    assert bundle["after_source_payload_sha256"] == source_digest
     assert bundle["after_source_payload_integrity_checked"] is False
     assert result["provenance"]["calibration_verified"] is False
     assert result["provenance"]["specimen_identity_verified"] is False
