@@ -10,12 +10,14 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as SchemaValidationError
 
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
+from reefvision.services.ecology_candidate_report_export import render_ecology_series_qc_csv
 from reefvision.services.ecology_candidate_measurements_export import (
     MEASUREMENT_CSV_SCHEMA_VERSION,
     _utc_capture,
@@ -307,3 +309,48 @@ def test_executable_saved_workflow_exports_typed_unverified_csv(
     assert invalid.status_code == 200, invalid.text
     assert invalid.json()["valid"] is False
     assert any(issue["code"] == "incompatible_port_types" for issue in invalid.json()["issues"])
+
+
+def test_current_lineage_digest_contract_fails_closed_for_api_and_saved_artifacts(
+    client: TestClient,
+) -> None:
+    """Current evidence cannot drop a lineage layer, even after re-signing."""
+    project_id, _ = _source(client)
+    response = client.get(
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["source_fingerprint_contract"] == "ecology-measurement-candidates-0021"
+    assert four_layer_source_digests_present(
+        EcologyMeasurementCandidatesResponse.model_validate(payload)
+    )
+
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "succeeded"
+    saved = next(
+        row["payload_json"]
+        for row in workflow["artifacts"]
+        if row["data_type"] == "ecology_measurement_candidates"
+    )
+    assert saved == payload
+
+    for field in (
+        "source_registry_history_sha256",
+        "source_image_evidence_sha256",
+        "source_annotation_evidence_sha256",
+        "source_calibration_evidence_sha256",
+    ):
+        for invalid in (None, "0" * 63, "z" * 64):
+            for serialized in (payload, saved):
+                tampered = {**serialized, field: invalid}
+                with pytest.raises(SchemaValidationError, match="four complete lineage"):
+                    EcologyMeasurementCandidatesResponse.model_validate(tampered)
+            # The exporter must also reject unchecked model_copy mutations,
+            # including an artifact with an otherwise recomputed source hash.
+            source = EcologyMeasurementCandidatesResponse.model_validate(payload)
+            bypass = source.model_copy(update={field: invalid})
+            with pytest.raises(ValidationError, match="four complete lineage"):
+                render_ecology_series_qc_csv(bypass)
+            with pytest.raises(ValidationError, match="four complete lineage"):
+                render_ecology_measurements_csv(bypass)

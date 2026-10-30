@@ -10,6 +10,7 @@ from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidate,
     EcologyMeasurementCandidatesResponse,
+    has_complete_ecology_lineage_digests,
 )
 from reefvision.services.ecology_measurement_candidates import (
     count_declared_ecological_units,
@@ -73,6 +74,15 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
     report = response.candidate_report
     if report is None:
         raise ValidationError("Ecological candidate report is missing")
+    # model_copy(update=...) bypasses schema validators. Current-contract
+    # source artifacts must retain all four lineage digests at export time.
+    if (
+        response.source_fingerprint_contract == "ecology-measurement-candidates-0021"
+        and not has_complete_ecology_lineage_digests(response)
+    ):
+        raise ValidationError(
+            "Current ecological source fingerprint requires four complete lineage digests"
+        )
     if (
         report.project_id != response.project_id
         or report.source_input_sha256 != response.input_sha256

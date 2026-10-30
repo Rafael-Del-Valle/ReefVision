@@ -310,3 +310,36 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
     input_sha256: str
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+    @model_validator(mode="after")
+    def require_current_lineage_digests(self) -> EcologyMeasurementCandidatesResponse:
+        """A current source contract cannot silently omit one evidence layer.
+
+        Digest shape is an integrity prerequisite, not proof of source ownership,
+        calibration accuracy, scientist review, or biological independence.
+        """
+        if (
+            self.source_fingerprint_contract == "ecology-measurement-candidates-0021"
+            and not has_complete_ecology_lineage_digests(self)
+        ):
+            raise ValueError(
+                "Current ecological source fingerprint requires four complete lineage digests"
+            )
+        return self
+
+
+def has_complete_ecology_lineage_digests(
+    response: EcologyMeasurementCandidatesResponse,
+) -> bool:
+    """Check four SHA-256 digest fields without asserting scientific verification."""
+    if response.source_fingerprint_contract is None:
+        return False
+    return all(
+        isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{64}", value) is not None
+        for value in (
+            response.source_registry_history_sha256,
+            response.source_image_evidence_sha256,
+            response.source_annotation_evidence_sha256,
+            response.source_calibration_evidence_sha256,
+        )
+    )

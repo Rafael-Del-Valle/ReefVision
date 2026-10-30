@@ -4289,3 +4289,21 @@ revalidation rather than being silently promoted. All outputs remain
 registered design, real longitudinal review, migration reconciliation and
 installed Windows GUI/MSI acceptance remain release gates.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Current source-lineage digest completeness gate (2026-10-30)
+
+The current `ecology-measurement-candidates-0021` contract now requires all
+four source-lineage SHA-256 digests (identity history, source images,
+annotation evidence, calibration evidence) to be present and well-formed.
+The typed API/saved Workflow Builder artifact rejects incomplete current
+records at deserialization. Both standalone scientific CSV export paths also
+fail closed on unchecked in-memory `model_copy` changes. Older persisted
+contracts retain their explicitly disclosed partial-lineage compatibility
+and remain unverified. Focused tests cover current API output, saved
+Workflow Builder parity, all four missing/malformed digest fields, and
+exporter bypass attempts. This is **digest metadata completeness only**:
+it does not verify digest correspondence to live project records,
+scientist approval, biological identity, calibration accuracy, or
+experimental-unit independence. Migration reconciliation with 1.1,
+representative ecological acceptance and physical Windows GUI testing
+remain required before release.
