@@ -80,22 +80,35 @@ def test_mesh_shape_ratio_withholds_zero_diagonal(client: TestClient) -> None:
     assert response.json()["surface_area_to_bounding_diagonal_squared_ratio"] is None
 
 
-def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(
-    client: TestClient,
+@pytest.mark.parametrize(
+    ("obj_text", "warning"),
+    [
+        pytest.param(
+            "v 0 0 0\nv 1e-200 0 0\nv 0 1e-200 0\nf 1 2 3\n",
+            "mesh_shape_ratio_unavailable_numeric_underflow",
+            id="underflow",
+        ),
+        pytest.param(
+            "v 0 0 0\nv 0 0 0\nv 0 0 0\nf 1 2 3\n",
+            "mesh_shape_ratio_unavailable_zero_extent",
+            id="zero-extent",
+        ),
+    ],
+)
+def test_mesh_shape_ratio_unavailable_in_saved_workflow(
+    client: TestClient, obj_text: str, warning: str
 ) -> None:
     project_id = str(create_project(client, "Tiny mesh shape ratio")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = {
         **MESH,
-        "obj_text": "v 0 0 0\nv 1e-200 0 0\nv 0 1e-200 0\nf 1 2 3\n",
+        "obj_text": obj_text,
     }
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     measurement = standalone.json()
     assert measurement["surface_area_to_bounding_diagonal_squared_ratio"] is None
-    assert (
-        "mesh_shape_ratio_unavailable_numeric_underflow" in measurement["qc_warnings"]
-    )
+    assert warning in measurement["qc_warnings"]
     assert measurement["provenance"]["calibration_verified"] is False
 
     graph = {
@@ -121,9 +134,7 @@ def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -138,7 +149,7 @@ def test_mesh_shape_ratio_underflow_withheld_in_saved_workflow(
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] is None
-    assert "mesh_shape_ratio_unavailable_numeric_underflow" in artifact["qc_warnings"]
+    assert warning in artifact["qc_warnings"]
     expected_sha = measurement["provenance"]["geometry_sha256"]
     assert artifact["provenance"]["geometry_sha256"] == expected_sha
 
