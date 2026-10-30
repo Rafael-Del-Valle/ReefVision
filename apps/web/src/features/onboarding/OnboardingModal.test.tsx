@@ -184,8 +184,12 @@ describe("onboarding local usability", () => {
   it("hands keyboard focus to the project-creation dialog", () => {
     render(<ProjectCreationHandoffHarness />);
     fireEvent.click(screen.getByRole("button", { name: "Create a project" }));
-    expect(screen.queryByRole("heading", { name: /Welcome to ReefVision/ })).toBeNull();
-    expect(screen.getByRole("dialog", { name: "Create project" })).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: /Welcome to ReefVision/ }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("dialog", { name: "Create project" }),
+    ).toBeTruthy();
     expect(document.activeElement).toBe(
       screen.getByRole("textbox", { name: "Project name" }),
     );
