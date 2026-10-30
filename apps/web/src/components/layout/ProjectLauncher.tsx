@@ -278,7 +278,7 @@ export function ProjectLauncher({
           {matchingProjects.length > 12 && (
             <button
               type="button"
-              className="secondary"
+              className="secondary rv-project-launcher-expand"
               onClick={() => setShowAllProjects((current) => !current)}
             >
               {showAllProjects
