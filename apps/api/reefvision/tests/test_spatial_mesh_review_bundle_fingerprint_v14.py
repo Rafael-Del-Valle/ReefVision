@@ -308,7 +308,7 @@ def test_checked_import_review_bundle_matches_saved_workflow(client: TestClient)
         "observation_id": "early",
         "observed_at_utc": "2026-10-01T12:00:00Z",
     }
-    obj_text = "# original source\\nv 0 0 0\\nv 1 0 0\\nv 0 2 0\\nf 1 2 3\\n"
+    obj_text = "# original source\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n"
     source_sha = sha256(obj_text.encode("utf-8")).hexdigest()
     after_params = {
         "obj_text": obj_text,
@@ -348,11 +348,8 @@ def test_checked_import_review_bundle_matches_saved_workflow(client: TestClient)
     ).hexdigest() == provenance["review_evidence_bundle_sha256"]
 
     # The same imported bytes without an expected SHA are not a checked source.
-    unchecked_params = {
-        key: value
-        for key, value in after_params.items()
-        if key != "expected_source_payload_sha256"
-    }
+    unchecked_params = dict(after_params)
+    unchecked_params.pop("expected_source_payload_sha256")
     unchecked = compare_mesh_observations(
         before, preview(unchecked_params), reidentification_evidence=review
     )
