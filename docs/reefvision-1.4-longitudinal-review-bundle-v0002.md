@@ -22,3 +22,19 @@ append-only database, authenticated reviewer signature, or authorization to
 promote provisional measurements to verified biological growth. Preserve the
 bundle and its schema version together; changing its contents without updating
 the digest makes the artifact internally inconsistent.
+
+
+## Source-integrity validation at comparison time
+
+Longitudinal comparison now rejects malformed imported-source integrity metadata
+before constructing a review fingerprint. A supplied source SHA-256 must be
+64 lowercase hexadecimal characters; a supplied byte count must be a
+nonnegative integer (not a boolean); and a supplied integrity-check flag must
+be boolean. A `true` check flag without any source digest is contradictory
+and is rejected. Older previews that omit these fields remain readable with
+null audit evidence; absence is never promoted to a successful source check.
+
+These checks protect the consistency of caller-supplied provenance. They do
+not verify original file bytes, establish an authenticated reviewer, or
+certify coral calibration or identity. Standalone and saved typed Workflow
+Builder comparisons share the same service-level validation.
