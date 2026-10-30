@@ -652,6 +652,11 @@ def _reused_pose_training_result(
     experiment = session.scalar(
         select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
     )
+    # Newly completed workflow training always creates a registry record.
+    # Losing it must not silently downgrade downstream scientific lineage to
+    # experiment_id=None; only historical snapshots can lack this record.
+    if experiment is None and is_current_snapshot:
+        raise ValidationError("Recovered pose-training experiment registry record is missing")
     if experiment is not None:
         # A saved workflow replay exposes this experiment ID to downstream
         # research. Verify the registry still describes the same frozen run.
