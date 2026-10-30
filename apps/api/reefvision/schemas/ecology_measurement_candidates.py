@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import datetime
 from typing import Literal
 
@@ -79,6 +80,20 @@ class EcologyMeasurementCandidate(BaseModel):
             raise ValueError("Undated capture status cannot carry a timestamp")
         return self
 
+    @staticmethod
+    def _linear_unit_syntax(unit: str) -> bool:
+        """Reject exponent-coded dimensions, including Unicode superscripts.
+
+        This is a syntax safeguard, not verification of physical calibration.
+        """
+        normalized = unicodedata.normalize("NFKC", unit)
+        return (
+            bool(unit)
+            and unit == unit.strip()
+            and not any(char.isspace() or char.isdigit() for char in normalized)
+            and "^" not in normalized
+        )
+
     @model_validator(mode="after")
     def consistent_geometry_dimension(self) -> EcologyMeasurementCandidate:
         """Preserve linear box dimensions versus squared mask area evidence.
@@ -86,18 +101,13 @@ class EcologyMeasurementCandidate(BaseModel):
         This does not authenticate calibration, identity, or biological growth.
         """
         if self.annotation_kind == "box":
-            if (
-                self.metric not in ("box_width", "box_height")
-                or not self.unit
-                or "^2" in self.unit
+            if self.metric not in ("box_width", "box_height") or not self._linear_unit_syntax(
+                self.unit
             ):
                 raise ValueError("Box geometry requires a linear measurement and unit")
-        elif (
-            self.metric != "mask_projected_area"
-            or not self.unit.endswith("^2")
-            or not self.unit[:-2]
-            or "^2" in self.unit[:-2]
-        ):
+        elif self.metric != "mask_projected_area" or not self.unit.endswith(
+            "^2"
+        ) or not self._linear_unit_syntax(self.unit[:-2]):
             raise ValueError("Mask projected area requires a squared measurement unit")
         return self
 
