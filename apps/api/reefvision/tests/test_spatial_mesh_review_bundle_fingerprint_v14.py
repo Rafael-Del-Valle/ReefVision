@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from hashlib import sha256
 from json import dumps
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+from reefvision.tests.test_annotations import create_project
 
 
 def _observation(observation_id: str, height: int) -> dict:
@@ -287,3 +292,146 @@ def test_longitudinal_legacy_missing_source_integrity_stays_unverified() -> None
     assert bundle["before_source_payload_integrity_checked"] is None
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["calibration_verified"] is False
+
+
+def test_checked_import_review_bundle_matches_saved_workflow(client: TestClient) -> None:
+    """A real source-byte check changes review provenance without verifying biology."""
+    project_id = str(create_project(client, "Bound longitudinal source review")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    before_params = {
+        "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+        "faces": [[0, 1, 2]],
+        "meters_per_unit": 1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified ruler",
+        "specimen_id": "colony-1",
+        "observation_id": "early",
+        "observed_at_utc": "2026-10-01T12:00:00Z",
+    }
+    obj_text = "# original source\\nv 0 0 0\\nv 1 0 0\\nv 0 2 0\\nf 1 2 3\\n"
+    source_sha = sha256(obj_text.encode("utf-8")).hexdigest()
+    after_params = {
+        "obj_text": obj_text,
+        "expected_source_payload_sha256": source_sha,
+        "meters_per_unit": 1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified ruler",
+        "specimen_id": "colony-1",
+        "observation_id": "late",
+        "observed_at_utc": "2026-10-02T12:00:00Z",
+    }
+
+    def preview(parameters: dict) -> dict:
+        record = preview_from_request(MeshPreviewRequest.model_validate(parameters))
+        record["project_id"] = project_id
+        return record
+
+    before = preview(before_params)
+    after = preview(after_params)
+    review = {**_review(before, after), "project_id": project_id}
+    expected = compare_mesh_observations(before, after, reidentification_evidence=review)
+    provenance = expected["provenance"]
+    bundle = provenance["review_evidence_bundle"]
+    assert bundle["after_source_payload_sha256"] == source_sha
+    assert bundle["after_source_payload_integrity_checked"] is True
+    assert bundle["before_source_payload_integrity_checked"] is False
+    assert provenance["specimen_identity_verified"] is False
+    assert provenance["calibration_verified"] is False
+    assert sha256(
+        dumps(
+            bundle,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest() == provenance["review_evidence_bundle_sha256"]
+
+    # The same imported bytes without an expected SHA are not a checked source.
+    unchecked_params = {
+        key: value
+        for key, value in after_params.items()
+        if key != "expected_source_payload_sha256"
+    }
+    unchecked = compare_mesh_observations(
+        before, preview(unchecked_params), reidentification_evidence=review
+    )
+    assert unchecked["provenance"]["review_evidence_bundle_sha256"] != (
+        provenance["review_evidence_bundle_sha256"]
+    )
+
+    standalone = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={
+            "before": before_params,
+            "after": after_params,
+            "reidentification_evidence": review,
+        },
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert standalone.json() == expected
+
+    graph = {
+        "graph_id": "checked-import-longitudinal-v14",
+        "name": "Checked source review provenance",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "early",
+                "node_type": "mesh_surface_preview",
+                "parameters": before_params,
+            },
+            {
+                "node_id": "late",
+                "node_type": "mesh_surface_preview",
+                "parameters": after_params,
+            },
+            {
+                "node_id": "compare",
+                "node_type": "mesh_longitudinal_comparison",
+                "parameters": {"reidentification_evidence": review},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": f"project-{node}",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": node,
+                "target_port_id": "project",
+            }
+            for node in ("early", "late")
+        ]
+        + [
+            {
+                "edge_id": f"{node}-compare",
+                "source_node_id": node,
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": port,
+            }
+            for node, port in (("early", "before"), ("late", "after"))
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    comparisons = [
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    ]
+    assert comparisons == [expected]
