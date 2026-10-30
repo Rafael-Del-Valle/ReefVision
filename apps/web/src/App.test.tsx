@@ -1260,12 +1260,32 @@ describe("App", () => {
     expect(
       screen.queryByRole("heading", { name: /Welcome to ReefVision/ }),
     ).not.toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", { name: /CPT Coral Study/ }),
-    ).toBeInTheDocument();
+    const openProject = await screen.findByRole("button", {
+      name: "Open CPT Coral Study",
+    });
+    expect(openProject).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(openProject));
     expect(
       screen.queryByRole("dialog", { name: "Create project" }),
     ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/projects") && options?.method === "POST",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("hands focus to New project when onboarding has no saved projects", async () => {
+    window.localStorage.clear();
+    const fetchMock = mockApi({ projects: [] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Choose an existing project" }),
+    );
+    const newProject = screen.getByRole("button", { name: "New project" });
+    await waitFor(() => expect(document.activeElement).toBe(newProject));
     expect(
       fetchMock.mock.calls.filter(
         ([url, options]) =>
