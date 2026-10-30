@@ -94,14 +94,11 @@ try {
     }
     Write-Host "Administrative extraction root: $ExtractRoot"
 
-    $MsiProcess = Start-Process -FilePath 'msiexec.exe' -ArgumentList @(
-        '/a',
-        $Msi.FullName,
-        '/qn',
-        "TARGETDIR=$ExtractRoot",
-        '/L*v',
-        $MsiLog
-    ) -Wait -PassThru -WindowStyle Hidden
+    $AdminExtractArguments = New-ReefVisionMsiAdministrativeArguments `
+        -PackagePath $Msi.FullName `
+        -ExtractRoot $ExtractRoot `
+        -LogPath $MsiLog
+    $MsiProcess = Start-Process -FilePath 'msiexec.exe' -ArgumentList $AdminExtractArguments -Wait -PassThru -WindowStyle Hidden
     $MsiExitCode = $MsiProcess.ExitCode
     if ($MsiExitCode -notin @(0, 3010)) {
         Show-Tail -Path $MsiLog
@@ -181,7 +178,7 @@ try {
         '--self-test',
         '--safe-mode',
         '--data-dir', $SelfTestData,
-        '--log-file', $SidecarLog
+        '--log-file', ('"{0}"' -f $SidecarLog)
     ) -Wait -PassThru -WindowStyle Hidden
     if ($SidecarProcess.ExitCode -ne 0) {
         Show-Tail -Path $SidecarLog

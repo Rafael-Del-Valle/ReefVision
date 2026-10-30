@@ -159,6 +159,31 @@ function New-ReefVisionMsiArguments {
     return $arguments
 }
 
+
+# Start-Process joins ArgumentList elements into a single Windows command line.
+# Quote paths explicitly so MSI/CAB acceptance works from folders with spaces,
+# including user profiles, without changing the installed product or its data.
+function New-ReefVisionMsiAdministrativeArguments {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackagePath,
+        [Parameter(Mandatory = $true)][string]$ExtractRoot,
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
+    foreach ($value in @($PackagePath, $ExtractRoot, $LogPath)) {
+        if ([string]::IsNullOrWhiteSpace($value) -or $value.Contains('"')) {
+            throw 'MSI administrative extraction paths must be nonempty and cannot contain quotes.'
+        }
+    }
+    return @(
+        '/a',
+        ('"{0}"' -f $PackagePath),
+        '/qn',
+        ('TARGETDIR="{0}"' -f $ExtractRoot),
+        '/L*v',
+        ('"{0}"' -f $LogPath)
+    )
+}
+
 # Validate the MSI Media table against the adjacent external CAB payload before
 # administrative extraction. An unexpected CAB is as unsafe as a missing one:
 # both indicate an incomplete or mixed installer artifact set.

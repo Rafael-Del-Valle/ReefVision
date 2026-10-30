@@ -67,6 +67,17 @@ $uninstall = New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00
 Assert-True ($uninstall[0] -eq '/x') 'Uninstall command does not use /x.'
 Assert-True ((ConvertTo-ReefVisionVersionString ' 1.0.3 ') -eq '1.0.3') 'MSI version comparison did not normalize COM padding.'
 
+
+# Start-Process does not preserve argument boundaries when paths contain spaces.
+# Verify the exact MSI command-line tokens without invoking msiexec.
+$adminArgs = @(New-ReefVisionMsiAdministrativeArguments -PackagePath 'C:\camera dataset\ReefVision.msi' -ExtractRoot 'C:\rv validation\extract' -LogPath 'C:\User Name\Temp\msi.log')
+Assert-True ($adminArgs.Count -eq 6) 'MSI administrative extraction must supply six arguments.'
+Assert-True ($adminArgs[0] -ceq '/a') 'MSI administrative extraction must use /a.'
+Assert-True ($adminArgs[1] -ceq '"C:\camera dataset\ReefVision.msi"') 'MSI path containing spaces must be quoted.'
+Assert-True ($adminArgs[3] -ceq 'TARGETDIR="C:\rv validation\extract"') 'Administrative extraction root containing spaces must be quoted.'
+Assert-True ($adminArgs[5] -ceq '"C:\User Name\Temp\msi.log"') 'MSI log path containing spaces must be quoted.'
+Assert-Throws { New-ReefVisionMsiAdministrativeArguments -PackagePath 'C:\unsafe"payload.msi' -ExtractRoot 'C:\rv-test' -LogPath 'C:\msi.log' | Out-Null } 'MSI path containing quotes must be rejected.'
+
 # MSI Media table CAB contract: fail closed on missing, unexpected, duplicate,
 # or path-traversing payloads before any administrative extraction is attempted.
 $validCabinets = Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#embedded.cab', 'rv1.cab', 'RV2.CAB') -AvailableCabinets @('RV1.CAB', 'rv2.cab')
@@ -83,6 +94,7 @@ Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#', 'rv1.cab
 # Verification must reject symlinked MSI/CAB inputs before opening or extracting
 # any package, without actually installing software in this harness.
 $msiVerifier = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verify-windows-msi.ps1') -Raw
+Assert-True ($msiVerifier.Contains('New-ReefVisionMsiAdministrativeArguments')) 'MSI verifier must quote extraction and log paths using the tested helper.'
 Assert-True ($msiVerifier.Contains('Assert-ReefVisionNoReparseAncestors -Path $Msi.FullName')) 'MSI verifier does not reject reparse-point MSI paths.'
 Assert-True ($msiVerifier.Contains('Assert-ReefVisionNoReparseAncestors -Path $Cab.FullName')) 'MSI verifier does not reject reparse-point CAB paths.'
 Assert-True ($msiVerifier.IndexOf('Assert-ReefVisionNoReparseAncestors -Path $Msi.FullName') -lt $msiVerifier.IndexOf('OpenDatabase($Msi.FullName, 0)')) 'MSI reparse-point guard must run before opening the database.'
