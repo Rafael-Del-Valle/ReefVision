@@ -1096,26 +1096,39 @@ def compare_mesh_observations(
         warnings.append("longitudinal_change_withheld_disputed_specimen_identity")
     if identity_inconclusive:
         warnings.append("longitudinal_change_withheld_inconclusive_specimen_identity")
-    # A content-addressed audit fingerprint binds both *caller-supplied* review
-    # records to the project, observation pair, timestamps, and source geometry.
-    # This is stable across dictionary key order and equivalent UTC offsets,
-    # but it is NOT a signature, authenticated review, or durable review ledger.
+    # A content-addressed audit fingerprint binds caller-supplied review records
+    # to both observations' source bytes, geometry, calibration and identity.
+    # Revisions to calibration evidence must invalidate the old review bundle,
+    # even when the original geometry and observation timestamps are unchanged.
+    # This is NOT an authenticated review, signature, or durable review ledger.
     review_bundle_sha256 = None
     if registration_record is not None or reidentification_record is not None:
         review_bundle = {
-            "schema_version": "mesh-review-bundle-0001",
+            "schema_version": "mesh-review-bundle-0002",
             "project_id": project_before,
             "specimen_id": specimen,
             "before_observation_id": first_id,
             "after_observation_id": second_id,
-            "before_observed_at_utc": before_time.astimezone(UTC).isoformat().replace(
-                "+00:00", "Z"
-            ),
-            "after_observed_at_utc": after_time.astimezone(UTC).isoformat().replace(
-                "+00:00", "Z"
-            ),
+            "before_observed_at_utc": before_time.astimezone(UTC)
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "after_observed_at_utc": after_time.astimezone(UTC).isoformat().replace("+00:00", "Z"),
             "before_geometry_sha256": first.get("geometry_sha256"),
             "after_geometry_sha256": second.get("geometry_sha256"),
+            "before_source_payload_sha256": first.get("source_payload_sha256"),
+            "after_source_payload_sha256": second.get("source_payload_sha256"),
+            "before_coordinate_frame_id": frames[0],
+            "after_coordinate_frame_id": frames[1],
+            "before_calibration_method": first.get("calibration_method"),
+            "after_calibration_method": second.get("calibration_method"),
+            "before_calibration_evidence": first.get("calibration_evidence"),
+            "after_calibration_evidence": second.get("calibration_evidence"),
+            "before_meters_per_mesh_unit": before_scale,
+            "after_meters_per_mesh_unit": after_scale,
+            "before_relative_scale_uncertainty": first.get("relative_scale_uncertainty"),
+            "after_relative_scale_uncertainty": second.get("relative_scale_uncertainty"),
+            "before_calibration_review_evidence": first.get("calibration_review_evidence"),
+            "after_calibration_review_evidence": second.get("calibration_review_evidence"),
             "registration_evidence": registration_record,
             "reidentification_evidence": reidentification_record,
         }
@@ -1227,7 +1240,7 @@ def compare_mesh_observations(
             "registration_evidence": registration_record,
             "reidentification_evidence": reidentification_record,
             "review_evidence_bundle_schema_version": (
-                "mesh-review-bundle-0001" if review_bundle_sha256 is not None else None
+                "mesh-review-bundle-0002" if review_bundle_sha256 is not None else None
             ),
             "review_evidence_bundle_sha256": review_bundle_sha256,
             "reidentification_evidence_review_status": (
