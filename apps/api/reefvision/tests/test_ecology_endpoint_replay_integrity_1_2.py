@@ -39,8 +39,7 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
     saved = _workflow(client, project_id)
     assert saved["run"]["status"] == "succeeded"
     artifacts = [
-        row for row in saved["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in saved["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == standalone.json()
@@ -67,17 +66,18 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
     )
     assert len(changes) == 1
     original = changes[0].model_dump(mode="json")
-    assert EcologyProjectedEndpointChange.model_validate(original).model_dump(
-        mode="json"
-    ) == original
+    assert (
+        EcologyProjectedEndpointChange.model_validate(original).model_dump(mode="json") == original
+    )
 
     # A previously saved typed result can omit optional later-added slopes.
     legacy = dict(original)
     legacy.pop("projected_absolute_change_per_day")
     legacy.pop("projected_baseline_percent_change_per_day")
-    assert EcologyProjectedEndpointChange.model_validate(
-        legacy
-    ).projected_absolute_change_per_day is None
+    assert (
+        EcologyProjectedEndpointChange.model_validate(legacy).projected_absolute_change_per_day
+        is None
+    )
 
     # Equivalent offset timestamps must replay the same UTC instants.
     offset = dict(original)
@@ -85,15 +85,25 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
     offset["final_capture_timestamp_utc"] = "2026-04-05T04:00:00-04:00"
     assert EcologyProjectedEndpointChange.model_validate(offset).elapsed_days == 2
 
+    # Different local calendar dates can still be the same UTC sampling date.
+    same_utc_date = dict(original)
+    same_utc_date["baseline_capture_timestamp_utc"] = "2026-04-03T23:30:00-04:00"
+    same_utc_date["final_capture_timestamp_utc"] = "2026-04-04T00:30:00-04:00"
+    with pytest.raises(PydanticValidationError, match="distinct ordered UTC sampling dates"):
+        EcologyProjectedEndpointChange.model_validate(same_utc_date)
+
     # Typed saved-workflow payloads reject changed endpoint calculations
     # even if the attacker keeps all lineage digest strings intact.
     typed_artifact = dict(standalone.json())
     typed_artifact["projected_endpoint_changes"] = [original]
-    assert len(
-        EcologyMeasurementCandidatesResponse.model_validate(
-            typed_artifact
-        ).projected_endpoint_changes
-    ) == 1
+    assert (
+        len(
+            EcologyMeasurementCandidatesResponse.model_validate(
+                typed_artifact
+            ).projected_endpoint_changes
+        )
+        == 1
+    )
 
     mutations: list[tuple[str, object]] = [
         ("absolute_change", 99.0),
@@ -104,6 +114,9 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
         ("baseline_capture_timestamp_utc", "2026-04-03T08:00:00"),
         ("final_capture_timestamp_utc", "2026-04-03T16:00:00Z"),
         ("final_image_id", first.image_id),
+        ("baseline_image_id", " "),
+        ("final_annotation_evidence_id", ""),
+        ("baseline_calibration_evidence_id", " "),
     ]
     for field, replacement in mutations:
         tampered = dict(original)

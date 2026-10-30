@@ -202,6 +202,21 @@ class EcologyProjectedEndpointChange(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
+    @field_validator(
+        "baseline_image_id",
+        "final_image_id",
+        "baseline_annotation_evidence_id",
+        "final_annotation_evidence_id",
+        "baseline_calibration_evidence_id",
+        "final_calibration_evidence_id",
+        mode="before",
+    )
+    @classmethod
+    def require_nonblank_endpoint_source_ids(cls, value: object) -> str:
+        """Saved endpoint changes must retain explicit source-evidence IDs."""
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("Projected endpoint requires nonblank source evidence IDs")
+        return value
 
     @model_validator(mode="after")
     def require_replayable_endpoint_arithmetic(self) -> EcologyProjectedEndpointChange:

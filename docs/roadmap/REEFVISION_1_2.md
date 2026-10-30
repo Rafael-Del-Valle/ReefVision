@@ -4550,3 +4550,27 @@ longitudinal measurement promotion, independent study-design verification,
 1.1 migration reconciliation, representative biological data, and installed
 Windows GUI/MSI acceptance remain open. **1.2 NOT RELEASE-READY; 1.3
 not started.**
+
+## Endpoint source-ID integrity and exact-head CI repair (2026-10-30)
+
+The previous head `b319b314` completed 16 of 19 PR-triggered Actions
+workflows successfully. Backend CI, Pose Workflow Validation, and ReefVision
+1.0 Acceptance failed at Ruff formatting, before backend scientific tests.
+The CI logs identified two unformatted files: the endpoint replay schema
+and its focused regression module. Applied the exact Ruff-requested layouts.
+
+A persisted projected endpoint now rejects empty or whitespace-only image,
+annotation-evidence, and calibration-evidence identifiers for either timepoint.
+This guards against saved scientific evidence losing its source links; it does
+not establish that a nonblank identifier belongs to an authenticated source.
+The existing standalone/project-source and saved-workflow parity test now
+also checks those missing-ID tampering cases, and rejects differing local dates
+that resolve to the **same UTC sampling date**. The already-executable typed
+Workflow Builder contract and scientist-review gate are unchanged.
+
+This increment does not authenticate growth, establish independent replication,
+add migrations, or duplicate 1.1 environmental context. Fresh exact-head CI
+must pass before treating this change as validated end-to-end. Real reviewed
+longitudinal measurements, migration reconciliation, representative biological
+acceptance, and installed Windows MSI/GUI acceptance remain mandatory.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
