@@ -3382,7 +3382,9 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
+                  disabled={
+                    visibilityMutation.isPending || !visibilityQuery.data
+                  }
                   onClick={saveCurrentVisibilityAsMyPreference}
                 >
                   Save as My Preference
@@ -3390,7 +3392,9 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
+                  disabled={
+                    visibilityMutation.isPending || !visibilityQuery.data
+                  }
                   onClick={saveCurrentVisibilityAsProjectDefault}
                 >
                   Save as Project Default
@@ -3398,7 +3402,9 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
+                  disabled={
+                    visibilityMutation.isPending || !visibilityQuery.data
+                  }
                   onClick={resetMyVisibilityPreferences}
                 >
                   Reset My Preferences
@@ -3413,7 +3419,9 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
+                  disabled={
+                    visibilityMutation.isPending || !visibilityQuery.data
+                  }
                   onClick={copyCurrentVisibilityToProjectDefaults}
                 >
                   Copy Current Visibility to Project Defaults
@@ -3421,7 +3429,9 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
+                  disabled={
+                    visibilityMutation.isPending || !visibilityQuery.data
+                  }
                   onClick={applyProjectDefaultsToMyPreferences}
                 >
                   Apply Project Defaults to My Preferences
