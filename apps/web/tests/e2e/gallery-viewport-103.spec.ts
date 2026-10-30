@@ -67,6 +67,8 @@ test("initial image and gallery scrolling", async ({ page }) => {
   }));
 
   const displayRequests: string[] = [];
+  const imageTwoRetryValues: Array<string | null> = [];
+  let imageTwoFailures = 0;
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("/health")) {
@@ -91,6 +93,19 @@ test("initial image and gallery scrolling", async ({ page }) => {
       const match = url.pathname.match(/\/images\/(image-\d+)\/display$/);
       if (match) {
         displayRequests.push(match[1]);
+        if (match[1] === "image-2") {
+          imageTwoRetryValues.push(url.searchParams.get("rv_retry"));
+          if (imageTwoFailures++ === 0) {
+            // An intermittent camera-display endpoint must show a recoverable
+            // error rather than an indefinitely obscured first preview.
+            await route.fulfill({
+              status: 503,
+              contentType: "text/plain",
+              body: "Camera rendition temporarily unavailable",
+            });
+            return;
+          }
+        }
         await route.fulfill({
           status: 200,
           contentType: "image/jpeg",
@@ -347,6 +362,23 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await expect(
     workbench.getByRole("listitem", { name: "Focus camera-01.JPEG" }),
   ).toHaveAttribute("aria-current", "true");
+
+  // The gallery must recover from a failed full-resolution JPEG request
+  // without changing the selected image or mutating annotation data.
+  // Retry must bypass a potentially cached failed WebView2 response.
+  const secondImage = workbench.getByRole("listitem", {
+    name: "Focus camera-02.JPEG",
+  });
+  await secondImage.click();
+  await expect(workbench.getByRole("alert")).toContainText(
+    "Image could not be displayed",
+  );
+  await expect(secondImage).toHaveAttribute("aria-current", "true");
+  await workbench.getByRole("button", { name: "Retry image" }).click();
+  await assertDecodedAndContained(1600, 1200);
+  await expect(secondImage).toHaveAttribute("aria-current", "true");
+  expect(imageTwoRetryValues).toEqual([null, "1"]);
+  await expect(workbench.getByRole("alert")).toHaveCount(0);
 
   expect(displayRequests).toContain("image-1");
   expect(displayRequests).toContain("image-12");
