@@ -216,7 +216,9 @@ def measure_mesh_preview(
     source_diagonal_squared = source_diagonal * source_diagonal
     # A nonzero diagonal can still square to zero in floating-point arithmetic.
     # Withhold the descriptor instead of dividing by zero or inventing precision.
-    shape_ratio = raw_area / source_diagonal_squared if source_diagonal_squared > 0 else None
+    shape_ratio = (
+        raw_area / source_diagonal_squared if source_diagonal_squared > 0 else None
+    )
     boundary = sum(count == 1 for count in edges.values())
     nonmanifold = sum(count > 2 for count in edges.values())
     # Group by shared edges, never by shared vertices alone. Sort patches by
