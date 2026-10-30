@@ -186,11 +186,17 @@ export function updateClassVisibilityBundleScope(
 export function updateClassVisibilityBundleForProject(
   bundle: ClassVisibilityBundle,
   projectId: string,
+  originUserIdentity: string | null,
   scopeKey: VisibilityScopeKey,
   layerType: ClassVisibilityLayerType,
   state: ClassVisibilityScopeState,
 ): ClassVisibilityBundle {
-  if (bundle.project_id !== projectId) {
+  if (
+    bundle.project_id !== projectId ||
+    (scopeKey === "user_preferences" &&
+      (originUserIdentity === null ||
+        bundle.user_identity !== originUserIdentity))
+  ) {
     return bundle;
   }
   return updateClassVisibilityBundleScope(bundle, scopeKey, layerType, state);

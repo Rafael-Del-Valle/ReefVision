@@ -50,6 +50,7 @@ describe("class visibility mutation project isolation", () => {
     const updated = updateClassVisibilityBundleForProject(
       original,
       "project-1",
+      "local-user:fixture",
       "user_preferences",
       "annotations",
       saved,
@@ -65,11 +66,53 @@ describe("class visibility mutation project isolation", () => {
     const updated = updateClassVisibilityBundleForProject(
       currentProject,
       "project-1",
+      "local-user:fixture",
       "project_defaults",
       "annotations",
       saved,
     );
     expect(updated).toBe(currentProject);
     expect(updated.project_defaults.annotations).toBe(emptyState);
+  });
+
+  it("rejects a late preference save from a different local user", () => {
+    const currentUser = bundle("project-1");
+    const updated = updateClassVisibilityBundleForProject(
+      currentUser,
+      "project-1",
+      "local-user:previous",
+      "user_preferences",
+      "annotations",
+      saved,
+    );
+    expect(updated).toBe(currentUser);
+    expect(updated.user_preferences.annotations).toBe(emptyState);
+  });
+
+  it("rejects a late preference reset without a known originating identity", () => {
+    const currentUser = bundle("project-1");
+    const updated = updateClassVisibilityBundleForProject(
+      currentUser,
+      "project-1",
+      null,
+      "user_preferences",
+      "annotations",
+      emptyState,
+    );
+    expect(updated).toBe(currentUser);
+  });
+
+  it("allows project defaults to update regardless of the originating user", () => {
+    const currentUser = bundle("project-1");
+    const updated = updateClassVisibilityBundleForProject(
+      currentUser,
+      "project-1",
+      "local-user:previous",
+      "project_defaults",
+      "annotations",
+      saved,
+    );
+    expect(updated.project_defaults.annotations).toEqual(saved);
+    expect(updated.user_preferences.annotations).toBe(emptyState);
   });
 });

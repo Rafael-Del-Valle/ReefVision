@@ -1066,6 +1066,11 @@ export function AnnotationEditor({
       };
     },
     onMutate: (input) => {
+      const originUserIdentity =
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          input.projectId,
+        ])?.user_identity ?? null;
       const layerLabel = visibilityLayerLabel(input.layerType);
       if (input.projectId === project.id) {
         setVisibilityStatusMessage(
@@ -1074,8 +1079,9 @@ export function AnnotationEditor({
             : `Resetting ${layerLabel} visibility...`,
         );
       }
+      return { originUserIdentity };
     },
-    onSuccess: (result) => {
+    onSuccess: (result, _input, context) => {
       queryClient.setQueryData<ClassVisibilityBundle>(
         ["class-visibility", result.projectId],
         (current) => {
@@ -1085,18 +1091,37 @@ export function AnnotationEditor({
           return updateClassVisibilityBundleForProject(
             current,
             result.projectId,
+            context?.originUserIdentity ?? null,
             result.scopeKey,
             result.layerType,
             result.state,
           );
         },
       );
-      if (result.projectId === project.id) {
+      const activeUserIdentity =
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          result.projectId,
+        ])?.user_identity ?? null;
+      if (
+        result.projectId === project.id &&
+        context?.originUserIdentity !== null &&
+        context?.originUserIdentity === activeUserIdentity
+      ) {
         setVisibilityStatusMessage(result.statusMessage);
       }
     },
-    onError: (error: Error, input) => {
-      if (input.projectId === project.id) {
+    onError: (error: Error, input, context) => {
+      const activeUserIdentity =
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          input.projectId,
+        ])?.user_identity ?? null;
+      if (
+        input.projectId === project.id &&
+        context?.originUserIdentity !== null &&
+        context?.originUserIdentity === activeUserIdentity
+      ) {
         setVisibilityStatusMessage(error.message);
       }
     },
