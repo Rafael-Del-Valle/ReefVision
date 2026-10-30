@@ -180,6 +180,15 @@ def preview_project_mesh(
     service = SpatialSourceAssetService(session, settings)
     asset = service.get(project_id, payload.asset_id)
     original = service.read_verified(project_id, asset.id)
+    # The byte digest alone does not identify a project-owned original:
+    # two projects may import identical source bytes independently.
+    review = payload.calibration_review
+    if (
+        review is not None
+        and review.reviewed_spatial_source_asset_id is not None
+        and review.reviewed_spatial_source_asset_id != asset.id
+    ):
+        raise ValidationError("Calibration review does not match imported spatial source asset")
     if (
         payload.expected_source_payload_sha256 is not None
         and payload.expected_source_payload_sha256 != asset.sha256
@@ -210,6 +219,8 @@ def preview_project_mesh(
     result["provenance"]["spatial_source_asset_id"] = asset.id
     result["provenance"]["spatial_source_asset_sha256"] = asset.sha256
     result["qc_warnings"].append("project_source_original_unreviewed")
+    if review is not None and review.reviewed_spatial_source_asset_id is None:
+        result["qc_warnings"].append("independent_calibration_review_source_asset_unbound")
     return result
 
 
@@ -227,6 +238,15 @@ def preview_project_point_cloud(
     if asset.source_format != "ply":
         raise ValidationError("Project point-cloud preview requires a PLY original")
     original = service.read_verified(project_id, asset.id)
+    # The byte digest alone does not identify a project-owned original:
+    # two projects may import identical source bytes independently.
+    review = payload.calibration_review
+    if (
+        review is not None
+        and review.reviewed_spatial_source_asset_id is not None
+        and review.reviewed_spatial_source_asset_id != asset.id
+    ):
+        raise ValidationError("Calibration review does not match imported spatial source asset")
     if (
         payload.expected_source_payload_sha256 is not None
         and payload.expected_source_payload_sha256 != asset.sha256
@@ -249,4 +269,6 @@ def preview_project_point_cloud(
     result["provenance"]["spatial_source_asset_id"] = asset.id
     result["provenance"]["spatial_source_asset_sha256"] = asset.sha256
     result["qc_warnings"].append("project_source_original_unreviewed")
+    if review is not None and review.reviewed_spatial_source_asset_id is None:
+        result["qc_warnings"].append("independent_calibration_review_source_asset_unbound")
     return result
