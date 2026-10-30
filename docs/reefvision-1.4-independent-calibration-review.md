@@ -82,3 +82,19 @@ directory between validation and opening a file. Project storage still
 requires appropriate operating-system access controls. A matching SHA-256
 digest and path are not evidence of verified calibration, acquisition
 authenticity, or confirmed specimen identity.
+
+## Asset-bound review evidence requires an imported original
+
+A calibration review carrying `reviewed_spatial_source_asset_id` is valid only
+when the analysis resolves that specific project-owned imported original. Inline
+OBJ/PLY/GLB text, inline indexed triangles, and inline XYZ/PLY point clouds do
+not acquire project asset identity merely because their bytes and geometry
+match an imported source. Inline requests claiming an asset-bound review now
+fail closed. This check also runs during replay of persisted, executable
+`mesh_surface_preview` and `point_cloud_preview` Workflow Builder nodes;
+failed runs must not emit a measurement artifact. Asset-backed analyses retain
+existing exact-asset binding and legacy-unbound QC behavior.
+
+This prevents a misleading source-asset provenance claim. It does not
+establish authenticated reviewers, durable versioned review records, verified
+physical calibration, or biological specimen identity.
