@@ -147,14 +147,19 @@ class SpatialSourceAssetService:
         # the same data root could otherwise replay identical bytes under the
         # original asset ID and still satisfy the SHA-256 check. Inspect each
         # lexical path component before resolving it, including parent folders.
-        lexical_path = self.settings.resolved_data_dir
-        for component in Path(expected_path).parts:
-            lexical_path = lexical_path / component
-            if lexical_path.is_symlink():
-                raise ValidationError("Spatial source original path contains a symlink")
-        path = resolve_managed_project_path(self.settings, asset.managed_path)
-        if path.is_symlink() or not path.is_file():
-            raise ValidationError("Spatial source original bytes are missing or unsafe")
+        try:
+            lexical_path = self.settings.resolved_data_dir
+            for component in Path(expected_path).parts:
+                lexical_path = lexical_path / component
+                if lexical_path.is_symlink():
+                    raise ValidationError("Spatial source original path contains a symlink")
+            path = resolve_managed_project_path(self.settings, asset.managed_path)
+            if path.is_symlink() or not path.is_file():
+                raise ValidationError("Spatial source original bytes are missing or unsafe")
+        except OSError as exc:
+            # Permission changes or I/O failures during path inspection are
+            # invalid source evidence, not an unexpected server error.
+            raise ValidationError("Spatial source original path could not be inspected") from exc
         if asset.size_bytes <= 0 or asset.size_bytes > MAX_BYTES:
             raise ValidationError("Spatial source stored byte length is invalid")
         # Read only the bounded import limit, then compare the bytes actually read.
