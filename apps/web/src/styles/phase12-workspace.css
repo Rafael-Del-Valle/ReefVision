@@ -224,6 +224,25 @@
   font-size: 0.78rem;
 }
 
+.rv-project-launcher-search {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 30rem;
+  margin-bottom: 1rem;
+  color: var(--rv-muted-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.rv-project-launcher-search input {
+  width: 100%;
+  min-height: 2.5rem;
+}
+
+.rv-project-launcher-expand {
+  margin-top: 0.9rem;
+}
+
 .rv-project-launcher-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
