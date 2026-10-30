@@ -51,6 +51,31 @@ try {
     Assert-Throws {
         Assert-ReefVisionMsiLocalPath -InstallerPath (Join-Path $bundle 'missing.msi') -RepoPath $repo
     } 'missing from the local build directory'
+    # A valid, locally pinned MSI must not replace a newer installed desktop.
+    # Three-component MSI versions compare against four-component FileVersion.
+    foreach ($case in @(
+        @{ Installed = $null; Target = '1.0.3' },
+        @{ Installed = '1.0.3'; Target = '1.0.3' },
+        @{ Installed = '1.0.3.0'; Target = '1.0.3' },
+        @{ Installed = '1.0.2.9'; Target = '1.0.3' },
+        @{ Installed = '1.0.3'; Target = '1.0.4' }
+    )) {
+        Assert-ReefVisionMsiNoDowngrade -InstalledVersion $case.Installed -TargetVersion $case.Target
+        $passed++
+    }
+    Assert-Throws {
+        Assert-ReefVisionMsiNoDowngrade -InstalledVersion '1.0.4' -TargetVersion '1.0.3'
+    } 'Refusing ReefVision MSI downgrade'
+    Assert-Throws {
+        Assert-ReefVisionMsiNoDowngrade -InstalledVersion '1.0.3.1' -TargetVersion '1.0.3'
+    } 'Refusing ReefVision MSI downgrade'
+    Assert-Throws {
+        Assert-ReefVisionMsiNoDowngrade -InstalledVersion 'v1.0.4' -TargetVersion '1.0.3'
+    } 'Cannot verify installed ReefVision version'
+    Assert-Throws {
+        Assert-ReefVisionMsiNoDowngrade -InstalledVersion '1.0.3' -TargetVersion '256.0.0'
+    } 'Windows Installer numeric limits'
+
     # No .venv exists in this disposable repository. The offline provenance
     # validator must use an already installed Python 3.11+ from PATH, without
     # bootstrapping a virtual environment or installing dependencies.
@@ -194,6 +219,13 @@ try {
         $logPreflight -le $verificationPosition -or $logPreflight -ge $stopPosition) {
         throw 'MSI executable and safe log preflight must precede stopping the desktop.'
     }
+    $downgradePreflight = $updateScript.IndexOf(
+        'Assert-ReefVisionMsiNoDowngrade -InstalledVersion $installedVersion -TargetVersion $expectedVersion'
+    )
+    if ($downgradePreflight -le $verificationPosition -or $downgradePreflight -ge $stopPosition) {
+        throw 'Downgrade preflight must run after MSI verification and before desktop shutdown.'
+    }
+    $passed++
     $passed++
     if ($updateScript -notmatch '(?s)if \(\$process\.ExitCode -eq 3010\) \{\s*Write-Warning[^\r\n]*\s*return\s*\}') {
         throw 'Reboot-required MSI result must defer version verification and relaunch.'
