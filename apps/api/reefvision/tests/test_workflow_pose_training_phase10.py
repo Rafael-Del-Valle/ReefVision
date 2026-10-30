@@ -956,7 +956,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
     checkpoint = resolve_managed_project_path(test_settings, result["result_checkpoint_path"])
     checkpoint.write_bytes(b"changed-after-scientist-verified-pose-training")
-    with pytest.raises(ValidationError, match="checkpoint checksum changed"):
+    with pytest.raises(ValidationError, match=r"checkpoint (?:artifact )?checksum changed"):
         retry_completed_node()
 
 
