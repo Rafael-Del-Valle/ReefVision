@@ -318,6 +318,26 @@ def compare_mesh_observations(
         else:
             raise ValueError("Bounding-box diagonals must be finite and nonnegative")
     early_extent, late_extent = extents
+    # A dimensionless reconstruction descriptor from the full source mesh.
+    # Missing values in older artifacts stay unknown; never infer them from
+    # nominal calibrated values, which may underflow at extreme scales.
+    shape_ratios: list[float | None] = []
+    for record in (before, after):
+        value = record.get("surface_area_to_bounding_diagonal_squared_ratio")
+        if value is None:
+            shape_ratios.append(None)
+        elif type(value) in (int, float) and isfinite(value) and value >= 0:
+            shape_ratios.append(float(value))
+        else:
+            raise ValueError("Mesh shape ratios must be finite and nonnegative")
+    before_shape_ratio, after_shape_ratio = shape_ratios
+    shape_ratio_delta = (
+        after_shape_ratio - before_shape_ratio
+        if before_shape_ratio is not None and after_shape_ratio is not None
+        else None
+    )
+    if shape_ratio_delta is not None and not isfinite(shape_ratio_delta):
+        raise ValueError("Mesh shape ratio change exceeds finite numeric range")
     extent_delta = (
         late_extent - early_extent if early_extent is not None and late_extent is not None else None
     )
@@ -568,6 +588,10 @@ def compare_mesh_observations(
         warnings.append("calibration_scale_metadata_unavailable")
     elif before_scale != after_scale:
         warnings.append("calibration_scale_changed_between_observations")
+    if shape_ratio_delta is None:
+        warnings.append("mesh_shape_ratio_comparison_unavailable")
+    else:
+        warnings.append("mesh_shape_ratio_change_is_orientation_sensitive_reconstruction_qc")
     if a0 == 0:
         warnings.append("relative_surface_area_change_unavailable_zero_baseline")
     if a0 > 0 and a1 == 0:
@@ -1122,6 +1146,9 @@ def compare_mesh_observations(
         "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m": (
             centroid_axis_bound_intervals_m
         ),
+        "before_surface_area_to_bounding_diagonal_squared_ratio": before_shape_ratio,
+        "after_surface_area_to_bounding_diagonal_squared_ratio": after_shape_ratio,
+        "delta_surface_area_to_bounding_diagonal_squared_ratio": shape_ratio_delta,
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
         "delta_surface_area_m2": difference,
@@ -1187,6 +1214,7 @@ def compare_mesh_observations(
         # disputed or inconclusive match cannot support cross-timepoint organism
         # change estimates, even if the numerical geometry is well formed.
         for key in (
+            "delta_surface_area_to_bounding_diagonal_squared_ratio",
             "delta_patch_area_concentration_index",
             "delta_area_weighted_effective_patch_count",
             "ranked_patch_area_profile_distance",
