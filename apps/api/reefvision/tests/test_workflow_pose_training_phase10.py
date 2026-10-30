@@ -293,6 +293,13 @@ def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
                 **dict(run.artifact_manifest_json or {}),
                 "last_checkpoint_path": last_path,
             }
+            # The worker must persist the same artifact evidence in its
+            # experiment record before Workflow Builder pins checkpoint hashes.
+            experiment = session.scalar(
+                select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
+            )
+            assert experiment is not None
+            experiment.artifact_manifest_json = dict(run.artifact_manifest_json)
             session.commit()
         return True
 
