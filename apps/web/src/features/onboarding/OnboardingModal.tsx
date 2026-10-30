@@ -25,6 +25,7 @@ export function OnboardingModal({
 }: OnboardingModalProps) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const handoffFocusRef = useRef(false);
 
   useEffect(() => {
     const previouslyFocused =
@@ -49,11 +50,16 @@ export function OnboardingModal({
     document.addEventListener("focusin", keepFocusInDialog);
     return () => {
       document.removeEventListener("focusin", keepFocusInDialog);
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+      // Opening the project-creation dialog is a modal-to-modal handoff.
+      // Do not steal focus from its auto-focused project-name input.
+      if (!handoffFocusRef.current && previouslyFocused?.isConnected) {
+        previouslyFocused.focus();
+      }
     };
   }, []);
 
   function navigateTo(destination: OnboardingDestination) {
+    if (destination === "create_project") handoffFocusRef.current = true;
     onNavigate(destination);
     onClose();
   }
