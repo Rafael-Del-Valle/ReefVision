@@ -51,7 +51,16 @@ OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
     ],
     ids=["obj", "ply-point-cloud", "glb"],
 )
-@pytest.mark.parametrize("corrupt_field", ["source_kind", "source_format"])
+@pytest.mark.parametrize(
+    "corrupt_field",
+    [
+        "source_kind",
+        "source_format",
+        "original_filename_extension",
+        "original_filename_path",
+        "original_filename_empty",
+    ],
+)
 def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
     client: TestClient,
     filename: str,
@@ -102,14 +111,23 @@ def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
         assert record is not None
         if corrupt_field == "source_kind":
             record.source_kind = wrong_kind
-        else:
+        elif corrupt_field == "source_format":
             record.source_format = "unknown"
+        elif corrupt_field == "original_filename_extension":
+            record.original_filename = "relabelled.txt"
+        elif corrupt_field == "original_filename_path":
+            record.original_filename = f"../{filename}"
+        else:
+            record.original_filename = ""
         session.commit()
 
     # The file itself has not changed; the recorded source classification has.
     content = client.get(f"{base}/spatial/assets/{asset['id']}/content")
     assert content.status_code == 400, content.text
-    assert "format and kind" in content.text.lower()
+    if corrupt_field in {"source_kind", "source_format"}:
+        assert "format and kind" in content.text.lower()
+    else:
+        assert "original filename" in content.text.lower()
     standalone = client.post(f"{base}/spatial/{endpoint}", json=params)
     assert standalone.status_code == 400, standalone.text
 
