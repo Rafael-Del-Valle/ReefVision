@@ -4357,3 +4357,27 @@ verified longitudinal measurements. The review gate remains
 `scientist_review_required`. Real-data acceptance, 1.1 migration-lineage
 reconciliation, full exact-head CI and installed Windows GUI testing remain
 required.
+
+
+## Strict typing repair for identity-history evidence export (2026-10-30)
+
+At branch head `08c6ca30`, 16 of 19 PR-triggered Actions workflows passed;
+three backend workflows failed on four strict mypy errors in
+`ecology_identity_history_export.py`. The three linked source-evidence
+collections (image, reviewed annotation, frozen calibration) contain distinct
+typed row models, but their sequential loops reused the same variable
+`link`. Mypy retained the image-link type for subsequent loops, rejecting
+the annotation and calibration field access.
+
+The exporter now uses type-specific `image_link`, `annotation_link` and
+`calibration_link` names. Source mapping, CSV schema, validation and review
+semantics are unchanged. The existing integration regression
+`test_history_csv_traces_revision_sources_and_prior_design_change_evidence`
+checks all three link types, the earlier-revision design-correction warning,
+tampering rejection and exact standalone/saved Workflow Builder parity.
+This repair introduces no migration or parallel scientific implementation.
+
+A source-level inspection is not a substitute for strict mypy/pytest or
+physical Windows acceptance. Check the **new commit's exact-head** Actions
+results before claiming the typing gate is resolved. Version 1.2 remains
+**NOT RELEASE-READY**; 1.3 has not begun.
