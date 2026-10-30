@@ -1105,7 +1105,7 @@ def compare_mesh_observations(
     review_bundle_sha256 = None
     if registration_record is not None or reidentification_record is not None:
         review_bundle = {
-            "schema_version": "mesh-review-bundle-0002",
+            "schema_version": "mesh-review-bundle-0003",
             "project_id": project_before,
             "specimen_id": specimen,
             "before_observation_id": first_id,
@@ -1118,6 +1118,19 @@ def compare_mesh_observations(
             "after_geometry_sha256": second.get("geometry_sha256"),
             "before_source_payload_sha256": first.get("source_payload_sha256"),
             "after_source_payload_sha256": second.get("source_payload_sha256"),
+            # Bind the interpretation of source-byte hashes to the import format,
+            # byte count and whether an expected hash was actually checked.
+            # These are caller-derived audit facts, not verified authenticity.
+            "before_source_format": first.get("source_format"),
+            "after_source_format": second.get("source_format"),
+            "before_source_payload_size_bytes": first.get("source_payload_size_bytes"),
+            "after_source_payload_size_bytes": second.get("source_payload_size_bytes"),
+            "before_source_payload_integrity_checked": first.get(
+                "source_payload_integrity_checked"
+            ),
+            "after_source_payload_integrity_checked": second.get(
+                "source_payload_integrity_checked"
+            ),
             "before_coordinate_frame_id": frames[0],
             "after_coordinate_frame_id": frames[1],
             "before_calibration_method": first.get("calibration_method"),
@@ -1241,7 +1254,7 @@ def compare_mesh_observations(
             "registration_evidence": registration_record,
             "reidentification_evidence": reidentification_record,
             "review_evidence_bundle_schema_version": (
-                "mesh-review-bundle-0002" if review_bundle_sha256 is not None else None
+                "mesh-review-bundle-0003" if review_bundle_sha256 is not None else None
             ),
             "review_evidence_bundle_sha256": review_bundle_sha256,
             "review_evidence_bundle": review_bundle,
