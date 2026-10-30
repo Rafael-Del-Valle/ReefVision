@@ -26,6 +26,13 @@ the user requested only installation of a cached MSI.
   changes or development environments are missing, unless `--skip-setup`
   is explicitly selected. `--setup` still forces setup for build/update.
 - `--dry-run --install-only` reports `setup_needed: false`.
+- The provenance validator uses only Python's standard library. If the
+  repository's .venv is absent, an **already installed** Python 3.11+ on PATH
+  is permitted, running with -I -S -B (isolated, no site packages, no bytecode
+  writes). No interpreter or packages are downloaded. If neither interpreter
+  exists, installation fails closed **before** the running desktop is stopped.
+  This is not a Python-free installer; native MSI/GUI acceptance remains
+  required.
 - Installation still requires a pinned MSI, matching SHA-256, verified
   embedded source commit/version, safe local MSI/log paths, and successful
   Windows Installer execution. No automatic pretrained model downloads,
@@ -37,7 +44,10 @@ the user requested only installation of a cached MSI.
 PowerShell AST, evaluates the setup decision in an isolated disposable
 fixture, and checks five cases: install-only with and without skip-setup,
 normal dependency mismatch, explicit skip-setup, and explicit setup.
-It also checks for the conflicting-option guard. The existing
+It also checks for the conflicting-option guard. The Windows preflight
+now exercises the actual Python resolver against a disposable repository
+without .venv, verifies selection of an existing Python executable, and
+confirms a missing validator still fails before installation. The existing
 `.github/workflows/build-desktop.yml` Windows preflight already invokes
 this test before building an MSI.
 
