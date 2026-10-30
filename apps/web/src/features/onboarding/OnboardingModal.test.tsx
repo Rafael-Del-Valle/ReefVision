@@ -135,6 +135,61 @@ describe("onboarding local usability", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+
+  it("offers explicit project creation from first-run help without creating data", () => {
+    const onNavigate = vi.fn();
+    const onClose = vi.fn();
+    const onDismissPermanently = vi.fn();
+    render(
+      <OnboardingModal
+        version="1.6"
+        hasProject={false}
+        onNavigate={onNavigate}
+        onClose={onClose}
+        onDismissPermanently={onDismissPermanently}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create a project" }));
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("create_project");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onDismissPermanently).not.toHaveBeenCalled();
+  });
+
+  it("opens existing-project selection without requiring a project first", () => {
+    const onNavigate = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <OnboardingModal
+        version="1.6"
+        hasProject={false}
+        onNavigate={onNavigate}
+        onClose={onClose}
+        onDismissPermanently={vi.fn()}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose an existing project" }),
+    );
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("projects");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not offer project-creation navigation inside an existing project", () => {
+    render(
+      <OnboardingModal
+        version="1.6"
+        hasProject={true}
+        onNavigate={vi.fn()}
+        onClose={vi.fn()}
+        onDismissPermanently={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Create a project" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Choose an existing project" }),
+    ).toBeNull();
+  });
+
   it("describes reviewed QC and saved workflows", () => {
     render(
       <OnboardingModal
