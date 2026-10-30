@@ -766,3 +766,25 @@ adapter use this fail-closed validation. Regression tests exercise
 both timepoints and both interval types. These are scale-only bounds,
 not statistical confidence intervals or verified coral growth; physical
 calibration, registration and biological identity remain provisional.
+
+### Dimensionless mesh shape diagnostic (October 30, 2026)
+
+Standalone OBJ/PLY/GLB mesh previews and executable, persisted Workflow Builder
+`mesh_surface_preview` nodes now emit
+`surface_area_to_bounding_diagonal_squared_ratio`. The value is the **full
+mesh** triangle surface area in source units divided by the square of the
+axis-aligned bounding-box diagonal in the same source units. For the example
+2-by-3-unit right triangle, the ratio is `3 / 13`. It is independent of a
+common positive isotropic meters-per-unit scale; source-unit calculation also
+avoids numerical underflow from squaring very small calibrated dimensions.
+A zero diagonal produces `null`, not a fabricated finite ratio. The field
+does not acquire a separate scale-only uncertainty interval because the
+common scale factor cancels algebraically.
+
+This is a **provisional reconstruction shape descriptor**, not a coral health,
+biomass, branch length, growth, or species classification. It changes with
+source-axis rotation, reconstruction completeness, mesh tessellation, and
+the spacing of disconnected patches. No orientation registration, independent
+scale validation, biological reidentification, or reconstruction-error
+uncertainty is implied. Persisted-workflow and standalone regressions check
+the same value, calibration-scale invariance, and the zero-diagonal case.
