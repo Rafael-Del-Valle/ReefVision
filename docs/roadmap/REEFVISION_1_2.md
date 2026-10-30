@@ -4264,3 +4264,28 @@ not source ownership attestation, scientist approval, calibration verification,
 or experimental-unit independence. Typed Workflow Builder results, historical
 artifact compatibility and review restrictions remain unchanged. Latest-head
 CI and installed Windows/scientific acceptance are required before release.
+
+## Shared physical-unit eligibility at source and artifact boundaries (2026-10-30)
+
+Source-linked ecological measurements now use one physical-length unit policy
+for the frozen calibration registry and the persisted measurement-candidate
+schema. Previously the registry rejected pixels, seconds and arbitrary unit
+labels, but the candidate schema only checked that a label *looked* linear:
+a re-signed saved artifact could therefore export `pixels`, `seconds` or
+`unknown` as if they were calibrated physical lengths, and `px^2` as
+a projected physical area. The schema now accepts the same recognized
+physical-length labels as the source registry; mask projected areas must use
+the corresponding `^2` suffix. Existing accepted micro-sign/Greek-mu
+spellings and metric/imperial units remain supported.
+
+Focused standalone Pydantic regressions cover accepted units and rejected
+nonphysical labels; saved executable Workflow Builder replay and re-signed
+source CSV regression cases must fail closed on altered units. The common
+helper does **not** convert units, validate the physical scale, authenticate
+calibration/identity or establish independent biological replicates.
+Historical artifacts with invalid nonphysical units must fail scientific
+revalidation rather than being silently promoted. All outputs remain
+`linked_unverified` with scientist review required. Exact-head CI,
+registered design, real longitudinal review, migration reconciliation and
+installed Windows GUI/MSI acceptance remain release gates.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

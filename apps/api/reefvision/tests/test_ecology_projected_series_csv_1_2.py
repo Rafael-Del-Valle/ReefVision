@@ -299,6 +299,9 @@ def test_resigned_source_cannot_swap_geometry_dimension_in_csv(
         {"image_sha256": "not-a-sha256"},
         {"identity_revision": 0},
         {"capture_time_status": "timezone_missing"},
+        {"unit": "pixels"},
+        {"unit": "seconds"},
+        {"unit": "unknown"},
     ],
 )
 def test_resigned_source_cannot_bypass_candidate_schema_in_csv(

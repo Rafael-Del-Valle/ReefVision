@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
 
 
 class EcologyMeasurementCandidate(BaseModel):
@@ -82,17 +83,11 @@ class EcologyMeasurementCandidate(BaseModel):
 
     @staticmethod
     def _linear_unit_syntax(unit: str) -> bool:
-        """Reject exponent-coded dimensions, including Unicode superscripts.
+        """Require a physical length label, not pixels or arbitrary dimension text.
 
-        This is a syntax safeguard, not verification of physical calibration.
+        This does not authenticate the underlying scale or its scientific review.
         """
-        normalized = unicodedata.normalize("NFKC", unit)
-        return (
-            bool(unit)
-            and unit == unit.strip()
-            and not any(char.isspace() or char.isdigit() for char in normalized)
-            and "^" not in normalized
-        )
+        return is_ecological_physical_length_unit(unit)
 
     @model_validator(mode="after")
     def consistent_geometry_dimension(self) -> EcologyMeasurementCandidate:

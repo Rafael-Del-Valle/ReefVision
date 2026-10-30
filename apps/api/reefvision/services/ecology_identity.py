@@ -24,6 +24,7 @@ from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
+from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
 from reefvision.domain.ecology_polygon_qc import validate_ecological_polygon_topology
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
@@ -570,49 +571,7 @@ class EcologyIdentityService:
             raise ValidationError("Ecological image calibration metadata is invalid") from exc
         # An arbitrary text unit (e.g. seconds or frames) cannot yield physical lengths.
         # Validate dimensionality here without silently converting the saved scale.
-        unit = calibration.unit.strip().casefold()
-        if unit not in {
-            "nm",
-            "nanometer",
-            "nanometers",
-            "nanometre",
-            "nanometres",
-            "um",
-            "μm",
-            "micrometer",
-            "micrometers",
-            "micrometre",
-            "micrometres",
-            "mm",
-            "millimeter",
-            "millimeters",
-            "millimetre",
-            "millimetres",
-            "cm",
-            "centimeter",
-            "centimeters",
-            "centimetre",
-            "centimetres",
-            "m",
-            "meter",
-            "meters",
-            "metre",
-            "metres",
-            "km",
-            "kilometer",
-            "kilometers",
-            "kilometre",
-            "kilometres",
-            "in",
-            "inch",
-            "inches",
-            "ft",
-            "foot",
-            "feet",
-            "yd",
-            "yard",
-            "yards",
-        }:
+        if not is_ecological_physical_length_unit(calibration.unit):
             raise ValidationError(
                 "Ecological calibration requires a recognized physical length unit"
             )
