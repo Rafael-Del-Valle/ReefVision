@@ -272,6 +272,10 @@ def test_projected_endpoint_csv_reports_dated_arithmetic_and_sources(
         {"annotation_kind": "mask"},
         {"metric": "mask_projected_area"},
         {"unit": "mm^2"},
+        {"unit": "mm²"},
+        {"unit": "mm2"},
+        {"unit": "mm^3"},
+        {"unit": "mm⁴"},
     ],
 )
 def test_resigned_source_cannot_swap_geometry_dimension_in_csv(
@@ -281,9 +285,7 @@ def test_resigned_source_cannot_swap_geometry_dimension_in_csv(
     original = _dated_artifact(client)
     forged_candidate = original.candidates[0].model_copy(update=forged_source_fields)
     tampered = _resign_derived_evidence(
-        original.model_copy(
-            update={"candidates": [forged_candidate, *original.candidates[1:]]}
-        )
+        original.model_copy(update={"candidates": [forged_candidate, *original.candidates[1:]]})
     )
     with pytest.raises(ValidationError, match="geometry dimension"):
         render_ecology_series_qc_csv(tampered)
