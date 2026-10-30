@@ -27,6 +27,7 @@ PLY = (
 )
 
 
+@pytest.mark.parametrize("bind_asset", [True, False], ids=["bound", "legacy-unbound"])
 @pytest.mark.parametrize(
     ("filename", "original", "endpoint", "node_type", "artifact_type"),
     [
@@ -53,6 +54,7 @@ def test_project_original_review_replays_identically_in_saved_workflow(
     endpoint: str,
     node_type: str,
     artifact_type: str,
+    bind_asset: bool,
 ) -> None:
     project_id = str(create_project(client, "Reviewed 3D source replay")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -90,6 +92,8 @@ def test_project_original_review_replays_identically_in_saved_workflow(
         "reviewed_calibration_evidence": "Unverified scale bar in source images",
         "reviewed_relative_scale_uncertainty": 0.05,
     }
+    if bind_asset:
+        params["calibration_review"]["reviewed_spatial_source_asset_id"] = asset["id"]
     standalone = client.post(f"{base}/spatial/{endpoint}", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
@@ -102,6 +106,9 @@ def test_project_original_review_replays_identically_in_saved_workflow(
     )
     assert "independent_calibration_review_disputes_scale" in expected["qc_warnings"]
     assert "project_source_original_unreviewed" in expected["qc_warnings"]
+    assert (
+        "independent_calibration_review_source_asset_unbound" in expected["qc_warnings"]
+    ) is not bind_asset
 
     graph = {
         "graph_id": f"asset-review-{node_type}",
@@ -141,6 +148,57 @@ def test_project_original_review_replays_identically_in_saved_workflow(
         if item["data_type"] == artifact_type
     )
     assert artifact == expected
+
+    if bind_asset:
+        # Identical bytes imported into another project still have a distinct
+        # project-owned identity. A review for that asset cannot be replayed.
+        foreign_project = str(create_project(client, "Separate imported source")["id"])
+        foreign = client.post(
+            f"/api/v1/projects/{foreign_project}/spatial/assets",
+            files={"file": (filename, original)},
+        )
+        assert foreign.status_code == 201, foreign.text
+        assert foreign.json()["sha256"] == asset["sha256"]
+        assert foreign.json()["id"] != asset["id"]
+        invalid_params = {
+            **params,
+            "calibration_review": {
+                **params["calibration_review"],
+                "reviewed_spatial_source_asset_id": foreign.json()["id"],
+            },
+        }
+        rejected = client.post(f"{base}/spatial/{endpoint}", json=invalid_params)
+        assert rejected.status_code == 400, rejected.text
+        assert "does not match imported spatial source asset" in rejected.text
+        invalid_graph = {
+            **graph,
+            "graph_id": f"foreign-asset-review-{node_type}",
+            "nodes": [
+                graph["nodes"][0],
+                {**graph["nodes"][1], "parameters": invalid_params},
+            ],
+        }
+        rejected_save = client.post(
+            f"{base}/workflow-graphs", json={"graph": invalid_graph}
+        )
+        assert rejected_save.status_code == 201, rejected_save.text
+        rejected_run = client.post(
+            f"{base}/workflow-runs",
+            json={"graph_record_id": rejected_save.json()["id"]},
+        )
+        assert rejected_run.status_code == 202, rejected_run.text
+        assert not process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(rejected_run.json()["job_id"]),
+        )
+        rejected_detail = client.get(f"/api/v1/workflow-runs/{rejected_run.json()['id']}")
+        assert rejected_detail.status_code == 200, rejected_detail.text
+        assert rejected_detail.json()["run"]["status"] == "failed"
+        assert not any(
+            item["data_type"] == artifact_type
+            for item in rejected_detail.json()["artifacts"]
+        )
 
     # Reusing a review after changing physical scale must fail closed.
     stale = client.post(
