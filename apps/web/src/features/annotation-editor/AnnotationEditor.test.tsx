@@ -1440,8 +1440,6 @@ describe("AnnotationEditor", () => {
     expect(annotationGets).toHaveLength(1);
   });
 
-
-
   it("waits for a project visibility identity before enabling persistent controls", async () => {
     let resolveVisibility: (response: Response) => void = () => {
       throw new Error("The visibility request was not started");
@@ -1575,9 +1573,9 @@ describe("AnnotationEditor", () => {
         project.id,
       ]),
     ).toBe(otherUser);
-    expect(
-      screen.getByTestId("class-visibility-status"),
-    ).not.toHaveTextContent("Saved my preference for Annotations.");
+    expect(screen.getByTestId("class-visibility-status")).not.toHaveTextContent(
+      "Saved my preference for Annotations.",
+    );
   });
 
   it("keeps delayed visibility saves in the original project's cache after switching projects", async () => {
