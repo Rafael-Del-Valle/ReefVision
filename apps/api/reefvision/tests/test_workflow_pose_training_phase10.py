@@ -2178,18 +2178,21 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             settings: Settings,
             factory: sessionmaker[Session],
             job_id: str,
+            summary_field: str = field,
+            summary_value: Any = corrupted,
+            run_ids: list[str] = created_run_ids,
         ) -> bool:
             assert _fake_pose_processor(settings, factory, job_id)
             with factory() as child_session:
                 job = child_session.get(Job, job_id)
                 assert job is not None
                 run_id = str(job.request_json["training_run_id"])
-                created_run_ids.append(run_id)
+                run_ids.append(run_id)
                 experiment = child_session.scalar(
                     select(ExperimentRecord).where(ExperimentRecord.training_run_id == run_id)
                 )
                 assert experiment is not None
-                setattr(experiment, field, corrupted)
+                setattr(experiment, summary_field, summary_value)
                 child_session.commit()
             return True
 
