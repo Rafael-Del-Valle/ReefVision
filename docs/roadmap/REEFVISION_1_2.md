@@ -4243,3 +4243,24 @@ This is a **unit-syntax consistency check**, not a verified physical unit
 registry, calibration attestation, identity verification, or biological growth
 claim. Unreviewed evidence remains gated; experimental-unit independence and
 installed Windows/scientific acceptance are not established.
+
+
+## Full candidate-schema revalidation at scientific CSV boundary (2026-10-30)
+
+The existing source-linked series-QC CSV exporter now revalidates the entire
+`EcologyMeasurementCandidate` schema before accepting even an in-memory,
+re-signed artifact. Pydantic's `model_copy(update=...)` bypasses validators:
+checking only the decorated geometry method missed forged negative/Boolean
+values, invalid SHA-256 source evidence, impossible identity revisions and
+contradictory capture-time status. Calling the decorated validator directly
+also failed strict mypy in three exact-head backend workflows at `eeb88060`.
+The exporter now uses `model_validate(model_dump(mode="python"))` to check
+all candidate fields and dimensional constraints with the ordinary Pydantic
+validation path, converting failures to a domain validation error.
+
+Five re-signed tampering regressions extend the existing geometry, standalone
+CSV and saved-workflow tests. This is a defensive internal-consistency gate,
+not source ownership attestation, scientist approval, calibration verification,
+or experimental-unit independence. Typed Workflow Builder results, historical
+artifact compatibility and review restrictions remain unchanged. Latest-head
+CI and installed Windows/scientific acceptance are required before release.

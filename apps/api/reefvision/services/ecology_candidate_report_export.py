@@ -8,6 +8,7 @@ from io import StringIO
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.ecology_measurement_candidates import (
+    EcologyMeasurementCandidate,
     EcologyMeasurementCandidatesResponse,
 )
 from reefvision.services.ecology_measurement_candidates import (
@@ -77,13 +78,16 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
         or report.source_input_sha256 != response.input_sha256
     ):
         raise ValidationError("Ecological candidate report source fingerprint mismatch")
-    # model_copy(update=...) bypasses Pydantic validators. Check the source
-    # geometry contract again before exporting re-signed in-memory artifacts.
+    # model_copy(update=...) bypasses Pydantic validators. Re-validate the
+    # complete source record before exporting even re-signed in-memory data.
+    # Calling a decorated model_validator directly also breaks strict mypy.
     for candidate in response.candidates:
         try:
-            candidate.consistent_geometry_dimension()
+            EcologyMeasurementCandidate.model_validate(candidate.model_dump(mode="python"))
         except ValueError as exc:
-            raise ValidationError("Ecological source geometry dimension mismatch") from exc
+            raise ValidationError(
+                "Ecological source candidate schema or geometry dimension mismatch"
+            ) from exc
 
     # Reject a forged top-level candidate count before aggregate report checks,
     # so the failure is specific and independent of the stored QC histogram.

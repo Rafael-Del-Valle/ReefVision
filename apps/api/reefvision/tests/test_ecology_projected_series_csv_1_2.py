@@ -291,6 +291,29 @@ def test_resigned_source_cannot_swap_geometry_dimension_in_csv(
         render_ecology_series_qc_csv(tampered)
 
 
+@pytest.mark.parametrize(
+    "forged_source_fields",
+    [
+        {"value": -1.0},
+        {"value": True},
+        {"image_sha256": "not-a-sha256"},
+        {"identity_revision": 0},
+        {"capture_time_status": "timezone_missing"},
+    ],
+)
+def test_resigned_source_cannot_bypass_candidate_schema_in_csv(
+    client: TestClient, forged_source_fields: dict[str, object]
+) -> None:
+    """Even a re-signed in-memory candidate must pass its full source schema."""
+    original = _dated_artifact(client)
+    forged_candidate = original.candidates[0].model_copy(update=forged_source_fields)
+    tampered = _resign_derived_evidence(
+        original.model_copy(update={"candidates": [forged_candidate, *original.candidates[1:]]})
+    )
+    with pytest.raises(ValidationError, match="candidate schema"):
+        render_ecology_series_qc_csv(tampered)
+
+
 def test_projected_csv_rejects_tampered_or_missing_endpoints(client: TestClient) -> None:
     artifact = _dated_artifact(client)
     forged = artifact.projected_endpoint_changes[0].model_copy(update={"absolute_change": 999.0})
