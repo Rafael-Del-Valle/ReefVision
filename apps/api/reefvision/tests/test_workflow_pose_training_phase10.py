@@ -694,12 +694,19 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     # The experiment registry is a second persisted scientific record, not
     # merely an ID to expose downstream. A replay must reject inconsistent
     # metadata or checkpoint evidence without starting another training run.
+    # Removing a digest or frozen dataset identity is also a provenance change.
+    missing_checkpoint_digest = dict(result["artifact_manifest"])
+    missing_checkpoint_digest.pop("result_checkpoint_sha256")
+    missing_dataset_identity = dict(result["artifact_manifest"])
+    missing_dataset_identity.pop("pose_training_dataset_id")
     for field, corrupt_value in (
         ("provider_id", "unrelated-provider"),
         (
             "artifact_manifest_json",
             {**result["artifact_manifest"], "result_checkpoint_sha256": "0" * 64},
         ),
+        ("artifact_manifest_json", missing_checkpoint_digest),
+        ("artifact_manifest_json", missing_dataset_identity),
     ):
         with app.state.session_factory() as session:
             experiment = session.scalar(
