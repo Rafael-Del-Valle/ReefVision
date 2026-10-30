@@ -146,14 +146,30 @@ function Assert-ReefVisionSafeAcceptanceRoot {
 
 function New-ReefVisionMsiArguments {
     param(
-        [ValidateSet('Install', 'Uninstall')][string]$Action,
+        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Uninstall')][string]$Action,
         [Parameter(Mandatory = $true)][string]$PackageOrProduct,
         [string]$InstallRoot,
         [Parameter(Mandatory = $true)][string]$LogPath
     )
+    # Start-Process joins ArgumentList into one command line. Embedded quotes
+    # or newlines could escape an argument and alter the msiexec operation.
+    foreach ($value in @($PackageOrProduct, $LogPath)) {
+        if ([string]::IsNullOrWhiteSpace($value) -or $value -match '[\r\n"]') {
+            throw 'MSI package/product and log arguments must be nonempty and cannot contain quotes or newlines.'
+        }
+    }
+    if ($Action -eq 'Install') {
+        # Acceptance installs must never silently fall back to the real
+        # default installation directory if the disposable root is omitted.
+        if ([string]::IsNullOrWhiteSpace($InstallRoot) -or $InstallRoot -match '[\r\n"]') {
+            throw 'MSI acceptance installation requires a safe, nonempty INSTALLDIR without quotes or newlines.'
+        }
+    } elseif (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
+        throw 'MSI uninstall must not supply INSTALLDIR.'
+    }
     $operation = if ($Action -eq 'Install') { '/i' } else { '/x' }
     $arguments = @($operation, ('"{0}"' -f $PackageOrProduct), '/qn', '/norestart', '/L*v', ('"{0}"' -f $LogPath))
-    if ($Action -eq 'Install' -and $InstallRoot) {
+    if ($Action -eq 'Install') {
         $arguments += ('INSTALLDIR="{0}"' -f $InstallRoot)
     }
     return $arguments

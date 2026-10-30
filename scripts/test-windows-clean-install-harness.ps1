@@ -65,6 +65,19 @@ Assert-True ($arguments[0] -eq '/i') 'Install command does not use /i.'
 Assert-True (($arguments -join ' ') -match 'INSTALLDIR=') 'Install command omitted isolated INSTALLDIR.'
 $uninstall = New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00000000-0000-0000-0000-000000000000}' -LogPath 'C:\rv-test\uninstall.log'
 Assert-True ($uninstall[0] -eq '/x') 'Uninstall command does not use /x.'
+
+# Never allow an acceptance install to fall back to the real default path,
+# or allow command-line metacharacters to escape msiexec argument boundaries.
+$spacedInstall = @(New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\camera dataset\ReefVision.msi' -InstallRoot 'C:\rv validation\install' -LogPath 'C:\User Name\Temp\install.log')
+Assert-True ($spacedInstall[1] -ceq '"C:\camera dataset\ReefVision.msi"') 'MSI install package with spaces was not quoted.'
+Assert-True ($spacedInstall[5] -ceq '"C:\User Name\Temp\install.log"') 'MSI install log with spaces was not quoted.'
+Assert-True ($spacedInstall[6] -ceq 'INSTALLDIR="C:\rv validation\install"') 'Disposable MSI install root with spaces was not quoted.'
+Assert-Throws { New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -LogPath 'C:\install.log' | Out-Null } 'MSI install without isolated INSTALLDIR must fail.'
+Assert-Throws { New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -InstallRoot 'C:\safe" /x unsafe' -LogPath 'C:\install.log' | Out-Null } 'Quoted INSTALLDIR injection must fail.'
+Assert-Throws { New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build" /x unsafe' -InstallRoot 'C:\rv-test' -LogPath 'C:\install.log' | Out-Null } 'Quoted MSI package injection must fail.'
+Assert-Throws { New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00000000-0000-0000-0000-000000000000}' -InstallRoot 'C:\rv-test' -LogPath 'C:\uninstall.log' | Out-Null } 'Uninstall must not accept INSTALLDIR.'
+Assert-Throws { New-ReefVisionMsiArguments -Action Install -PackageOrProduct "C:\build\`nReefVision.msi" -InstallRoot 'C:\rv-test' -LogPath 'C:\install.log' | Out-Null } 'Newline in MSI package argument must fail.'
+Assert-Throws { New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00000000-0000-0000-0000-000000000000}' -LogPath "C:\logs\`r`nuninstall.log" | Out-Null } 'Newline in MSI log argument must fail.'
 Assert-True ((ConvertTo-ReefVisionVersionString ' 1.0.3 ') -eq '1.0.3') 'MSI version comparison did not normalize COM padding.'
 
 
