@@ -102,6 +102,16 @@ def test_review_fingerprint_is_canonical_and_sensitive_to_review_revision() -> N
         ).encode("utf-8")
     ).hexdigest()
     assert digest == expected
+    assert provenance["review_evidence_bundle"] == canonical
+    assert sha256(
+        dumps(
+            provenance["review_evidence_bundle"],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest() == digest
     reversed_review = dict(reversed(list(review.items())))
     assert (
         compare_mesh_observations(before, after, reidentification_evidence=reversed_review)[
@@ -124,6 +134,7 @@ def test_review_fingerprint_binds_observations_but_does_not_certify_legacy_evide
     absent = compare_mesh_observations(before, after)["provenance"]
     assert absent["review_evidence_bundle_sha256"] is None
     assert absent["review_evidence_bundle_schema_version"] is None
+    assert absent["review_evidence_bundle"] is None
 
     review = _review(before, after)
     review.pop("before_geometry_sha256")
