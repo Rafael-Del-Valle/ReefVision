@@ -264,10 +264,16 @@ export function ReefVisionAssistant({
   }, [project.id]);
 
   useEffect(() => {
-    window.localStorage.setItem(
-      `reefvision.assistant.${project.id}`,
-      JSON.stringify(messages.slice(-40)),
-    );
+    // Assistant chat history is an optional UI preference. WebView2 may deny
+    // localStorage access entirely; never let that prevent opening a project.
+    try {
+      window.localStorage.setItem(
+        `reefvision.assistant.${project.id}`,
+        JSON.stringify(messages.slice(-40)),
+      );
+    } catch {
+      // Keep the current in-memory conversation without persisted history.
+    }
   }, [messages, project.id]);
 
   const imagesQuery = useQuery({
