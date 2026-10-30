@@ -1082,6 +1082,15 @@ function ReefVisionMainApp() {
           hasProject={Boolean(selectedProject)}
           onNavigate={(destination) => {
             setEditorLaunch(null);
+            if (destination === "create_project" || destination === "projects") {
+              // First-run help must not strand a researcher behind disabled
+              // project-scoped controls. Return to Home before opening the
+              // existing create-project dialog; never create data implicitly.
+              setSelectedProjectId(null);
+              setActiveView("gallery");
+              if (destination === "create_project") setShowCreate(true);
+              return;
+            }
             if (destination === "system") setSelectedProjectId(null);
             setActiveView(destination);
           }}
