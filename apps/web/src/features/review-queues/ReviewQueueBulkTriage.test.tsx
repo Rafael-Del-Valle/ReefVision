@@ -258,6 +258,65 @@ describe("ReviewQueueBulkTriage", () => {
     );
   });
 
+  it.each([
+    { name: "input checksum", change: { input_checksum: "new-checksum" } },
+    { name: "QC score", change: { score: 72 } },
+    { name: "QC severity", change: { highest_qc_severity: "warning" } },
+    { name: "item update timestamp", change: { updated_at: "2026-10-30T01:00:00Z" } },
+  ])("invalidates manual completion after $name changes", ({ change }) => {
+    const evidenceItems = items.map((item) =>
+      item.id === "active-2"
+        ? ({
+            ...item,
+            input_checksum: "original-checksum",
+            score: 45,
+            highest_qc_severity: null,
+            updated_at: "2026-10-30T00:00:00Z",
+          } as ReviewQueueItem)
+        : item,
+    );
+    const rerenderItems = mountChangingItems(evidenceItems);
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "lab reviewer" },
+    });
+    fireEvent.change(screen.getByLabelText("Triage action"), {
+      target: { value: "complete" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select eligible on page/ }),
+    );
+    const confirm = screen.getByLabelText(
+      "Confirm manual triage",
+    ) as HTMLInputElement;
+    const reviewed = screen.getByLabelText(
+      "Confirm each item was manually reviewed",
+    ) as HTMLInputElement;
+    fireEvent.click(confirm);
+    fireEvent.click(reviewed);
+    const apply = screen.getByRole("button", {
+      name: "Apply complete to 1 items",
+    }) as HTMLButtonElement;
+    expect(apply.disabled).toBe(false);
+
+    rerenderItems(
+      evidenceItems.map((item) =>
+        item.id === "active-2"
+          ? ({ ...item, ...change } as ReviewQueueItem)
+          : item,
+      ),
+    );
+    expect(confirm.checked).toBe(false);
+    expect(reviewed.checked).toBe(false);
+    expect(apply.disabled).toBe(true);
+    expect(bulkTriageReviewQueueItems).not.toHaveBeenCalled();
+
+    // Returning to the original evidence cannot revive a prior approval.
+    rerenderItems(evidenceItems);
+    expect(confirm.checked).toBe(false);
+    expect(reviewed.checked).toBe(false);
+    expect(apply.disabled).toBe(true);
+  });
+
   it("does not revive confirmation after eligibility returns", () => {
     const rerenderItems = mountChangingItems();
     fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
