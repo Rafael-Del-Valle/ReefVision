@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+. (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 if (-not $InstallerDirectory) {
     $InstallerDirectory = Join-Path $RepositoryRoot "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
@@ -27,9 +28,9 @@ if (-not $ExpectedVersion) {
 }
 $MsiDatabase = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($Msi.FullName, 0)
 $VersionView = $MsiDatabase.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductVersion'")
-$VersionView.Execute()
-$ProductVersion = $VersionView.Fetch().StringData(1)
-$VersionView.Close()
+[void]$VersionView.Execute()
+$ProductVersion = ConvertTo-ReefVisionVersionString ([string]$VersionView.Fetch().StringData(1))
+[void]$VersionView.Close()
 if ($ProductVersion -ne $ExpectedVersion) {
     throw "MSI ProductVersion $ProductVersion does not match expected $ExpectedVersion."
 }
@@ -39,6 +40,26 @@ foreach ($Cab in $CabFiles) {
         throw "External cabinet is empty: $($Cab.FullName)"
     }
 }
+
+# Validate the MSI's authoritative Media table before invoking msiexec /a.
+# A CAB copied from another build can otherwise be mistaken for part of this
+# candidate installer; never infer required cabinets from directory contents.
+$MediaView = $MsiDatabase.OpenView('SELECT `Cabinet` FROM `Media`')
+$DeclaredCabinets = @()
+try {
+    [void]$MediaView.Execute()
+    while ($MediaRecord = $MediaView.Fetch()) {
+        $DeclaredCabinets += [string]$MediaRecord.StringData(1)
+    }
+}
+finally {
+    [void]$MediaView.Close()
+}
+$CabinetContract = Assert-ReefVisionMsiCabinetSet `
+    -DeclaredCabinets $DeclaredCabinets `
+    -AvailableCabinets @($CabFiles | ForEach-Object { $_.Name })
+Write-Host "MSI Media table references $($CabinetContract.Count) verified external CABs."
+
 
 $Token = [Guid]::NewGuid().ToString('N').Substring(0, 8)
 $SystemDrive = if ($env:SystemDrive) { $env:SystemDrive } else { 'C:' }
