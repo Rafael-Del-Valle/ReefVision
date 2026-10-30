@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from hashlib import sha256
 from itertools import zip_longest
+from json import dumps
 from math import atan2, degrees, exp, fsum, hypot, isclose, isfinite, log, log2
 from re import fullmatch
 from typing import Any
@@ -1094,6 +1096,38 @@ def compare_mesh_observations(
         warnings.append("longitudinal_change_withheld_disputed_specimen_identity")
     if identity_inconclusive:
         warnings.append("longitudinal_change_withheld_inconclusive_specimen_identity")
+    # A content-addressed audit fingerprint binds both *caller-supplied* review
+    # records to the project, observation pair, timestamps, and source geometry.
+    # This is stable across dictionary key order and equivalent UTC offsets,
+    # but it is NOT a signature, authenticated review, or durable review ledger.
+    review_bundle_sha256 = None
+    if registration_record is not None or reidentification_record is not None:
+        review_bundle = {
+            "schema_version": "mesh-review-bundle-0001",
+            "project_id": project_before,
+            "specimen_id": specimen,
+            "before_observation_id": first_id,
+            "after_observation_id": second_id,
+            "before_observed_at_utc": before_time.astimezone(UTC).isoformat().replace(
+                "+00:00", "Z"
+            ),
+            "after_observed_at_utc": after_time.astimezone(UTC).isoformat().replace(
+                "+00:00", "Z"
+            ),
+            "before_geometry_sha256": first.get("geometry_sha256"),
+            "after_geometry_sha256": second.get("geometry_sha256"),
+            "registration_evidence": registration_record,
+            "reidentification_evidence": reidentification_record,
+        }
+        review_bundle_sha256 = sha256(
+            dumps(
+                review_bundle,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
     result = {
         "schema_version": "mesh-longitudinal-comparison-0001",
         "specimen_id": specimen,
@@ -1192,6 +1226,10 @@ def compare_mesh_observations(
             "after_coordinate_frame_id": frames[1],
             "registration_evidence": registration_record,
             "reidentification_evidence": reidentification_record,
+            "review_evidence_bundle_schema_version": (
+                "mesh-review-bundle-0001" if review_bundle_sha256 is not None else None
+            ),
+            "review_evidence_bundle_sha256": review_bundle_sha256,
             "reidentification_evidence_review_status": (
                 "caller_supplied_unverified"
                 if reidentification_record is not None
