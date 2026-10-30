@@ -183,12 +183,18 @@ def test_saved_longitudinal_review_chronology_matches_standalone(
         assert comparison_artifacts[0]["payload_json"] == expected
         assert (
             expected["provenance"]["review_evidence_bundle_schema_version"]
-            == "mesh-review-bundle-0002"
+            == "mesh-review-bundle-0003"
         )
         assert len(expected["provenance"]["review_evidence_bundle_sha256"]) == 64
         bundle = expected["provenance"]["review_evidence_bundle"]
-        assert bundle["schema_version"] == "mesh-review-bundle-0002"
+        assert bundle["schema_version"] == "mesh-review-bundle-0003"
         assert bundle[evidence_key] == expected["provenance"][evidence_key]
+        # Saved executable graphs must retain the same source import QC
+        # fields as the standalone scientific comparison and digest.
+        for prefix in ("before", "after"):
+            assert bundle[f"{prefix}_source_format"] == "indexed_triangles"
+            assert bundle[f"{prefix}_source_payload_size_bytes"] is None
+            assert bundle[f"{prefix}_source_payload_integrity_checked"] is False
         digest = sha256(
             dumps(
                 bundle,
