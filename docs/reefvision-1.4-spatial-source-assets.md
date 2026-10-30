@@ -29,7 +29,13 @@ original submitter or prove specimen identity.
 The verified reader rejects symbolic-link originals and reads at most the
 8 MiB import limit plus one byte before checking the actual byte count and
 SHA-256. This avoids unbounded reads if a source grows between filesystem
-metadata inspection and the read. A matching digest establishes byte integrity
+metadata inspection and the read. Permission and I/O errors during path
+inspection or the bounded original read are rejected as invalid source
+evidence, rather than returning an unexpected server error. OBJ mesh and PLY
+point-cloud regressions cover original-content retrieval, standalone previews,
+and previously saved executable Workflow Builder graphs: failed replays must
+not publish a measurement artifact. These checks are not atomic against
+concurrent filesystem changes. A matching digest establishes byte integrity
 only; it does not establish scale or biological identity.
 
 The project 3D preview client rejects inconsistent source-format/kind pairs
