@@ -14,7 +14,7 @@ on:
       - apps/api/reefvision/tests/test_image_import_collision_103.py
       - apps/api/reefvision/api/routes/training.py
       - apps/api/reefvision/tests/test_training_log_tail_103.py
-      - apps/web/src-tauri/src/main.rs
+      - apps/web/src-tauri/**
       - scripts/test-training-console-readonly.ps1
       - scripts/test-training-console-sanitizer.ps1
       - apps/web/src/features/gallery/**
@@ -42,7 +42,7 @@ jobs:
   windows-camera-import:
     name: Windows JPEG aliases, EXIF, and immutable originals
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - name: Assert exact source revision
@@ -89,6 +89,14 @@ jobs:
         run: |
           ./scripts/test-training-console-sanitizer.ps1
           ./scripts/test-training-console-readonly.ps1
+      - name: Verify Tauri desktop Rust lifecycle and training-run ID safety
+        shell: pwsh
+        run: |
+          # Run the real Rust unit tests on Windows, not just static source
+          # assertions. --locked prevents unreviewed dependency resolution.
+          cargo --version
+          cargo fmt --manifest-path apps/web/src-tauri/Cargo.toml -- --check
+          cargo test --manifest-path apps/web/src-tauri/Cargo.toml --locked
 
   chromium-initial-image-gallery:
     name: Chromium first image, wheel navigation, and gallery
