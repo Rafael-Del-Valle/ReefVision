@@ -350,9 +350,10 @@ def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
             run.artifact_manifest_json = original_manifest
             session.commit()
 
-        assert execute(processor_with_secondary_checkpoint)["training_run_id"] == result[
-            "training_run_id"
-        ]
+        assert (
+            execute(processor_with_secondary_checkpoint)["training_run_id"]
+            == result["training_run_id"]
+        )
 
     with app.state.session_factory() as session:
         assert session.scalars(select(TrainingRun.id)).all() == [result["training_run_id"]]
