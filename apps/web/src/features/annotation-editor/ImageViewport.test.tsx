@@ -153,6 +153,49 @@ describe("ImageViewport", () => {
     expect(polygon).toHaveAttribute("points", originalGeometry);
   });
 
+  it("cancels a pan on Escape without moving scientific overlays", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Escape viewport">
+        <svg data-testid="escape-overlay" viewBox="0 0 1600 1200">
+          <polygon points="10,10 50,10 50,50" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Escape viewport" });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const polygon = screen.getByTestId("escape-overlay").querySelector("polygon");
+    const originalPoints = polygon?.getAttribute("points");
+
+    fireEvent.pointerDown(frame, {
+      button: 0,
+      altKey: true,
+      pointerId: 11,
+      clientX: 50,
+      clientY: 60,
+    });
+    fireEvent.pointerMove(window, { pointerId: 11, clientX: 90, clientY: 110 });
+    const panned = transform.style.transform;
+
+    // Cancelling the gesture must not leave a stale drag that moves the
+    // image when the pointer continues moving after the keypress.
+    fireEvent.keyDown(frame, { key: "Escape" });
+    fireEvent.pointerMove(window, { pointerId: 11, clientX: 140, clientY: 160 });
+    expect(transform.style.transform).toBe(panned);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+
+    // A fresh pan must still work after cancellation.
+    fireEvent.pointerDown(frame, {
+      button: 0,
+      altKey: true,
+      pointerId: 12,
+      clientX: 50,
+      clientY: 60,
+    });
+    fireEvent.pointerMove(window, { pointerId: 12, clientX: 80, clientY: 90 });
+    expect(transform.style.transform).not.toBe(panned);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+  });
+
   it("preserves Alt-modified polygon vertex gestures", () => {
     const onPointerDown = vi.fn();
     render(
