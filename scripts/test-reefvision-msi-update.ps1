@@ -118,7 +118,7 @@ try {
     $updateAst = [System.Management.Automation.Language.Parser]::ParseInput(
         $updateScript, [ref]$parseTokens, [ref]$parseErrors
     )
-    if (@($parseErrors).Count -ne 0) {
+    if ($null -ne $parseErrors -and $parseErrors.Count -gt 0) {
         throw 'Updater PowerShell source did not parse.'
     }
     $setupAssignments = @($updateAst.FindAll({
