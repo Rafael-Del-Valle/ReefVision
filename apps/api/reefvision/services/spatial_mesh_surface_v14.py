@@ -213,9 +213,7 @@ def measure_mesh_preview(
     # Global-axis bounds are orientation-sensitive and include gaps between
     # disconnected patches: this is NOT a biological condition or growth score.
     source_diagonal = dist((0.0, 0.0, 0.0), source_dimensions)
-    shape_ratio = (
-        raw_area / (source_diagonal * source_diagonal) if source_diagonal > 0 else None
-    )
+    shape_ratio = raw_area / (source_diagonal * source_diagonal) if source_diagonal > 0 else None
     boundary = sum(count == 1 for count in edges.values())
     nonmanifold = sum(count > 2 for count in edges.values())
     # Group by shared edges, never by shared vertices alone. Sort patches by
