@@ -2,12 +2,12 @@ import { expect, test } from "@playwright/test";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-// Browser-generated, decodable PNGs exercise the viewer without requiring
-// network image fixtures or changing scientific source-image metadata.
+// Browser-generated JPEG bytes exercise the real camera-image decoder path
+// without network fixtures or changing scientific source-image metadata.
 test("initial image and gallery scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 820 });
 
-  const makePng = async (width: number, height: number): Promise<Buffer> => {
+  const makeJpeg = async (width: number, height: number): Promise<Buffer> => {
     const base64 = await page.evaluate(
       ({ width, height }) => {
         const canvas = document.createElement("canvas");
@@ -17,15 +17,21 @@ test("initial image and gallery scrolling", async ({ page }) => {
         if (!context) throw new Error("Canvas context unavailable");
         context.fillStyle = "#407e8c";
         context.fillRect(0, 0, width, height);
-        return canvas.toDataURL("image/png").split(",")[1];
+        return canvas.toDataURL("image/jpeg", 0.92).split(",")[1];
       },
       { width, height },
     );
     return Buffer.from(base64, "base64");
   };
 
-  const standard = await makePng(1600, 1200);
-  const panoramic = await makePng(6000, 400);
+  const standard = await makeJpeg(1600, 1200);
+  const panoramic = await makeJpeg(6000, 400);
+  // A mislabeled PNG can pass image-decoding assertions while hiding JPEG
+  // compatibility bugs. Require JPEG SOI/EOI markers for both camera shapes.
+  for (const jpeg of [standard, panoramic]) {
+    expect(jpeg.readUInt16BE(0)).toBe(0xffd8);
+    expect(jpeg.readUInt16BE(jpeg.length - 2)).toBe(0xffd9);
+  }
   const project = {
     id: "project-1",
     name: "CPT Coral Study",
@@ -87,7 +93,7 @@ test("initial image and gallery scrolling", async ({ page }) => {
         displayRequests.push(match[1]);
         await route.fulfill({
           status: 200,
-          contentType: "image/png",
+          contentType: "image/jpeg",
           body: match[1] === "image-12" ? panoramic : standard,
         });
       } else {
