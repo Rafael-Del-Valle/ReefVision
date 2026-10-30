@@ -3322,6 +3322,12 @@ export function AnnotationEditor({
                   is using session-visible defaults until the request succeeds.
                 </p>
               )}
+              {!visibilityQuery.data && (
+                <p className="annotation-helper">
+                  Save and reset controls require loaded visibility settings.
+                  Session-only visibility changes remain available.
+                </p>
+              )
               <p className="annotation-helper">
                 My Preference:{" "}
                 {currentLayerVisibility.userPreference.saved
@@ -3376,7 +3382,7 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending}
+                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
                   onClick={saveCurrentVisibilityAsMyPreference}
                 >
                   Save as My Preference
@@ -3384,7 +3390,7 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending}
+                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
                   onClick={saveCurrentVisibilityAsProjectDefault}
                 >
                   Save as Project Default
@@ -3392,7 +3398,7 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending}
+                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
                   onClick={resetMyVisibilityPreferences}
                 >
                   Reset My Preferences
@@ -3407,7 +3413,7 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending}
+                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
                   onClick={copyCurrentVisibilityToProjectDefaults}
                 >
                   Copy Current Visibility to Project Defaults
@@ -3415,7 +3421,7 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={visibilityMutation.isPending}
+                  disabled={visibilityMutation.isPending || !visibilityQuery.data}
                   onClick={applyProjectDefaultsToMyPreferences}
                 >
                   Apply Project Defaults to My Preferences
