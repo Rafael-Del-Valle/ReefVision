@@ -184,8 +184,7 @@ try {
     # reintroduce NSIS execution or direct portable-backend overwrites.
     $updateScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'update-reefvision.ps1') -Raw
     $installerScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'install-reefvision-commands.ps1') -Raw
-    if ([regex]::Matches($updateScript,
-        'Assert-ReefVisionSourceTreeClean -RepoPath \\$repoPath -ExpectedCommit \\$expectedSourceCommit').Count -ne 2) {
+    if ($updateScript.Split('Assert-ReefVisionSourceTreeClean -RepoPath $repoPath -ExpectedCommit $expectedSourceCommit').Count -ne 3) {
         throw 'MSI updater must check source cleanliness both before and after building.'
     }
     $passed++
