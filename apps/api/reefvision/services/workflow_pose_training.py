@@ -687,6 +687,11 @@ def _reused_pose_training_result(
         # workflow snapshots, however, removing a frozen lineage assertion
         # must not downgrade the experiment registry to unchecked evidence.
         experiment_manifest = dict(experiment.artifact_manifest_json or {})
+        # Current experiments expose native metric rows and worker artifacts as
+        # well as checkpoint lineage. All persisted scientific evidence must
+        # still match the completed run, not only the selected lineage fields.
+        if is_current_snapshot and experiment_manifest != frozen_checkpoint:
+            raise ValidationError("Recovered pose-training experiment provenance changed")
         for field in (
             "pose_training_dataset_id",
             "pose_validation_dataset_id",
