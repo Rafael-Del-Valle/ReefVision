@@ -2261,20 +2261,27 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             child_session.commit()
         return True
 
-    with (
-        app.state.session_factory() as session,
-        pytest.raises(ValidationError, match="checkpoint belongs to another output"),
-    ):
-        create_pose_workflow_training_result(
-            session,
-            test_settings,
-            project_id=project_id,
-            dataset_payload=payload,
-            parameters={"training_config": {"epochs": 1}},
-            workflow_run_id="saved-pose-run",
-            workflow_node_run_id="substituted-checkpoint-node",
-            processor=substituted_checkpoint_processor,
+    # A rejected, out-of-run checkpoint must never reach the file hasher,
+    # even if the worker copied legitimate bytes into that other directory.
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            "reefvision.services.workflow_pose_training.hash_model_file",
+            lambda _path: pytest.fail("Rejected pose checkpoint was hashed"),
         )
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="checkpoint belongs to another output"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload=payload,
+                parameters={"training_config": {"epochs": 1}},
+                workflow_run_id="saved-pose-run",
+                workflow_node_run_id="substituted-checkpoint-node",
+                processor=substituted_checkpoint_processor,
+            )
 
     # Training can finish after another writer changes the registered seed
     # checkpoint. First completion must reject that drift, not publish the
