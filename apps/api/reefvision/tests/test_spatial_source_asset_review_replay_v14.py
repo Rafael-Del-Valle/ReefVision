@@ -270,6 +270,7 @@ def test_project_original_review_replays_identically_in_saved_workflow(
             item["data_type"] == artifact_type for item in stale_detail.json()["artifacts"]
         ), field
 
+
 def test_original_read_is_bounded_even_if_file_grows_during_read(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -304,3 +305,92 @@ def test_original_read_is_bounded_even_if_file_grows_during_read(
     response = client.get(f"{base}/spatial/assets/{asset_id}/content")
     assert response.status_code == 400, response.text
     assert read_sizes == [MAX_BYTES + 1]
+
+
+@pytest.mark.parametrize(
+    ("filename", "original", "endpoint", "node_type", "artifact_type"),
+    [
+        ("coral.obj", OBJ, "mesh-preview", "mesh_surface_preview", "mesh_measurement_preview"),
+        (
+            "survey.ply",
+            PLY,
+            "point-cloud-preview",
+            "point_cloud_preview",
+            "point_cloud_measurement_preview",
+        ),
+    ],
+)
+def test_original_disappearing_at_read_fails_standalone_and_saved_workflow(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    filename: str,
+    original: bytes,
+    endpoint: str,
+    node_type: str,
+    artifact_type: str,
+) -> None:
+    project_id = str(create_project(client, "Original disappeared during read")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    imported = client.post(f"{base}/spatial/assets", files={"file": (filename, original)})
+    assert imported.status_code == 201, imported.text
+    asset = imported.json()
+    params = {
+        "asset_id": asset["id"],
+        "expected_source_payload_sha256": asset["sha256"],
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified field scale",
+        "relative_scale_uncertainty": 0.05,
+    }
+    baseline = client.post(f"{base}/spatial/{endpoint}", json=params)
+    assert baseline.status_code == 200, baseline.text
+    graph = {
+        "graph_id": f"missing-original-{node_type}",
+        "name": "Fail closed when an original becomes unreadable",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "measure", "node_type": node_type, "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-measure",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "measure",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        record = session.get(SpatialSourceAsset, asset["id"])
+        assert record is not None
+        original_path = resolve_managed_project_path(app.state.settings, record.managed_path)
+
+    # The path passes is_file(), then opening it fails. This models a
+    # disappearing/unreadable original without deleting any real source bytes.
+    original_open = Path.open
+
+    def missing_open(path: Path, *args: object, **kwargs: object) -> BytesIO:
+        if path == original_path:
+            raise FileNotFoundError("simulated source disappeared during bounded read")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", missing_open)
+    standalone = client.post(f"{base}/spatial/{endpoint}", json=params)
+    assert standalone.status_code == 400, standalone.text
+    assert "original bytes could not be read" in standalone.text
+
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == artifact_type for item in detail.json()["artifacts"]
+    )
