@@ -178,9 +178,7 @@ def test_project_original_review_replays_identically_in_saved_workflow(
                 {**graph["nodes"][1], "parameters": invalid_params},
             ],
         }
-        rejected_save = client.post(
-            f"{base}/workflow-graphs", json={"graph": invalid_graph}
-        )
+        rejected_save = client.post(f"{base}/workflow-graphs", json={"graph": invalid_graph})
         assert rejected_save.status_code == 201, rejected_save.text
         rejected_run = client.post(
             f"{base}/workflow-runs",
@@ -196,8 +194,7 @@ def test_project_original_review_replays_identically_in_saved_workflow(
         assert rejected_detail.status_code == 200, rejected_detail.text
         assert rejected_detail.json()["run"]["status"] == "failed"
         assert not any(
-            item["data_type"] == artifact_type
-            for item in rejected_detail.json()["artifacts"]
+            item["data_type"] == artifact_type for item in rejected_detail.json()["artifacts"]
         )
 
     # Reusing a review after changing physical scale must fail closed.
@@ -206,6 +203,37 @@ def test_project_original_review_replays_identically_in_saved_workflow(
         json={**params, "meters_per_unit": 0.02},
     )
     assert stale.status_code == 400, stale.text
+
+    # A saved workflow must enforce the same physical-scale review binding
+    # on replay. Rejecting the endpoint alone is not sufficient: stale
+    # calibration evidence must never yield a persisted measurement artifact.
+    stale_graph = {
+        **graph,
+        "graph_id": f"stale-scale-review-{node_type}",
+        "nodes": [
+            graph["nodes"][0],
+            {
+                **graph["nodes"][1],
+                "parameters": {**params, "meters_per_unit": 0.02},
+            },
+        ],
+    }
+    stale_saved = client.post(f"{base}/workflow-graphs", json={"graph": stale_graph})
+    assert stale_saved.status_code == 201, stale_saved.text
+    stale_run = client.post(
+        f"{base}/workflow-runs",
+        json={"graph_record_id": stale_saved.json()["id"]},
+    )
+    assert stale_run.status_code == 202, stale_run.text
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(stale_run.json()["job_id"])
+    )
+    stale_detail = client.get(f"/api/v1/workflow-runs/{stale_run.json()['id']}")
+    assert stale_detail.status_code == 200, stale_detail.text
+    assert stale_detail.json()["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == artifact_type for item in stale_detail.json()["artifacts"]
+    )
 
 
 def test_original_read_is_bounded_even_if_file_grows_during_read(
