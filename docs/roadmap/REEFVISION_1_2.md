@@ -4111,3 +4111,28 @@ cannot run locally in this environment because GitHub DNS blocks checkout.
 Authenticated longitudinal measurement, real study-design review, migration
 reconciliation and physical installed Windows GUI/MSI acceptance remain
 outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Exact-head planner/adapter contract recovery (2026-10-29)
+
+The preceding head `e39cdceb370a62f16ee6d2d8314a28dab89c649f`
+completed 15/19 GitHub Actions workflows successfully. The four failing
+workflows (CI, Pose Workflow Validation, ReefVision 1.0 Acceptance and
+Milestone 10 Acceptance) all stopped on one Ruff formatting requirement
+in the newly registered paired-count CSV Workflow Builder planner action.
+The exact CI-reported formatting correction was applied.
+
+The ecology planner regression is now **registry-driven** rather than
+checking only the two original analysis nodes: every executable
+`ecology_*` node must have a nonblank planner action, a runtime adapter,
+typed input/output ports supported by `WorkflowDataType`, and a matching
+registered definition. A second regression rejects orphaned ecology planner
+actions or runtime adapters. This protects saved scientific workflows from
+future registry/planner drift without adding duplicate 1.1 context features
+or changing the existing source-unverified evidence and review gates.
+
+This is a bounded integration repair, **not** authenticated calibrated
+longitudinal measurement or validated independent replication. The new
+head's backend/Workflow Builder CI results, 1.1 migration reconciliation,
+representative biological review and physical Windows installer/GUI tests
+must still be checked. **1.2 NOT RELEASE-READY; 1.3 not started.**
