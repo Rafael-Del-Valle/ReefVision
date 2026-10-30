@@ -239,40 +239,40 @@ export function ProjectLauncher({
         <div>
           <div className="rv-project-launcher-grid">
             {visibleProjects.map((project) => {
-            const pinned = pinnedIds.includes(project.id);
-            return (
-              <article className="rv-project-launcher-card" key={project.id}>
-                <button
-                  type="button"
-                  className="rv-project-launcher-open"
-                  onClick={() => onOpenProject(project.id)}
-                  aria-label={`Open ${project.name}`}
-                >
-                  <span className="rv-project-card-kicker">
-                    {pinned ? "Pinned project" : "Research project"}
-                  </span>
-                  <strong>{project.name}</strong>
-                  <span>
-                    {project.description || "No project description."}
-                  </span>
-                  <small>
-                    {project.active_label_class_count} active{" "}
-                    {project.active_label_class_count === 1
-                      ? "class"
-                      : "classes"}{" "}
-                    · {formatUpdatedAt(project.updated_at)}
-                  </small>
-                </button>
-                <button
-                  type="button"
-                  className="rv-pin-button"
-                  aria-pressed={pinned}
-                  onClick={() => togglePinned(project.id)}
-                >
-                  {pinned ? "Unpin" : "Pin"}
-                </button>
-              </article>
-            );
+              const pinned = pinnedIds.includes(project.id);
+              return (
+                <article className="rv-project-launcher-card" key={project.id}>
+                  <button
+                    type="button"
+                    className="rv-project-launcher-open"
+                    onClick={() => onOpenProject(project.id)}
+                    aria-label={`Open ${project.name}`}
+                  >
+                    <span className="rv-project-card-kicker">
+                      {pinned ? "Pinned project" : "Research project"}
+                    </span>
+                    <strong>{project.name}</strong>
+                    <span>
+                      {project.description || "No project description."}
+                    </span>
+                    <small>
+                      {project.active_label_class_count} active{" "}
+                      {project.active_label_class_count === 1
+                        ? "class"
+                        : "classes"}{" "}
+                      · {formatUpdatedAt(project.updated_at)}
+                    </small>
+                  </button>
+                  <button
+                    type="button"
+                    className="rv-pin-button"
+                    aria-pressed={pinned}
+                    onClick={() => togglePinned(project.id)}
+                  >
+                    {pinned ? "Unpin" : "Pin"}
+                  </button>
+                </article>
+              );
             })}
           </div>
           {matchingProjects.length > 12 && (
@@ -290,7 +290,10 @@ export function ProjectLauncher({
       ) : normalizedQuery ? (
         <div className="rv-launcher-empty" role="status">
           <h3>No matching projects</h3>
-          <p>Try another name or description. Saved projects have not been changed.</p>
+          <p>
+            Try another name or description. Saved projects have not been
+            changed.
+          </p>
         </div>
       ) : (
         <div className="rv-launcher-empty">
