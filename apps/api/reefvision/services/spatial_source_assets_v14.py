@@ -28,6 +28,19 @@ MAX_BYTES = 8 * 1024 * 1024
 KINDS = {"obj": "mesh", "glb": "mesh", "ply": "mesh_or_point_cloud"}
 
 
+def _safe_original_filename(name: str | None) -> bool:
+    """Use the same lexical filename constraints for import and later replay."""
+    return (
+        isinstance(name, str)
+        and bool(name)
+        and len(name) <= 500
+        and name not in {".", ".."}
+        and Path(name).name == name
+        and "\\" not in name
+        and "\x00" not in name
+    )
+
+
 class SpatialSourceAssetService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -60,14 +73,7 @@ class SpatialSourceAssetService:
     ) -> SpatialSourceAsset:
         project = self._project(project_id)
         name = filename or ""
-        if (
-            not name
-            or len(name) > 500
-            or name in {".", ".."}
-            or Path(name).name != name
-            or "\\" in name
-            or "\x00" in name
-        ):
+        if not _safe_original_filename(name):
             raise ValidationError("A safe original 3D filename is required")
         source_format = Path(name).suffix.casefold().lstrip(".")
         if source_format not in KINDS:
@@ -122,6 +128,15 @@ class SpatialSourceAssetService:
         # correctly. PLY deliberately remains ambiguous until parsed.
         if KINDS.get(asset.source_format) != asset.source_kind:
             raise ValidationError("Spatial source format and kind metadata do not match")
+        # The filename is original audit metadata. A later database edit must
+        # not silently relabel the imported bytes as another file or format.
+        # Reapply the import safety constraints without changing legacy case.
+        if (
+            not _safe_original_filename(asset.original_filename)
+            or Path(asset.original_filename).suffix.casefold().lstrip(".")
+            != asset.source_format
+        ):
+            raise ValidationError("Spatial source original filename metadata is invalid")
         # Bind the immutable original to its database identity, not merely to
         # a file somewhere in the project originals directory. Otherwise a
         # changed managed_path could replay identical bytes under a different
