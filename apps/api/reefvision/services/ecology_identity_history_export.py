@@ -118,7 +118,7 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
         ):
             raise ValidationError("Ecological design-change audit differs from identity history")
 
-    details: list[EcologyCrossUnitParentDetail] = []
+    # Bind each design correction to its actual append-only revision row.\n    # A count alone is insufficient for reviewing changed tank/parent assignments.\n    design_events_by_revision = {\n        (event.organism_key, event.to_revision): event\n        for event in derive_ecology_design_changes(history)\n    }\n    details: list[EcologyCrossUnitParentDetail] = []
     if registry.cross_unit_parent_audit_status != "unavailable":
         details = derive_cross_unit_parent_details(registry.identities)
         shared_parent_keys = sorted({row.parent_colony_key for row in details})
@@ -174,6 +174,7 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             "review_gate",
             "design_history_status",
             "design_change_count",
+            "design_revision_change_json",
             "cross_unit_parent_audit_status",
             "cross_unit_shared_parent_colony_keys",
             "cross_unit_parent_details_json",
@@ -199,6 +200,7 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
                 registry.review_gate,
                 registry.design_history_status,
                 registry.design_change_count,
+                json.dumps(\n                    design_events_by_revision[(row.organism_key, row.revision)].model_dump(\n                        mode="json"\n                    ),\n                    sort_keys=True,\n                    separators=(",", ":"),\n                )\n                if (row.organism_key, row.revision) in design_events_by_revision\n                and registry.design_history_status != "history_unavailable"\n                else "",
                 registry.cross_unit_parent_audit_status,
                 "|".join(registry.cross_unit_shared_parent_colony_keys),
                 json.dumps(
