@@ -139,9 +139,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["before_surface_area_to_bounding_diagonal_squared_ratio"] == (
         pytest.approx(0.25)
     )
-    assert expected["after_surface_area_to_bounding_diagonal_squared_ratio"] == (
-        pytest.approx(0.2)
-    )
+    assert expected["after_surface_area_to_bounding_diagonal_squared_ratio"] == (pytest.approx(0.2))
     assert expected["delta_surface_area_to_bounding_diagonal_squared_ratio"] == (
         pytest.approx(-0.05)
     )
