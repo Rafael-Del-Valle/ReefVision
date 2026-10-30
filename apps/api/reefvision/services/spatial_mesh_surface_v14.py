@@ -213,7 +213,10 @@ def measure_mesh_preview(
     # Global-axis bounds are orientation-sensitive and include gaps between
     # disconnected patches: this is NOT a biological condition or growth score.
     source_diagonal = dist((0.0, 0.0, 0.0), source_dimensions)
-    shape_ratio = raw_area / (source_diagonal * source_diagonal) if source_diagonal > 0 else None
+    source_diagonal_squared = source_diagonal * source_diagonal
+    # A nonzero diagonal can still square to zero in floating-point arithmetic.
+    # Withhold the descriptor instead of dividing by zero or inventing precision.
+    shape_ratio = raw_area / source_diagonal_squared if source_diagonal_squared > 0 else None
     boundary = sum(count == 1 for count in edges.values())
     nonmanifold = sum(count > 2 for count in edges.values())
     # Group by shared edges, never by shared vertices alone. Sort patches by
@@ -769,6 +772,11 @@ def measure_mesh_preview(
         "qc_warnings": (
             sorted(volume_qc_warnings)
             + (["degenerate_triangles_present"] if degenerate else [])
+            + (
+                ["mesh_shape_ratio_unavailable_numeric_underflow"]
+                if source_diagonal > 0 and source_diagonal_squared == 0
+                else []
+            )
             + (["open_mesh_surface_not_enclosed"] if boundary else [])
             + (["noncycle_mesh_boundary_components"] if any(patch_noncycle_boundary_counts) else [])
             + (["nonmanifold_mesh_edges"] if nonmanifold else [])
