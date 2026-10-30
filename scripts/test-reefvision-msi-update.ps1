@@ -51,9 +51,22 @@ try {
     Assert-Throws {
         Assert-ReefVisionMsiLocalPath -InstallerPath (Join-Path $bundle 'missing.msi') -RepoPath $repo
     } 'missing from the local build directory'
+    # No .venv exists in this disposable repository. The offline provenance
+    # validator must use an already installed Python 3.11+ from PATH, without
+    # bootstrapping a virtual environment or installing dependencies.
+    $systemPython = Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -eq $systemPython) {
+        throw 'Windows CI must provide Python 3.11+ for the offline fallback regression.'
+    }
+    $resolvedPython = Resolve-ReefVisionProvenancePython -RepoPath $repo
+    if ($resolvedPython -ne $systemPython.Source) {
+        throw 'Offline provenance fallback did not select the existing system Python.'
+    }
+    $passed++
     Assert-Throws {
         Assert-ReefVisionMsiPayload -InstallerPath $msi -RepoPath $repo -ExpectedVersion '1.0.2' -ExpectedCommit ('a' * 40)
-    } 'Python environment missing'
+    } 'MSI provenance validator is missing'
 
     # A junction can preserve the apparent MSI directory suffix but redirect
     # to a different location. Reject it before any manifest or MSI access.
