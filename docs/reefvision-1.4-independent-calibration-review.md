@@ -113,3 +113,26 @@ checks that valid reviewed results replay with identical provisional provenance.
 These tests verify that saved graph execution cannot silently reuse stale
 caller-supplied review evidence. They do not authenticate the reviewer, establish
 calibration accuracy, or supply persistent, versioned review records.
+
+## Content-addressed longitudinal review evidence (provisional)
+
+The 1.4 `mesh_longitudinal_comparison` response now includes
+`provenance.review_evidence_bundle_schema_version` and
+`provenance.review_evidence_bundle_sha256` when registration or
+reidentification evidence is supplied. The digest is SHA-256 of canonical
+UTF-8 JSON (sorted object keys, compact separators, no NaN), including the
+versioned bundle schema, project and provisional specimen IDs, both
+observation IDs, UTC-normalized timestamps, source geometry fingerprints,
+and the two validated caller-supplied review records (or `null` if absent).
+Without either review record, both fields are `null`; no review is invented.
+
+The same digest is produced by standalone analysis and saved, executable
+typed Workflow Builder graphs. A changed review decision/note or different
+observation geometry produces a different digest; dictionary key ordering
+does not. A digest identifies the *content* of the provisional review bundle
+for later comparison, **not** the reviewer, an authenticated signature,
+verified calibration/registration/specimen identity, an immutable stored
+review version, or a durable review ledger. It cannot prevent a caller who
+controls the record from replacing both the record and its computed digest.
+Independent versioned review storage and authenticated reviewer attribution
+remain required before release.
