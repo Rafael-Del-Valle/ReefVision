@@ -134,3 +134,19 @@ infers identity from an untrusted filename or changed checkout. The Windows
 preflight covers valid pinned identity, missing version/commit, invalid SHA,
 invalid MSI numeric limits and the actual updater's pinned-identity wiring.
 Native MSI upgrade/rollback and installed-GUI acceptance remain outstanding.
+
+## Unreadable installed-version fail-closed preflight (2026-10-30)
+
+An installed executable with missing/corrupt version metadata previously yielded
+`$null` from `Get-ReefVisionExecutableVersion`. The downgrade check interpreted
+that value as a clean installation, even when a ReefVision executable existed.
+A stale per-user installation registration could produce the same ambiguity.
+
+The updater now distinguishes an absent, unregistered installation from an
+existing executable with unreadable version metadata or a registered install
+whose version cannot be verified. Either ambiguous existing-install case
+fails closed **after verifying the pinned MSI and before stopping ReefVision**.
+A genuinely clean install, or an existing executable with a known version,
+continues through the existing numeric downgrade guard. Disposable Windows
+preflight regressions cover both failures, both valid cases and call ordering.
+This is not a claim of native installed-GUI or MSI rollback acceptance.
