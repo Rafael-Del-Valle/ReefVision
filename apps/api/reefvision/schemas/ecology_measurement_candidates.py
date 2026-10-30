@@ -409,9 +409,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             "registry_annotation_evidence_sha256": self.source_annotation_evidence_sha256,
             "registry_calibration_evidence_sha256": self.source_calibration_evidence_sha256,
             "candidates": [row.model_dump(mode="json") for row in self.candidates],
-            "sampling_date_qc": [
-                row.model_dump(mode="json") for row in self.sampling_date_qc
-            ],
+            "sampling_date_qc": [row.model_dump(mode="json") for row in self.sampling_date_qc],
             "projected_visit_coverage": [
                 row.model_dump(mode="json") for row in self.projected_visit_coverage
             ],
