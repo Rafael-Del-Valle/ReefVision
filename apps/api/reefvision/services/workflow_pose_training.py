@@ -581,6 +581,29 @@ def _reused_pose_training_result(
     # as the original scientific result. Legacy runs without a recorded digest
     # remain readable; newly completed runs always persist one below.
     frozen_checkpoint = dict(run.artifact_manifest_json or {})
+    # A saved node can advertise both best.pt and last.pt. Verify the bytes
+    # of every checkpoint that was checksummed on first completion, not only
+    # the selected result checkpoint. Older runs without these digests remain
+    # readable, while explicit but invalid digest assertions always fail.
+    for path_field, digest_field in (
+        ("best_checkpoint_path", "best_checkpoint_sha256"),
+        ("last_checkpoint_path", "last_checkpoint_sha256"),
+    ):
+        if digest_field not in frozen_checkpoint:
+            continue
+        expected_digest = frozen_checkpoint[digest_field]
+        advertised = frozen_checkpoint.get(path_field)
+        if not isinstance(expected_digest, str) or not isinstance(advertised, str):
+            raise ValidationError("Recovered pose-training checkpoint artifact checksum changed")
+        artifact_checkpoint = resolve_managed_project_path(settings, advertised)
+        actual_digest = (
+            checkpoint_sha256
+            if artifact_checkpoint.resolve() == checkpoint.resolve()
+            else hash_model_file(artifact_checkpoint)[0]
+        )
+        if actual_digest != expected_digest:
+            raise ValidationError("Recovered pose-training checkpoint artifact checksum changed")
+
     # This manifest is returned to downstream workflow nodes. Verify its
     # dataset and split lineage against the already-validated frozen snapshot.
     expected_artifact_lineage = {
@@ -1260,10 +1283,43 @@ def create_pose_workflow_training_result(
     ):
         raise ValidationError("Completed pose training worker checkpoint path changed")
 
-    # Bind the completed training result to its on-disk checkpoint so a
+    # Pin all advertised checkpoint bytes, not just the selected result.
+    # Validate their exact run-local paths before hashing so a worker cannot
+    # point provenance checks at an unrelated managed file.
+    expected_weights_dir = resolve_managed_project_path(
+        settings,
+        f"{project.storage_root}/training/{run.id}/runs/pose/weights",
+    )
+    checkpoint_digests: dict[str, str] = {}
+    for path_field, digest_field, filename in (
+        ("best_checkpoint_path", "best_checkpoint_sha256", "best.pt"),
+        ("last_checkpoint_path", "last_checkpoint_sha256", "last.pt"),
+    ):
+        advertised = worker_manifest.get(path_field)
+        if advertised is None:
+            continue
+        if not isinstance(advertised, str):
+            raise ValidationError("Completed pose training checkpoint artifact path changed")
+        artifact_checkpoint = resolve_managed_project_path(settings, advertised)
+        if (
+            artifact_checkpoint.resolve() != (expected_weights_dir / filename).resolve()
+            or not artifact_checkpoint.is_file()
+        ):
+            raise ValidationError("Completed pose training checkpoint artifact path changed")
+        digest = (
+            checkpoint_sha256
+            if artifact_checkpoint.resolve() == checkpoint.resolve()
+            else hash_model_file(artifact_checkpoint)[0]
+        )
+        if digest_field in worker_manifest and worker_manifest[digest_field] != digest:
+            raise ValidationError("Completed pose training worker checkpoint artifact checksum changed")
+        checkpoint_digests[digest_field] = digest
+
+    # Bind the completed training result to its on-disk checkpoints so a
     # retried Workflow Builder node cannot reuse different model weights.
     run.artifact_manifest_json = {
         **worker_manifest,
+        **checkpoint_digests,
         "result_checkpoint_path": run.result_checkpoint_path,
         "result_checkpoint_sha256": checkpoint_sha256,
     }
