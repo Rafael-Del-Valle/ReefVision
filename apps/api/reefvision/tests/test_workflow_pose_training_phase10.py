@@ -647,6 +647,8 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         )
         assert experiment is not None
         assert experiment.project_id == project["id"]
+        assert experiment.summary_metrics_json == result["metrics"]
+        assert experiment.comparison_warnings_json == result["warnings"]
         assert (
             experiment.artifact_manifest_json["result_checkpoint_path"]
             == result["result_checkpoint_path"]
@@ -701,6 +703,8 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     missing_dataset_identity.pop("pose_training_dataset_id")
     for field, corrupt_value in (
         ("provider_id", "unrelated-provider"),
+        ("summary_metrics_json", {"metrics/mAP50-95(P)": 0.01}),
+        ("comparison_warnings_json", ["altered scientific warning"]),
         (
             "artifact_manifest_json",
             {**result["artifact_manifest"], "result_checkpoint_sha256": "0" * 64},
