@@ -64,3 +64,26 @@ reconciliation, saved executable Workflow Builder regressions, and
 representative biological-data validation remain release HOLD gates.
 
 No cross-version branches were merged, and no user files were modified.
+
+## Unattended downgrade preflight (2026-10-30)
+
+A cached MSI can have valid provenance and a correct digest while still being
+**older than the installed desktop**. The updater now calls
+`Assert-ReefVisionMsiNoDowngrade` after verifying the MSI payload and before
+stopping ReefVision. It compares numeric three-part MSI versions with three-
+or four-part installed executable FileVersions, including the fourth build
+component. A known newer installed build is never silently replaced by an
+older pinned MSI. Unknown nonempty installed version strings fail closed,
+rather than being treated as an empty/uninstalled machine. A missing installed
+version (clean install) and an equal version (MSI-managed repair) remain
+permitted. No version changes, migrations, model downloads or user-data
+operations are performed by this preflight.
+
+The Windows MSI preflight covers clean install, same-version repair,
+three/four-part version comparisons, known downgrades, unknown installed
+versions, invalid target numeric limits, and the **verification -> downgrade
+guard -> desktop shutdown** ordering. These are source-level and helper tests,
+not proof of a real Windows upgrade/rollback. Native installed-GUI acceptance,
+representative biological data, cross-version Alembic 0038 reconciliation,
+and complete exact-head CI remain release HOLD gates.
+
