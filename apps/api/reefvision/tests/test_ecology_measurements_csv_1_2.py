@@ -17,6 +17,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
 from reefvision.services.ecology_candidate_measurements_export import (
+    MEASUREMENT_CSV_SCHEMA_VERSION,
     _utc_capture,
     render_ecology_measurements_csv,
 )
@@ -45,11 +46,17 @@ def test_measurement_csv_preserves_all_source_links_and_saved_workflow_parity(
     assert len(rows) == payload["candidate_count"] == 2
     assert [row["metric"] for row in rows] == ["box_height", "box_width"]
     for row in rows:
-        assert row["export_schema_version"] == "ecology-measurement-export-0001"
+        assert row["export_schema_version"] == MEASUREMENT_CSV_SCHEMA_VERSION
         assert row["project_id"] == project_id
         assert row["source_input_sha256"] == payload["input_sha256"]
         assert row["report_sha256"] == payload["candidate_report"]["report_sha256"]
         assert row["source_fingerprint_rechecked"] == "true"
+        assert row["source_fingerprint_contract"] == payload["source_fingerprint_contract"]
+        assert row["source_registry_history_sha256"] == payload["source_registry_history_sha256"]
+        assert row["source_image_evidence_sha256"] == payload["source_image_evidence_sha256"]
+        assert row["source_annotation_evidence_sha256"] == payload["source_annotation_evidence_sha256"]
+        assert row["source_calibration_evidence_sha256"] == payload["source_calibration_evidence_sha256"]
+        assert row["independent_unit_inference_allowed"] == "false"
         assert row["organism_key"] == source.organism_key
         assert row["identity_revision"] == str(source.identity_revision)
         assert row["image_id"] == source.image_id
@@ -213,9 +220,19 @@ def test_executable_saved_workflow_exports_typed_unverified_csv(
     ]
     assert len(artifacts) == 1
     payload = artifacts[0]["payload_json"]
-    assert payload["schema_version"] == "ecology-measurement-export-0001"
+    assert payload["schema_version"] == MEASUREMENT_CSV_SCHEMA_VERSION
     assert payload["project_id"] == project_id
     assert payload["source_fingerprint_rechecked"] is True
+    assert payload["source_fingerprint_contract"] is not None
+    assert payload["independent_unit_inference_allowed"] is False
+    for field in (
+        "source_registry_history_sha256",
+        "source_image_evidence_sha256",
+        "source_annotation_evidence_sha256",
+        "source_calibration_evidence_sha256",
+    ):
+        assert payload[field] is not None
+        assert len(payload[field]) == 64
     assert payload["evidence_level"] == "linked_unverified"
     assert payload["review_gate"] == "scientist_review_required"
     standalone = client.get(
