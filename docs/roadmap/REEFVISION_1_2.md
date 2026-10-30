@@ -4189,3 +4189,19 @@ increment also corrects. Exact-new-head CI, authenticated longitudinal
 identity/calibration review, 1.1 migration reconciliation, real ecological
 acceptance, and installed Windows GUI/MSI tests remain mandatory.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Population CSV saved-workflow contract alignment (2026-10-30)
+
+The existing `ecology_population_csv_export` executable Workflow Builder node
+now persists the same `ecology-population-export-0004` schema version used by
+the standalone CSV renderer. Previously its artifact metadata incorrectly
+advertised `0001` while the CSV rows used `0004`. A single shared version
+constant prevents future drift. Persisted workflow artifacts additionally
+include the SHA-256 digest of their UTF-8 CSV bytes, the source fingerprint
+contract, source candidate and declared-unit denominators, and an explicit
+`independent_unit_inference_allowed=false` review boundary. Saved-workflow
+acceptance checks compare exact standalone CSV bytes, schema metadata, digest,
+and denominators; the existing typed ports and verified-dataset promotion block
+remain in place. Historical saved artifacts are not rewritten. This is
+provenance/contract integrity, not verified ecological independence, organism
+identity, or calibrated growth acceptance.

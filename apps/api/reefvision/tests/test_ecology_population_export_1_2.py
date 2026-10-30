@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from io import StringIO
 from typing import Any, cast
@@ -18,7 +19,10 @@ from reefvision.schemas.ecology_measurement_candidates import (
 )
 from reefvision.schemas.workflow_graphs import WorkflowPortDefinition
 from reefvision.services import ecology_population_export as exporter
-from reefvision.services.ecology_population_export import render_ecology_population_csv
+from reefvision.services.ecology_population_export import (
+    POPULATION_CSV_SCHEMA_VERSION,
+    render_ecology_population_csv,
+)
 from reefvision.tests.test_ecology_projected_series_csv_1_2 import (
     _dated_artifact,
     _resign_derived_evidence,
@@ -152,7 +156,7 @@ def test_population_csv_carries_rechecked_source_lineage_for_all_rows(
     """Both excluded and population rows expose the source audit chain."""
     source = _dated_artifact(client)
     rows = _rows(render_ecology_population_csv(source))
-    assert {row["export_schema_version"] for row in rows} == {"ecology-population-export-0004"}
+    assert {row["export_schema_version"] for row in rows} == {POPULATION_CSV_SCHEMA_VERSION}
     assert {row["row_type"] for row in rows} == {"declared_unit", "population_stratum"}
     report = source.candidate_report
     assert report is not None
@@ -565,7 +569,14 @@ def test_saved_workflow_population_csv_matches_standalone_and_blocks_promotion(
     )
     assert standalone.status_code == 200, standalone.text
     assert payload["csv_text"] == standalone.text
+    assert payload["schema_version"] == POPULATION_CSV_SCHEMA_VERSION
+    assert payload["source_fingerprint_contract"] is not None
+    assert payload["csv_sha256"] == hashlib.sha256(standalone.text.encode("utf-8")).hexdigest()
+    assert payload["source_candidate_count"] == 2
+    assert payload["source_declared_experimental_unit_count"] == 0
+    assert payload["independent_unit_inference_allowed"] is False
     for row in _rows(payload["csv_text"]):
+        assert row["export_schema_version"] == payload["schema_version"]
         if row["row_type"] == "population_stratum":
             assert row["unit_status"] == "eligible_declared_units_only"
             assert row["experimental_unit_id"] == ""

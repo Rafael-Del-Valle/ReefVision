@@ -22,7 +22,7 @@ from reefvision.services.ecology_candidate_report_export import (
     render_ecology_series_qc_csv,
 )
 
-_EXPORT_SCHEMA_VERSION = "ecology-population-export-0004"
+POPULATION_CSV_SCHEMA_VERSION = "ecology-population-export-0004"
 
 _COLUMNS = (
     "export_schema_version",
@@ -288,7 +288,7 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
         _write_checked_row(
             writer,
             (
-                _EXPORT_SCHEMA_VERSION,
+                POPULATION_CSV_SCHEMA_VERSION,
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
@@ -331,7 +331,7 @@ def render_ecology_population_csv(response: EcologyMeasurementCandidatesResponse
         _write_checked_row(
             writer,
             (
-                _EXPORT_SCHEMA_VERSION,
+                POPULATION_CSV_SCHEMA_VERSION,
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,

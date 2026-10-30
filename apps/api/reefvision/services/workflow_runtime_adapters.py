@@ -947,7 +947,12 @@ def _ecology_population_csv_export(
     from reefvision.schemas.ecology_measurement_candidates import (
         EcologyMeasurementCandidatesResponse,
     )
-    from reefvision.services.ecology_population_export import render_ecology_population_csv
+    import hashlib
+
+    from reefvision.services.ecology_population_export import (
+        POPULATION_CSV_SCHEMA_VERSION,
+        render_ecology_population_csv,
+    )
 
     del session, settings
     runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
@@ -967,11 +972,18 @@ def _ecology_population_csv_export(
             "port_id": "csv",
             "data_type": "ecology_population_csv",
             "payload": {
-                "schema_version": "ecology-population-export-0001",
+                "schema_version": POPULATION_CSV_SCHEMA_VERSION,
                 "project_id": project_id,
                 "source_input_sha256": source.input_sha256,
                 "report_sha256": report.report_sha256,
                 "source_fingerprint_rechecked": True,
+                "source_fingerprint_contract": source.source_fingerprint_contract,
+                "source_candidate_count": report.candidate_count,
+                "source_declared_experimental_unit_count": (
+                    report.declared_experimental_unit_count
+                ),
+                "independent_unit_inference_allowed": False,
+                "csv_sha256": hashlib.sha256(csv_text.encode("utf-8")).hexdigest(),
                 "csv_text": csv_text,
                 "evidence_level": "linked_unverified",
                 "review_gate": "scientist_review_required",
