@@ -307,6 +307,7 @@ def test_original_read_is_bounded_even_if_file_grows_during_read(
     assert read_sizes == [MAX_BYTES + 1]
 
 
+@pytest.mark.parametrize("failure_stage", ["path_probe", "read_open"])
 @pytest.mark.parametrize(
     ("filename", "original", "endpoint", "node_type", "artifact_type"),
     [
@@ -320,9 +321,10 @@ def test_original_read_is_bounded_even_if_file_grows_during_read(
         ),
     ],
 )
-def test_original_disappearing_at_read_fails_standalone_and_saved_workflow(
+def test_original_io_failure_fails_standalone_and_saved_workflow(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
     filename: str,
     original: bytes,
     endpoint: str,
@@ -369,19 +371,32 @@ def test_original_disappearing_at_read_fails_standalone_and_saved_workflow(
         assert record is not None
         original_path = resolve_managed_project_path(app.state.settings, record.managed_path)
 
-    # The path passes is_file(), then opening it fails. This models a
-    # disappearing/unreadable original without deleting any real source bytes.
-    original_open = Path.open
+    # Simulate an inaccessible path probe or a later failed open without
+    # deleting any real original bytes. Both must fail closed on graph replay.
+    if failure_stage == "path_probe":
+        original_is_file = Path.is_file
 
-    def missing_open(path: Path, *args: object, **kwargs: object) -> BytesIO:
-        if path == original_path:
-            raise FileNotFoundError("simulated source disappeared during bounded read")
-        return original_open(path, *args, **kwargs)
+        def blocked_probe(path: Path) -> bool:
+            if path == original_path:
+                raise PermissionError("simulated inaccessible source path")
+            return original_is_file(path)
 
-    monkeypatch.setattr(Path, "open", missing_open)
+        monkeypatch.setattr(Path, "is_file", blocked_probe)
+        expected_error = "original path could not be inspected"
+    else:
+        original_open = Path.open
+
+        def missing_open(path: Path, *args: object, **kwargs: object) -> BytesIO:
+            if path == original_path:
+                raise FileNotFoundError("simulated source disappeared during bounded read")
+            return original_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", missing_open)
+        expected_error = "original bytes could not be read"
+
     standalone = client.post(f"{base}/spatial/{endpoint}", json=params)
     assert standalone.status_code == 400, standalone.text
-    assert "original bytes could not be read" in standalone.text
+    assert expected_error in standalone.text
 
     run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
@@ -391,6 +406,4 @@ def test_original_disappearing_at_read_fails_standalone_and_saved_workflow(
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
-    assert not any(
-        item["data_type"] == artifact_type for item in detail.json()["artifacts"]
-    )
+    assert not any(item["data_type"] == artifact_type for item in detail.json()["artifacts"])
