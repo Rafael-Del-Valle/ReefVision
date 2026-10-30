@@ -123,6 +123,38 @@ def test_manual_event_lock_rolls_back_and_same_request_retries(
 
 
 @pytest.mark.parametrize("saved_workflow", [False, True])
+def test_locked_review_history_read_is_retryable_and_preserves_evidence(
+    client: TestClient, saved_workflow: bool
+) -> None:
+    """An EXCLUSIVE local writer must not turn QC history reads into HTTP 500."""
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    url = f"/api/v1/review-queues/{queue_id}/items/{item_ids[0]}/events"
+    app = cast(FastAPI, client.app)
+    db_path = make_url(app.state.settings.resolved_database_url).database
+    assert db_path is not None and Path(db_path).is_file()
+
+    blocker = sqlite3.connect(db_path, timeout=0.2, isolation_level=None)
+    try:
+        blocker.execute("BEGIN EXCLUSIVE")
+        blocked = client.get(url)
+        assert blocked.status_code == 409, blocked.text
+        assert "busy" in blocked.text.lower()
+    finally:
+        blocker.rollback()
+        blocker.close()
+
+    history = client.get(url)
+    assert history.status_code == 200, history.text
+    assert history.json()["total"] == 0
+    assert history.json()["items"] == []
+    assert history.json()["current_assignee"] is None
+    assert history.json()["requires_researcher_review"] is True
+    items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert items.status_code == 200, items.text
+    assert {item["review_state"] for item in items.json()["items"]} == {"pending"}
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
 def test_unrelated_event_integrity_failure_propagates_without_audit_write(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, saved_workflow: bool
 ) -> None:
