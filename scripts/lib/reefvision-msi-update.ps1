@@ -85,7 +85,13 @@ function Resolve-ReefVisionProvenancePython {
     catch {
         throw "The available Python cannot run isolated MSI provenance verification; no installation was attempted."
     }
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '^3\.(\d+)
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '^3\.(\d+)$' -or [int]$Matches[1] -lt 11) {
+        throw "Python 3.11+ is required for isolated MSI provenance verification; no installation was attempted."
+    }
+    return $python
+}
+
+function Assert-ReefVisionMsiPayload {
     param(
         [string]$InstallerPath,
         [string]$RepoPath,
@@ -106,103 +112,6 @@ function Resolve-ReefVisionProvenancePython {
     }
     $directory = [System.IO.Path]::GetDirectoryName($msiPath)
     & $python -I -S -B $validator --directory $directory --expected-version $ExpectedVersion --expected-commit $ExpectedCommit | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "MSI/CAB provenance validation failed." }
-
-    # The MSI Media table, not the manifest, determines the required CABs.
-    $installer = New-Object -ComObject WindowsInstaller.Installer
-    $database = $installer.OpenDatabase($msiPath, 0)
-    $tick = [char]96
-    $versionSql = 'SELECT ' + $tick + 'Value' + $tick + ' FROM ' + $tick + 'Property' + $tick +
-        ' WHERE ' + $tick + 'Property' + $tick + "='ProductVersion'"
-    $versionView = $database.OpenView($versionSql)
-    try {
-        $versionView.Execute()
-        $record = $versionView.Fetch()
-        if ($null -eq $record -or $record.StringData(1) -ne $ExpectedVersion) {
-            throw "MSI ProductVersion differs from expected version."
-        }
-    }
-    finally { $versionView.Close() }
-    $mediaView = $database.OpenView(('SELECT ' + $tick + 'Cabinet' + $tick + ' FROM ' + $tick + 'Media' + $tick))
-    $required = @()
-    try {
-        $mediaView.Execute()
-        while ($record = $mediaView.Fetch()) {
-            $name = [string]$record.StringData(1)
-            if (-not $name -or $name.StartsWith('#')) { continue }
-            if ($name -cnotmatch '^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.cab$') {
-                throw "Unsafe MSI Media cabinet filename: $name"
-            }
-            $required += $name
-        }
-    }
-    finally { $mediaView.Close() }
-    if ($required.Count -eq 0 -or @($required | Sort-Object -Unique).Count -ne $required.Count) {
-        throw "MSI must declare a nonempty, unique external CAB set."
-    }
-    $actual = @(Get-ChildItem -LiteralPath $directory -Filter '*.cab' -File | ForEach-Object { $_.Name })
-    if ($actual.Count -ne $required.Count -or
-        @($actual | Where-Object { $_ -notin $required }).Count -gt 0) {
-        throw "MSI Media table and verified CAB payload disagree."
-    }
-    return [pscustomobject]@{
-        installer = $msiPath
-        source_commit = $ExpectedCommit
-        external_cabinets = $required
-        verified = $true
-    }
-}
-
-function Assert-ReefVisionMsiLogDirectory {
-    param([Parameter(Mandatory = $true)][string]$LogDirectory)
-    $fullPath = [System.IO.Path]::GetFullPath($LogDirectory)
-    $current = $fullPath
-    while (-not [string]::IsNullOrWhiteSpace($current)) {
-        $entry = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
-        if ($null -ne $entry) {
-            if (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-                throw "Refusing MSI log through a symlink/junction: $current"
-            }
-            if ($current -eq $fullPath -and -not $entry.PSIsContainer) {
-                throw "Refusing MSI log directory occupied by a file: $fullPath"
-            }
-        }
-        $parent = Split-Path -Parent $current
-        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $current) { break }
-        $current = $parent
-    }
-    return $fullPath
-}
- -or [int]$Matches[1] -lt 11) {
-        throw "Python 3.11+ is required for isolated MSI provenance verification; no installation was attempted."
-    }
-    return $python
-}
-
-function Assert-ReefVisionMsiPayload {
-    param(
-        [string]$InstallerPath,
-        [string]$RepoPath,
-        [string]$ExpectedVersion,
-        [string]$ExpectedCommit
-    )
-    $msiPath = Assert-ReefVisionMsiLocalPath -InstallerPath $InstallerPath -RepoPath $RepoPath
-    if ([System.IO.Path]::GetFileName($msiPath) -cne ('ReefVision_' + $ExpectedVersion + '_x64_en-US.msi')) {
-        throw "MSI filename differs from the expected version."
-    }
-    if ($ExpectedCommit -notmatch '^[0-9a-fA-F]{40}$') {
-        throw "Expected source commit must be a complete Git SHA."
-    }
-    $python = Join-Path $RepoPath '.venv\Scripts\python.exe'
-    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-        throw "ReefVision Python environment missing; cannot verify MSI provenance."
-    }
-    $validator = Join-Path $RepoPath 'scripts\validate_msi_provenance.py'
-    if (-not (Test-Path -LiteralPath $validator -PathType Leaf)) {
-        throw "MSI provenance validator is missing."
-    }
-    $directory = [System.IO.Path]::GetDirectoryName($msiPath)
-    & $python $validator --directory $directory --expected-version $ExpectedVersion --expected-commit $ExpectedCommit | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "MSI/CAB provenance validation failed." }
 
     # The MSI Media table, not the manifest, determines the required CABs.
