@@ -228,8 +228,599 @@ function Assert-ReefVisionMsiCabinetSet {
             }
             continue
         }
-        if ($name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\.cab$') {
+        if ($name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\.cab        if (-not $expected.Add($name)) {
+            throw "Duplicate MSI Media cabinet declaration: $name"
+        }
+    }
+    if ($expected.Count -eq 0) {
+        throw 'MSI Media table declares no external cabinet payloads.'
+    }
+    $actual = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $AvailableCabinets) {
+        if ([string]::IsNullOrWhiteSpace($name) -or $name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\.cab$') {
+            throw "Unsafe external cabinet filename: $name"
+        }
+        if ($name -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\.cab    }
+    $missing = @($expected | Where-Object { -not $actual.Contains($_) } | Sort-Object)
+    $unexpected = @($actual | Where-Object { -not $expected.Contains($_) } | Sort-Object)
+    if ($missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+        throw "MSI/CAB mismatch; missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')."
+    }
+    return [pscustomobject]@{ Count = $expected.Count; Names = @($expected | Sort-Object) }
+}
+
+function New-ReefVisionEvidenceResult {
+    param([string]$Status = 'NOT RUN', [string]$Detail = '')
+    return [ordered]@{ status = $Status; detail = $Detail; timestamp_utc = [DateTime]::UtcNow.ToString('o') }
+}
+
+function Write-ReefVisionEvidenceReport {
+    param([Parameter(Mandatory = $true)]$Report, [Parameter(Mandatory = $true)][string]$Path)
+    $parent = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+# Decode actual camera bytes rather than accepting a nonempty display response.
+# Scientific annotation coordinates remain in the original camera raster frame.
+function Assert-ReefVisionCameraRaster {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$Bytes,
+        [Parameter(Mandatory = $true)][ValidateSet('image/jpeg', 'image/png')][string]$ContentType,
+        [Parameter(Mandatory = $true)][int]$ExpectedWidth,
+        [Parameter(Mandatory = $true)][int]$ExpectedHeight
+    )
+    if ($Bytes.Length -eq 0 -or $ExpectedWidth -le 0 -or $ExpectedHeight -le 0) {
+        throw 'Camera raster bytes and expected dimensions must be nonempty and positive.'
+    }
+    Add-Type -AssemblyName System.Drawing
+    $stream = [System.IO.MemoryStream]::new([byte[]]$Bytes, $false)
+    try {
+        $raster = [System.Drawing.Image]::FromStream($stream, $false, $true)
+        try {
+            $expectedFormat = if ($ContentType -eq 'image/jpeg') {
+                [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid
+            } else {
+                [System.Drawing.Imaging.ImageFormat]::Png.Guid
+            }
+            if ($raster.RawFormat.Guid -ne $expectedFormat) {
+                throw "Camera raster encoding does not match declared $ContentType."
+            }
+            if ($raster.Width -ne $ExpectedWidth -or $raster.Height -ne $ExpectedHeight) {
+                throw "Camera raster dimensions $($raster.Width)x$($raster.Height) differ from original source frame ${ExpectedWidth}x${ExpectedHeight}."
+            }
+            return [pscustomobject]@{
+                width = [int]$raster.Width
+                height = [int]$raster.Height
+                media_type = $ContentType
+            }
+        } finally { $raster.Dispose() }
+    } finally { $stream.Dispose() }
+}
+
+
+# A camera image must render identically before and after an installed desktop
+# restart. Matching dimensions alone would miss changed pixels or re-encoding.
+# This deliberately requires byte-for-byte stability of the display response;
+# no source camera bytes are modified by this check.
+function Assert-ReefVisionStableCameraDisplay {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$InitialBytes,
+        [Parameter(Mandatory = $true)][byte[]]$RestartBytes,
+        [Parameter(Mandatory = $true)][string]$InitialContentType,
+        [Parameter(Mandatory = $true)][string]$RestartContentType
+    )
+    if ($InitialBytes.Length -eq 0 -or $RestartBytes.Length -eq 0) {
+        throw 'Camera display bytes must be nonempty before and after restart.'
+    }
+    if ($InitialContentType -cne $RestartContentType) {
+        throw 'Camera display media type changed after desktop restart.'
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $before = [BitConverter]::ToString($sha.ComputeHash($InitialBytes)).Replace('-', '')
+        $after = [BitConverter]::ToString($sha.ComputeHash($RestartBytes)).Replace('-', '')
+    } finally { $sha.Dispose() }
+    if ($before -cne $after) {
+        throw 'Camera display bytes changed after desktop restart despite matching dimensions.'
+    }
+}
+
+function Get-ReefVisionInstalledRegistrations {
+    $roots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    return @(Get-ItemProperty $roots -ErrorAction SilentlyContinue | Where-Object {
+        $displayName = $_.PSObject.Properties['DisplayName']
+        $null -ne $displayName -and $displayName.Value -like 'ReefVision*'
+    })
+}
+
+function Test-ReefVisionAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+) {
             throw "Unsafe MSI Media cabinet name: $name"
+        }
+        # Windows treats DOS device basenames as devices even with a .cab
+        # extension. Never open an MSI-declared cabinet such as CON.cab.
+        if ($name -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\.cab        if (-not $expected.Add($name)) {
+            throw "Duplicate MSI Media cabinet declaration: $name"
+        }
+    }
+    if ($expected.Count -eq 0) {
+        throw 'MSI Media table declares no external cabinet payloads.'
+    }
+    $actual = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $AvailableCabinets) {
+        if ([string]::IsNullOrWhiteSpace($name) -or $name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\.cab$') {
+            throw "Unsafe external cabinet filename: $name"
+        }
+        if (-not $actual.Add($name)) {
+            throw "Duplicate external cabinet filename: $name"
+        }
+    }
+    $missing = @($expected | Where-Object { -not $actual.Contains($_) } | Sort-Object)
+    $unexpected = @($actual | Where-Object { -not $expected.Contains($_) } | Sort-Object)
+    if ($missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+        throw "MSI/CAB mismatch; missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')."
+    }
+    return [pscustomobject]@{ Count = $expected.Count; Names = @($expected | Sort-Object) }
+}
+
+function New-ReefVisionEvidenceResult {
+    param([string]$Status = 'NOT RUN', [string]$Detail = '')
+    return [ordered]@{ status = $Status; detail = $Detail; timestamp_utc = [DateTime]::UtcNow.ToString('o') }
+}
+
+function Write-ReefVisionEvidenceReport {
+    param([Parameter(Mandatory = $true)]$Report, [Parameter(Mandatory = $true)][string]$Path)
+    $parent = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+# Decode actual camera bytes rather than accepting a nonempty display response.
+# Scientific annotation coordinates remain in the original camera raster frame.
+function Assert-ReefVisionCameraRaster {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$Bytes,
+        [Parameter(Mandatory = $true)][ValidateSet('image/jpeg', 'image/png')][string]$ContentType,
+        [Parameter(Mandatory = $true)][int]$ExpectedWidth,
+        [Parameter(Mandatory = $true)][int]$ExpectedHeight
+    )
+    if ($Bytes.Length -eq 0 -or $ExpectedWidth -le 0 -or $ExpectedHeight -le 0) {
+        throw 'Camera raster bytes and expected dimensions must be nonempty and positive.'
+    }
+    Add-Type -AssemblyName System.Drawing
+    $stream = [System.IO.MemoryStream]::new([byte[]]$Bytes, $false)
+    try {
+        $raster = [System.Drawing.Image]::FromStream($stream, $false, $true)
+        try {
+            $expectedFormat = if ($ContentType -eq 'image/jpeg') {
+                [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid
+            } else {
+                [System.Drawing.Imaging.ImageFormat]::Png.Guid
+            }
+            if ($raster.RawFormat.Guid -ne $expectedFormat) {
+                throw "Camera raster encoding does not match declared $ContentType."
+            }
+            if ($raster.Width -ne $ExpectedWidth -or $raster.Height -ne $ExpectedHeight) {
+                throw "Camera raster dimensions $($raster.Width)x$($raster.Height) differ from original source frame ${ExpectedWidth}x${ExpectedHeight}."
+            }
+            return [pscustomobject]@{
+                width = [int]$raster.Width
+                height = [int]$raster.Height
+                media_type = $ContentType
+            }
+        } finally { $raster.Dispose() }
+    } finally { $stream.Dispose() }
+}
+
+
+# A camera image must render identically before and after an installed desktop
+# restart. Matching dimensions alone would miss changed pixels or re-encoding.
+# This deliberately requires byte-for-byte stability of the display response;
+# no source camera bytes are modified by this check.
+function Assert-ReefVisionStableCameraDisplay {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$InitialBytes,
+        [Parameter(Mandatory = $true)][byte[]]$RestartBytes,
+        [Parameter(Mandatory = $true)][string]$InitialContentType,
+        [Parameter(Mandatory = $true)][string]$RestartContentType
+    )
+    if ($InitialBytes.Length -eq 0 -or $RestartBytes.Length -eq 0) {
+        throw 'Camera display bytes must be nonempty before and after restart.'
+    }
+    if ($InitialContentType -cne $RestartContentType) {
+        throw 'Camera display media type changed after desktop restart.'
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $before = [BitConverter]::ToString($sha.ComputeHash($InitialBytes)).Replace('-', '')
+        $after = [BitConverter]::ToString($sha.ComputeHash($RestartBytes)).Replace('-', '')
+    } finally { $sha.Dispose() }
+    if ($before -cne $after) {
+        throw 'Camera display bytes changed after desktop restart despite matching dimensions.'
+    }
+}
+
+function Get-ReefVisionInstalledRegistrations {
+    $roots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    return @(Get-ItemProperty $roots -ErrorAction SilentlyContinue | Where-Object {
+        $displayName = $_.PSObject.Properties['DisplayName']
+        $null -ne $displayName -and $displayName.Value -like 'ReefVision*'
+    })
+}
+
+function Test-ReefVisionAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+) {
+            throw "Reserved Windows device name in MSI Media cabinet: $name"
+        }
+        if (-not $expected.Add($name)) {
+            throw "Duplicate MSI Media cabinet declaration: $name"
+        }
+    }
+    if ($expected.Count -eq 0) {
+        throw 'MSI Media table declares no external cabinet payloads.'
+    }
+    $actual = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $AvailableCabinets) {
+        if ([string]::IsNullOrWhiteSpace($name) -or $name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\.cab$') {
+            throw "Unsafe external cabinet filename: $name"
+        }
+        if (-not $actual.Add($name)) {
+            throw "Duplicate external cabinet filename: $name"
+        }
+    }
+    $missing = @($expected | Where-Object { -not $actual.Contains($_) } | Sort-Object)
+    $unexpected = @($actual | Where-Object { -not $expected.Contains($_) } | Sort-Object)
+    if ($missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+        throw "MSI/CAB mismatch; missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')."
+    }
+    return [pscustomobject]@{ Count = $expected.Count; Names = @($expected | Sort-Object) }
+}
+
+function New-ReefVisionEvidenceResult {
+    param([string]$Status = 'NOT RUN', [string]$Detail = '')
+    return [ordered]@{ status = $Status; detail = $Detail; timestamp_utc = [DateTime]::UtcNow.ToString('o') }
+}
+
+function Write-ReefVisionEvidenceReport {
+    param([Parameter(Mandatory = $true)]$Report, [Parameter(Mandatory = $true)][string]$Path)
+    $parent = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+# Decode actual camera bytes rather than accepting a nonempty display response.
+# Scientific annotation coordinates remain in the original camera raster frame.
+function Assert-ReefVisionCameraRaster {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$Bytes,
+        [Parameter(Mandatory = $true)][ValidateSet('image/jpeg', 'image/png')][string]$ContentType,
+        [Parameter(Mandatory = $true)][int]$ExpectedWidth,
+        [Parameter(Mandatory = $true)][int]$ExpectedHeight
+    )
+    if ($Bytes.Length -eq 0 -or $ExpectedWidth -le 0 -or $ExpectedHeight -le 0) {
+        throw 'Camera raster bytes and expected dimensions must be nonempty and positive.'
+    }
+    Add-Type -AssemblyName System.Drawing
+    $stream = [System.IO.MemoryStream]::new([byte[]]$Bytes, $false)
+    try {
+        $raster = [System.Drawing.Image]::FromStream($stream, $false, $true)
+        try {
+            $expectedFormat = if ($ContentType -eq 'image/jpeg') {
+                [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid
+            } else {
+                [System.Drawing.Imaging.ImageFormat]::Png.Guid
+            }
+            if ($raster.RawFormat.Guid -ne $expectedFormat) {
+                throw "Camera raster encoding does not match declared $ContentType."
+            }
+            if ($raster.Width -ne $ExpectedWidth -or $raster.Height -ne $ExpectedHeight) {
+                throw "Camera raster dimensions $($raster.Width)x$($raster.Height) differ from original source frame ${ExpectedWidth}x${ExpectedHeight}."
+            }
+            return [pscustomobject]@{
+                width = [int]$raster.Width
+                height = [int]$raster.Height
+                media_type = $ContentType
+            }
+        } finally { $raster.Dispose() }
+    } finally { $stream.Dispose() }
+}
+
+
+# A camera image must render identically before and after an installed desktop
+# restart. Matching dimensions alone would miss changed pixels or re-encoding.
+# This deliberately requires byte-for-byte stability of the display response;
+# no source camera bytes are modified by this check.
+function Assert-ReefVisionStableCameraDisplay {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$InitialBytes,
+        [Parameter(Mandatory = $true)][byte[]]$RestartBytes,
+        [Parameter(Mandatory = $true)][string]$InitialContentType,
+        [Parameter(Mandatory = $true)][string]$RestartContentType
+    )
+    if ($InitialBytes.Length -eq 0 -or $RestartBytes.Length -eq 0) {
+        throw 'Camera display bytes must be nonempty before and after restart.'
+    }
+    if ($InitialContentType -cne $RestartContentType) {
+        throw 'Camera display media type changed after desktop restart.'
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $before = [BitConverter]::ToString($sha.ComputeHash($InitialBytes)).Replace('-', '')
+        $after = [BitConverter]::ToString($sha.ComputeHash($RestartBytes)).Replace('-', '')
+    } finally { $sha.Dispose() }
+    if ($before -cne $after) {
+        throw 'Camera display bytes changed after desktop restart despite matching dimensions.'
+    }
+}
+
+function Get-ReefVisionInstalledRegistrations {
+    $roots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    return @(Get-ItemProperty $roots -ErrorAction SilentlyContinue | Where-Object {
+        $displayName = $_.PSObject.Properties['DisplayName']
+        $null -ne $displayName -and $displayName.Value -like 'ReefVision*'
+    })
+}
+
+function Test-ReefVisionAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+) {
+            throw "Reserved Windows device name in external cabinet: $name"
+        }
+        if (-not $actual.Add($name)) {
+            throw "Duplicate external cabinet filename: $name"
+        }
+    }
+    $missing = @($expected | Where-Object { -not $actual.Contains($_) } | Sort-Object)
+    $unexpected = @($actual | Where-Object { -not $expected.Contains($_) } | Sort-Object)
+    if ($missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+        throw "MSI/CAB mismatch; missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')."
+    }
+    return [pscustomobject]@{ Count = $expected.Count; Names = @($expected | Sort-Object) }
+}
+
+function New-ReefVisionEvidenceResult {
+    param([string]$Status = 'NOT RUN', [string]$Detail = '')
+    return [ordered]@{ status = $Status; detail = $Detail; timestamp_utc = [DateTime]::UtcNow.ToString('o') }
+}
+
+function Write-ReefVisionEvidenceReport {
+    param([Parameter(Mandatory = $true)]$Report, [Parameter(Mandatory = $true)][string]$Path)
+    $parent = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+# Decode actual camera bytes rather than accepting a nonempty display response.
+# Scientific annotation coordinates remain in the original camera raster frame.
+function Assert-ReefVisionCameraRaster {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$Bytes,
+        [Parameter(Mandatory = $true)][ValidateSet('image/jpeg', 'image/png')][string]$ContentType,
+        [Parameter(Mandatory = $true)][int]$ExpectedWidth,
+        [Parameter(Mandatory = $true)][int]$ExpectedHeight
+    )
+    if ($Bytes.Length -eq 0 -or $ExpectedWidth -le 0 -or $ExpectedHeight -le 0) {
+        throw 'Camera raster bytes and expected dimensions must be nonempty and positive.'
+    }
+    Add-Type -AssemblyName System.Drawing
+    $stream = [System.IO.MemoryStream]::new([byte[]]$Bytes, $false)
+    try {
+        $raster = [System.Drawing.Image]::FromStream($stream, $false, $true)
+        try {
+            $expectedFormat = if ($ContentType -eq 'image/jpeg') {
+                [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid
+            } else {
+                [System.Drawing.Imaging.ImageFormat]::Png.Guid
+            }
+            if ($raster.RawFormat.Guid -ne $expectedFormat) {
+                throw "Camera raster encoding does not match declared $ContentType."
+            }
+            if ($raster.Width -ne $ExpectedWidth -or $raster.Height -ne $ExpectedHeight) {
+                throw "Camera raster dimensions $($raster.Width)x$($raster.Height) differ from original source frame ${ExpectedWidth}x${ExpectedHeight}."
+            }
+            return [pscustomobject]@{
+                width = [int]$raster.Width
+                height = [int]$raster.Height
+                media_type = $ContentType
+            }
+        } finally { $raster.Dispose() }
+    } finally { $stream.Dispose() }
+}
+
+
+# A camera image must render identically before and after an installed desktop
+# restart. Matching dimensions alone would miss changed pixels or re-encoding.
+# This deliberately requires byte-for-byte stability of the display response;
+# no source camera bytes are modified by this check.
+function Assert-ReefVisionStableCameraDisplay {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$InitialBytes,
+        [Parameter(Mandatory = $true)][byte[]]$RestartBytes,
+        [Parameter(Mandatory = $true)][string]$InitialContentType,
+        [Parameter(Mandatory = $true)][string]$RestartContentType
+    )
+    if ($InitialBytes.Length -eq 0 -or $RestartBytes.Length -eq 0) {
+        throw 'Camera display bytes must be nonempty before and after restart.'
+    }
+    if ($InitialContentType -cne $RestartContentType) {
+        throw 'Camera display media type changed after desktop restart.'
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $before = [BitConverter]::ToString($sha.ComputeHash($InitialBytes)).Replace('-', '')
+        $after = [BitConverter]::ToString($sha.ComputeHash($RestartBytes)).Replace('-', '')
+    } finally { $sha.Dispose() }
+    if ($before -cne $after) {
+        throw 'Camera display bytes changed after desktop restart despite matching dimensions.'
+    }
+}
+
+function Get-ReefVisionInstalledRegistrations {
+    $roots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    return @(Get-ItemProperty $roots -ErrorAction SilentlyContinue | Where-Object {
+        $displayName = $_.PSObject.Properties['DisplayName']
+        $null -ne $displayName -and $displayName.Value -like 'ReefVision*'
+    })
+}
+
+function Test-ReefVisionAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+) {
+            throw "Unsafe MSI Media cabinet name: $name"
+        }
+        # Windows treats DOS device basenames as devices even with a .cab
+        # extension. Never open an MSI-declared cabinet such as CON.cab.
+        if ($name -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\.cab        if (-not $expected.Add($name)) {
+            throw "Duplicate MSI Media cabinet declaration: $name"
+        }
+    }
+    if ($expected.Count -eq 0) {
+        throw 'MSI Media table declares no external cabinet payloads.'
+    }
+    $actual = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $AvailableCabinets) {
+        if ([string]::IsNullOrWhiteSpace($name) -or $name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\.cab$') {
+            throw "Unsafe external cabinet filename: $name"
+        }
+        if (-not $actual.Add($name)) {
+            throw "Duplicate external cabinet filename: $name"
+        }
+    }
+    $missing = @($expected | Where-Object { -not $actual.Contains($_) } | Sort-Object)
+    $unexpected = @($actual | Where-Object { -not $expected.Contains($_) } | Sort-Object)
+    if ($missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+        throw "MSI/CAB mismatch; missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')."
+    }
+    return [pscustomobject]@{ Count = $expected.Count; Names = @($expected | Sort-Object) }
+}
+
+function New-ReefVisionEvidenceResult {
+    param([string]$Status = 'NOT RUN', [string]$Detail = '')
+    return [ordered]@{ status = $Status; detail = $Detail; timestamp_utc = [DateTime]::UtcNow.ToString('o') }
+}
+
+function Write-ReefVisionEvidenceReport {
+    param([Parameter(Mandatory = $true)]$Report, [Parameter(Mandatory = $true)][string]$Path)
+    $parent = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+# Decode actual camera bytes rather than accepting a nonempty display response.
+# Scientific annotation coordinates remain in the original camera raster frame.
+function Assert-ReefVisionCameraRaster {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$Bytes,
+        [Parameter(Mandatory = $true)][ValidateSet('image/jpeg', 'image/png')][string]$ContentType,
+        [Parameter(Mandatory = $true)][int]$ExpectedWidth,
+        [Parameter(Mandatory = $true)][int]$ExpectedHeight
+    )
+    if ($Bytes.Length -eq 0 -or $ExpectedWidth -le 0 -or $ExpectedHeight -le 0) {
+        throw 'Camera raster bytes and expected dimensions must be nonempty and positive.'
+    }
+    Add-Type -AssemblyName System.Drawing
+    $stream = [System.IO.MemoryStream]::new([byte[]]$Bytes, $false)
+    try {
+        $raster = [System.Drawing.Image]::FromStream($stream, $false, $true)
+        try {
+            $expectedFormat = if ($ContentType -eq 'image/jpeg') {
+                [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid
+            } else {
+                [System.Drawing.Imaging.ImageFormat]::Png.Guid
+            }
+            if ($raster.RawFormat.Guid -ne $expectedFormat) {
+                throw "Camera raster encoding does not match declared $ContentType."
+            }
+            if ($raster.Width -ne $ExpectedWidth -or $raster.Height -ne $ExpectedHeight) {
+                throw "Camera raster dimensions $($raster.Width)x$($raster.Height) differ from original source frame ${ExpectedWidth}x${ExpectedHeight}."
+            }
+            return [pscustomobject]@{
+                width = [int]$raster.Width
+                height = [int]$raster.Height
+                media_type = $ContentType
+            }
+        } finally { $raster.Dispose() }
+    } finally { $stream.Dispose() }
+}
+
+
+# A camera image must render identically before and after an installed desktop
+# restart. Matching dimensions alone would miss changed pixels or re-encoding.
+# This deliberately requires byte-for-byte stability of the display response;
+# no source camera bytes are modified by this check.
+function Assert-ReefVisionStableCameraDisplay {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$InitialBytes,
+        [Parameter(Mandatory = $true)][byte[]]$RestartBytes,
+        [Parameter(Mandatory = $true)][string]$InitialContentType,
+        [Parameter(Mandatory = $true)][string]$RestartContentType
+    )
+    if ($InitialBytes.Length -eq 0 -or $RestartBytes.Length -eq 0) {
+        throw 'Camera display bytes must be nonempty before and after restart.'
+    }
+    if ($InitialContentType -cne $RestartContentType) {
+        throw 'Camera display media type changed after desktop restart.'
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $before = [BitConverter]::ToString($sha.ComputeHash($InitialBytes)).Replace('-', '')
+        $after = [BitConverter]::ToString($sha.ComputeHash($RestartBytes)).Replace('-', '')
+    } finally { $sha.Dispose() }
+    if ($before -cne $after) {
+        throw 'Camera display bytes changed after desktop restart despite matching dimensions.'
+    }
+}
+
+function Get-ReefVisionInstalledRegistrations {
+    $roots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    return @(Get-ItemProperty $roots -ErrorAction SilentlyContinue | Where-Object {
+        $displayName = $_.PSObject.Properties['DisplayName']
+        $null -ne $displayName -and $displayName.Value -like 'ReefVision*'
+    })
+}
+
+function Test-ReefVisionAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+) {
+            throw "Reserved Windows device name in MSI Media cabinet: $name"
         }
         if (-not $expected.Add($name)) {
             throw "Duplicate MSI Media cabinet declaration: $name"
