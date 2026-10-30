@@ -258,7 +258,6 @@ def _fake_pose_processor(
     return True
 
 
-
 def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
     client: TestClient,
     test_settings: Settings,
@@ -317,9 +316,7 @@ def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
     assert manifest["best_checkpoint_sha256"] == result["result_checkpoint_sha256"]
     assert manifest["last_checkpoint_sha256"] == hashlib.sha256(secondary_bytes).hexdigest()
 
-    last_checkpoint = resolve_managed_project_path(
-        test_settings, str(manifest["last_checkpoint_path"])
-    )
+    last_checkpoint = resolve_managed_project_path(test_settings, str(manifest["last_checkpoint_path"]))
     try:
         last_checkpoint.write_bytes(b"altered-secondary-checkpoint")
         with pytest.raises(ValidationError, match="checkpoint artifact checksum changed"):
