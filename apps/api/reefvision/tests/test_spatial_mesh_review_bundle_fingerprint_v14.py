@@ -178,3 +178,47 @@ def test_review_bundle_detects_revised_observation_provenance(
     )
     assert revised["provenance"]["specimen_identity_verified"] is False
     assert revised["provenance"]["calibration_verified"] is False
+
+
+def test_review_fingerprint_detects_changed_obj_bytes_with_same_geometry() -> None:
+    """A changed source comment is an evidence revision, not geometric growth."""
+    before = _observation("early", 1)
+
+    def imported(comment: str) -> dict:
+        obj_text = (
+            f"# {comment}\n"
+            "v 0 0 0\n"
+            "v 1 0 0\n"
+            "v 0 2 0\n"
+            "f 1 2 3\n"
+        )
+        result = preview_from_request(
+            MeshPreviewRequest.model_validate(
+                {
+                    "obj_text": obj_text,
+                    "meters_per_unit": 1,
+                    "calibration_method": "ruler",
+                    "calibration_evidence": "Unverified ruler",
+                    "specimen_id": "colony-1",
+                    "observation_id": "late",
+                    "observed_at_utc": "2026-10-02T12:00:00Z",
+                }
+            )
+        )
+        result["project_id"] = "study-1"
+        return result
+
+    first = imported("source revision one")
+    second = imported("source revision two")
+    assert first["provenance"]["geometry_sha256"] == second["provenance"]["geometry_sha256"]
+    assert first["provenance"]["source_payload_sha256"] != (
+        second["provenance"]["source_payload_sha256"]
+    )
+    review = _review(before, first)
+    initial = compare_mesh_observations(before, first, reidentification_evidence=review)
+    revised = compare_mesh_observations(before, second, reidentification_evidence=review)
+    assert (
+        initial["provenance"]["review_evidence_bundle_sha256"]
+        != revised["provenance"]["review_evidence_bundle_sha256"]
+    )
+    assert revised["provenance"]["specimen_identity_verified"] is False
