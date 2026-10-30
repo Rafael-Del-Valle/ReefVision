@@ -67,6 +67,18 @@ $uninstall = New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00
 Assert-True ($uninstall[0] -eq '/x') 'Uninstall command does not use /x.'
 Assert-True ((ConvertTo-ReefVisionVersionString ' 1.0.3 ') -eq '1.0.3') 'MSI version comparison did not normalize COM padding.'
 
+# MSI Media table CAB contract: fail closed on missing, unexpected, duplicate,
+# or path-traversing payloads before any administrative extraction is attempted.
+$validCabinets = Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#embedded.cab', 'rv1.cab', 'RV2.CAB') -AvailableCabinets @('RV1.CAB', 'rv2.cab')
+Assert-True ($validCabinets.Count -eq 2) 'Embedded MSI cabinets must not require external files.'
+Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab', 'rv2.cab') -AvailableCabinets @('rv1.cab') | Out-Null } 'Missing MSI-declared CAB must fail.'
+Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab') -AvailableCabinets @('rv1.cab', 'rv2.cab') | Out-Null } 'Unexpected CAB must fail.'
+Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab') -AvailableCabinets @('rv1.cab', 'RV1.CAB') | Out-Null } 'Duplicate CAB names must fail case-insensitively.'
+Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('../rv1.cab') -AvailableCabinets @('rv1.cab') | Out-Null } 'MSI Media path traversal must fail.'
+Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#embedded.cab') -AvailableCabinets @() | Out-Null } 'An installer with no external CAB declarations must not pass.'
+Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab') -AvailableCabinets @('../rv1.cab') | Out-Null } 'External CAB path traversal must fail.'
+
+
 function Get-ItemProperty {
     [CmdletBinding()]
     param([Parameter(Position = 0)]$Path)
