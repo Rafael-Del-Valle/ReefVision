@@ -12,8 +12,10 @@ visibility preferences or display a misleading completion/error message.
 
 ## Implementation
 
-The mutation records the originating local identity from the existing project
-visibility bundle. The cache helper requires both project and user identity
+Persistence controls are disabled until the visibility bundle has loaded,
+so an unknown identity cannot initiate a user-preference write. Session-only
+show/hide actions remain available. The mutation records the originating local
+identity from the existing project visibility bundle. The cache helper requires both project and user identity
 to match before applying a **user preference** result. A missing identity
 fails closed. Project defaults remain shared across users, and their cache
 updates remain project-scoped. Completion/error messages are suppressed when
