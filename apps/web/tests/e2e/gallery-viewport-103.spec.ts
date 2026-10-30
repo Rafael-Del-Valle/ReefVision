@@ -47,7 +47,11 @@ test("initial image and gallery scrolling", async ({ page }) => {
   const images = Array.from({ length: 12 }, (_, index) => ({
     id: "image-" + (index + 1),
     project_id: project.id,
-    original_filename: `camera-${String(index + 1).padStart(2, "0")}.JPEG`,
+    // Exercise real-world case-insensitive JPEG filename aliases in the
+    // gallery, not just the canonical .JPEG extension.
+    original_filename: `camera-${String(index + 1).padStart(2, "0")}.${
+      ["JPE", "JFIF", "jfi", "jif"][index - 2] ?? "JPEG"
+    }`,
     managed_path: `projects/project-1/images/originals/camera-${index + 1}.jpg`,
     thumbnail_path: null,
     sha256: "a".repeat(64),
@@ -379,6 +383,23 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await expect(secondImage).toHaveAttribute("aria-current", "true");
   expect(imageTwoRetryValues).toEqual([null, "1"]);
   await expect(workbench.getByRole("alert")).toHaveCount(0);
+
+  // Each accepted JPEG alias must remain selectable and decode genuine JPEG
+  // bytes in Chromium, including mixed-case scientific camera filenames.
+  for (const [number, extension] of [
+    [3, "JPE"],
+    [4, "JFIF"],
+    [5, "jfi"],
+    [6, "jif"],
+  ] as const) {
+    const aliasImage = workbench.getByRole("listitem", {
+      name: `Focus camera-${String(number).padStart(2, "0")}.${extension}`,
+    });
+    await aliasImage.click();
+    await assertDecodedAndContained(1600, 1200);
+    await expect(aliasImage).toHaveAttribute("aria-current", "true");
+    expect(displayRequests).toContain(`image-${number}`);
+  }
 
   expect(displayRequests).toContain("image-1");
   expect(displayRequests).toContain("image-12");
