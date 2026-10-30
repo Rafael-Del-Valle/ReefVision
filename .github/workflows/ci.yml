@@ -58,8 +58,11 @@ jobs:
         if: failure()
         working-directory: apps/web
         run: |
-          npx prettier --write src/features/annotation-editor/AnnotationEditor.test.tsx src/features/onboarding/OnboardingModal.tsx src/features/review-queues/ReviewQueueDashboard.scope.test.tsx src/features/review-queues/ReviewQueueDashboard.tsx
-          git diff -- src/features/annotation-editor/AnnotationEditor.test.tsx src/features/onboarding/OnboardingModal.tsx src/features/review-queues/ReviewQueueDashboard.scope.test.tsx src/features/review-queues/ReviewQueueDashboard.tsx
+          # Print the actual formatter diff for every file, rather than a stale
+          # hard-coded shortlist that omitted the failing onboarding regression.
+          # This diagnostic runs only after failure; it does not commit changes.
+          npx prettier --write .
+          git diff -- .
       - run: npm run typecheck
         working-directory: apps/web
       - run: npm run test
