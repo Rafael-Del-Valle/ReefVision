@@ -4476,3 +4476,24 @@ measurements, or promote data to a verified dataset. Full exact-head CI,
 representative scientific review, 1.1 migration reconciliation and installed
 Windows GUI/MSI acceptance remain mandatory. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+
+## Evidence revalidation precedence: regression alignment (2026-10-30)
+
+Exact-head CI on `6a5799f7` found four backend tests failing solely because
+copied, tampered typed identity-registry objects now fail the earlier full
+Pydantic evidence-integrity revalidation before reaching derived design-change,
+shared-parent and historical-parent audit checks. The error is
+`Ecological identity source evidence integrity check failed`, not the later
+specific audit error expected by older tests. Both paths reject tampering;
+no integrity gate is weakened. Updated the ten existing tamper assertions
+across the two affected test modules to expect the earlier fail-closed check,
+and documented this validation order in test comments. No API, database,
+workflow contract, production behavior or scientific dataset was changed.
+
+Previous exact-head backend CI: 2,144 passed, 4 failed, 32 skipped (the four
+failures were stale error-message assertions). This test-only repair still
+requires fresh exact-head CI before claiming a pass. Authenticated biological
+review, longitudinal measurement acceptance, 1.1 migration reconciliation
+and installed Windows MSI/GUI testing remain outstanding. **1.2 NOT
+RELEASE-READY; 1.3 not started.**
