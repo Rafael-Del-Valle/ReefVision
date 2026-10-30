@@ -58,7 +58,7 @@ def test_review_fingerprint_is_canonical_and_sensitive_to_review_revision() -> N
     result = compare_mesh_observations(before, after, reidentification_evidence=review)
     provenance = result["provenance"]
     digest = provenance["review_evidence_bundle_sha256"]
-    assert provenance["review_evidence_bundle_schema_version"] == "mesh-review-bundle-0002"
+    assert provenance["review_evidence_bundle_schema_version"] == "mesh-review-bundle-0003"
     assert isinstance(digest, str) and len(digest) == 64
     assert provenance["specimen_identity_verified"] is False
     assert provenance["reidentification_evidence_review_status"] == "caller_supplied_unverified"
@@ -66,7 +66,7 @@ def test_review_fingerprint_is_canonical_and_sensitive_to_review_revision() -> N
 
     # Verify the published canonical digest, not just its format.
     canonical = {
-        "schema_version": "mesh-review-bundle-0002",
+        "schema_version": "mesh-review-bundle-0003",
         "project_id": "study-1",
         "specimen_id": "colony-1",
         "before_observation_id": "early",
@@ -77,6 +77,12 @@ def test_review_fingerprint_is_canonical_and_sensitive_to_review_revision() -> N
         "after_geometry_sha256": after["provenance"]["geometry_sha256"],
         "before_source_payload_sha256": None,
         "after_source_payload_sha256": None,
+        "before_source_format": "indexed_triangles",
+        "after_source_format": "indexed_triangles",
+        "before_source_payload_size_bytes": None,
+        "after_source_payload_size_bytes": None,
+        "before_source_payload_integrity_checked": False,
+        "after_source_payload_integrity_checked": False,
         "before_coordinate_frame_id": None,
         "after_coordinate_frame_id": None,
         "before_calibration_method": "ruler",
@@ -103,15 +109,18 @@ def test_review_fingerprint_is_canonical_and_sensitive_to_review_revision() -> N
     ).hexdigest()
     assert digest == expected
     assert provenance["review_evidence_bundle"] == canonical
-    assert sha256(
-        dumps(
-            provenance["review_evidence_bundle"],
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode("utf-8")
-    ).hexdigest() == digest
+    assert (
+        sha256(
+            dumps(
+                provenance["review_evidence_bundle"],
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        == digest
+    )
     reversed_review = dict(reversed(list(review.items())))
     assert (
         compare_mesh_observations(before, after, reidentification_evidence=reversed_review)[
@@ -162,6 +171,9 @@ def test_review_fingerprint_binds_observations_but_does_not_certify_legacy_evide
         ("calibration_evidence", "Revised unverified scale note"),
         ("relative_scale_uncertainty", 0.2),
         ("source_payload_sha256", "a" * 64),
+        ("source_format", "ply_ascii"),
+        ("source_payload_size_bytes", 120),
+        ("source_payload_integrity_checked", True),
         ("coordinate_frame_id", "survey-local"),
         ("calibration_review_evidence", {"independent_review_note": "Amended"}),
     ],
@@ -176,16 +188,13 @@ def test_review_bundle_detects_revised_observation_provenance(
     original = compare_mesh_observations(before, after, reidentification_evidence=review)
     amended_after = {**after, "provenance": {**after["provenance"]}}
     amended_after["provenance"][provenance_key] = revised_value
-    revised = compare_mesh_observations(
-        before, amended_after, reidentification_evidence=review
-    )
+    revised = compare_mesh_observations(before, amended_after, reidentification_evidence=review)
     assert (
         original["provenance"]["review_evidence_bundle_sha256"]
         != revised["provenance"]["review_evidence_bundle_sha256"]
     )
     assert (
-        revised["provenance"]["review_evidence_bundle_schema_version"]
-        == "mesh-review-bundle-0002"
+        revised["provenance"]["review_evidence_bundle_schema_version"] == "mesh-review-bundle-0003"
     )
     assert revised["provenance"]["specimen_identity_verified"] is False
     assert revised["provenance"]["calibration_verified"] is False
@@ -196,13 +205,7 @@ def test_review_fingerprint_detects_changed_obj_bytes_with_same_geometry() -> No
     before = _observation("early", 1)
 
     def imported(comment: str) -> dict:
-        obj_text = (
-            f"# {comment}\n"
-            "v 0 0 0\n"
-            "v 1 0 0\n"
-            "v 0 2 0\n"
-            "f 1 2 3\n"
-        )
+        obj_text = f"# {comment}\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n"
         result = preview_from_request(
             MeshPreviewRequest.model_validate(
                 {
@@ -221,10 +224,7 @@ def test_review_fingerprint_detects_changed_obj_bytes_with_same_geometry() -> No
 
     first = imported("source revision one")
     second = imported("source revision two")
-    assert (
-        first["provenance"]["geometry_sha256"]
-        == second["provenance"]["geometry_sha256"]
-    )
+    assert first["provenance"]["geometry_sha256"] == second["provenance"]["geometry_sha256"]
     assert (
         first["provenance"]["source_payload_sha256"]
         != second["provenance"]["source_payload_sha256"]
