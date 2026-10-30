@@ -57,4 +57,13 @@ def get_review_events(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> ReviewQueueEventsPage:
-    return list_review_events(session, queue_id, item_id, page=page, page_size=page_size)
+    try:
+        return list_review_events(session, queue_id, item_id, page=page, page_size=page_size)
+    except OperationalError as exc:
+        # An EXCLUSIVE local SQLite writer can block review-history reads.
+        # Preserve existing reviewer evidence and offer a retryable conflict
+        # instead of misreporting a transient lock as a server failure.
+        session.rollback()
+        if session.get_bind().dialect.name != "sqlite" or not _is_sqlite_writer_contention(exc):
+            raise
+        raise ConflictError("SQLite review queue is busy; retry loading review events") from exc
