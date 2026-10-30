@@ -780,3 +780,26 @@ Workflow Builder node use the same calculation and retain the original
 unverified calibration and geometry provenance. This safeguard does **not**
 validate physical calibration, reconstruct missing triangles, or establish
 biological condition or longitudinal growth.
+
+### Source-import provenance in versioned longitudinal review bundles (Track C)
+
+Longitudinal review evidence now uses `mesh-review-bundle-0003` when a
+caller supplies registration or reidentification evidence. In addition to the
+existing geometry SHA-256, imported-source byte SHA-256, observation identity,
+timestamps, calibration and human review records, the canonical bundle binds
+each observation's `source_format`, `source_payload_size_bytes`, and
+`source_payload_integrity_checked` flag. Revising any of these audit fields
+changes the SHA-256 digest even if the triangulated geometry is unchanged.
+This prevents a previously recorded digest from silently representing a
+different source-import or expected-hash-check history.
+
+The prior `mesh-review-bundle-0002` digest is a distinct schema and must
+not be relabeled or compared directly with a v0003 digest. Existing saved
+workflow definitions execute the shared comparison implementation and produce
+v0003 artifacts without rewriting earlier persisted scientific results.
+Standalone and saved executable Workflow Builder regressions verify the
+canonical payload, digest and provisional evidence flags. The digest does
+**not** authenticate source files or reviewers, certify that the expected
+source hash came from a trusted instrument, or constitute a durable review
+ledger. Verified calibration, biological identity and full Windows GUI/GPU
+scientific acceptance remain release gates.
