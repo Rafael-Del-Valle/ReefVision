@@ -80,6 +80,7 @@ def test_history_csv_matches_persisted_typed_workflow_and_retains_old_units(
     assert rows[0]["design_change_prior_annotation_evidence_ids_json"] == ""
     assert rows[0]["design_change_prior_calibration_evidence_ids_json"] == ""
     assert rows[1]["design_change_prior_annotation_evidence_ids_json"] == "[]"
+    assert rows[1]["design_change_prior_legacy_unfrozen_image_evidence_ids_json"] == "[]"
     assert rows[1]["design_change_prior_calibration_evidence_ids_json"] == "[]"
 
     graph = {
@@ -229,9 +230,11 @@ def test_history_csv_traces_revision_sources_and_prior_design_change_evidence(
     ):
         assert json.loads(rows[1][field]) == []
     assert rows[0]["design_change_prior_image_evidence_ids_json"] == ""
+    assert rows[0]["design_change_prior_legacy_unfrozen_image_evidence_ids_json"] == ""
     assert rows[0]["design_change_prior_annotation_evidence_ids_json"] == ""
     assert rows[0]["design_change_prior_calibration_evidence_ids_json"] == ""
     assert json.loads(rows[1]["design_change_prior_image_evidence_ids_json"]) == [image_id_link]
+    assert json.loads(rows[1]["design_change_prior_legacy_unfrozen_image_evidence_ids_json"]) == []
     assert json.loads(rows[1]["design_change_prior_annotation_evidence_ids_json"]) == [
         annotation_id_link
     ]
@@ -272,7 +275,13 @@ def test_history_csv_flags_legacy_unfrozen_source_metadata_with_workflow_parity(
     client: TestClient,
 ) -> None:
     project_id = str(create_project(client, "Legacy ecological source metadata QC")["id"])
-    _register(client, project_id, "specimen-legacy")
+    _register(
+        client,
+        project_id,
+        "specimen-legacy",
+        experimental_unit_type="tank",
+        experimental_unit_id="tank-A",
+    )
     image_id = str(import_one(client, project_id)["successful"][0]["image_id"])
     linked = _link(client, project_id, "specimen-legacy", image_id)
     assert linked.status_code == 201, linked.text
@@ -289,6 +298,18 @@ def test_history_csv_flags_legacy_unfrozen_source_metadata_with_workflow_parity(
         evidence.source_metadata_sha256 = None
         session.commit()
 
+    revised = client.post(
+        f"/api/v1/projects/{project_id}/ecology/organisms/specimen-legacy/revisions",
+        json={
+            "expected_revision": 1,
+            "kind": "individual",
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-B",
+            "reason": "Correct tank assignment after reviewing collection notes",
+        },
+    )
+    assert revised.status_code == 201, revised.text
+
     url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
     registry = client.get(url)
     assert registry.status_code == 200, registry.text
@@ -298,12 +319,21 @@ def test_history_csv_flags_legacy_unfrozen_source_metadata_with_workflow_parity(
     response = client.get(f"{url}/history.csv")
     assert response.status_code == 200, response.text
     rows = list(csv.DictReader(StringIO(response.text)))
-    assert len(rows) == 1
+    assert len(rows) == 2
     assert rows[0]["revision_image_metadata_qc_status"] == "legacy_unfrozen_requires_review"
     assert json.loads(rows[0]["revision_legacy_unfrozen_image_evidence_ids_json"]) == [
         linked.json()["id"]
     ]
     assert rows[0]["review_gate"] == "scientist_review_required"
+    assert rows[0]["design_change_prior_legacy_unfrozen_image_evidence_ids_json"] == ""
+    assert rows[1]["revision_image_metadata_qc_status"] == "no_image_evidence"
+    assert json.loads(
+        rows[1]["design_change_prior_legacy_unfrozen_image_evidence_ids_json"]
+    ) == [linked.json()["id"]]
+    assert json.loads(rows[1]["design_change_prior_image_evidence_ids_json"]) == [
+        linked.json()["id"]
+    ]
+    assert rows[1]["review_gate"] == "scientist_review_required"
 
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
