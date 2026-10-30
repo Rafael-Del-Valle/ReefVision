@@ -495,12 +495,16 @@ try {
     }
     $installer = $null
     if (-not $installOnly) {
+        # The commit recorded in MSI provenance must describe the actual source.
+        Assert-ReefVisionSourceTreeClean -RepoPath $repoPath -ExpectedCommit $expectedSourceCommit
         $buildStartedAtUtc = (Get-Date).ToUniversalTime().AddSeconds(-1)
         Write-ReefVisionCommandStep "Building the ReefVision desktop installer"
         & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoPath "scripts\build-desktop.ps1")
         if ($LASTEXITCODE -ne 0) {
             throw "The ReefVision desktop build failed."
         }
+        # Refuse to publish a build if source changed while compilation ran.
+        Assert-ReefVisionSourceTreeClean -RepoPath $repoPath -ExpectedCommit $expectedSourceCommit
 
         $installer = Get-ReefVisionFreshMsi -RepoPath $repoPath -ExpectedVersion $expectedVersion -BuildStartedAtUtc $buildStartedAtUtc
         if ($null -eq $installer) {
