@@ -559,6 +559,7 @@ try {
     $verifiedMsi = Assert-ReefVisionMsiPayload -InstallerPath $installer.FullName -RepoPath $repoPath -ExpectedVersion $expectedVersion -ExpectedCommit $expectedSourceCommit
     Write-ReefVisionCommandNote "Verified MSI source commit: $($verifiedMsi.source_commit)"
     # Reject a verified but older installer before stopping the existing desktop.
+    Assert-ReefVisionInstalledDesktopVersionKnown -InstalledExecutablePath $installedDesktopPath -InstalledVersion $installedVersion -RegisteredInstall $registeredInstall
     Assert-ReefVisionMsiNoDowngrade -InstalledVersion $installedVersion -TargetVersion $expectedVersion
 
     # Preflight the MSI engine and a safe log destination before stopping the
