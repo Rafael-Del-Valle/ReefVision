@@ -4381,3 +4381,29 @@ A source-level inspection is not a substitute for strict mypy/pytest or
 physical Windows acceptance. Check the **new commit's exact-head** Actions
 results before claiming the typing gate is resolved. Version 1.2 remains
 **NOT RELEASE-READY**; 1.3 has not begun.
+
+
+## Prior derived-evidence review queues on identity-design corrections (2026-10-30)
+
+The existing identity-history CSV now exposes two additional per-revision
+review queues: `design_change_prior_annotation_evidence_ids_json` and
+`design_change_prior_calibration_evidence_ids_json`. When an organism's
+registered biological kind, parent colony or experimental-unit assignment
+changes, these deterministic arrays identify earlier-revision reviewed
+annotation links and frozen calibration links, in addition to the existing
+prior-image evidence queue. A correction with no prior derived links records
+`[]`; unchanged revisions record blank fields. Earlier evidence is flagged
+for scientist reassessment, never silently reassigned or promoted to verified
+longitudinal measurements. The same project-owned typed registry is persisted
+by the executable `ecology_identity_registry_source` Workflow Builder node;
+standalone CSV and saved-workflow parity tests cover a real image/annotation/
+calibration chain and a correction without derived evidence. The pre-existing
+collection digests, source integrity revalidation, review gate and
+pseudoreplication restrictions remain in effect. This iteration also fixes
+the Ruff formatting failure at prior head `42bb87b1` in the same exporter.
+
+This is provenance/reporting integrity, not authenticated biological review,
+independent experimental-unit approval, or verified growth. Exact-head CI,
+1.1 migration reconciliation, representative ecological acceptance and
+installed Windows MSI/GUI tests remain release gates. **1.2 NOT RELEASE-READY;
+1.3 not started.**
