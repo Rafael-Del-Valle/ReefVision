@@ -18,6 +18,12 @@ on:
       - scripts/test-training-console-readonly.ps1
       - scripts/test-training-console-sanitizer.ps1
       - apps/web/src/features/gallery/**
+      - apps/web/src/features/workflow-graphs/**
+      - apps/api/reefvision/api/routes/workflow_graphs.py
+      - apps/api/reefvision/services/workflow_graphs.py
+      - apps/api/reefvision/jobs/workflow.py
+      - apps/api/reefvision/tests/test_workflow_graphs_phase10.py
+      - apps/api/reefvision/tests/test_workflow_execution_phase10.py
       - apps/web/src/features/annotation-editor/ImageViewport*
       - apps/web/tests/e2e/gallery-viewport-103.spec.ts
       - apps/web/package.json
@@ -71,6 +77,13 @@ jobs:
           REEFVISION_BACKGROUND_WORKER_ENABLED: "false"
         run: |
           python -m pytest apps/api/reefvision/tests/test_training_log_tail_103.py -q
+      - name: Verify saved Workflow Builder graphs, immutable revisions, and typed execution
+        shell: pwsh
+        env:
+          REEFVISION_ENV: test
+          REEFVISION_BACKGROUND_WORKER_ENABLED: "false"
+        run: |
+          python -m pytest apps/api/reefvision/tests/test_workflow_graphs_phase10.py apps/api/reefvision/tests/test_workflow_execution_phase10.py -q
       - name: Verify embedded PowerShell monitor reads real losses without controlling jobs
         shell: pwsh
         run: |
@@ -100,7 +113,7 @@ jobs:
         working-directory: apps/web
         run: |
           npm run typecheck
-          npx vitest run --config vite.config.mjs --configLoader runner src/features/gallery/Gallery.test.tsx src/features/gallery/galleryNavigation.test.ts src/features/annotation-editor/ImageViewport.test.tsx
+          npx vitest run --config vite.config.mjs --configLoader runner src/features/gallery/Gallery.test.tsx src/features/gallery/galleryNavigation.test.ts src/features/annotation-editor/ImageViewport.test.tsx src/features/workflow-graphs/WorkflowGraphWorkspace.test.tsx src/features/workflow-graphs/WorkflowVisualEditor.test.tsx src/features/workflow-graphs/workflowTemplates.test.ts
       - name: Install Chromium for browser-level acceptance
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
