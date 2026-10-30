@@ -58,6 +58,12 @@ type CreateQueueRequest = QueueMutationScope & {
   reviewBelowConfidence: string;
 };
 
+type ItemMutationRequest = QueueMutationScope & {
+  queueId: string;
+  itemId: string;
+  actor: string;
+};
+
 function sameQueueScope(a: QueueMutationScope, b: QueueMutationScope): boolean {
   return (
     a.projectId === b.projectId &&
@@ -277,58 +283,46 @@ export function ReviewQueueDashboard({
       });
     },
   });
+  // Capture reviewer identity and queue provenance when the researcher acts.
+  // A delayed mutation must not invalidate another project's selected queue.
+  const itemRequest = (itemId: string): ItemMutationRequest => ({
+    ...currentScope.current,
+    queueId: activeQueueId,
+    itemId,
+    actor: singleItemActor.trim(),
+  });
+  const invalidateItemRequest = async (request: ItemMutationRequest) => {
+    await queryClient.invalidateQueries({
+      queryKey: ["review_queue_items", request.queueId],
+    });
+    await queryClient.invalidateQueries({
+      queryKey: ["review_queue_events", request.queueId],
+    });
+  };
   const startItem = useMutation({
-    mutationFn: (itemId: string) =>
-      startReviewQueueItem(itemId, singleItemActor.trim()),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_items", selectedQueueId],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_events", selectedQueueId],
-      });
-    },
+    mutationFn: (request: ItemMutationRequest) =>
+      startReviewQueueItem(request.itemId, request.actor),
+    onSuccess: (_, request) => invalidateItemRequest(request),
   });
   const completeItem = useMutation({
-    mutationFn: (itemId: string) =>
-      completeReviewQueueItem(itemId, singleItemActor.trim(), true),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_items", selectedQueueId],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_events", selectedQueueId],
-      });
-    },
+    mutationFn: (request: ItemMutationRequest) =>
+      completeReviewQueueItem(request.itemId, request.actor, true),
+    onSuccess: (_, request) => invalidateItemRequest(request),
   });
   const skipItem = useMutation({
-    mutationFn: async (itemId: string) => {
+    mutationFn: async (request: ItemMutationRequest) => {
       const reason = window.prompt("Skip reason");
       if (!reason?.trim()) {
         throw new Error("A skip reason is required");
       }
-      return skipReviewQueueItem(itemId, reason.trim(), singleItemActor.trim());
+      return skipReviewQueueItem(request.itemId, reason.trim(), request.actor);
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_items", selectedQueueId],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_events", selectedQueueId],
-      });
-    },
+    onSuccess: (_, request) => invalidateItemRequest(request),
   });
   const returnItem = useMutation({
-    mutationFn: (itemId: string) =>
-      returnReviewQueueItem(itemId, singleItemActor.trim()),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_items", selectedQueueId],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_events", selectedQueueId],
-      });
-    },
+    mutationFn: (request: ItemMutationRequest) =>
+      returnReviewQueueItem(request.itemId, request.actor),
+    onSuccess: (_, request) => invalidateItemRequest(request),
   });
 
   const selectedQueue = useMemo(
@@ -736,7 +730,7 @@ export function ReviewQueueDashboard({
                         disabled={
                           !singleItemActor.trim() || startItem.isPending
                         }
-                        onClick={() => startItem.mutate(item.id)}
+                        onClick={() => startItem.mutate(itemRequest(item.id))}
                       >
                         Start review
                       </button>
@@ -755,7 +749,7 @@ export function ReviewQueueDashboard({
                                 "Completing a QC queue item does not verify model predictions or annotations.",
                             )
                           ) {
-                            completeItem.mutate(item.id);
+                            completeItem.mutate(itemRequest(item.id));
                           }
                         }}
                       >
@@ -767,7 +761,7 @@ export function ReviewQueueDashboard({
                         type="button"
                         className="secondary"
                         disabled={!singleItemActor.trim() || skipItem.isPending}
-                        onClick={() => skipItem.mutate(item.id)}
+                        onClick={() => skipItem.mutate(itemRequest(item.id))}
                       >
                         Skip
                       </button>
@@ -778,7 +772,7 @@ export function ReviewQueueDashboard({
                         disabled={
                           !singleItemActor.trim() || returnItem.isPending
                         }
-                        onClick={() => returnItem.mutate(item.id)}
+                        onClick={() => returnItem.mutate(itemRequest(item.id))}
                       >
                         Return to queue
                       </button>
@@ -856,8 +850,16 @@ export function ReviewQueueDashboard({
                   "Completing QC does not verify predictions or annotations.",
               )
             ) {
-              completeItem.mutate(quickReviewItem.id, {
-                onSuccess: () => setQuickReviewItemId(null),
+              const request = itemRequest(quickReviewItem.id);
+              completeItem.mutate(request, {
+                onSuccess: () => {
+                  if (
+                    sameQueueScope(currentScope.current, request) &&
+                    activeQueueId === request.queueId
+                  ) {
+                    setQuickReviewItemId(null);
+                  }
+                },
               });
             }
           }}
