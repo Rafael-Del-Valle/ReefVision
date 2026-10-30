@@ -1440,6 +1440,135 @@ describe("AnnotationEditor", () => {
     expect(annotationGets).toHaveLength(1);
   });
 
+  it("keeps delayed visibility saves in the original project's cache after switching projects", async () => {
+    const secondProject: Project = {
+      ...project,
+      id: "project-2",
+      label_classes: project.label_classes.map((labelClass) => ({
+        ...labelClass,
+        project_id: "project-2",
+      })),
+    };
+    let resolveSave: (response: Response) => void = () => {
+      throw new Error("The visibility save was not started");
+    };
+    const delayedSave = new Promise<Response>((resolve) => {
+      resolveSave = resolve;
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(session);
+        }
+        if (
+          url.endsWith(`/projects/${secondProject.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse({
+            ...buildVisibilityBundle(),
+            project_id: secondProject.id,
+          });
+        }
+        if (
+          url.endsWith(
+            `/projects/${project.id}/class-visibility/preferences/annotations`,
+          ) &&
+          init?.method === "PUT"
+        ) {
+          return delayedSave;
+        }
+        if (url.includes(`/projects/${secondProject.id}/model-catalog`)) {
+          return jsonResponse({
+            schema_version: 2,
+            catalog_version: "2.0.0",
+            models: [],
+            warnings: [],
+            rejected_entries: [],
+          });
+        }
+        if (url.includes(`/projects/${secondProject.id}/models?purpose=`)) {
+          return jsonResponse([]);
+        }
+        const shared = handleDefaultEditorRequests(url, init);
+        if (shared) {
+          return shared;
+        }
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const editorFor = (activeProject: Project) => (
+      <QueryClientProvider client={queryClient}>
+        <AnnotationEditor
+          project={activeProject}
+          initialImageId={session.image.id}
+          onClose={vi.fn()}
+          onActiveImageChange={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(editorFor(project));
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save as My Preference" }),
+    );
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([request, init]) =>
+            String(request).endsWith(
+              `/projects/${project.id}/class-visibility/preferences/annotations`,
+            ) && init?.method === "PUT",
+        ),
+      ).toBe(true),
+    );
+
+    rerender(editorFor(secondProject));
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          secondProject.id,
+        ]),
+      ).toBeDefined(),
+    );
+    await act(async () => {
+      resolveSave(
+        jsonResponse({
+          saved: true,
+          hidden_class_ids: ["class-1"],
+          updated_at: "2026-10-30T00:00:00Z",
+          updated_by_identity: "local-user:test",
+        }),
+      );
+      await delayedSave;
+    });
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          project.id,
+        ])?.user_preferences.annotations.hidden_class_ids,
+      ).toEqual(["class-1"]),
+    );
+    expect(
+      queryClient.getQueryData<ClassVisibilityBundle>([
+        "class-visibility",
+        secondProject.id,
+      ])?.user_preferences.annotations.saved,
+    ).toBe(false);
+  });
+
   it("keeps prediction visibility separate through project defaults", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);

@@ -1044,7 +1044,10 @@ export function AnnotationEditor({
       if (input.target === "my_preference") {
         await deleteClassVisibilityPreference(input.projectId, input.layerType);
       } else {
-        await deleteProjectClassVisibilityDefault(input.projectId, input.layerType);
+        await deleteProjectClassVisibilityDefault(
+          input.projectId,
+          input.layerType,
+        );
       }
       return {
         projectId: input.projectId,
