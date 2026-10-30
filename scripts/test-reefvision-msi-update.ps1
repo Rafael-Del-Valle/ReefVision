@@ -82,6 +82,37 @@ try {
     Assert-ReefVisionSourceTreeClean -RepoPath $sourceRepo -ExpectedCommit $sourceCommit
     $passed++
 
+    # A pinned MSI must use the version and source commit captured at build
+    # time, even when the repository has advanced since --build-only.
+    $pinnedConfig = @{
+        last_installer_version = '1.0.3'
+        last_installer_source_commit = $sourceCommit
+    }
+    $pinnedIdentity = Get-ReefVisionPinnedMsiIdentity -Config $pinnedConfig
+    if ($pinnedIdentity.version -ne '1.0.3' -or $pinnedIdentity.source_commit -ne $sourceCommit) {
+        throw 'Pinned MSI identity did not preserve its original build provenance.'
+    }
+    $passed++
+    Assert-Throws {
+        Get-ReefVisionPinnedMsiIdentity -Config @{ last_installer_version = '1.0.3' }
+    } 'Pinned MSI version or source commit'
+    Assert-Throws {
+        Get-ReefVisionPinnedMsiIdentity -Config @{ last_installer_source_commit = $sourceCommit }
+    } 'Pinned MSI version or source commit'
+    Assert-Throws {
+        Get-ReefVisionPinnedMsiIdentity -Config @{
+            last_installer_version = '1.0.3'
+            last_installer_source_commit = ('z' * 40)
+        }
+    } 'Pinned MSI version or source commit'
+    Assert-Throws {
+        Get-ReefVisionPinnedMsiIdentity -Config @{
+            last_installer_version = '256.0.0'
+            last_installer_source_commit = $sourceCommit
+        }
+    } 'Windows Installer numeric limits'
+    $passed += 4
+
     # A valid, locally pinned MSI must not replace a newer installed desktop.
     # Three-component MSI versions compare against four-component FileVersion.
     foreach ($case in @(
@@ -198,6 +229,15 @@ try {
         $updateScript.Contains('$installer = $latestInstaller')) {
         throw 'Install-only must use the pinned MSI path and digest, without a fallback.'
     }
+
+    if (-not $updateScript.Contains('Get-ReefVisionPinnedMsiIdentity -Config $config') -or
+        -not $updateScript.Contains('$pinnedMsiIdentity.version') -or
+        -not $updateScript.Contains('$expectedSourceCommit = $pinnedMsiIdentity.source_commit') -or
+        -not $updateScript.Contains('$config.last_installer_version = $expectedVersion') -or
+        -not $updateScript.Contains('$config.last_installer_source_commit = $expectedSourceCommit')) {
+        throw 'Install-only must use the persisted MSI build identity, not the current checkout.'
+    }
+    $passed++
 
     # Evaluate the actual updater setup expression without executing an
     # installer. A pinned --install-only must not bootstrap dependencies even

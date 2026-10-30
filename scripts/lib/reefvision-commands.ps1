@@ -68,6 +68,8 @@ function Get-ReefVisionCommandConfig {
         dependency_signature = $null
         last_installer_path = $null
         last_installer_sha256 = $null
+        last_installer_version = $null
+        last_installer_source_commit = $null
     }
     $configPath = Get-ReefVisionCommandConfigPath
     if (-not (Test-Path $configPath -PathType Leaf)) {

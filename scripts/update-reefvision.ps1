@@ -382,9 +382,15 @@ if ($null -eq $repoPath) {
     throw "A ReefVision repository is required. Run update-reefvision --configure-repo PATH first."
 }
 
-$expectedVersion = Assert-ReefVisionVersionConsistency -RepoPath $repoPath
-$dependencySignature = Get-UpdateDependencySignature -RepoPath $repoPath
 $config = Get-ReefVisionCommandConfig
+$pinnedMsiIdentity = if ($installOnly) { Get-ReefVisionPinnedMsiIdentity -Config $config } else { $null }
+$expectedVersion = if ($installOnly) {
+    $pinnedMsiIdentity.version
+}
+else {
+    Assert-ReefVisionVersionConsistency -RepoPath $repoPath
+}
+$dependencySignature = Get-UpdateDependencySignature -RepoPath $repoPath
 $msiDir = Get-ReefVisionMsiDirectory -RepoPath $repoPath
 $latestInstaller = Get-ReefVisionLatestMsi -RepoPath $repoPath -ExpectedVersion $expectedVersion
 $installedDesktopPath = Resolve-ReefVisionInstalledDesktopPath
@@ -489,9 +495,16 @@ try {
         Save-ReefVisionCommandConfig -Config $config
     }
 
-    $expectedSourceCommit = (& git -C $repoPath rev-parse HEAD).Trim()
-    if ($LASTEXITCODE -ne 0 -or $expectedSourceCommit -notmatch '^[0-9a-fA-F]{40}$') {
-        throw "Unable to resolve the checked-out ReefVision source commit."
+    if ($installOnly) {
+        # The checkout may advance after --build-only. Trust only the cached
+        # identity, then verify it against the pinned MSI and external CABs.
+        $expectedSourceCommit = $pinnedMsiIdentity.source_commit
+    }
+    else {
+        $expectedSourceCommit = (& git -C $repoPath rev-parse HEAD).Trim()
+        if ($LASTEXITCODE -ne 0 -or $expectedSourceCommit -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "Unable to resolve the checked-out ReefVision source commit."
+        }
     }
     $installer = $null
     if (-not $installOnly) {
@@ -517,6 +530,8 @@ try {
         $config = Get-ReefVisionCommandConfig
         $config.last_installer_path = $installer.FullName
         $config.last_installer_sha256 = $installerSha
+        $config.last_installer_version = $expectedVersion
+        $config.last_installer_source_commit = $expectedSourceCommit
         Save-ReefVisionCommandConfig -Config $config
 
         Write-ReefVisionCommandNote "Fresh installer: $($installer.FullName)"

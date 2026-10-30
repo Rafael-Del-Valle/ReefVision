@@ -109,3 +109,28 @@ run for `--install-only`, which relies on its previously pinned digest and
 independent MSI/CAB provenance checks. No migrations or scientific Workflow
 Builder nodes are introduced by this packaging-only change. A native Windows
 MSI installation, rollback and installed-GUI acceptance are still required.
+
+## Pinned build identity survives a later checkout (2026-10-30)
+
+A previously verified MSI can remain cached after a researcher checks out a
+newer ReefVision commit or version. Previously, `--install-only` verified the
+old MSI against the **current** checkout's version and HEAD, causing a valid
+pinned build to fail provenance verification. A subsequent checkout must not
+silently redefine the cached installer's identity.
+
+The command configuration now persists `last_installer_version` and
+`last_installer_source_commit` alongside the existing exact local MSI path
+and SHA-256 **only after a successful build/provenance check**. During
+`--install-only`, the updater reads this pinned identity rather than invoking
+Git or taking the current checkout's version. It still verifies the cached
+MSI hash, MSI/CAB manifest and embedded source provenance, and still rejects
+installing a version older than the currently installed desktop **before**
+stopping the application. The repository and validator must remain locally
+available; no network or package bootstrap is introduced.
+
+Legacy cached MSI configurations lacking either pinned identity field now
+fail closed with instructions to rerun `--build-only`; the updater never
+infers identity from an untrusted filename or changed checkout. The Windows
+preflight covers valid pinned identity, missing version/commit, invalid SHA,
+invalid MSI numeric limits and the actual updater's pinned-identity wiring.
+Native MSI upgrade/rollback and installed-GUI acceptance remain outstanding.

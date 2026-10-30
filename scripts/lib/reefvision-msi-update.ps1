@@ -106,6 +106,24 @@ function Assert-ReefVisionMsiNoDowngrade {
     # Same-version repair is allowed; MSI itself retains ownership of rollback.
 }
 
+# A cached MSI must retain the identity of the build that produced it.
+# The checkout may have moved since --build-only; never substitute current
+# source HEAD or version for the pinned MSI's independently verified identity.
+function Get-ReefVisionPinnedMsiIdentity {
+    param([Parameter(Mandatory = $true)][hashtable]$Config)
+    $version = [string]$Config.last_installer_version
+    $commit = [string]$Config.last_installer_source_commit
+    if ($version -cnotmatch '^\d{1,3}\.\d{1,3}\.\d{1,5}$' -or
+        $commit -cnotmatch '^[0-9a-fA-F]{40}$') {
+        throw 'Pinned MSI version or source commit is missing or invalid. Rebuild and pin with update-reefvision --build-only.'
+    }
+    Assert-ReefVisionMsiNoDowngrade -InstalledVersion $null -TargetVersion $version
+    return [pscustomobject]@{
+        version = $version
+        source_commit = $commit
+    }
+}
+
 # --install-only is permitted only for a previously verified, pinned build.
 # A manifest alone is not a trustworthy replacement for the cached MSI hash.
 function Assert-ReefVisionCachedMsi {
