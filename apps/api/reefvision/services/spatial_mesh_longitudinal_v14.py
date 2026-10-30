@@ -1101,6 +1101,7 @@ def compare_mesh_observations(
     # Revisions to calibration evidence must invalidate the old review bundle,
     # even when the original geometry and observation timestamps are unchanged.
     # This is NOT an authenticated review, signature, or durable review ledger.
+    review_bundle: dict[str, Any] | None = None
     review_bundle_sha256 = None
     if registration_record is not None or reidentification_record is not None:
         review_bundle = {
@@ -1243,6 +1244,7 @@ def compare_mesh_observations(
                 "mesh-review-bundle-0002" if review_bundle_sha256 is not None else None
             ),
             "review_evidence_bundle_sha256": review_bundle_sha256,
+            "review_evidence_bundle": review_bundle,
             "reidentification_evidence_review_status": (
                 "caller_supplied_unverified"
                 if reidentification_record is not None
