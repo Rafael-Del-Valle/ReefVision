@@ -262,7 +262,10 @@ describe("ReviewQueueBulkTriage", () => {
     { name: "input checksum", change: { input_checksum: "new-checksum" } },
     { name: "QC score", change: { score: 72 } },
     { name: "QC severity", change: { highest_qc_severity: "warning" } },
-    { name: "item update timestamp", change: { updated_at: "2026-10-30T01:00:00Z" } },
+    {
+      name: "item update timestamp",
+      change: { updated_at: "2026-10-30T01:00:00Z" },
+    },
   ])("invalidates manual completion after $name changes", ({ change }) => {
     const evidenceItems = items.map((item) =>
       item.id === "active-2"
