@@ -99,6 +99,24 @@ type ProjectView =
 
 const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.0.3";
 
+// Some Windows WebView2 contexts deny access to the localStorage property
+// itself. UI preferences are optional and must never block the workbench.
+function readOptionalUiPreference(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeOptionalUiPreference(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Keep the current UI choice even if it cannot be persisted.
+  }
+}
+
 type ProjectTab = Exclude<ProjectView, "system">;
 
 const PROJECT_NAV_GROUPS: Array<{
@@ -302,7 +320,7 @@ function ReefVisionMainApp() {
   const selectedProject = selectedProjectQuery.data ?? null;
 
   useEffect(() => {
-    if (window.localStorage.getItem(ONBOARDING_DISMISS_KEY) !== "true") {
+    if (readOptionalUiPreference(ONBOARDING_DISMISS_KEY) !== "true") {
       setShowOnboarding(true);
     }
   }, []);
@@ -318,7 +336,7 @@ function ReefVisionMainApp() {
       setWorkspacePresetId("annotation");
       return;
     }
-    const saved = window.localStorage.getItem(
+    const saved = readOptionalUiPreference(
       `reefvision.ui.workspace-preset.${selectedProjectId}.v1`,
     );
     setWorkspacePresetId(
@@ -401,7 +419,7 @@ function ReefVisionMainApp() {
     const preset = workspacePreset(presetId);
     setWorkspacePresetId(preset.id);
     if (selectedProjectId) {
-      window.localStorage.setItem(
+      writeOptionalUiPreference(
         `reefvision.ui.workspace-preset.${selectedProjectId}.v1`,
         preset.id,
       );
@@ -417,7 +435,7 @@ function ReefVisionMainApp() {
   }
 
   function dismissOnboardingPermanently() {
-    window.localStorage.setItem(ONBOARDING_DISMISS_KEY, "true");
+    writeOptionalUiPreference(ONBOARDING_DISMISS_KEY, "true");
     setShowOnboarding(false);
   }
 

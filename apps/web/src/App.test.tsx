@@ -1218,6 +1218,41 @@ describe("App", () => {
     );
   });
 
+  it("opens the first project image when WebView2 denies UI preference storage", async () => {
+    mockApi({ projects: [project], images: [image] });
+    const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
+    if (!descriptor) throw new Error("Expected localStorage property descriptor");
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("Storage denied", "SecurityError");
+      },
+    });
+
+    try {
+      renderApp();
+      expect(
+        await screen.findByRole("heading", {
+          name: /Welcome to ReefVision 1.0.3/,
+        }),
+      ).toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Don't show on startup" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("button", { name: /CPT Coral Study/ }),
+      );
+      expect(
+        await screen.findByAltText("Focused project image: swiftia-01.png"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("region", { name: "Image workbench" }),
+      ).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "localStorage", descriptor);
+    }
+  });
+
   it("opens a project and displays its stable classes", async () => {
     mockApi({ projects: [project] });
     renderApp();
