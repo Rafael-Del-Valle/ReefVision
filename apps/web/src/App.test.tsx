@@ -1218,6 +1218,36 @@ describe("App", () => {
     );
   });
 
+  it("requires an explicit submit after first-run project creation navigation", async () => {
+    window.localStorage.clear();
+    const fetchMock = mockApi({ projects: [] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Create a project" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Create project" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /Welcome to ReefVision/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Project name")).toHaveFocus();
+
+    const projectWrites = () =>
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/projects") && options?.method === "POST",
+      );
+    expect(projectWrites()).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.queryByRole("dialog", { name: "Create project" }),
+    ).not.toBeInTheDocument();
+    expect(projectWrites()).toHaveLength(0);
+  });
+
   it("opens a project and displays its stable classes", async () => {
     mockApi({ projects: [project] });
     renderApp();
