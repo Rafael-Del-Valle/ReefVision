@@ -1329,6 +1329,24 @@ def create_pose_workflow_training_result(
         "result_checkpoint_path": run.result_checkpoint_path,
         "result_checkpoint_sha256": checkpoint_sha256,
     }
+
+    # The worker finalizes the experiment record before the workflow pins
+    # checkpoint digests. Keep that persisted research record in sync with
+    # the verified training artifact instead of exporting stale provenance.
+    experiment = session.scalar(
+        select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
+    )
+    if experiment is None or experiment.project_id != run.project_id:
+        raise ValidationError("Completed pose training experiment lineage changed")
+    if (
+        experiment.dataset_manifest_sha256 != run.dataset_manifest_sha256
+        or experiment.split_manifest_sha256 != run.split_manifest_sha256
+        or experiment.task != run.task
+        or experiment.provider_id != run.provider_id
+        or experiment.architecture != run.architecture
+    ):
+        raise ValidationError("Completed pose training experiment provenance changed")
+    experiment.artifact_manifest_json = dict(run.artifact_manifest_json)
     session.commit()
 
     # Apply the same persisted child-job, frozen-artifact, and checkpoint
