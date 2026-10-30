@@ -79,6 +79,28 @@ class EcologyMeasurementCandidate(BaseModel):
             raise ValueError("Undated capture status cannot carry a timestamp")
         return self
 
+    @model_validator(mode="after")
+    def consistent_geometry_dimension(self) -> EcologyMeasurementCandidate:
+        """Preserve linear box dimensions versus squared mask area evidence.
+
+        This does not authenticate calibration, identity, or biological growth.
+        """
+        if self.annotation_kind == "box":
+            if (
+                self.metric not in ("box_width", "box_height")
+                or not self.unit
+                or "^2" in self.unit
+            ):
+                raise ValueError("Box geometry requires a linear measurement and unit")
+        elif (
+            self.metric != "mask_projected_area"
+            or not self.unit.endswith("^2")
+            or not self.unit[:-2]
+            or "^2" in self.unit[:-2]
+        ):
+            raise ValueError("Mask projected area requires a squared measurement unit")
+        return self
+
 
 class EcologyMeasurementExclusion(BaseModel):
     calibration_evidence_id: str

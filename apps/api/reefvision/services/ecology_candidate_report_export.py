@@ -77,6 +77,14 @@ def render_ecology_series_qc_csv(response: EcologyMeasurementCandidatesResponse)
         or report.source_input_sha256 != response.input_sha256
     ):
         raise ValidationError("Ecological candidate report source fingerprint mismatch")
+    # model_copy(update=...) bypasses Pydantic validators. Check the source
+    # geometry contract again before exporting re-signed in-memory artifacts.
+    for candidate in response.candidates:
+        try:
+            candidate.consistent_geometry_dimension()
+        except ValueError as exc:
+            raise ValidationError("Ecological source geometry dimension mismatch") from exc
+
     # Reject a forged top-level candidate count before aggregate report checks,
     # so the failure is specific and independent of the stored QC histogram.
     if response.candidate_count != len(response.candidates):

@@ -42,6 +42,46 @@ def _candidate_payload() -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize(
+    ("kind", "metric", "unit"),
+    [
+        ("box", "box_width", "mm"),
+        ("box", "box_height", "cm"),
+        ("mask", "mask_projected_area", "mm^2"),
+    ],
+)
+def test_projected_geometry_accepts_matching_length_and_area_units(
+    kind: str, metric: str, unit: str
+) -> None:
+    payload = _candidate_payload()
+    payload.update(annotation_kind=kind, metric=metric, unit=unit)
+    candidate = EcologyMeasurementCandidate.model_validate(payload)
+    assert (candidate.annotation_kind, candidate.metric, candidate.unit) == (
+        kind,
+        metric,
+        unit,
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "metric", "unit", "message"),
+    [
+        ("box", "mask_projected_area", "mm^2", "Box geometry"),
+        ("mask", "box_width", "mm", "Mask projected area"),
+        ("box", "box_width", "mm^2", "Box geometry"),
+        ("mask", "mask_projected_area", "mm", "Mask projected area"),
+        ("mask", "mask_projected_area", "mm^2^2", "Mask projected area"),
+    ],
+)
+def test_projected_geometry_rejects_incompatible_source_dimensions(
+    kind: str, metric: str, unit: str, message: str
+) -> None:
+    payload = _candidate_payload()
+    payload.update(annotation_kind=kind, metric=metric, unit=unit)
+    with pytest.raises(SchemaValidationError, match=message):
+        EcologyMeasurementCandidate.model_validate(payload)
+
+
 @pytest.mark.parametrize("revision_field", ["identity_revision", "annotation_revision"])
 @pytest.mark.parametrize("bad_revision", [True, False, "1", 1.0, None, [], {}])
 def test_projected_source_revisions_reject_coerced_identifiers(
@@ -168,6 +208,30 @@ def test_saved_workflow_source_replay_rejects_coerced_measurements_and_epochs(
         tampered["candidates"][0][field] = bad_value
         if field == "capture_timestamp_utc":
             tampered["candidates"][0]["capture_time_status"] = "timezone_aware"
+        with pytest.raises(SchemaValidationError, match=error):
+            EcologyMeasurementCandidatesResponse.model_validate(tampered)
+
+
+def test_saved_workflow_source_rejects_swapped_geometry_dimensions(
+    client: TestClient,
+) -> None:
+    """Persisted typed Workflow Builder artifacts cannot relabel length as area."""
+    project_id, _ = _source(client)
+    run = _workflow(client, project_id)
+    assert run["run"]["status"] == "succeeded"
+    saved = next(
+        row["payload_json"]
+        for row in run["artifacts"]
+        if row["data_type"] == "ecology_measurement_candidates"
+    )
+    assert EcologyMeasurementCandidatesResponse.model_validate(saved).candidate_count > 0
+    for field, bad_value, error in (
+        ("annotation_kind", "mask", "Mask projected area"),
+        ("metric", "mask_projected_area", "Box geometry"),
+        ("unit", "mm^2", "Box geometry"),
+    ):
+        tampered = deepcopy(saved)
+        tampered["candidates"][0][field] = bad_value
         with pytest.raises(SchemaValidationError, match=error):
             EcologyMeasurementCandidatesResponse.model_validate(tampered)
 

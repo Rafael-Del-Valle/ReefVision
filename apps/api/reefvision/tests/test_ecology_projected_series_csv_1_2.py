@@ -266,6 +266,29 @@ def test_projected_endpoint_csv_reports_dated_arithmetic_and_sources(
     assert detail["evidence_level"] == "linked_unverified"
 
 
+@pytest.mark.parametrize(
+    "forged_source_fields",
+    [
+        {"annotation_kind": "mask"},
+        {"metric": "mask_projected_area"},
+        {"unit": "mm^2"},
+    ],
+)
+def test_resigned_source_cannot_swap_geometry_dimension_in_csv(
+    client: TestClient, forged_source_fields: dict[str, str]
+) -> None:
+    """Re-signing source evidence cannot turn box lengths into mask areas."""
+    original = _dated_artifact(client)
+    forged_candidate = original.candidates[0].model_copy(update=forged_source_fields)
+    tampered = _resign_derived_evidence(
+        original.model_copy(
+            update={"candidates": [forged_candidate, *original.candidates[1:]]}
+        )
+    )
+    with pytest.raises(ValidationError, match="geometry dimension"):
+        render_ecology_series_qc_csv(tampered)
+
+
 def test_projected_csv_rejects_tampered_or_missing_endpoints(client: TestClient) -> None:
     artifact = _dated_artifact(client)
     forged = artifact.projected_endpoint_changes[0].model_copy(update={"absolute_change": 999.0})

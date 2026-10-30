@@ -4205,3 +4205,24 @@ and denominators; the existing typed ports and verified-dataset promotion block
 remain in place. Historical saved artifacts are not rewritten. This is
 provenance/contract integrity, not verified ecological independence, organism
 identity, or calibrated growth acceptance.
+
+
+## Source geometry dimensional integrity (2026-10-30)
+
+Source-linked calibrated candidates now fail closed when a box width/height is
+mislabeled as a mask area, a linear box unit is replaced by a squared unit,
+or a projected mask area lacks a squared unit. Persisted JSON validation
+rejects incompatible candidates during saved Workflow Builder replay. The
+shared series-QC renderer also checks in-memory candidates created through
+`model_copy(update=...)`, which bypasses Pydantic validators, before any
+standalone measurement, population or series CSV can export re-signed source
+evidence. Regressions cover valid and invalid geometry/unit combinations,
+saved-workflow tampering and re-signed CSV tampering. Existing typed ports,
+source digests, researcher-review gates and unverified dataset boundaries
+are preserved. This is dimensional-integrity validation, **not** verified
+calibration, biological growth or experimental-unit independence.
+
+Exact-head CI, scientist-reviewed longitudinal data, experimental-design
+approval, 1.1 migration reconciliation, representative ecological acceptance
+and installed Windows GUI/MSI tests remain required.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
