@@ -227,7 +227,8 @@ def test_project_original_review_replays_identically_in_saved_workflow(
         inline_detail = client.get(f"/api/v1/workflow-runs/{inline_run.json()['id']}")
         assert inline_detail.status_code == 200, inline_detail.text
         assert inline_detail.json()["run"]["status"] == "failed"
-        assert not any(item["data_type"] == artifact_type for item in inline_detail.json()["artifacts"])
+        inline_artifacts = inline_detail.json()["artifacts"]
+        assert not any(item["data_type"] == artifact_type for item in inline_artifacts)
 
     # Reusing a review after changing physical scale must fail closed.
     stale = client.post(
