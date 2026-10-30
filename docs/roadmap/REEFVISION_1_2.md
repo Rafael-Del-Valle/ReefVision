@@ -4578,7 +4578,7 @@ acceptance, and installed Windows MSI/GUI acceptance remain mandatory.
 ## Current-contract saved ecological payload fingerprint replay (2026-10-30)
 
 The v0021 ecological measurement response now recomputes its canonical
-source-input SHA-256 from the **actual deserialized** candidates, sampling-date
+source-input SHA-256 from the **actual persisted** candidates, sampling-date
 QC, projected visit coverage, projected endpoint changes, unit and population
 summaries, exclusions, project ID and four lineage digests. A mismatched saved
 Workflow Builder payload fails closed even when its individual projected
@@ -4586,6 +4586,11 @@ endpoint arithmetic is internally consistent. It also rejects a current
 candidate count that differs from its source rows. This closes a gap where
 saved typed responses previously checked the *shape* of lineage digests but
 did not recompute the source-input digest after replay.
+
+The check runs before newer optional Pydantic row defaults are injected, so
+older v0021 snapshots with legitimately omitted optional fields can retain
+their original fingerprint. The focused regression also replays such a
+legacy-omission case without silently upgrading its review status.
 
 The existing standalone project endpoint and executed
 `ecology_identity_registry_source` Workflow Builder node share this response
