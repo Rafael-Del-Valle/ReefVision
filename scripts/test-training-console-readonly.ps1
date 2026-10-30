@@ -85,6 +85,14 @@ function Invoke-RestMethod {
   [void]$script:requests.Add("$Method $Uri")
   if ($Uri -ceq $url) {
     $script:pollCount++
+    if ($script:scenario -eq 'transient') {
+      if ($script:pollCount -eq 1) {
+        throw ('Temporary loopback outage ' + [char]0x001B + ']0;spoofed outage title' + [char]0x0007 + ' reconnecting')
+      }
+      if ($script:pollCount -eq 2) { return $script:active }
+      if ($script:pollCount -eq 3) { return $script:completed }
+      throw 'Monitor polled after recovering and observing completion.'
+    }
     if ($script:scenario -ne 'completed') {
       if ($script:pollCount -eq 1) { return $script:terminalFailures[$script:scenario] }
       throw 'Monitor polled after a failed or cancelled training job.'
@@ -112,7 +120,8 @@ function Start-Sleep {
   param([int]$Seconds)
   if ($Seconds -ne 2) { throw "Unexpected polling interval: $Seconds" }
   $script:sleeps++
-  if ($script:sleeps -gt 1) { throw 'Monitor failed to stop after completion.' }
+  $maxSleeps = if ($script:scenario -eq 'transient') { 2 } else { 1 }
+  if ($script:sleeps -gt $maxSleeps) { throw 'Monitor failed to stop after completion.' }
 }
 
 # The production script runs unchanged; only its loopback GET responses,
@@ -188,4 +197,44 @@ foreach ($terminalStatus in @('failed', 'cancelled')) {
     throw 'Cancelled-run monitor did not handle an unavailable persisted log.'
   }
 }
-Write-Output 'PowerShell training monitor read-only polling, terminal-state, and loss regressions passed.'
+# A temporary loopback/API outage must never cancel or interrupt the
+# training worker. Reconnect with GET-only requests and stop after observing
+# the worker's actual terminal state. Sanitize errors before displaying them.
+$script:scenario = 'transient'
+$script:requests.Clear()
+$script:messages.Clear()
+$script:pollCount = 0
+$script:sleeps = 0
+Invoke-Expression $match.Groups['body'].Value
+$recoveryOutput = $script:messages -join [char]10
+$expectedRecoveryRequests = @(
+  "Get $url",
+  "Get $url",
+  "Get $url/logs/tail",
+  "Get $url",
+  "Get $url/logs/tail"
+)
+if (($script:requests -join [char]10) -cne ($expectedRecoveryRequests -join [char]10)) {
+  throw "Unexpected monitor requests during transient API recovery: $($script:requests -join ', ')"
+}
+if ($script:pollCount -ne 3 -or $script:sleeps -ne 2) {
+  throw 'Monitor failed to recover from an API outage and stop after completion.'
+}
+foreach ($expected in @(
+  'Waiting for ReefVision training status:',
+  'Temporary loopback outage',
+  'Status: training',
+  'Status: completed',
+  'train/box_loss\\s+0\\.25',
+  'train/dfl_loss\\s+0\\.08',
+  'Run ended\\. This window can now be closed\\.'
+)) {
+  if ($recoveryOutput -notmatch $expected) {
+    throw "Missing transient-recovery monitor output: $expected"
+  }
+}
+if ($recoveryOutput.Contains('spoofed outage title')) {
+  throw 'Untrusted API outage diagnostics escaped console sanitization.'
+}
+
+Write-Output 'PowerShell training monitor read-only polling, terminal-state, loss, and transient-recovery regressions passed.'
