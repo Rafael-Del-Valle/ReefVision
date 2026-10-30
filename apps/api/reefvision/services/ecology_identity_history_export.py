@@ -232,6 +232,7 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
             "revision_annotation_evidence_ids_json",
             "revision_calibration_evidence_ids_json",
             "design_change_prior_image_evidence_ids_json",
+            "design_change_prior_legacy_unfrozen_image_evidence_ids_json",
             "design_change_prior_annotation_evidence_ids_json",
             "design_change_prior_calibration_evidence_ids_json",
         )
@@ -266,6 +267,11 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
         )
         prior_image_ids = sorted(previous_image_ids_by_organism.get(row.organism_key, []))
         prior_annotation_ids = sorted(previous_annotation_ids_by_organism.get(row.organism_key, []))
+        prior_legacy_unfrozen_image_ids = [
+            image_id
+            for image_id in prior_image_ids
+            if image_metadata_status_by_id[image_id] == "legacy_unfrozen"
+        ]
         prior_calibration_ids = sorted(
             previous_calibration_ids_by_organism.get(row.organism_key, [])
         )
@@ -322,18 +328,15 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
                 json.dumps(annotation_ids, separators=(",", ":")),
                 json.dumps(calibration_ids, separators=(",", ":")),
                 json.dumps(prior_image_ids, separators=(",", ":")) if design_changed else "",
-                json.dumps(prior_annotation_ids, separators=(",", ":"))
+                json.dumps(prior_legacy_unfrozen_image_ids, separators=(",", ":"))
                 if design_changed
                 else "",
-                json.dumps(prior_calibration_ids, separators=(",", ":"))
-                if design_changed
-                else "",
+                json.dumps(prior_annotation_ids, separators=(",", ":")) if design_changed else "",
+                json.dumps(prior_calibration_ids, separators=(",", ":")) if design_changed else "",
             )
         )
         previous_image_ids_by_organism.setdefault(row.organism_key, []).extend(image_ids)
-        previous_annotation_ids_by_organism.setdefault(row.organism_key, []).extend(
-            annotation_ids
-        )
+        previous_annotation_ids_by_organism.setdefault(row.organism_key, []).extend(annotation_ids)
         previous_calibration_ids_by_organism.setdefault(row.organism_key, []).extend(
             calibration_ids
         )
