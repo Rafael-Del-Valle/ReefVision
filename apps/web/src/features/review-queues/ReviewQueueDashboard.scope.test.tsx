@@ -395,4 +395,39 @@ describe("ReviewQueueDashboard scope isolation", () => {
     ).toBe("queue-b");
   });
 
+  it("does not revive an old generation after leaving and returning to the same project", async () => {
+    let resolveOld!: (value: ReviewQueueRecord) => void;
+    const pendingOld = new Promise<ReviewQueueRecord>((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(createReviewQueue).mockReturnValueOnce(pendingOld);
+    const { rerender, view, onSelectedQueueChange } = mount();
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate queue" }));
+    await waitFor(() =>
+      expect(createReviewQueue).toHaveBeenCalledWith(
+        "project-a",
+        expect.any(Object),
+      ),
+    );
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b"),
+    );
+    rerender(view("project-a"));
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+    );
+    await act(async () => {
+      resolveOld(queue("old-generated-a"));
+      await pendingOld;
+    });
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(
+      vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0],
+    ).toBe("queue-a");
+  });
+
 });
