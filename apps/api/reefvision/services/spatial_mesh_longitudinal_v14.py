@@ -44,6 +44,17 @@ def _validate_source_import_provenance(metadata: dict[str, Any]) -> None:
         raise ValueError("Source payload integrity check must be boolean")
     if checked is True and digest is None:
         raise ValueError("Source payload integrity check requires a source SHA-256")
+    # A checked digest must refer to actual imported bytes. Indexed triangles
+    # have no source file to check, and an absent/empty byte count cannot
+    # substantiate a successful comparison with an expected file digest.
+    if checked is True and metadata.get("source_format") not in (
+        "obj",
+        "ply_ascii",
+        "glb_2_0",
+    ):
+        raise ValueError("Source payload integrity check requires an imported mesh format")
+    if checked is True and (size is None or size == 0):
+        raise ValueError("Source payload integrity check requires a positive source byte count")
 
 
 def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | None:
