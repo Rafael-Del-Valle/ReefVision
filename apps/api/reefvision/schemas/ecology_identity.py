@@ -37,6 +37,8 @@ class EcologyIdentityFields(BaseModel):
     def require_complete_unit(self) -> EcologyIdentityFields:
         if (self.experimental_unit_type is None) != (self.experimental_unit_id is None):
             raise ValueError("Experimental unit type and ID must be declared together")
+        if self.experimental_unit_id is not None and not self.experimental_unit_id.strip():
+            raise ValueError("Experimental unit ID cannot be blank")
         if self.parent_colony_key is not None and self.kind != "fragment":
             raise ValueError("Only fragments can reference a parent colony")
         return self
