@@ -1312,7 +1312,9 @@ def create_pose_workflow_training_result(
             else hash_model_file(artifact_checkpoint)[0]
         )
         if digest_field in worker_manifest and worker_manifest[digest_field] != digest:
-            raise ValidationError("Completed pose training worker checkpoint artifact checksum changed")
+            raise ValidationError(
+                "Completed pose training worker checkpoint artifact checksum changed"
+            )
         checkpoint_digests[digest_field] = digest
 
     # Bind the completed training result to its on-disk checkpoints so a
