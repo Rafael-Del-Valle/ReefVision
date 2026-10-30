@@ -18,13 +18,13 @@ from reefvision.services.ecology_measurement_candidates import (
     summarize_projected_endpoint_changes,
     summarize_sampling_date_qc,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
     _link_calibration,
     _prepared_annotation,
     _save_calibration,
 )
 from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
-from reefvision.storage.datasets import canonical_json_sha256
 
 
 def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
@@ -68,7 +68,7 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
             altered["input_sha256"] = "0" * 64
         else:
             altered["sampling_date_qc"][0]["candidate_count"] += 1
-        with pytest.raises(PydanticValidationError, match="candidate count|fingerprint"):
+        with pytest.raises(PydanticValidationError, match=r"candidate count|fingerprint"):
             EcologyMeasurementCandidatesResponse.model_validate(altered)
 
     # Historical v0020 payloads are not retrospectively asserted to follow
@@ -193,7 +193,7 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
             EcologyProjectedEndpointChange.model_validate(tampered)
         forged_artifact = dict(typed_artifact)
         forged_artifact["projected_endpoint_changes"] = [tampered]
-        with pytest.raises(PydanticValidationError, match="fingerprint|Projected endpoint"):
+        with pytest.raises(PydanticValidationError, match=r"fingerprint|Projected endpoint"):
             EcologyMeasurementCandidatesResponse.model_validate(forged_artifact)
 
     assert original["evidence_level"] == "linked_unverified"
