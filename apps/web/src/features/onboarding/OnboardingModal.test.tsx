@@ -153,7 +153,9 @@ describe("onboarding local usability", () => {
       expect(button.hasAttribute("disabled")).toBe(true);
       fireEvent.click(button);
     }
-    expect(screen.getByText(/Select or create a project to open class/)).toBeTruthy();
+    expect(
+      screen.getByText(/Select or create a project to open class/),
+    ).toBeTruthy();
     expect(onNavigate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Open System status" }));
     expect(onNavigate).toHaveBeenCalledTimes(1);
