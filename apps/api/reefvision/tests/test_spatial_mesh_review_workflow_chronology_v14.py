@@ -179,8 +179,9 @@ def test_saved_longitudinal_review_chronology_matches_standalone(
         assert detail.json()["run"]["status"] == "succeeded"
         assert len(comparison_artifacts) == 1
         assert comparison_artifacts[0]["payload_json"] == expected
-        assert expected["provenance"]["review_evidence_bundle_schema_version"] == (
-            "mesh-review-bundle-0002"
+        assert (
+            expected["provenance"]["review_evidence_bundle_schema_version"]
+            == "mesh-review-bundle-0002"
         )
         assert len(expected["provenance"]["review_evidence_bundle_sha256"]) == 64
         assert len(comparison_artifacts[0]["payload_sha256"]) == 64
