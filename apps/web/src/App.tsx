@@ -1094,10 +1094,10 @@ function ReefVisionMainApp() {
               if (destination === "create_project") {
                 setShowCreate(true);
               } else {
-                // Onboarding unmounts before the next animation frame. Focus
-                // an existing project, or the New project action if none exist,
-                // rather than leaving keyboard users on the document body.
-                window.requestAnimationFrame(() => {
+                // Defer until the onboarding dialog unmounts, including in
+                // non-visual environments without requestAnimationFrame.
+                // Never create or select a project as part of this handoff.
+                window.setTimeout(() => {
                   const launcher = document.querySelector<HTMLElement>(
                     '[aria-label="ReefVision project launcher"]',
                   );
@@ -1109,7 +1109,7 @@ function ReefVisionMainApp() {
                       ".rv-launcher-actions button",
                     );
                   target?.focus();
-                });
+                }, 0);
               }
               return;
             }
