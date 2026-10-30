@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from datetime import UTC, datetime
 
 import pytest
@@ -43,6 +45,40 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
     ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == standalone.json()
+
+    # The standalone API and executed, persisted Workflow Builder artifact
+    # must both replay their v0021 digest, not merely retain a plausible hex
+    # string after source candidates or derived ecological summaries change.
+    original_payload = standalone.json()
+    assert original_payload["source_fingerprint_contract"] == (
+        "ecology-measurement-candidates-0021"
+    )
+    for payload in (original_payload, artifacts[0]["payload_json"]):
+        assert (
+            EcologyMeasurementCandidatesResponse.model_validate(payload).input_sha256
+            == original_payload["input_sha256"]
+        )
+    for changed_field in ("candidate_value", "candidate_count", "digest", "qc"):
+        altered = deepcopy(original_payload)
+        if changed_field == "candidate_value":
+            altered["candidates"][0]["value"] += 1.0
+        elif changed_field == "candidate_count":
+            altered["candidate_count"] += 1
+        elif changed_field == "digest":
+            altered["input_sha256"] = "0" * 64
+        else:
+            altered["sampling_date_qc"][0]["candidate_count"] += 1
+        with pytest.raises(PydanticValidationError, match="candidate count|fingerprint"):
+            EcologyMeasurementCandidatesResponse.model_validate(altered)
+
+    # Historical v0020 payloads are not retrospectively asserted to follow
+    # v0021's canonical digest contract; they remain explicitly legacy.
+    historical = deepcopy(original_payload)
+    historical["source_fingerprint_contract"] = "ecology-measurement-candidates-0020"
+    assert (
+        EcologyMeasurementCandidatesResponse.model_validate(historical).input_sha256
+        == original_payload["input_sha256"]
+    )
 
     source = EcologyMeasurementCandidate.model_validate(standalone.json()["candidates"][0])
     first = source.model_copy(
@@ -96,14 +132,10 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
     # even if the attacker keeps all lineage digest strings intact.
     typed_artifact = dict(standalone.json())
     typed_artifact["projected_endpoint_changes"] = [original]
-    assert (
-        len(
-            EcologyMeasurementCandidatesResponse.model_validate(
-                typed_artifact
-            ).projected_endpoint_changes
-        )
-        == 1
-    )
+    # A fabricated endpoint cannot be appended to a saved current-contract
+    # artifact while retaining the earlier source fingerprint.
+    with pytest.raises(PydanticValidationError, match="fingerprint"):
+        EcologyMeasurementCandidatesResponse.model_validate(typed_artifact)
 
     mutations: list[tuple[str, object]] = [
         ("absolute_change", 99.0),
