@@ -322,11 +322,25 @@ def compare_mesh_observations(
     # Missing values in older artifacts stay unknown; never infer them from
     # nominal calibrated values, which may underflow at extreme scales.
     shape_ratios: list[float | None] = []
-    for record in (before, after):
+    for record, extent in zip((before, after), extents, strict=True):
         value = record.get("surface_area_to_bounding_diagonal_squared_ratio")
         if value is None:
             shape_ratios.append(None)
         elif type(value) in (int, float) and isfinite(value) and value >= 0:
+            # A saved summary must agree with the source preview's area and
+            # diagonal. Otherwise a changed ratio could fabricate longitudinal
+            # morphology change without changing either measurement.
+            # Only cross-check representable positive calibrated values: at
+            # extreme scales, area or squared extent can underflow to zero.
+            area = record["surface_area_m2"]
+            if area > 0 and extent is not None and extent > 0:
+                expected = (area / extent) / extent
+                if expected > 0 and isfinite(expected) and not isclose(
+                    value, expected, rel_tol=1e-8, abs_tol=0.0
+                ):
+                    raise ValueError(
+                        "Mesh shape ratio contradicts calibrated area and extent"
+                    )
             shape_ratios.append(float(value))
         else:
             raise ValueError("Mesh shape ratios must be finite and nonnegative")
