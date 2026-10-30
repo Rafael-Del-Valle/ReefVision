@@ -320,7 +320,11 @@ function ReefVisionMainApp() {
     if (projectSummaries.isPending) return;
     // Do not steal focus if the researcher already moved to another control.
     const focused = document.activeElement;
-    if (focused instanceof HTMLElement && focused !== document.body && focused.isConnected) {
+    if (
+      focused instanceof HTMLElement &&
+      focused !== document.body &&
+      focused.isConnected
+    ) {
       setFocusProjectLauncher(false);
       return;
     }
