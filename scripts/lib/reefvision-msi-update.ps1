@@ -74,6 +74,25 @@ function Assert-ReefVisionSourceTreeClean {
     }
 }
 
+# An unreadable installed executable must not be mistaken for a clean install.
+# A stale registration is also evidence of an existing installation, even if
+# its executable cannot currently be resolved. Fail before desktop shutdown.
+function Assert-ReefVisionInstalledDesktopVersionKnown {
+    param(
+        [string]$InstalledExecutablePath,
+        [string]$InstalledVersion,
+        [bool]$RegisteredInstall = $false
+    )
+    if (-not [string]::IsNullOrWhiteSpace($InstalledExecutablePath) -and
+        (Test-Path -LiteralPath $InstalledExecutablePath -PathType Leaf) -and
+        [string]::IsNullOrWhiteSpace($InstalledVersion)) {
+        throw 'Existing ReefVision desktop has no readable version; refusing unattended MSI replacement.'
+    }
+    if ($RegisteredInstall -and [string]::IsNullOrWhiteSpace($InstalledVersion)) {
+        throw 'Existing ReefVision installation is registered but its version cannot be verified; refusing unattended MSI replacement.'
+    }
+}
+
 # Reject accidental MSI downgrades before stopping a running desktop.
 # FileVersion may have a fourth numeric component; MSI ProductVersion has three.
 # Unknown installed versions fail closed rather than silently replacing a
