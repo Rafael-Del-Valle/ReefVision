@@ -2100,6 +2100,8 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
 
     # The first result must also reject a worker-mutated frozen artifact
     # manifest, before a downstream node can consume the false schema lineage.
+    substituted_artifact_run_ids: list[str] = []
+
     def substituted_artifact_processor(
         settings: Settings,
         factory: sessionmaker[Session],
@@ -2111,6 +2113,7 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             assert job is not None
             run = child_session.get(TrainingRun, str(job.request_json["training_run_id"]))
             assert run is not None
+            substituted_artifact_run_ids.append(run.id)
             run.artifact_manifest_json = {
                 **dict(run.artifact_manifest_json or {}),
                 "pose_schema_id": "substituted-pose-schema",
@@ -2132,6 +2135,15 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             workflow_node_run_id="tampered-artifact-node",
             processor=substituted_artifact_processor,
         )
+
+    # Rejected first-completion replay must roll back checkpoint finalization.
+    # The worker's completed run remains intact for scientific forensics.
+    assert len(substituted_artifact_run_ids) == 1
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, substituted_artifact_run_ids[0])
+        assert run is not None and run.status == "completed"
+        assert run.artifact_manifest_json["pose_schema_id"] == "substituted-pose-schema"
+        assert "result_checkpoint_sha256" not in run.artifact_manifest_json
 
     # A completed worker may leave an experiment record with altered frozen
     # schema lineage even when the training run itself is still intact.
