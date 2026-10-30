@@ -93,7 +93,9 @@ describe("ImageViewport", () => {
         clientY: 250,
         ...init,
       });
-      frame.dispatchEvent(event);
+      // Testing Library wraps dispatch in React act(), flushing the viewport
+      // state update before the transform assertion below.
+      fireEvent(frame, event);
       return event.defaultPrevented;
     };
 
