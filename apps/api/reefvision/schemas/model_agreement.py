@@ -250,7 +250,7 @@ class PairedCountComparisonResponse(BaseModel):
                 row.model_source_record_id,
             ):
                 if not name or name.strip() != name:
-                    raise ValueError("Directional paired identifiers must be canonical and nonblank")
+                    raise ValueError("Directional paired identifiers must be trimmed and nonblank")
         if any(
             len(set(identifiers)) != len(identifiers)
             for identifiers in (observation_ids, reference_ids, model_ids)
