@@ -111,8 +111,16 @@ function Assert-ReefVisionMsiNoDowngrade {
 # source HEAD or version for the pinned MSI's independently verified identity.
 function Get-ReefVisionPinnedMsiIdentity {
     param([Parameter(Mandatory = $true)][hashtable]$Config)
-    $version = [string]$Config.last_installer_version
-    $commit = [string]$Config.last_installer_source_commit
+    # Explicitly handle pre-upgrade command configs and incomplete pins even
+    # under Set-StrictMode; missing keys must fail with a useful message.
+    $version = if ($Config.ContainsKey('last_installer_version')) {
+        [string]$Config['last_installer_version']
+    }
+    else { '' }
+    $commit = if ($Config.ContainsKey('last_installer_source_commit')) {
+        [string]$Config['last_installer_source_commit']
+    }
+    else { '' }
     if ($version -cnotmatch '^\d{1,3}\.\d{1,3}\.\d{1,5}$' -or
         $commit -cnotmatch '^[0-9a-fA-F]{40}$') {
         throw 'Pinned MSI version or source commit is missing or invalid. Rebuild and pin with update-reefvision --build-only.'
