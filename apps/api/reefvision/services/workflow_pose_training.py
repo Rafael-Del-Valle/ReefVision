@@ -1442,12 +1442,11 @@ def create_pose_workflow_training_result(
         raise ValidationError("Completed pose training experiment artifact provenance changed")
 
     experiment.artifact_manifest_json = dict(run.artifact_manifest_json)
-    session.commit()
 
-    # Apply the same persisted child-job, frozen-artifact, and checkpoint
-    # provenance checks on first completion as on a saved-workflow retry.
-    # Never expose a worker-mutated manifest to downstream science nodes.
-    return _reused_pose_training_result(
+    # Validate the final downstream artifact before committing checkpoint
+    # provenance. A worker-mutated frozen lineage must not leave a finalized
+    # digest behind when the replay contract rejects the first completion.
+    result = _reused_pose_training_result(
         session,
         settings,
         run=run,
@@ -1457,6 +1456,8 @@ def create_pose_workflow_training_result(
         workflow_node_run_id=workflow_node_run_id,
         checkpoint_integrity=(checkpoint_sha256, checkpoint_size),
     )
+    session.commit()
+    return result
 
 
 def execute_pose_model_training_adapter(
