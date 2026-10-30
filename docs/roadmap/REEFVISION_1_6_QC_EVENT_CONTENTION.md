@@ -70,3 +70,23 @@ but does **not** replace exact-code repository CI or installed Windows GUI tests
   upstream integration; do not rewrite already-applied installed migrations.
 
 No user assets, checkpoints, or scientific observations are changed.
+
+
+## 2026-10-29 — Explicit UTC reviewer-history API timestamps
+
+SQLite returns naive datetimes for the existing timezone-aware SQLAlchemy audit
+column, even though ReefVision's `utc_now()` writes UTC. The response schema
+now treats those legacy naive values as UTC and converts offset-aware values to
+UTC before JSON serialization. Standalone review comments, idempotent retries,
+and persisted `project_source -> qc_review_queue` Workflow Builder review
+histories must expose the same explicit `Z` timestamp. This changes only API
+representation, not stored events, annotation verification, saved graph units,
+or researcher approval. Added a schema regression for naive and offset-aware
+values and API regressions for standalone and saved-workflow QC queues.
+
+At predecessor `9166abbc`, GitHub Actions run `40980891049` passed frontend
+and backend lint but failed Ruff format on one blank line in
+`test_desktop_runtime_paths.py:156`. The same change set repairs that exact
+formatting failure. New-head integrated CI, native Windows installed-GUI/MSI,
+representative biological acceptance, and the independent 1.1/1.6 Alembic
+revision-0038 conflict remain release blockers. No merge or release.
