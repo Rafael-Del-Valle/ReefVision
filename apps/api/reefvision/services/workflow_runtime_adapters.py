@@ -944,11 +944,11 @@ def _ecology_population_csv_export(
     parameters: dict[str, Any],
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
+    import hashlib
+
     from reefvision.schemas.ecology_measurement_candidates import (
         EcologyMeasurementCandidatesResponse,
     )
-    import hashlib
-
     from reefvision.services.ecology_population_export import (
         POPULATION_CSV_SCHEMA_VERSION,
         render_ecology_population_csv,
