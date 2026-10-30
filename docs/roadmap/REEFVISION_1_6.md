@@ -8,8 +8,11 @@
   project is active. These route through the existing Home/project-creation
   UI; they never create a project without researcher confirmation.
 - Added focused frontend regressions for both actions, dismissal semantics,
-  and project-scoped visibility. No database migration, model download,
-  scientific record mutation or Workflow Builder node change.
+  and project-scoped visibility. The create-project action now hands keyboard
+  focus to the existing creation dialog's project-name input rather than
+  restoring focus behind the new modal; a modal-to-modal focus regression
+  covers this transition. No database migration, model download, scientific
+  record mutation or Workflow Builder node change.
 - **HOLD:** frontend CI and installed Windows GUI acceptance still required;
   the independent 1.1/1.6 Alembic revision-0038 collision, MSI upgrade/rollback
   and biological validation remain unresolved.
