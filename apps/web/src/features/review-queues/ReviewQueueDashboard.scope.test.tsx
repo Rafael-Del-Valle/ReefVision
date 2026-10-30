@@ -437,12 +437,14 @@ describe("ReviewQueueDashboard scope isolation", () => {
   });
 
   it("invalidates the originating queue after a delayed single-item start", async () => {
-    let resolveStart!: (value: Awaited<ReturnType<typeof startReviewQueueItem>>) => void;
-    const pendingStart = new Promise<Awaited<ReturnType<typeof startReviewQueueItem>>>(
-      (resolve) => {
-        resolveStart = resolve;
-      },
-    );
+    let resolveStart!: (
+      value: Awaited<ReturnType<typeof startReviewQueueItem>>,
+    ) => void;
+    const pendingStart = new Promise<
+      Awaited<ReturnType<typeof startReviewQueueItem>>
+    >((resolve) => {
+      resolveStart = resolve;
+    });
     vi.mocked(startReviewQueueItem).mockReturnValueOnce(pendingStart);
     vi.mocked(getReviewQueueItems).mockImplementation(async (id) => ({
       items: [reviewItem(id === "queue-a" ? "item-a" : "item-b", "image-1")],
@@ -491,7 +493,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
   });
 
   it("does not close a new project's quick review after an old completion", async () => {
-    let resolveComplete!: (value: Awaited<ReturnType<typeof completeReviewQueueItem>>) => void;
+    let resolveComplete!: (
+      value: Awaited<ReturnType<typeof completeReviewQueueItem>>,
+    ) => void;
     const pendingComplete = new Promise<
       Awaited<ReturnType<typeof completeReviewQueueItem>>
     >((resolve) => {
@@ -508,7 +512,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     try {
       const { rerender, view } = mount();
-      fireEvent.click(await screen.findByRole("button", { name: "Quick review" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Quick review" }),
+      );
       fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
         target: { value: "reviewer-a" },
       });
@@ -528,13 +534,19 @@ describe("ReviewQueueDashboard scope isolation", () => {
           expect.anything(),
         ),
       );
-      fireEvent.click(await screen.findByRole("button", { name: "Quick review" }));
-      expect(screen.getByRole("button", { name: "Quick modal complete" })).toBeTruthy();
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Quick review" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      ).toBeTruthy();
       await act(async () => {
         resolveComplete({} as Awaited<ReturnType<typeof completeReviewQueueItem>>);
         await pendingComplete;
       });
-      expect(screen.getByRole("button", { name: "Quick modal complete" })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      ).toBeTruthy();
     } finally {
       confirm.mockRestore();
     }
