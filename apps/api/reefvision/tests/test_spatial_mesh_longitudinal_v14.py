@@ -141,8 +141,12 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert review_bundle["schema_version"] == "mesh-review-bundle-0003"
     assert review_bundle["before_calibration_method"] == "ruler"
     assert review_bundle["after_calibration_method"] == "ruler"
-    assert review_bundle["before_source_format"] is None
-    assert review_bundle["after_source_format"] is None
+    assert review_bundle["before_source_format"] == "indexed_triangles"
+    assert review_bundle["after_source_format"] == "indexed_triangles"
+    assert review_bundle["before_source_payload_size_bytes"] is None
+    assert review_bundle["after_source_payload_size_bytes"] is None
+    assert review_bundle["before_source_payload_integrity_checked"] is False
+    assert review_bundle["after_source_payload_integrity_checked"] is False
     assert review_digest == sha256(
         dumps(
             review_bundle,
