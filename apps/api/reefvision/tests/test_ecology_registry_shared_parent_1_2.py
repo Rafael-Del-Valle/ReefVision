@@ -159,18 +159,20 @@ def test_shared_parent_tanks_api_csv_and_saved_workflow(client: TestClient) -> N
     typed = EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
     assert render_ecology_identity_history_csv(typed) == csv_response.text
 
+    # Revalidation of copied typed artifacts now fails closed before the
+    # derived audit-specific error paths, without exposing source details.
     # An explicitly supplied modern detail list is authenticated against
     # fingerprint-checked identities; dropping the shared-parent evidence
     # must fail closed rather than suppressing the pseudoreplication warning.
     tampered = typed.model_copy(deep=True)
     tampered.cross_unit_parent_details = []
-    with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(tampered)
 
     # Altered contributing fragments or units are likewise rejected.
     tampered = typed.model_copy(deep=True)
     tampered.cross_unit_parent_details[0].fragment_keys = ["fragment-A", "fragment-B"]
-    with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(tampered)
 
     # Existing saved artifacts with the older, status-only audit remain
@@ -225,11 +227,11 @@ def test_no_false_cross_unit_parent_claims_and_csv_tampering(client: TestClient)
     typed = EcologyIdentityRegistryResponse.model_validate(payload)
     tampered = typed.model_copy(deep=True)
     tampered.cross_unit_parent_audit_status = "shared_parent_requires_review"
-    with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(tampered)
     tampered = typed.model_copy(deep=True)
     tampered.cross_unit_shared_parent_colony_keys = ["invented-parent"]
-    with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(tampered)
     # The expected details are already empty for a parent present in only
     # one tank; assigning [] again is not tampering. A fabricated detail
@@ -243,7 +245,7 @@ def test_no_false_cross_unit_parent_claims_and_csv_tampering(client: TestClient)
             fragment_keys=["fragment-1", "fragment-2"],
         )
     ]
-    with pytest.raises(ValidationError, match="cross-unit parent audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(tampered)
 
     legacy = payload.copy()
@@ -372,11 +374,11 @@ def test_historical_parent_unit_exposure_api_workflow_and_csv(
     assert render_ecology_identity_history_csv(typed) == csv_response.text
     tampered = typed.model_copy(deep=True)
     tampered.historical_cross_unit_parent_details[0].assignments.pop()
-    with pytest.raises(ValidationError, match="historical parent audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(tampered)
     tampered = typed.model_copy(deep=True)
     tampered.historical_cross_unit_parent_audit_status = "no_recorded_cross_unit_parent_reuse"
-    with pytest.raises(ValidationError, match="historical parent audit differs"):
+    with pytest.raises(ValidationError, match="source evidence integrity check failed"):
         render_ecology_identity_history_csv(tampered)
 
     legacy = payload.copy()
