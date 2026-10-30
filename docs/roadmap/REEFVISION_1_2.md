@@ -4136,3 +4136,30 @@ longitudinal measurement or validated independent replication. The new
 head's backend/Workflow Builder CI results, 1.1 migration reconciliation,
 representative biological review and physical Windows installer/GUI tests
 must still be checked. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Source-level measurement export: explicit four-layer lineage (2026-10-29)
+
+Exact predecessor `01d6c1f69531cd81a9c6bb440c09a8584245049a`
+completed **19/19 GitHub Actions workflows successfully** (including backend
+CI, Milestone 10 and Windows desktop build). This is automated build evidence,
+not installed Windows GUI or ecological scientist acceptance.
+
+The existing standalone `/measurements.csv` endpoint and executable saved
+`ecology_measurement_csv_export` Workflow Builder node now share
+`MEASUREMENT_CSV_SCHEMA_VERSION` (`ecology-measurement-export-0002`). Each
+projected measurement CSV row explicitly carries the registry-history,
+source-image, reviewed-annotation and calibration-evidence SHA-256 fingerprints,
+alongside the existing aggregate input/report digests and individual source IDs.
+The saved typed workflow artifact also exposes the four lineage digests and
+fingerprint contract. Both export surfaces explicitly set
+`independent_unit_inference_allowed=false`; they do not upgrade
+`linked_unverified` observations into verified growth or independent replicates.
+
+Existing full source fingerprint/QC recomputation is reused, including rejection
+of altered source values. Updated API and saved-workflow acceptance checks assert
+all four lineage digests, schema parity, byte-identical CSV and review restrictions.
+No migration, cloud access, model download or cross-version branch integration.
+Exact-new-head CI, authenticated biological identity/calibration approval,
+1.1 migration reconciliation, real scientific review and installed Windows
+MSI/GUI tests remain release gates. **1.2 NOT RELEASE-READY; 1.3 not started.**
