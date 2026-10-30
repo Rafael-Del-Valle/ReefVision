@@ -19,12 +19,20 @@ from reefvision.services.ecology_candidate_report_export import (
     render_ecology_series_qc_csv,
 )
 
+MEASUREMENT_CSV_SCHEMA_VERSION = "ecology-measurement-export-0002"
+
 _MEASUREMENT_COLUMNS = (
     "export_schema_version",
     "project_id",
     "source_input_sha256",
     "report_sha256",
     "source_fingerprint_rechecked",
+    "source_fingerprint_contract",
+    "source_registry_history_sha256",
+    "source_image_evidence_sha256",
+    "source_annotation_evidence_sha256",
+    "source_calibration_evidence_sha256",
+    "independent_unit_inference_allowed",
     "organism_key",
     "identity_revision",
     "parent_colony_key",
@@ -101,11 +109,17 @@ def render_ecology_measurements_csv(response: EcologyMeasurementCandidatesRespon
     for candidate, capture_utc, qc_status in rows:
         writer.writerow(
             (
-                "ecology-measurement-export-0001",
+                MEASUREMENT_CSV_SCHEMA_VERSION,
                 _csv_identifier(response.project_id),
                 response.input_sha256,
                 report.report_sha256,
                 str(response.source_fingerprint_contract is not None).lower(),
+                response.source_fingerprint_contract or "",
+                response.source_registry_history_sha256 or "",
+                response.source_image_evidence_sha256 or "",
+                response.source_annotation_evidence_sha256 or "",
+                response.source_calibration_evidence_sha256 or "",
+                "false",
                 _csv_identifier(candidate.organism_key),
                 candidate.identity_revision,
                 _csv_identifier(candidate.parent_colony_key or ""),
