@@ -231,14 +231,14 @@ class EcologyProjectedEndpointChange(BaseModel):
             raise ValueError("Projected endpoint elapsed days do not match source times")
         difference = self.final_value - self.baseline_value
         percent = 100 * (difference / self.baseline_value)
-        expected = (
+        expected: list[tuple[float, float]] = [
             (self.absolute_change, difference),
             (self.percent_change, percent),
-        )
+        ]
         if self.projected_absolute_change_per_day is not None:
-            expected += ((self.projected_absolute_change_per_day, difference / elapsed),)
+            expected.append((self.projected_absolute_change_per_day, difference / elapsed))
         if self.projected_baseline_percent_change_per_day is not None:
-            expected += ((self.projected_baseline_percent_change_per_day, percent / elapsed),)
+            expected.append((self.projected_baseline_percent_change_per_day, percent / elapsed))
         if any(
             not math.isfinite(derived)
             or not math.isclose(actual, derived, rel_tol=1e-9, abs_tol=1e-12)
