@@ -73,6 +73,12 @@ def test_history_csv_matches_persisted_typed_workflow_and_retains_old_units(
     assert all(row["evidence_level"] == "registered_unverified" for row in rows)
     assert all(row["review_gate"] == "scientist_review_required" for row in rows)
     assert all(row["history_sha256"] == registry.json()["history_sha256"] for row in rows)
+    # A correction with no earlier source links has empty review queues,
+    # not invented observations or implied independent replicates.
+    assert rows[0]["design_change_prior_annotation_evidence_ids_json"] == ""
+    assert rows[0]["design_change_prior_calibration_evidence_ids_json"] == ""
+    assert rows[1]["design_change_prior_annotation_evidence_ids_json"] == "[]"
+    assert rows[1]["design_change_prior_calibration_evidence_ids_json"] == "[]"
 
     graph = {
         "graph_id": "ecology-history-csv-parity-1-2",
@@ -217,7 +223,15 @@ def test_history_csv_traces_revision_sources_and_prior_design_change_evidence(
     ):
         assert json.loads(rows[1][field]) == []
     assert rows[0]["design_change_prior_image_evidence_ids_json"] == ""
+    assert rows[0]["design_change_prior_annotation_evidence_ids_json"] == ""
+    assert rows[0]["design_change_prior_calibration_evidence_ids_json"] == ""
     assert json.loads(rows[1]["design_change_prior_image_evidence_ids_json"]) == [image_id_link]
+    assert json.loads(rows[1]["design_change_prior_annotation_evidence_ids_json"]) == [
+        annotation_id_link
+    ]
+    assert json.loads(rows[1]["design_change_prior_calibration_evidence_ids_json"]) == [
+        calibration_id_link
+    ]
     for row in rows:
         for name in (
             "image_evidence_sha256",
