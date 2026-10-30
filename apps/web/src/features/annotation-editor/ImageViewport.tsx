@@ -168,6 +168,12 @@ export function ImageViewport({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    // Escape cancels an in-progress pan without swallowing the editor's
+    // own Escape shortcuts (for example, cancelling a polygon edit).
+    if (event.key === "Escape") {
+      dragRef.current = null;
+      return;
+    }
     if (event.key.toLowerCase() !== "f") return;
     if (
       event.target instanceof HTMLElement &&
