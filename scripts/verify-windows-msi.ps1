@@ -23,6 +23,9 @@ if ($MsiFiles.Count -ne 1) {
     throw "Expected exactly one MSI in $InstallerDirectory but found $($MsiFiles.Count)."
 }
 $Msi = $MsiFiles[0]
+# A symlinked MSI or CAB (or a junction in its parent path) could redirect
+# verification to unrelated files. Reject reparse points before reading either.
+Assert-ReefVisionNoReparseAncestors -Path $Msi.FullName
 if (-not $ExpectedVersion) {
     $ExpectedVersion = (Get-Content -LiteralPath (Join-Path $RepositoryRoot 'apps\web\src-tauri\tauri.conf.json') -Raw | ConvertFrom-Json).version
 }
@@ -36,6 +39,7 @@ if ($ProductVersion -ne $ExpectedVersion) {
 }
 $CabFiles = @(Get-ChildItem -Path $InstallerDirectory -Filter '*.cab' -File)
 foreach ($Cab in $CabFiles) {
+    Assert-ReefVisionNoReparseAncestors -Path $Cab.FullName
     if ($Cab.Length -le 0) {
         throw "External cabinet is empty: $($Cab.FullName)"
     }
