@@ -77,6 +77,15 @@ Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab') -A
 Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('../rv1.cab') -AvailableCabinets @('rv1.cab') | Out-Null } 'MSI Media path traversal must fail.'
 Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#embedded.cab') -AvailableCabinets @() | Out-Null } 'An installer with no external CAB declarations must not pass.'
 Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab') -AvailableCabinets @('../rv1.cab') | Out-Null } 'External CAB path traversal must fail.'
+Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab', 'RV1.CAB') -AvailableCabinets @('rv1.cab') | Out-Null } 'Duplicate Media cabinet declarations must fail case-insensitively.'
+Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#../embedded.cab', 'rv1.cab') -AvailableCabinets @('rv1.cab') | Out-Null } 'Malformed embedded cabinet names must fail.'
+Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#', 'rv1.cab') -AvailableCabinets @('rv1.cab') | Out-Null } 'Empty embedded cabinet names must fail.'
+# Verification must reject symlinked MSI/CAB inputs before opening or extracting
+# any package, without actually installing software in this harness.
+$msiVerifier = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verify-windows-msi.ps1') -Raw
+Assert-True ($msiVerifier.Contains('Assert-ReefVisionNoReparseAncestors -Path $Msi.FullName')) 'MSI verifier does not reject reparse-point MSI paths.'
+Assert-True ($msiVerifier.Contains('Assert-ReefVisionNoReparseAncestors -Path $Cab.FullName')) 'MSI verifier does not reject reparse-point CAB paths.'
+Assert-True ($msiVerifier.IndexOf('Assert-ReefVisionNoReparseAncestors -Path $Msi.FullName') -lt $msiVerifier.IndexOf('OpenDatabase($Msi.FullName, 0)')) 'MSI reparse-point guard must run before opening the database.'
 
 
 function Get-ItemProperty {
