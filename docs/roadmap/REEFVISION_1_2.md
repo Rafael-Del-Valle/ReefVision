@@ -4163,3 +4163,29 @@ No migration, cloud access, model download or cross-version branch integration.
 Exact-new-head CI, authenticated biological identity/calibration approval,
 1.1 migration reconciliation, real scientific review and installed Windows
 MSI/GUI tests remain release gates. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Four-layer source-digest disclosure in calibrated measurement exports (2026-10-30)
+
+The existing standalone projected-measurement CSV and the executable, persisted
+`ecology_measurement_csv_export` Workflow Builder node now expose
+`four_layer_source_digests_present`. This flag is true only when the source
+artifact has a fingerprint contract and all four registry-history, image,
+annotation and calibration SHA-256 fields have valid hexadecimal shape.
+It is **not** an assertion that any of those hashes match the current project
+database, that a scientist verified organism identity or geometry, or that
+measurements establish growth. The separate `source_fingerprint_rechecked`
+flag still describes internal artifact fingerprint recomputation, not
+external attestation. Legacy artifacts with missing lineage fields remain
+exportable with the new flag false, and all rows retain
+`independent_unit_inference_allowed=false` and scientist review gates.
+
+CSV contract `ecology-measurement-export-0003` is shared by the standalone
+endpoint and saved typed Workflow Builder output. Focused tests cover current
+four-digest sources, malformed/missing digests, historical partial lineage,
+CSV parity, and the persisted artifact flag. The preceding exact head
+`c22d8a9d` passed 16/19 Actions workflows; three backend workflows stopped
+at one Ruff formatting discrepancy in the measurement CSV test, which this
+increment also corrects. Exact-new-head CI, authenticated longitudinal
+identity/calibration review, 1.1 migration reconciliation, real ecological
+acceptance, and installed Windows GUI/MSI tests remain mandatory.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

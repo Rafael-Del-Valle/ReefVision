@@ -894,6 +894,7 @@ def _ecology_measurement_csv_export(
     )
     from reefvision.services.ecology_candidate_measurements_export import (
         MEASUREMENT_CSV_SCHEMA_VERSION,
+        four_layer_source_digests_present,
         render_ecology_measurements_csv,
     )
 
@@ -926,6 +927,7 @@ def _ecology_measurement_csv_export(
                 "source_image_evidence_sha256": source.source_image_evidence_sha256,
                 "source_annotation_evidence_sha256": source.source_annotation_evidence_sha256,
                 "source_calibration_evidence_sha256": source.source_calibration_evidence_sha256,
+                "four_layer_source_digests_present": four_layer_source_digests_present(source),
                 "independent_unit_inference_allowed": False,
                 "csv_text": csv_text,
                 "evidence_level": "linked_unverified",

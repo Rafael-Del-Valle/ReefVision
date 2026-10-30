@@ -19,6 +19,7 @@ from reefvision.schemas.ecology_measurement_candidates import (
 from reefvision.services.ecology_candidate_measurements_export import (
     MEASUREMENT_CSV_SCHEMA_VERSION,
     _utc_capture,
+    four_layer_source_digests_present,
     render_ecology_measurements_csv,
 )
 from reefvision.tests.test_annotations import create_project
@@ -55,13 +56,13 @@ def test_measurement_csv_preserves_all_source_links_and_saved_workflow_parity(
         assert row["source_registry_history_sha256"] == payload["source_registry_history_sha256"]
         assert row["source_image_evidence_sha256"] == payload["source_image_evidence_sha256"]
         assert (
-            row["source_annotation_evidence_sha256"]
-            == payload["source_annotation_evidence_sha256"]
+            row["source_annotation_evidence_sha256"] == payload["source_annotation_evidence_sha256"]
         )
         assert (
             row["source_calibration_evidence_sha256"]
             == payload["source_calibration_evidence_sha256"]
         )
+        assert row["four_layer_source_digests_present"] == "true"
         assert row["independent_unit_inference_allowed"] == "false"
         assert row["organism_key"] == source.organism_key
         assert row["identity_revision"] == str(source.identity_revision)
@@ -124,6 +125,52 @@ def test_measurement_csv_rejects_modified_source_even_if_qc_counts_unchanged(
     )
     with pytest.raises(ValidationError, match="source input fingerprint"):
         render_ecology_measurements_csv(altered)
+
+
+
+def test_measurement_csv_discloses_partial_historical_lineage_without_verification(
+    client: TestClient,
+) -> None:
+    project_id, _ = _source(client)
+    response = client.get(
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    )
+    assert response.status_code == 200, response.text
+    source = EcologyMeasurementCandidatesResponse.model_validate(response.json())
+    assert four_layer_source_digests_present(source) is True
+
+    # Legacy artifacts can be exported with a clearly disclosed incomplete
+    # lineage; no rechecked source or independent biological unit is invented.
+    legacy = source.model_copy(
+        update={
+            "source_fingerprint_contract": None,
+            "source_image_evidence_sha256": None,
+            "source_annotation_evidence_sha256": None,
+        }
+    )
+    rows = _rows(render_ecology_measurements_csv(legacy))
+    assert rows
+    for row in rows:
+        assert row["source_fingerprint_rechecked"] == "false"
+        assert row["four_layer_source_digests_present"] == "false"
+        assert row["independent_unit_inference_allowed"] == "false"
+        assert row["review_gate"] == "scientist_review_required"
+
+
+@pytest.mark.parametrize("invalid_digest", [None, "0" * 63, "z" * 64])
+def test_measurement_lineage_presence_requires_four_well_formed_digests(
+    client: TestClient, invalid_digest: str | None
+) -> None:
+    project_id, _ = _source(client)
+    response = client.get(
+        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    )
+    assert response.status_code == 200, response.text
+    source = EcologyMeasurementCandidatesResponse.model_validate(response.json())
+    altered = source.model_copy(
+        update={"source_calibration_evidence_sha256": invalid_digest}
+    )
+    assert four_layer_source_digests_present(altered) is False
 
 
 def test_measurement_csv_empty_project_has_only_header(client: TestClient) -> None:
@@ -230,6 +277,7 @@ def test_executable_saved_workflow_exports_typed_unverified_csv(
     assert payload["project_id"] == project_id
     assert payload["source_fingerprint_rechecked"] is True
     assert payload["source_fingerprint_contract"] is not None
+    assert payload["four_layer_source_digests_present"] is True
     assert payload["independent_unit_inference_allowed"] is False
     for field in (
         "source_registry_history_sha256",

@@ -7,6 +7,7 @@ identity, calibration accuracy, experimental independence, or biological growth.
 from __future__ import annotations
 
 import csv
+import re
 from datetime import UTC, datetime
 from io import StringIO
 
@@ -19,7 +20,7 @@ from reefvision.services.ecology_candidate_report_export import (
     render_ecology_series_qc_csv,
 )
 
-MEASUREMENT_CSV_SCHEMA_VERSION = "ecology-measurement-export-0002"
+MEASUREMENT_CSV_SCHEMA_VERSION = "ecology-measurement-export-0003"
 
 _MEASUREMENT_COLUMNS = (
     "export_schema_version",
@@ -32,6 +33,7 @@ _MEASUREMENT_COLUMNS = (
     "source_image_evidence_sha256",
     "source_annotation_evidence_sha256",
     "source_calibration_evidence_sha256",
+    "four_layer_source_digests_present",
     "independent_unit_inference_allowed",
     "organism_key",
     "identity_revision",
@@ -56,6 +58,21 @@ _MEASUREMENT_COLUMNS = (
     "evidence_level",
     "review_gate",
 )
+
+
+def four_layer_source_digests_present(response: EcologyMeasurementCandidatesResponse) -> bool:
+    """Check lineage digest presence/shape, not project ownership or scientist approval."""
+    if response.source_fingerprint_contract is None:
+        return False
+    return all(
+        isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{64}", value) is not None
+        for value in (
+            response.source_registry_history_sha256,
+            response.source_image_evidence_sha256,
+            response.source_annotation_evidence_sha256,
+            response.source_calibration_evidence_sha256,
+        )
+    )
 
 
 def _utc_capture(value: datetime | None, status: str) -> str:
@@ -119,6 +136,7 @@ def render_ecology_measurements_csv(response: EcologyMeasurementCandidatesRespon
                 response.source_image_evidence_sha256 or "",
                 response.source_annotation_evidence_sha256 or "",
                 response.source_calibration_evidence_sha256 or "",
+                str(four_layer_source_digests_present(response)).lower(),
                 "false",
                 _csv_identifier(candidate.organism_key),
                 candidate.identity_revision,
