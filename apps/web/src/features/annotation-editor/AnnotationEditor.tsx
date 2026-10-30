@@ -91,7 +91,7 @@ import type {
 import {
   resolveClassVisibilityState,
   sanitizeHiddenClassIds,
-  updateClassVisibilityBundleScope,
+  updateClassVisibilityBundleForProject,
   visibilityLayerLabel,
   visibilityLayerOptions,
   visibilitySourceLabel,
@@ -160,6 +160,7 @@ type VisibilityMutationAction = "save" | "reset";
 type VisibilityMutationTarget = "my_preference" | "project_default";
 
 interface VisibilityMutationInput {
+  projectId: string;
   action: VisibilityMutationAction;
   layerType: ClassVisibilityLayerType;
   target: VisibilityMutationTarget;
@@ -167,6 +168,7 @@ interface VisibilityMutationInput {
 }
 
 interface VisibilityMutationResult {
+  projectId: string;
   layerType: ClassVisibilityLayerType;
   scopeKey: VisibilityScopeKey;
   state: ClassVisibilityScopeState;
@@ -1018,16 +1020,17 @@ export function AnnotationEditor({
         const state =
           input.target === "my_preference"
             ? await saveClassVisibilityPreference(
-                project.id,
+                input.projectId,
                 input.layerType,
                 payload,
               )
             : await saveProjectClassVisibilityDefault(
-                project.id,
+                input.projectId,
                 input.layerType,
                 payload,
               );
         return {
+          projectId: input.projectId,
           layerType: input.layerType,
           scopeKey,
           state,
@@ -1039,11 +1042,12 @@ export function AnnotationEditor({
       }
 
       if (input.target === "my_preference") {
-        await deleteClassVisibilityPreference(project.id, input.layerType);
+        await deleteClassVisibilityPreference(input.projectId, input.layerType);
       } else {
-        await deleteProjectClassVisibilityDefault(project.id, input.layerType);
+        await deleteProjectClassVisibilityDefault(input.projectId, input.layerType);
       }
       return {
+        projectId: input.projectId,
         layerType: input.layerType,
         scopeKey,
         state: {
@@ -1060,31 +1064,38 @@ export function AnnotationEditor({
     },
     onMutate: (input) => {
       const layerLabel = visibilityLayerLabel(input.layerType);
-      setVisibilityStatusMessage(
-        input.action === "save"
-          ? `Saving ${layerLabel} visibility...`
-          : `Resetting ${layerLabel} visibility...`,
-      );
+      if (input.projectId === project.id) {
+        setVisibilityStatusMessage(
+          input.action === "save"
+            ? `Saving ${layerLabel} visibility...`
+            : `Resetting ${layerLabel} visibility...`,
+        );
+      }
     },
     onSuccess: (result) => {
       queryClient.setQueryData<ClassVisibilityBundle>(
-        ["class-visibility", project.id],
+        ["class-visibility", result.projectId],
         (current) => {
           if (!current) {
             return current;
           }
-          return updateClassVisibilityBundleScope(
+          return updateClassVisibilityBundleForProject(
             current,
+            result.projectId,
             result.scopeKey,
             result.layerType,
             result.state,
           );
         },
       );
-      setVisibilityStatusMessage(result.statusMessage);
+      if (result.projectId === project.id) {
+        setVisibilityStatusMessage(result.statusMessage);
+      }
     },
-    onError: (error: Error) => {
-      setVisibilityStatusMessage(error.message);
+    onError: (error: Error, input) => {
+      if (input.projectId === project.id) {
+        setVisibilityStatusMessage(error.message);
+      }
     },
   });
 
@@ -1498,6 +1509,7 @@ export function AnnotationEditor({
 
   const saveCurrentVisibilityAsMyPreference = useCallback(() => {
     visibilityMutation.mutate({
+      projectId: project.id,
       action: "save",
       layerType: selectedVisibilityLayer,
       target: "my_preference",
@@ -1506,11 +1518,13 @@ export function AnnotationEditor({
   }, [
     currentLayerVisibility.hiddenClassIds,
     selectedVisibilityLayer,
+    project.id,
     visibilityMutation,
   ]);
 
   const saveCurrentVisibilityAsProjectDefault = useCallback(() => {
     visibilityMutation.mutate({
+      projectId: project.id,
       action: "save",
       layerType: selectedVisibilityLayer,
       target: "project_default",
@@ -1519,19 +1533,22 @@ export function AnnotationEditor({
   }, [
     currentLayerVisibility.hiddenClassIds,
     selectedVisibilityLayer,
+    project.id,
     visibilityMutation,
   ]);
 
   const resetMyVisibilityPreferences = useCallback(() => {
     visibilityMutation.mutate({
+      projectId: project.id,
       action: "reset",
       layerType: selectedVisibilityLayer,
       target: "my_preference",
     });
-  }, [selectedVisibilityLayer, visibilityMutation]);
+  }, [project.id, selectedVisibilityLayer, visibilityMutation]);
 
   const copyCurrentVisibilityToProjectDefaults = useCallback(() => {
     visibilityMutation.mutate({
+      projectId: project.id,
       action: "save",
       layerType: selectedVisibilityLayer,
       target: "project_default",
@@ -1540,12 +1557,14 @@ export function AnnotationEditor({
   }, [
     currentLayerVisibility.hiddenClassIds,
     selectedVisibilityLayer,
+    project.id,
     visibilityMutation,
   ]);
 
   const applyProjectDefaultsToMyPreferences = useCallback(() => {
     if (!currentLayerVisibility.projectDefault.saved) {
       visibilityMutation.mutate({
+        projectId: project.id,
         action: "reset",
         layerType: selectedVisibilityLayer,
         target: "my_preference",
@@ -1553,6 +1572,7 @@ export function AnnotationEditor({
       return;
     }
     visibilityMutation.mutate({
+      projectId: project.id,
       action: "save",
       layerType: selectedVisibilityLayer,
       target: "my_preference",
@@ -1562,6 +1582,7 @@ export function AnnotationEditor({
     currentLayerVisibility.projectDefault.hidden_class_ids,
     currentLayerVisibility.projectDefault.saved,
     selectedVisibilityLayer,
+    project.id,
     visibilityMutation,
   ]);
 

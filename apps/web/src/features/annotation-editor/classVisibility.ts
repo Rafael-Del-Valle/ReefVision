@@ -181,3 +181,17 @@ export function updateClassVisibilityBundleScope(
     },
   };
 }
+
+/** Keep delayed visibility saves scoped to the project that issued them. */
+export function updateClassVisibilityBundleForProject(
+  bundle: ClassVisibilityBundle,
+  projectId: string,
+  scopeKey: VisibilityScopeKey,
+  layerType: ClassVisibilityLayerType,
+  state: ClassVisibilityScopeState,
+): ClassVisibilityBundle {
+  if (bundle.project_id !== projectId) {
+    return bundle;
+  }
+  return updateClassVisibilityBundleScope(bundle, scopeKey, layerType, state);
+}
