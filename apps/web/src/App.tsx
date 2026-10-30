@@ -234,6 +234,7 @@ function ReefVisionMainApp() {
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [focusProjectLauncher, setFocusProjectLauncher] = useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const keyboardShortcutsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [workspacePresetId, setWorkspacePresetId] =
@@ -306,6 +307,39 @@ function ReefVisionMainApp() {
       setShowOnboarding(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!focusProjectLauncher || showOnboarding) return;
+    if (showCreate || selectedProjectId || activeView !== "gallery") {
+      setFocusProjectLauncher(false);
+      return;
+    }
+    // Wait for the actual project summaries before choosing a focus target.
+    // A one-shot timeout can otherwise focus "New project" while a saved
+    // project is still loading, leaving keyboard users on the wrong action.
+    if (projectSummaries.isPending) return;
+    // Do not steal focus if the researcher already moved to another control.
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused !== document.body && focused.isConnected) {
+      setFocusProjectLauncher(false);
+      return;
+    }
+    const launcher = document.querySelector<HTMLElement>(
+      '[aria-label="ReefVision project launcher"]',
+    );
+    const target =
+      launcher?.querySelector<HTMLButtonElement>(".rv-project-launcher-open") ??
+      launcher?.querySelector<HTMLButtonElement>(".rv-launcher-actions button");
+    target?.focus();
+    setFocusProjectLauncher(false);
+  }, [
+    focusProjectLauncher,
+    showOnboarding,
+    showCreate,
+    selectedProjectId,
+    activeView,
+    projectSummaries.isPending,
+  ]);
 
   useEffect(() => {
     setInferenceSelectedImageIds([]);
@@ -1092,24 +1126,12 @@ function ReefVisionMainApp() {
               setSelectedProjectId(null);
               setActiveView("gallery");
               if (destination === "create_project") {
+                setFocusProjectLauncher(false);
                 setShowCreate(true);
               } else {
-                // Defer until the onboarding dialog unmounts, including in
-                // non-visual environments without requestAnimationFrame.
-                // Never create or select a project as part of this handoff.
-                window.setTimeout(() => {
-                  const launcher = document.querySelector<HTMLElement>(
-                    '[aria-label="ReefVision project launcher"]',
-                  );
-                  const target =
-                    launcher?.querySelector<HTMLButtonElement>(
-                      ".rv-project-launcher-open",
-                    ) ??
-                    launcher?.querySelector<HTMLButtonElement>(
-                      ".rv-launcher-actions button",
-                    );
-                  target?.focus();
-                }, 0);
+                // Focus the saved project after summaries load and the
+                // onboarding dialog has unmounted. Never select data here.
+                setFocusProjectLauncher(true);
               }
               return;
             }
