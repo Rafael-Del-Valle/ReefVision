@@ -388,8 +388,21 @@ def _completed_workflow_pose_training_run(
             continue
 
         snapshot_version = snapshot.get("schema_version")
-        if snapshot_version not in (None, "pose-workflow-training-snapshot-0001"):
+        if snapshot_version not in (
+            None,
+            "pose-workflow-training-snapshot-0001",
+            "pose-workflow-training-snapshot-0002",
+        ):
             raise ValidationError("Recovered pose-training node snapshot schema changed")
+
+        # Version 0002 freezes the provider parameter registry used for the
+        # actual run. Never replay a model under silently rewritten registry
+        # provenance; version 0001 remains readable for historical runs.
+        if snapshot_version == "pose-workflow-training-snapshot-0002" and (
+            not isinstance(snapshot.get("parameter_registry_version"), str)
+            or snapshot["parameter_registry_version"] != candidate.parameter_registry_version
+        ):
+            raise ValidationError("Recovered pose-training provider registry version changed")
 
         if (
             snapshot.get("pose_training_dataset_id") != dataset.id
@@ -583,7 +596,8 @@ def _reused_pose_training_result(
     frozen_checkpoint = dict(run.artifact_manifest_json or {})
     snapshot = dict(run.draft_snapshot_json or {})
     is_current_snapshot = (
-        snapshot.get("schema_version") == "pose-workflow-training-snapshot-0001"
+        snapshot.get("schema_version")
+        in {"pose-workflow-training-snapshot-0001", "pose-workflow-training-snapshot-0002"}
         or "pose_training_dataset_manifest_sha256" in snapshot
     )
     # A saved node can advertise both best.pt and last.pt. Verify the bytes
@@ -1139,7 +1153,8 @@ def create_pose_workflow_training_result(
             "validation_mode": (split_manifest["validation_mode"]),
         },
         draft_snapshot_json={
-            "schema_version": ("pose-workflow-training-snapshot-0001"),
+            "schema_version": ("pose-workflow-training-snapshot-0002"),
+            "parameter_registry_version": provider_spec("ultralytics").provider_version,
             "pose_training_dataset_id": (dataset.id),
             "pose_training_dataset_manifest_sha256": (dataset.manifest_sha256),
             "pose_validation_dataset_id": (
