@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
+from json import dumps
 from typing import cast
 
 import pytest
@@ -184,6 +186,23 @@ def test_saved_longitudinal_review_chronology_matches_standalone(
             == "mesh-review-bundle-0002"
         )
         assert len(expected["provenance"]["review_evidence_bundle_sha256"]) == 64
+        bundle = expected["provenance"]["review_evidence_bundle"]
+        assert bundle["schema_version"] == "mesh-review-bundle-0002"
+        assert bundle[evidence_key] == expected["provenance"][evidence_key]
+        digest = sha256(
+            dumps(
+                bundle,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        assert digest == expected["provenance"]["review_evidence_bundle_sha256"]
+        assert (
+            comparison_artifacts[0]["payload_json"]["provenance"]["review_evidence_bundle"]
+            == bundle
+        )
         assert len(comparison_artifacts[0]["payload_sha256"]) == 64
     else:
         assert not completed
