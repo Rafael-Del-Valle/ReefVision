@@ -127,6 +127,12 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
+    review_digest = expected["provenance"]["review_evidence_bundle_sha256"]
+    assert isinstance(review_digest, str) and len(review_digest) == 64
+    assert expected["provenance"]["review_evidence_bundle_schema_version"] == (
+        "mesh-review-bundle-0001"
+    )
+    assert expected["provenance"]["specimen_identity_verified"] is False
     assert expected["before_reconstruction_qc_rates"]["boundary_edges_per_face"] == 3.0
     assert expected["after_reconstruction_qc_rates"]["degenerate_face_fraction"] == 0.0
     assert expected["reconstruction_face_count_ratio_after_to_before"] == 1.0
@@ -372,6 +378,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
         if item["data_type"] == "mesh_longitudinal_comparison"
     )
     assert artifact["payload_json"] == expected
+    assert artifact["payload_json"]["provenance"]["review_evidence_bundle_sha256"] == review_digest
     assert len(artifact["payload_sha256"]) == 64
 
     # A disputed registration must not yield apparently usable centroid
@@ -393,6 +400,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert disputed_response.status_code == 200, disputed_response.text
     disputed_result = disputed_response.json()
+    assert disputed_result["provenance"]["review_evidence_bundle_sha256"] != review_digest
     for field in (
         "registered_surface_centroid_offset_target_frame_m",
         "registered_surface_centroid_separation_m",
