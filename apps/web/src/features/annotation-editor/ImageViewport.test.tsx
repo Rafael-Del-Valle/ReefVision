@@ -75,6 +75,40 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toContain("scale(1)");
   });
 
+  it("blocks viewport scrolling without treating horizontal or zero-delta wheel input as zoom", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Trackpad viewport">
+        <div />
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Trackpad viewport" });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const initial = transform.style.transform;
+
+    const wheel = (init: WheelEventInit) => {
+      const event = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 300,
+        clientY: 250,
+        ...init,
+      });
+      frame.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    expect(wheel({ deltaX: 120, deltaY: 0 })).toBe(true);
+    expect(transform.style.transform).toBe(initial);
+    expect(wheel({ deltaX: 0, deltaY: 0 })).toBe(false);
+    expect(transform.style.transform).toBe(initial);
+    expect(wheel({ deltaY: -100, ctrlKey: true })).toBe(false);
+    expect(wheel({ deltaY: -100, metaKey: true })).toBe(false);
+    expect(transform.style.transform).toBe(initial);
+
+    expect(wheel({ deltaY: -100 })).toBe(true);
+    expect(transform.style.transform).not.toBe(initial);
+  });
+
   it("preserves Alt-modified polygon vertex gestures", () => {
     const onPointerDown = vi.fn();
     render(

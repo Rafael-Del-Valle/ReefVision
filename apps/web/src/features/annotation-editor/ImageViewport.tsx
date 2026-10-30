@@ -2,7 +2,6 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
-  type WheelEvent,
   useCallback,
   useEffect,
   useRef,
@@ -105,6 +104,36 @@ export function ImageViewport({
     };
   }, [updateView]);
 
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+
+    // React's delegated wheel listener may be passive in Chromium/WebView2.
+    // Register directly so preventing document scroll actually works while
+    // zooming the scientific image and its aligned annotation overlays.
+    const handleNativeWheel = (event: globalThis.WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) return;
+      if (!Number.isFinite(event.deltaX) || !Number.isFinite(event.deltaY)) return;
+      if (event.deltaX === 0 && event.deltaY === 0) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      // Horizontal trackpad movement must not unexpectedly zoom the image.
+      if (event.deltaY === 0) return;
+
+      const rect = frame.getBoundingClientRect();
+      updateView(
+        zoomAtPoint(
+          viewRef.current,
+          { x: event.clientX - rect.left, y: event.clientY - rect.top },
+          viewRef.current.scale * (event.deltaY > 0 ? 1 / 1.08 : 1.08),
+        ),
+      );
+    };
+    frame.addEventListener("wheel", handleNativeWheel, { passive: false });
+    return () => frame.removeEventListener("wheel", handleNativeWheel);
+  }, [updateView]);
+
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     const preservesPolygonGesture =
       event.button === 0 &&
@@ -126,18 +155,6 @@ export function ImageViewport({
       y: event.clientY,
       view: viewRef.current,
     };
-  }
-
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    updateView(
-      zoomAtPoint(
-        viewRef.current,
-        { x: event.clientX - rect.left, y: event.clientY - rect.top },
-        viewRef.current.scale * (event.deltaY > 0 ? 1 / 1.08 : 1.08),
-      ),
-    );
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -174,7 +191,6 @@ export function ImageViewport({
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onPointerDownCapture={handlePointerDown}
-        onWheel={handleWheel}
         onContextMenu={(event) => event.preventDefault()}
         onDoubleClick={(event) => {
           if (event.target === event.currentTarget) fit();
