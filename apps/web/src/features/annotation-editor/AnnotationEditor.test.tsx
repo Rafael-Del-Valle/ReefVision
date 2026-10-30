@@ -1441,6 +1441,59 @@ describe("AnnotationEditor", () => {
   });
 
 
+
+  it("waits for a project visibility identity before enabling persistent controls", async () => {
+    let resolveVisibility: (response: Response) => void = () => {
+      throw new Error("The visibility request was not started");
+    };
+    const delayedVisibility = new Promise<Response>((resolve) => {
+      resolveVisibility = resolve;
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/projects/${project.id}/class-visibility`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return delayedVisibility;
+      }
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    for (const name of [
+      "Save as My Preference",
+      "Save as Project Default",
+      "Reset My Preferences",
+      "Copy Current Visibility to Project Defaults",
+      "Apply Project Defaults to My Preferences",
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
+    expect(
+      screen.getByText(/Save and reset controls require loaded visibility/),
+    ).toBeInTheDocument();
+    await act(async () => {
+      resolveVisibility(jsonResponse(buildVisibilityBundle()));
+      await delayedVisibility;
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Save as My Preference" }),
+      ).not.toBeDisabled(),
+    );
+  });
+
   it("does not apply a delayed preference save to another user's cached preferences", async () => {
     let resolveSave: (response: Response) => void = () => {
       throw new Error("The visibility save was not started");
