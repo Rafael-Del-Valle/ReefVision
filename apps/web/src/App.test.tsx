@@ -1260,7 +1260,7 @@ describe("App", () => {
     });
     fetchMock.mockImplementation((input, init) => {
       if (
-        String(input).endsWith("/projects") &&
+        String(input).endsWith("/project-summaries") &&
         (!init?.method || init.method === "GET")
       ) {
         return delayedProjects;
@@ -1276,7 +1276,7 @@ describe("App", () => {
       screen.queryByRole("button", { name: "Open CPT Coral Study" }),
     ).not.toBeInTheDocument();
 
-    resolveProjects(jsonResponse([project]));
+    resolveProjects(jsonResponse([toProjectSummary(project)]));
     const openProject = await screen.findByRole("button", {
       name: "Open CPT Coral Study",
     });
@@ -1301,7 +1301,7 @@ describe("App", () => {
     });
     fetchMock.mockImplementation((input, init) => {
       if (
-        String(input).endsWith("/projects") &&
+        String(input).endsWith("/project-summaries") &&
         (!init?.method || init.method === "GET")
       ) {
         return delayedProjects;
@@ -1317,7 +1317,7 @@ describe("App", () => {
     newProject.focus();
     expect(newProject).toHaveFocus();
 
-    resolveProjects(jsonResponse([project]));
+    resolveProjects(jsonResponse([toProjectSummary(project)]));
     expect(
       await screen.findByRole("button", { name: "Open CPT Coral Study" }),
     ).toBeInTheDocument();
