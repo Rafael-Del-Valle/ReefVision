@@ -777,7 +777,13 @@ axis-aligned bounding-box diagonal in the same source units. For the example
 2-by-3-unit right triangle, the ratio is `3 / 13`. It is independent of a
 common positive isotropic meters-per-unit scale; source-unit calculation also
 avoids numerical underflow from squaring very small calibrated dimensions.
-A zero diagonal produces `null`, not a fabricated finite ratio. The field
+A zero diagonal produces `null`, not a fabricated finite ratio. The QC code
+`mesh_shape_ratio_unavailable_zero_extent` now explicitly distinguishes this
+geometrically undefined case from
+`mesh_shape_ratio_unavailable_numeric_underflow`, which means a nonzero source
+diagonal squared to zero at floating-point precision. Neither case should be
+imputed as a biological zero. Standalone and previously saved executable
+Workflow Builder graphs preserve the same null value and QC code. The field
 does not acquire a separate scale-only uncertainty interval because the
 common scale factor cancels algebraically.
 
