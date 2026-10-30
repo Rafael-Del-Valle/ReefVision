@@ -1,3 +1,11 @@
+## 2026-10-30 — Saved-project discoverability beyond twelve cards (Track D)
+
+- Audited draft PR #77, master issue #76, version branches, existing project launcher/onboarding, and exact-head backend/frontend CI. Earlier launcher implementation showed only the twelve newest/pinned projects and provided no route to older saved projects. This is a usability gap, not missing scientific analysis or Workflow Builder functionality.
+- Added a local, case-insensitive name/description search over **all** returned project summaries, and an explicit Show all / Show fewer control when more than twelve match. The initial twelve-card preview remains for large project collections. Search-empty is labeled **No matching projects**, distinct from **No projects yet**, pending summaries, and API failures. No backend query, project creation, deletion, or data mutation is triggered by search or expansion.
+- Added three component regressions: reopen thirteenth older project without creating records, search by name/description, and distinguish an unmatched query from an empty installation. Styled the search and expansion controls for keyboard use.
+- Existing class visibility, reviewer QC, typed persisted executable Workflow Builder, and explicit human-approval gates remain unchanged; this UI-only change does not warrant a new workflow node or database migration.
+- **HOLD:** exact-new-head CI and frontend regression execution, independent 1.1/1.6 Alembic 0038 reconciliation, native Windows installed-GUI/MSI upgrade and rollback, and representative biological-data acceptance. No merge, release, deployment, pretrained weights, or asset deletion.
+
 ## 2026-10-30 — Asynchronous first-run project focus handoff (Track D)
 
 - Audited PR #77, issue #76, exact-head CI (previous head `440cf242`
