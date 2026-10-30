@@ -132,7 +132,15 @@ function Assert-ReefVisionSafeAcceptanceRoot {
         }
         if ($resolved -ieq $item -or (Test-ReefVisionPathWithin -Path $resolved -Parent $item)) {
             if ($item -ieq (Resolve-ReefVisionAcceptancePath $env:USERPROFILE) -and $resolved -ine $item) {
-                continue
+                # A disposable acceptance run may live in the Windows local
+                # Temp folder, but never in Documents, Desktop, Downloads,
+                # Roaming, or arbitrary user-profile directories. The old
+                # exception allowed every descendant of USERPROFILE.
+                $localTemp = Resolve-ReefVisionAcceptancePath (Join-Path $env:LOCALAPPDATA 'Temp')
+                if ($resolved -ieq $localTemp -or
+                    (Test-ReefVisionPathWithin -Path $resolved -Parent $localTemp)) {
+                    continue
+                }
             }
             throw "Unsafe acceptance root '$resolved' overlaps protected path '$item'."
         }
