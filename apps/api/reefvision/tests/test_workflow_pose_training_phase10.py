@@ -691,6 +691,42 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
 
+    # The experiment registry is a second persisted scientific record, not
+    # merely an ID to expose downstream. A replay must reject inconsistent
+    # metadata or checkpoint evidence without starting another training run.
+    for field, corrupt_value in (
+        ("provider_id", "unrelated-provider"),
+        (
+            "artifact_manifest_json",
+            {**result["artifact_manifest"], "result_checkpoint_sha256": "0" * 64},
+        ),
+    ):
+        with app.state.session_factory() as session:
+            experiment = session.scalar(
+                select(ExperimentRecord).where(
+                    ExperimentRecord.training_run_id == result["training_run_id"]
+                )
+            )
+            assert experiment is not None
+            original_value = getattr(experiment, field)
+            setattr(experiment, field, corrupt_value)
+            session.commit()
+
+        with pytest.raises(ValidationError, match="experiment provenance changed"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            experiment = session.scalar(
+                select(ExperimentRecord).where(
+                    ExperimentRecord.training_run_id == result["training_run_id"]
+                )
+            )
+            assert experiment is not None
+            setattr(experiment, field, original_value)
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # A persisted manifest must not advertise an optional checkpoint that
     # disappeared after training. The selected best.pt remains intact here,
     # so its valid digest alone must not authorize a missing last.pt artifact.
