@@ -189,9 +189,7 @@ describe("onboarding local usability", () => {
     expect(
       screen.queryByRole("heading", { name: /Welcome to ReefVision/ }),
     ).toBeNull();
-    expect(
-      screen.getByRole("dialog", { name: "Create project" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Create project" })).toBeTruthy();
     expect(document.activeElement).toBe(
       screen.getByRole("textbox", { name: "Project name" }),
     );
