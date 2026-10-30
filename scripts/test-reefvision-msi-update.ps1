@@ -109,6 +109,51 @@ try {
         $updateScript.Contains('$installer = $latestInstaller')) {
         throw 'Install-only must use the pinned MSI path and digest, without a fallback.'
     }
+
+    # Evaluate the actual updater setup expression without executing an
+    # installer. A pinned --install-only must not bootstrap dependencies even
+    # when the repository has missing environments or a changed signature.
+    $parseTokens = $null
+    $parseErrors = $null
+    $updateAst = [System.Management.Automation.Language.Parser]::ParseInput(
+        $updateScript, [ref]$parseTokens, [ref]$parseErrors
+    )
+    if (@($parseErrors).Count -ne 0) {
+        throw 'Updater PowerShell source did not parse.'
+    }
+    $setupAssignments = @($updateAst.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $node.Left.Extent.Text -eq '$setupNeeded'
+    }, $true))
+    if ($setupAssignments.Count -ne 1) {
+        throw 'Expected exactly one updater setup decision.'
+    }
+    $setupDecision = [scriptblock]::Create($setupAssignments[0].Extent.Text + "`n`$setupNeeded")
+    $repoPath = $repo
+    $dependencySignature = 'changed'
+    $config = [pscustomobject]@{ dependency_signature = 'previous' }
+    foreach ($case in @(
+        @{ InstallOnly = $true; RunSetup = $false; SkipSetup = $false; Expected = $false },
+        @{ InstallOnly = $true; RunSetup = $false; SkipSetup = $true; Expected = $false },
+        @{ InstallOnly = $false; RunSetup = $false; SkipSetup = $false; Expected = $true },
+        @{ InstallOnly = $false; RunSetup = $false; SkipSetup = $true; Expected = $false },
+        @{ InstallOnly = $false; RunSetup = $true; SkipSetup = $false; Expected = $true }
+    )) {
+        $installOnly = $case.InstallOnly
+        $runSetup = $case.RunSetup
+        $skipSetup = $case.SkipSetup
+        $actual = & $setupDecision
+        if ([bool]$actual -ne [bool]$case.Expected) {
+            throw "Unexpected setup decision for installOnly=$installOnly runSetup=$runSetup skipSetup=$skipSetup"
+        }
+        $passed++
+    }
+    if (-not $updateScript.Contains('if ($installOnly -and $runSetup)')) {
+        throw 'Install-only must explicitly reject a conflicting --setup request.'
+    }
+    $passed++
+
     $verificationPosition = $updateScript.LastIndexOf('Assert-ReefVisionMsiPayload')
     $stopPosition = $updateScript.IndexOf('Stop-ReefVisionRunningProcesses', $verificationPosition)
     if ($verificationPosition -lt 0 -or $stopPosition -le $verificationPosition) {
