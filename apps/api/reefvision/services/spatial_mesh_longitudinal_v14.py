@@ -67,6 +67,8 @@ def _validate_source_import_provenance(metadata: dict[str, Any]) -> None:
         raise ValueError("Source payload integrity check requires an imported mesh format")
     if checked is True and (size is None or size == 0):
         raise ValueError("Source payload integrity check requires a positive source byte count")
+    if source_format is None and (digest is not None or size is not None):
+        raise ValueError("Source payload metadata requires an imported mesh format")
 
 
 def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | None:
