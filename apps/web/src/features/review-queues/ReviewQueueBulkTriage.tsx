@@ -269,8 +269,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           disabled={locked || selectedIds.length === 0}
           checked={confirmed}
           onChange={(event) =>
-          setConfirmedSelectionKey(event.target.checked ? selectionKey : null)
-        }
+            setConfirmedSelectionKey(event.target.checked ? selectionKey : null)
+          }
         />
         I confirm this queue-only action; biological verification remains
         manual.
