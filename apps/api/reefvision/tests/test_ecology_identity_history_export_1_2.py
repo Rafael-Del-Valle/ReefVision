@@ -337,9 +337,7 @@ def test_history_csv_flags_legacy_unfrozen_source_metadata_with_workflow_parity(
 
     run = _workflow(client, project_id)
     assert run["run"]["status"] == "succeeded"
-    artifacts = [
-        row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"
-    ]
+    artifacts = [row for row in run["artifacts"] if row["data_type"] == "ecology_identity_registry"]
     assert len(artifacts) == 1
     typed = EcologyIdentityRegistryResponse.model_validate(artifacts[0]["payload_json"])
     assert render_ecology_identity_history_csv(typed) == response.text
