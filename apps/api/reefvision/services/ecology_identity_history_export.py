@@ -171,16 +171,23 @@ def render_ecology_identity_history_csv(registry: EcologyIdentityRegistryRespons
         raise ValidationError("Unavailable historical parent audit cannot claim details")
 
     image_ids_by_revision: dict[tuple[str, int], list[str]] = {}
-    for link in registry.image_evidence_links:
-        image_ids_by_revision.setdefault((link.organism_key, link.identity_revision), []).append(
-            link.id
-        )
+    # Use distinct loop variables: these are different Pydantic row types.
+    # Reusing one name across the three collections confuses strict mypy and
+    # obscures the image -> annotation -> calibration evidence chain.
+    for image_link in registry.image_evidence_links:
+        image_ids_by_revision.setdefault(
+            (image_link.organism_key, image_link.identity_revision), []
+        ).append(image_link.id)
     annotation_ids_by_image: dict[str, list[str]] = {}
-    for link in registry.annotation_evidence_links:
-        annotation_ids_by_image.setdefault(link.image_evidence_id, []).append(link.id)
+    for annotation_link in registry.annotation_evidence_links:
+        annotation_ids_by_image.setdefault(
+            annotation_link.image_evidence_id, []
+        ).append(annotation_link.id)
     calibration_ids_by_annotation: dict[str, list[str]] = {}
-    for link in registry.calibration_evidence_links:
-        calibration_ids_by_annotation.setdefault(link.annotation_evidence_id, []).append(link.id)
+    for calibration_link in registry.calibration_evidence_links:
+        calibration_ids_by_annotation.setdefault(
+            calibration_link.annotation_evidence_id, []
+        ).append(calibration_link.id)
 
     # A design correction can affect the interpretation of source links made
     # under earlier identity revisions; flag them for review, not reassignment.
