@@ -1572,7 +1572,13 @@ describe("AnnotationEditor", () => {
         "class-visibility",
         project.id,
       ]),
-    ).toBe(otherUser);
+    ).toEqual(otherUser);
+    expect(
+      queryClient.getQueryData<ClassVisibilityBundle>([
+        "class-visibility",
+        project.id,
+      ])?.user_identity,
+    ).toBe("local-user:second");
     expect(screen.getByTestId("class-visibility-status")).not.toHaveTextContent(
       "Saved my preference for Annotations.",
     );
