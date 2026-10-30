@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   completeReviewQueueItem,
@@ -45,6 +45,26 @@ const defaultWeights: ReviewScoreWeights = {
   stale_review_state: 6,
 };
 
+type QueueMutationScope = {
+  projectId: string;
+  scopeType: "project" | "dataset_version";
+  datasetVersionId: string;
+};
+
+type CreateQueueRequest = QueueMutationScope & {
+  sourceRunId: string;
+  weights: ReviewScoreWeights;
+  reviewBelowConfidence: string;
+};
+
+function sameQueueScope(a: QueueMutationScope, b: QueueMutationScope): boolean {
+  return (
+    a.projectId === b.projectId &&
+    a.scopeType === b.scopeType &&
+    a.datasetVersionId === b.datasetVersionId
+  );
+}
+
 function queueLabel(queue: ReviewQueueRecord): string {
   return `${queue.status} | ${queue.item_count} ranked images`;
 }
@@ -59,6 +79,11 @@ export function ReviewQueueDashboard({
   onSelectedQueueChange?: (queueId: string | null) => void;
 }) {
   const queryClient = useQueryClient();
+  const currentScope = useRef<QueueMutationScope>({
+    projectId: project.id,
+    scopeType: "project",
+    datasetVersionId: "",
+  });
   const [scopeProjectId, setScopeProjectId] = useState(project.id);
   const [scopeType, setScopeType] = useState<"project" | "dataset_version">(
     "project",
@@ -83,6 +108,10 @@ export function ReviewQueueDashboard({
   );
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
     useState(false);
+
+  // Mutation completions must never select a queue from a project or dataset
+  // that the researcher has since navigated away from.
+  currentScope.current = { projectId: project.id, scopeType, datasetVersionId };
 
   // A dataset-version scope without a selected version is not a project scope.
   const scopeReady =
@@ -183,37 +212,53 @@ export function ReviewQueueDashboard({
   }, [items.data, openQuickReviewWhenReady, selectedQueueId]);
 
   const createQueue = useMutation({
-    mutationFn: async () => {
-      if (!scopeReady) {
+    mutationFn: async (request: CreateQueueRequest) => {
+      if (
+        !request.projectId ||
+        (request.scopeType === "dataset_version" && !request.datasetVersionId)
+      ) {
         throw new Error("Review scope is not ready");
       }
       const payload = {
-        source_quality_control_run_id: selectedRunId || undefined,
-        signal_weights: weights,
+        source_quality_control_run_id: request.sourceRunId || undefined,
+        signal_weights: request.weights,
         review_below_confidence:
-          reviewBelowConfidence === ""
+          request.reviewBelowConfidence === ""
             ? undefined
-            : Number(reviewBelowConfidence) / 100,
+            : Number(request.reviewBelowConfidence) / 100,
       };
-      return scopeType === "dataset_version" && datasetVersionId
-        ? createDatasetVersionReviewQueue(datasetVersionId, payload)
-        : createReviewQueue(project.id, payload);
+      return request.scopeType === "dataset_version"
+        ? createDatasetVersionReviewQueue(request.datasetVersionId, payload)
+        : createReviewQueue(request.projectId, payload);
     },
-    onSuccess: async (queue) => {
-      setSelectedQueueId(queue.id);
-      setQuickReviewItemId(null);
-      setOpenQuickReviewWhenReady(reviewBelowConfidence !== "");
+    onSuccess: async (queue, request) => {
+      if (sameQueueScope(currentScope.current, request)) {
+        setSelectedQueueId(queue.id);
+        setQuickReviewItemId(null);
+        setOpenQuickReviewWhenReady(request.reviewBelowConfidence !== "");
+      }
       await queryClient.invalidateQueries({
-        queryKey: ["review_queues", project.id],
+        queryKey: reviewQueuesQueryKey(
+          request.projectId,
+          request.scopeType,
+          request.datasetVersionId,
+        ),
       });
     },
   });
   const regenerateQueue = useMutation({
-    mutationFn: (queueId: string) => regenerateReviewQueue(queueId),
-    onSuccess: async (queue) => {
-      setSelectedQueueId(queue.id);
+    mutationFn: (request: QueueMutationScope & { queueId: string }) =>
+      regenerateReviewQueue(request.queueId),
+    onSuccess: async (queue, request) => {
+      if (sameQueueScope(currentScope.current, request)) {
+        setSelectedQueueId(queue.id);
+      }
       await queryClient.invalidateQueries({
-        queryKey: ["review_queues", project.id],
+        queryKey: reviewQueuesQueryKey(
+          request.projectId,
+          request.scopeType,
+          request.datasetVersionId,
+        ),
       });
     },
   });
@@ -420,7 +465,16 @@ export function ReviewQueueDashboard({
                   createQueue.isPending ||
                   (scopeType === "dataset_version" && !datasetVersionId)
                 }
-                onClick={() => createQueue.mutate()}
+                onClick={() =>
+                  createQueue.mutate({
+                    projectId: project.id,
+                    scopeType,
+                    datasetVersionId,
+                    sourceRunId: selectedRunId,
+                    weights: { ...weights },
+                    reviewBelowConfidence,
+                  })
+                }
               >
                 {createQueue.isPending ? "Generating..." : "Generate queue"}
               </button>
@@ -428,7 +482,14 @@ export function ReviewQueueDashboard({
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => regenerateQueue.mutate(selectedQueue.id)}
+                  onClick={() =>
+                    regenerateQueue.mutate({
+                      projectId: project.id,
+                      scopeType,
+                      datasetVersionId,
+                      queueId: selectedQueue.id,
+                    })
+                  }
                 >
                   Regenerate
                 </button>
