@@ -24,6 +24,7 @@ from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
     _save_calibration,
 )
 from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
+from reefvision.storage.datasets import canonical_json_sha256
 
 
 def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
@@ -77,6 +78,42 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
     assert (
         EcologyMeasurementCandidatesResponse.model_validate(historical).input_sha256
         == original_payload["input_sha256"]
+    )
+
+    # Older v0021 artifacts may omit optional row fields that the newer
+    # Pydantic schema now supplies as defaults. Hash their persisted rows
+    # before those defaults are injected, without claiming a newer review.
+    legacy_current = deepcopy(original_payload)
+    legacy_current["sampling_date_qc"][0].pop("reused_image_ids")
+    legacy_current["candidate_report"] = None
+    legacy_hash_payload = {
+        "algorithm_version": "ecology-measurement-candidates-0021",
+        "project_id": legacy_current["project_id"],
+        "registry_history_sha256": legacy_current["source_registry_history_sha256"],
+        "registry_image_evidence_sha256": legacy_current["source_image_evidence_sha256"],
+        "registry_annotation_evidence_sha256": legacy_current[
+            "source_annotation_evidence_sha256"
+        ],
+        "registry_calibration_evidence_sha256": legacy_current[
+            "source_calibration_evidence_sha256"
+        ],
+        **{
+            key: legacy_current[key]
+            for key in (
+                "candidates",
+                "sampling_date_qc",
+                "projected_visit_coverage",
+                "projected_endpoint_changes",
+                "projected_unit_summaries",
+                "projected_population_summaries",
+                "exclusions",
+            )
+        },
+    }
+    legacy_current["input_sha256"] = canonical_json_sha256(legacy_hash_payload)
+    assert (
+        EcologyMeasurementCandidatesResponse.model_validate(legacy_current).input_sha256
+        == legacy_current["input_sha256"]
     )
 
     source = EcologyMeasurementCandidate.model_validate(standalone.json()["candidates"][0])
@@ -156,7 +193,7 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
             EcologyProjectedEndpointChange.model_validate(tampered)
         forged_artifact = dict(typed_artifact)
         forged_artifact["projected_endpoint_changes"] = [tampered]
-        with pytest.raises(PydanticValidationError, match="Projected endpoint"):
+        with pytest.raises(PydanticValidationError, match="fingerprint|Projected endpoint"):
             EcologyMeasurementCandidatesResponse.model_validate(forged_artifact)
 
     assert original["evidence_level"] == "linked_unverified"
