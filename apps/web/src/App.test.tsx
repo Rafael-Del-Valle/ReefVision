@@ -1248,6 +1248,71 @@ describe("App", () => {
     expect(projectWrites()).toHaveLength(0);
   });
 
+  it("offers existing projects from first-run help without creating or selecting data", async () => {
+    window.localStorage.clear();
+    const fetchMock = mockApi({ projects: [project] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Choose an existing project" }),
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: /Welcome to ReefVision/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Create project" }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/projects") && options?.method === "POST",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("creates a project from onboarding only after an explicit form submission", async () => {
+    window.localStorage.clear();
+    const fetchMock = mockApi({ projects: [] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Create a project" }),
+    );
+    const projectWrites = () =>
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/projects") && options?.method === "POST",
+      );
+    expect(projectWrites()).toHaveLength(0);
+
+    await userEvent.type(
+      screen.getByLabelText("Project name"),
+      "New coral survey",
+    );
+    await userEvent.click(
+      within(screen.getByRole("dialog", { name: "Create project" })).getByRole(
+        "button",
+        { name: "Create project" },
+      ),
+    );
+
+    await waitFor(() => expect(projectWrites()).toHaveLength(1));
+    expect(projectWrites()[0][1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "New coral survey",
+          description: "",
+          template: "blank",
+        }),
+      }),
+    );
+  });
+
   it("opens a project and displays its stable classes", async () => {
     mockApi({ projects: [project] });
     renderApp();
