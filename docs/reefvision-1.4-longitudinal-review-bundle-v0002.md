@@ -38,3 +38,24 @@ These checks protect the consistency of caller-supplied provenance. They do
 not verify original file bytes, establish an authenticated reviewer, or
 certify coral calibration or identity. Standalone and saved typed Workflow
 Builder comparisons share the same service-level validation.
+
+
+## Duplicate imported-original QC (longitudinal comparisons)
+
+When both observation previews carry the same well-formed imported-source
+SHA-256, the comparison emits
+`identical_imported_source_payload_reused_across_observations`. Different
+observation IDs or dates do not make the same original OBJ/PLY/GLB bytes an
+independent biological survey. If their geometry fingerprints nevertheless
+differ, it also emits
+`identical_imported_source_payload_geometry_inconsistent` to flag a possible
+reconstruction or metadata inconsistency for investigation.
+
+These are **scientific QC warnings**, not authentication or automatic evidence
+of misconduct. The source hashes are derived from the supplied originals but
+do not establish their acquisition date or provenance. Different original
+bytes may still produce identical triangles; the existing
+`identical_geometry_fingerprint` warning remains independent. Neither case
+establishes coral growth, verified identity, or calibrated measurement.
+Standalone longitudinal API calls and saved executable typed Workflow Builder
+graphs share the same warnings and provisional review evidence.
