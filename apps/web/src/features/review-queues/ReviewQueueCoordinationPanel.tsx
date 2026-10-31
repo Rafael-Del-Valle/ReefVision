@@ -355,7 +355,10 @@ export function ReviewQueueCoordinationPanel({
           </button>
           {discardRequestKey !== null &&
             discardRequestConfirmationKey === discardRequestKey && (
-              <div role="group" aria-label="Confirm abandoning uncertain review event">
+              <div
+                role="group"
+                aria-label="Confirm abandoning uncertain review event"
+              >
                 <p>
                   This request may already have been recorded. Abandoning its
                   retry does not undo a server event. Submitting the same
