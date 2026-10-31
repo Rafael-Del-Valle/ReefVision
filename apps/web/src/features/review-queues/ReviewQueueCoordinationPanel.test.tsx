@@ -144,7 +144,9 @@ describe("ReviewQueueCoordinationPanel", () => {
       target: { value: "Original unsent coral note" },
     });
     expect(
-      screen.queryByRole("group", { name: "Discard unsent coordination drafts" }),
+      screen.queryByRole("group", {
+        name: "Discard unsent coordination drafts",
+      }),
     ).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
     expect(addReviewQueueEvent).not.toHaveBeenCalled();
@@ -167,7 +169,9 @@ describe("ReviewQueueCoordinationPanel", () => {
     const originalId =
       vi.mocked(addReviewQueueEvent).mock.calls[0][2].client_request_id;
 
-    fireEvent.click(screen.getByRole("button", { name: "Discard failed action" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard failed action" }),
+    );
     expect(
       screen.getByRole("group", {
         name: "Confirm abandoning uncertain review event",
@@ -176,7 +180,9 @@ describe("ReviewQueueCoordinationPanel", () => {
     expect(screen.getByRole("button", { name: "Retry event" })).toBeTruthy();
     expect(addReviewQueueEvent).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Keep retry available" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep retry available" }),
+    );
     expect(
       screen.queryByRole("group", {
         name: "Confirm abandoning uncertain review event",
@@ -218,7 +224,9 @@ describe("ReviewQueueCoordinationPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
     await screen.findByRole("button", { name: "Retry event" });
-    fireEvent.click(screen.getByRole("button", { name: "Discard failed action" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard failed action" }),
+    );
     expect(
       screen.getByRole("group", {
         name: "Confirm abandoning uncertain review event",
@@ -233,8 +241,12 @@ describe("ReviewQueueCoordinationPanel", () => {
       }),
     ).toBeNull();
     expect(screen.getByRole("button", { name: "Retry event" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Discard failed action" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm abandon retry" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard failed action" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm abandon retry" }),
+    );
     expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull();
     expect(screen.getByLabelText("Review comment")).toHaveProperty(
       "value",
