@@ -1245,4 +1245,103 @@ describe("ReviewQueueCoordinationPanel", () => {
       "reviewer-b",
     );
   });
+
+  it("warns on browser reload only while an unsent biological note exists", async () => {
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    const beforeUnloadPrevented = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      act(() => {
+        window.dispatchEvent(event);
+      });
+      return event.defaultPrevented;
+    };
+    expect(beforeUnloadPrevented()).toBe(false);
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsubmitted coral health observation" },
+    });
+    expect(beforeUnloadPrevented()).toBe(true);
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "" },
+    });
+    expect(beforeUnloadPrevented()).toBe(false);
+    expect(addReviewQueueEvent).not.toHaveBeenCalled();
+  });
+
+  it("warns on browser reload during an in-flight event even with no draft", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(getReviewQueueEvents).mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 50,
+      current_assignee: "reviewer-a",
+      requires_researcher_review: true,
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: reviewer-a");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Unassign reviewer" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    const unload = new Event("beforeunload", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(unload);
+    });
+    expect(unload.defaultPrevented).toBe(true);
+    await act(async () => {
+      resolveEvent(responseForCall(0));
+      await pending;
+    });
+    await waitFor(() => {
+      const safeUnload = new Event("beforeunload", { cancelable: true });
+      act(() => {
+        window.dispatchEvent(safeUnload);
+      });
+      expect(safeUnload.defaultPrevented).toBe(false);
+    });
+  });
+
+  it("warns about an uncertain event UUID until its retry is explicitly abandoned", async () => {
+    vi.mocked(getReviewQueueEvents).mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 50,
+      current_assignee: "reviewer-a",
+      requires_researcher_review: true,
+    });
+    vi.mocked(addReviewQueueEvent).mockRejectedValueOnce(
+      new Error("Network response unknown"),
+    );
+    mount();
+    await screen.findByText("Assigned reviewer: reviewer-a");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Unassign reviewer" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    const uncertainUnload = new Event("beforeunload", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(uncertainUnload);
+    });
+    expect(uncertainUnload.defaultPrevented).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Discard failed action" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm abandon retry" }));
+    const clearedUnload = new Event("beforeunload", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(clearedUnload);
+    });
+    expect(clearedUnload.defaultPrevented).toBe(false);
+    expect(addReviewQueueEvent).toHaveBeenCalledTimes(1);
+  });
 });
