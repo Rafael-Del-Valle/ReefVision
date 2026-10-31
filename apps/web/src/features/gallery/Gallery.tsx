@@ -647,10 +647,18 @@ function GalleryContent({
   }
 
   const visibleImages = images.data?.items ?? [];
+  // A cross-page navigation already knows which edge to focus. Resolve it
+  // before rendering or notifying scientific consumers; otherwise the first
+  // image on the destination page briefly appears even when navigating to
+  // its last image, and can be persisted as the wrong active observation.
   const focusedImage =
-    visibleImages.find((image) => image.id === focusedImageId) ??
-    visibleImages[0] ??
-    null;
+    pendingNavigationEdge === "last"
+      ? (visibleImages[visibleImages.length - 1] ?? null)
+      : pendingNavigationEdge === "first"
+        ? (visibleImages[0] ?? null)
+        : (visibleImages.find((image) => image.id === focusedImageId) ??
+          visibleImages[0] ??
+          null);
 
   useEffect(() => {
     onFocusedImageChange?.(focusedImage?.id ?? null);
