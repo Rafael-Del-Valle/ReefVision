@@ -5235,3 +5235,32 @@ claiming a passing suite.
 true experimental-unit design verification, representative biological and
 human/model acceptance, 1.1 migration reconciliation, and installed Windows
 MSI/GUI testing remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Registered physical-unit case-alias integrity (2026-10-31)
+
+The existing project-owned ecological identity registry now detects case-folded
+collisions among **different spellings** of one declared physical experimental
+unit. For example, `Tank-1` and `tank-1`, or `Straße-1` and
+`STRASSE-1`, cannot be counted as separate tanks at the same sampling level.
+Known aliases such as tank/aquarium share a namespace; different biological
+levels retain separate namespaces. Repeated organisms assigned to the
+**exact same** physical unit ID remain valid. Identifiers are never silently
+rewritten, and the rule does not prove true unit independence.
+
+The shared validator is applied before organism registration, append-only
+revision, registry readback of imported revisions, and persisted typed
+`ecology_identity_registry` artifact readback. This prevents a re-signed
+saved artifact from hiding case-only aliases. The existing executable
+`ecology_identity_registry_source` Workflow Builder node uses the same
+fail-closed service and publishes no successful registry artifact for an
+invalid imported design. Focused tests cover API create/revise rejection,
+same-ID and cross-level controls, Unicode casefolding, forged signed
+registry replay, and a saved executable workflow.
+
+**Release HOLD:** verify exact-head Ruff/pytest/frontend/E2E/Windows CI;
+authenticated scientist-reviewed calibrated longitudinal measurements,
+registered independent experimental-unit design, representative biological
+and human/model scientific acceptance, 1.1 Alembic reconciliation and
+physical installed Windows MSI/GUI tests remain outstanding.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
