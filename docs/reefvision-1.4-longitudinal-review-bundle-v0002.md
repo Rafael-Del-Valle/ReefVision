@@ -68,8 +68,9 @@ the comparison additionally emits
 `identical_imported_source_payload_metadata_inconsistent`. Identical source
 bytes cannot have different lengths or different native import formats. This
 is an audit warning about contradictory caller-supplied provenance, not a
-biological change or proof of tampering. Missing historical size/format values
-remain unknown and do not trigger a fabricated conflict. An integrity-check
+biological change or proof of tampering. A missing historical byte count stays
+unknown rather than triggering a fabricated conflict; a digest without its
+import format is rejected earlier as orphaned metadata. An integrity-check
 flag can legitimately differ between previews because an expected hash may
 have been supplied in one import but not the other.
 
