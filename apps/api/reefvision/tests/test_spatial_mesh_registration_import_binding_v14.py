@@ -266,7 +266,7 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     assert artifact == expected
 
     # A new export with identical geometry must fail in both execution paths.
-    reexport = (AFTER_OBJ + "# revised export comment\\n").encode("utf-8")
+    reexport = (AFTER_OBJ + "# revised export comment\n").encode("utf-8")
     uploaded_reexport = client.post(
         f"{base}/spatial/assets",
         files={"file": ("late-reexport.obj", reexport)},
