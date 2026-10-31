@@ -167,12 +167,12 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
       // evidence that this batch was applied. Exact retries may legitimately
       // report zero changed items, but must still return the requested items
       // in their resulting state. Never clear the original UUID on mismatch.
-      const expectedState: ReviewQueueItem["review_state"] = {
+      const expectedState: ReviewQueueItem["review_state"] = ({
         start: "in_progress",
         skip: "skipped",
         return: "pending",
         complete: "completed",
-      }[request.payload.action];
+      } as const)[request.payload.action];
       const expectedIds = new Set(request.payload.item_ids);
       if (
         !Number.isInteger(result.changed_count) ||
