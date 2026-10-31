@@ -4956,3 +4956,28 @@ This increment requires its own exact-head CI validation. Full
 authenticated longitudinal observations, registered experimental-unit
 independence, real scientific review, 1.1 migration reconciliation, and
 installed Windows MSI/GUI acceptance remain release blockers.
+
+## Paired-count response and provenance claim integrity (2026-10-31)
+
+Current `ecology-paired-count-0007` readback now rejects unsupported
+top-level result fields and nested `analysis_provenance` fields instead of
+silently discarding them under Pydantic's default extra-field behavior.
+This closes a route for a modified persisted analysis to carry unrecognized
+`scientist_review_approved` or `independent_unit_registry_verified`
+claims while appearing to validate. Existing nested paired-row and
+experimental-unit field checks remain in place. This is a **scientific
+claim-integrity** check, not evidence authentication or statistical
+independence.
+
+The focused regression exercises real standalone API output and an executed,
+persisted typed Workflow Builder artifact, both forged claim locations,
+and historical `0006` compatibility. Legacy artifacts continue to decode
+as `caller_supplied_unverified` with
+`requires_source_verification`. No new node, migration, 1.1 environmental
+context, model checkpoint, or cross-track merge is introduced.
+
+**Release HOLD:** fresh exact-head backend/frontend/E2E/Windows CI,
+authenticated scientist-reviewed calibrated longitudinal measurements,
+registered true experimental-unit independence, representative biological
+and human/model acceptance, 1.1 Alembic migration reconciliation, and
+installed Windows MSI/GUI checks. **1.2 NOT RELEASE-READY; 1.3 not started.**
