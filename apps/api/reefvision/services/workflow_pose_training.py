@@ -402,10 +402,7 @@ def _completed_workflow_pose_training_run(
             "pose-workflow-training-snapshot-0002",
             "pose-workflow-training-snapshot-0003",
         )
-        if (
-            snapshot_version not in registry_snapshots
-            and "parameter_registry_version" in snapshot
-        ):
+        if snapshot_version not in registry_snapshots and "parameter_registry_version" in snapshot:
             raise ValidationError("Recovered pose-training node snapshot schema changed")
         if (
             snapshot_version != "pose-workflow-training-snapshot-0003"
