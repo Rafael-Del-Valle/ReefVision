@@ -4879,3 +4879,24 @@ context provider, migration, model checkpoint, or workflow node. Full exact-head
 CI, authenticated review, independent ecological acceptance, cross-version
 migration reconciliation, and installed Windows GUI/MSI checks remain required.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Derived ecological summary replay — Ruff gate repair (2026-10-31)
+
+At preceding exact head `40da75ebcd17bf0075b5a96e0f5f10215f0cd018`,
+16/19 PR-triggered GitHub Actions workflows passed, including Windows Desktop
+Build. Backend CI, Pose Workflow Validation, and ReefVision 1.0 Acceptance
+failed at Ruff 0.17.3 `format --check` before scientific pytest execution.
+Both failing Ruff hunks were in
+`test_ecology_derived_summary_source_replay_1_2.py`: the calibrated-candidate
+API call and historical-contract `model_copy` expression. Applied the exact
+formatter-requested compact expressions without changing assertions, source
+replay, biological calculations, typed Workflow Builder artifacts, scientific
+review gates, provenance, or experimental-unit handling. This is a test-gate
+repair, not a new feature; full exact-head CI must complete before declaring
+the regression resolved.
+
+**Release HOLD:** authenticated scientist-reviewed longitudinal observations,
+registered independent experimental units, representative biological and
+human/model acceptance, 1.1 migration reconciliation, and physical installed
+Windows MSI/GUI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
+1.3 not started.**
