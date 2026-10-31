@@ -119,6 +119,28 @@ def test_rehashed_missing_endpoint_cannot_hide_valid_source_series(
         EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
 
 
+def test_current_endpoint_allows_historical_optional_slope_fields(
+    client: TestClient,
+) -> None:
+    """Completeness replay must not retroactively require optional slopes."""
+    original = _dated_artifact(client)
+    endpoint = original.projected_endpoint_changes[0].model_copy(
+        update={
+            "projected_absolute_change_per_day": None,
+            "projected_baseline_percent_change_per_day": None,
+        }
+    )
+    legacy_current = _resign_derived_evidence(
+        original.model_copy(update={"projected_endpoint_changes": [endpoint]})
+    )
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(
+        legacy_current.model_dump(mode="json")
+    )
+    assert len(parsed.projected_endpoint_changes) == 1
+    assert parsed.projected_endpoint_changes[0].projected_absolute_change_per_day is None
+    assert parsed.review_gate == "scientist_review_required"
+
+
 def test_rehashed_duplicate_endpoint_is_not_an_extra_replicate(
     client: TestClient,
 ) -> None:

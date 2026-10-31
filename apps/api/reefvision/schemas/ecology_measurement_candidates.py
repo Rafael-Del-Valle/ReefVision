@@ -680,9 +680,12 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         expected_changes = summarize_projected_endpoint_changes(
             self.candidates, self.sampling_date_qc
         )
-        if [row.model_dump(mode="json") for row in self.projected_endpoint_changes] != [
-            row.model_dump(mode="json") for row in expected_changes
-        ]:
+        # Source replay below validates each present endpoint. Compare series
+        # keys here to detect omissions while preserving older saved endpoints
+        # that legitimately omit later-added optional slope fields.
+        expected_keys = {(row.organism_key, row.metric) for row in expected_changes}
+        actual_keys = {(row.organism_key, row.metric) for row in self.projected_endpoint_changes}
+        if actual_keys != expected_keys:
             raise ValueError("Current projected endpoints do not match source candidates")
         expected_units = summarize_projected_unit_summaries(self.candidates, expected_changes)
         if [row.model_dump(mode="json") for row in self.projected_unit_summaries] != [

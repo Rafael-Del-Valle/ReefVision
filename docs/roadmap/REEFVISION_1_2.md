@@ -5011,7 +5011,7 @@ remain outstanding. No release or merge is authorized.
 ## Current projected endpoint completeness replay (2026-10-31)
 
 The current `ecology-measurement-candidates-0021` typed artifact now recomputes
-the **complete** projected endpoint roster from linked source candidates and
+the **complete** organism/metric endpoint roster from linked source candidates and
 sampling-date QC. Previously, rehashing a payload after removing an otherwise
 valid endpoint could evade row-by-row endpoint checks: the remaining projected
 unit and population summaries were replayed from source records, but the
@@ -5019,7 +5019,9 @@ missing endpoint itself was not compared with the expected roster. The saved
 Workflow Builder artifact and standalone API share the same typed validation.
 A regression uses a source-linked, two-date candidate series, removes its
 endpoint, recalculates both fingerprints, and requires typed readback failure.
-Existing API and executed saved-workflow parity tests cover legitimate
+Source-row replay still validates each present endpoint; key-based completeness
+preserves historical optional slope fields and ordering. Existing API and executed
+saved-workflow parity tests cover legitimate
 undated/no-endpoint artifacts. Historical source-fingerprint contracts remain
 readable and unverified. This is **completeness/integrity**, not scientist
 approval, calibrated growth validation or independent-unit authentication.
