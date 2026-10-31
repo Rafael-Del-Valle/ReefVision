@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError as PydanticValidationError
@@ -9,6 +11,7 @@ from pydantic import ValidationError as PydanticValidationError
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
 )
+from reefvision.services.ecology_measurement_candidates import summarize_projected_visit_coverage
 from reefvision.tests.test_ecology_image_evidence_1_2 import _workflow
 from reefvision.tests.test_ecology_projected_series_csv_1_2 import (
     _dated_artifact,
@@ -136,11 +139,22 @@ def test_saved_workflow_rejects_rehashed_fabricated_visit(
     )
     saved = EcologyMeasurementCandidatesResponse.model_validate(payload)
     assert saved.projected_visit_coverage == []
-    # This undated real source has no measured UTC visit. A fabricated visit
-    # from a separate source must fail even after both digests are recomputed.
-    fabricated_visit = _dated_artifact(client).projected_visit_coverage[0]
+    # The persisted source has no dated visit. Fabricate a visit from an
+    # in-memory candidate, without creating a second project with a reused
+    # annotation UUID (which would fail before this replay check runs).
+    dated_source = saved.candidates[0].model_copy(
+        update={
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "fabricated-tank",
+            "capture_timestamp_utc": datetime(2026, 4, 3, 8, tzinfo=UTC),
+            "capture_time_status": "timezone_aware",
+        }
+    )
+    fabricated_visits = summarize_projected_visit_coverage([dated_source])
+    assert len(fabricated_visits) == 1
+    assert fabricated_visits[0].sampling_date_utc == "2026-04-03"
     forged = _resign_derived_evidence(
-        saved.model_copy(update={"projected_visit_coverage": [fabricated_visit]})
+        saved.model_copy(update={"projected_visit_coverage": fabricated_visits})
     )
     with pytest.raises(PydanticValidationError, match="visit coverage"):
         EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
