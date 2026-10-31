@@ -2788,8 +2788,8 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
     expected = standalone.json()
     assert expected["provenance"]["reidentification_evidence"] == evidence
     assert expected["provenance"]["specimen_identity_verified"] is False
-    assert "reidentification_spatial_source_asset_binding_unavailable" not in (
-        expected["qc_warnings"]
+    assert (
+        "reidentification_spatial_source_asset_binding_unavailable" not in (expected["qc_warnings"])
     )
 
     legacy = client.post(
@@ -2799,7 +2799,8 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
             "reidentification_evidence": {
                 key: value
                 for key, value in evidence.items()
-                if key not in (
+                if key
+                not in (
                     "before_spatial_source_asset_id",
                     "after_spatial_source_asset_id",
                 )
@@ -2807,16 +2808,15 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
         },
     )
     assert legacy.status_code == 200, legacy.text
-    assert "reidentification_spatial_source_asset_binding_unavailable" in (
-        legacy.json()["qc_warnings"]
+    assert (
+        "reidentification_spatial_source_asset_binding_unavailable"
+        in (legacy.json()["qc_warnings"])
     )
     for changed in (
         {**evidence, "after_spatial_source_asset_id": asset_ids[0]},
         {**evidence, "before_spatial_source_asset_id": None},
     ):
-        rejected = client.post(
-            endpoint, json={**payload, "reidentification_evidence": changed}
-        )
+        rejected = client.post(endpoint, json={**payload, "reidentification_evidence": changed})
         assert rejected.status_code in (400, 422), rejected.text
 
     graph = {
