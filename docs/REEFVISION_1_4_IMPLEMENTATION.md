@@ -72,6 +72,29 @@ matching attacker-controlled hash offers no security guarantee. Saved
 workflows continue to retain the submitted bounded input payload and
 measurement provenance under existing local project persistence.
 
+## Rescaled cross-format re-export guard (longitudinal QC)
+
+An OBJ, ASCII PLY, or GLB file can be re-exported with different original
+bytes while preserving exactly the same parsed triangle geometry. The
+longitudinal comparison now flags
+`identical_geometry_different_imported_source_payload` when valid imported
+source fingerprints differ but valid geometry fingerprints match. If the
+caller-supplied calibration scale also differs, the comparison flags
+`longitudinal_change_withheld_rescaled_reexported_geometry`, preserves the
+original per-timepoint measurements, and withholds derived longitudinal
+changes and uncertainty intervals. The provenance flag
+`longitudinal_change_withheld_due_to_rescaled_reexported_geometry` records
+this decision. A different file digest alone is not evidence of an
+independent biological observation. Same-scale re-exports remain descriptive
+with the repeated-geometry warning, not verified as independent samples.
+
+This conservative guard is identical for the standalone comparison endpoint
+and a saved executable typed Workflow Builder graph. It does **not** verify
+specimen identity, original acquisition independence, calibration accuracy,
+source authenticity, or biological growth; it also cannot detect different
+meshes derived from the same acquisition when their geometry fingerprints
+change. Authenticated longitudinal review remains a release blocker.
+
 ## Imported point-cloud byte-exact replay guard (provisional)
 
 The project-scoped standalone ASCII PLY point-cloud preview and executable,
