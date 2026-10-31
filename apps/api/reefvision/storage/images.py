@@ -158,12 +158,12 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
             return None
         if isinstance(offset, str):
             offset = offset.rstrip("\x00")
+        if not offset:
+            # EXIF camera time without a UTC offset is not a verified instant.
+            # Keep the raw local timestamp in EXIF metadata, not in UTC fields.
+            return None
         try:
-            if isinstance(offset, str) and offset:
-                timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
-            else:
-                # Preserve the existing legacy behavior for offset-free images.
-                timestamp = datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
+            timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
         except ValueError:
             # Do not silently substitute DateTimeDigitized/DateTime when a
             # higher-priority acquisition field exists but cannot be trusted.
@@ -254,8 +254,24 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 "info": safe_info,
                 "exif": named_exif,
             }
+            capture_timestamp = None if exif_warning is not None else _capture_timestamp(exif)
             if exif_warning is not None:
                 metadata["exif_warning"] = exif_warning
+            elif capture_timestamp is None:
+                # Keep timezone uncertainty visible to scientific consumers
+                # without fabricating UTC from a camera-local wall clock.
+                for date_tag, offset_tag in (
+                    (36867, 36881),
+                    (36868, 36882),
+                    (306, 36880),
+                ):
+                    if exif.get(date_tag) is not None:
+                        if not exif.get(offset_tag):
+                            metadata["capture_time_warning"] = (
+                                "EXIF camera-local time has no UTC offset; "
+                                "UTC capture timestamp not inferred"
+                            )
+                        break
             return InspectedImage(
                 sha256=sha256,
                 width_px=width,
@@ -264,7 +280,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 media_type=media_type,
                 extension=extension,
                 metadata=metadata,
-                capture_timestamp=None if exif_warning is not None else _capture_timestamp(exif),
+                capture_timestamp=capture_timestamp,
             )
     except UnsupportedImageError:
         raise

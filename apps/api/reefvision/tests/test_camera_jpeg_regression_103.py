@@ -48,7 +48,9 @@ def test_progressive_camera_jpeg_keeps_original_bytes_and_exif(
     assert metadata["width_px"] == 64
     assert metadata["height_px"] == 48
     assert metadata["metadata_json"]["exif"]["Orientation"] == 6
-    assert metadata["capture_timestamp"].startswith("2026-10-01T12:30:00")
+    assert metadata["capture_timestamp"] is None
+    assert metadata["metadata_json"]["exif"]["DateTime"] == "2026:10:01 12:30:00"
+    assert "UTC offset" in metadata["metadata_json"]["capture_time_warning"]
     original = client.get(f"/api/v1/images/{image_id}/content")
     assert original.status_code == 200
     assert original.content == payload
@@ -59,6 +61,38 @@ def test_progressive_camera_jpeg_keeps_original_bytes_and_exif(
     with Image.open(BytesIO(display.content)) as decoded:
         assert decoded.size == (64, 48)
         assert decoded.getexif().get(274) is None
+
+
+def test_camera_local_exposure_without_offset_retains_raw_exif_not_fake_utc(
+    client: TestClient,
+) -> None:
+    """A Canon/Sony-style local EXIF clock cannot be assumed to be UTC."""
+    project = create_project(client, "Camera local exposure without timezone")
+    exif = Image.Exif()
+    exif[306] = "2026:10:02 15:00:00"
+    exif[34665] = {36867: "2026:10:01 12:30:00"}
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_LOCAL.JPG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"] is None
+    assert metadata["metadata_json"]["exif"]["DateTimeOriginal"] == "2026:10:01 12:30:00"
+    assert "UTC offset" in metadata["metadata_json"]["capture_time_warning"]
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+def test_camera_exposure_without_offset_never_borrows_digitization_offset() -> None:
+    """A later digitization timezone cannot establish the exposure timezone."""
+    exif = {
+        36867: "2026:10:01 12:30:00",
+        36868: "2026:10:02 13:00:00",
+        36882: "+00:00",
+    }
+    assert _capture_timestamp(exif) is None
 
 
 @pytest.mark.parametrize("extension", [".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"])
