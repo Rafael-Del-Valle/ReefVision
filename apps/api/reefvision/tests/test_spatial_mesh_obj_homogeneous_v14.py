@@ -116,7 +116,7 @@ def test_supported_obj_face_reference_forms_preserve_geometry(face: str) -> None
         "f 1/0 2 3",
         "f 1//0 2 3",
         "f 1_0 2 3",
-        "f ١ 2 3",
+        "f \\u0661 2 3",
     ],
 )
 def test_malformed_obj_face_references_are_not_silently_measured(face: str) -> None:
