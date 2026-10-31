@@ -88,6 +88,10 @@ def _artifact_ids(value: Any, *, field: str) -> list[str]:
         return []
     if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
         raise ConflictError(f"Workflow node {field} must be a list of artifact IDs")
+    # One produced artifact has one output identity. Repeated inputs can be
+    # legitimate fan-out across different ports, but repeated outputs cannot.
+    if field == "output IDs" and len(value) != len(set(value)):
+        raise ConflictError("Workflow node output IDs contain duplicates")
     return value
 
 
