@@ -930,10 +930,9 @@ def compare_mesh_observations(
         # coral with identical survey labels and imported reconstruction bytes.
         if registration.source_specimen_id is None:
             warnings.append("registration_specimen_binding_unavailable")
-        elif (
-            registration.source_specimen_id != first.get("specimen_id")
-            or registration.target_specimen_id != second.get("specimen_id")
-        ):
+        elif registration.source_specimen_id != first.get(
+            "specimen_id"
+        ) or registration.target_specimen_id != second.get("specimen_id"):
             raise ValueError("Registration evidence must match both specimen IDs")
         if registration.source_observation_id is None:
             warnings.append("registration_observation_binding_unavailable")
@@ -1334,8 +1333,18 @@ def compare_mesh_observations(
     review_bundle: dict[str, Any] | None = None
     review_bundle_sha256 = None
     if registration_record is not None or reidentification_record is not None:
+        # v0003 remains byte-for-byte compatible for historical previews.
+        # Project-owned originals need a distinct v0004 canonical payload:
+        # otherwise a reimport under another asset ID could retain the same
+        # audit digest despite changing which project record was reviewed.
+        has_asset_binding = (
+            first.get("spatial_source_asset_id") is not None
+            or second.get("spatial_source_asset_id") is not None
+        )
         review_bundle = {
-            "schema_version": "mesh-review-bundle-0003",
+            "schema_version": (
+                "mesh-review-bundle-0004" if has_asset_binding else "mesh-review-bundle-0003"
+            ),
             "project_id": project_before,
             "specimen_id": specimen,
             "before_observation_id": first_id,
@@ -1376,6 +1385,13 @@ def compare_mesh_observations(
             "registration_evidence": registration_record,
             "reidentification_evidence": reidentification_record,
         }
+        if has_asset_binding:
+            review_bundle["before_spatial_source_asset_id"] = first.get(
+                "spatial_source_asset_id"
+            )
+            review_bundle["after_spatial_source_asset_id"] = second.get(
+                "spatial_source_asset_id"
+            )
         review_bundle_sha256 = sha256(
             dumps(
                 review_bundle,
@@ -1484,7 +1500,7 @@ def compare_mesh_observations(
             "registration_evidence": registration_record,
             "reidentification_evidence": reidentification_record,
             "review_evidence_bundle_schema_version": (
-                "mesh-review-bundle-0003" if review_bundle_sha256 is not None else None
+                review_bundle["schema_version"] if review_bundle is not None else None
             ),
             "review_evidence_bundle_sha256": review_bundle_sha256,
             "review_evidence_bundle": review_bundle,
