@@ -297,6 +297,11 @@ def build_workflow_run_provenance(
 
             output_refs.append(_artifact_ref(artifact))
 
+        # Preserve the persisted parameter JSON type in exported scientific
+        # provenance; dict(list_of_pairs) would conceal a corrupted record.
+        if node.parameters_json is not None and not isinstance(node.parameters_json, dict):
+            raise ConflictError("Workflow node parameters must be a JSON object")
+
         result = dict(node.result_json or {})
 
         review_approval = result.get("review_approval")
