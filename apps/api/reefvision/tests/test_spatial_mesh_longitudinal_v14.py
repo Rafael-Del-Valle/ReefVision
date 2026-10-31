@@ -59,7 +59,7 @@ def _rigid_transform() -> list[list[float]]:
         ("observation_id", "s" * 129, "valid syntax"),
         ("project_id", "   ", "nonempty project_id"),
         ("project_id", "p" * 129, "nonempty project_id"),
-        ("project_id", "project\\nother", "nonempty project_id"),
+        ("project_id", "project\nother", "nonempty project_id"),
     ],
 )
 def test_replayed_longitudinal_artifacts_reject_invalid_identity_labels(
