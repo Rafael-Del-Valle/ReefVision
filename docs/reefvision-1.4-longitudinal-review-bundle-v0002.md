@@ -60,6 +60,27 @@ establishes coral growth, verified identity, or calibrated measurement.
 Standalone longitudinal API calls and saved executable typed Workflow Builder
 graphs share the same warnings and provisional review evidence.
 
+### Withholding nonindependent longitudinal change estimates
+
+When two timepoints reuse the same well-formed imported-source SHA-256, the
+comparison now emits
+`longitudinal_change_withheld_reused_imported_source_payload` and sets
+`provenance.longitudinal_change_withheld_due_to_reused_source_payload` to
+`true`. It withholds cross-timepoint change, percentage change, rates,
+registered centroid movement and ranked patch-change metrics as `null`.
+This applies even if the same original was recalibrated to yield different
+nominal surface areas or an independent reviewer supplied a match note.
+The individual measured areas, topology and reconstruction QC remain
+available for auditing the recalibration. An identical original is not a
+second biological observation.
+
+Different imported-source SHA-256 values do **not** prove independent
+acquisition: source comments can change while geometry stays identical.
+Missing legacy source hashes likewise do not prove independence. This
+guard does not certify the acquisition history, calibration, identity or
+source authenticity. The same withholding is exercised in standalone
+analysis and saved executable typed Workflow Builder artifact tests.
+
 ## Conflicting imported-original metadata
 
 If two observation previews report the same well-formed imported-source
