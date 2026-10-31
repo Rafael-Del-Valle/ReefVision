@@ -81,10 +81,12 @@ export function ReviewQueueDashboard({
   project,
   onOpenImage,
   onSelectedQueueChange,
+  onCoordinationOpenChange,
 }: {
   project: Project;
   onOpenImage: (item: ReviewQueueItem) => void;
   onSelectedQueueChange?: (queueId: string | null) => void;
+  onCoordinationOpenChange?: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const currentScope = useRef<QueueMutationScope>({
@@ -117,6 +119,13 @@ export function ReviewQueueDashboard({
   );
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
     useState(false);
+
+  // The host workspace must not unmount coordination behind its guarded
+  // close button: that would discard item-local drafts and audit retry UUIDs.
+  useEffect(() => {
+    onCoordinationOpenChange?.(coordinationItemId !== null);
+    return () => onCoordinationOpenChange?.(false);
+  }, [coordinationItemId, onCoordinationOpenChange]);
 
   // Mutation completions must never select a queue from a project or dataset
   // that the researcher has since navigated away from.
@@ -719,6 +728,7 @@ export function ReviewQueueDashboard({
                   <div className="dashboard-actions">
                     <button
                       type="button"
+                      disabled={coordinationItemId !== null}
                       onClick={() => setQuickReviewItemId(item.id)}
                     >
                       Quick review
@@ -726,7 +736,10 @@ export function ReviewQueueDashboard({
                     <button
                       type="button"
                       className="secondary"
-                      onClick={() => onOpenImage(item)}
+                      disabled={coordinationItemId !== null}
+                      onClick={() => {
+                        if (coordinationItemId === null) onOpenImage(item);
+                      }}
                     >
                       Open image
                     </button>
