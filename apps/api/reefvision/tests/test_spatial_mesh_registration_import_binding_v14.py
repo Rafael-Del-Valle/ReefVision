@@ -13,8 +13,8 @@ from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.spatial_mesh_preview_v14 import (
-    MeshPreviewRequest,
     MeshRegistrationEvidence,
+    MeshPreviewRequest,
 )
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
@@ -71,6 +71,8 @@ def _registration(before: dict, after: dict, *, asset_ids: bool = False) -> dict
         "rms_residual_m": 0.02,
         "correspondence_count": 6,
         "evidence_note": "Provisional field registration, not certified",
+        "source_specimen_id": first["specimen_id"],
+        "target_specimen_id": second["specimen_id"],
         "source_geometry_sha256": first["geometry_sha256"],
         "target_geometry_sha256": second["geometry_sha256"],
         "source_payload_sha256": first["source_payload_sha256"],
@@ -90,7 +92,40 @@ def test_registration_import_bindings_are_provisional_and_auditable() -> None:
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert "registration_source_payload_binding_unavailable" not in result["qc_warnings"]
     assert "registration_spatial_source_asset_binding_unavailable" not in result["qc_warnings"]
+    assert "registration_specimen_binding_unavailable" not in result["qc_warnings"]
     assert result["provenance"]["review_evidence_bundle_sha256"] is not None
+
+
+def test_registration_rejects_cross_specimen_replay_with_unchanged_meshes() -> None:
+    before, after = _previews("project-1")
+    evidence = _registration(before, after)
+    for observation in (before, after):
+        observation["provenance"]["specimen_id"] = "another-colony"
+    with pytest.raises(ValueError, match="both specimen IDs"):
+        compare_mesh_observations(before, after, registration_evidence=evidence)
+
+
+def test_registration_specimen_binding_is_paired_and_mutation_checked() -> None:
+    before, after = _previews("project-1")
+    evidence = _registration(before, after)
+    del evidence["target_specimen_id"]
+    with pytest.raises(PydanticValidationError, match="requires both specimen IDs"):
+        MeshRegistrationEvidence.model_validate(evidence)
+    evidence["target_specimen_id"] = "colony-1"
+    record = MeshRegistrationEvidence.model_validate(evidence)
+    record.target_specimen_id = None
+    with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
+        compare_mesh_observations(before, after, registration_evidence=record)
+
+
+def test_legacy_registration_without_specimen_binding_is_flagged() -> None:
+    before, after = _previews("project-1")
+    evidence = _registration(before, after)
+    del evidence["source_specimen_id"]
+    del evidence["target_specimen_id"]
+    result = compare_mesh_observations(before, after, registration_evidence=evidence)
+    assert "registration_specimen_binding_unavailable" in result["qc_warnings"]
+    assert result["provenance"]["coordinate_registration_verified"] is False
 
 
 def test_registration_reexport_with_identical_geometry_rejects_stale_bytes() -> None:
@@ -198,6 +233,7 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["provenance"]["registration_evidence"] == evidence
+    assert "registration_specimen_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_source_payload_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_spatial_source_asset_binding_unavailable" not in expected[
         "qc_warnings"
