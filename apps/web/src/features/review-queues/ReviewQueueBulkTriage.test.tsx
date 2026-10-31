@@ -262,7 +262,9 @@ describe("ReviewQueueBulkTriage", () => {
           queue_id: queueId,
           action: payload.action,
           changed_count: 1,
-          items: mutate(responseItems(queueId, payload.action, payload.item_ids)),
+          items: mutate(
+            responseItems(queueId, payload.action, payload.item_ids),
+          ),
           requires_researcher_review: true,
         }),
       );
@@ -323,7 +325,9 @@ describe("ReviewQueueBulkTriage", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "Apply start to 1 items" }),
       );
-      await screen.findByRole("button", { name: "Retry identical bulk action" });
+      await screen.findByRole("button", {
+        name: "Retry identical bulk action",
+      });
       expect(invalidate).not.toHaveBeenCalled();
       expect(screen.getByRole("alert").textContent).toContain(
         "changed count",
