@@ -629,6 +629,11 @@ def _reused_pose_training_result(
         snapshot.get("schema_version") in current_snapshot_versions
         or "pose_training_dataset_manifest_sha256" in snapshot
     )
+    # Never coerce malformed persisted summary metrics into a dictionary.
+    # An array of key/value pairs could otherwise replay as unchanged science.
+    if is_current_snapshot and not isinstance(run.metrics_json, dict):
+        raise ValidationError("Recovered pose-training summary metrics must be a JSON object")
+
     if snapshot.get("schema_version") == "pose-workflow-training-snapshot-0003" and (
         not isinstance(run.metrics_history_json, dict)
         or not isinstance(snapshot.get("metrics_history_sha256"), str)
@@ -1474,6 +1479,11 @@ def create_pose_workflow_training_result(
         or experiment.architecture != run.architecture
     ):
         raise ValidationError("Completed pose training experiment provenance changed")
+    # Freeze only genuine summary metric objects. Coercing key/value arrays
+    # would silently normalize malformed worker evidence on first completion.
+    if not isinstance(run.metrics_json, dict):
+        raise ValidationError("Completed pose-training summary metrics must be a JSON object")
+
     # Reject a worker-altered experiment summary before committing checkpoint
     # provenance. A replay would detect the mismatch, but only after the
     # first-completion transaction had already finalized the run's manifest.
