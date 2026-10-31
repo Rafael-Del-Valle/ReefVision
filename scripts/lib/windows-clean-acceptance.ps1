@@ -211,6 +211,22 @@ function New-ReefVisionMsiArguments {
 # Start-Process joins ArgumentList elements into a single Windows command line.
 # Quote paths explicitly so MSI/CAB acceptance works from folders with spaces,
 # including user profiles, without changing the installed product or its data.
+# Windows Installer exit code 3010 means a reboot is required, not that a
+# disposable clean-install acceptance has completed. Never report PASS when
+# binaries, registry state, or file removals may still be pending a reboot.
+function Assert-ReefVisionMsiCompletedWithoutReboot {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Uninstall')][string]$Action,
+        [Parameter(Mandatory = $true)][int]$ExitCode,
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
+    if ($ExitCode -eq 0) { return }
+    if ($ExitCode -in @(3010, 1641)) {
+        throw "msiexec $Action requires a Windows reboot (exit code $ExitCode); acceptance cannot be marked PASS before reboot. Review $LogPath and rerun on a fresh disposable machine."
+    }
+    throw "msiexec $Action failed with exit code $ExitCode. See $LogPath"
+}
+
 function New-ReefVisionMsiAdministrativeArguments {
     param(
         [Parameter(Mandatory = $true)][string]$PackagePath,
