@@ -4720,3 +4720,18 @@ Existing Workflow Builder typed ports, provenance, persisted artifacts,
 project-owned verified longitudinal observations, registered study design,
 representative scientific validation, 1.1 migration reconciliation and native
 Windows MSI/GUI acceptance. No 1.3 branch or release is implied.
+
+## Backend Ruff format repair after Python datetime replay (2026-10-30)
+
+The preceding head `660a97f6d1e24d113f7726c2d102ec8bc5969c23`
+completed 16/19 PR-triggered GitHub Actions workflows successfully,
+including Windows Desktop Build and frontend checks. Backend CI, Pose
+Workflow Validation, and ReefVision 1.0 Acceptance failed before pytest:
+Ruff 0.17.3 requested four one-line expression layouts across three
+existing ecological regression modules. This change applies those exact
+formatter-requested layouts without changing test assertions, biological
+calculations, provenance, experimental-unit logic, migrations, or Workflow
+Builder behavior. Fresh exact-head Ruff, full backend and frontend CI,
+scientist-reviewed longitudinal measurements, migration reconciliation,
+representative biological validation, and installed Windows MSI/GUI
+acceptance remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
