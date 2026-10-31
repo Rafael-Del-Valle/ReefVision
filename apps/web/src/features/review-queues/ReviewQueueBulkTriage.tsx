@@ -266,23 +266,30 @@ export function ReviewQueueBulkTriage({
     }
     let active = true;
     let unlisten: (() => void) | undefined;
-    void getCurrentWindow()
-      .onCloseRequested((event) => {
-        if (!active) return;
-        event.preventDefault();
-        setNativeCloseBlocked(true);
-      })
-      .then((stop) => {
-        if (active) {
-          unlisten = stop;
-          setNativeCloseGuardUnavailable(false);
-        } else {
-          stop();
-        }
-      })
-      .catch(() => {
-        if (active) setNativeCloseGuardUnavailable(true);
-      });
+    // The native window accessor or listener registration may throw before
+    // returning a Promise (for example, during a partially initialized
+    // desktop bridge). Preserve the pending request and expose recovery.
+    try {
+      void getCurrentWindow()
+        .onCloseRequested((event) => {
+          if (!active) return;
+          event.preventDefault();
+          setNativeCloseBlocked(true);
+        })
+        .then((stop) => {
+          if (active) {
+            unlisten = stop;
+            setNativeCloseGuardUnavailable(false);
+          } else {
+            stop();
+          }
+        })
+        .catch(() => {
+          if (active) setNativeCloseGuardUnavailable(true);
+        });
+    } catch {
+      if (active) setNativeCloseGuardUnavailable(true);
+    }
     return () => {
       active = false;
       unlisten?.();
