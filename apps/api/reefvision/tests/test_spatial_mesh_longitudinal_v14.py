@@ -2751,13 +2751,11 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
     """Imported source IDs bind human matching notes beyond their file hashes."""
     project_id = str(create_project(client, "Asset-bound reidentification")["id"])
     base = f"/api/v1/projects/{project_id}"
-    original = b"v 0 0 0\\nv 1 0 0\\nv 0 1 0\\nf 1 2 3\\n"
-    followup = b"v 0 0 0\\nv 1 0 0\\nv 0 2 0\\nf 1 2 3\\n"
+    original = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
+    followup = b"v 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n"
     asset_ids = []
     for filename, data in (("early.obj", original), ("late.obj", followup)):
-        response = client.post(
-            f"{base}/spatial/assets", files={"file": (filename, data)}
-        )
+        response = client.post(f"{base}/spatial/assets", files={"file": (filename, data)})
         assert response.status_code == 201, response.text
         asset_ids.append(response.json()["id"])
     before = {
