@@ -452,6 +452,13 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         session.commit()
 
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 409
+    # Provenance export must not authenticate a graph whose revision metadata
+    # has changed even when its JSON payload still has the original digest.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="Workflow graph provenance checksum failed"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
     with (
         app.state.session_factory() as session,
         pytest.raises(ConflictError, match="Workflow graph revision checksum failed"),
