@@ -38,14 +38,16 @@ def _observation(observation_id: str, height: int) -> dict:
     return result
 
 
-def _imported_observation(observation_id: str, height: int) -> dict:
+def _imported_observation(
+    observation_id: str, height: int, meters_per_unit: float = 1
+) -> dict:
     """Construct genuine imported-source metadata rather than spoofing inline geometry."""
     obj_text = f"# provisional reconstruction\nv 0 0 0\nv 1 0 0\nv 0 {height} 0\nf 1 2 3\n"
     result = preview_from_request(
         MeshPreviewRequest.model_validate(
             {
                 "obj_text": obj_text,
-                "meters_per_unit": 1,
+                "meters_per_unit": meters_per_unit,
                 "calibration_method": "ruler",
                 "calibration_evidence": "Unverified ruler",
                 "specimen_id": "colony-1",
@@ -546,6 +548,10 @@ def test_reused_imported_original_is_not_an_independent_longitudinal_observation
     )
     assert "identical_imported_source_payload_reused_across_observations" in result["qc_warnings"]
     assert "identical_imported_source_payload_geometry_inconsistent" not in result["qc_warnings"]
+    assert "longitudinal_change_withheld_reused_imported_source_payload" in result["qc_warnings"]
+    assert result["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"] is True
+    assert result["delta_surface_area_m2"] is None
+    assert result["average_surface_area_change_m2_per_day"] is None
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["calibration_verified"] is False
 
@@ -578,6 +584,25 @@ def test_reused_imported_original_is_not_an_independent_longitudinal_observation
         "identical_imported_source_payload_reused_across_observations" not in revised["qc_warnings"]
     )
     assert "identical_geometry_fingerprint" in revised["qc_warnings"]
+    assert revised["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"] is False
+    assert revised["delta_surface_area_m2"] == 0
+
+
+def test_recalibrated_reused_original_does_not_invent_growth() -> None:
+    """One imported original can yield different measured areas without new biology."""
+    before = _imported_observation("early", 2)
+    after = _imported_observation("late", 2, meters_per_unit=2)
+    result = compare_mesh_observations(before, after)
+    assert result["after_surface_area_m2"] == pytest.approx(
+        4 * result["before_surface_area_m2"]
+    )
+    assert "identical_geometry_rescaled_not_biological_growth" in result["qc_warnings"]
+    assert result["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"] is True
+    assert result["delta_surface_area_m2"] is None
+    assert result["relative_surface_area_change_percent"] is None
+    assert result["average_surface_area_change_m2_per_day"] is None
+    assert result["before_surface_area_m2"] > 0
+    assert result["provenance"]["specimen_identity_verified"] is False
 
 
 @pytest.mark.parametrize(
@@ -632,6 +657,7 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     }
     late = {
         **common,
+        "meters_per_unit": 2,
         "observation_id": "late",
         "observed_at_utc": "2026-10-02T12:00:00Z",
     }
@@ -648,6 +674,13 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     expected = standalone.json()
     assert "identical_imported_source_payload_reused_across_observations" in expected["qc_warnings"]
     assert "identical_imported_source_payload_metadata_inconsistent" not in expected["qc_warnings"]
+    assert "longitudinal_change_withheld_reused_imported_source_payload" in expected["qc_warnings"]
+    assert expected["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"] is True
+    assert expected["after_surface_area_m2"] == pytest.approx(
+        4 * expected["before_surface_area_m2"]
+    )
+    assert expected["delta_surface_area_m2"] is None
+    assert expected["average_surface_area_change_m2_per_day"] is None
     assert expected["provenance"]["specimen_identity_verified"] is False
 
     graph = {
