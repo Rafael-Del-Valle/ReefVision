@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from hashlib import sha256
+from json import dumps
 from typing import cast
 
 import pytest
@@ -83,12 +84,12 @@ def _registration(before: dict, after: dict, *, asset_ids: bool = False) -> dict
     return evidence
 
 
-
 def test_reused_project_asset_with_conflicting_original_bytes_is_rejected() -> None:
     before, after = _previews("project-1", asset_ids=True)
-    assert before["provenance"]["source_payload_sha256"] != after["provenance"][
-        "source_payload_sha256"
-    ]
+    assert (
+        before["provenance"]["source_payload_sha256"]
+        != after["provenance"]["source_payload_sha256"]
+    )
     after["provenance"]["spatial_source_asset_id"] = ASSET_IDS[0]
     with pytest.raises(ValueError, match="conflicting original payloads"):
         compare_mesh_observations(before, after)
@@ -162,9 +163,10 @@ def test_registration_reexport_with_identical_geometry_rejects_stale_bytes() -> 
     reexport["project_id"] = "project-1"
     reexport["provenance"]["spatial_source_asset_id"] = ASSET_IDS[1]
     assert reexport["provenance"]["geometry_sha256"] == after["provenance"]["geometry_sha256"]
-    assert reexport["provenance"]["source_payload_sha256"] != after["provenance"][
-        "source_payload_sha256"
-    ]
+    assert (
+        reexport["provenance"]["source_payload_sha256"]
+        != after["provenance"]["source_payload_sha256"]
+    )
     with pytest.raises(ValueError, match="both imported source payloads"):
         compare_mesh_observations(before, reexport, registration_evidence=evidence)
 
@@ -173,12 +175,10 @@ def test_registration_reimport_with_identical_bytes_rejects_stale_asset() -> Non
     before, after = _previews("project-1", asset_ids=True)
     evidence = _registration(before, after, asset_ids=True)
     other = deepcopy(after)
-    other["provenance"]["spatial_source_asset_id"] = (
-        "33333333-3333-4333-8333-333333333333"
+    other["provenance"]["spatial_source_asset_id"] = "33333333-3333-4333-8333-333333333333"
+    assert (
+        other["provenance"]["source_payload_sha256"] == after["provenance"]["source_payload_sha256"]
     )
-    assert other["provenance"]["source_payload_sha256"] == after["provenance"][
-        "source_payload_sha256"
-    ]
     with pytest.raises(ValueError, match="both spatial source asset IDs"):
         compare_mesh_observations(before, other, registration_evidence=evidence)
 
@@ -260,9 +260,19 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     assert expected["provenance"]["registration_evidence"] == evidence
     assert "registration_specimen_binding_unavailable" not in expected["qc_warnings"]
     assert "registration_source_payload_binding_unavailable" not in expected["qc_warnings"]
-    assert "registration_spatial_source_asset_binding_unavailable" not in expected[
-        "qc_warnings"
-    ]
+    assert "registration_spatial_source_asset_binding_unavailable" not in expected["qc_warnings"]
+    bundle = expected["provenance"]["review_evidence_bundle"]
+    assert expected["provenance"]["review_evidence_bundle_schema_version"] == (
+        "mesh-review-bundle-0004"
+    )
+    assert bundle["schema_version"] == "mesh-review-bundle-0004"
+    assert bundle["before_spatial_source_asset_id"] == asset_ids[0]
+    assert bundle["after_spatial_source_asset_id"] == asset_ids[1]
+    assert sha256(
+        dumps(
+            bundle, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        ).encode("utf-8")
+    ).hexdigest() == expected["provenance"]["review_evidence_bundle_sha256"]
 
     graph = {
         "graph_id": "registration-source-bound-v14",
@@ -340,9 +350,10 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     assert duplicated_standalone.status_code == 200, duplicated_standalone.text
     duplicated_expected = duplicated_standalone.json()
     assert duplicated_expected["delta_surface_area_m2"] is None
-    assert "longitudinal_change_withheld_reused_spatial_source_asset" in duplicated_expected[
-        "qc_warnings"
-    ]
+    assert (
+        "longitudinal_change_withheld_reused_spatial_source_asset"
+        in duplicated_expected["qc_warnings"]
+    )
     duplicated_graph = deepcopy(graph)
     duplicated_graph["graph_id"] = "registration-reused-asset-withheld-v14"
     duplicated_graph["nodes"][2]["parameters"] = duplicated_after
@@ -350,9 +361,7 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     duplicated_plan = client.post(f"{base}/workflow-graphs/plan", json=duplicated_graph)
     assert duplicated_plan.status_code == 200, duplicated_plan.text
     assert duplicated_plan.json()["executable"] is True
-    duplicated_saved = client.post(
-        f"{base}/workflow-graphs", json={"graph": duplicated_graph}
-    )
+    duplicated_saved = client.post(f"{base}/workflow-graphs", json={"graph": duplicated_graph})
     assert duplicated_saved.status_code == 201, duplicated_saved.text
     duplicated_run = client.post(
         f"{base}/workflow-runs",
@@ -394,9 +403,7 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     graph["nodes"][2]["parameters"] = changed_after
     saved_bad = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved_bad.status_code == 201, saved_bad.text
-    run_bad = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved_bad.json()["id"]}
-    )
+    run_bad = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved_bad.json()["id"]})
     assert run_bad.status_code == 202, run_bad.text
     assert not process_workflow_run_job(
         app.state.settings, app.state.session_factory, str(run_bad.json()["job_id"])
@@ -405,8 +412,7 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     assert failed.status_code == 200, failed.text
     assert failed.json()["run"]["status"] == "failed"
     assert not any(
-        item["data_type"] == "mesh_longitudinal_comparison"
-        for item in failed.json()["artifacts"]
+        item["data_type"] == "mesh_longitudinal_comparison" for item in failed.json()["artifacts"]
     )
 
     # Changing only provisional specimen labels must invalidate the registration
