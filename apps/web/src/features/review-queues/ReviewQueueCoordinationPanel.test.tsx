@@ -216,7 +216,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     );
   });
 
-  it("preserves a comment draft when the reviewer label changes during submission", async () => {
+  it("keeps comment draft after actor switch", async () => {
     let resolveEvent!: (
       value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
     ) => void;
@@ -252,7 +252,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     );
   });
 
-  it("preserves an assignment draft when the reviewer label changes during submission", async () => {
+  it("keeps assignee draft after actor switch", async () => {
     let resolveEvent!: (
       value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
     ) => void;
@@ -288,7 +288,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     );
   });
 
-  it("retries a failed event under its original reviewer identity without erasing the new draft", async () => {
+  it("retries under original actor without clearing new draft", async () => {
     vi.mocked(addReviewQueueEvent)
       .mockRejectedValueOnce(new Error("Connection interrupted"))
       .mockResolvedValueOnce(
