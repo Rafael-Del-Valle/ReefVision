@@ -11,6 +11,7 @@ type EventMutationRequest = {
   payload: ReviewQueueEventCreate;
   commentRevision: number;
   assigneeRevision: number;
+  actorRevision: number;
 };
 
 interface Props {
@@ -42,8 +43,10 @@ export function ReviewQueueCoordinationPanel({
   const [page, setPage] = useState(1);
   // A response may arrive after the researcher has begun a different draft.
   // Retain the exact request for idempotent retries without erasing new work.
+  // A changed reviewer label also makes a draft a distinct researcher's work.
   const commentRevision = useRef(0);
   const assigneeRevision = useRef(0);
+  const actorRevision = useRef(0);
   const [failedRequest, setFailedRequest] =
     useState<EventMutationRequest | null>(null);
   const events = useQuery({
@@ -58,13 +61,15 @@ export function ReviewQueueCoordinationPanel({
       setFailedRequest(null);
       if (
         request.payload.event_type === "comment" &&
-        commentRevision.current === request.commentRevision
+        commentRevision.current === request.commentRevision &&
+        actorRevision.current === request.actorRevision
       ) {
         setComment("");
       }
       if (
         request.payload.event_type === "assign" &&
-        assigneeRevision.current === request.assigneeRevision
+        assigneeRevision.current === request.assigneeRevision &&
+        actorRevision.current === request.actorRevision
       ) {
         setAssignee("");
       }
@@ -93,6 +98,7 @@ export function ReviewQueueCoordinationPanel({
       payload,
       commentRevision: commentRevision.current,
       assigneeRevision: assigneeRevision.current,
+      actorRevision: actorRevision.current,
     });
   }
 
@@ -119,7 +125,10 @@ export function ReviewQueueCoordinationPanel({
           aria-label="Your local reviewer label"
           maxLength={100}
           value={actor}
-          onChange={(event) => setActor(event.target.value)}
+          onChange={(event) => {
+            actorRevision.current += 1;
+            setActor(event.target.value);
+          }}
         />
       </label>
       <p>Assigned reviewer: {events.data?.current_assignee ?? "Unassigned"}</p>
