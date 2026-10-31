@@ -134,11 +134,19 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         accessor = _as_object(accessors[accessor_index], "accessor")
         component = accessor.get("componentType")
         if position:
-            if type(component) is not int or component != 5126 or accessor.get("type") != "VEC3":
+            if (
+                type(component) is not int
+                or component != 5126
+                or accessor.get("type") != "VEC3"
+            ):
                 raise ValueError("GLB positions require float32 VEC3")
             fmt, width, limit = "<fff", 12, MAX_VERTICES
         else:
-            if type(component) is not int or component not in (5123, 5125) or accessor.get("type") != "SCALAR":
+            if (
+                type(component) is not int
+                or component not in (5123, 5125)
+                or accessor.get("type") != "SCALAR"
+            ):
                 raise ValueError("GLB indices require unsigned 16/32-bit scalars")
             fmt, width = ("<H", 2) if component == 5123 else ("<I", 4)
             limit = 3 * MAX_FACES
