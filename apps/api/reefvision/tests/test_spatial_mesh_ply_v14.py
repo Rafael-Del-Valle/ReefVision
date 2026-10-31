@@ -151,9 +151,7 @@ def test_saved_ply_workflow_roundtrip(client: TestClient, index_type: str) -> No
         ("uint32", "4294967296"),
     ],
 )
-def test_ply_face_indices_obey_declared_integer_bounds(
-    index_type: str, invalid_index: str
-) -> None:
+def test_ply_face_indices_obey_declared_integer_bounds(index_type: str, invalid_index: str) -> None:
     invalid = PLY.replace(
         "property list uchar int vertex_indices",
         f"property list uchar {index_type} vertex_indices",
@@ -162,9 +160,7 @@ def test_ply_face_indices_obey_declared_integer_bounds(
         parse_ply_triangles(invalid)
 
 
-def test_invalid_ply_face_index_fails_standalone_and_saved_workflow(
-    client: TestClient,
-) -> None:
+def test_invalid_ply_face_index_fails_standalone_and_saved_workflow(client: TestClient) -> None:
     invalid = PLY.replace(
         "property list uchar int vertex_indices",
         "property list uchar uchar vertex_indices",
