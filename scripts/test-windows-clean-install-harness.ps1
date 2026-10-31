@@ -44,6 +44,11 @@ $nestedData = Join-Path $safeRoot 'scientific-data'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $safeRoot -RepositoryRoot $nestedRepository -DefaultDataRoot $defaultData } 'Acceptance root containing a repository must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $safeRoot -RepositoryRoot $Root -DefaultDataRoot $nestedData } 'Acceptance root containing scientific app data must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Split-Path -Parent $env:USERPROFILE) -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Shared user-profile parent must be rejected.'
+# The acceptance root must not target another user's Documents or shared
+# Public data even though those paths are outside the current USERPROFILE.
+$profilesRoot = Split-Path -Parent $env:USERPROFILE
+Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $profilesRoot 'Public\reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Shared Public profile content must be rejected.'
+Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $profilesRoot 'another-profile\Documents\reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Another user profile must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $env:windir 'reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Windows directory descendants must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $env:ProgramFiles 'reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Program Files descendants must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $Root 'reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Repository descendants must be rejected.'
