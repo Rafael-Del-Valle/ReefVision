@@ -22,6 +22,7 @@ import {
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { WorkspaceShell } from "../../components/ui/WorkspaceShell";
 import {
+  parseGalleryPageDraft,
   readBrowserGalleryPreference,
   resolveGalleryNavigation,
   shouldIgnoreGalleryShortcut,
@@ -866,12 +867,11 @@ function GalleryContent({
     event.preventDefault();
     setPendingNavigationEdge(null);
     const totalPages = images.data?.pages ?? 1;
-    const requested = Number.parseInt(pageDraft, 10);
-    if (!Number.isFinite(requested)) {
+    const destination = parseGalleryPageDraft(pageDraft, totalPages);
+    if (destination === null) {
       setPageDraft(String(page));
       return;
     }
-    const destination = Math.max(1, Math.min(totalPages, requested));
     setPage(destination);
     setPageDraft(String(destination));
   }

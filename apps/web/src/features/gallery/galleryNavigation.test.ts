@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseGalleryPageDraft,
   readGalleryPreference,
   resolveGalleryNavigation,
   writeGalleryPreference,
@@ -70,6 +71,32 @@ describe("gallery preferences", () => {
       page: 1,
       wrap: false,
     });
+  });
+});
+
+describe("parseGalleryPageDraft", () => {
+  it("accepts exact decimal page numbers and clamps valid pages to the collection", () => {
+    expect(parseGalleryPageDraft("2", 5)).toBe(2);
+    expect(parseGalleryPageDraft(" 003 ", 5)).toBe(3);
+    expect(parseGalleryPageDraft("999", 5)).toBe(5);
+  });
+
+  it("rejects exponent, fractional, partial, and unsafe page input", () => {
+    for (const draft of [
+      "",
+      " ",
+      "0",
+      "-1",
+      "1e3",
+      "3.5",
+      "3junk",
+      "1_000",
+      "9007199254740992",
+    ]) {
+      expect(parseGalleryPageDraft(draft, 5)).toBeNull();
+    }
+    expect(parseGalleryPageDraft("2", 0)).toBeNull();
+    expect(parseGalleryPageDraft("2", Number.MAX_SAFE_INTEGER + 1)).toBeNull();
   });
 });
 

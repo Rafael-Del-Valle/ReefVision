@@ -89,6 +89,19 @@ export function writeGalleryPreference(
   }
 }
 
+/** Parse an explicit gallery page without accepting exponent or partial-number input. */
+export function parseGalleryPageDraft(
+  draft: string,
+  totalPages: number,
+): number | null {
+  if (!Number.isSafeInteger(totalPages) || totalPages < 1) return null;
+  const value = draft.trim();
+  if (!/^\d+$/.test(value)) return null;
+  const requested = Number(value);
+  if (!Number.isSafeInteger(requested) || requested < 1) return null;
+  return Math.min(totalPages, requested);
+}
+
 export function resolveGalleryNavigation({
   action,
   index,
