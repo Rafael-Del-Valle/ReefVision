@@ -6,8 +6,7 @@ import pytest
 
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
 from reefvision.services.spatial_mesh_obj_v14 import parse_obj_triangles
-from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
-from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
+from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview, preview_from_request
 
 
 def test_homogeneous_obj_vertices_are_normalized_before_calibration() -> None:
