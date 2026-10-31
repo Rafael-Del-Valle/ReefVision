@@ -1103,6 +1103,19 @@ def compare_mesh_observations(
         and first_source_hash == second_source_hash
     ):
         warnings.append("identical_imported_source_payload_reused_across_observations")
+        # Identical source bytes cannot have different original byte lengths or
+        # import formats. These are contradictory caller-supplied records, not
+        # evidence of specimen change. Missing legacy fields stay unknown.
+        if (
+            first.get("source_payload_size_bytes") is not None
+            and second.get("source_payload_size_bytes") is not None
+            and first["source_payload_size_bytes"] != second["source_payload_size_bytes"]
+        ) or (
+            first.get("source_format") is not None
+            and second.get("source_format") is not None
+            and first["source_format"] != second["source_format"]
+        ):
+            warnings.append("identical_imported_source_payload_metadata_inconsistent")
         if first_hash_valid and second_hash_valid and first_geometry_hash != second_geometry_hash:
             warnings.append("identical_imported_source_payload_geometry_inconsistent")
     if first_hash_valid and second_hash_valid and first_geometry_hash == second_geometry_hash:
