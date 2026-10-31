@@ -397,3 +397,57 @@ def test_invalid_or_mutated_project_binding_is_rejected() -> None:
     before, after = _observations()
     with pytest.raises(ValueError, match="must match the project ID"):
         compare_mesh_observations(before, after, reidentification_evidence=model)
+
+
+@pytest.mark.parametrize("changed_observation", ["before", "after"])
+def test_reidentification_imported_original_binding_rejects_reexport_reuse(
+    changed_observation: str,
+) -> None:
+    """Equal geometry does not authorize reusing a match for changed source bytes."""
+    before, after = _observations()
+    for record, digest in ((before, "c" * 64), (after, "d" * 64)):
+        record["provenance"].update(
+            source_format="obj",
+            source_payload_sha256=digest,
+            source_payload_size_bytes=42,
+        )
+    evidence = {
+        **_evidence(),
+        "before_source_payload_sha256": "c" * 64,
+        "after_source_payload_sha256": "d" * 64,
+    }
+    valid = compare_mesh_observations(before, after, reidentification_evidence=evidence)
+    assert "reidentification_source_payload_binding_unavailable" not in valid["qc_warnings"]
+    assert valid["provenance"]["specimen_identity_verified"] is False
+    record = before if changed_observation == "before" else after
+    record["provenance"]["source_payload_sha256"] = "e" * 64
+    with pytest.raises(ValueError, match="both imported source payloads"):
+        compare_mesh_observations(before, after, reidentification_evidence=evidence)
+
+
+def test_legacy_reidentification_without_imported_source_binding_is_flagged() -> None:
+    before, after = _observations()
+    for record, digest in ((before, "c" * 64), (after, "d" * 64)):
+        record["provenance"].update(
+            source_format="obj",
+            source_payload_sha256=digest,
+            source_payload_size_bytes=42,
+        )
+    result = compare_mesh_observations(before, after, reidentification_evidence=_evidence())
+    assert "reidentification_source_payload_binding_unavailable" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+def test_partial_malformed_or_mutated_source_binding_is_rejected() -> None:
+    evidence = {**_evidence(), "before_source_payload_sha256": "c" * 64}
+    with pytest.raises(PydanticValidationError, match="requires both"):
+        MeshReidentificationEvidence.model_validate(evidence)
+    evidence["after_source_payload_sha256"] = "not-a-digest"
+    with pytest.raises(PydanticValidationError):
+        MeshReidentificationEvidence.model_validate(evidence)
+    evidence["after_source_payload_sha256"] = "d" * 64
+    model = MeshReidentificationEvidence.model_validate(evidence)
+    model.after_source_payload_sha256 = "INVALID"
+    before, after = _observations()
+    with pytest.raises(ValueError, match="Invalid pairwise reidentification evidence"):
+        compare_mesh_observations(before, after, reidentification_evidence=model)
