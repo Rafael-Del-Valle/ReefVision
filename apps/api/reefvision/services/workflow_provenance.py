@@ -133,6 +133,11 @@ def verify_succeeded_node_artifacts(
         declared_outputs,
         list,
     ):
+        # The worker writes exactly one declaration per persisted artifact.
+        # A duplicate or forged extra entry must not disappear in the ID map.
+        if len(declared_outputs) != len(outputs):
+            raise ConflictError("Succeeded workflow node output summary count mismatch")
+
         declarations = {
             str(item.get("artifact_id")): item
             for item in declared_outputs
