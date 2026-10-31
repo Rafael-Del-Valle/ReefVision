@@ -10,6 +10,7 @@ import {
 interface Props {
   queueId: string;
   items: ReviewQueueItem[];
+  onProtectedStateChange?: (queueId: string | null) => void;
 }
 
 type BulkRequest = {
@@ -65,7 +66,11 @@ function eligible(
   return item.review_state === "skipped";
 }
 
-export function ReviewQueueBulkTriage({ queueId, items }: Props) {
+export function ReviewQueueBulkTriage({
+  queueId,
+  items,
+  onProtectedStateChange,
+}: Props) {
   const queryClient = useQueryClient();
   // A mounted dashboard can reuse this panel for a different review queue.
   // Capture the queue and visit at submission, not when a response arrives.
@@ -242,6 +247,13 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     },
   });
   const locked = mutation.isPending || uncertainRequest !== null;
+  useEffect(() => {
+    // The dashboard must keep this instance mounted while an in-flight or
+    // uncertain request owns its idempotency UUID. Never silently drop it on
+    // a filter, page, queue-list refresh, or workspace navigation.
+    onProtectedStateChange?.(locked ? queueId : null);
+    return () => onProtectedStateChange?.(null);
+  }, [locked, onProtectedStateChange, queueId]);
   const ready =
     selectedIds.length > 0 &&
     selectedIds.length <= 100 &&
