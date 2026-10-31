@@ -37,7 +37,7 @@ def _register(
     ("original", "alias"),
     [
         ("Tank-1", "tank-1"),
-        ("Stra\\u00dfe-1", "STRASSE-1"),
+        ("Stra\u00dfe-1", "STRASSE-1"),
     ],
     ids=["ascii-case", "unicode-casefold"],
 )
