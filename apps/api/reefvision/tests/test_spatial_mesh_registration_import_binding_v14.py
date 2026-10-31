@@ -77,8 +77,8 @@ def _registration(before: dict, after: dict, *, asset_ids: bool = False) -> dict
         "target_payload_sha256": second["source_payload_sha256"],
     }
     if asset_ids:
-        evidence["source_spatial_source_asset_id"] = ASSET_IDS[0]
-        evidence["target_spatial_source_asset_id"] = ASSET_IDS[1]
+        evidence["source_spatial_source_asset_id"] = first["spatial_source_asset_id"]
+        evidence["target_spatial_source_asset_id"] = second["spatial_source_asset_id"]
     return evidence
 
 
@@ -171,8 +171,22 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     project_id = str(create_project(client, "Import-bound registration workflow")["id"])
     base = f"/api/v1/projects/{project_id}"
     before, after = _inputs()
+    asset_ids = []
+    for filename, source in (("early.obj", BEFORE_OBJ), ("late.obj", AFTER_OBJ)):
+        uploaded = client.post(
+            f"{base}/spatial/assets",
+            files={"file": (filename, source.encode("utf-8"))},
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        asset_ids.append(uploaded.json()["id"])
+    before.pop("obj_text")
+    after.pop("obj_text")
+    before["asset_id"] = asset_ids[0]
+    after["asset_id"] = asset_ids[1]
     previews = _previews(project_id)
-    evidence = _registration(*previews)
+    for preview, asset_id in zip(previews, asset_ids, strict=True):
+        preview["provenance"]["spatial_source_asset_id"] = asset_id
+    evidence = _registration(*previews, asset_ids=True)
     endpoint = f"{base}/spatial/mesh-longitudinal-comparison"
     standalone = client.post(
         endpoint,
@@ -182,6 +196,9 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     expected = standalone.json()
     assert expected["provenance"]["registration_evidence"] == evidence
     assert "registration_source_payload_binding_unavailable" not in expected["qc_warnings"]
+    assert "registration_spatial_source_asset_binding_unavailable" not in expected[
+        "qc_warnings"
+    ]
 
     graph = {
         "graph_id": "registration-source-bound-v14",
@@ -249,11 +266,14 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     assert artifact == expected
 
     # A new export with identical geometry must fail in both execution paths.
-    changed_after = deepcopy(after)
-    changed_after["obj_text"] += "# revised export comment\n"
-    assert sha256(changed_after["obj_text"].encode()).hexdigest() != (
-        evidence["target_payload_sha256"]
+    reexport = (AFTER_OBJ + "# revised export comment\\n").encode("utf-8")
+    uploaded_reexport = client.post(
+        f"{base}/spatial/assets",
+        files={"file": ("late-reexport.obj", reexport)},
     )
+    assert uploaded_reexport.status_code == 201, uploaded_reexport.text
+    changed_after = {**after, "asset_id": uploaded_reexport.json()["id"]}
+    assert sha256(reexport).hexdigest() != evidence["target_payload_sha256"]
     rejected = client.post(
         endpoint,
         json={
