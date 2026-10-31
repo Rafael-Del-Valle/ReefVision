@@ -103,7 +103,8 @@ export function ReviewQueueCoordinationPanel({
     onSuccess: async (_, request) => {
       if (isCurrentRequest(request)) {
         setFailedRequest((current) =>
-          current?.payload.client_request_id === request.payload.client_request_id
+          current?.payload.client_request_id ===
+          request.payload.client_request_id
             ? null
             : current,
         );
