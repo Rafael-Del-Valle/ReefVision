@@ -69,7 +69,9 @@ function ImageCard({
   const [status, setStatus] = useState<AnnotationStatus>(
     image.annotation_status,
   );
-  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  // A failed URL must not permanently hide a newly generated thumbnail.
+  // Keep failures tied to the specific asset version, not the image card.
+  const [failedThumbnailUrl, setFailedThumbnailUrl] = useState<string | null>(null);
   // Keep the last server-confirmed editable fields separate from local drafts.
   // A refetch must not discard edits made after the previous server snapshot.
   const persistedEditable = useRef({
@@ -156,13 +158,13 @@ function ImageCard({
       }}
     >
       <div className="thumbnail-frame">
-        {thumbnailUrl && !thumbnailFailed ? (
+        {thumbnailUrl && failedThumbnailUrl !== thumbnailUrl ? (
           <img
             src={thumbnailUrl}
             alt={`Thumbnail of ${image.original_filename}`}
             loading="lazy"
             decoding="async"
-            onError={() => setThumbnailFailed(true)}
+            onError={() => setFailedThumbnailUrl(thumbnailUrl)}
           />
         ) : (
           <div className="thumbnail-placeholder" aria-label="Thumbnail pending">
