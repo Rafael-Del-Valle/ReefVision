@@ -86,9 +86,9 @@ export function ReviewQueueCoordinationPanel({
   const commentRevision = useRef(0);
   const assigneeRevision = useRef(0);
   const actorRevision = useRef(0);
-  const [closeConfirmationKey, setCloseConfirmationKey] = useState<string | null>(
-    null,
-  );
+  const [closeConfirmationKey, setCloseConfirmationKey] = useState<
+    string | null
+  >(null);
   const [failedRequests, setFailedRequests] = useState<
     Record<string, { request: EventMutationRequest; errorMessage: string }>
   >({});
