@@ -11,7 +11,9 @@ import pytest
 from reefvision.services.spatial_mesh_glb_v14 import parse_glb_triangles
 
 
-def make_glb(*, translated: bool = False, invalid_selector: str | None = None) -> str:
+def make_glb(
+    *, translated: bool = False, invalid_selector: str | None = None, explicit_canonical: bool = False
+) -> str:
     binary = struct.pack("<9f3H", 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 1, 2)
     doc = {
         "asset": {"version": "2.0"},
@@ -49,6 +51,10 @@ def make_glb(*, translated: bool = False, invalid_selector: str | None = None) -
         doc["accessors"][0]["normalized"] = 0
     elif invalid_selector == "stride_float":
         doc["bufferViews"][0]["byteStride"] = 12.0
+    if explicit_canonical:
+        doc["meshes"][0]["primitives"][0]["mode"] = 4
+        doc["accessors"][0]["normalized"] = False
+        doc["bufferViews"][0]["byteStride"] = 12
     json_bytes = json.dumps(doc).encode()
     json_bytes += b" " * (-len(json_bytes) % 4)
     binary += b"\x00" * (-len(binary) % 4)
@@ -100,3 +106,10 @@ def test_rejects_noncanonical_glb_numeric_geometry_metadata(invalid_selector: st
     """JSON floats and integers must not masquerade as glTF schema types."""
     with pytest.raises(ValueError):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_explicit_canonical_glb_numeric_metadata_preserves_geometry() -> None:
+    """Valid explicit JSON integer/boolean metadata must remain supported."""
+    assert parse_glb_triangles(make_glb(explicit_canonical=True)) == parse_glb_triangles(
+        make_glb()
+    )
