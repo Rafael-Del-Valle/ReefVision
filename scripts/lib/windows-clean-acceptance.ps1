@@ -216,7 +216,7 @@ function New-ReefVisionMsiArguments {
 # binaries, registry state, or file removals may still be pending a reboot.
 function Assert-ReefVisionMsiCompletedWithoutReboot {
     param(
-        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Uninstall')][string]$Action,
+        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Uninstall', 'Extract')][string]$Action,
         [Parameter(Mandatory = $true)][int]$ExitCode,
         [Parameter(Mandatory = $true)][string]$LogPath
     )
