@@ -87,9 +87,12 @@ def _dated_artifact(client: TestClient) -> EcologyMeasurementCandidatesResponse:
         "excluded_source_count": 0,
         "qc_status_counts": {"date_series_candidate": 1},
     }
-    report = EcologyCandidateReport.model_validate(
-        {**report_values, "report_sha256": canonical_json_sha256(report_values)}
-    )
+    # The algorithm marker participates in the digest, not the report schema.
+    report_fields = {
+        key: value for key, value in report_values.items() if key != "algorithm_version"
+    }
+    report_fields["report_sha256"] = canonical_json_sha256(report_values)
+    report = EcologyCandidateReport.model_validate(report_fields)
     return original.model_copy(
         update={
             "candidates": candidates,
@@ -104,6 +107,28 @@ def _dated_artifact(client: TestClient) -> EcologyMeasurementCandidatesResponse:
             "candidate_report": report,
         }
     )
+
+
+def test_dated_report_fixture_roundtrips_with_canonical_digest(client: TestClient) -> None:
+    """Fixture must mirror the strict production report envelope and signed digest."""
+    report = _dated_artifact(client).candidate_report
+    assert report is not None
+    payload = report.model_dump(mode="json")
+    assert "algorithm_version" not in payload
+    digest_values = {
+        "algorithm_version": "ecology-candidate-report-0001",
+        **{
+            key: value
+            for key, value in payload.items()
+            if key not in {"schema_version", "report_sha256", "evidence_level", "review_gate"}
+        },
+    }
+    assert report.report_sha256 == canonical_json_sha256(digest_values)
+    assert EcologyCandidateReport.model_validate(payload) == report
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        EcologyCandidateReport.model_validate(
+            {**payload, "algorithm_version": "ecology-candidate-report-0001"}
+        )
 
 
 class _SyntheticSeasonalTimezone(tzinfo):
