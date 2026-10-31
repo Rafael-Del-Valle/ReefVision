@@ -254,7 +254,9 @@ class MeshRegistrationEvidence(BaseModel):
         if (self.source_geometry_sha256 is None) != (self.target_geometry_sha256 is None):
             raise ValueError("Registration geometry binding requires both SHA-256 fingerprints")
         if (self.source_payload_sha256 is None) != (self.target_payload_sha256 is None):
-            raise ValueError("Registration source payload binding requires both SHA-256 fingerprints")
+            raise ValueError(
+                "Registration source payload binding requires both SHA-256 fingerprints"
+            )
         if (self.source_spatial_source_asset_id is None) != (
             self.target_spatial_source_asset_id is None
         ):
