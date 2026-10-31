@@ -49,7 +49,23 @@ vi.mock("./QuickConfidenceReviewDialog", () => ({
   }) => <button onClick={onMarkComplete}>Quick modal complete</button>,
 }));
 vi.mock("./ReviewQueueBulkTriage", () => ({
-  ReviewQueueBulkTriage: () => null,
+  ReviewQueueBulkTriage: ({
+    onProtectedStateChange,
+  }: {
+    onProtectedStateChange?: (queueId: string | null) => void;
+  }) => (
+    <div>
+      <button
+        type="button"
+        onClick={() => onProtectedStateChange?.("queue-a")}
+      >
+        Simulate unresolved bulk request
+      </button>
+      <button type="button" onClick={() => onProtectedStateChange?.(null)}>
+        Resolve unresolved bulk request
+      </button>
+    </div>
+  ),
 }));
 vi.mock("./ReviewQueueCoordinationPanel", () => ({
   // Stateful stand-in: the real panel separately tests per-item drafts and
@@ -296,6 +312,59 @@ describe("ReviewQueueDashboard scope isolation", () => {
       screen.getByRole("button", { name: "Close coordination test" }),
     );
     expect(screen.queryByLabelText("Coordination test draft")).toBeNull();
+  });
+
+  it("preserves an uncertain bulk retry owner across filters and a missing queue-list entry", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-a", "image-a")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
+    const { client, onSelectedQueueChange, onCoordinationOpenChange } = mount();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Simulate unresolved bulk request",
+      }),
+    );
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(true),
+    );
+    fireEvent.change(screen.getByLabelText("Review state"), {
+      target: { value: "skipped" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      client.setQueryData(reviewQueuesQueryKey("project-a", "project", ""), [
+        queue("queue-other"),
+      ]);
+    });
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(
+      screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
+    ).toBeTruthy();
+    expect(
+      document.querySelector<HTMLButtonElement>(
+        ".version-list .version-card",
+      )?.disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Open quick-review popout" }),
+    ).toHaveProperty("disabled", true);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
+    );
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(false),
+    );
   });
 
   it("signals coordination ownership to the host and prevents editor navigation until protected close", async () => {
