@@ -4767,3 +4767,24 @@ weights, environmental context or cross-track merge is introduced.
 observations, registered experimental-unit independence, representative
 ecological validation, 1.1 migration reconciliation, and installed Windows
 GUI/MSI acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Exact-head endpoint replay Ruff formatting repair (2026-10-31)
+
+At prior head `be4e693e4ef638a723791fb82d5379b734cc81e2`, 16 of 19
+PR-triggered GitHub Actions workflows succeeded, including Windows Desktop
+Build. Backend CI, Pose Workflow Validation, and ReefVision 1.0 Acceptance
+failed at Ruff 0.17.3 `format --check` before running backend tests.
+All three jobs reported the same nine formatting adjustments in
+`test_ecology_endpoint_source_replay_1_2.py`: compacting one API call,
+one `model_copy`, two projected endpoint validation calls, three response
+validation calls, and two `pytest.raises` contexts. Applied the exact
+CI-reported formatting without altering any test assertions, scientific
+calculations, source-linked provenance, persisted Workflow Builder behavior,
+review gates, experimental units, migrations, or verified datasets.
+
+This is a test-gate repair, not new ecological functionality. The new head
+requires fresh backend/full CI validation. Authenticated scientist-reviewed
+longitudinal measurements, registered independent experimental units,
+representative coral data, reconciliation with 1.1 migrations, and physical
+installed Windows GUI/MSI acceptance remain required. **1.2 NOT
+RELEASE-READY; 1.3 not started.**
