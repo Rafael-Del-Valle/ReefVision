@@ -1,11 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   addReviewQueueEvent,
   getReviewQueueEvents,
   type ReviewQueueEventCreate,
 } from "../../api/client";
+
+type EventMutationRequest = {
+  payload: ReviewQueueEventCreate;
+  commentRevision: number;
+  assigneeRevision: number;
+};
 
 interface Props {
   queueId: string;
@@ -34,20 +40,34 @@ export function ReviewQueueCoordinationPanel({
   const [assignee, setAssignee] = useState("");
   const [comment, setComment] = useState("");
   const [page, setPage] = useState(1);
+  // A response may arrive after the researcher has begun a different draft.
+  // Retain the exact request for idempotent retries without erasing new work.
+  const commentRevision = useRef(0);
+  const assigneeRevision = useRef(0);
   const [failedRequest, setFailedRequest] =
-    useState<ReviewQueueEventCreate | null>(null);
+    useState<EventMutationRequest | null>(null);
   const events = useQuery({
     queryKey: ["review_queue_events", queueId, itemId, page],
     queryFn: ({ signal }) =>
       getReviewQueueEvents(queueId, itemId, page, signal),
   });
   const mutation = useMutation({
-    mutationFn: (payload: ReviewQueueEventCreate) =>
-      addReviewQueueEvent(queueId, itemId, payload),
-    onSuccess: async (_, payload) => {
+    mutationFn: (request: EventMutationRequest) =>
+      addReviewQueueEvent(queueId, itemId, request.payload),
+    onSuccess: async (_, request) => {
       setFailedRequest(null);
-      if (payload.event_type === "comment") setComment("");
-      if (payload.event_type === "assign") setAssignee("");
+      if (
+        request.payload.event_type === "comment" &&
+        commentRevision.current === request.commentRevision
+      ) {
+        setComment("");
+      }
+      if (
+        request.payload.event_type === "assign" &&
+        assigneeRevision.current === request.assigneeRevision
+      ) {
+        setAssignee("");
+      }
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_events", queueId, itemId],
       });
@@ -69,7 +89,11 @@ export function ReviewQueueCoordinationPanel({
       ...(eventType === "comment" ? { comment: text } : {}),
       ...(eventType === "assign" ? { assignee: reviewer } : {}),
     };
-    mutation.mutate(payload);
+    mutation.mutate({
+      payload,
+      commentRevision: commentRevision.current,
+      assigneeRevision: assigneeRevision.current,
+    });
   }
 
   const locked = mutation.isPending || failedRequest !== null;
@@ -105,7 +129,10 @@ export function ReviewQueueCoordinationPanel({
           aria-label="Reviewer to assign"
           maxLength={100}
           value={assignee}
-          onChange={(event) => setAssignee(event.target.value)}
+          onChange={(event) => {
+            assigneeRevision.current += 1;
+            setAssignee(event.target.value);
+          }}
         />
       </label>
       <div className="version-actions">
@@ -131,7 +158,10 @@ export function ReviewQueueCoordinationPanel({
           aria-label="Review comment"
           maxLength={2000}
           value={comment}
-          onChange={(event) => setComment(event.target.value)}
+          onChange={(event) => {
+            commentRevision.current += 1;
+            setComment(event.target.value);
+          }}
         />
       </label>
       <button
