@@ -359,8 +359,12 @@ class MeshReidentificationEvidence(BaseModel):
     # Imported source bytes are distinct from parsed geometry: a re-export can
     # preserve triangles while changing the original OBJ/PLY/GLB payload.
     # Legacy evidence without this paired binding remains provisional.
-    before_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    after_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    before_source_payload_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    after_source_payload_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
 
     # Optional timepoint binding: observation IDs and geometry hashes alone do
     # not prevent a dated survey record from being silently reassigned.
