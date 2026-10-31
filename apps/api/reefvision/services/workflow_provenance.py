@@ -228,6 +228,13 @@ def build_workflow_run_provenance(
     ):
         raise ConflictError("Workflow graph provenance checksum failed")
 
+    # Persisted run inputs and results are scientific evidence. Coercing a
+    # JSON array of pairs to a dict can hide changes to its original shape.
+    if run.input_json is not None and not isinstance(run.input_json, dict):
+        raise ConflictError("Workflow run inputs must be a JSON object")
+    if run.result_json is not None and not isinstance(run.result_json, dict):
+        raise ConflictError("Workflow run result must be a JSON object")
+
     nodes = list(
         session.scalars(
             select(WorkflowNodeRun)
