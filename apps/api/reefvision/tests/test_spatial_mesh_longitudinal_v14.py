@@ -53,9 +53,13 @@ def _rigid_transform() -> list[list[float]]:
     [
         ("specimen_id", "   ", "valid syntax"),
         ("specimen_id", "colony 16", "valid syntax"),
+        ("specimen_id", "c" * 129, "valid syntax"),
         ("observation_id", "\t", "valid syntax"),
         ("observation_id", "survey 1", "valid syntax"),
+        ("observation_id", "s" * 129, "valid syntax"),
         ("project_id", "   ", "nonempty project_id"),
+        ("project_id", "p" * 129, "nonempty project_id"),
+        ("project_id", "project\\nother", "nonempty project_id"),
     ],
 )
 def test_replayed_longitudinal_artifacts_reject_invalid_identity_labels(
@@ -83,6 +87,22 @@ def test_replayed_longitudinal_artifacts_reject_invalid_identity_labels(
             after["provenance"][field] = invalid
     with pytest.raises(ValueError, match=error):
         compare_mesh_observations(before, after)
+
+
+def test_replayed_longitudinal_artifacts_accept_maximum_valid_identity_lengths() -> None:
+    """The 128-character schema boundary remains valid for replayed previews."""
+    specimen_id = "c" * 128
+    before_params = _mesh("s" * 127 + "1", "2026-10-01T12:00:00Z", 1)
+    after_params = _mesh("s" * 127 + "2", "2026-10-02T12:00:00Z", 2)
+    before_params["specimen_id"] = specimen_id
+    after_params["specimen_id"] = specimen_id
+    before = preview_from_request(MeshPreviewRequest(**before_params))
+    after = preview_from_request(MeshPreviewRequest(**after_params))
+    before["project_id"] = "p" * 128
+    after["project_id"] = "p" * 128
+    result = compare_mesh_observations(before, after)
+    assert result["elapsed_days"] == pytest.approx(1)
+    assert result["provenance"]["specimen_identity_verified"] is False
 
 
 def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -> None:
