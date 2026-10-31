@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from reefvision.db.models import (
+    Job,
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
     WorkflowArtifact,
@@ -173,6 +174,38 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["pose_schema_id"] == dataset["pose_schema_id"]
     assert payload["pose_schema_revision"] == dataset["pose_schema_revision"]
     assert payload["pose_schema_content_hash"] == dataset["pose_schema_content_hash"]
+
+    # A corrupted cross-project job must not overwrite a completed saved
+    # scientist-verified workflow. The terminal-run guard must precede the
+    # job ownership check even when both fields are invalid.
+    job_id = str(queued.json()["job_id"])
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        original_job_project = job.project_id
+        original_job_completed_at = job.completed_at
+        original_job_error = job.error_message
+        original_job_result = dict(job.result_json or {})
+        job.status = "queued"
+        job.project_id = str(other_project["id"])
+        session.commit()
+
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is False
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "failed"
+        assert job.error_message == "Workflow run is already terminal; refusing queued job replay"
+        job.status = "succeeded"
+        job.project_id = original_job_project
+        job.completed_at = original_job_completed_at
+        job.error_message = original_job_error
+        job.result_json = original_job_result
+        session.commit()
+
+    preserved = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert preserved.status_code == 200, preserved.text
+    assert preserved.json() == run
 
     # A digest-valid artifact is not trustworthy if its saved producer has
     # changed. The run-detail API must reject that lineage drift, not merely
