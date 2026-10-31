@@ -70,6 +70,13 @@ function ImageCard({
     image.annotation_status,
   );
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  // Keep the last server-confirmed editable fields separate from local drafts.
+  // A refetch must not discard edits made after the previous server snapshot.
+  const persistedEditable = useRef({
+    id: image.id,
+    groupKey: image.group_key ?? "",
+    status: image.annotation_status,
+  });
   const thumbnailVersion = image.thumbnail_path
     ? encodeURIComponent(image.thumbnail_path)
     : null;
@@ -77,12 +84,28 @@ function ImageCard({
     ? `${imageThumbnailUrl(image.id)}&rv_thumb=${thumbnailVersion}`
     : null;
 
-  // Thumbnail completion and annotation-count polling replace the image object.
-  // Only persisted editable fields should reset an unsaved metadata draft;
-  // otherwise a background thumbnail refresh can silently erase user input.
+  // Background refreshes and concurrent metadata changes must not silently
+  // erase unsaved scientific group/status edits. Reconcile each field against
+  // the *previous* server snapshot, updating only fields the user has not edited.
   useEffect(() => {
-    setGroupKey(image.group_key ?? "");
-    setStatus(image.annotation_status);
+    const previous = persistedEditable.current;
+    const next = {
+      id: image.id,
+      groupKey: image.group_key ?? "",
+      status: image.annotation_status,
+    };
+    if (previous.id !== next.id) {
+      setGroupKey(next.groupKey);
+      setStatus(next.status);
+    } else {
+      setGroupKey((draft) =>
+        draft === previous.groupKey ? next.groupKey : draft,
+      );
+      setStatus((draft) =>
+        draft === previous.status ? next.status : draft,
+      );
+    }
+    persistedEditable.current = next;
   }, [image.id, image.group_key, image.annotation_status]);
 
   // A thumbnail job can finish after an earlier 404. Retry only when its
