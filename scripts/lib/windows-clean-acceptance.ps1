@@ -137,7 +137,9 @@ function Assert-ReefVisionSafeAcceptanceRoot {
                 # Roaming, or arbitrary user-profile directories. The old
                 # exception allowed every descendant of USERPROFILE.
                 $localTemp = Resolve-ReefVisionAcceptancePath (Join-Path $env:LOCALAPPDATA 'Temp')
-                if ($resolved -ieq $localTemp -or
+                # The Temp directory itself can contain unrelated user files.
+                # Only a disposable child directory may be an acceptance root.
+                if ($resolved -ine $localTemp -and
                     (Test-ReefVisionPathWithin -Path $resolved -Parent $localTemp)) {
                     continue
                 }
