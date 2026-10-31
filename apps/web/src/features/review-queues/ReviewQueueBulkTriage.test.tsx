@@ -329,9 +329,7 @@ describe("ReviewQueueBulkTriage", () => {
         name: "Retry identical bulk action",
       });
       expect(invalidate).not.toHaveBeenCalled();
-      expect(screen.getByRole("alert").textContent).toContain(
-        "changed count",
-      );
+      expect(screen.getByRole("alert").textContent).toContain("changed count");
     },
   );
 
