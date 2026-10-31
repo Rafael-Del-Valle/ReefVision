@@ -337,6 +337,30 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
 
+    # Equivalent key/value pairs in a JSON array must not be coerced back
+    # into an apparently valid saved result for this frozen-pose execution.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.result_json = list(original_node_result.items())
+        session.commit()
+
+    malformed_result = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert malformed_result.status_code == 409, malformed_result.text
+    assert "result must be a JSON object" in malformed_result.json()["detail"]
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="result must be a JSON object"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.result_json = original_node_result
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+
     # A completed saved workflow must not expose a changed scientific output
     # through the run-detail API, even when its original digest remains stored.
     with app.state.session_factory() as session:
