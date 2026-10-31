@@ -183,15 +183,7 @@ def test_malformed_obj_rejected_by_api_and_persisted_workflow(
     assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
 
 
-ATTRIBUTE_RECORDS = (
-    "v 0 0 0\n"
-    "v 2 0 0\n"
-    "v 0 3 0\n"
-    "vt 0 0\n"
-    "vt 1 0\n"
-    "vt 0 1\n"
-    "vn 0 0 1\n"
-)
+ATTRIBUTE_RECORDS = "v 0 0 0\nv 2 0 0\nv 0 3 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\n"
 
 
 @pytest.mark.parametrize(
@@ -236,3 +228,70 @@ def test_declared_obj_attribute_indices_preserve_saved_workflow_measurement(
     assert artifact["surface_area_m2"] == standalone.json()["surface_area_m2"]
     assert artifact["provenance"] == standalone.json()["provenance"]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
+
+
+@pytest.mark.parametrize(
+    "invalid_declaration",
+    [
+        "vt nan 0",
+        "vt inf",
+        "vt bad 0",
+        "vt",
+        "vt 0 0 0 0",
+        "vn 0 0 inf",
+        "vn 0 0",
+        "vn 0 0 1 2",
+    ],
+)
+def test_invalid_obj_attribute_declarations_fail_standalone_and_saved_workflow(
+    client: TestClient, invalid_declaration: str
+) -> None:
+    project_id = str(create_project(client, "Reject malformed OBJ attribute declarations")["id"])
+    obj_text = (
+        "v 0 0 0\n"
+        "v 2 0 0\n"
+        "v 0 3 0\n"
+        f"{invalid_declaration}\n"
+        "f 1 2 3\n"
+    )
+    params = {**COMMON, "obj_text": obj_text}
+    with pytest.raises(ValueError, match=r"OBJ line 4: invalid (vt|vn) declaration"):
+        preview_from_request(MeshPreviewRequest.model_validate(params))
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
+    assert response.status_code == 400, response.text
+    assert "OBJ line 4: invalid" in response.text
+
+    detail = _run_saved_mesh(client, project_id, params)
+    assert detail["completed"] is False
+    assert detail["run"]["status"] == "failed"
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
+
+
+def test_valid_obj_attribute_declaration_lengths_preserve_workflow_parity(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Valid OBJ attribute declaration lengths")["id"])
+    obj_text = (
+        "v 0 0 0\n"
+        "v 2 0 0\n"
+        "v 0 3 0\n"
+        "vt 0\n"
+        "vt 1 0\n"
+        "vt 0 1 0\n"
+        "vn 0 0 1\n"
+        "f 1/1/1 2/2/1 3/3/1\n"
+    )
+    params = {**COMMON, "obj_text": obj_text}
+    standalone = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    detail = _run_saved_mesh(client, project_id, params)
+    assert detail["completed"] is True
+    assert detail["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_area_m2"] == standalone.json()["surface_area_m2"]
+    assert artifact["provenance"] == standalone.json()["provenance"]
+    assert artifact["provenance"]["calibration_verified"] is False
