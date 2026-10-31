@@ -245,7 +245,12 @@ export function ReviewQueueDashboard({
     onSelectedQueueChange?.(
       coordinationQueueId || bulkProtectedQueueId || activeQueueId || null,
     );
-  }, [onSelectedQueueChange, activeQueueId, coordinationQueueId, bulkProtectedQueueId]);
+  }, [
+    onSelectedQueueChange,
+    activeQueueId,
+    coordinationQueueId,
+    bulkProtectedQueueId,
+  ]);
 
   useEffect(
     () => () => {
