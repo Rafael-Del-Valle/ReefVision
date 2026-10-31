@@ -4900,3 +4900,33 @@ registered independent experimental units, representative biological and
 human/model acceptance, 1.1 migration reconciliation, and physical installed
 Windows MSI/GUI acceptance remain outstanding. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+## Saved-workflow fabricated-visit acceptance repair (2026-10-31)
+
+At exact head `222ebfbab0bd607c5f88bd90589fbc8b93c41caa`, 17 of 19
+PR-triggered GitHub Actions workflows succeeded, including the Windows
+Desktop Build, Pose Workflow Validation, frontend and E2E. Backend CI and
+ReefVision 1.0 Acceptance each reported **2,194 passed, one failed, and
+32 skipped**. The single failing case was
+`test_saved_workflow_rejects_rehashed_fabricated_visit`: after running an
+actual saved Workflow Builder graph, the test created a second project using
+a shared fixed annotation UUID. The annotations API correctly rejected that
+cross-image reuse with HTTP 400, before the intended forged-visit replay
+assertion could execute. This is a test-fixture collision, not evidence of a
+production ecological replay failure.
+
+The regression now synthesizes a timezone-aware, biologically unit-labeled
+visit **in memory** from the already persisted source candidate. It signs the
+modified saved artifact without changing the original undated source rows,
+then requires current-contract deserialization to reject the fabricated
+visit as inconsistent with its source. No additional project, image or
+annotation is created. The test retains real API and executed saved-workflow
+coverage, typed artifact provenance, `linked_unverified` evidence and the
+scientist-review gate. No production code, migration, environmental context,
+model weights or unreviewed version branch is changed.
+
+**Release HOLD:** new exact-head backend/frontend/E2E/Windows CI, independent
+scientist-reviewed longitudinal observations, registered experimental-unit
+independence, representative biological/human-model acceptance, 1.1 migration
+reconciliation and installed Windows MSI/GUI checks. **1.2 NOT
+RELEASE-READY; 1.3 not started.**
