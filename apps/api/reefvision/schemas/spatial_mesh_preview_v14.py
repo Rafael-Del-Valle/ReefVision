@@ -176,6 +176,19 @@ class MeshRegistrationEvidence(BaseModel):
     # This is a consistency binding, not proof of alignment or identity.
     source_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     target_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    # Geometry alone cannot bind a registration to an imported OBJ/PLY/GLB
+    # original. Source byte fingerprints and project asset IDs are separate,
+    # optional paired consistency checks; neither authenticates acquisition.
+    source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    target_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_spatial_source_asset_id: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    )
+    target_spatial_source_asset_id: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    )
     # The same reconstruction may be recalibrated without changing its geometry
     # hash. Pairwise scale bindings prevent reusing a meter-valued transform
     # against a newly scaled mesh; these remain unverified caller evidence.
@@ -229,6 +242,12 @@ class MeshRegistrationEvidence(BaseModel):
             raise ValueError("Registration timepoint binding requires both UTC timestamps")
         if (self.source_geometry_sha256 is None) != (self.target_geometry_sha256 is None):
             raise ValueError("Registration geometry binding requires both SHA-256 fingerprints")
+        if (self.source_payload_sha256 is None) != (self.target_payload_sha256 is None):
+            raise ValueError("Registration source payload binding requires both SHA-256 fingerprints")
+        if (self.source_spatial_source_asset_id is None) != (
+            self.target_spatial_source_asset_id is None
+        ):
+            raise ValueError("Registration asset binding requires both spatial source IDs")
         if (self.source_meters_per_mesh_unit is None) != (self.target_meters_per_mesh_unit is None):
             raise ValueError("Registration calibration scale binding requires both scales")
         if (self.source_relative_scale_uncertainty is None) != (
