@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -338,6 +339,29 @@ class EcologyCandidateReport(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
+    @model_validator(mode="after")
+    def require_replayable_report_digest(self) -> EcologyCandidateReport:
+        """A saved ecological report must match its own canonical summary.
+
+        A digest checks consistency, not the authenticity of the study data.
+        """
+        values = {
+            "algorithm_version": "ecology-candidate-report-0001",
+            "project_id": self.project_id,
+            "source_input_sha256": self.source_input_sha256,
+            "candidate_count": self.candidate_count,
+            "source_image_count": self.source_image_count,
+            "source_organism_count": self.source_organism_count,
+            "declared_experimental_unit_count": self.declared_experimental_unit_count,
+            "date_qc_pass_series_count": self.date_qc_pass_series_count,
+            "excluded_series_count": self.excluded_series_count,
+            "excluded_source_count": self.excluded_source_count,
+            "qc_status_counts": dict(sorted(self.qc_status_counts.items())),
+        }
+        if canonical_json_sha256(values) != self.report_sha256:
+            raise ValueError("Ecological candidate report fingerprint mismatch")
+        return self
+
 
 class EcologyMeasurementCandidatesResponse(BaseModel):
     schema_version: Literal["ecology-measurement-candidates-0001"] = (
@@ -389,6 +413,51 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def require_report_source_consistency(self) -> EcologyMeasurementCandidatesResponse:
+        """Prevent a rehashed report from misrepresenting saved source rows.
+
+        Historical payloads without a report remain readable. Alternative
+        spellings of the same declared unit are counted once for modern
+        reports, while legacy literal-label counts remain admissible.
+        Neither count authenticates experimental-unit independence.
+        """
+        report = self.candidate_report
+        if report is None:
+            return self
+        qc_counts: dict[str, int] = {}
+        for row in self.sampling_date_qc:
+            qc_counts[row.qc_status] = qc_counts.get(row.qc_status, 0) + 1
+        declared_units = {
+            (row.experimental_unit_type, row.experimental_unit_id)
+            for row in self.candidates
+            if row.experimental_unit_type and row.experimental_unit_id
+        }
+        canonical_units = {
+            (classify_ecological_unit_level(unit_type) or unit_type, unit_id)
+            for unit_type, unit_id in declared_units
+        }
+        expected = (
+            report.project_id == self.project_id
+            and report.source_input_sha256 == self.input_sha256
+            and report.candidate_count == len(self.candidates)
+            and report.source_image_count
+            == len({row.image_id for row in self.candidates})
+            and report.source_organism_count
+            == len({row.organism_key for row in self.candidates})
+            and report.declared_experimental_unit_count
+            in (len(declared_units), len(canonical_units))
+            and report.date_qc_pass_series_count
+            == qc_counts.get("date_series_candidate", 0)
+            and report.excluded_series_count
+            == len(self.sampling_date_qc) - qc_counts.get("date_series_candidate", 0)
+            and report.excluded_source_count == len(self.exclusions)
+            and report.qc_status_counts == qc_counts
+        )
+        if not expected:
+            raise ValueError("Ecological candidate report does not match source rows")
+        return self
+
     @model_validator(mode="before")
     @classmethod
     def require_current_payload_fingerprint(cls, raw: Any) -> Any:
@@ -398,8 +467,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         """
         if (
             not isinstance(raw, dict)
-            or raw.get("source_fingerprint_contract")
-            != "ecology-measurement-candidates-0021"
+            or raw.get("source_fingerprint_contract") != "ecology-measurement-candidates-0021"
         ):
             return raw
         candidates = raw.get("candidates", [])
@@ -413,8 +481,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             if not isinstance(rows, list):
                 return rows
             return [
-                row.model_dump(mode="json") if isinstance(row, BaseModel) else row
-                for row in rows
+                row.model_dump(mode="json") if isinstance(row, BaseModel) else row for row in rows
             ]
 
         payload = {
@@ -422,20 +489,14 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             "project_id": raw.get("project_id"),
             "registry_history_sha256": raw.get("source_registry_history_sha256"),
             "registry_image_evidence_sha256": raw.get("source_image_evidence_sha256"),
-            "registry_annotation_evidence_sha256": raw.get(
-                "source_annotation_evidence_sha256"
-            ),
-            "registry_calibration_evidence_sha256": raw.get(
-                "source_calibration_evidence_sha256"
-            ),
+            "registry_annotation_evidence_sha256": raw.get("source_annotation_evidence_sha256"),
+            "registry_calibration_evidence_sha256": raw.get("source_calibration_evidence_sha256"),
             "candidates": persisted_rows("candidates"),
             "sampling_date_qc": persisted_rows("sampling_date_qc"),
             "projected_visit_coverage": persisted_rows("projected_visit_coverage"),
             "projected_endpoint_changes": persisted_rows("projected_endpoint_changes"),
             "projected_unit_summaries": persisted_rows("projected_unit_summaries"),
-            "projected_population_summaries": persisted_rows(
-                "projected_population_summaries"
-            ),
+            "projected_population_summaries": persisted_rows("projected_population_summaries"),
             "exclusions": persisted_rows("exclusions"),
         }
         if canonical_json_sha256(payload) != raw.get("input_sha256"):
