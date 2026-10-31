@@ -86,8 +86,9 @@ export function ReviewQueueCoordinationPanel({
   const commentRevision = useRef(0);
   const assigneeRevision = useRef(0);
   const actorRevision = useRef(0);
-  const [failedRequest, setFailedRequest] =
-    useState<EventMutationRequest | null>(null);
+  const [failedRequests, setFailedRequests] = useState<
+    Record<string, { request: EventMutationRequest; errorMessage: string }>
+  >({});
   const events = useQuery({
     queryKey: ["review_queue_events", queueId, itemId, page],
     queryFn: ({ signal }) =>
@@ -101,14 +102,19 @@ export function ReviewQueueCoordinationPanel({
     mutationFn: (request: EventMutationRequest) =>
       addReviewQueueEvent(request.queueId, request.itemId, request.payload),
     onSuccess: async (_, request) => {
-      if (isCurrentRequest(request)) {
-        setFailedRequest((current) =>
-          current?.payload.client_request_id ===
+      // Clear only the matching item and request UUID, even if navigation
+      // changed while the event was in flight. Other uncertain events survive.
+      setFailedRequests((current) => {
+        if (
+          current[request.draftKey]?.request.payload.client_request_id !==
           request.payload.client_request_id
-            ? null
-            : current,
-        );
-      }
+        ) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[request.draftKey];
+        return next;
+      });
       if (
         isCurrentRequest(request) &&
         request.payload.event_type === "comment" &&
@@ -141,13 +147,21 @@ export function ReviewQueueCoordinationPanel({
         queryKey: ["review_queue_events", request.queueId, request.itemId],
       });
     },
-    onError: (_, request) => {
-      if (isCurrentRequest(request)) setFailedRequest(request);
+    onError: (error, request) => {
+      // A late failure belongs to its original review item. Keep its UUID
+      // available for an exact replay when the researcher returns to that item.
+      setFailedRequests((current) => ({
+        ...current,
+        [request.draftKey]: {
+          request,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+      }));
     },
   });
 
-  const activeFailedRequest =
-    failedRequest && isCurrentRequest(failedRequest) ? failedRequest : null;
+  const activeFailure = failedRequests[draftKey];
+  const activeFailedRequest = activeFailure?.request ?? null;
 
   function submit(eventType: ReviewQueueEventCreate["event_type"]) {
     const name = actor.trim();
@@ -253,8 +267,8 @@ export function ReviewQueueCoordinationPanel({
       >
         Add comment
       </button>
-      {activeFailedRequest && mutation.error && (
-        <p role="alert">{mutation.error.message}</p>
+      {activeFailure && (
+        <p role="alert">{activeFailure.errorMessage}</p>
       )}
       {activeFailedRequest && (
         <div role="group" aria-label="Failed review event">
@@ -265,7 +279,12 @@ export function ReviewQueueCoordinationPanel({
           <button
             type="button"
             disabled={mutation.isPending}
-            onClick={() => mutation.mutate(activeFailedRequest)}
+            onClick={() =>
+              mutation.mutate({
+                ...activeFailedRequest,
+                scopeEpoch: currentScope.current.epoch,
+              })
+            }
           >
             Retry event
           </button>
@@ -274,7 +293,11 @@ export function ReviewQueueCoordinationPanel({
             className="secondary"
             disabled={mutation.isPending}
             onClick={() => {
-              setFailedRequest(null);
+              setFailedRequests((current) => {
+                const next = { ...current };
+                delete next[draftKey];
+                return next;
+              });
               mutation.reset();
             }}
           >
