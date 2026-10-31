@@ -84,3 +84,42 @@ def test_inline_obj_comments_do_not_hide_malformed_geometry(invalid: str) -> Non
     text = f"v 0 0 0\nv 2 0 0\nv 0 3 0\n{invalid}\nf 1 2 3\n"
     with pytest.raises(ValueError):
         parse_obj_triangles(text)
+
+
+@pytest.mark.parametrize(
+    "face",
+    [
+        "f 1 2 3",
+        "f 1/2 2/3 3/4",
+        "f 1//2 2//3 3//4",
+        "f 1/2/3 2/3/4 3/4/5",
+        "f -3/-3/-3 -2/-2/-2 -1/-1/-1",
+    ],
+)
+def test_supported_obj_face_reference_forms_preserve_geometry(face: str) -> None:
+    text = f"v 0 0 0\nv 2 0 0\nv 0 3 0\n{face}\n"
+    vertices, faces = parse_obj_triangles(text)
+    assert vertices == [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 3.0, 0.0]]
+    assert faces == [[0, 1, 2]]
+
+
+@pytest.mark.parametrize(
+    "face",
+    [
+        "f 1/ 2 3",
+        "f 1// 2 3",
+        "f 1/2/ 2 3",
+        "f 1/2/3/4 2 3",
+        "f 1//2/3 2 3",
+        "f 1/a 2 3",
+        "f 1//a 2 3",
+        "f 1/0 2 3",
+        "f 1//0 2 3",
+        "f 1_0 2 3",
+        "f ١ 2 3",
+    ],
+)
+def test_malformed_obj_face_references_are_not_silently_measured(face: str) -> None:
+    text = f"v 0 0 0\nv 2 0 0\nv 0 3 0\n{face}\n"
+    with pytest.raises(ValueError, match="OBJ line 4:"):
+        parse_obj_triangles(text)
