@@ -1291,9 +1291,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
       target: { value: "scientist" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Unassign reviewer" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Unassign reviewer" }));
     await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
     const unload = new Event("beforeunload", { cancelable: true });
     act(() => {
@@ -1330,9 +1328,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
       target: { value: "scientist" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Unassign reviewer" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Unassign reviewer" }));
     await screen.findByRole("button", { name: "Retry event" });
     const uncertainUnload = new Event("beforeunload", { cancelable: true });
     act(() => {
