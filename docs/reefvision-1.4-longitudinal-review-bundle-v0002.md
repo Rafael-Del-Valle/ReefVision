@@ -119,3 +119,23 @@ source bytes still trigger longitudinal withholding even when either or both
 imports have matching expected digests. Regression tests compare standalone
 analysis with persisted executable typed Workflow Builder graphs for OBJ,
 PLY and GLB, including mixed checked/unchecked timepoints.
+
+## Provisional identity-label validation on replay
+
+The standalone longitudinal comparison service now independently enforces
+the mesh request contract for `specimen_id` and both `observation_id` values:
+each must begin with an ASCII letter or digit and contain only ASCII letters,
+digits, underscores, periods, colons or hyphens. Equal whitespace-only labels,
+embedded spaces, tabs and control characters are rejected, including when a
+caller mutates a previously constructed preview or replays an older artifact
+without passing through request validation. The two observations must still
+have distinct observation IDs and the same provisional specimen ID. A
+`project_id` containing only whitespace is also rejected.
+
+This is **identifier hygiene**, not organism reidentification or authenticated
+review. It prevents ambiguous labels from silently passing the direct service
+path while the standalone HTTP API and executable saved Workflow Builder use
+the stricter request schema. Existing legitimate identifiers remain unchanged;
+scientific calibration, acquisition history and biological identity are still
+unverified. Regression coverage exercises direct replay rejection and retains
+standalone/saved-workflow parity for valid labels.
