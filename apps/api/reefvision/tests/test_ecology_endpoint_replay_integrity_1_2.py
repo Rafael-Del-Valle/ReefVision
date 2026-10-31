@@ -91,9 +91,7 @@ def test_projected_endpoint_replay_rejects_changed_scientific_arithmetic(
         "project_id": legacy_current["project_id"],
         "registry_history_sha256": legacy_current["source_registry_history_sha256"],
         "registry_image_evidence_sha256": legacy_current["source_image_evidence_sha256"],
-        "registry_annotation_evidence_sha256": legacy_current[
-            "source_annotation_evidence_sha256"
-        ],
+        "registry_annotation_evidence_sha256": legacy_current["source_annotation_evidence_sha256"],
         "registry_calibration_evidence_sha256": legacy_current[
             "source_calibration_evidence_sha256"
         ],

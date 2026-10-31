@@ -4668,3 +4668,31 @@ alongside the report integrity improvement. Fresh exact-head CI, full
 scientific acceptance, migration reconciliation with 1.1 and physical
 Windows MSI/GUI acceptance remain required. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+## Standalone and persisted Workflow Builder ecological QC histogram integrity (2026-10-30)
+
+A source-linked ecological report previously validated its SHA-256 and, when
+embedded in a full measurement-candidate response, checked counts against the
+source rows. The **separately persisted typed** `ecology_candidate_report`
+Workflow Builder output still accepted a recomputed fingerprint over impossible
+QC status histograms (unknown categories, negative/boolean/coerced counts,
+inconsistent series totals, or falsely claimed date-series passes).
+
+The existing report schema now requires explicit nonnegative integer
+frequencies for the nine supported sampling QC categories; category totals
+must equal pass-plus-excluded series, and the `date_series_candidate` count
+must equal the declared pass count. The checks apply to the standalone report
+type, API response, and saved executable Workflow Builder report artifact
+without adding a duplicate node, migration, or environmental-context feature.
+Focused regression exercises the real API/workflow report and eight altered
+artifacts with **recomputed** report fingerprints. This is consistency QC,
+**not** authenticated scientist review or proof of biological independence.
+
+The preceding exact head `c5568f23` completed 16/19 GitHub Actions
+workflows successfully (including Windows Desktop Build); three backend
+workflows failed Ruff format checks. This iteration also applies the three
+exact formatting corrections identified in CI logs. New-head integrated CI,
+reviewed longitudinal measurements, independent study-design registration,
+1.1 Alembic reconciliation, representative ecological acceptance, and installed
+Windows GUI/MSI acceptance remain required. **1.2 NOT RELEASE-READY;
+1.3 not started.**

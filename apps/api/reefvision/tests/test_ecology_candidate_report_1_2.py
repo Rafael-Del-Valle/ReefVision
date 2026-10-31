@@ -143,16 +143,81 @@ def test_saved_ecological_report_rejects_tampered_or_rehashed_source_counts(
             },
             "algorithm_version": "ecology-candidate-report-0001",
         }
-        altered["candidate_report"]["report_sha256"] = canonical_json_sha256(
-            report_values
-        )
+        altered["candidate_report"]["report_sha256"] = canonical_json_sha256(report_values)
         # The standalone report contract checks the digest, but the source
         # response also requires exact correspondence with its source rows.
-        EcologyCandidateReport.model_validate(altered["candidate_report"])
-        with pytest.raises(PydanticValidationError, match="report does not match"):
+        qc_totals_field = field in (
+            "date_qc_pass_series_count",
+            "excluded_series_count",
+            "qc_status_counts",
+        )
+        if qc_totals_field:
+            with pytest.raises(PydanticValidationError, match="report QC totals"):
+                EcologyCandidateReport.model_validate(altered["candidate_report"])
+        else:
+            EcologyCandidateReport.model_validate(altered["candidate_report"])
+        expected_error = "report QC totals" if qc_totals_field else "report does not match"
+        with pytest.raises(PydanticValidationError, match=expected_error):
             EcologyMeasurementCandidatesResponse.model_validate(altered)
 
     # Older persisted candidate payloads without a report remain readable.
     legacy = deepcopy(payload)
     legacy.pop("candidate_report")
     assert EcologyMeasurementCandidatesResponse.model_validate(legacy).candidate_report is None
+
+
+
+def test_saved_workflow_ecological_qc_histogram_rejects_rehashed_invalid_series(
+    client: TestClient,
+) -> None:
+    """Validate the typed report port independently of the parent response."""
+    project_id, _ = _source(client)
+    path = f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
+    response = client.get(path)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    workflow = _workflow(client, project_id)
+    assert workflow["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_candidate_report"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == payload["candidate_report"]
+
+    # Rehashing alone must not make impossible QC histograms acceptable in
+    # either the persisted typed workflow port or standalone API response.
+    for counts, passed, excluded in (
+        ({"missing_timestamps": -1}, 0, 2),
+        ({"missing_timestamps": True}, 0, 2),
+        ({"missing_timestamps": "2"}, 0, 2),
+        ({"missing_timestamps": 1.5}, 0, 2),
+        ({"unknown_status": 2}, 0, 2),
+        ({"missing_timestamps": 1}, 0, 2),
+        ({"missing_timestamps": 2}, 1, 1),
+        ({"missing_timestamps": 2, "date_series_candidate": 1}, 0, 3),
+    ):
+        altered = deepcopy(artifacts[0]["payload_json"])
+        altered["qc_status_counts"] = counts
+        altered["date_qc_pass_series_count"] = passed
+        altered["excluded_series_count"] = excluded
+        excluded_fields = {
+            "schema_version",
+            "report_sha256",
+            "evidence_level",
+            "review_gate",
+        }
+        digest_input = {
+            **{
+                key: value
+                for key, value in altered.items()
+                if key not in excluded_fields
+            },
+            "algorithm_version": "ecology-candidate-report-0001",
+        }
+        altered["report_sha256"] = canonical_json_sha256(digest_input)
+        with pytest.raises(PydanticValidationError, match="report QC"):
+            EcologyCandidateReport.model_validate(altered)
+        with pytest.raises(PydanticValidationError, match="report QC"):
+            EcologyMeasurementCandidatesResponse.model_validate(
+                {**payload, "candidate_report": altered}
+            )

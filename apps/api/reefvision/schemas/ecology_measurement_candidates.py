@@ -339,6 +339,43 @@ class EcologyCandidateReport(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
+    @field_validator("qc_status_counts", mode="before")
+    @classmethod
+    def require_explicit_qc_histogram(cls, value: object) -> object:
+        """Do not coerce saved scientific QC frequencies or invent statuses."""
+        valid_statuses = {
+            "mixed_units",
+            "missing_timestamps",
+            "same_day_technical_replicates",
+            "reused_image_across_dates",
+            "reused_image_content_across_dates",
+            "source_capture_conflict",
+            "insufficient_dates",
+            "date_series_candidate",
+            "identity_context_changed",
+        }
+        if not isinstance(value, dict) or any(
+            status not in valid_statuses
+            or isinstance(count, bool)
+            or not isinstance(count, int)
+            or count < 0
+            for status, count in value.items()
+        ):
+            raise ValueError("Ecological candidate report QC status counts must be nonnegative integers")
+        return value
+
+    @model_validator(mode="after")
+    def require_qc_histogram_totals(self) -> EcologyCandidateReport:
+        """A rehashed report cannot claim impossible series or pass totals."""
+        if (
+            sum(self.qc_status_counts.values())
+            != self.date_qc_pass_series_count + self.excluded_series_count
+            or self.qc_status_counts.get("date_series_candidate", 0)
+            != self.date_qc_pass_series_count
+        ):
+            raise ValueError("Ecological candidate report QC totals mismatch")
+        return self
+
     @model_validator(mode="after")
     def require_replayable_report_digest(self) -> EcologyCandidateReport:
         """A saved ecological report must match its own canonical summary.
@@ -444,7 +481,8 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             and report.candidate_count == len(self.candidates)
             and report.source_image_count == len({row.image_id for row in self.candidates})
             and report.source_organism_count == len({row.organism_key for row in self.candidates})
-            and report.declared_experimental_unit_count in (
+            and report.declared_experimental_unit_count
+            in (
                 len(declared_units),
                 len(canonical_units),
             )
