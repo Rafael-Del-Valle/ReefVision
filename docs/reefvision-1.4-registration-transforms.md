@@ -279,3 +279,29 @@ agreed, or that the registration is spatially accurate. Reidentification
 review and calibrated, independently verified evidence remain necessary;
 `coordinate_registration_verified` and `specimen_identity_verified`
 are not promoted by these bindings.
+
+## Reused project-owned mesh assets are not independent observations
+
+A project-owned OBJ/PLY/GLB source asset represents one immutable imported
+original. Reusing the same `spatial_source_asset_id` for two dated mesh
+previews is not a second independent survey, even if observation IDs, scale
+calibration, or legacy source-fingerprint availability differ. Longitudinal
+analysis retains the individual measurements and reconstruction QC but
+withholds change and rate estimates, recording
+`same_spatial_source_asset_reused_across_observations` and
+`longitudinal_change_withheld_reused_spatial_source_asset`. The corresponding
+provenance flag is
+`longitudinal_change_withheld_due_to_reused_spatial_source_asset`.
+
+If the same project asset ID carries **two different valid source-byte
+SHA-256 fingerprints**, the comparison instead rejects the contradictory
+provenance. A missing historical fingerprint does not become a claimed match:
+the reused asset identity alone is enough to withhold growth estimates.
+This safeguard complements, rather than replaces, duplicate-payload and
+identical-geometry checks. Asset identifiers and fingerprints remain
+caller-derived evidence, not authenticated acquisition or independent review.
+
+Regression coverage includes conflicting originals, legacy missing digests,
+and exact standalone/saved typed Workflow Builder artifact parity for a reused
+project-owned asset. Neither a successful comparison nor a matching source ID
+verifies specimen identity, calibration, registration, or biological change.
