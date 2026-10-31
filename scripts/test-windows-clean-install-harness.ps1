@@ -88,6 +88,24 @@ try {
     if ([System.IO.Directory]::Exists($junctionRoot)) { [System.IO.Directory]::Delete($junctionRoot, $true) }
 }
 
+# A Windows Installer reboot-required result is not a completed clean install.
+# The harness must not report PASS or remove its evidence while a reboot is
+# pending. Exercise both installation and uninstallation without running MSI.
+foreach ($msiAction in @('Install', 'Uninstall')) {
+    $successOutput = @(Assert-ReefVisionMsiCompletedWithoutReboot -Action $msiAction -ExitCode 0 -LogPath 'C:\\rv-test\\msi.log')
+    Assert-True ($successOutput.Count -eq 0) "Successful $msiAction must emit no spurious pipeline output."
+    foreach ($pendingCode in @(3010, 1641)) {
+        $rebootMessage = $null
+        try {
+            Assert-ReefVisionMsiCompletedWithoutReboot -Action $msiAction -ExitCode $pendingCode -LogPath 'C:\\rv-test\\msi.log'
+        } catch {
+            $rebootMessage = $_.Exception.Message
+        }
+        Assert-True ($null -ne $rebootMessage -and $rebootMessage.Contains('requires a Windows reboot') -and $rebootMessage.Contains([string]$pendingCode)) "Reboot-pending $msiAction ($pendingCode) must fail closed with an explicit reason."
+    }
+    Assert-Throws { Assert-ReefVisionMsiCompletedWithoutReboot -Action $msiAction -ExitCode 1603 -LogPath 'C:\\rv-test\\msi.log' } "MSI $msiAction failure 1603 must be rejected."
+}
+
 $arguments = New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -InstallRoot 'C:\rv-test\install' -LogPath 'C:\rv-test\install.log'
 Assert-True ($arguments[0] -eq '/i') 'Install command does not use /i.'
 Assert-True (($arguments -join ' ') -match 'INSTALLDIR=') 'Install command omitted isolated INSTALLDIR.'
@@ -224,6 +242,7 @@ $parseErrors = $null
 )
 Assert-True (@($parseErrors).Count -eq 0) "Windows acceptance PowerShell syntax invalid: $($parseErrors -join '; ')"
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+Assert-True ($acceptanceScript.Contains('Assert-ReefVisionMsiCompletedWithoutReboot -Action $Action -ExitCode $process.ExitCode -LogPath $log')) 'MSI runner must reject reboot-required exit codes before recording PASS.'
 Assert-True ($acceptanceScript.Contains('[void]$view.Execute()')) 'MSI ProductVersion extraction must suppress COM Execute output.'
 Assert-True ($acceptanceScript.Contains('[void]$view.Close()')) 'MSI ProductVersion extraction must suppress COM Close output.'
 # Guard the packaged acceptance request against retired project templates and
