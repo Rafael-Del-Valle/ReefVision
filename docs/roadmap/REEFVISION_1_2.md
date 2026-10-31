@@ -5210,3 +5210,28 @@ authenticated scientist-reviewed longitudinal measurements, actual independent
 unit design verification, representative biological validation, 1.1 migration
 reconciliation and physical Windows installed-GUI acceptance remain outstanding.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Unicode identifier fixture / CI compatibility repair (2026-10-31)
+
+At exact predecessor `1803369128385ecf74b969b63c896a6b799e3820`,
+16 of 19 registered GitHub Actions workflows succeeded, including Windows
+Desktop Build and frontend/E2E. Backend CI, Pose Workflow Validation and
+ReefVision 1.0 Acceptance failed at Ruff `RUF001` before pytest. All eight
+reported errors came from two fullwidth Unicode **test literals** in
+`test_ecology_identity_unit_aliases_1_2.py`; the production identifier
+validator was not implicated by these lint failures.
+
+The two fixtures now use explicit `\\uff54\\uff41\\uff4e\\uff4b-1`
+escapes. Python interprets these as the identical fullwidth string at runtime,
+so both standalone registration/revision tests and imported-registry/saved
+executable Workflow Builder rejection tests still exercise the NFKC safeguard.
+No scientific rule, typed port, persistence, review gate, migration, model,
+1.1 environmental context or version branch was changed. This is a **CI
+unblock**, not new scientific verification; exact-head CI must run before
+claiming a passing suite.
+
+**Release HOLD:** independent scientist-reviewed longitudinal observations,
+true experimental-unit design verification, representative biological and
+human/model acceptance, 1.1 migration reconciliation, and installed Windows
+MSI/GUI testing remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
