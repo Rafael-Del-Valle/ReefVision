@@ -15,6 +15,8 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
         raise ValueError("OBJ preview exceeds the 256000-byte limit")
     vertices: list[list[float]] = []
     faces: list[list[int]] = []
+    texture_coordinate_count = 0
+    normal_count = 0
     for line_number, line in enumerate(text.splitlines(), 1):
         # OBJ permits trailing # comments on geometry records. Strip only
         # parser tokens; the original bytes remain bound in source provenance.
@@ -44,6 +46,10 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             vertices.append(point)
             if len(vertices) > MAX_VERTICES:
                 raise ValueError("OBJ preview exceeds vertex limit")
+        elif fields[0] == "vt":
+            texture_coordinate_count += 1
+        elif fields[0] == "vn":
+            normal_count += 1
         elif fields[0] == "f":
             if len(fields) != 4:
                 raise ValueError(f"OBJ line {line_number}: only triangular faces are supported")
@@ -61,15 +67,28 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                 ):
                     raise ValueError(f"OBJ line {line_number}: malformed face reference")
                 try:
-                    if any(
-                        part and fullmatch(r"[+-]?[0-9]+", part) is None for part in parts
-                    ):
+                    if any(part and fullmatch(r"[+-]?[0-9]+", part) is None for part in parts):
                         raise ValueError("non-integer face reference")
                     references = [int(part) for part in parts if part]
                 except ValueError as exc:
                     raise ValueError(f"OBJ line {line_number}: invalid face index") from exc
                 if 0 in references:
                     raise ValueError(f"OBJ line {line_number}: OBJ index zero is invalid")
+                # Attribute records are not used for measurements, but when
+                # present their references must resolve to declared records.
+                # Legacy files with no vt/vn declarations remain supported.
+                for component, available in ((1, texture_coordinate_count), (2, normal_count)):
+                    if component < len(parts) and parts[component] and available:
+                        attribute_index = int(parts[component])
+                        resolved_attribute = (
+                            attribute_index - 1
+                            if attribute_index > 0
+                            else available + attribute_index
+                        )
+                        if resolved_attribute < 0 or resolved_attribute >= available:
+                            raise ValueError(
+                                f"OBJ line {line_number}: face attribute index out of bounds"
+                            )
                 index = references[0]
                 resolved = index - 1 if index > 0 else len(vertices) + index
                 if resolved < 0 or resolved >= len(vertices):
