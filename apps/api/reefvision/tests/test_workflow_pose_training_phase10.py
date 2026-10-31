@@ -818,9 +818,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     with app.state.session_factory() as session:
         persisted = session.get(TrainingRun, result["training_run_id"])
         assert persisted is not None
-        persisted.metrics_history_json = [
-            [key, value] for key, value in original_history.items()
-        ]
+        persisted.metrics_history_json = [[key, value] for key, value in original_history.items()]
         session.commit()
 
     with pytest.raises(ValidationError, match="metrics history changed"):
