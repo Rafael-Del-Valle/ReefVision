@@ -361,11 +361,19 @@ class MeshReidentificationEvidence(BaseModel):
     # Imported source bytes are distinct from parsed geometry: a re-export can
     # preserve triangles while changing the original OBJ/PLY/GLB payload.
     # Legacy evidence without this paired binding remains provisional.
-    before_source_payload_sha256: str | None = Field(
-        default=None, pattern=r"^[0-9a-f]{64}$"
+    before_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    after_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    # Two imported originals can have the same bytes but different project
+    # asset identities. Bind both project-owned source IDs when available;
+    # historical evidence without these bindings remains explicitly provisional.
+    before_spatial_source_asset_id: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     )
-    after_source_payload_sha256: str | None = Field(
-        default=None, pattern=r"^[0-9a-f]{64}$"
+    after_spatial_source_asset_id: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     )
 
     # Optional timepoint binding: observation IDs and geometry hashes alone do
@@ -395,6 +403,10 @@ class MeshReidentificationEvidence(BaseModel):
             raise ValueError(
                 "Reidentification source payload binding requires both SHA-256 fingerprints"
             )
+        if (self.before_spatial_source_asset_id is None) != (
+            self.after_spatial_source_asset_id is None
+        ):
+            raise ValueError("Reidentification asset binding requires both spatial source IDs")
         if (self.before_observed_at_utc is None) != (self.after_observed_at_utc is None):
             raise ValueError("Reidentification timepoint binding requires both UTC timestamps")
         if not self.evidence_note.strip() or (
