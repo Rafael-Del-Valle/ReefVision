@@ -234,11 +234,19 @@ export function ReviewQueueCoordinationPanel({
   }
 
   const locked = mutation.isPending || activeFailedRequest !== null;
+  // Closing unmounts *all* in-memory item drafts and retry UUIDs, not only
+  // those belonging to the currently displayed item. A -> B -> Close must
+  // never silently destroy A's unsent biological note or uncertain event.
+  const hasUnsentDrafts = Object.values(drafts).some(
+    (draft) => draft.comment.trim() || draft.assignee.trim(),
+  );
+  const hasUnresolvedEvents = Object.keys(failedRequests).length > 0;
+  const closeBlocked = mutation.isPending || hasUnresolvedEvents;
   function requestClose() {
     // An unresolved request may already have reached the server. Keep its
     // idempotency UUID available for exact retry or explicit discard.
-    if (locked) return;
-    if (comment.trim() || assignee.trim()) {
+    if (closeBlocked) return;
+    if (hasUnsentDrafts) {
       setCloseConfirmationKey(closeApprovalScopeKey);
       return;
     }
@@ -255,23 +263,25 @@ export function ReviewQueueCoordinationPanel({
         <button
           type="button"
           className="secondary"
-          disabled={locked}
+          disabled={closeBlocked}
           onClick={requestClose}
         >
           Close coordination
         </button>
       </div>
-      {locked && (
+      {closeBlocked && (
         <p role="status">
-          Finish the pending event or resolve its uncertain outcome before
-          closing. An interrupted request may already be recorded.
+          Finish the pending event or revisit any review item with an
+          uncertain outcome before closing. An interrupted request may
+          already be recorded; its original retry ID must be preserved.
         </p>
       )}
       {closeConfirmationKey === closeApprovalScopeKey && (
         <div role="group" aria-label="Discard unsent coordination drafts">
           <p>
-            This item has unsent reviewer notes or an assignment draft. Closing
-            now will discard those local drafts without saving an event.
+            One or more review items have unsent reviewer notes or assignment
+            drafts. Closing now will discard all of those local drafts without
+            saving an event.
           </p>
           <button
             type="button"
@@ -280,7 +290,7 @@ export function ReviewQueueCoordinationPanel({
           >
             Continue editing
           </button>
-          <button type="button" disabled={locked} onClick={onClose}>
+          <button type="button" disabled={closeBlocked} onClick={onClose}>
             Close without saving drafts
           </button>
         </div>
