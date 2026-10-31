@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   bulkTriageReviewQueueItems,
+  type ReviewQueueBulkAction,
   type ReviewQueueItem,
 } from "../../api/client";
 import { ReviewQueueBulkTriage } from "./ReviewQueueBulkTriage";
@@ -32,6 +33,32 @@ const items = [
     review_state: "skipped",
   },
 ] as ReviewQueueItem[];
+
+function responseItems(
+  queueId: string,
+  action: ReviewQueueBulkAction,
+  ids: string[],
+): ReviewQueueItem[] {
+  const resultingState: ReviewQueueItem["review_state"] = {
+    start: "in_progress",
+    skip: "skipped",
+    return: "pending",
+    complete: "completed",
+  }[action];
+  return ids.map(
+    (id) =>
+      ({
+        ...(items.find((item) => item.id === id) ?? {
+          id,
+          image_id: id,
+          rank_position: 1,
+        }),
+        id,
+        review_queue_id: queueId,
+        review_state: resultingState,
+      }) as ReviewQueueItem,
+  );
+}
 
 function mount(visible = items) {
   const client = new QueryClient({
@@ -67,7 +94,7 @@ describe("ReviewQueueBulkTriage", () => {
         queue_id: queueId,
         action: payload.action,
         changed_count: 1,
-        items: [],
+        items: responseItems(queueId, payload.action, payload.item_ids),
         requires_researcher_review: true,
       }),
     );
@@ -151,14 +178,14 @@ describe("ReviewQueueBulkTriage", () => {
           queue_id: mismatch === "queue" ? "wrong-queue" : queueId,
           action: mismatch === "action" ? "skip" : payload.action,
           changed_count: 1,
-          items: [],
+          items: responseItems(queueId, payload.action, payload.item_ids),
           requires_researcher_review: mismatch !== "gate",
         }))
         .mockImplementationOnce(async (queueId, payload) => ({
           queue_id: queueId,
           action: payload.action,
           changed_count: 0,
-          items: [],
+          items: responseItems(queueId, payload.action, payload.item_ids),
           requires_researcher_review: true,
         }));
       const invalidate = mount();
@@ -200,6 +227,110 @@ describe("ReviewQueueBulkTriage", () => {
     },
   );
 
+  it.each([
+    {
+      name: "missing item",
+      mutate: (rows: ReviewQueueItem[]) => rows.slice(1),
+    },
+    {
+      name: "foreign item",
+      mutate: (rows: ReviewQueueItem[]) => [
+        { ...rows[0]!, id: "foreign-review-item" },
+      ],
+    },
+    {
+      name: "duplicate item",
+      mutate: (rows: ReviewQueueItem[]) => [rows[0]!, rows[0]!],
+    },
+    {
+      name: "foreign queue",
+      mutate: (rows: ReviewQueueItem[]) => [
+        { ...rows[0]!, review_queue_id: "other-queue" },
+      ],
+    },
+    {
+      name: "incorrect resulting review state",
+      mutate: (rows: ReviewQueueItem[]) => [
+        { ...rows[0]!, review_state: "completed" as const },
+      ],
+    },
+  ])(
+    "retains original bulk UUID after response with $name",
+    async ({ mutate }) => {
+      vi.mocked(bulkTriageReviewQueueItems).mockImplementationOnce(
+        async (queueId, payload) => ({
+          queue_id: queueId,
+          action: payload.action,
+          changed_count: 1,
+          items: mutate(responseItems(queueId, payload.action, payload.item_ids)),
+          requires_researcher_review: true,
+        }),
+      );
+      const invalidate = mount();
+      fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+        target: { value: "lab reviewer" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: /Select eligible on page/ }),
+      );
+      fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply start to 1 items" }),
+      );
+      const retry = await screen.findByRole("button", {
+        name: "Retry identical bulk action",
+      });
+      expect(screen.getByRole("alert").textContent).toContain(
+        "response item identities",
+      );
+      expect(invalidate).not.toHaveBeenCalled();
+      const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
+      fireEvent.click(retry);
+      await waitFor(() =>
+        expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(2),
+      );
+      expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1]).toEqual(
+        original,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain(
+          "scientific review remains required",
+        ),
+      );
+    },
+  );
+
+  it.each([-1, 2, 0.5, Number.NaN])(
+    "rejects invalid bulk changed count %s without acknowledging a batch",
+    async (changedCount) => {
+      vi.mocked(bulkTriageReviewQueueItems).mockImplementationOnce(
+        async (queueId, payload) => ({
+          queue_id: queueId,
+          action: payload.action,
+          changed_count: changedCount,
+          items: responseItems(queueId, payload.action, payload.item_ids),
+          requires_researcher_review: true,
+        }),
+      );
+      const invalidate = mount();
+      fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+        target: { value: "lab reviewer" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: /Select eligible on page/ }),
+      );
+      fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply start to 1 items" }),
+      );
+      await screen.findByRole("button", { name: "Retry identical bulk action" });
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert").textContent).toContain(
+        "changed count",
+      );
+    },
+  );
+
   it("retries uncertain outcomes using exactly the original payload", async () => {
     vi.mocked(bulkTriageReviewQueueItems)
       .mockRejectedValueOnce(new Error("Connection lost"))
@@ -207,7 +338,7 @@ describe("ReviewQueueBulkTriage", () => {
         queue_id: "queue-1",
         action: "return",
         changed_count: 1,
-        items: [],
+        items: responseItems("queue-1", "return", ["skipped-3"]),
         requires_researcher_review: true,
       });
     mount();
@@ -425,14 +556,14 @@ describe("ReviewQueueBulkTriage", () => {
         queue_id: "queue-b",
         action: "start",
         changed_count: 1,
-        items: [],
+        items: responseItems("queue-b", "start", ["pending-1"]),
         requires_researcher_review: true,
       })
       .mockResolvedValueOnce({
         queue_id: "queue-a",
         action: "start",
         changed_count: 1,
-        items: [],
+        items: responseItems("queue-a", "start", ["pending-1"]),
         requires_researcher_review: true,
       });
     const client = new QueryClient({
@@ -505,7 +636,7 @@ describe("ReviewQueueBulkTriage", () => {
         queue_id: "queue-a",
         action: "start",
         changed_count: 1,
-        items: [],
+        items: responseItems("queue-a", "start", ["pending-1"]),
         requires_researcher_review: true,
       };
     });
@@ -608,7 +739,7 @@ describe("ReviewQueueBulkTriage", () => {
         queue_id: "queue-a",
         action: "start",
         changed_count: 0,
-        items: [],
+        items: responseItems("queue-a", "start", ["pending-1"]),
         requires_researcher_review: true,
       });
     const client = new QueryClient({
