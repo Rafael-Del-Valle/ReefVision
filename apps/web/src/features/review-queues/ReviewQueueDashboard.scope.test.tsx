@@ -518,7 +518,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
       fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
         target: { value: "reviewer-a" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Quick modal complete" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      );
       await waitFor(() =>
         expect(completeReviewQueueItem).toHaveBeenCalledWith(
           "item-a",
@@ -541,7 +543,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
         screen.getByRole("button", { name: "Quick modal complete" }),
       ).toBeTruthy();
       await act(async () => {
-        resolveComplete({} as Awaited<ReturnType<typeof completeReviewQueueItem>>);
+        resolveComplete(
+          {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
+        );
         await pendingComplete;
       });
       expect(
