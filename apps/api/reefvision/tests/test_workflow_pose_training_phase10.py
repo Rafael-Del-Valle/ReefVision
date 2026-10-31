@@ -812,6 +812,28 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # JSON arrays of key/value pairs convert to the original dict and would
+    # pass a hash check that silently coerces malformed epoch-level evidence.
+    # The saved scientist-verified training run must reject that type change.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.metrics_history_json = [
+            [key, value] for key, value in original_history.items()
+        ]
+        session.commit()
+
+    with pytest.raises(ValidationError, match="metrics history changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.metrics_history_json = original_history
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # The experiment registry is a second persisted scientific record, not
     # merely an ID to expose downstream. A replay must reject inconsistent
     # metadata or checkpoint evidence without starting another training run.
