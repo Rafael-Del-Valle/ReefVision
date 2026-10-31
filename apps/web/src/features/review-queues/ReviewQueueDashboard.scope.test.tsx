@@ -53,7 +53,13 @@ vi.mock("./ReviewQueueBulkTriage", () => ({
 vi.mock("./ReviewQueueCoordinationPanel", () => ({
   // Stateful stand-in: the real panel separately tests per-item drafts and
   // UUID retries. Here we test whether the dashboard keeps it mounted.
-  ReviewQueueCoordinationPanel: ({ itemId }: { itemId: string }) => {
+  ReviewQueueCoordinationPanel: ({
+    itemId,
+    onClose,
+  }: {
+    itemId: string;
+    onClose: () => void;
+  }) => {
     const [drafts, setDrafts] = useState<Record<string, string>>({});
     return (
       <label>
@@ -68,6 +74,9 @@ vi.mock("./ReviewQueueCoordinationPanel", () => ({
             }))
           }
         />
+        <button type="button" onClick={onClose}>
+          Close coordination test
+        </button>
       </label>
     );
   },
@@ -119,22 +128,31 @@ function project(id: string): Project {
   return { id, label_classes: [] } as unknown as Project;
 }
 
-function mount() {
+function mount(onCoordinationOpenChange = vi.fn()) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const onSelectedQueueChange = vi.fn();
+  const onOpenImage = vi.fn();
   const view = (id: string) => (
     <QueryClientProvider client={client}>
       <ReviewQueueDashboard
         project={project(id)}
-        onOpenImage={vi.fn()}
+        onOpenImage={onOpenImage}
         onSelectedQueueChange={onSelectedQueueChange}
+        onCoordinationOpenChange={onCoordinationOpenChange}
       />
     </QueryClientProvider>
   );
   const result = render(view("project-a"));
-  return { ...result, view, onSelectedQueueChange, client };
+  return {
+    ...result,
+    view,
+    onSelectedQueueChange,
+    onCoordinationOpenChange,
+    onOpenImage,
+    client,
+  };
 }
 
 describe("ReviewQueueDashboard scope isolation", () => {
@@ -214,6 +232,37 @@ describe("ReviewQueueDashboard scope isolation", () => {
         /unsent biological notes and uncertain audit-event retry IDs/,
       ),
     ).toBeTruthy();
+  });
+
+  it("signals coordination ownership to the host and prevents editor navigation until protected close", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-a", "image-a")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    const { onCoordinationOpenChange, onOpenImage } = mount();
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(false),
+    );
+    const openImage = await screen.findByRole("button", { name: "Open image" });
+    fireEvent.click(screen.getByRole("button", { name: "Comments & assignments" }));
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(true),
+    );
+    expect(openImage).toHaveProperty("disabled", true);
+    fireEvent.click(openImage);
+    expect(onOpenImage).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination test" }));
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(false),
+    );
+    expect(openImage).toHaveProperty("disabled", false);
+    fireEvent.click(openImage);
+    expect(onOpenImage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "item-a" }),
+    );
   });
 
   it("does not fetch items from the previous project after navigation", async () => {
