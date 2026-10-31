@@ -110,13 +110,6 @@ function ImageCard({
     persistedEditable.current = next;
   }, [image.id, image.group_key, image.annotation_status]);
 
-  // A thumbnail job can finish after an earlier 404. Retry only when its
-  // persisted path changes; ordinary query refreshes must not retry a
-  // permanently broken thumbnail on every render.
-  useEffect(() => {
-    setThumbnailFailed(false);
-  }, [image.thumbnail_path]);
-
   const update = useMutation({
     mutationFn: () =>
       updateImage(image.id, {
