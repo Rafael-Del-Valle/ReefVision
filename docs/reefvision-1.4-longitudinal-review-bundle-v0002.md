@@ -1,8 +1,10 @@
-# Provisional longitudinal review bundles v0002–v0003
+# Provisional longitudinal review bundles v0002–v0004
 
-The versioned review fingerprint now binds project, specimen, observation timestamps, geometry and source bytes, coordinate frames, calibration inputs, calibration review evidence, and independent registration/reidentification notes.
+The versioned review fingerprint binds project, specimen, observation timestamps, geometry and source bytes, coordinate frames, calibration inputs, calibration review evidence, and independent registration/reidentification notes.
 
-A v0001 digest is not equivalent to a v0002 or v0003 digest. Current comparisons use `mesh-review-bundle-0003`, which additionally binds source import format, original byte count and integrity-check status. Preserve schema version with the hash. Missing legacy provenance remains null. These caller-supplied records and deterministic hashes do not authenticate reviewers, certify calibration or identity, or substitute for immutable review persistence.
+A v0001 digest is not equivalent to a v0002, v0003, or v0004 digest. Comparisons without project-owned source-asset IDs retain `mesh-review-bundle-0003`, which includes source format, original byte count and integrity-check status. When either timepoint identifies a project-owned imported source asset, `mesh-review-bundle-0004` additionally includes both `before_spatial_source_asset_id` and `after_spatial_source_asset_id` (null where absent). Reimporting identical bytes under a different asset ID changes the canonical review digest, even when geometry, calibration and human notes are unchanged. This does not prove a new biological observation; a partially bound pair is not authenticated.
+
+Preserve the bundle schema version with its digest; v0003 digests for historical unbound observations are unchanged. These caller-supplied records and deterministic hashes do not authenticate reviewers, certify calibration or identity, or substitute for immutable review persistence.
 
 Standalone longitudinal comparisons and persisted executable Workflow Builder graphs share this provenance. Tests cover canonicalization, calibration revisions, and saved graph artifacts.
 
