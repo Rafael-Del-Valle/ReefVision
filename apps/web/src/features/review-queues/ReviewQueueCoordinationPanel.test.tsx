@@ -179,4 +179,40 @@ describe("ReviewQueueCoordinationPanel", () => {
       ),
     );
   });
+
+  it("keeps an edit-and-reverted comment draft after an older response", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation B" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation A" },
+    });
+    await act(async () => {
+      resolveEvent({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      await pending;
+    });
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Observation A",
+    );
+  });
 });
