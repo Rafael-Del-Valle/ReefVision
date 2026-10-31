@@ -634,7 +634,7 @@ describe("ReviewQueueCoordinationPanel", () => {
       async (_queueId, _itemId, page) => ({
         items: [],
         total: 101,
-        page,
+        page: page ?? 1,
         page_size: 50,
         current_assignee: null,
         requires_researcher_review: true,
