@@ -21,9 +21,7 @@ def test_standalone_and_executed_saved_workflow_replay_current_source(
     client: TestClient,
 ) -> None:
     project_id, _ = _source(client)
-    api = client.get(
-        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
-    )
+    api = client.get(f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates")
     assert api.status_code == 200, api.text
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
@@ -152,9 +150,7 @@ def test_historical_summary_contract_is_readable_but_never_verified(
     client: TestClient,
 ) -> None:
     current = _dated_artifact(client)
-    altered = current.projected_unit_summaries[0].model_copy(
-        update={"mean_absolute_change": 999.0}
-    )
+    altered = current.projected_unit_summaries[0].model_copy(update={"mean_absolute_change": 999.0})
     historical = current.model_copy(
         update={
             "source_fingerprint_contract": "ecology-measurement-candidates-0020",
