@@ -1,3 +1,5 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -249,6 +251,52 @@ export function ReviewQueueBulkTriage({
     },
   });
   const locked = mutation.isPending || uncertainRequest !== null;
+  const [nativeCloseBlocked, setNativeCloseBlocked] = useState(false);
+  const [nativeCloseGuardAttempt, setNativeCloseGuardAttempt] = useState(0);
+  const [nativeCloseGuardUnavailable, setNativeCloseGuardUnavailable] =
+    useState(false);
+  // Bulk mutations can commit before their response arrives. Browser reload
+  // or native desktop closure must not silently destroy the original UUID.
+  // This is best-effort window-close protection, not crash-safe persistence.
+  useEffect(() => {
+    if (!locked || !isTauri()) {
+      setNativeCloseBlocked(false);
+      setNativeCloseGuardUnavailable(false);
+      return;
+    }
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow()
+      .onCloseRequested((event) => {
+        if (!active) return;
+        event.preventDefault();
+        setNativeCloseBlocked(true);
+      })
+      .then((stop) => {
+        if (active) {
+          unlisten = stop;
+          setNativeCloseGuardUnavailable(false);
+        } else {
+          stop();
+        }
+      })
+      .catch(() => {
+        if (active) setNativeCloseGuardUnavailable(true);
+      });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [locked, nativeCloseGuardAttempt]);
+  useEffect(() => {
+    if (!locked) return;
+    const warnOnUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnOnUnload);
+    return () => window.removeEventListener("beforeunload", warnOnUnload);
+  }, [locked]);
   useEffect(() => {
     // The dashboard must keep this instance mounted while an in-flight or
     // uncertain request owns its idempotency UUID. Never silently drop it on
@@ -431,7 +479,30 @@ export function ReviewQueueBulkTriage({
           : `Apply ${action} to ${selectedIds.length} items`}
       </button>
       {lastResult && <p role="status">{lastResult}</p>}
-      {uncertainRequest && <p role="alert">{uncertainRequest.errorMessage}</p>}
+      {nativeCloseBlocked && locked && (
+        <p role="alert">
+          Desktop window close was blocked to preserve an in-flight or
+          uncertain bulk QC request. Resolve or explicitly discard the
+          original request before closing ReefVision.
+        </p>
+      )}
+      {nativeCloseGuardUnavailable && locked && (
+        <p role="alert">
+          Desktop close protection could not be registered. Keep ReefVision
+          open until the bulk QC request is resolved.
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setNativeCloseGuardUnavailable(false);
+              setNativeCloseGuardAttempt((attempt) => attempt + 1);
+            }}
+          >
+            Retry bulk desktop close protection
+          </button>
+        </p>
+      )}
+      {uncertainRequest && <p role="alert">{uncertainRequest.errorMessage}</p>
       {uncertainRequest && (
         <div role="group" aria-label="Uncertain bulk triage outcome">
           <p>
