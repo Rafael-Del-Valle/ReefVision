@@ -603,6 +603,49 @@ def test_recalibrated_reused_original_does_not_invent_growth() -> None:
     assert result["provenance"]["specimen_identity_verified"] is False
 
 
+def test_reused_import_with_changed_scale_withholds_all_longitudinal_metrics() -> None:
+    """A second calibration of one source must not produce any growth estimators."""
+    before = _imported_observation("early", 2)
+    after = _imported_observation("late", 2, meters_per_unit=2)
+    result = compare_mesh_observations(
+        before, after, reidentification_evidence=_review(before, after)
+    )
+    withheld = (
+        "delta_surface_area_to_bounding_diagonal_squared_ratio",
+        "delta_patch_area_concentration_index",
+        "delta_area_weighted_effective_patch_count",
+        "ranked_patch_area_profile_distance",
+        "ranked_patch_area_jensen_shannon_divergence_bits",
+        "scale_normalized_surface_area_ratio_after_to_before",
+        "scale_normalized_bounding_box_diagonal_ratio_after_to_before",
+        "registered_surface_centroid_offset_target_frame_m",
+        "registered_surface_centroid_separation_m",
+        "registered_centroid_separation_to_registration_rms_ratio",
+        "registered_surface_centroid_separation_caller_bound_interval_m",
+        "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m",
+        "delta_surface_area_m2",
+        "delta_axis_aligned_bounding_box_diagonal_m",
+        "relative_axis_aligned_bounding_box_diagonal_change_percent",
+        "relative_axis_aligned_bounding_box_diagonal_scale_interval_percent",
+        "delta_axis_aligned_bounding_box_diagonal_scale_interval_m",
+        "average_axis_aligned_bounding_box_diagonal_change_m_per_day",
+        "average_axis_aligned_bounding_box_diagonal_change_scale_interval_m_per_day",
+        "average_surface_area_change_m2_per_day",
+        "average_surface_area_change_scale_interval_m2_per_day",
+        "delta_surface_area_scale_interval_m2",
+        "relative_surface_area_change_percent",
+        "relative_surface_area_scale_interval_percent",
+    )
+    assert all(key in result and result[key] is None for key in withheld)
+    assert result["before_surface_area_m2"] == before["surface_area_m2"]
+    assert result["after_surface_area_m2"] == after["surface_area_m2"]
+    assert result["after_surface_area_m2"] > result["before_surface_area_m2"]
+    assert result["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"]
+    assert result["provenance"]["scale_uncertainty_only"] is False
+    assert result["provenance"]["calibration_verified"] is False
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert "longitudinal_change_withheld_reused_imported_source_payload" in result["qc_warnings"]
+
 
 def test_same_claimed_imported_bytes_with_changed_geometry_withholds_growth() -> None:
     """Conflicting geometry for one claimed original is an audit fault, not growth."""
@@ -615,9 +658,7 @@ def test_same_claimed_imported_bytes_with_changed_geometry_withholds_growth() ->
     )
     # Simulate a corrupted legacy provenance record. A reused source digest
     # with changed geometry cannot establish an independent acquisition.
-    after["provenance"]["source_payload_sha256"] = before["provenance"][
-        "source_payload_sha256"
-    ]
+    after["provenance"]["source_payload_sha256"] = before["provenance"]["source_payload_sha256"]
     result = compare_mesh_observations(
         before, after, reidentification_evidence=_review(before, after)
     )
