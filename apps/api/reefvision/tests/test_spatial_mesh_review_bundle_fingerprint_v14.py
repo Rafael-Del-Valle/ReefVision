@@ -584,7 +584,10 @@ def test_reused_imported_original_is_not_an_independent_longitudinal_observation
         "identical_imported_source_payload_reused_across_observations" not in revised["qc_warnings"]
     )
     assert "identical_geometry_fingerprint" in revised["qc_warnings"]
-    assert revised["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"] is False
+    assert (
+        revised["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"]
+        is False
+    )
     assert revised["delta_surface_area_m2"] == 0
 
 
@@ -675,7 +678,10 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     assert "identical_imported_source_payload_reused_across_observations" in expected["qc_warnings"]
     assert "identical_imported_source_payload_metadata_inconsistent" not in expected["qc_warnings"]
     assert "longitudinal_change_withheld_reused_imported_source_payload" in expected["qc_warnings"]
-    assert expected["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"] is True
+    assert (
+        expected["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"]
+        is True
+    )
     assert expected["after_surface_area_m2"] == pytest.approx(
         4 * expected["before_surface_area_m2"]
     )
