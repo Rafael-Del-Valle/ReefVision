@@ -72,6 +72,13 @@ export function ReviewQueueCoordinationPanel({
   // notes, reviewer attribution and history pagination isolated by item.
   // A -> B -> A restores A's unsent work without copying it onto B.
   const draftKey = JSON.stringify([queueId, itemId]);
+  // An approval to abandon unsent scientific notes is valid only for the
+  // navigation epoch in which it was requested. A -> B -> A must not revive
+  // a stale approval merely because the original item key matches again.
+  const closeApprovalScopeKey = JSON.stringify([
+    draftKey,
+    currentScope.current.epoch,
+  ]);
   const [drafts, setDrafts] = useState<Record<string, CoordinationDraft>>({});
   const { actor, assignee, comment, page } = drafts[draftKey] ?? emptyDraft;
   const updateDraft = (patch: Partial<CoordinationDraft>) => {
@@ -213,7 +220,7 @@ export function ReviewQueueCoordinationPanel({
     // idempotency UUID available for exact retry or explicit discard.
     if (locked) return;
     if (comment.trim() || assignee.trim()) {
-      setCloseConfirmationKey(draftKey);
+      setCloseConfirmationKey(closeApprovalScopeKey);
       return;
     }
     onClose();
@@ -241,7 +248,7 @@ export function ReviewQueueCoordinationPanel({
           closing. An interrupted request may already be recorded.
         </p>
       )}
-      {closeConfirmationKey === draftKey && (
+      {closeConfirmationKey === closeApprovalScopeKey && (
         <div role="group" aria-label="Discard unsent coordination drafts">
           <p>
             This item has unsent reviewer notes or an assignment draft. Closing
