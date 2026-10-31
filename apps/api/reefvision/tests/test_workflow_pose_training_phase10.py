@@ -852,6 +852,28 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # A malformed array of key/value pairs must not be accepted as an
+    # unchanged frozen checkpoint manifest during completed-node replay.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_manifest = dict(persisted.artifact_manifest_json or {})
+        persisted.artifact_manifest_json = [
+            [key, value] for key, value in original_manifest.items()
+        ]
+        session.commit()
+
+    with pytest.raises(ValidationError, match="artifact manifest must be a JSON object"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.artifact_manifest_json = original_manifest
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # The experiment registry is a second persisted scientific record, not
     # merely an ID to expose downstream. A replay must reject inconsistent
     # metadata or checkpoint evidence without starting another training run.
