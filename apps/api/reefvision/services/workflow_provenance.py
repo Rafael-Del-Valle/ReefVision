@@ -81,6 +81,17 @@ def _artifact_by_id(
     return artifact
 
 
+def _artifact_ids(value: Any, *, field: str) -> list[str]:
+    """Reject malformed persisted lineage instead of iterating JSON object keys."""
+
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item for item in value
+    ):
+        raise ConflictError(f"Workflow node {field} must be a list of artifact IDs")
+    return value
+
 def verify_succeeded_node_artifacts(
     session: Session,
     *,
@@ -92,9 +103,9 @@ def verify_succeeded_node_artifacts(
     if node_run.workflow_run_id != run_id:
         raise ConflictError("Workflow node belongs to a different run")
 
-    input_ids = [str(value) for value in node_run.input_artifact_ids_json or []]
+    input_ids = _artifact_ids(node_run.input_artifact_ids_json, field="input IDs")
 
-    output_ids = [str(value) for value in node_run.output_artifact_ids_json or []]
+    output_ids = _artifact_ids(node_run.output_artifact_ids_json, field="output IDs")
 
     inputs = [
         _artifact_by_id(
@@ -237,9 +248,9 @@ def build_workflow_run_provenance(
     node_manifest: list[dict[str, Any]] = []
 
     for node in nodes:
-        input_ids = [str(value) for value in node.input_artifact_ids_json or []]
+        input_ids = _artifact_ids(node.input_artifact_ids_json, field="input IDs")
 
-        output_ids = [str(value) for value in node.output_artifact_ids_json or []]
+        output_ids = _artifact_ids(node.output_artifact_ids_json, field="output IDs")
 
         consumed_ids.update(input_ids)
 
