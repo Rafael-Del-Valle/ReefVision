@@ -422,7 +422,8 @@ def _completed_workflow_pose_training_run(
         # Completed v3 nodes freeze the epoch-by-epoch metric history, not
         # just experiment summary metrics. Replays cannot silently rewrite it.
         if snapshot_version == "pose-workflow-training-snapshot-0003" and (
-            not isinstance(snapshot.get("metrics_history_sha256"), str)
+            not isinstance(candidate.metrics_history_json, dict)
+            or not isinstance(snapshot.get("metrics_history_sha256"), str)
             or snapshot["metrics_history_sha256"]
             != canonical_json_sha256(dict(candidate.metrics_history_json or {}))
         ):
@@ -629,7 +630,8 @@ def _reused_pose_training_result(
         or "pose_training_dataset_manifest_sha256" in snapshot
     )
     if snapshot.get("schema_version") == "pose-workflow-training-snapshot-0003" and (
-        not isinstance(snapshot.get("metrics_history_sha256"), str)
+        not isinstance(run.metrics_history_json, dict)
+        or not isinstance(snapshot.get("metrics_history_sha256"), str)
         or snapshot["metrics_history_sha256"]
         != canonical_json_sha256(dict(run.metrics_history_json or {}))
     ):
@@ -1492,6 +1494,12 @@ def create_pose_workflow_training_result(
         raise ValidationError("Completed pose training experiment artifact provenance changed")
 
     experiment.artifact_manifest_json = dict(run.artifact_manifest_json)
+
+    # A JSON array of key/value pairs can coerce to the same dict and digest
+    # as the original history. Require a genuine metrics object before freezing
+    # its scientific provenance; never normalize malformed worker evidence.
+    if not isinstance(run.metrics_history_json, dict):
+        raise ValidationError("Completed pose-training metrics history must be a JSON object")
 
     # Upgrade the queued v2 snapshot only when the worker has completed.
     # Historical completed v2 snapshots remain readable, while new results
