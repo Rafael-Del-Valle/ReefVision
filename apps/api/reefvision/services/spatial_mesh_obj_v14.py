@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import isfinite
+from re import fullmatch
 
 MAX_OBJ_BYTES = 256_000
 MAX_VERTICES = 2_000
@@ -48,12 +49,28 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                 raise ValueError(f"OBJ line {line_number}: only triangular faces are supported")
             indices: list[int] = []
             for field in fields[1:]:
+                # Accept v, v/vt, v//vn, and v/vt/vn. Texture and normal
+                # references are not used to compute spatial measurements,
+                # but malformed tokens must not silently become valid faces.
+                parts = field.split("/")
+                if (
+                    len(parts) not in {1, 2, 3}
+                    or not parts[0]
+                    or (len(parts) == 2 and not parts[1])
+                    or (len(parts) == 3 and not parts[2])
+                ):
+                    raise ValueError(f"OBJ line {line_number}: malformed face reference")
                 try:
-                    index = int(field.split("/")[0])
+                    if any(
+                        part and fullmatch(r"[+-]?[0-9]+", part) is None for part in parts
+                    ):
+                        raise ValueError("non-integer face reference")
+                    references = [int(part) for part in parts if part]
                 except ValueError as exc:
                     raise ValueError(f"OBJ line {line_number}: invalid face index") from exc
-                if index == 0:
+                if 0 in references:
                     raise ValueError(f"OBJ line {line_number}: OBJ index zero is invalid")
+                index = references[0]
                 resolved = index - 1 if index > 0 else len(vertices) + index
                 if resolved < 0 or resolved >= len(vertices):
                     raise ValueError(f"OBJ line {line_number}: face index out of bounds")
