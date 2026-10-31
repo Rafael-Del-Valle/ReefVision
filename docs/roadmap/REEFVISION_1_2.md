@@ -4696,3 +4696,27 @@ reviewed longitudinal measurements, independent study-design registration,
 1.1 Alembic reconciliation, representative ecological acceptance, and installed
 Windows GUI/MSI acceptance remain required. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+
+## Current-source replay and backend acceptance repair (2026-10-30)
+
+Previous head `ef3a9bfb` passed 17/19 Actions workflows, including Windows
+Desktop Build, but both full-backend jobs failed nine regressions (2,142 passed,
+32 skipped on Linux). The current v0021 source SHA-256 guard now intentionally
+rejects modified saved candidates and lineage digests *before* older semantic
+assertions. The report QC-arithmetic guard similarly precedes its digest check.
+Tests now exercise both early saved-artifact rejection and independent candidate
+and lineage validation, preserving the scientific checks.
+
+Current-source deserialization now converts Python-mode `datetime` objects
+to canonical JSON timestamps before fingerprint comparison. This repairs a
+real `TypeError` without accepting stale or altered source evidence. Focused
+regressions cover signed Python-mode replay, re-signed contradictory capture
+metadata, and legacy undated artifacts under their historical contract.
+Existing Workflow Builder typed ports, provenance, persisted artifacts,
+`linked_unverified` evidence and scientist-review gates are unchanged.
+
+**Release HOLD:** exact-head backend, Ruff/mypy, frontend and Windows CI;
+project-owned verified longitudinal observations, registered study design,
+representative scientific validation, 1.1 migration reconciliation and native
+Windows MSI/GUI acceptance. No 1.3 branch or release is implied.

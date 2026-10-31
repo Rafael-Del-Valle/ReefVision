@@ -226,8 +226,13 @@ def test_saved_workflow_source_replay_rejects_coerced_measurements_and_epochs(
         tampered["candidates"][0][field] = bad_value
         if field == "capture_timestamp_utc":
             tampered["candidates"][0]["capture_time_status"] = "timezone_aware"
-        with pytest.raises(SchemaValidationError, match=error):
+        with pytest.raises(
+            SchemaValidationError, match="source fingerprint mismatch"
+        ):
             EcologyMeasurementCandidatesResponse.model_validate(tampered)
+        # Keep the scientific field-level contract tested behind the digest.
+        with pytest.raises(SchemaValidationError, match=error):
+            EcologyMeasurementCandidate.model_validate(tampered["candidates"][0])
 
 
 def test_saved_workflow_source_rejects_swapped_geometry_dimensions(
@@ -256,8 +261,12 @@ def test_saved_workflow_source_rejects_swapped_geometry_dimensions(
     ):
         tampered = deepcopy(saved)
         tampered["candidates"][0][field] = bad_value
-        with pytest.raises(SchemaValidationError, match=error):
+        with pytest.raises(
+            SchemaValidationError, match="source fingerprint mismatch"
+        ):
             EcologyMeasurementCandidatesResponse.model_validate(tampered)
+        with pytest.raises(SchemaValidationError, match=error):
+            EcologyMeasurementCandidate.model_validate(tampered["candidates"][0])
 
 
 def test_saved_identity_registry_rejects_malformed_linked_evidence_hashes(

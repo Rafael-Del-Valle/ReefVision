@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic_core import to_jsonable_python
 
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
@@ -519,9 +520,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             rows = raw.get(field, [])
             if not isinstance(rows, list):
                 return rows
-            return [
-                row.model_dump(mode="json") if isinstance(row, BaseModel) else row for row in rows
-            ]
+            return [to_jsonable_python(row) for row in rows]
 
         payload = {
             "algorithm_version": "ecology-measurement-candidates-0021",

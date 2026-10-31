@@ -101,9 +101,15 @@ def test_saved_ecological_report_rejects_tampered_or_rehashed_source_counts(
     ):
         altered = deepcopy(payload)
         altered["candidate_report"][field] += 1
-        with pytest.raises(PydanticValidationError, match="report fingerprint"):
+        # QC arithmetic precedes the digest check; both gates fail closed.
+        error = (
+            "report QC totals"
+            if field in ("date_qc_pass_series_count", "excluded_series_count")
+            else "report fingerprint"
+        )
+        with pytest.raises(PydanticValidationError, match=error):
             EcologyMeasurementCandidatesResponse.model_validate(altered)
-        with pytest.raises(PydanticValidationError, match="report fingerprint"):
+        with pytest.raises(PydanticValidationError, match=error):
             EcologyCandidateReport.model_validate(altered["candidate_report"])
 
     # Rehashing a fabricated report is insufficient: the typed candidate

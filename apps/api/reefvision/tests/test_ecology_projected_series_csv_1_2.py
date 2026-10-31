@@ -207,16 +207,35 @@ def test_projected_candidate_rejects_contradictory_capture_metadata(
 ) -> None:
     """Saved source evidence cannot claim both dated and undated acquisition."""
     original = _dated_artifact(client)
-    payload = original.model_dump(mode="python")
-    payload["candidates"][0]["capture_time_status"] = status
-    payload["candidates"][0]["capture_timestamp_utc"] = timestamp
+    # Re-sign the altered source to reach semantic capture-status validation
+    # independently of the earlier source-fingerprint replay guard.
+    changed = original.candidates[0].model_copy(
+        update={"capture_time_status": status, "capture_timestamp_utc": timestamp}
+    )
+    signed = _resign_derived_evidence(
+        original.model_copy(update={"candidates": [changed, *original.candidates[1:]]})
+    )
     with pytest.raises(ValueError, match="capture status"):
-        EcologyMeasurementCandidatesResponse.model_validate(payload)
+        EcologyMeasurementCandidatesResponse.model_validate(signed.model_dump(mode="python"))
+
+
+def test_current_candidate_python_datetime_roundtrip(client: TestClient) -> None:
+    """Python-mode saved artifacts with datetime objects retain their digest."""
+    original = _dated_artifact(client)
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(
+        original.model_dump(mode="python")
+    )
+    assert parsed.input_sha256 == original.input_sha256
+    assert parsed.candidates[0].capture_timestamp_utc == datetime(2026, 4, 3, 8, tzinfo=UTC)
 
 
 def test_legacy_undated_candidate_remains_readable(client: TestClient) -> None:
     original = _dated_artifact(client)
-    payload = original.model_dump(mode="python")
+    # Historical contracts did not fingerprint these capture-status fields.
+    legacy = original.model_copy(
+        update={"source_fingerprint_contract": "ecology-measurement-candidates-0018"}
+    )
+    payload = legacy.model_dump(mode="python")
     payload["candidates"][0]["capture_time_status"] = "timezone_missing"
     payload["candidates"][0]["capture_timestamp_utc"] = None
     parsed = EcologyMeasurementCandidatesResponse.model_validate(payload)
