@@ -25,6 +25,7 @@ import {
   type ReviewQueueRecord,
 } from "../../api/client";
 import { ReviewQueueDashboard } from "./ReviewQueueDashboard";
+import { reviewQueuesQueryKey } from "./reviewQueueState";
 
 vi.mock("../../api/client", () => ({
   completeReviewQueueItem: vi.fn(),
@@ -216,7 +217,14 @@ describe("ReviewQueueDashboard scope isolation", () => {
       ".version-list .version-card",
     );
     expect(queueButtons).toHaveLength(2);
+    expect(queueButtons[0]?.disabled).toBe(true);
     expect(queueButtons[1]?.disabled).toBe(true);
+    // Even clicking the already-selected queue must not bypass guarded close.
+    fireEvent.click(queueButtons[0]);
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent observation for coral A");
     fireEvent.click(open[1]);
     expect(
       (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
@@ -232,6 +240,62 @@ describe("ReviewQueueDashboard scope isolation", () => {
         /unsent biological notes and uncertain audit-event retry IDs/,
       ),
     ).toBeTruthy();
+  });
+
+  it("pins the original QC queue when a background refresh temporarily omits it", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-a", "image-a")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    const { client, onSelectedQueueChange } = mount();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Comments & assignments" }),
+    );
+    fireEvent.change(screen.getByLabelText("Coordination test draft"), {
+      target: { value: "Unsent octocoral polyp observation" },
+    });
+
+    // A stale or incomplete server list must not unmount the open panel or
+    // change the host's selected queue identity to a foreign queue.
+    await act(async () => {
+      client.setQueryData(reviewQueuesQueryKey("project-a", "project", ""), [
+        queue("queue-other"),
+      ]);
+    });
+    expect(screen.getByText(/temporarily absent from the refreshed/)).toBeTruthy();
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent octocoral polyp observation");
+    const foreignQueue = document.querySelector<HTMLButtonElement>(
+      ".version-list .version-card",
+    );
+    expect(foreignQueue?.disabled).toBe(true);
+    if (foreignQueue) fireEvent.click(foreignQueue);
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent octocoral polyp observation");
+
+    await act(async () => {
+      client.setQueryData(reviewQueuesQueryKey("project-a", "project", ""), [
+        queue("queue-a"),
+        queue("queue-other"),
+      ]);
+    });
+    expect(screen.queryByText(/temporarily absent from the refreshed/)).toBeNull();
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent octocoral polyp observation");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close coordination test" }),
+    );
+    expect(screen.queryByLabelText("Coordination test draft")).toBeNull();
   });
 
   it("signals coordination ownership to the host and prevents editor navigation until protected close", async () => {
