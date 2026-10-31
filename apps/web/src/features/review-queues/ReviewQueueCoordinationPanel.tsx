@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   addReviewQueueEvent,
@@ -242,6 +242,22 @@ export function ReviewQueueCoordinationPanel({
   );
   const hasUnresolvedEvents = Object.keys(failedRequests).length > 0;
   const closeBlocked = mutation.isPending || hasUnresolvedEvents;
+  // The panel's close button is guarded, but browser reload/window close
+  // bypasses it. Warn before losing unsent biological notes, an in-flight
+  // audit event, or an uncertain idempotency UUID. This is a best-effort
+  // browser confirmation, NOT durable recovery after an abrupt crash.
+  useEffect(() => {
+    if (!hasUnsentDrafts && !hasUnresolvedEvents && !mutation.isPending) {
+      return;
+    }
+    const warnOnUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnOnUnload);
+    return () => window.removeEventListener("beforeunload", warnOnUnload);
+  }, [hasUnsentDrafts, hasUnresolvedEvents, mutation.isPending]);
+
   function requestClose() {
     // An unresolved request may already have reached the server. Keep its
     // idempotency UUID available for exact retry or explicit discard.
