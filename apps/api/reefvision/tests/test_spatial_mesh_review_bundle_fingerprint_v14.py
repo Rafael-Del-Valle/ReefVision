@@ -559,7 +559,7 @@ def test_reused_imported_original_is_not_an_independent_longitudinal_observation
         MeshPreviewRequest.model_validate(
             {
                 "obj_text": (
-                    "# revised source note\\nv 0 0 0\\nv 1 0 0\\nv 0 2 0\\nf 1 2 3\\n"
+                    "# revised source note\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n"
                 ),
                 "meters_per_unit": 1,
                 "calibration_method": "ruler",
@@ -571,7 +571,9 @@ def test_reused_imported_original_is_not_an_independent_longitudinal_observation
         )
     )
     changed["project_id"] = "study-1"
-    assert changed["provenance"]["geometry_sha256"] == after["provenance"]["geometry_sha256"]
+    assert (
+        changed["provenance"]["geometry_sha256"] == after["provenance"]["geometry_sha256"]
+    )
     assert changed["provenance"]["source_payload_sha256"] != after["provenance"][
         "source_payload_sha256"
     ]
@@ -590,7 +592,7 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     """Standalone and persisted graphs report identical duplicate-source QC."""
     project_id = str(create_project(client, "Repeated original 3D survey QC")["id"])
     base = f"/api/v1/projects/{project_id}"
-    original = "# source survey\\nv 0 0 0\\nv 1 0 0\\nv 0 2 0\\nf 1 2 3\\n"
+    original = "# source survey\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n"
     common = {
         "obj_text": original,
         "meters_per_unit": 1,
