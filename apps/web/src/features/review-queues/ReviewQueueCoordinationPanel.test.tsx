@@ -117,6 +117,48 @@ describe("ReviewQueueCoordinationPanel", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("does not carry a draft-discard confirmation onto another review item", async () => {
+    const onClose = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={onClose}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsent A note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+    expect(
+      screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeTruthy();
+
+    rerender(view("queue-b", "item-b"));
+    expect(
+      screen.queryByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeNull();
+    rerender(view("queue-a", "item-a"));
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Unsent A note",
+    );
+    expect(
+      screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("posts a comment with trimmed actor and UUID without approving data", async () => {
     mount();
     await screen.findByText("Assigned reviewer: Unassigned");
