@@ -268,11 +268,12 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
     assert bundle["schema_version"] == "mesh-review-bundle-0004"
     assert bundle["before_spatial_source_asset_id"] == asset_ids[0]
     assert bundle["after_spatial_source_asset_id"] == asset_ids[1]
-    assert sha256(
+    bundle_digest = sha256(
         dumps(
             bundle, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
         ).encode("utf-8")
-    ).hexdigest() == expected["provenance"]["review_evidence_bundle_sha256"]
+    ).hexdigest()
+    assert bundle_digest == expected["provenance"]["review_evidence_bundle_sha256"]
 
     graph = {
         "graph_id": "registration-source-bound-v14",
