@@ -215,4 +215,108 @@ describe("ReviewQueueCoordinationPanel", () => {
       "Observation A",
     );
   });
+
+  it("preserves a comment draft when the reviewer label changes during submission", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-one" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsubmitted observation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-two" },
+    });
+    await act(async () => {
+      resolveEvent({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      await pending;
+    });
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[0][2].actor).toBe(
+      "reviewer-one",
+    );
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Unsubmitted observation",
+    );
+  });
+
+  it("preserves an assignment draft when the reviewer label changes during submission", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-one" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "scientist-three" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Assign reviewer" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-two" },
+    });
+    await act(async () => {
+      resolveEvent({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      await pending;
+    });
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[0][2].actor).toBe(
+      "reviewer-one",
+    );
+    expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+      "value",
+      "scientist-three",
+    );
+  });
+
+  it("retries a failed event under its original reviewer identity without erasing the new draft", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Connection interrupted"))
+      .mockResolvedValueOnce(
+        {} as Awaited<ReturnType<typeof addReviewQueueEvent>>,
+      );
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-one" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original observation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-two" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(addReviewQueueEvent).mock.calls;
+    expect(calls[1][2]).toEqual(calls[0][2]);
+    expect(calls[1][2].actor).toBe("reviewer-one");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Review comment")).toHaveProperty(
+        "value",
+        "Original observation",
+      ),
+    );
+  });
 });
