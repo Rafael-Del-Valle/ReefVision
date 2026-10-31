@@ -948,6 +948,37 @@ def compare_mesh_observations(
             "geometry_sha256"
         ) or registration.target_geometry_sha256 != second.get("geometry_sha256"):
             raise ValueError("Registration evidence must match both source geometry fingerprints")
+        # Re-exporting a mesh can preserve its triangles but change the original
+        # OBJ/PLY/GLB bytes. Keep registration notes bound to both originals,
+        # while flagging older evidence rather than treating it as verified.
+        source_payloads = (
+            first.get("source_payload_sha256"),
+            second.get("source_payload_sha256"),
+        )
+        bound_payloads = (
+            registration.source_payload_sha256,
+            registration.target_payload_sha256,
+        )
+        if bound_payloads[0] is None:
+            if any(digest is not None for digest in source_payloads):
+                warnings.append("registration_source_payload_binding_unavailable")
+        elif bound_payloads != source_payloads:
+            raise ValueError("Registration evidence must match both imported source payloads")
+        # A matching byte digest can belong to multiple project-owned imports.
+        # Preserve each asset identity as a separate, provisional binding.
+        source_asset_ids = (
+            first.get("spatial_source_asset_id"),
+            second.get("spatial_source_asset_id"),
+        )
+        bound_asset_ids = (
+            registration.source_spatial_source_asset_id,
+            registration.target_spatial_source_asset_id,
+        )
+        if bound_asset_ids[0] is None:
+            if any(asset_id is not None for asset_id in source_asset_ids):
+                warnings.append("registration_spatial_source_asset_binding_unavailable")
+        elif bound_asset_ids != source_asset_ids:
+            raise ValueError("Registration evidence must match both spatial source asset IDs")
         # A geometry hash does not cover physical calibration. Reject a stale
         # meter-valued registration after either observation is recalibrated.
         # Older unbound evidence remains readable with explicit QC.
