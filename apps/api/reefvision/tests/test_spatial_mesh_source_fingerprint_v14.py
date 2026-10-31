@@ -197,9 +197,22 @@ def test_imported_source_digest_check_qc_matches_saved_comparison(
         "observation_id": "survey-2",
         "observed_at_utc": "2026-10-02T12:00:00Z",
     }
+    reidentification = {
+        "before_observation_id": "survey-1",
+        "after_observation_id": "survey-2",
+        "method": "photo_match",
+        "observer_id": "lab-annotator-1",
+        "evidence_note": "Provisional photo match; no independent verification",
+        "before_source_payload_sha256": digest,
+        "after_source_payload_sha256": digest,
+    }
     response = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
-        json={"before": before, "after": after},
+        json={
+            "before": before,
+            "after": after,
+            "reidentification_evidence": reidentification,
+        },
     )
     assert response.status_code == 200, response.text
     expected = response.json()
@@ -207,6 +220,8 @@ def test_imported_source_digest_check_qc_matches_saved_comparison(
     assert "before_imported_source_expected_digest_not_checked" not in warnings
     assert "after_imported_source_expected_digest_not_checked" in warnings
     assert "identical_imported_source_payload_reused_across_observations" in warnings
+    assert "reidentification_source_payload_binding_unavailable" not in warnings
+    assert expected["provenance"]["reidentification_evidence"]["before_source_payload_sha256"] == digest
     assert expected["delta_surface_area_m2"] is None
     assert expected["provenance"]["specimen_identity_verified"] is False
 
@@ -217,7 +232,11 @@ def test_imported_source_digest_check_qc_matches_saved_comparison(
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
             {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": after},
-            {"node_id": "compare", "node_type": "mesh_longitudinal_comparison"},
+            {
+                "node_id": "compare",
+                "node_type": "mesh_longitudinal_comparison",
+                "parameters": {"reidentification_evidence": reidentification},
+            },
         ],
         "edges": [
             {
