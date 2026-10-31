@@ -361,6 +361,33 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
 
+    # The saved scientist-verified node's parameters are part of its research
+    # provenance. An equivalent JSON array of pairs is not a parameter object.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        original_parameters = dict(node.parameters_json)
+        assert original_parameters["dataset_id"] == dataset_id
+        node.parameters_json = list(original_parameters.items())
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="parameters must be a JSON object"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.parameters_json = original_parameters
+        session.commit()
+    with app.state.session_factory() as session:
+        verified_provenance = build_workflow_run_provenance(
+            session, run_id=str(queued.json()["id"])
+        )
+    assert verified_provenance["nodes"][0]["parameters"] == original_parameters
+
     # A completed saved workflow must not expose a changed scientific output
     # through the run-detail API, even when its original digest remains stored.
     with app.state.session_factory() as session:
