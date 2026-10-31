@@ -581,7 +581,6 @@ describe("ReviewQueueCoordinationPanel", () => {
     await screen.findByText("Page 2");
   });
 
-
   it("restores an uncertain event retry after delayed failure across item navigation", async () => {
     let rejectOriginal!: (reason: Error) => void;
     const pendingOriginal = new Promise<
@@ -690,9 +689,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     expect(vi.mocked(addReviewQueueEvent).mock.calls[2]).toEqual(
       vi.mocked(addReviewQueueEvent).mock.calls[0],
     );
-    await waitFor(() =>
-      expect(screen.queryByText("Uncertain A")).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByText("Uncertain A")).toBeNull());
 
     rerender(view("queue-b", "item-b"));
     expect(screen.getByText("Uncertain B")).toBeTruthy();
