@@ -104,7 +104,8 @@ describe("bulk QC browser and native window-close integrity", () => {
     let rejectRequest!: (error: Error) => void;
     const pending = new Promise<
       Awaited<ReturnType<typeof bulkTriageReviewQueueItems>>
-    >(      (_resolve, reject) => {
+    >(
+      (_resolve, reject) => {
         rejectRequest = reject;
       },
     );
@@ -203,6 +204,57 @@ describe("bulk QC browser and native window-close integrity", () => {
     expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["window accessor", "listener registration"] as const)(
+    "keeps the original bulk request recoverable when %s throws synchronously",
+    async (failure) => {
+      if (failure === "window accessor") {
+        vi.mocked(getCurrentWindow).mockImplementationOnce(() => {
+          throw new Error("Desktop window unavailable");
+        });
+      } else {
+        onCloseRequested.mockImplementationOnce(() => {
+          throw new Error("Native listener unavailable");
+        });
+      }
+      vi.mocked(bulkTriageReviewQueueItems)
+        .mockRejectedValueOnce(new Error("Bulk response lost"))
+        .mockResolvedValueOnce(validResult());
+      mount();
+      submitBulkReview();
+      const retryGuard = await screen.findByRole("button", {
+        name: "Retry bulk desktop close protection",
+      });
+      const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
+      const browserClose = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(browserClose);
+      expect(browserClose.defaultPrevented).toBe(true);
+
+      fireEvent.click(retryGuard);
+      await waitFor(() => expect(getCurrentWindow).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", {
+            name: "Retry bulk desktop close protection",
+          }),
+        ).toBeNull(),
+      );
+      const prevented = vi.fn();
+      act(() => closeHandler?.({ preventDefault: prevented }));
+      expect(prevented).toHaveBeenCalledTimes(1);
+      expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Retry identical bulk action" }),
+      );
+      await waitFor(() =>
+        expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(2),
+      );
+      expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1]).toEqual(
+        original,
+      );
+    },
+  );
+
   it("cleans up a native listener that resolves after the request completes", async () => {
     let resolveListener!: (stop: () => void) => void;
     const subscription = new Promise<() => void>((resolve) => {
@@ -219,7 +271,8 @@ describe("bulk QC browser and native window-close integrity", () => {
     ) => void;
     const pending = new Promise<
       Awaited<ReturnType<typeof bulkTriageReviewQueueItems>>
-    >(      (resolve) => {
+    >(
+      (resolve) => {
         resolveRequest = resolve;
       },
     );
