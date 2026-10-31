@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_spatial_mesh_cross_format_v14 import COMMON, OBJ, PLY
@@ -116,3 +117,51 @@ def test_indexed_triangles_do_not_claim_an_imported_source_file() -> None:
     assert result["provenance"]["source_payload_sha256"] is None
     assert result["provenance"]["source_payload_size_bytes"] is None
     assert len(result["provenance"]["geometry_sha256"]) == 64
+
+@pytest.mark.parametrize(
+    ("source_key", "source_value"),
+    [
+        ("obj_text", OBJ),
+        ("ply_text", PLY),
+        ("glb_base64", make_glb()),
+    ],
+    ids=["obj", "ply", "glb"],
+)
+def test_unchecked_zero_byte_import_provenance_fails_but_missing_legacy_count_survives(
+    source_key: str, source_value: str
+) -> None:
+    """A claimed imported original cannot be empty, even without a hash check."""
+    common = {**COMMON, source_key: source_value, "specimen_id": "colony:16"}
+    before = preview_from_request(
+        MeshPreviewRequest.model_validate(
+            {
+                **common,
+                "observation_id": "survey-1",
+                "observed_at_utc": "2026-10-01T12:00:00Z",
+            }
+        )
+    )
+    after = preview_from_request(
+        MeshPreviewRequest.model_validate(
+            {
+                **common,
+                "observation_id": "survey-2",
+                "observed_at_utc": "2026-10-02T12:00:00Z",
+            }
+        )
+    )
+    for observation in (before, after):
+        observation["project_id"] = "local-project"
+    assert before["provenance"]["source_payload_integrity_checked"] is False
+    baseline = compare_mesh_observations(before, after)
+    assert baseline["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"]
+
+    before["provenance"]["source_payload_size_bytes"] = 0
+    with pytest.raises(ValueError, match="Imported mesh source byte count must be positive"):
+        compare_mesh_observations(before, after)
+
+    # Older preview artifacts can omit the count entirely. Missing is not
+    # equivalent to an impossible explicitly claimed zero-byte original.
+    before["provenance"].pop("source_payload_size_bytes")
+    legacy = compare_mesh_observations(before, after)
+    assert legacy["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"]
