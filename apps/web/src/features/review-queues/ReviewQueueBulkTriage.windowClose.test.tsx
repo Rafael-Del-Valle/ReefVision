@@ -21,7 +21,12 @@ vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: vi.fn() }));
 vi.mock("../../api/client", () => ({ bulkTriageReviewQueueItems: vi.fn() }));
 
 const items = [
-  { id: "coral-1", image_id: "frame-1", rank_position: 1, review_state: "pending" },
+  {
+    id: "coral-1",
+    image_id: "frame-1",
+    rank_position: 1,
+    review_state: "pending",
+  },
 ] as ReviewQueueItem[];
 
 function mount() {
@@ -97,8 +102,9 @@ describe("bulk QC browser and native window-close integrity", () => {
 
   it("blocks native close through an uncertain response and preserves the exact retry UUID", async () => {
     let rejectRequest!: (error: Error) => void;
-    const pending = new Promise<Awaited<ReturnType<typeof bulkTriageReviewQueueItems>>>(
-      (_resolve, reject) => {
+    const pending = new Promise<
+      Awaited<ReturnType<typeof bulkTriageReviewQueueItems>>
+    >(      (_resolve, reject) => {
         rejectRequest = reject;
       },
     );
@@ -211,8 +217,9 @@ describe("bulk QC browser and native window-close integrity", () => {
     let resolveRequest!: (
       value: Awaited<ReturnType<typeof bulkTriageReviewQueueItems>>,
     ) => void;
-    const pending = new Promise<Awaited<ReturnType<typeof bulkTriageReviewQueueItems>>>(
-      (resolve) => {
+    const pending = new Promise<
+      Awaited<ReturnType<typeof bulkTriageReviewQueueItems>>
+    >(      (resolve) => {
         resolveRequest = resolve;
       },
     );
