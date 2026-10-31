@@ -660,9 +660,23 @@ def compare_mesh_observations(
             if any(digest is not None for digest in expected_payloads):
                 warnings.append("reidentification_source_payload_binding_unavailable")
         elif bound_payloads != expected_payloads:
-            raise ValueError(
-                "Reidentification evidence must match both imported source payloads"
-            )
+            raise ValueError("Reidentification evidence must match both imported source payloads")
+        # A byte digest is not a project-owned asset identity. Reusing a
+        # matching note against another import with identical bytes must not
+        # silently inherit the earlier human observation.
+        expected_asset_ids = (
+            first.get("spatial_source_asset_id"),
+            second.get("spatial_source_asset_id"),
+        )
+        bound_asset_ids = (
+            identity.before_spatial_source_asset_id,
+            identity.after_spatial_source_asset_id,
+        )
+        if bound_asset_ids[0] is None:
+            if any(asset_id is not None for asset_id in expected_asset_ids):
+                warnings.append("reidentification_spatial_source_asset_binding_unavailable")
+        elif bound_asset_ids != expected_asset_ids:
+            raise ValueError("Reidentification evidence must match both spatial source asset IDs")
         reidentification_record = identity.model_dump(mode="json", exclude_none=True)
         if identity.specimen_id is None:
             warnings.append("reidentification_specimen_binding_unavailable")
