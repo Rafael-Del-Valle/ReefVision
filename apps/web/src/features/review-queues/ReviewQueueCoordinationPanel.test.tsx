@@ -444,4 +444,126 @@ describe("ReviewQueueCoordinationPanel", () => {
       "Keep this draft",
     );
   });
+
+  it("keeps unsent reviewer notes and attribution scoped to their review item", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "assignee-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsent biological note for A" },
+    });
+
+    rerender(view("queue-b", "item-b"));
+    expect(screen.getByLabelText("Your local reviewer label")).toHaveProperty(
+      "value",
+      "",
+    );
+    expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+      "value",
+      "",
+    );
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "",
+    );
+    expect(screen.getByRole("button", { name: "Add comment" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-b" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Note for B" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    expect(addReviewQueueEvent).toHaveBeenCalledWith(
+      "queue-b",
+      "item-b",
+      expect.objectContaining({
+        actor: "researcher-b",
+        comment: "Note for B",
+      }),
+    );
+
+    rerender(view("queue-a", "item-a"));
+    expect(screen.getByLabelText("Your local reviewer label")).toHaveProperty(
+      "value",
+      "researcher-a",
+    );
+    expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+      "value",
+      "assignee-a",
+    );
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Unsent biological note for A",
+    );
+    expect(addReviewQueueEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets history pagination for a new item and restores it on return", async () => {
+    vi.mocked(getReviewQueueEvents).mockImplementation(
+      async (_queueId, _itemId, page) => ({
+        items: [],
+        total: 101,
+        page,
+        page_size: 50,
+        current_assignee: null,
+        requires_researcher_review: true,
+      }),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Page 1");
+    fireEvent.click(screen.getByRole("button", { name: "Next events" }));
+    await screen.findByText("Page 2");
+    expect(getReviewQueueEvents).toHaveBeenCalledWith(
+      "queue-a",
+      "item-a",
+      2,
+      expect.anything(),
+    );
+
+    rerender(view("queue-b", "item-b"));
+    await screen.findByText("Page 1");
+    expect(getReviewQueueEvents).toHaveBeenCalledWith(
+      "queue-b",
+      "item-b",
+      1,
+      expect.anything(),
+    );
+    rerender(view("queue-a", "item-a"));
+    await screen.findByText("Page 2");
+  });
+
 });
