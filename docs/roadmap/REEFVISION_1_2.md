@@ -4788,3 +4788,34 @@ longitudinal measurements, registered independent experimental units,
 representative coral data, reconciliation with 1.1 migrations, and physical
 installed Windows GUI/MSI acceptance remain required. **1.2 NOT
 RELEASE-READY; 1.3 not started.**
+
+
+## Current-contract UTC sampling QC source replay (2026-10-31)
+
+After the preceding head `81f1e66cb0a36275fa83b7c465db20e849c52979`
+passed **19/19 GitHub Actions workflows**, including backend, pose workflow,
+ReefVision 1.0 Acceptance and Windows Desktop Build, the v0021 typed
+`EcologyMeasurementCandidatesResponse` now **recomputes the full per-organism
+UTC sampling-date QC from the actual persisted source candidate rows** when
+deserializing standalone API and saved executable Workflow Builder artifacts.
+This check runs in addition to canonical SHA-256 verification, so an attacker
+or accidental edit cannot simply recompute a digest to fabricate sampling
+dates, omit a failed series, invent extra source images, hide same-day
+technical replicates, or change source-conflict flags.
+
+The regression `test_ecology_sampling_qc_source_replay_1_2.py` exercises real
+standalone API and executed saved-workflow parity, rehashed forged QC metadata
+and counts, missing/duplicated series, and v0020 historical compatibility.
+The existing typed `ecology_identity_registry_source` node, review gate,
+provenance, persistence and offline workflow remain unchanged. Older source
+fingerprint contracts remain readable without retroactively claiming their
+historical QC was authenticated. **The source rows are still
+`linked_unverified` projected geometry; SHA-256 and deterministic QC are
+not scientist review, verified growth or proof of independent experimental
+units.**
+
+**Release HOLD:** exact-new-head CI, authenticated scientist-reviewed
+longitudinal measurements, registered experimental-unit independence,
+representative ecological/human-model validation, 1.1 Alembic reconciliation
+and physical installed Windows GUI/MSI acceptance. **1.2 NOT RELEASE-READY;
+1.3 not started.**
