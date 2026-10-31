@@ -201,7 +201,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect((screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement).value).toBe(
       "Unsent observation for coral A",
     );
-    expect(screen.getByRole("status").textContent).toMatch(/uncertain audit-event retry IDs/);
+    expect(
+      screen.getByText(/unsent biological notes and uncertain audit-event retry IDs/),
+    ).toBeTruthy();
   });
 
   it("does not fetch items from the previous project after navigation", async () => {
