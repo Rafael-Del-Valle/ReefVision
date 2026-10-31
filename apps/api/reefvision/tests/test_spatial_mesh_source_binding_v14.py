@@ -157,3 +157,31 @@ def test_legacy_import_without_expected_hash_remains_unbound() -> None:
     assert result["provenance"]["source_payload_sha256"] == expected_sha
     assert result["provenance"]["source_payload_integrity_checked"] is False
     assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+@pytest.mark.parametrize(
+    "invalid_face",
+    [
+        "f 1/ 2 3",
+        "f 1/2/3/4 2 3",
+        "f 1//0 2 3",
+    ],
+)
+def test_malformed_obj_rejected_by_api_and_persisted_workflow(
+    client: TestClient, invalid_face: str
+) -> None:
+    project_id = str(create_project(client, "Reject malformed OBJ references")["id"])
+    obj_text = f"v 0 0 0\nv 2 0 0\nv 0 3 0\n{invalid_face}\n"
+    params = {**COMMON, "obj_text": obj_text}
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params
+    )
+    assert response.status_code == 400, response.text
+    assert "OBJ line 4:" in response.text
+
+    detail = _run_saved_mesh(client, project_id, params)
+    assert detail["completed"] is False
+    assert detail["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"]
+    )
