@@ -4735,3 +4735,35 @@ Builder behavior. Fresh exact-head Ruff, full backend and frontend CI,
 scientist-reviewed longitudinal measurements, migration reconciliation,
 representative biological validation, and installed Windows MSI/GUI
 acceptance remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Current-contract projected endpoint source-row replay (2026-10-30)
+
+The prior exact head `9964ea55bbfaf408e5ba64838abd4142f29ead30`
+completed **19/19 GitHub Actions workflows successfully**, including full
+backend CI, Pose Workflow Validation, ReefVision 1.0 Acceptance and Windows
+Desktop Build. That is pre-change evidence, not validation of this increment.
+
+The existing `ecology-measurement-candidates-0021` typed response now
+cross-checks every persisted projected endpoint against its actual source
+candidate series **after** canonical SHA-256 verification. An endpoint must
+have one unambiguous passing UTC sampling-date QC series, the correct
+observed timepoint count, source-ordered first and last observations,
+matching image/annotation/calibration evidence IDs, timestamps, geometry
+values, unit, organism identity revision, parent colony and declared
+experimental unit. Duplicate endpoints for the same organism/metric fail
+closed. A recomputed payload and report digest cannot promote a fabricated
+endpoint or count repeated images as new independent observations.
+
+Focused tests use the existing API and executed, persisted Workflow Builder
+artifact, plus source-linked synthetic two-date evidence to exercise six
+rehashed lineage mismatches, a self-consistent but fabricated final
+measurement, duplicate endpoint rejection, and historical v0020 replay.
+The tests do not claim authenticated scientific review: source-linked
+projected geometry remains `linked_unverified` and
+`scientist_review_required`. No new workflow node, migration, pretrained
+weights, environmental context or cross-track merge is introduced.
+
+**Release HOLD:** fresh exact-head CI, authenticated reviewed longitudinal
+observations, registered experimental-unit independence, representative
+ecological validation, 1.1 migration reconciliation, and installed Windows
+GUI/MSI acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
