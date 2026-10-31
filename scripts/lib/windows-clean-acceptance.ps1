@@ -203,6 +203,21 @@ function Assert-ReefVisionOwnedAcceptanceRun {
     if ($lines.Count -ne 1 -or $lines[0] -cne $Token) {
         throw 'Refusing cleanup: acceptance run ownership token mismatch.'
     }
+    # The ownership marker and parent ancestry are not sufficient: a junction
+    # introduced *inside* the run could redirect recursive cleanup into real
+    # user data. Enumerate without following links, and fail closed on every
+    # reparse point (files and directories) before Remove-Item -Recurse.
+    $pending = [System.Collections.Generic.Stack[string]]::new()
+    $pending.Push($actual)
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        foreach ($child in @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop)) {
+            if (($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Refusing cleanup: disposable acceptance run contains a junction or symbolic link: $($child.FullName)"
+            }
+            if ($child.PSIsContainer) { $pending.Push($child.FullName) }
+        }
+    }
 }
 
 function New-ReefVisionMsiArguments {
