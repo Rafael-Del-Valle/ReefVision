@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import errno
+from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO
 from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
@@ -293,3 +295,44 @@ def test_camera_exif_nul_terminated_timestamp_and_offset(as_bytes: bool) -> None
     timestamp = image_storage._capture_timestamp({36867: raw, 36881: offset, 37521: "123456\x00"})
     assert timestamp is not None
     assert timestamp.isoformat() == "2026-10-25T14:11:12.123456+00:00"
+
+
+@pytest.mark.parametrize(
+    ("camera_time", "offset", "expected_utc", "warning_fragment"),
+    [
+        ("2026:10:25 10:11:12", None, None, "no UTC offset"),
+        ("2026:10:25 10:11:12", "+99:99", None, "invalid"),
+        ("2026:13:25 10:11:12", "+00:00", None, "invalid"),
+        ("2026:10:25 10:11:12", "+00:00", "2026-10-25T10:11:12+00:00", None),
+    ],
+)
+def test_camera_jpeg_exif_time_qc_preserves_original_bytes(
+    tmp_path: Path,
+    camera_time: str,
+    offset: str | None,
+    expected_utc: str | None,
+    warning_fragment: str | None,
+) -> None:
+    """Malformed camera clocks must retain source bytes and visible time uncertainty."""
+    source = tmp_path / "IMG_0103.JPG"
+    exif = Image.Exif()
+    exif[36867] = camera_time
+    if offset is not None:
+        exif[36881] = offset
+    Image.new("RGB", (17, 13), (20, 40, 60)).save(source, format="JPEG", exif=exif)
+    original = source.read_bytes()
+    digest = sha256(original).hexdigest()
+
+    inspected = image_storage.inspect_staged_image(source, digest, len(original))
+
+    assert inspected.sha256 == digest
+    assert inspected.media_type == "image/jpeg"
+    assert inspected.metadata["exif"]["DateTimeOriginal"] == camera_time
+    assert source.read_bytes() == original
+    if expected_utc is None:
+        assert inspected.capture_timestamp is None
+        assert warning_fragment in inspected.metadata["capture_time_warning"]
+    else:
+        assert inspected.capture_timestamp is not None
+        assert inspected.capture_timestamp.isoformat() == expected_utc
+        assert "capture_time_warning" not in inspected.metadata
