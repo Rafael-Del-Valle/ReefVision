@@ -303,3 +303,78 @@ def test_queued_verified_pose_workflow_rejects_changed_revision_lineage(
     assert detail.json()["run"]["status"] == "failed"
     assert detail.json()["run"]["error_message"] == expected_error
     assert detail.json()["artifacts"] == []
+
+
+def test_completed_verified_pose_workflow_refuses_stale_queued_job(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A real API-frozen pose dataset has already completed its saved workflow.
+    # Requeueing the old job must not rewrite its scientific run or artifacts.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    graph = {
+        "graph_id": "track-e-terminal-pose-replay",
+        "name": "Verified pose workflow terminal replay guard",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": {
+                    "dataset_id": str(dataset["id"]),
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+            }
+        ],
+        "edges": [],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+
+    app = cast(FastAPI, client.app)
+    job_id = str(queued.json()["job_id"])
+    run_id = str(queued.json()["id"])
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, job_id
+    )
+
+    before = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert before.status_code == 200, before.text
+    frozen = before.json()
+    assert frozen["run"]["status"] == "succeeded"
+    assert len(frozen["artifacts"]) == 1
+    assert frozen["run"]["result_json"]["provenance_sha256"]
+
+    # Simulate a stale queue record after a successful worker completion.
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        job.status = "queued"
+        session.commit()
+
+    assert (
+        process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
+        is False
+    )
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "failed"
+        assert job.error_message == (
+            "Workflow run is already terminal; refusing queued job replay"
+        )
+        assert job.completed_at is not None
+
+    after = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert after.status_code == 200, after.text
+    assert after.json()["run"] == frozen["run"]
+    assert after.json()["nodes"] == frozen["nodes"]
+    assert after.json()["artifacts"] == frozen["artifacts"]
