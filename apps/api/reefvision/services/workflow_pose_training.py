@@ -586,6 +586,10 @@ def _reused_pose_training_result(
     # Downstream nodes also receive the worker's best/last checkpoint paths.
     # A valid result checkpoint cannot authorize unrelated model artifacts
     # advertised through that same scientific provenance manifest.
+    # A JSON array of key/value pairs can coerce to the original dictionary.
+    # Reject malformed persisted evidence instead of accepting its contents.
+    if run.artifact_manifest_json is not None and not isinstance(run.artifact_manifest_json, dict):
+        raise ValidationError("Recovered pose-training artifact manifest must be a JSON object")
     artifact_manifest = dict(run.artifact_manifest_json or {})
     for field, filename in (
         ("best_checkpoint_path", "best.pt"),
