@@ -124,6 +124,11 @@ def verify_succeeded_node_artifacts(
 
     declared_outputs = result.get("outputs")
 
+    # Older records may omit the summary, but an explicitly persisted one
+    # must retain its list shape. Otherwise malformed lineage is ignored.
+    if "outputs" in result and not isinstance(declared_outputs, list):
+        raise ConflictError("Succeeded workflow node output summary must be a list")
+
     if isinstance(
         declared_outputs,
         list,
