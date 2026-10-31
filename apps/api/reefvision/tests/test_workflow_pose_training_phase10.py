@@ -734,7 +734,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         assert persisted is not None
         original_registry = persisted.parameter_registry_version
         original_snapshot = dict(persisted.draft_snapshot_json or {})
-        assert original_snapshot["schema_version"] == "pose-workflow-training-snapshot-0002"
+        assert original_snapshot["schema_version"] == "pose-workflow-training-snapshot-0003"
         assert original_snapshot["parameter_registry_version"] == original_registry
         persisted.parameter_registry_version = "substituted-provider-registry"
         session.commit()
@@ -764,9 +764,13 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
-    # A v2 snapshot cannot evade its frozen provider-registry check by
-    # changing only the schema marker to a historical version or null.
-    for downgraded_schema in ("pose-workflow-training-snapshot-0001", None):
+    # A completed v3 snapshot cannot evade its frozen metric history or
+    # provider-registry assertions by changing only the schema marker.
+    for downgraded_schema in (
+        "pose-workflow-training-snapshot-0001",
+        "pose-workflow-training-snapshot-0002",
+        None,
+    ):
         with app.state.session_factory() as session:
             persisted = session.get(TrainingRun, result["training_run_id"])
             assert persisted is not None
@@ -783,6 +787,27 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         persisted = session.get(TrainingRun, result["training_run_id"])
         assert persisted is not None
         persisted.draft_snapshot_json = original_snapshot
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # A saved Workflow Builder replay must not return altered epoch-level
+    # metrics merely because its final experiment summary still matches.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_history = dict(persisted.metrics_history_json or {})
+        assert original_snapshot["metrics_history_sha256"]
+        persisted.metrics_history_json = {**original_history, "epoch": [999]}
+        session.commit()
+
+    with pytest.raises(ValidationError, match="metrics history changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.metrics_history_json = original_history
         session.commit()
 
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
