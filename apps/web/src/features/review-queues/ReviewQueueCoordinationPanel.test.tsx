@@ -16,7 +16,7 @@ vi.mock("../../api/client", () => ({
   getReviewQueueEvents: vi.fn(),
 }));
 
-function mount() {
+function mount(onClose = vi.fn()) {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -28,10 +28,11 @@ function mount() {
       <ReviewQueueCoordinationPanel
         queueId="queue-1"
         itemId="item-1"
-        onClose={vi.fn()}
+        onClose={onClose}
       />
     </QueryClientProvider>,
   );
+  return onClose;
 }
 
 describe("ReviewQueueCoordinationPanel", () => {
@@ -59,6 +60,61 @@ describe("ReviewQueueCoordinationPanel", () => {
         created_at: "2026-10-18T20:00:00Z",
       }),
     );
+  });
+
+  it("requires explicit confirmation before discarding unsent biological notes", async () => {
+    const onClose = mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsubmitted coral condition note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue editing" }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Unsubmitted coral condition note",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close without saving drafts" }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(addReviewQueueEvent).not.toHaveBeenCalled();
+  });
+
+  it("keeps an uncertain audit UUID available until the researcher resolves it", async () => {
+    vi.mocked(addReviewQueueEvent).mockRejectedValueOnce(
+      new Error("Uncertain event delivery"),
+    );
+    const onClose = mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Tentacle condition needs inspection" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByText("Uncertain event delivery");
+    const close = screen.getByRole("button", { name: "Close coordination" });
+    expect(close).toHaveProperty("disabled", true);
+    fireEvent.click(close);
+    expect(onClose).not.toHaveBeenCalled();
+    const originalUuid =
+      vi.mocked(addReviewQueueEvent).mock.calls[0][2].client_request_id;
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(
+      vi.mocked(addReviewQueueEvent).mock.calls[1][2].client_request_id,
+    ).toBe(originalUuid);
+    await waitFor(() => expect(close).toHaveProperty("disabled", false));
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("posts a comment with trimmed actor and UUID without approving data", async () => {
