@@ -38,3 +38,26 @@ No schema migration or new Workflow Builder node is required because the
 change only protects unsubmitted local form state. Existing typed workflow
 inputs/outputs, persisted runs, provenance, retry and review-gate semantics
 remain unchanged. Do not infer 1.6 release readiness from these tests alone.
+
+## Reviewer-label race hardening (2026-10-30)
+
+A second gap exists even when the comment/assignee text is unchanged: the
+researcher can change the self-reported actor label while the first event is
+pending. A successful response previously cleared the unchanged draft, even
+though it now belongs to a different local reviewer. This could silently
+discard another researcher's unsubmitted observation or assignment.
+
+The panel now increments a separate actor-edit revision and snapshots it
+alongside the original event UUID, actor, comment/assignee and field revisions.
+A successful response clears the submitted field only if **both** its field
+revision and actor revision are unchanged. This includes edits that restore
+the original actor text. Uncertain retries retain the original event UUID,
+actor and payload; changing the label never reattributes an already submitted
+event. Existing append-only server audit and queue-scoped invalidation remain
+unchanged.
+
+Three new component regressions cover delayed comment completion, delayed
+assignment completion and failed-event retry after changing the actor. The
+tests assert preservation of the current draft and exact original actor and
+payload. Native GUI behavior, full frontend CI and Windows installer
+acceptance must be verified independently; this is not release approval.
