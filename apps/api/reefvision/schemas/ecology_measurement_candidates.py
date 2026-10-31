@@ -649,6 +649,50 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
                 raise ValueError("Current projected endpoint does not match source candidates")
         return self
 
+    @model_validator(mode="after")
+    def require_current_derived_summary_source_consistency(
+        self,
+    ) -> EcologyMeasurementCandidatesResponse:
+        """Rebuild saved ecological coverage and unit-level means from source rows.
+
+        A valid recomputed fingerprint alone cannot turn a missing organism,
+        duplicated tank, or changed population mean into scientific evidence.
+        This is replay integrity, not independent-unit authentication.
+        Earlier source contracts retain their historical decoding semantics.
+        """
+        if self.source_fingerprint_contract != "ecology-measurement-candidates-0021":
+            return self
+
+        # Import lazily to avoid the schema/service dependency cycle.
+        from reefvision.services.ecology_measurement_candidates import (
+            summarize_projected_endpoint_changes,
+            summarize_projected_population_summaries,
+            summarize_projected_unit_summaries,
+            summarize_projected_visit_coverage,
+        )
+
+        expected_visits = summarize_projected_visit_coverage(self.candidates)
+        if [row.model_dump(mode="json") for row in self.projected_visit_coverage] != [
+            row.model_dump(mode="json") for row in expected_visits
+        ]:
+            raise ValueError("Current projected visit coverage does not match source candidates")
+
+        expected_changes = summarize_projected_endpoint_changes(
+            self.candidates, self.sampling_date_qc
+        )
+        expected_units = summarize_projected_unit_summaries(self.candidates, expected_changes)
+        if [row.model_dump(mode="json") for row in self.projected_unit_summaries] != [
+            row.model_dump(mode="json") for row in expected_units
+        ]:
+            raise ValueError("Current projected unit summaries do not match source candidates")
+
+        expected_population = summarize_projected_population_summaries(expected_units)
+        if [row.model_dump(mode="json") for row in self.projected_population_summaries] != [
+            row.model_dump(mode="json") for row in expected_population
+        ]:
+            raise ValueError("Current projected population summaries do not match source candidates")
+        return self
+
     @model_validator(mode="before")
     @classmethod
     def require_current_payload_fingerprint(cls, raw: Any) -> Any:
