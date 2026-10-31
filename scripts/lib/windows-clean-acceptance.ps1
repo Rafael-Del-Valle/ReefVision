@@ -147,6 +147,16 @@ function Assert-ReefVisionSafeAcceptanceRoot {
             throw "Unsafe acceptance root '$resolved' overlaps protected path '$item'."
         }
     }
+    # An acceptance root that *contains* a protected directory is just as
+    # dangerous as one inside it: C:\Users, for example, could overwrite or
+    # remove multiple user profiles even though it is outside USERPROFILE.
+    # The drive root is already rejected above; do not exempt other ancestors.
+    foreach ($item in $forbidden) {
+        if ($item -ine $volumeRoot -and
+            (Test-ReefVisionPathWithin -Path $item -Parent $resolved)) {
+            throw "Unsafe acceptance root '$resolved' contains protected path '$item'."
+        }
+    }
     if (Test-ReefVisionPathWithin -Path $DefaultDataRoot -Parent $resolved) {
         throw "Acceptance root may not contain the normal ReefVision data directory: $DefaultDataRoot"
     }
