@@ -236,12 +236,25 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
             altered[collection][0][forged_field] = forged_value
             with pytest.raises(SchemaValidationError, match="unsupported fields"):
                 PairedCountComparisonResponse.model_validate(altered)
+        # Current saved results must not silently drop unsupported claims at
+        # the response or source-provenance level either.
+        forged_response = dict(evidence)
+        forged_response["scientist_review_approved"] = True
+        with pytest.raises(SchemaValidationError, match="response contains unsupported fields"):
+            PairedCountComparisonResponse.model_validate(forged_response)
+        forged_provenance = dict(evidence)
+        forged_provenance["analysis_provenance"] = dict(evidence["analysis_provenance"])
+        forged_provenance["analysis_provenance"]["independent_unit_registry_verified"] = True
+        with pytest.raises(SchemaValidationError, match="provenance contains unsupported fields"):
+            PairedCountComparisonResponse.model_validate(forged_provenance)
     # Older unverified artifacts retain their historical decoding contract.
     historical = dict(payload)
     historical["analysis_provenance"] = dict(payload["analysis_provenance"])
     historical["analysis_provenance"]["algorithm_version"] = "ecology-paired-count-0006"
     historical["paired_differences"] = [dict(row) for row in payload["paired_differences"]]
     historical["paired_differences"][0]["scientist_verified"] = True
+    historical["scientist_review_approved"] = True
+    historical["analysis_provenance"]["independent_unit_registry_verified"] = True
     parsed_historical = PairedCountComparisonResponse.model_validate(historical)
     assert parsed_historical.evidence_level == "caller_supplied_unverified"
     assert parsed_historical.review_status == "requires_source_verification"
