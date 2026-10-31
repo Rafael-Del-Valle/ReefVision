@@ -286,6 +286,11 @@ describe("ReviewQueueCoordinationPanel", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull(),
     );
+    // A successfully replayed comment is sent and its input is cleared.
+    // Start a separate unsent assignment to exercise cross-item close safety.
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "second-scientist" },
+    });
     rerender(view("item-b"));
     expect(close.disabled).toBe(false);
     // The resolved retry does not authorize discarding A's remaining draft.
