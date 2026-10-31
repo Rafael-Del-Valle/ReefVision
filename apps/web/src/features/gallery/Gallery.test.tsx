@@ -734,6 +734,54 @@ describe("Gallery", () => {
     expect(requestedPages).toContain(2);
   });
 
+  it("focuses the last destination image without flashing the first on wrapped page navigation", async () => {
+    const firstPage = Array.from({ length: 24 }, (_, index) => ({
+      ...image,
+      id: `image-${index + 1}`,
+      original_filename: `swiftia-${String(index + 1).padStart(2, "0")}.png`,
+    }));
+    const secondPage = [25, 26].map((index) => ({
+      ...image,
+      id: `image-${index}`,
+      original_filename: `swiftia-${index}.png`,
+    }));
+    const onFocusedImageChange = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input), "http://localhost");
+      const requestedPage = Number(url.searchParams.get("page") ?? "1");
+      return jsonResponse({
+        items: requestedPage === 1 ? firstPage : secondPage,
+        total: 26,
+        page: requestedPage,
+        page_size: 24,
+        pages: 2,
+      });
+    });
+
+    renderGallery(undefined, undefined, onFocusedImageChange);
+    await screen.findByAltText("Focused project image: swiftia-01.png");
+    await userEvent.click(screen.getByLabelText("Wrap image navigation"));
+    const viewer = screen.getByRole("region", { name: "Image workbench" });
+    viewer.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+
+    expect(
+      await screen.findByAltText("Focused project image: swiftia-26.png"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByAltText("Focused project image: swiftia-25.png"),
+    ).toBeNull();
+    expect(onFocusedImageChange).not.toHaveBeenCalledWith("image-25");
+    await waitFor(() =>
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(`reefvision.gallery.${project.id}.v1`) ??
+            "{}",
+        ),
+      ).toMatchObject({ imageId: "image-26", page: 2, wrap: true }),
+    );
+  });
+
   it("does not navigate from editor controls and persists optional wrapping", async () => {
     const secondImage: ProjectImage = {
       ...image,
