@@ -132,8 +132,22 @@ function ImageCard({
       className={`image-card ${selected ? "selected" : ""}`}
       tabIndex={0}
       aria-label={`${image.original_filename}, ${image.annotation_count} annotations, ${status}`}
-      onDoubleClick={() => onOpenAnnotation?.(image.id)}
+      onDoubleClick={(event) => {
+        // Metadata fields and selection controls are nested in this card.
+        // Double-clicking a field to select text must not open the editor.
+        if (
+          (event.target as HTMLElement).closest(
+            "button, input, select, textarea, a, label, summary, [contenteditable='true']",
+          )
+        ) {
+          return;
+        }
+        onOpenAnnotation?.(image.id);
+      }}
       onKeyDown={(event: KeyboardEvent<HTMLElement>) => {
+        // Space and Enter from child inputs, checkboxes, and buttons bubble
+        // through the card. Only apply card shortcuts when the card has focus.
+        if (event.target !== event.currentTarget) return;
         if (event.key === "Enter") onOpenAnnotation?.(image.id);
         if (event.key === " ") {
           event.preventDefault();
