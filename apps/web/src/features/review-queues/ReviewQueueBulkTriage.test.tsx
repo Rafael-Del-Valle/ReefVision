@@ -424,7 +424,9 @@ describe("ReviewQueueBulkTriage", () => {
 
     rerender(view("queue-a"));
     fireEvent.click(
-      await screen.findByRole("button", { name: "Retry identical bulk action" }),
+      await screen.findByRole("button", {
+        name: "Retry identical bulk action",
+      }),
     );
     await waitFor(() =>
       expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(3),
