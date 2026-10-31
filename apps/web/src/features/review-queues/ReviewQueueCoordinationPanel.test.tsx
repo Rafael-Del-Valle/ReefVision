@@ -589,10 +589,7 @@ describe("ReviewQueueCoordinationPanel", () => {
       "value",
       "",
     );
-    expect(screen.getByLabelText("Review comment")).toHaveProperty(
-      "value",
-      "",
-    );
+    expect(screen.getByLabelText("Review comment")).toHaveProperty("value", "");
     expect(screen.getByRole("button", { name: "Add comment" })).toHaveProperty(
       "disabled",
       true,
@@ -740,9 +737,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     vi.mocked(addReviewQueueEvent)
       .mockRejectedValueOnce(new Error("Uncertain A"))
       .mockRejectedValueOnce(new Error("Uncertain B"))
-      .mockResolvedValue(
-        {} as Awaited<ReturnType<typeof addReviewQueueEvent>>,
-      );
+      .mockResolvedValue({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
     const client = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
