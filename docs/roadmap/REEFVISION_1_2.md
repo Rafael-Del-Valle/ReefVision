@@ -4854,3 +4854,28 @@ scientist-reviewed longitudinal measurements, registered independent study
 units, human-model comparison on representative biological data, migration
 reconciliation with unmerged 1.1 and installed Windows GUI/MSI acceptance.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Replayed observed-visit and experimental-unit summary integrity (2026-10-31)
+
+Current `ecology-measurement-candidates-0021` source-linked artifacts now
+recompute observed UTC-date visit coverage, projected organism/metric endpoints,
+one-row-per-declared-unit summaries, and equal-unit-weighted population
+summaries from their original candidate measurements. Persisted Workflow Builder
+results and standalone API responses use the same typed Pydantic contract.
+Even if an altered payload and its candidate-report SHA-256 are recomputed,
+fabricated/missing/duplicated visit rows, inflated independent-unit
+denominators, reassigned tanks, altered unit means, or removed
+independence-review blockers must fail deserialization. Older v0018–v0020
+source-fingerprint contracts retain historical readability and remain
+`linked_unverified`.
+
+The focused regression includes live standalone API versus executed saved
+Workflow Builder payload parity, a tampered saved-workflow visit, nine altered
+derived-field cases, six missing/duplicate summary-row cases, and historical
+decoding. This is **source-to-derived replay consistency**, not authentication
+of source images, parentage, calibration, biological independence, or
+scientist-approved growth. It does not introduce another environmental
+context provider, migration, model checkpoint, or workflow node. Full exact-head
+CI, authenticated review, independent ecological acceptance, cross-version
+migration reconciliation, and installed Windows GUI/MSI checks remain required.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
