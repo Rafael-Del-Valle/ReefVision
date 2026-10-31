@@ -529,7 +529,8 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
 
         Historical payloads without a report remain readable. Alternative
         spellings of the same declared unit are counted once for modern
-        reports, while legacy literal-label counts remain admissible.
+        reports. Current reports must use canonical physical-unit counts;
+        legacy literal-label counts remain admissible.
         Neither count authenticates experimental-unit independence.
         """
         report = self.candidate_report
@@ -547,6 +548,12 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             (classify_ecological_unit_level(unit_type) or unit_type, unit_id)
             for unit_type, unit_id in declared_units
         }
+        # The current producer counts canonical physical units only. Older
+        # signed reports may legitimately use the historical literal labels.
+        if self.source_fingerprint_contract == "ecology-measurement-candidates-0021":
+            allowed_unit_counts = {len(canonical_units)}
+        else:
+            allowed_unit_counts = {len(declared_units), len(canonical_units)}
         pass_series_count = qc_counts.get("date_series_candidate", 0)
         expected = (
             report.project_id == self.project_id
@@ -554,11 +561,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             and report.candidate_count == len(self.candidates)
             and report.source_image_count == len({row.image_id for row in self.candidates})
             and report.source_organism_count == len({row.organism_key for row in self.candidates})
-            and report.declared_experimental_unit_count
-            in (
-                len(declared_units),
-                len(canonical_units),
-            )
+            and report.declared_experimental_unit_count in allowed_unit_counts
             and report.date_qc_pass_series_count == pass_series_count
             and report.excluded_series_count == len(self.sampling_date_qc) - pass_series_count
             and report.excluded_source_count == len(self.exclusions)
@@ -746,7 +749,6 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         if canonical_json_sha256(payload) != raw.get("input_sha256"):
             raise ValueError("Current ecological candidate source fingerprint mismatch")
         return raw
-
 
     @model_validator(mode="before")
     @classmethod
