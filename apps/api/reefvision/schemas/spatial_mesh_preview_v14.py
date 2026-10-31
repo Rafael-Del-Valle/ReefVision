@@ -356,6 +356,11 @@ class MeshReidentificationEvidence(BaseModel):
     # Both hashes must be supplied together; labels alone are not unique assets.
     before_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     after_geometry_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    # Imported source bytes are distinct from parsed geometry: a re-export can
+    # preserve triangles while changing the original OBJ/PLY/GLB payload.
+    # Legacy evidence without this paired binding remains provisional.
+    before_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    after_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     # Optional timepoint binding: observation IDs and geometry hashes alone do
     # not prevent a dated survey record from being silently reassigned.
@@ -378,6 +383,10 @@ class MeshReidentificationEvidence(BaseModel):
     def require_complete_geometry_binding(self) -> MeshReidentificationEvidence:
         if (self.before_geometry_sha256 is None) != (self.after_geometry_sha256 is None):
             raise ValueError("Reidentification geometry binding requires both SHA-256 fingerprints")
+        if (self.before_source_payload_sha256 is None) != (
+            self.after_source_payload_sha256 is None
+        ):
+            raise ValueError("Reidentification source payload binding requires both SHA-256 fingerprints")
         if (self.before_observed_at_utc is None) != (self.after_observed_at_utc is None):
             raise ValueError("Reidentification timepoint binding requires both UTC timestamps")
         if not self.evidence_note.strip() or (
