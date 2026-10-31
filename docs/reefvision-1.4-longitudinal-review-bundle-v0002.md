@@ -139,3 +139,21 @@ the stricter request schema. Existing legitimate identifiers remain unchanged;
 scientific calibration, acquisition history and biological identity are still
 unverified. Regression coverage exercises direct replay rejection and retains
 standalone/saved-workflow parity for valid labels.
+
+## Project-bound reidentification evidence hygiene
+
+A supplied reidentification `project_id` now follows the same 1–128 character
+ASCII identifier contract as the compared mesh observations: it must start with
+an ASCII letter or digit and contain only letters, digits, underscores, periods,
+colons, or hyphens. Blank, whitespace-containing, control-character, oversized,
+and path-like labels fail at schema validation. The shared longitudinal engine
+revalidates mutated evidence models on replay, so callers cannot bypass this
+check by editing an already constructed model. Legacy evidence omitting the
+optional project binding remains readable and receives
+`reidentification_project_binding_unavailable` scientific QC; it is not
+promoted to verified specimen identity. The standalone comparison and saved,
+typed Workflow Builder execution both use this shared validation path.
+
+This guards identifier ambiguity, not authorization, authenticated reviewer
+identity, or durable versioned review persistence. No automatic verification
+or biological growth certification is implied.
