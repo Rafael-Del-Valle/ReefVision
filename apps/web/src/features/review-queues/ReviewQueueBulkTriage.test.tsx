@@ -359,4 +359,102 @@ describe("ReviewQueueBulkTriage", () => {
     expect(apply.disabled).toBe(true);
     expect(bulkTriageReviewQueueItems).not.toHaveBeenCalled();
   });
+  it("keeps uncertain bulk retries attached to their original queue across navigation", async () => {
+    vi.mocked(bulkTriageReviewQueueItems)
+      .mockRejectedValueOnce(new Error("Response lost for queue A"))
+      .mockResolvedValueOnce({
+        queue_id: "queue-b",
+        action: "start",
+        changed_count: 1,
+        items: [],
+        requires_researcher_review: true,
+      })
+      .mockResolvedValueOnce({
+        queue_id: "queue-a",
+        action: "start",
+        changed_count: 1,
+        items: [],
+        requires_researcher_review: true,
+      });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const view = (id: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueBulkTriage queueId={id} items={items} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a"));
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Select eligible on page/ }));
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply start to 1 items" }));
+    await screen.findByRole("button", { name: "Retry identical bulk action" });
+    const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
+
+    rerender(view("queue-b"));
+    expect(screen.queryByRole("button", { name: "Retry identical bulk action" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "reviewer-b" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Select eligible on page/ }));
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply start to 1 items" }));
+    await waitFor(() => expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1][0]).toBe("queue-b");
+
+    rerender(view("queue-a"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Retry identical bulk action" }),
+    );
+    await waitFor(() => expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[2]).toEqual(original);
+  });
+
+  it("does not display an old queue's delayed success or invalidate the new queue", async () => {
+    let finish!: () => void;
+    vi.mocked(bulkTriageReviewQueueItems).mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return {
+        queue_id: "queue-a",
+        action: "start",
+        changed_count: 1,
+        items: [],
+        requires_researcher_review: true,
+      };
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const view = (id: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueBulkTriage queueId={id} items={items} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a"));
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Select eligible on page/ }));
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply start to 1 items" }));
+    await waitFor(() => expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(1));
+    rerender(view("queue-b"));
+    finish();
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["review_queue_events", "queue-a"],
+      }),
+    );
+    expect(screen.queryByText(/items updated; scientific review remains required/)).toBeNull();
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: ["review_queue_items", "queue-b"],
+    });
+  });
+
 });
