@@ -225,6 +225,14 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
+        # A stale queued job must not reopen completed, failed, or cancelled
+        # scientific work. Preserve the terminal run and its frozen artifacts.
+        if run.status in {"succeeded", "failed", "cancelled"}:
+            job.status = "failed"
+            job.error_message = "Workflow run is already terminal; refusing queued job replay"
+            job.completed_at = _now()
+            session.commit()
+            return False
         graph_record = session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
         if graph_record is None:
             job.status = "failed"
