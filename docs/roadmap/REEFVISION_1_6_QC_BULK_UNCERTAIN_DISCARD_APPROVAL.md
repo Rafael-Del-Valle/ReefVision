@@ -5,7 +5,7 @@ A bulk QC request may commit successfully even when the desktop loses its HTTP r
 
 ## Behavior
 - First click **Review discard risk** exposes the risk; the UUID and exact retry remain available and no server mutation is made.
-- A separate **Discard and refresh** click explicitly removes only the currently scoped local uncertain request and refreshes that queue's items. It does not delete server records or verify observations.
+- A separate **Discard and refresh** click explicitly removes only the currently scoped local uncertain request and refreshes that queue's items and audit-event history. It does not delete server records or verify observations.
 - Approval is tied to the original request UUID, queue and navigation epoch. A→B→A navigation invalidates it, even if the original retry is still available.
 - Retrying the identical request invalidates discard approval. New uncertain outcomes also invalidate it.
 - The existing standalone bulk API and saved executable `qc_review_queue` Workflow Builder node are unchanged. Typed review-queue references, provenance, idempotent replay and researcher review remain mandatory.

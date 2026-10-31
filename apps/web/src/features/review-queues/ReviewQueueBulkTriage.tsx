@@ -387,7 +387,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
               This batch may already have been committed. Discarding its
               original request UUID prevents an identical safe retry and a new
               submission could duplicate audit history. Confirm only after
-              checking the refreshed queue and event history.
+              reviewing the refreshed queue and event history before another action.
             </p>
           )}
           <button
@@ -421,6 +421,9 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
               mutation.reset();
               void queryClient.invalidateQueries({
                 queryKey: ["review_queue_items", queueId],
+              });
+              void queryClient.invalidateQueries({
+                queryKey: ["review_queue_events", queueId],
               });
             }}
           >

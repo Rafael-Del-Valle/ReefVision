@@ -534,6 +534,11 @@ describe("ReviewQueueBulkTriage", () => {
         queryKey: ["review_queue_items", "queue-1"],
       }),
     );
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["review_queue_events", "queue-1"],
+      }),
+    );
     expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(1);
   });
 
