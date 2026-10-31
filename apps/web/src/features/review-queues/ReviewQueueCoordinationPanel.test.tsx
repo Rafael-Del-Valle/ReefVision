@@ -88,6 +88,74 @@ describe("ReviewQueueCoordinationPanel", () => {
   });
 
   it.each([
+    ["queue-a", "item-b"],
+    ["queue-b", "item-a"],
+  ])(
+    "requires fresh discard approval after navigating away to %s/%s and back",
+    async (otherQueueId, otherItemId) => {
+      const onClose = vi.fn();
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const view = (queueId: string, itemId: string) => (
+        <QueryClientProvider client={client}>
+          <ReviewQueueCoordinationPanel
+            queueId={queueId}
+            itemId={itemId}
+            onClose={onClose}
+          />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(view("queue-a", "item-a"));
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+        target: { value: "researcher-a" },
+      });
+      fireEvent.change(screen.getByLabelText("Review comment"), {
+        target: { value: "Unsent polyp observation for A" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+      expect(
+        screen.getByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeTruthy();
+
+      // No edits occur while away: the original item key and draft text
+      // are unchanged, but the earlier consent must still be invalid.
+      rerender(view(otherQueueId, otherItemId));
+      expect(
+        screen.queryByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeNull();
+      rerender(view("queue-a", "item-a"));
+      expect(screen.getByLabelText("Review comment")).toHaveProperty(
+        "value",
+        "Unsent polyp observation for A",
+      );
+      expect(
+        screen.queryByRole("button", { name: "Close without saving drafts" }),
+      ).toBeNull();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(addReviewQueueEvent).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+      expect(
+        screen.getByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Continue editing" }));
+      expect(onClose).not.toHaveBeenCalled();
+      expect(addReviewQueueEvent).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     ["Review comment", "Revised coral note"],
     ["Reviewer to assign", "reviewer-b"],
     ["Your local reviewer label", "scientist-b"],
