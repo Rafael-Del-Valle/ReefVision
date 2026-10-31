@@ -22,8 +22,10 @@ SQLite transaction committed and its HTTP response was lost.
   browser `beforeunload` confirmation and a native Tauri close interceptor.
   Native close is refused and a visible warning explains the unresolved
   audit/idempotency risk.
-- If native listener registration fails, show a retry control without
-  changing the original bulk request, UUID, actor or item set.
+- If native listener registration fails, whether through an asynchronous
+  rejection or a synchronous throw from the Tauri window accessor/listener,
+  show a retry control without changing the original bulk request, UUID,
+  actor or item set. Browser-unload protection stays active during recovery.
 - Remove both guards when the request succeeds or the researcher explicitly
   confirms the existing two-step discard process. A late asynchronous
   Tauri listener is immediately unregistered after its scope becomes safe.
@@ -37,8 +39,9 @@ SQLite transaction committed and its HTTP response was lost.
 `ReviewQueueBulkTriage.windowClose.test.tsx` covers idle closure,
 native close during an in-flight request and uncertain outcome, exact UUID
 replay, browser reload and explicit discard, failed native registration
-with manual retry, and late listener cleanup. Existing standalone API
-and saved Workflow Builder tests remain required.
+with manual retry, synchronous native bridge failures and exact-UUID
+recovery, and late listener cleanup. Existing standalone API and saved
+Workflow Builder tests remain required.
 
 Window-close protection is **best effort**. It cannot recover an original
 UUID after an OS crash, power loss, forced termination or browser process
