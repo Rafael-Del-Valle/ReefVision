@@ -65,7 +65,7 @@ def test_current_dated_evidence_rejects_unsupported_nested_claims(
     payload = _dated_artifact(client).model_dump(mode="json")
     assert payload[collection]
     payload[collection][0]["independent_unit_registry_verified"] = True
-    with pytest.raises(PydanticValidationError, match=f"unsupported fields"):
+    with pytest.raises(PydanticValidationError, match="unsupported fields"):
         EcologyMeasurementCandidatesResponse.model_validate(payload)
 
 
