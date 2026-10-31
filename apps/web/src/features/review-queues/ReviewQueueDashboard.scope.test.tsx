@@ -359,6 +359,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect(
       screen.getByRole("button", { name: "Open quick-review popout" }),
     ).toHaveProperty("disabled", true);
+    expect(
+      screen.getByRole("button", { name: "Comments & assignments" }),
+    ).toHaveProperty("disabled", true);
     fireEvent.click(
       screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
     );
