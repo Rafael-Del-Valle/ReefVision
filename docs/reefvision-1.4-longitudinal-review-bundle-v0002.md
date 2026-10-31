@@ -157,3 +157,38 @@ typed Workflow Builder execution both use this shared validation path.
 This guards identifier ambiguity, not authorization, authenticated reviewer
 identity, or durable versioned review persistence. No automatic verification
 or biological growth certification is implied.
+
+
+## Imported-source bindings for provisional spatial registration
+
+Pairwise `MeshRegistrationEvidence` now accepts optional
+`source_payload_sha256` / `target_payload_sha256` and
+`source_spatial_source_asset_id` / `target_spatial_source_asset_id`.
+Each binding must be supplied as a complete pair. Digests must be 64
+lowercase hexadecimal characters; project-owned asset IDs must match the
+lowercase UUID format used by the imported-original store.
+
+The longitudinal comparison service independently revalidates this evidence
+on execution, including already-constructed and subsequently modified model
+objects. A supplied pair must match both observation previews. Re-exporting
+the same triangles with changed OBJ/PLY/GLB source bytes invalidates the
+source-payload binding; reimporting byte-identical files under different
+project asset IDs invalidates the asset binding. Geometry hashes, source-byte
+digests and asset IDs are distinct consistency checks.
+
+Historical registration records without these bindings remain readable, but
+imported originals with unbound payload hashes receive
+`registration_source_payload_binding_unavailable`, and project-owned
+originals without bound asset IDs receive
+`registration_spatial_source_asset_binding_unavailable`. The new bindings
+are included in the caller-supplied review evidence snapshot and its
+recomputable digest; the existing bundle schema version is unchanged because
+the canonical record already includes all supplied registration fields.
+
+Standalone comparisons and saved executable typed Workflow Builder graphs
+share the same validation. Regression coverage includes changed source bytes
+with unchanged geometry, reused source bytes under another asset ID,
+incomplete/mutated bindings, legacy warnings, and successful/failed persisted
+graph executions. These are **provisional audit controls**, not authenticated
+review, certified registration, verified calibration, verified coral identity,
+or proof that observations came from independent biological surveys.
