@@ -70,7 +70,16 @@ def test_ply_standalone_api(client: TestClient) -> None:
     assert client.post(url, json={**MESH, "obj_text": "v 0 0 0"}).status_code == 422
 
 
-def test_saved_ply_workflow_roundtrip(client: TestClient) -> None:
+@pytest.mark.parametrize(
+    "index_type",
+    ["int", "uint", "uchar", "uint8", "ushort", "uint16", "short", "int16"],
+)
+def test_saved_ply_workflow_roundtrip(client: TestClient, index_type: str) -> None:
+    ply = PLY.replace(
+        "property list uchar int vertex_indices",
+        f"property list uchar {index_type} vertex_indices",
+    )
+    params = {**MESH, "ply_text": ply}
     project = create_project(client, "PLY workflow")
     project_id = str(project["id"])
     graph = {
@@ -81,7 +90,7 @@ def test_saved_ply_workflow_roundtrip(client: TestClient) -> None:
             {
                 "node_id": "mesh",
                 "node_type": "mesh_surface_preview",
-                "parameters": MESH,
+                "parameters": params,
             },
         ],
         "edges": [
@@ -100,7 +109,7 @@ def test_saved_ply_workflow_roundtrip(client: TestClient) -> None:
     saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     record = saved.json()
-    assert record["graph_json"]["nodes"][1]["parameters"]["ply_text"] == PLY
+    assert record["graph_json"]["nodes"][1]["parameters"]["ply_text"] == ply
     run = client.post(
         f"/api/v1/projects/{project_id}/workflow-runs",
         json={"graph_record_id": record["id"]},
@@ -121,7 +130,79 @@ def test_saved_ply_workflow_roundtrip(client: TestClient) -> None:
         for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
+    standalone = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    assert artifact["payload_json"] == standalone.json()
     assert artifact["payload_json"]["surface_area_m2"] == pytest.approx(0.0003)
     assert artifact["payload_json"]["provenance"]["source_format"] == "ply_ascii"
     assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     assert len(artifact["payload_sha256"]) == 64
+
+
+@pytest.mark.parametrize(
+    ("index_type", "invalid_index"),
+    [
+        ("uchar", "256"),
+        ("uint8", "-1"),
+        ("ushort", "65536"),
+        ("uint16", "65536"),
+        ("short", "32768"),
+        ("int8", "128"),
+        ("uint32", "4294967296"),
+    ],
+)
+def test_ply_face_indices_obey_declared_integer_bounds(
+    index_type: str, invalid_index: str
+) -> None:
+    invalid = PLY.replace(
+        "property list uchar int vertex_indices",
+        f"property list uchar {index_type} vertex_indices",
+    ).replace("3 0 1 2", f"3 0 1 {invalid_index}")
+    with pytest.raises(ValueError, match="face index outside declared integer type bounds"):
+        parse_ply_triangles(invalid)
+
+
+def test_invalid_ply_face_index_fails_standalone_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    invalid = PLY.replace(
+        "property list uchar int vertex_indices",
+        "property list uchar uchar vertex_indices",
+    ).replace("3 0 1 2", "3 0 1 256")
+    params = {**MESH, "ply_text": invalid}
+    project_id = str(create_project(client, "PLY face index overflow")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 400, standalone.text
+    graph = {
+        "graph_id": "ply-index-width-v14",
+        "name": "Reject invalid declared PLY face index",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "mesh_measurement_preview"
+        for artifact in detail.json()["artifacts"]
+    )
