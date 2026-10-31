@@ -286,6 +286,7 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
         },
     )
     assert rejected.status_code == 400, rejected.text
+    graph["graph_id"] = "registration-source-reexport-rejected-v14"
     graph["nodes"][2]["parameters"] = changed_after
     saved_bad = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved_bad.status_code == 201, saved_bad.text
