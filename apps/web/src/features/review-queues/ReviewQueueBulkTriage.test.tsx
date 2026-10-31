@@ -490,4 +490,85 @@ describe("ReviewQueueBulkTriage", () => {
       queryKey: ["review_queue_items", "queue-b"],
     });
   });
+  it("requires explicit risk approval before discarding an uncertain bulk UUID", async () => {
+    vi.mocked(bulkTriageReviewQueueItems).mockRejectedValueOnce(
+      new Error("Response lost after commit"),
+    );
+    const invalidate = mount();
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "lab reviewer" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select eligible on page/ }),
+    );
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply start to 1 items" }),
+    );
+    await screen.findByRole("button", { name: "Retry identical bulk action" });
+    const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
+    expect(screen.queryByRole("button", { name: "Discard and refresh" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review discard risk" }));
+    expect(screen.getByText(/may already have been committed/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry identical bulk action" })).toBeTruthy();
+    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[0]).toEqual(original);
+    expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard and refresh" }));
+    expect(screen.queryByRole("button", { name: "Retry identical bulk action" })).toBeNull();
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["review_queue_items", "queue-1"],
+      }),
+    );
+    expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(1);
+  });
+
+  it("invalidates bulk discard approval across A to B to A navigation", async () => {
+    vi.mocked(bulkTriageReviewQueueItems)
+      .mockRejectedValueOnce(new Error("Response lost for queue A"))
+      .mockResolvedValueOnce({
+        queue_id: "queue-a",
+        action: "start",
+        changed_count: 0,
+        items: [],
+        requires_researcher_review: true,
+      });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const view = (id: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueBulkTriage queueId={id} items={items} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a"));
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select eligible on page/ }),
+    );
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply start to 1 items" }),
+    );
+    await screen.findByRole("button", { name: "Retry identical bulk action" });
+    const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
+    fireEvent.click(screen.getByRole("button", { name: "Review discard risk" }));
+    expect(screen.getByRole("button", { name: "Discard and refresh" })).toBeTruthy();
+
+    rerender(view("queue-b"));
+    expect(screen.queryByRole("button", { name: "Discard and refresh" })).toBeNull();
+    rerender(view("queue-a"));
+    expect(screen.queryByRole("button", { name: "Discard and refresh" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Review discard risk" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry identical bulk action" }));
+    await waitFor(() =>
+      expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(2),
+    );
+    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1]).toEqual(original);
+  });
+
 });

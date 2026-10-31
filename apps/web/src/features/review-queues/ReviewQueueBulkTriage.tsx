@@ -91,6 +91,20 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     Record<string, UncertainBulkRequest>
   >({});
   const uncertainRequest = uncertainRequests[queueId] ?? null;
+  // Discarding a lost-response request can destroy its idempotency key even
+  // when the server has already committed the batch. Require scoped approval.
+  const [discardConfirmation, setDiscardConfirmation] = useState<{
+    queueId: string;
+    requestId: string;
+    scopeEpoch: number;
+  } | null>(null);
+  const discardConfirmed =
+    discardConfirmation !== null &&
+    uncertainRequest !== null &&
+    discardConfirmation.queueId === queueId &&
+    discardConfirmation.scopeEpoch === currentScope.current.epoch &&
+    discardConfirmation.requestId ===
+      uncertainRequest.request.payload.client_request_id;
   useEffect(() => {
     // Never carry selected image IDs, evidence approvals or a prior queue's
     // success banner into another queue. Preserve unresolved UUIDs per queue.
@@ -99,6 +113,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     setConfirmedSelectionKey(null);
     setReviewedSelectionKey(null);
     setLastResult(null);
+    setDiscardConfirmation(null);
   }, [queueId]);
   const available = items.filter((item) => eligible(item, action));
   const selectedIds = selected.filter((id) =>
@@ -167,6 +182,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     onError: (error, request) => {
       // A lost response may follow a committed transaction. Keep its original
       // queue and UUID even if the researcher navigated elsewhere.
+      setDiscardConfirmation(null);
       setUncertainRequests((current) => ({
         ...current,
         [request.queueId]: {
@@ -359,15 +375,35 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           <button
             type="button"
             disabled={mutation.isPending}
-            onClick={() => mutation.mutate(uncertainRequest.request)}
+            onClick={() => {
+              setDiscardConfirmation(null);
+              mutation.mutate(uncertainRequest.request);
+            }}
           >
             Retry identical bulk action
           </button>
+          {discardConfirmed && (
+            <p role="alert">
+              This batch may already have been committed. Discarding its
+              original request UUID prevents an identical safe retry and a new
+              submission could duplicate audit history. Confirm only after
+              checking the refreshed queue and event history.
+            </p>
+          )}
           <button
             type="button"
             className="secondary"
             disabled={mutation.isPending}
             onClick={() => {
+              if (!discardConfirmed) {
+                setDiscardConfirmation({
+                  queueId,
+                  requestId: uncertainRequest.request.payload.client_request_id,
+                  scopeEpoch: currentScope.current.epoch,
+                });
+                return;
+              }
+              setDiscardConfirmation(null);
               setUncertainRequests((current) => {
                 if (
                   current[queueId]?.request.payload.client_request_id !==
@@ -388,7 +424,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
               });
             }}
           >
-            Discard and refresh
+            {discardConfirmed ? "Discard and refresh" : "Review discard risk"}
           </button>
         </div>
       )}
