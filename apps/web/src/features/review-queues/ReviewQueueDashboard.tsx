@@ -371,6 +371,7 @@ export function ReviewQueueDashboard({
             <label>
               Scope
               <select
+                disabled={coordinationItemId !== null}
                 value={scopeType}
                 onChange={(event) => {
                   setScopeType(
@@ -393,6 +394,7 @@ export function ReviewQueueDashboard({
               <label>
                 Dataset version
                 <select
+                  disabled={coordinationItemId !== null}
                   value={datasetVersionId}
                   onChange={(event) => {
                     setDatasetVersionId(event.target.value);
@@ -471,6 +473,7 @@ export function ReviewQueueDashboard({
                 type="button"
                 disabled={
                   !scopeReady ||
+                  coordinationItemId !== null ||
                   createQueue.isPending ||
                   (scopeType === "dataset_version" && !datasetVersionId)
                 }
@@ -489,6 +492,7 @@ export function ReviewQueueDashboard({
                 <button
                   type="button"
                   className="secondary"
+                  disabled={coordinationItemId !== null}
                   onClick={() =>
                     regenerateQueue.mutate({
                       ...currentScope.current,
@@ -514,6 +518,13 @@ export function ReviewQueueDashboard({
                 <h4>Generated queues</h4>
               </div>
             </div>
+            {coordinationItemId !== null && (
+              <p className="annotation-helper" role="status">
+                Close researcher coordination before changing queues or scope;
+                unsent biological notes and uncertain audit-event retry IDs must
+                not be lost by unmounting the panel.
+              </p>
+            )}
             <div className="version-list">
               {queues.data?.map((queue) => (
                 <button
@@ -522,6 +533,9 @@ export function ReviewQueueDashboard({
                   className={`version-card ${
                     selectedQueueId === queue.id ? "selected" : ""
                   }`}
+                  disabled={
+                    coordinationItemId !== null && selectedQueueId !== queue.id
+                  }
                   onClick={() => {
                     setSelectedQueueId(queue.id);
                     setQuickReviewItemId(null);
@@ -783,7 +797,9 @@ export function ReviewQueueDashboard({
             </div>
             {activeQueueId && coordinationItemId && (
               <ReviewQueueCoordinationPanel
-                key={`${selectedQueueId}:${coordinationItemId}`}
+                // Preserve one mounted instance across A -> B -> A. Its own
+                // per-item draft and retry maps provide scope isolation; a
+                // React key here silently destroyed them on every item click.
                 queueId={selectedQueueId}
                 itemId={coordinationItemId}
                 onClose={() => setCoordinationItemId(null)}
