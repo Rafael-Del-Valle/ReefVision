@@ -300,10 +300,33 @@ if (-not (Test-ReefVisionPathWithin -Path $reportPath -Parent (Join-Path $Root '
 Remove-Item -LiteralPath $reportPath -Force
 
 $cleanupRoot = Join-Path $Root ('.artifacts\harness-cleanup-' + [guid]::NewGuid().ToString('N'))
-$ownedRun = Join-Path $cleanupRoot 'owned-run'
+$token = [guid]::NewGuid().ToString('N').Substring(0, 12)
+$ownedRun = Join-Path $cleanupRoot "reefvision-clean-$token"
 $foreign = Join-Path $cleanupRoot 'foreign'
 New-Item -ItemType Directory -Path $ownedRun,$foreign -Force | Out-Null
-Set-Content -LiteralPath (Join-Path $ownedRun '.reefvision-acceptance-run') -Value 'owned'
+$marker = Join-Path $ownedRun '.reefvision-acceptance-run'
+Set-Content -LiteralPath $marker -Value $token
+Assert-Throws { Assert-ReefVisionOwnedAcceptanceRun -RunRoot $foreign -AcceptanceRoot $cleanupRoot -Token $token } 'Cleanup must reject an unrelated directory.'
+Assert-Throws { Assert-ReefVisionOwnedAcceptanceRun -RunRoot $ownedRun -AcceptanceRoot $cleanupRoot -Token 'not-a-token' } 'Cleanup must reject malformed ownership tokens.'
+Set-Content -LiteralPath $marker -Value 'foreign-owner'
+Assert-Throws { Assert-ReefVisionOwnedAcceptanceRun -RunRoot $ownedRun -AcceptanceRoot $cleanupRoot -Token $token } 'Cleanup must reject a mismatched ownership marker.'
+Remove-Item -LiteralPath $marker -Force
+Assert-Throws { Assert-ReefVisionOwnedAcceptanceRun -RunRoot $ownedRun -AcceptanceRoot $cleanupRoot -Token $token } 'Cleanup must reject a missing ownership marker.'
+Set-Content -LiteralPath $marker -Value $token
+Add-Content -LiteralPath $marker -Value 'unexpected-extra-line'
+Assert-Throws { Assert-ReefVisionOwnedAcceptanceRun -RunRoot $ownedRun -AcceptanceRoot $cleanupRoot -Token $token } 'Cleanup must reject a marker with additional content.'
+Set-Content -LiteralPath $marker -Value $token
+$junctionToken = [guid]::NewGuid().ToString('N').Substring(0, 12)
+$junctionRun = Join-Path $cleanupRoot "reefvision-clean-$junctionToken"
+Set-Content -LiteralPath (Join-Path $foreign '.reefvision-acceptance-run') -Value $junctionToken
+try {
+    New-Item -ItemType Junction -Path $junctionRun -Target $foreign -ErrorAction Stop | Out-Null
+    Assert-Throws { Assert-ReefVisionOwnedAcceptanceRun -RunRoot $junctionRun -AcceptanceRoot $cleanupRoot -Token $junctionToken } 'Cleanup must reject a swapped-in junction even when its marker matches.'
+} finally {
+    if ([System.IO.Directory]::Exists($junctionRun)) { [System.IO.Directory]::Delete($junctionRun) }
+}
+Assert-ReefVisionOwnedAcceptanceRun -RunRoot $ownedRun -AcceptanceRoot $cleanupRoot -Token $token
+Assert-True (Test-Path -LiteralPath $ownedRun -PathType Container) 'Ownership validation must not delete the run.'
 if (-not (Test-ReefVisionPathWithin -Path $ownedRun -Parent (Join-Path $Root '.artifacts'))) { throw 'Unsafe harness test cleanup path.' }
 Remove-Item -LiteralPath $ownedRun -Recurse -Force
 Assert-True (-not (Test-Path $ownedRun)) 'Owned run was not removed.'
