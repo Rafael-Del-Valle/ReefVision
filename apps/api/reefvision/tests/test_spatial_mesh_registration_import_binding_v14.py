@@ -13,13 +13,12 @@ from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.spatial_mesh_preview_v14 import (
-    MeshRegistrationEvidence,
     MeshPreviewRequest,
+    MeshRegistrationEvidence,
 )
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.tests.test_annotations import create_project
-
 
 BEFORE_OBJ = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
 AFTER_OBJ = "v 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n"
@@ -82,6 +81,32 @@ def _registration(before: dict, after: dict, *, asset_ids: bool = False) -> dict
         evidence["source_spatial_source_asset_id"] = first["spatial_source_asset_id"]
         evidence["target_spatial_source_asset_id"] = second["spatial_source_asset_id"]
     return evidence
+
+
+
+def test_reused_project_asset_with_conflicting_original_bytes_is_rejected() -> None:
+    before, after = _previews("project-1", asset_ids=True)
+    assert before["provenance"]["source_payload_sha256"] != after["provenance"][
+        "source_payload_sha256"
+    ]
+    after["provenance"]["spatial_source_asset_id"] = ASSET_IDS[0]
+    with pytest.raises(ValueError, match="conflicting original payloads"):
+        compare_mesh_observations(before, after)
+
+
+def test_reused_project_asset_without_legacy_payload_hashes_withholds_change() -> None:
+    before, after = _previews("project-1", asset_ids=True)
+    after["provenance"]["spatial_source_asset_id"] = ASSET_IDS[0]
+    for preview in (before, after):
+        preview["provenance"].pop("source_payload_sha256")
+    result = compare_mesh_observations(before, after)
+    assert "same_spatial_source_asset_reused_across_observations" in result["qc_warnings"]
+    assert "longitudinal_change_withheld_reused_spatial_source_asset" in result["qc_warnings"]
+    assert result["provenance"]["longitudinal_change_withheld_due_to_reused_spatial_source_asset"]
+    assert result["delta_surface_area_m2"] is None
+    assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
+    assert result["before_surface_area_m2"] is not None
+    assert result["after_surface_area_m2"] is not None
 
 
 def test_registration_import_bindings_are_provisional_and_auditable() -> None:
@@ -303,6 +328,49 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
         if item["data_type"] == "mesh_longitudinal_comparison"
     )
     assert artifact == expected
+
+    # Two dated observations referencing one immutable project asset are not
+    # independent biological scans. The standalone API and a persisted typed
+    # workflow must both withhold longitudinal change, even without review notes.
+    duplicated_after = {**after, "asset_id": asset_ids[0]}
+    duplicated_standalone = client.post(
+        endpoint,
+        json={"before": before, "after": duplicated_after},
+    )
+    assert duplicated_standalone.status_code == 200, duplicated_standalone.text
+    duplicated_expected = duplicated_standalone.json()
+    assert duplicated_expected["delta_surface_area_m2"] is None
+    assert "longitudinal_change_withheld_reused_spatial_source_asset" in duplicated_expected[
+        "qc_warnings"
+    ]
+    duplicated_graph = deepcopy(graph)
+    duplicated_graph["graph_id"] = "registration-reused-asset-withheld-v14"
+    duplicated_graph["nodes"][2]["parameters"] = duplicated_after
+    duplicated_graph["nodes"][3]["parameters"] = {}
+    duplicated_plan = client.post(f"{base}/workflow-graphs/plan", json=duplicated_graph)
+    assert duplicated_plan.status_code == 200, duplicated_plan.text
+    assert duplicated_plan.json()["executable"] is True
+    duplicated_saved = client.post(
+        f"{base}/workflow-graphs", json={"graph": duplicated_graph}
+    )
+    assert duplicated_saved.status_code == 201, duplicated_saved.text
+    duplicated_run = client.post(
+        f"{base}/workflow-runs",
+        json={"graph_record_id": duplicated_saved.json()["id"]},
+    )
+    assert duplicated_run.status_code == 202, duplicated_run.text
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(duplicated_run.json()["job_id"])
+    )
+    duplicated_detail = client.get(f"/api/v1/workflow-runs/{duplicated_run.json()['id']}")
+    assert duplicated_detail.status_code == 200, duplicated_detail.text
+    assert duplicated_detail.json()["run"]["status"] == "succeeded"
+    duplicated_artifact = next(
+        item["payload_json"]
+        for item in duplicated_detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert duplicated_artifact == duplicated_expected
 
     # A new export with identical geometry must fail in both execution paths.
     reexport = (AFTER_OBJ + "# revised export comment\n").encode("utf-8")
