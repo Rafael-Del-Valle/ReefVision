@@ -294,12 +294,14 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     )
     assert "identical_geometry_different_imported_source_payload" in expected["qc_warnings"]
     assert "longitudinal_change_withheld_rescaled_reexported_geometry" in expected["qc_warnings"]
-    assert "identical_imported_source_payload_reused_across_observations" not in expected[
-        "qc_warnings"
-    ]
-    assert expected["provenance"][
-        "longitudinal_change_withheld_due_to_rescaled_reexported_geometry"
-    ] is True
+    assert (
+        "identical_imported_source_payload_reused_across_observations"
+        not in expected["qc_warnings"]
+    )
+    assert (
+        expected["provenance"]["longitudinal_change_withheld_due_to_rescaled_reexported_geometry"]
+        is True
+    )
     for field in (
         "delta_surface_area_m2",
         "relative_surface_area_change_percent",
@@ -320,9 +322,12 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     )
     assert control.status_code == 200, control.text
     assert control.json()["delta_surface_area_m2"] == pytest.approx(0)
-    assert control.json()["provenance"][
-        "longitudinal_change_withheld_due_to_rescaled_reexported_geometry"
-    ] is False
+    assert (
+        control.json()["provenance"][
+            "longitudinal_change_withheld_due_to_rescaled_reexported_geometry"
+        ]
+        is False
+    )
 
     graph = {
         "graph_id": "rescaled-cross-format-reexport-v14",
