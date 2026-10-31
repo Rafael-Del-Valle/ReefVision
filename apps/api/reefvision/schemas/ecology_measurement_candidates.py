@@ -361,7 +361,9 @@ class EcologyCandidateReport(BaseModel):
             or count < 0
             for status, count in value.items()
         ):
-            raise ValueError("Ecological candidate report QC status counts must be nonnegative integers")
+            raise ValueError(
+                "Ecological candidate report QC status counts must be nonnegative integers"
+            )
         return value
 
     @model_validator(mode="after")
