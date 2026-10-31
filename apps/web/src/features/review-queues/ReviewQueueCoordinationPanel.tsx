@@ -15,6 +15,21 @@ type EventMutationRequest = {
   commentRevision: number;
   assigneeRevision: number;
   actorRevision: number;
+  draftKey: string;
+};
+
+type CoordinationDraft = {
+  actor: string;
+  assignee: string;
+  comment: string;
+  page: number;
+};
+
+const emptyDraft: CoordinationDraft = {
+  actor: "",
+  assignee: "",
+  comment: "",
+  page: 1,
 };
 
 interface Props {
@@ -53,10 +68,18 @@ export function ReviewQueueCoordinationPanel({
       epoch: currentScope.current.epoch + 1,
     };
   }
-  const [actor, setActor] = useState("");
-  const [assignee, setAssignee] = useState("");
-  const [comment, setComment] = useState("");
-  const [page, setPage] = useState(1);
+  // The panel can be reused for another review item. Keep unsent research
+  // notes, reviewer attribution and history pagination isolated by item.
+  // A -> B -> A restores A's unsent work without copying it onto B.
+  const draftKey = JSON.stringify([queueId, itemId]);
+  const [drafts, setDrafts] = useState<Record<string, CoordinationDraft>>({});
+  const { actor, assignee, comment, page } = drafts[draftKey] ?? emptyDraft;
+  const updateDraft = (patch: Partial<CoordinationDraft>) => {
+    setDrafts((current) => ({
+      ...current,
+      [draftKey]: { ...(current[draftKey] ?? emptyDraft), ...patch },
+    }));
+  };
   // A response may arrive after the researcher has begun a different draft.
   // Retain the exact request for idempotent retries without erasing new work.
   // A changed reviewer label also makes a draft a distinct researcher's work.
@@ -91,7 +114,13 @@ export function ReviewQueueCoordinationPanel({
         commentRevision.current === request.commentRevision &&
         actorRevision.current === request.actorRevision
       ) {
-        setComment("");
+        setDrafts((current) => ({
+          ...current,
+          [request.draftKey]: {
+            ...(current[request.draftKey] ?? emptyDraft),
+            comment: "",
+          },
+        }));
       }
       if (
         isCurrentRequest(request) &&
@@ -99,7 +128,13 @@ export function ReviewQueueCoordinationPanel({
         assigneeRevision.current === request.assigneeRevision &&
         actorRevision.current === request.actorRevision
       ) {
-        setAssignee("");
+        setDrafts((current) => ({
+          ...current,
+          [request.draftKey]: {
+            ...(current[request.draftKey] ?? emptyDraft),
+            assignee: "",
+          },
+        }));
       }
       await queryClient.invalidateQueries({
         queryKey: ["review_queue_events", request.queueId, request.itemId],
@@ -135,6 +170,7 @@ export function ReviewQueueCoordinationPanel({
       commentRevision: commentRevision.current,
       assigneeRevision: assigneeRevision.current,
       actorRevision: actorRevision.current,
+      draftKey,
     });
   }
 
@@ -163,7 +199,7 @@ export function ReviewQueueCoordinationPanel({
           value={actor}
           onChange={(event) => {
             actorRevision.current += 1;
-            setActor(event.target.value);
+            updateDraft({ actor: event.target.value });
           }}
         />
       </label>
@@ -176,7 +212,7 @@ export function ReviewQueueCoordinationPanel({
           value={assignee}
           onChange={(event) => {
             assigneeRevision.current += 1;
-            setAssignee(event.target.value);
+            updateDraft({ assignee: event.target.value });
           }}
         />
       </label>
@@ -205,7 +241,7 @@ export function ReviewQueueCoordinationPanel({
           value={comment}
           onChange={(event) => {
             commentRevision.current += 1;
-            setComment(event.target.value);
+            updateDraft({ comment: event.target.value });
           }}
         />
       </label>
@@ -263,7 +299,7 @@ export function ReviewQueueCoordinationPanel({
             type="button"
             className="secondary"
             disabled={page === 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => updateDraft({ page: Math.max(1, page - 1) })}
           >
             Previous events
           </button>
@@ -272,7 +308,7 @@ export function ReviewQueueCoordinationPanel({
             type="button"
             className="secondary"
             disabled={page * 50 >= events.data.total}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => updateDraft({ page: page + 1 })}
           >
             Next events
           </button>
