@@ -92,6 +92,7 @@ def _artifact_ids(value: Any, *, field: str) -> list[str]:
         raise ConflictError(f"Workflow node {field} must be a list of artifact IDs")
     return value
 
+
 def verify_succeeded_node_artifacts(
     session: Session,
     *,
