@@ -180,13 +180,24 @@ def compare_mesh_observations(
         raise ValueError("Both observations require provenance dictionaries")
     for metadata in (first, second):
         _validate_source_import_provenance(metadata)
+    # The request schema restricts these labels, but direct comparison and
+    # replayed artifacts must enforce the same rule independently. Whitespace
+    # or control characters must not become provisional biological identities.
+    identity_pattern = r"[A-Za-z0-9][A-Za-z0-9_.:-]*"
     specimen = first.get("specimen_id")
-    if not isinstance(specimen, str) or not specimen or specimen != second.get("specimen_id"):
-        raise ValueError("Two observations require the same nonempty provisional specimen_id")
+    if (
+        not isinstance(specimen, str)
+        or fullmatch(identity_pattern, specimen) is None
+        or specimen != second.get("specimen_id")
+    ):
+        raise ValueError("Two observations require the same valid provisional specimen_id")
     first_id = first.get("observation_id")
     second_id = second.get("observation_id")
-    if not all(isinstance(value, str) and value for value in (first_id, second_id)):
-        raise ValueError("Both observations require nonempty observation_id values")
+    if not all(
+        isinstance(value, str) and fullmatch(identity_pattern, value) is not None
+        for value in (first_id, second_id)
+    ):
+        raise ValueError("Both observations require valid observation_id values")
     if first_id == second_id:
         raise ValueError("Longitudinal comparison requires distinct observation_id values")
     try:
@@ -203,7 +214,11 @@ def compare_mesh_observations(
     elapsed_days = (after_time - before_time).total_seconds() / 86400
     project_before = before.get("project_id")
     project_after = after.get("project_id")
-    if not isinstance(project_before, str) or not project_before or project_before != project_after:
+    if (
+        not isinstance(project_before, str)
+        or not project_before.strip()
+        or project_before != project_after
+    ):
         raise ValueError("Longitudinal observations require the same nonempty project_id")
     if before.get("schema_version") != "mesh-preview-0001" or (
         after.get("schema_version") != "mesh-preview-0001"
