@@ -4930,3 +4930,29 @@ scientist-reviewed longitudinal observations, registered experimental-unit
 independence, representative biological/human-model acceptance, 1.1 migration
 reconciliation and installed Windows MSI/GUI checks. **1.2 NOT
 RELEASE-READY; 1.3 not started.**
+
+## Paired-count persisted evidence field integrity (2026-10-31)
+
+The current `ecology-paired-count-0007` response validator now rejects
+unrecognized fields embedded in source-linked `paired_differences` and
+per-unit `unit_summaries` when reading persisted scientific artifacts.
+Previously Pydantic could silently discard injected claims such as
+`scientist_verified` or `independent_sample_size`, allowing an altered
+serialized artifact to appear acceptable after validation. These additions
+are not supported evidence or registered experimental units.
+
+The existing standalone paired-count API and executable, persisted
+`ecology_paired_count_comparison` Workflow Builder node use the same typed
+response contract. The saved-workflow regression exercises both actual
+standalone and executed saved artifacts, forged fields in both nested
+collections, and historical `0006` decoding. Legacy artifacts retain
+`caller_supplied_unverified` and `requires_source_verification`; they
+are not promoted to verified biological data. No migration, new workflow
+node, external service, or model weight is introduced.
+
+Before these changes, exact-head `e0663454` passed all 19 registered
+GitHub Actions workflows, including backend CI and Windows Desktop Build.
+This increment requires its own exact-head CI validation. Full
+authenticated longitudinal observations, registered experimental-unit
+independence, real scientific review, 1.1 migration reconciliation, and
+installed Windows MSI/GUI acceptance remain release blockers.
