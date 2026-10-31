@@ -642,9 +642,10 @@ try {
     }
     $report.completed_at_utc = [DateTime]::UtcNow.ToString('o')
     Save-Report
-    if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS') {
-        $ExpectedRunRoot = [System.IO.Path]::GetFullPath((Join-Path $AcceptanceRoot "reefvision-clean-$Token"))
-        if ([System.IO.Path]::GetFullPath($RunRoot) -ne $ExpectedRunRoot) { throw 'Refusing cleanup outside the generated acceptance run.' }
+    if (-not $KeepArtifacts -and $report.uninstall.status -eq 'PASS') {
+        # Recheck ownership and reparse points at the moment of deletion:
+        # an initially safe run directory can be replaced during MSI testing.
+        Assert-ReefVisionOwnedAcceptanceRun -RunRoot $RunRoot -AcceptanceRoot $AcceptanceRoot -Token $Token
         Remove-Item -LiteralPath $RunRoot -Recurse -Force
     }
 }
