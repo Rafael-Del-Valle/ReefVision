@@ -72,6 +72,9 @@ function ImageCard({
   // A failed URL must not permanently hide a newly generated thumbnail.
   // Keep failures tied to the specific asset version, not the image card.
   const [failedThumbnailUrl, setFailedThumbnailUrl] = useState<string | null>(null);
+  // Some thumbnail jobs regenerate the same managed path. Only a deliberate
+  // retry should bypass the failed WebView2/browser cache for that asset.
+  const [thumbnailRetry, setThumbnailRetry] = useState(0);
   // Keep the last server-confirmed editable fields separate from local drafts.
   // A refetch must not discard edits made after the previous server snapshot.
   const persistedEditable = useRef({
@@ -83,8 +86,9 @@ function ImageCard({
     ? encodeURIComponent(image.thumbnail_path)
     : null;
   const thumbnailUrl = thumbnailVersion
-    ? `${imageThumbnailUrl(image.id)}&rv_thumb=${thumbnailVersion}`
+    ? `${imageThumbnailUrl(image.id)}&rv_thumb=${thumbnailVersion}${thumbnailRetry ? `&rv_retry=${thumbnailRetry}` : ""}`
     : null;
+  const thumbnailFailed = thumbnailUrl !== null && failedThumbnailUrl === thumbnailUrl;
 
   // Background refreshes and concurrent metadata changes must not silently
   // erase unsaved scientific group/status edits. Reconcile each field against
@@ -151,7 +155,7 @@ function ImageCard({
       }}
     >
       <div className="thumbnail-frame">
-        {thumbnailUrl && failedThumbnailUrl !== thumbnailUrl ? (
+        {thumbnailUrl && !thumbnailFailed ? (
           <img
             src={thumbnailUrl}
             alt={`Thumbnail of ${image.original_filename}`}
@@ -160,8 +164,20 @@ function ImageCard({
             onError={() => setFailedThumbnailUrl(thumbnailUrl)}
           />
         ) : (
-          <div className="thumbnail-placeholder" aria-label="Thumbnail pending">
-            <span>Thumbnail pending</span>
+          <div
+            className="thumbnail-placeholder"
+            aria-label={thumbnailFailed ? "Thumbnail unavailable" : "Thumbnail pending"}
+          >
+            <span>{thumbnailFailed ? "Thumbnail unavailable" : "Thumbnail pending"}</span>
+            {thumbnailFailed && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setThumbnailRetry((current) => current + 1)}
+              >
+                Retry thumbnail
+              </button>
+            )}
           </div>
         )}
       </div>
