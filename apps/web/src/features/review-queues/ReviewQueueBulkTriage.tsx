@@ -11,6 +11,7 @@ interface Props {
   queueId: string;
   items: ReviewQueueItem[];
   onProtectedStateChange?: (queueId: string | null) => void;
+  disabled?: boolean;
 }
 
 type BulkRequest = {
@@ -70,6 +71,7 @@ export function ReviewQueueBulkTriage({
   queueId,
   items,
   onProtectedStateChange,
+  disabled = false,
 }: Props) {
   const queryClient = useQueryClient();
   // A mounted dashboard can reuse this panel for a different review queue.
@@ -255,6 +257,7 @@ export function ReviewQueueBulkTriage({
     return () => onProtectedStateChange?.(null);
   }, [locked, onProtectedStateChange, queueId]);
   const ready =
+    !disabled &&
     selectedIds.length > 0 &&
     selectedIds.length <= 100 &&
     actor.trim().length > 0 &&
