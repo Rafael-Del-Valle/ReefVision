@@ -1097,12 +1097,16 @@ def compare_mesh_observations(
     # have changed. A source digest is still caller-supplied, not authenticated.
     first_source_hash = first.get("source_payload_sha256")
     second_source_hash = second.get("source_payload_sha256")
-    if (
+    reused_imported_source_payload = (
         _is_sha256_fingerprint(first_source_hash)
         and _is_sha256_fingerprint(second_source_hash)
         and first_source_hash == second_source_hash
-    ):
+    )
+    if reused_imported_source_payload:
         warnings.append("identical_imported_source_payload_reused_across_observations")
+        # A reprocessed or recalibrated copy of one original file cannot
+        # establish a second biological timepoint, even with distinct IDs.
+        warnings.append("longitudinal_change_withheld_reused_imported_source_payload")
         # Identical source bytes cannot have different original byte lengths or
         # import formats. These are contradictory caller-supplied records, not
         # evidence of specimen change. Missing legacy fields stay unknown.
@@ -1354,6 +1358,10 @@ def compare_mesh_observations(
                 difference_bounds is not None
                 and not identity_disputed
                 and not identity_inconclusive
+                and not reused_imported_source_payload
+            ),
+            "longitudinal_change_withheld_due_to_reused_source_payload": (
+                reused_imported_source_payload
             ),
             "longitudinal_change_withheld_due_to_identity_dispute": identity_disputed,
             "longitudinal_change_withheld_due_to_inconclusive_identity_review": (
@@ -1361,10 +1369,10 @@ def compare_mesh_observations(
             ),
         },
     }
-    if identity_disputed or identity_inconclusive:
-        # Keep each original observation and reconstruction QC intact. A
-        # disputed or inconclusive match cannot support cross-timepoint organism
-        # change estimates, even if the numerical geometry is well formed.
+    if identity_disputed or identity_inconclusive or reused_imported_source_payload:
+        # Keep original measurements and reconstruction QC intact. Disputed
+        # identity or byte-identical imported originals cannot establish two
+        # independent biological timepoints, even if the geometry is valid.
         for key in (
             "delta_surface_area_to_bounding_diagonal_squared_ratio",
             "delta_patch_area_concentration_index",
