@@ -253,6 +253,33 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert restored_ids.status_code == 200, restored_ids.text
     assert restored_ids.json() == run
 
+    # Historical node results can omit an output summary. Duplicate output
+    # artifact IDs must still be rejected on the saved verified-pose run;
+    # otherwise one frozen artifact appears twice in its scientific lineage.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        original_output_ids = list(node.output_artifact_ids_json)
+        original_node_result = dict(node.result_json or {})
+        assert len(original_output_ids) == 1
+        node.output_artifact_ids_json = [*original_output_ids, original_output_ids[0]]
+        node.result_json = {
+            key: value for key, value in original_node_result.items() if key != "outputs"
+        }
+        session.commit()
+
+    duplicate_output_ids = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert duplicate_output_ids.status_code == 409, duplicate_output_ids.text
+    assert "output IDs contain duplicates" in duplicate_output_ids.json()["detail"]
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.output_artifact_ids_json = original_output_ids
+        node.result_json = original_node_result
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+
     # An explicitly saved output summary must retain its list shape. A
     # malformed object previously bypassed the lineage check even though
     # the frozen artifacts themselves still had valid checksums.
