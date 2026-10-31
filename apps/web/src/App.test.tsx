@@ -1686,6 +1686,119 @@ describe("App", () => {
     expect(screen.getByText("Generate ranking")).toBeInTheDocument();
   });
 
+  it("keeps QC coordination mounted when Home or workspace navigation is requested", async () => {
+    const fetchMock = mockApi({
+      projects: [project],
+      reviewQueues: [
+        {
+          id: "queue-a",
+          project_id: project.id,
+          status: "complete",
+          item_count: 1,
+          formula_id: "qc",
+          formula_version: "1",
+          configuration_json: {},
+          created_at: "2026-10-31T12:00:00Z",
+        },
+      ],
+    });
+    const originalFetch = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((input, init) => {
+      const url = String(input);
+      if (url.includes("/review-queues/queue-a/items/item-a/events?")) {
+        return Promise.resolve(
+          jsonResponse({
+            items: [],
+            total: 0,
+            page: 1,
+            page_size: 50,
+            current_assignee: null,
+          }),
+        );
+      }
+      if (url.includes("/review-queues/queue-a/items?")) {
+        return Promise.resolve(
+          jsonResponse({
+            items: [
+              {
+                id: "item-a",
+                review_queue_id: "queue-a",
+                project_id: project.id,
+                dataset_version_id: null,
+                image_id: image.id,
+                split: null,
+                review_state: "pending",
+                score: 0.6,
+                rank_position: 1,
+                highest_qc_severity: null,
+                label_class_ids_json: [],
+                model_ids_json: [],
+                related_issue_ids_json: [],
+                signal_values_json: {},
+                normalized_signals_json: {},
+                weights_json: {},
+                score_breakdown_json: [],
+                input_checksum: "a".repeat(64),
+                reason_summary: "Review this coral image",
+                skip_reason: null,
+                created_at: "2026-10-31T12:00:00Z",
+                updated_at: "2026-10-31T12:00:00Z",
+                started_at: null,
+                completed_at: null,
+                returned_at: null,
+              },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 25,
+            pages: 1,
+          }),
+        );
+      }
+      return originalFetch!(input, init);
+    });
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    try {
+      renderApp();
+      await userEvent.click(
+        await screen.findByRole("button", { name: /CPT Coral Study/ }),
+      );
+      await userEvent.click(screen.getByRole("tab", { name: /Review/ }));
+      await userEvent.click(screen.getByRole("tab", { name: "Review queue" }));
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Comments & assignments" }),
+      );
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText("Review comment"), {
+        target: { value: "Unsent observation of polyp behavior" },
+      });
+
+      await userEvent.click(screen.getAllByRole("button", { name: "Home" })[0]);
+      expect(alert).toHaveBeenCalled();
+      expect(screen.getByLabelText("Review comment")).toHaveValue(
+        "Unsent observation of polyp behavior",
+      );
+      await userEvent.click(
+        screen.getByRole("tab", { name: "Quality control" }),
+      );
+      expect(screen.getByRole("heading", { name: "Review Queue" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Review comment")).toHaveValue(
+        "Unsent observation of polyp behavior",
+      );
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Close without saving drafts" }),
+      );
+      await userEvent.click(screen.getAllByRole("button", { name: "Home" })[0]);
+      await screen.findByRole("button", { name: /CPT Coral Study/ });
+    } finally {
+      alert.mockRestore();
+    }
+  });
+
   it("creates a project with the blank class baseline", async () => {
     const fetchMock = mockApi({ projects: [] });
     renderApp();
