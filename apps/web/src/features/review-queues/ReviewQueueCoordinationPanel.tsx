@@ -93,6 +93,8 @@ export function ReviewQueueCoordinationPanel({
   const [closeConfirmationKey, setCloseConfirmationKey] = useState<
     string | null
   >(null);
+  const [discardRequestConfirmationKey, setDiscardRequestConfirmationKey] =
+    useState<string | null>(null);
   const [failedRequests, setFailedRequests] = useState<
     Record<string, { request: EventMutationRequest; errorMessage: string }>
   >({});
@@ -169,6 +171,15 @@ export function ReviewQueueCoordinationPanel({
 
   const activeFailure = failedRequests[draftKey];
   const activeFailedRequest = activeFailure?.request ?? null;
+  // An uncertain event may already be committed on the server. A discard
+  // decision is valid only for this exact UUID, item and navigation epoch.
+  const discardRequestKey = activeFailedRequest
+    ? JSON.stringify([
+        draftKey,
+        currentScope.current.epoch,
+        activeFailedRequest.payload.client_request_id,
+      ])
+    : null;
 
   function submit(eventType: ReviewQueueEventCreate["event_type"]) {
     const name = actor.trim();
@@ -324,12 +335,13 @@ export function ReviewQueueCoordinationPanel({
           <button
             type="button"
             disabled={mutation.isPending}
-            onClick={() =>
+            onClick={() => {
+              setDiscardRequestConfirmationKey(null);
               mutation.mutate({
                 ...activeFailedRequest,
                 scopeEpoch: currentScope.current.epoch,
-              })
-            }
+              });
+            }}
           >
             Retry event
           </button>
@@ -337,17 +349,50 @@ export function ReviewQueueCoordinationPanel({
             type="button"
             className="secondary"
             disabled={mutation.isPending}
-            onClick={() => {
-              setFailedRequests((current) => {
-                const next = { ...current };
-                delete next[draftKey];
-                return next;
-              });
-              mutation.reset();
-            }}
+            onClick={() => setDiscardRequestConfirmationKey(discardRequestKey)}
           >
             Discard failed action
           </button>
+          {discardRequestKey !== null &&
+            discardRequestConfirmationKey === discardRequestKey && (
+              <div role="group" aria-label="Confirm abandoning uncertain review event">
+                <p>
+                  This request may already have been recorded. Abandoning its
+                  retry does not undo a server event. Submitting the same
+                  observation again with a new request ID could duplicate
+                  scientific audit history.
+                </p>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setDiscardRequestConfirmationKey(null)}
+                >
+                  Keep retry available
+                </button>
+                <button
+                  type="button"
+                  disabled={mutation.isPending}
+                  onClick={() => {
+                    if (!activeFailedRequest || mutation.isPending) return;
+                    setFailedRequests((current) => {
+                      if (
+                        current[draftKey]?.request.payload.client_request_id !==
+                        activeFailedRequest.payload.client_request_id
+                      ) {
+                        return current;
+                      }
+                      const next = { ...current };
+                      delete next[draftKey];
+                      return next;
+                    });
+                    setDiscardRequestConfirmationKey(null);
+                    mutation.reset();
+                  }}
+                >
+                  Confirm abandon retry
+                </button>
+              </div>
+            )}
         </div>
       )}
       {events.error && <p role="alert">{events.error.message}</p>}
