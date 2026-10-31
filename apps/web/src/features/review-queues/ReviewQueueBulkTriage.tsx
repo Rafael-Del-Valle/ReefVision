@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   bulkTriageReviewQueueItems,
@@ -19,6 +19,17 @@ type BulkRequest = {
   actor: string;
   review_confirmed?: boolean;
   client_request_id: string;
+};
+
+type ScopedBulkRequest = {
+  queueId: string;
+  scopeEpoch: number;
+  payload: BulkRequest;
+};
+
+type UncertainBulkRequest = {
+  request: ScopedBulkRequest;
+  errorMessage: string;
 };
 
 function newBulkRequestId(): string {
@@ -56,6 +67,15 @@ function eligible(
 
 export function ReviewQueueBulkTriage({ queueId, items }: Props) {
   const queryClient = useQueryClient();
+  // A mounted dashboard can reuse this panel for a different review queue.
+  // Capture the queue and visit at submission, not when a response arrives.
+  const currentScope = useRef({ queueId, epoch: 0 });
+  if (currentScope.current.queueId !== queueId) {
+    currentScope.current = {
+      queueId,
+      epoch: currentScope.current.epoch + 1,
+    };
+  }
   const [action, setAction] = useState<ReviewQueueBulkAction>("start");
   const [selected, setSelected] = useState<string[]>([]);
   const [reason, setReason] = useState("");
@@ -67,9 +87,19 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     string | null
   >(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
-  const [uncertainRequest, setUncertainRequest] = useState<BulkRequest | null>(
-    null,
-  );
+  const [uncertainRequests, setUncertainRequests] = useState<
+    Record<string, UncertainBulkRequest>
+  >({});
+  const uncertainRequest = uncertainRequests[queueId] ?? null;
+  useEffect(() => {
+    // Never carry selected image IDs, evidence approvals or a prior queue's
+    // success banner into another queue. Preserve unresolved UUIDs per queue.
+    setSelected([]);
+    setReason("");
+    setConfirmedSelectionKey(null);
+    setReviewedSelectionKey(null);
+    setLastResult(null);
+  }, [queueId]);
   const available = items.filter((item) => eligible(item, action));
   const selectedIds = selected.filter((id) =>
     available.some((item) => item.id === id),
@@ -101,26 +131,49 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     setReviewedSelectionKey(null);
   }, [selectionKey]);
   const mutation = useMutation({
-    mutationFn: (payload: BulkRequest) =>
-      bulkTriageReviewQueueItems(queueId, payload),
-    onSuccess: async (result) => {
-      setSelected([]);
-      setConfirmedSelectionKey(null);
-      setReviewedSelectionKey(null);
-      setUncertainRequest(null);
-      setLastResult(
-        `${result.changed_count} items updated; scientific review remains required.`,
-      );
+    mutationFn: (request: ScopedBulkRequest) =>
+      bulkTriageReviewQueueItems(request.queueId, request.payload),
+    onSuccess: async (result, request) => {
+      // A delayed success cannot erase a different queue's uncertain retry.
+      setUncertainRequests((current) => {
+        if (
+          current[request.queueId]?.request.payload.client_request_id !==
+          request.payload.client_request_id
+        ) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[request.queueId];
+        return next;
+      });
+      if (
+        currentScope.current.queueId === request.queueId &&
+        currentScope.current.epoch === request.scopeEpoch
+      ) {
+        setSelected([]);
+        setConfirmedSelectionKey(null);
+        setReviewedSelectionKey(null);
+        setLastResult(
+          `${result.changed_count} items updated; scientific review remains required.`,
+        );
+      }
       await queryClient.invalidateQueries({
-        queryKey: ["review_queue_items", queueId],
+        queryKey: ["review_queue_items", request.queueId],
       });
       await queryClient.invalidateQueries({
-        queryKey: ["review_queue_events", queueId],
+        queryKey: ["review_queue_events", request.queueId],
       });
     },
-    onError: (_, payload) => {
-      // A lost response may follow a committed transaction.
-      setUncertainRequest(payload);
+    onError: (error, request) => {
+      // A lost response may follow a committed transaction. Keep its original
+      // queue and UUID even if the researcher navigated elsewhere.
+      setUncertainRequests((current) => ({
+        ...current,
+        [request.queueId]: {
+          request,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+      }));
     },
   });
   const locked = mutation.isPending || uncertainRequest !== null;
@@ -135,14 +188,18 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
   function submit() {
     if (!ready || locked) return;
     mutation.mutate({
-      item_ids: selectedIds,
-      action,
-      actor: actor.trim(),
-      // Stable across an uncertain-response retry; never reapply a stale
-      // triage action after another researcher changes the queue state.
-      client_request_id: newBulkRequestId(),
-      ...(action === "skip" ? { reason: reason.trim() } : {}),
-      ...(action === "complete" ? { review_confirmed: true } : {}),
+      queueId,
+      scopeEpoch: currentScope.current.epoch,
+      payload: {
+        item_ids: selectedIds,
+        action,
+        actor: actor.trim(),
+        // Stable across an uncertain-response retry; never reapply a stale
+        // triage action after another researcher changes the queue state.
+        client_request_id: newBulkRequestId(),
+        ...(action === "skip" ? { reason: reason.trim() } : {}),
+        ...(action === "complete" ? { review_confirmed: true } : {}),
+      },
     });
   }
 
@@ -292,7 +349,9 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           : `Apply ${action} to ${selectedIds.length} items`}
       </button>
       {lastResult && <p role="status">{lastResult}</p>}
-      {mutation.error && <p role="alert">{mutation.error.message}</p>}
+      {uncertainRequest && (
+        <p role="alert">{uncertainRequest.errorMessage}</p>
+      )}
       {uncertainRequest && (
         <div role="group" aria-label="Uncertain bulk triage outcome">
           <p>
@@ -302,7 +361,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           <button
             type="button"
             disabled={mutation.isPending}
-            onClick={() => mutation.mutate(uncertainRequest)}
+            onClick={() => mutation.mutate(uncertainRequest.request)}
           >
             Retry identical bulk action
           </button>
@@ -311,7 +370,17 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
             className="secondary"
             disabled={mutation.isPending}
             onClick={() => {
-              setUncertainRequest(null);
+              setUncertainRequests((current) => {
+                if (
+                  current[queueId]?.request.payload.client_request_id !==
+                  uncertainRequest.request.payload.client_request_id
+                ) {
+                  return current;
+                }
+                const next = { ...current };
+                delete next[queueId];
+                return next;
+              });
               setSelected([]);
               setConfirmedSelectionKey(null);
               setReviewedSelectionKey(null);
