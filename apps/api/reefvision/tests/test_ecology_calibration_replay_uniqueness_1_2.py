@@ -94,6 +94,7 @@ def test_historical_calibration_rows_remain_readable_but_unverified(
             "source_fingerprint_contract": "ecology-measurement-candidates-0020",
             "candidates": [*original.candidates, original.candidates[0]],
             "candidate_count": original.candidate_count + 1,
+            "candidate_report": None,
         }
     )
     parsed = EcologyMeasurementCandidatesResponse.model_validate(historical.model_dump(mode="json"))
