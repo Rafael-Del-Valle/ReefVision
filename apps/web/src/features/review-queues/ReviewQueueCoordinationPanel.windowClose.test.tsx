@@ -1,7 +1,13 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { addReviewQueueEvent, getReviewQueueEvents } from "../../api/client";
@@ -34,8 +40,7 @@ function mount() {
 
 describe("native QC window close protection", () => {
   let closeHandler:
-    | ((event: { preventDefault: () => void }) => void)
-    | undefined;
+    ((event: { preventDefault: () => void }) => void) | undefined;
   let unlisten: ReturnType<typeof vi.fn>;
   let onCloseRequested: ReturnType<typeof vi.fn>;
 
@@ -181,7 +186,82 @@ describe("native QC window close protection", () => {
       target: { value: "Unsent biological record" },
     });
     expect(
-      await screen.findByText(/Desktop close protection could not be registered/),
+      await screen.findByText(
+        /Desktop close protection could not be registered/,
+      ),
     ).toBeTruthy();
+  });
+
+  it("retries failed native close interception without discarding a biological draft", async () => {
+    onCloseRequested.mockRejectedValueOnce(new Error("Native listener failed"));
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsent coral tissue condition" },
+    });
+    const retry = await screen.findByRole("button", {
+      name: "Retry desktop close protection",
+    });
+    expect(onCloseRequested).toHaveBeenCalledTimes(1);
+    fireEvent.click(retry);
+    await waitFor(() => expect(onCloseRequested).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", {
+          name: "Retry desktop close protection",
+        }),
+      ).toBeNull(),
+    );
+    const preventDefault = vi.fn();
+    act(() => closeHandler?.({ preventDefault }));
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Unsent coral tissue condition",
+    );
+    expect(addReviewQueueEvent).not.toHaveBeenCalled();
+  });
+
+  it("continues blocking native close for a hidden draft after A to B navigation", async () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId="queue-a"
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("coral-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Hidden polyp activity note for coral A" },
+    });
+    await waitFor(() => expect(onCloseRequested).toHaveBeenCalledTimes(1));
+
+    rerender(view("coral-b"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    expect(screen.getByLabelText("Review comment")).toHaveProperty("value", "");
+    const preventDefault = vi.fn();
+    act(() => closeHandler?.({ preventDefault }));
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(unlisten).not.toHaveBeenCalled();
+
+    rerender(view("coral-a"));
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Hidden polyp activity note for coral A",
+    );
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "" },
+    });
+    await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
+    expect(addReviewQueueEvent).not.toHaveBeenCalled();
   });
 });
