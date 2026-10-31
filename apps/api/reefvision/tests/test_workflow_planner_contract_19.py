@@ -342,9 +342,7 @@ def test_completed_verified_pose_workflow_refuses_stale_queued_job(
     app = cast(FastAPI, client.app)
     job_id = str(queued.json()["job_id"])
     run_id = str(queued.json()["id"])
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, job_id
-    )
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
 
     before = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert before.status_code == 200, before.text
@@ -360,17 +358,12 @@ def test_completed_verified_pose_workflow_refuses_stale_queued_job(
         job.status = "queued"
         session.commit()
 
-    assert (
-        process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
-        is False
-    )
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is False
     with app.state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "failed"
-        assert job.error_message == (
-            "Workflow run is already terminal; refusing queued job replay"
-        )
+        assert job.error_message == ("Workflow run is already terminal; refusing queued job replay")
         assert job.completed_at is not None
 
     after = client.get(f"/api/v1/workflow-runs/{run_id}")
