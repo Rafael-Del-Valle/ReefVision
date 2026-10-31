@@ -163,6 +163,10 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
             "v 0 0 0 # origin\nv 2 0 0 # x\nv 0 3 0 # y\nf 1 2 3 # face\n",
             id="inline-comments",
         ),
+        pytest.param(
+            "v 0 0 0\nv 2 0 0\nv 0 3 0\nf 1/2 2//3 3/4/5\n",
+            id="mixed-face-references",
+        ),
     ],
 )
 def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> None:
