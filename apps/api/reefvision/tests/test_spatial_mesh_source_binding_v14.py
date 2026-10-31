@@ -180,6 +180,59 @@ def test_malformed_obj_rejected_by_api_and_persisted_workflow(
     detail = _run_saved_mesh(client, project_id, params)
     assert detail["completed"] is False
     assert detail["run"]["status"] == "failed"
-    assert not any(
-        item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"]
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
+
+
+ATTRIBUTE_RECORDS = (
+    "v 0 0 0\n"
+    "v 2 0 0\n"
+    "v 0 3 0\n"
+    "vt 0 0\n"
+    "vt 1 0\n"
+    "vt 0 1\n"
+    "vn 0 0 1\n"
+)
+
+
+@pytest.mark.parametrize(
+    "invalid_face",
+    [
+        "f 1/4/1 2/2/1 3/3/1",
+        "f 1/-4/1 2/2/1 3/3/1",
+        "f 1/1/2 2/2/1 3/3/1",
+    ],
+)
+def test_declared_obj_attribute_index_replay_fails_closed(
+    client: TestClient, invalid_face: str
+) -> None:
+    project_id = str(create_project(client, "Reject stale OBJ texture or normal references")["id"])
+    params = {**COMMON, "obj_text": ATTRIBUTE_RECORDS + invalid_face + "\n"}
+    with pytest.raises(ValueError, match="face attribute index out of bounds"):
+        preview_from_request(MeshPreviewRequest.model_validate(params))
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
+    assert response.status_code == 400, response.text
+    assert "face attribute index out of bounds" in response.text
+    detail = _run_saved_mesh(client, project_id, params)
+    assert detail["completed"] is False
+    assert detail["run"]["status"] == "failed"
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
+
+
+def test_declared_obj_attribute_indices_preserve_saved_workflow_measurement(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Bound OBJ texture and normal indices")["id"])
+    params = {**COMMON, "obj_text": ATTRIBUTE_RECORDS + "f 1/1/1 2/-2/1 3/-1/-1\n"}
+    standalone = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    detail = _run_saved_mesh(client, project_id, params)
+    assert detail["completed"] is True
+    assert detail["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
     )
+    assert artifact["surface_area_m2"] == standalone.json()["surface_area_m2"]
+    assert artifact["provenance"] == standalone.json()["provenance"]
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
