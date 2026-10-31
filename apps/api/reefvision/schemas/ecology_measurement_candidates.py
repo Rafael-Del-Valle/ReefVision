@@ -457,7 +457,7 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
     def require_current_sampling_qc_source_consistency(
         self,
     ) -> EcologyMeasurementCandidatesResponse:
-        """Rebuild current UTC sampling QC from immutable source candidate rows.
+        """Rebuild current UTC sampling QC from persisted source candidate rows.
 
         A recomputed SHA-256 is not enough: an altered QC date, source image
         roster or technical-replicate flag must not pass saved-workflow replay.
