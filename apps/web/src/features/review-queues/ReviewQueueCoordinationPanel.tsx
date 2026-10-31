@@ -86,6 +86,9 @@ export function ReviewQueueCoordinationPanel({
   const commentRevision = useRef(0);
   const assigneeRevision = useRef(0);
   const actorRevision = useRef(0);
+  const [closeConfirmationKey, setCloseConfirmationKey] = useState<string | null>(
+    null,
+  );
   const [failedRequests, setFailedRequests] = useState<
     Record<string, { request: EventMutationRequest; errorMessage: string }>
   >({});
@@ -190,6 +193,17 @@ export function ReviewQueueCoordinationPanel({
   }
 
   const locked = mutation.isPending || activeFailedRequest !== null;
+  function requestClose() {
+    // An unresolved request may already have reached the server. Keep its
+    // idempotency UUID available for exact retry or explicit discard.
+    if (locked) return;
+    if (comment.trim() || assignee.trim()) {
+      setCloseConfirmationKey(draftKey);
+      return;
+    }
+    onClose();
+  }
+
   return (
     <section aria-label="Review coordination" className="dashboard-card">
       <div className="section-heading">
@@ -197,10 +211,39 @@ export function ReviewQueueCoordinationPanel({
           <p className="eyebrow">Researcher coordination</p>
           <h4>Comments and assignments</h4>
         </div>
-        <button type="button" className="secondary" onClick={onClose}>
+        <button
+          type="button"
+          className="secondary"
+          disabled={locked}
+          onClick={requestClose}
+        >
           Close coordination
         </button>
       </div>
+      {locked && (
+        <p role="status">
+          Finish the pending event or resolve its uncertain outcome before
+          closing. An interrupted request may already be recorded.
+        </p>
+      )}
+      {closeConfirmationKey === draftKey && (
+        <div role="group" aria-label="Discard unsent coordination drafts">
+          <p>
+            This item has unsent reviewer notes or an assignment draft. Closing
+            now will discard those local drafts without saving an event.
+          </p>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setCloseConfirmationKey(null)}
+          >
+            Continue editing
+          </button>
+          <button type="button" disabled={locked} onClick={onClose}>
+            Close without saving drafts
+          </button>
+        </div>
+      )}
       <p className="annotation-helper">
         Actor labels are self-reported on this local workstation, not verified
         accounts. Coordination does not approve or verify biological
