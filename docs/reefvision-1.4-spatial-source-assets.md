@@ -183,8 +183,13 @@ silently becoming apparently valid calibrated mesh measurements. Older OBJ
 files that include face attribute references but no corresponding `vt` or
 `vn` declarations remain supported for backward compatibility; those
 undeclared references are syntax-checked only. Texture coordinates and normals
-are not used for area, branch length, or scale calibration, and their numeric
-contents are not independently validated by this bounded preview parser.
+are not used for area, branch length, or scale calibration. Nevertheless,
+the bounded parser now validates declaration structure and numeric finiteness:
+`vt` accepts one to three finite coordinates and `vn` requires exactly
+three finite coordinates. Malformed, nonnumeric, NaN, and infinite
+declarations fail closed before they can authorize face references. The
+parser does not verify that normals have unit length or match the surface,
+and it does not interpret texture coordinates as physical measurements.
 Standalone API previews and persisted typed Workflow Builder execution share
 the parser. Tests require rejected source references to fail a saved workflow
 without publishing a measurement artifact; valid signed relative attribute
