@@ -88,6 +88,45 @@ try {
     if ([System.IO.Directory]::Exists($junctionRoot)) { [System.IO.Directory]::Delete($junctionRoot, $true) }
 }
 
+# The MSI verification script also creates disposable extraction/self-test
+# roots. Prove it cannot authorize deletion after an ownership-marker swap or
+# nested junction substitution. No MSI is installed by this regression.
+$msiGuardParent = Join-Path $env:TEMP ('reefvision-msi-guard-' + [guid]::NewGuid().ToString('N'))
+$msiGuardToken = 'abcdef12'
+$msiGuardRun = Join-Path $msiGuardParent "rv1-$msiGuardToken"
+$msiGuardMarker = Join-Path $msiGuardRun '.reefvision-msi-verification-run'
+$msiGuardOutside = Join-Path $msiGuardParent 'research-data'
+$msiGuardLink = Join-Path $msiGuardRun 'linked-data'
+New-Item -ItemType Directory -Path $msiGuardRun -Force | Out-Null
+New-Item -ItemType Directory -Path $msiGuardOutside -Force | Out-Null
+$msiGuardSentinel = Join-Path $msiGuardOutside 'do-not-delete.txt'
+Set-Content -LiteralPath $msiGuardSentinel -Value 'preserve' -Encoding Ascii
+Set-Content -LiteralPath $msiGuardMarker -Value 'rv1:abcdef12' -Encoding Ascii
+try {
+    Assert-True (@(Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $msiGuardRun -ParentRoot $msiGuardParent -Kind rv1 -Token $msiGuardToken).Count -eq 0) 'Owned MSI verification run was rejected.'
+    Assert-Throws { Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $msiGuardOutside -ParentRoot $msiGuardParent -Kind rv1 -Token $msiGuardToken } 'MSI verification cleanup must reject an unrelated directory.'
+    Assert-Throws { Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $msiGuardRun -ParentRoot $msiGuardParent -Kind rv1 -Token 'bad-token' } 'MSI verification cleanup must reject an invalid token.'
+    Assert-Throws { Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $msiGuardRun -ParentRoot $msiGuardParent -Kind rvd -Token $msiGuardToken } 'MSI verification cleanup must reject the wrong run kind.'
+    Set-Content -LiteralPath $msiGuardMarker -Value 'rv1:wrong' -Encoding Ascii
+    Assert-Throws { Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $msiGuardRun -ParentRoot $msiGuardParent -Kind rv1 -Token $msiGuardToken } 'MSI verification cleanup must reject an altered ownership marker.'
+    Remove-Item -LiteralPath $msiGuardMarker -Force
+    Assert-Throws { Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $msiGuardRun -ParentRoot $msiGuardParent -Kind rv1 -Token $msiGuardToken } 'MSI verification cleanup must reject a missing marker.'
+    Set-Content -LiteralPath $msiGuardMarker -Value 'rv1:abcdef12' -Encoding Ascii
+    New-Item -ItemType Junction -Path $msiGuardLink -Target $msiGuardOutside -ErrorAction Stop | Out-Null
+    Assert-Throws { Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $msiGuardRun -ParentRoot $msiGuardParent -Kind rv1 -Token $msiGuardToken } 'MSI verification cleanup must reject a nested junction.'
+    Assert-True (Test-Path -LiteralPath $msiGuardSentinel -PathType Leaf) 'MSI verification junction guard altered external research data.'
+} finally {
+    if ([System.IO.Directory]::Exists($msiGuardLink)) { [System.IO.Directory]::Delete($msiGuardLink) }
+    if ([System.IO.Directory]::Exists($msiGuardParent)) { [System.IO.Directory]::Delete($msiGuardParent, $true) }
+}
+# The verifier must invoke the ownership check immediately before deletion,
+# rather than relying on a pre-extraction path check or a filename prefix.
+$msiVerifierSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verify-windows-msi.ps1') -Raw
+$msiCleanupGuard = $msiVerifierSource.IndexOf('Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $entry.Path')
+$msiCleanupDelete = $msiVerifierSource.IndexOf('Remove-Item -LiteralPath $entry.Path -Recurse -Force')
+Assert-True ($msiCleanupGuard -ge 0 -and $msiCleanupDelete -gt $msiCleanupGuard) 'MSI verifier must check disposable ownership before recursive deletion.'
+Assert-True (-not $msiVerifierSource.Contains('Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $ExtractRoot')) 'MSI verifier still has unguarded extraction cleanup.'
+
 # A Windows Installer reboot-required result is not a completed clean install.
 # The harness must not report PASS or remove its evidence while a reboot is
 # pending. Exercise both installation and uninstallation without running MSI.
