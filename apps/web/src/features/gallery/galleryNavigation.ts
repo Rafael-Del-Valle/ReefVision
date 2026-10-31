@@ -35,9 +35,12 @@ export function readGalleryPreference(
     if (candidate.imageId !== null && typeof candidate.imageId !== "string") {
       return { ...DEFAULT_PREFERENCE };
     }
+    // Corrupted persisted pages such as 1e100 are integers in JavaScript but
+    // cannot safely be used for a paginated API query. Fall back before the
+    // first image is requested so a bad preference never hides the viewport.
     if (
       typeof candidate.page !== "number" ||
-      !Number.isInteger(candidate.page) ||
+      !Number.isSafeInteger(candidate.page) ||
       candidate.page < 1 ||
       typeof candidate.wrap !== "boolean"
     ) {

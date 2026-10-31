@@ -183,6 +183,12 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await page.evaluate((version) => {
     const onboardingKey = "reefvision.onboarding.dismissed." + version;
     window.localStorage.setItem(onboardingKey, "true");
+    // A stale or corrupted saved page must not hide the initial camera image.
+    // JavaScript considers 1e100 an integer, but it is not a safe page index.
+    window.localStorage.setItem(
+      "reefvision.gallery.project-1.v1",
+      JSON.stringify({ imageId: "image-12", page: 1e100, wrap: true }),
+    );
   }, pkg.version);
   await page.addStyleTag({ content: style });
   await page.addScriptTag({ content: script, type: "module" });
@@ -232,6 +238,9 @@ test("initial image and gallery scrolling", async ({ page }) => {
   };
 
   await assertDecodedAndContained(1600, 1200);
+  await expect(
+    workbench.getByRole("listitem", { name: "Focus camera-01.JPEG" }),
+  ).toHaveAttribute("aria-current", "true");
   // Synthetic WheelEvent assertions below only prove that preventDefault was
   // called. Exercise real mouse-wheel input over the *first* loaded image to
   // catch compositor scrolling that partially displaces the camera preview.

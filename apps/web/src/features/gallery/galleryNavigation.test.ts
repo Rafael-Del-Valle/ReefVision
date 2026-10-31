@@ -42,6 +42,24 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("rejects unsafe saved pages before loading the first camera image", () => {
+    for (const page of [2 ** 53, 1e100, Number.MAX_VALUE]) {
+      const storage = memoryStorage({
+        "reefvision.gallery.project-a.v1": JSON.stringify({
+          imageId: "image-12",
+          page,
+          wrap: true,
+        }),
+      });
+
+      expect(readGalleryPreference(storage, "project-a")).toEqual({
+        imageId: null,
+        page: 1,
+        wrap: false,
+      });
+    }
+  });
+
   it("falls back safely when stored data is corrupt", () => {
     const storage = memoryStorage({
       "reefvision.gallery.project-a.v1": '{"imageId":7,"page":-3}',
