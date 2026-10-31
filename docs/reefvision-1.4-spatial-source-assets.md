@@ -211,3 +211,17 @@ Workflow Builder graphs use the same parser, with regression coverage for
 valid widths, invalid widths, and failed workflow runs that publish no
 measurement artifact. No mesh topology, calibration, or biological identity
 is independently verified by an accepted integer index.
+
+### GLB numeric schema integrity for scientific previews
+
+The bounded GLB 2.0 importer requires JSON integer types for TRIANGLES
+primitive mode (`4`), position/index accessor component types, and any
+explicit buffer-view byte stride. A JSON floating-point value such as `4.0`,
+`5126.0`, or `12.0` is not a valid substitute, even if numerically equal.
+An explicitly supplied accessor `normalized` flag must be a JSON boolean;
+`false` is permitted and `true` remains unsupported. This prevents malformed
+GLB metadata from silently entering calibrated measurements. The same parser
+is used by standalone preview and persisted typed Workflow Builder execution;
+regressions require invalid saved runs to fail without publishing a mesh
+measurement artifact. Accepted GLB geometry is still provisional and does
+not independently verify scale, biological identity, or registration.
