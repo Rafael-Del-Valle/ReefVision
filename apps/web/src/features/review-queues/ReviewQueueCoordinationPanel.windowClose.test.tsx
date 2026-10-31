@@ -41,13 +41,13 @@ function mount() {
 describe("native QC window close protection", () => {
   let closeHandler:
     ((event: { preventDefault: () => void }) => void) | undefined;
-  let unlisten: ReturnType<typeof vi.fn>;
+  let unlisten: () => void;
   let onCloseRequested: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     closeHandler = undefined;
-    unlisten = vi.fn();
+    unlisten = vi.fn(() => undefined);
     onCloseRequested = vi.fn(
       async (callback: (event: { preventDefault: () => void }) => void) => {
         closeHandler = callback;
