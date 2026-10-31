@@ -8,6 +8,9 @@ import {
 } from "../../api/client";
 
 type EventMutationRequest = {
+  queueId: string;
+  itemId: string;
+  scopeEpoch: number;
   payload: ReviewQueueEventCreate;
   commentRevision: number;
   assigneeRevision: number;
@@ -37,6 +40,19 @@ export function ReviewQueueCoordinationPanel({
   onClose,
 }: Props) {
   const queryClient = useQueryClient();
+  // Bind each request to the queue/item and navigation epoch at submission.
+  // This also protects direct consumers that reuse the panel without a React key.
+  const currentScope = useRef({ queueId, itemId, epoch: 0 });
+  if (
+    currentScope.current.queueId !== queueId ||
+    currentScope.current.itemId !== itemId
+  ) {
+    currentScope.current = {
+      queueId,
+      itemId,
+      epoch: currentScope.current.epoch + 1,
+    };
+  }
   const [actor, setActor] = useState("");
   const [assignee, setAssignee] = useState("");
   const [comment, setComment] = useState("");
@@ -54,12 +70,23 @@ export function ReviewQueueCoordinationPanel({
     queryFn: ({ signal }) =>
       getReviewQueueEvents(queueId, itemId, page, signal),
   });
+  const isCurrentRequest = (request: EventMutationRequest) =>
+    currentScope.current.queueId === request.queueId &&
+    currentScope.current.itemId === request.itemId &&
+    currentScope.current.epoch === request.scopeEpoch;
   const mutation = useMutation({
     mutationFn: (request: EventMutationRequest) =>
-      addReviewQueueEvent(queueId, itemId, request.payload),
+      addReviewQueueEvent(request.queueId, request.itemId, request.payload),
     onSuccess: async (_, request) => {
-      setFailedRequest(null);
+      if (isCurrentRequest(request)) {
+        setFailedRequest((current) =>
+          current?.payload.client_request_id === request.payload.client_request_id
+            ? null
+            : current,
+        );
+      }
       if (
+        isCurrentRequest(request) &&
         request.payload.event_type === "comment" &&
         commentRevision.current === request.commentRevision &&
         actorRevision.current === request.actorRevision
@@ -67,6 +94,7 @@ export function ReviewQueueCoordinationPanel({
         setComment("");
       }
       if (
+        isCurrentRequest(request) &&
         request.payload.event_type === "assign" &&
         assigneeRevision.current === request.assigneeRevision &&
         actorRevision.current === request.actorRevision
@@ -74,17 +102,22 @@ export function ReviewQueueCoordinationPanel({
         setAssignee("");
       }
       await queryClient.invalidateQueries({
-        queryKey: ["review_queue_events", queueId, itemId],
+        queryKey: ["review_queue_events", request.queueId, request.itemId],
       });
     },
-    onError: (_, payload) => setFailedRequest(payload),
+    onError: (_, request) => {
+      if (isCurrentRequest(request)) setFailedRequest(request);
+    },
   });
+
+  const activeFailedRequest =
+    failedRequest && isCurrentRequest(failedRequest) ? failedRequest : null;
 
   function submit(eventType: ReviewQueueEventCreate["event_type"]) {
     const name = actor.trim();
     const text = comment.trim();
     const reviewer = assignee.trim();
-    if (!name || failedRequest || mutation.isPending) return;
+    if (!name || activeFailedRequest || mutation.isPending) return;
     if (eventType === "comment" && !text) return;
     if (eventType === "assign" && !reviewer) return;
     const payload: ReviewQueueEventCreate = {
@@ -95,6 +128,9 @@ export function ReviewQueueCoordinationPanel({
       ...(eventType === "assign" ? { assignee: reviewer } : {}),
     };
     mutation.mutate({
+      queueId,
+      itemId,
+      scopeEpoch: currentScope.current.epoch,
       payload,
       commentRevision: commentRevision.current,
       assigneeRevision: assigneeRevision.current,
@@ -102,7 +138,7 @@ export function ReviewQueueCoordinationPanel({
     });
   }
 
-  const locked = mutation.isPending || failedRequest !== null;
+  const locked = mutation.isPending || activeFailedRequest !== null;
   return (
     <section aria-label="Review coordination" className="dashboard-card">
       <div className="section-heading">
@@ -180,8 +216,10 @@ export function ReviewQueueCoordinationPanel({
       >
         Add comment
       </button>
-      {mutation.error && <p role="alert">{mutation.error.message}</p>}
-      {failedRequest && (
+      {activeFailedRequest && mutation.error && (
+        <p role="alert">{mutation.error.message}</p>
+      )}
+      {activeFailedRequest && (
         <div role="group" aria-label="Failed review event">
           <p>
             The outcome may be uncertain. Retry with the same request ID or
@@ -190,7 +228,7 @@ export function ReviewQueueCoordinationPanel({
           <button
             type="button"
             disabled={mutation.isPending}
-            onClick={() => mutation.mutate(failedRequest)}
+            onClick={() => mutation.mutate(activeFailedRequest)}
           >
             Retry event
           </button>
