@@ -582,6 +582,7 @@ function GalleryContent({
       return combined;
     },
     onSuccess: async (result) => {
+      setPendingNavigationEdge(null);
       setReport(result);
       setSortBy("newest");
       setPage(1);
@@ -621,6 +622,7 @@ function GalleryContent({
 
   function applyFilters(event: FormEvent) {
     event.preventDefault();
+    setPendingNavigationEdge(null);
     setPage(1);
     setFilters({
       filename: filenameDraft.trim(),
@@ -811,6 +813,7 @@ function GalleryContent({
 
   function jumpToPage(event: FormEvent) {
     event.preventDefault();
+    setPendingNavigationEdge(null);
     const totalPages = images.data?.pages ?? 1;
     const requested = Number.parseInt(pageDraft, 10);
     if (!Number.isFinite(requested)) {
@@ -823,6 +826,7 @@ function GalleryContent({
   }
 
   function resetFilters() {
+    setPendingNavigationEdge(null);
     setFilenameDraft("");
     setStatusDraft("");
     setGroupDraft("");
@@ -964,7 +968,10 @@ function GalleryContent({
                   aria-current={
                     image.id === focusedImage.id ? "true" : undefined
                   }
-                  onClick={() => setFocusedImageId(image.id)}
+                  onClick={() => {
+                    setPendingNavigationEdge(null);
+                    setFocusedImageId(image.id);
+                  }}
                 >
                   <span className="rv-filmstrip-thumbnail">
                     {image.thumbnail_path ? (
@@ -1067,6 +1074,7 @@ function GalleryContent({
             onChange={(event) => {
               const value = event.target.value;
               setFilenameDraft(value);
+              setPendingNavigationEdge(null);
               setFilters((current) => ({ ...current, filename: value.trim() }));
               setPage(1);
             }}
@@ -1099,6 +1107,7 @@ function GalleryContent({
             value={sortBy}
             onChange={(event) => {
               setSortBy(event.target.value as typeof sortBy);
+              setPendingNavigationEdge(null);
               setPage(1);
             }}
           >
@@ -1191,7 +1200,10 @@ function GalleryContent({
             type="button"
             className="secondary"
             disabled={page === 1}
-            onClick={() => setPage(1)}
+            onClick={() => {
+              setPendingNavigationEdge(null);
+              setPage(1);
+            }}
           >
             First
           </button>
@@ -1199,7 +1211,10 @@ function GalleryContent({
             type="button"
             className="secondary"
             disabled={page === 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => {
+              setPendingNavigationEdge(null);
+              setPage((current) => current - 1);
+            }}
           >
             Previous
           </button>
@@ -1230,7 +1245,10 @@ function GalleryContent({
             type="button"
             className="secondary"
             disabled={page === images.data.pages}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => {
+              setPendingNavigationEdge(null);
+              setPage((current) => current + 1);
+            }}
           >
             Next
           </button>
@@ -1238,7 +1256,10 @@ function GalleryContent({
             type="button"
             className="secondary"
             disabled={page === images.data.pages}
-            onClick={() => setPage(images.data.pages)}
+            onClick={() => {
+              setPendingNavigationEdge(null);
+              setPage(images.data.pages);
+            }}
           >
             Last
           </button>
