@@ -247,14 +247,18 @@ describe("ReviewQueueDashboard scope isolation", () => {
       expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(false),
     );
     const openImage = await screen.findByRole("button", { name: "Open image" });
-    fireEvent.click(screen.getByRole("button", { name: "Comments & assignments" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Comments & assignments" }),
+    );
     await waitFor(() =>
       expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(true),
     );
     expect(openImage).toHaveProperty("disabled", true);
     fireEvent.click(openImage);
     expect(onOpenImage).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Close coordination test" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close coordination test" }),
+    );
     await waitFor(() =>
       expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(false),
     );
