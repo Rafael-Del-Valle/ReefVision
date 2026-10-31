@@ -265,7 +265,7 @@ def test_padded_experimental_unit_ids_cannot_create_or_revise_registry(
         == 201
     )
     before = client.get(registry_url).json()
-    for invalid in ("tank-1 ", " tank-1", "tank-1\\t", "tank-1\\n"):
+    for invalid in ("tank-1 ", " tank-1", "tank-1\t", "tank-1\n"):
         create = _register(
             client,
             project_id,
