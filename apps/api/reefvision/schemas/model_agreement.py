@@ -196,6 +196,25 @@ class PairedCountComparisonResponse(BaseModel):
         )
         if version != "ecology-paired-count-0007":
             return value
+        # Current saved scientific rows must not silently discard claims of
+        # verification or independent replication embedded as extra fields.
+        # Preserve legacy decoding; the original API never produced such fields.
+        for collection, row_model in (
+            ("paired_differences", PairedCountDifference),
+            ("unit_summaries", PairedCountUnitSummary),
+        ):
+            entries = value.get(collection)
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                unexpected = sorted(set(entry) - row_model.model_fields.keys())
+                if unexpected:
+                    raise ValueError(
+                        f"Directional persisted {collection} contain unsupported fields: "
+                        + ", ".join(unexpected)
+                    )
         rows = value.get("paired_differences")
         if isinstance(rows, list):
             for row in rows:
