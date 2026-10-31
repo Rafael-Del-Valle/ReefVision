@@ -690,7 +690,9 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         if [row.model_dump(mode="json") for row in self.projected_population_summaries] != [
             row.model_dump(mode="json") for row in expected_population
         ]:
-            raise ValueError("Current projected population summaries do not match source candidates")
+            raise ValueError(
+                "Current projected population summaries do not match source candidates"
+            )
         return self
 
     @model_validator(mode="before")
