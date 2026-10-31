@@ -74,9 +74,7 @@ describe("native QC window close protection", () => {
     const preventDefault = vi.fn();
     act(() => closeHandler?.({ preventDefault }));
     expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(
-      screen.getByText(/Desktop window close was blocked/),
-    ).toBeTruthy();
+    expect(screen.getByText(/Desktop window close was blocked/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Review comment"), {
       target: { value: "" },
     });
@@ -110,9 +108,7 @@ describe("native QC window close protection", () => {
     fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
       target: { value: "researcher" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Unassign reviewer" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Unassign reviewer" }));
     await waitFor(() => expect(onCloseRequested).toHaveBeenCalledTimes(1));
     const preventDefault = vi.fn();
     act(() => closeHandler?.({ preventDefault }));
