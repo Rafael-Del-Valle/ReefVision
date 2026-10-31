@@ -346,9 +346,7 @@ def test_current_lineage_digest_contract_fails_closed_for_api_and_saved_artifact
                 tampered = {**serialized, field: invalid}
                 # Saved artifacts fail first at the current-source digest;
                 # the exporter below still independently checks all four layers.
-                with pytest.raises(
-                    SchemaValidationError, match="source fingerprint mismatch"
-                ):
+                with pytest.raises(SchemaValidationError, match="source fingerprint mismatch"):
                     EcologyMeasurementCandidatesResponse.model_validate(tampered)
             # The exporter must also reject unchecked model_copy mutations,
             # without relying only on a later source-fingerprint comparison.
