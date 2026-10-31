@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError as PydanticValidationError
-import pytest
 
 from reefvision.schemas.ecology_measurement_candidates import (
     EcologyMeasurementCandidatesResponse,
