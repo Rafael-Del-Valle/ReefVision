@@ -284,7 +284,7 @@ describe("Gallery", () => {
       });
 
     renderGallery();
-    await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    await screen.findByRole("article", { name: /swiftia-01\.png/ });
     const groupKey = screen.getByPlaceholderText("e.g. source-image-001");
     const status = screen.getByLabelText("Image status");
     await userEvent.type(groupKey, "unsaved-parent-fragment");
