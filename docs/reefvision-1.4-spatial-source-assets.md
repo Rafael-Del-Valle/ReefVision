@@ -38,6 +38,14 @@ not publish a measurement artifact. These checks are not atomic against
 concurrent filesystem changes. A matching digest establishes byte integrity
 only; it does not establish scale or biological identity.
 
+The longitudinal comparison engine also rejects an explicitly recorded
+zero-byte imported OBJ, PLY, or GLB original, even when its source digest was
+not independently checked. A nonempty imported file cannot have a zero-byte
+count. Historical preview records that omit the byte count remain readable;
+absence is unknown, not a claimed empty file. Tests cover all three formats
+and retain conservative duplicate-source withholding. This validation does
+not authenticate caller-supplied hashes or establish independent surveys.
+
 The project 3D preview client rejects inconsistent source-format/kind pairs
 (PLY is `mesh_or_point_cloud`; OBJ/GLB are `mesh`), empty, fractional, or
 oversized reported source byte counts, and forged source verification flags
