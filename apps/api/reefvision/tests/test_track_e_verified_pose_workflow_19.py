@@ -31,11 +31,11 @@ from reefvision.services.pose_training_datasets import (
     frozen_pose_item_evidence_sha256,
 )
 from reefvision.services.workflow_execution import WorkflowExecutionService
-from reefvision.services.workflow_provenance import build_workflow_run_provenance
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
     execute_pose_training_dataset_adapter,
 )
+from reefvision.services.workflow_provenance import build_workflow_run_provenance
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_pose_training_phase10 import _frozen_dataset
