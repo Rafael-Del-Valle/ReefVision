@@ -680,6 +680,10 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         expected_changes = summarize_projected_endpoint_changes(
             self.candidates, self.sampling_date_qc
         )
+        if [row.model_dump(mode="json") for row in self.projected_endpoint_changes] != [
+            row.model_dump(mode="json") for row in expected_changes
+        ]:
+            raise ValueError("Current projected endpoints do not match source candidates")
         expected_units = summarize_projected_unit_summaries(self.candidates, expected_changes)
         if [row.model_dump(mode="json") for row in self.projected_unit_summaries] != [
             row.model_dump(mode="json") for row in expected_units

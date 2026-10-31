@@ -95,6 +95,30 @@ def test_rehashed_endpoint_rejects_fabricated_but_consistent_growth(
         EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
 
 
+def test_rehashed_missing_endpoint_cannot_hide_valid_source_series(
+    client: TestClient,
+) -> None:
+    """A saved result cannot suppress growth-like projected evidence by rehashing."""
+    original = _dated_artifact(client)
+    assert len(original.projected_endpoint_changes) == 1
+    assert original.sampling_date_qc[0].qc_status == "date_series_candidate"
+    assert EcologyMeasurementCandidatesResponse.model_validate(
+        original.model_dump(mode="json")
+    ).projected_endpoint_changes
+
+    # Removing the only endpoint and re-signing both source and report hashes
+    # previously passed typed saved-workflow readback. Unit summaries still
+    # existed, but the exported endpoint roster was silently incomplete.
+    forged = _resign_derived_evidence(
+        original.model_copy(update={"projected_endpoint_changes": []})
+    )
+    with pytest.raises(
+        PydanticValidationError,
+        match="Current projected endpoints do not match source candidates",
+    ):
+        EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
+
+
 def test_rehashed_duplicate_endpoint_is_not_an_extra_replicate(
     client: TestClient,
 ) -> None:
