@@ -34,7 +34,12 @@ def verify_workflow_artifact(
     if expected_run_id is not None and artifact.workflow_run_id != expected_run_id:
         raise ConflictError("Workflow artifact belongs to a different workflow run")
 
-    actual = canonical_json_sha256(dict(artifact.payload_json or {}))
+    # A JSON array of key/value pairs can coerce to the same dictionary and
+    # digest as the original payload. Preserve the stored artifact type.
+    if not isinstance(artifact.payload_json, dict):
+        raise ConflictError("Workflow artifact payload must be a JSON object")
+
+    actual = canonical_json_sha256(artifact.payload_json)
 
     if actual != artifact.payload_sha256:
         raise ConflictError(f"Workflow artifact checksum failed for {artifact.id}")
@@ -76,6 +81,20 @@ def _artifact_by_id(
     return artifact
 
 
+def _artifact_ids(value: Any, *, field: str) -> list[str]:
+    """Reject malformed persisted lineage instead of iterating JSON object keys."""
+
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise ConflictError(f"Workflow node {field} must be a list of artifact IDs")
+    # One produced artifact has one output identity. Repeated inputs can be
+    # legitimate fan-out across different ports, but repeated outputs cannot.
+    if field == "output IDs" and len(value) != len(set(value)):
+        raise ConflictError("Workflow node output IDs contain duplicates")
+    return value
+
+
 def verify_succeeded_node_artifacts(
     session: Session,
     *,
@@ -87,9 +106,9 @@ def verify_succeeded_node_artifacts(
     if node_run.workflow_run_id != run_id:
         raise ConflictError("Workflow node belongs to a different run")
 
-    input_ids = [str(value) for value in node_run.input_artifact_ids_json or []]
+    input_ids = _artifact_ids(node_run.input_artifact_ids_json, field="input IDs")
 
-    output_ids = [str(value) for value in node_run.output_artifact_ids_json or []]
+    output_ids = _artifact_ids(node_run.output_artifact_ids_json, field="output IDs")
 
     inputs = [
         _artifact_by_id(
@@ -119,10 +138,20 @@ def verify_succeeded_node_artifacts(
 
     declared_outputs = result.get("outputs")
 
+    # Older records may omit the summary, but an explicitly persisted one
+    # must retain its list shape. Otherwise malformed lineage is ignored.
+    if "outputs" in result and not isinstance(declared_outputs, list):
+        raise ConflictError("Succeeded workflow node output summary must be a list")
+
     if isinstance(
         declared_outputs,
         list,
     ):
+        # The worker writes exactly one declaration per persisted artifact.
+        # A duplicate or forged extra entry must not disappear in the ID map.
+        if len(declared_outputs) != len(outputs):
+            raise ConflictError("Succeeded workflow node output summary count mismatch")
+
         declarations = {
             str(item.get("artifact_id")): item
             for item in declared_outputs
@@ -222,9 +251,9 @@ def build_workflow_run_provenance(
     node_manifest: list[dict[str, Any]] = []
 
     for node in nodes:
-        input_ids = [str(value) for value in node.input_artifact_ids_json or []]
+        input_ids = _artifact_ids(node.input_artifact_ids_json, field="input IDs")
 
-        output_ids = [str(value) for value in node.output_artifact_ids_json or []]
+        output_ids = _artifact_ids(node.output_artifact_ids_json, field="output IDs")
 
         consumed_ids.update(input_ids)
 

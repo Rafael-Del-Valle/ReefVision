@@ -13,6 +13,7 @@ from reefvision.db.models import (
     ExperimentRecord,
     Job,
     ModelRegistration,
+    PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
     PoseModelSchemaBinding,
     PoseTrainingDataset,
@@ -31,6 +32,7 @@ from reefvision.ml.ultralytics_registry import (
 from reefvision.services import (
     workflow_runtime_adapters as runtime_adapters,
 )
+from reefvision.services.pose_training_datasets import frozen_pose_item_fingerprints_match
 from reefvision.storage.datasets import (
     canonical_json_sha256,
 )
@@ -116,9 +118,9 @@ def _pose_dataset(
     payload: dict[str, Any],
     role: str,
 ) -> PoseTrainingDataset:
-    payload_project = payload.get("project_id")
-
-    if payload_project is not None and str(payload_project) != project_id:
+    # A connected artifact's explicit project identity is a provenance assertion.
+    # Null must not be interpreted as an omitted project when replaying a graph.
+    if "project_id" in payload and str(payload["project_id"]) != project_id:
         raise ValidationError(f"Pose {role} dataset belongs to another project")
 
     dataset_id = str(payload.get("dataset_id") or "")
@@ -134,13 +136,112 @@ def _pose_dataset(
     if dataset is None or dataset.project_id != project_id:
         raise ValidationError(f"Pose {role} dataset does not belong to this project")
 
-    if dataset.status != "complete":
-        raise ValidationError(f"Pose {role} dataset must be complete")
+    if dataset.status != "complete" or (dataset.item_count or 0) < 1:
+        raise ValidationError(f"Pose {role} dataset must be complete and contain verified items")
 
-    advertised_manifest = str(payload.get("manifest_sha256") or "")
+    if not isinstance(dataset.manifest_json, dict):
+        raise ValidationError(f"Pose {role} dataset manifest must be a JSON object")
 
-    if advertised_manifest and advertised_manifest != dataset.manifest_sha256:
-        raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
+    if canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
+        raise ValidationError(
+            f"Pose {role} dataset manifest checksum no longer matches frozen truth"
+        )
+
+    manifest = dataset.manifest_json
+    manifest_schema = manifest.get("pose_schema")
+    if (
+        manifest.get("dataset_id") != dataset.id
+        or manifest.get("project_id") != dataset.project_id
+        or manifest.get("source_round_id") != dataset.source_round_id
+        or manifest.get("source_selection_sha256") != dataset.source_selection_sha256
+        or manifest.get("source_retraining_manifest_sha256")
+        != dataset.source_retraining_manifest_sha256
+        or not isinstance(manifest_schema, dict)
+        or manifest_schema.get("schema_id") != dataset.pose_schema_id
+        or manifest_schema.get("schema_revision") != dataset.pose_schema_revision
+        or manifest_schema.get("content_hash") != dataset.pose_schema_content_hash
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset manifest lineage no longer matches frozen truth"
+        )
+
+    if (
+        dataset.manifest_json.get("truth_policy") != "scientist_verified_only"
+        or dataset.manifest_json.get("skipped_candidates_included") is not False
+        or dataset.manifest_json.get("pending_candidates_included") is not False
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset manifest must contain only scientist-verified items"
+        )
+
+    if (
+        not isinstance(dataset.manifest_json.get("items"), list)
+        or dataset.manifest_json.get("item_count") != dataset.item_count
+        or len(dataset.manifest_json["items"]) != dataset.item_count
+    ):
+        raise ValidationError(f"Pose {role} dataset item count no longer matches frozen manifest")
+
+    if not frozen_pose_item_fingerprints_match(session, dataset):
+        raise ValidationError(
+            f"Pose {role} dataset item fingerprints no longer match persisted frozen truth"
+        )
+
+    # The planner validates frozen truth, but the execution adapter must also
+    # reject schema drift after planning or when invoked independently.
+    schema = session.get(PoseLandmarkSchema, dataset.pose_schema_id)
+    revision = session.scalar(
+        select(PoseLandmarkSchemaRevision).where(
+            PoseLandmarkSchemaRevision.schema_id == dataset.pose_schema_id,
+            PoseLandmarkSchemaRevision.revision == dataset.pose_schema_revision,
+        )
+    )
+    if (
+        schema is None
+        or schema.project_id != project_id
+        or revision is None
+        or revision.content_hash != dataset.pose_schema_content_hash
+    ):
+        raise ValidationError(f"Pose {role} dataset landmark schema no longer matches frozen truth")
+
+    # An explicitly supplied checksum is a provenance assertion. Do not
+    # treat false, zero, or a blank digest as if no assertion was supplied.
+    if "manifest_sha256" in payload:
+        advertised_manifest = payload["manifest_sha256"]
+        if (
+            not isinstance(advertised_manifest, str)
+            or advertised_manifest != dataset.manifest_sha256
+        ):
+            raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
+
+    # Explicit source-round and active-learning digests are scientific
+    # lineage assertions, even when the dataset ID and manifest still resolve.
+    source_lineage_fields = (
+        ("source_round_id", dataset.source_round_id),
+        ("source_selection_sha256", dataset.source_selection_sha256),
+        ("source_retraining_manifest_sha256", dataset.source_retraining_manifest_sha256),
+    )
+    if any(
+        payload[field] != expected for field, expected in source_lineage_fields if field in payload
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset artifact source lineage no longer matches frozen truth"
+        )
+
+    # Downstream training must not silently accept a stale or substituted
+    # landmark schema identity from a persisted Workflow Builder artifact.
+    schema_fields = (
+        "pose_schema_id",
+        "pose_schema_revision",
+        "pose_schema_content_hash",
+    )
+    if any(
+        str(payload[field]) != str(getattr(dataset, field))
+        for field in schema_fields
+        if field in payload
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset artifact landmark schema metadata no longer matches frozen truth"
+        )
 
     return dataset
 
@@ -153,6 +254,11 @@ def _seed_pose_model(
     payload: dict[str, Any],
     dataset: PoseTrainingDataset,
 ) -> ModelRegistration:
+    # The model ID must resolve locally, but a persisted model-reference
+    # artifact must also retain its explicitly asserted project lineage.
+    if "project_id" in payload and payload["project_id"] != project_id:
+        raise ValidationError("Pose retraining seed artifact project lineage changed")
+
     model_id = str(payload.get("model_id") or "")
 
     if not model_id:
@@ -169,6 +275,19 @@ def _seed_pose_model(
     if model.purpose != "detector" or model.task != "pose" or model.provider_name != "ultralytics":
         raise ValidationError("Pose retraining seed must be a registered Ultralytics pose model")
 
+    # A model-reference artifact may pin the original registered checkpoint.
+    # Its digest is an explicit lineage assertion, not a hint to discard when
+    # the model ID still resolves to an intact but different registration.
+    for digest_field in ("sha256", "source_model_sha256", "model_sha256"):
+        if digest_field in payload and payload[digest_field] != model.sha256:
+            raise ValidationError("Pose retraining seed artifact checksum changed")
+
+    # The actual registered_model_source node also pins the model's type and
+    # provider. Reject altered metadata before using its local checkpoint.
+    for metadata_field in ("purpose", "task", "provider_name", "provider_version"):
+        if metadata_field in payload and payload[metadata_field] != getattr(model, metadata_field):
+            raise ValidationError("Pose retraining seed artifact metadata changed")
+
     binding = session.get(
         PoseModelSchemaBinding,
         model.id,
@@ -176,6 +295,17 @@ def _seed_pose_model(
 
     if binding is None:
         raise ValidationError("Pose retraining seed requires a bound ReefVision landmark schema")
+
+    # Matching keypoint definitions are not sufficient provenance: distinct
+    # schema identities can have identical content hashes. Require the exact
+    # frozen schema revision before using a locally registered checkpoint.
+    if (
+        binding.schema_id != dataset.pose_schema_id
+        or binding.schema_revision != dataset.pose_schema_revision
+    ):
+        raise ValidationError(
+            "Pose retraining seed landmark schema identity does not match frozen training dataset"
+        )
 
     revision = session.scalar(
         select(PoseLandmarkSchemaRevision).where(
@@ -219,10 +349,13 @@ def _completed_workflow_pose_training_run(
     split_manifest_sha256: str,
     seed_model: ModelRegistration | None,
     architecture: str,
+    run_name: str,
+    notes: str | None,
     device: str,
     precision: str,
     random_seed: int | None,
     training_config: dict[str, Any],
+    resource_limits: dict[str, Any],
 ) -> TrainingRun | None:
     """Find completed child science created by this exact workflow node."""
 
@@ -254,31 +387,133 @@ def _completed_workflow_pose_training_run(
         ):
             continue
 
+        snapshot_version = snapshot.get("schema_version")
+        if snapshot_version not in (
+            None,
+            "pose-workflow-training-snapshot-0001",
+            "pose-workflow-training-snapshot-0002",
+            "pose-workflow-training-snapshot-0003",
+        ):
+            raise ValidationError("Recovered pose-training node snapshot schema changed")
+
+        # Historical snapshots must not inherit newer provenance assertions
+        # under a downgraded schema marker.
+        registry_snapshots = (
+            "pose-workflow-training-snapshot-0002",
+            "pose-workflow-training-snapshot-0003",
+        )
+        if snapshot_version not in registry_snapshots and "parameter_registry_version" in snapshot:
+            raise ValidationError("Recovered pose-training node snapshot schema changed")
+        if (
+            snapshot_version != "pose-workflow-training-snapshot-0003"
+            and "metrics_history_sha256" in snapshot
+        ):
+            raise ValidationError("Recovered pose-training node snapshot schema changed")
+
+        # Version 0002 freezes the provider parameter registry used for the
+        # actual run. Never replay a model under silently rewritten registry
+        # provenance; version 0001 remains readable for historical runs.
+        if snapshot_version in registry_snapshots and (
+            not isinstance(snapshot.get("parameter_registry_version"), str)
+            or snapshot["parameter_registry_version"] != candidate.parameter_registry_version
+        ):
+            raise ValidationError("Recovered pose-training provider registry version changed")
+
+        # Completed v3 nodes freeze the epoch-by-epoch metric history, not
+        # just experiment summary metrics. Replays cannot silently rewrite it.
+        if snapshot_version == "pose-workflow-training-snapshot-0003" and (
+            not isinstance(candidate.metrics_history_json, dict)
+            or not isinstance(snapshot.get("metrics_history_sha256"), str)
+            or snapshot["metrics_history_sha256"]
+            != canonical_json_sha256(dict(candidate.metrics_history_json or {}))
+        ):
+            raise ValidationError("Recovered pose-training metrics history changed")
+
         if (
             snapshot.get("pose_training_dataset_id") != dataset.id
             or snapshot.get("pose_validation_dataset_id") != expected_validation_id
         ):
             raise ValidationError("Recovered pose-training node dataset identity changed")
 
+        # The frozen seed identity is scientific provenance, even when the
+        # registered model and its bytes still validate independently.
+        expected_seed_mode = "registered_model" if seed_model else "random"
+        if (
+            snapshot.get("initialization_mode") != expected_seed_mode
+            or snapshot.get("seed_model_id") != (seed_model.id if seed_model else None)
+            or snapshot.get("seed_model_sha256") != (seed_model.sha256 if seed_model else None)
+        ):
+            raise ValidationError("Recovered pose-training node seed provenance changed")
+
+        # Replaying a completed node must preserve the frozen dataset digests
+        # and exact landmark schema identity, not just its dataset IDs.
+        if (
+            snapshot.get("pose_training_dataset_manifest_sha256") != dataset.manifest_sha256
+            or snapshot.get("pose_validation_dataset_manifest_sha256")
+            != (validation_dataset.manifest_sha256 if validation_dataset else None)
+            or snapshot.get("pose_schema_id") != dataset.pose_schema_id
+            or snapshot.get("pose_schema_revision") != dataset.pose_schema_revision
+            or snapshot.get("pose_schema_content_hash") != dataset.pose_schema_content_hash
+            or not isinstance(snapshot.get("split_manifest"), dict)
+            or canonical_json_sha256(snapshot["split_manifest"]) != split_manifest_sha256
+        ):
+            raise ValidationError("Recovered pose-training node frozen provenance changed")
+
         if candidate.split_manifest_sha256 != split_manifest_sha256:
             raise ValidationError("Recovered pose-training node split manifest changed")
 
-        if candidate.initial_checkpoint_model_id != (
-            seed_model.id if seed_model else None
-        ) or candidate.resolved_model_checksum != (seed_model.sha256 if seed_model else None):
+        if candidate.dataset_manifest_sha256 != dataset.manifest_sha256:
+            raise ValidationError("Recovered pose-training node dataset checksum changed")
+
+        expected_validation_mode = (
+            "separate_frozen_pose_dataset" if validation_dataset is not None else "none"
+        )
+        if (
+            dict(candidate.evaluation_config_json or {}).get("validation_mode")
+            != expected_validation_mode
+        ):
+            raise ValidationError("Recovered pose-training node validation mode changed")
+
+        # The persisted run's seed source and asset identity are returned to
+        # downstream science nodes. They must agree with the registered seed,
+        # not merely its checkpoint ID and checksum.
+        expected_checkpoint_source = "registered_model" if seed_model else "scratch"
+        expected_seed_id = seed_model.id if seed_model else None
+        expected_seed_sha256 = seed_model.sha256 if seed_model else None
+        expected_model_asset_id = (
+            f"registered_model:{seed_model.id}"
+            if seed_model
+            else f"builtin_architecture:{architecture}"
+        )
+        if (
+            candidate.initial_checkpoint_source != expected_checkpoint_source
+            or candidate.initial_checkpoint_model_id != expected_seed_id
+            or candidate.resolved_model_asset_id != expected_model_asset_id
+            or candidate.resolved_model_checksum != expected_seed_sha256
+        ):
             raise ValidationError("Recovered pose-training seed model changed")
 
         if (
-            candidate.architecture != architecture
+            candidate.provider_id != "ultralytics"
+            or candidate.architecture != architecture
+            or candidate.run_name != run_name
+            or candidate.notes != notes
             or candidate.device != device
             or candidate.precision != precision
             or candidate.random_seed != random_seed
             or dict(candidate.training_config_json or {}) != training_config
+            or dict(candidate.resource_limits_json or {}) != resource_limits
         ):
             raise ValidationError("Recovered pose-training node configuration changed")
 
         if candidate.status == "completed":
             return candidate
+
+        # Workflow retries must not start a second training job while the
+        # original child run is queued or executing. Failed/cancelled attempts
+        # may be retried, but an active run still owns this workflow node.
+        if candidate.status not in {"failed", "cancelled"}:
+            raise ValidationError("Pose-training workflow node already has an active child run")
 
     return None
 
@@ -292,6 +527,7 @@ def _reused_pose_training_result(
     validation_dataset: PoseTrainingDataset | None,
     workflow_run_id: str | None,
     workflow_node_run_id: str | None,
+    checkpoint_integrity: tuple[str, int] | None = None,
 ) -> dict[str, Any]:
     """Recreate the workflow artifact from a completed persisted pose run."""
 
@@ -306,19 +542,241 @@ def _reused_pose_training_result(
     if job is None or job.status != "succeeded" or run.status != "completed":
         raise ValidationError("Recovered pose training is not durably complete")
 
+    # A completed child job must still belong to the training run's project.
+    # Corrupted job ownership must never authorize replay of its checkpoint.
+    if job.project_id != run.project_id:
+        raise ValidationError("Recovered pose training job project ownership changed")
+
+    # The completed child job must still identify this exact frozen training
+    # run and saved workflow node. A substituted request cannot authorize
+    # replay of another node's checkpoint, even within the same project.
+    request = job.request_json
+    expected_validation_id = validation_dataset.id if validation_dataset is not None else None
+    if (
+        job.job_type != "training"
+        or not isinstance(request, dict)
+        or request.get("training_run_id") != run.id
+        or request.get("pose_training_dataset_id") != dataset.id
+        or request.get("pose_validation_dataset_id") != expected_validation_id
+        or request.get("created_by_workflow") is not True
+        or request.get("workflow_run_id") != workflow_run_id
+        or request.get("workflow_node_run_id") != workflow_node_run_id
+    ):
+        raise ValidationError("Recovered pose training child job lineage changed")
+
     checkpoint = resolve_managed_project_path(
         settings,
         run.result_checkpoint_path,
     )
 
+    # A valid checksum alone cannot prove this model came from this training
+    # run: a worker could point to another run's perfectly intact weights.
+    project = session.get(Project, run.project_id)
+    if project is None:
+        raise ValidationError("Recovered pose training project is missing")
+    expected_weights_dir = resolve_managed_project_path(
+        settings,
+        f"{project.storage_root}/training/{run.id}/runs/pose/weights",
+    )
+    if checkpoint.resolve().parent != expected_weights_dir.resolve():
+        raise ValidationError("Recovered pose training checkpoint belongs to another output")
+    if checkpoint.name not in {"best.pt", "last.pt"}:
+        raise ValidationError("Recovered pose training checkpoint belongs to another output")
+
+    # Downstream nodes also receive the worker's best/last checkpoint paths.
+    # A valid result checkpoint cannot authorize unrelated model artifacts
+    # advertised through that same scientific provenance manifest.
+    # A JSON array of key/value pairs can coerce to the original dictionary.
+    # Reject malformed persisted evidence instead of accepting its contents.
+    if run.artifact_manifest_json is not None and not isinstance(run.artifact_manifest_json, dict):
+        raise ValidationError("Recovered pose-training artifact manifest must be a JSON object")
+    artifact_manifest = dict(run.artifact_manifest_json or {})
+    for field, filename in (
+        ("best_checkpoint_path", "best.pt"),
+        ("last_checkpoint_path", "last.pt"),
+    ):
+        advertised = artifact_manifest.get(field)
+        if advertised is None:
+            continue
+        if not isinstance(advertised, str):
+            raise ValidationError("Recovered pose-training checkpoint artifact path changed")
+        advertised_checkpoint = resolve_managed_project_path(settings, advertised)
+        if (
+            advertised_checkpoint.resolve() != (expected_weights_dir / filename).resolve()
+            or not advertised_checkpoint.is_file()
+        ):
+            raise ValidationError(
+                "Recovered pose-training checkpoint artifact path changed or is missing"
+            )
+
     if not checkpoint.is_file():
         raise ValidationError("Recovered pose training checkpoint is missing")
 
-    checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
+    # First completion has already hashed these bytes while persisting the
+    # checkpoint digest. Reuse that result rather than hashing large weights
+    # twice; completed-node retries always rehash the on-disk checkpoint.
+    checkpoint_sha256, checkpoint_size = (
+        checkpoint_integrity if checkpoint_integrity is not None else hash_model_file(checkpoint)
+    )
+
+    # Completed workflow retries must not silently relabel changed model bytes
+    # as the original scientific result. Legacy runs without a recorded digest
+    # remain readable; newly completed runs always persist one below.
+    frozen_checkpoint = dict(run.artifact_manifest_json or {})
+    snapshot = dict(run.draft_snapshot_json or {})
+    current_snapshot_versions = {
+        "pose-workflow-training-snapshot-0001",
+        "pose-workflow-training-snapshot-0002",
+        "pose-workflow-training-snapshot-0003",
+    }
+    is_current_snapshot = (
+        snapshot.get("schema_version") in current_snapshot_versions
+        or "pose_training_dataset_manifest_sha256" in snapshot
+    )
+    # Never coerce malformed persisted summary metrics into a dictionary.
+    # An array of key/value pairs could otherwise replay as unchanged science.
+    if is_current_snapshot and not isinstance(run.metrics_json, dict):
+        raise ValidationError("Recovered pose-training summary metrics must be a JSON object")
+
+    if snapshot.get("schema_version") == "pose-workflow-training-snapshot-0003" and (
+        not isinstance(run.metrics_history_json, dict)
+        or not isinstance(snapshot.get("metrics_history_sha256"), str)
+        or snapshot["metrics_history_sha256"]
+        != canonical_json_sha256(dict(run.metrics_history_json or {}))
+    ):
+        raise ValidationError("Recovered pose-training metrics history changed")
+
+    # A saved node can advertise both best.pt and last.pt. Verify the bytes
+    # of every checkpoint that was checksummed on first completion, not only
+    # the selected result checkpoint. Older runs without these digests remain
+    # readable, while explicit but invalid digest assertions always fail.
+    for path_field, digest_field in (
+        ("best_checkpoint_path", "best_checkpoint_sha256"),
+        ("last_checkpoint_path", "last_checkpoint_sha256"),
+    ):
+        if digest_field in frozen_checkpoint and path_field not in frozen_checkpoint:
+            raise ValidationError("Recovered pose-training checkpoint artifact path is missing")
+        if digest_field not in frozen_checkpoint:
+            if is_current_snapshot and frozen_checkpoint.get(path_field) is not None:
+                raise ValidationError(
+                    "Recovered pose-training checkpoint artifact checksum is missing"
+                )
+            continue
+        expected_digest = frozen_checkpoint[digest_field]
+        advertised = frozen_checkpoint.get(path_field)
+        if not isinstance(expected_digest, str) or not isinstance(advertised, str):
+            raise ValidationError("Recovered pose-training checkpoint artifact checksum changed")
+        artifact_checkpoint = resolve_managed_project_path(settings, advertised)
+        actual_digest = (
+            checkpoint_sha256
+            if artifact_checkpoint.resolve() == checkpoint.resolve()
+            else hash_model_file(artifact_checkpoint)[0]
+        )
+        if actual_digest != expected_digest:
+            raise ValidationError("Recovered pose-training checkpoint artifact checksum changed")
+
+    # This manifest is returned to downstream workflow nodes. Verify its
+    # dataset and split lineage against the already-validated frozen snapshot.
+    expected_artifact_lineage = {
+        "pose_training_dataset_id": dataset.id,
+        "pose_validation_dataset_id": (
+            validation_dataset.id if validation_dataset is not None else None
+        ),
+        "pose_schema_id": dataset.pose_schema_id,
+        "pose_schema_revision": dataset.pose_schema_revision,
+        "pose_schema_content_hash": dataset.pose_schema_content_hash,
+        "pose_split_manifest_sha256": run.split_manifest_sha256,
+    }
+    if any(frozen_checkpoint.get(key) != value for key, value in expected_artifact_lineage.items()):
+        raise ValidationError("Recovered pose-training artifact provenance changed")
+    if frozen_checkpoint.get("pose_split_manifest") != dict(run.draft_snapshot_json or {}).get(
+        "split_manifest"
+    ):
+        raise ValidationError("Recovered pose-training artifact provenance changed")
+
+    expected_sha256 = frozen_checkpoint.get("result_checkpoint_sha256")
+    expected_path = frozen_checkpoint.get("result_checkpoint_path")
+    # New workflow-created training runs always persist both fields. Missing
+    # metadata must not turn a verified checkpoint into an unchecked legacy
+    # replay; only older snapshots may use the backwards-compatible fallback.
+    if is_current_snapshot and (
+        not isinstance(expected_sha256, str)
+        or not expected_sha256
+        or not isinstance(expected_path, str)
+        or not expected_path
+    ):
+        raise ValidationError("Recovered pose-training checkpoint provenance is missing")
+    if expected_sha256 is not None and expected_sha256 != checkpoint_sha256:
+        raise ValidationError("Recovered pose-training checkpoint checksum changed")
+    if expected_path is not None and expected_path != run.result_checkpoint_path:
+        raise ValidationError("Recovered pose-training checkpoint path changed")
 
     experiment = session.scalar(
         select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
     )
+    # Newly completed workflow training always creates a registry record.
+    # Losing it must not silently downgrade downstream scientific lineage to
+    # experiment_id=None; only historical snapshots can lack this record.
+    if experiment is None and is_current_snapshot:
+        raise ValidationError("Recovered pose-training experiment registry record is missing")
+    if experiment is not None:
+        # A saved workflow replay exposes this experiment ID to downstream
+        # research. Verify the registry still describes the same frozen run.
+        if (
+            experiment.project_id != run.project_id
+            or experiment.dataset_manifest_sha256 != run.dataset_manifest_sha256
+            or experiment.split_manifest_sha256 != run.split_manifest_sha256
+            or experiment.task != run.task
+            or experiment.provider_id != run.provider_id
+            or experiment.architecture != run.architecture
+        ):
+            raise ValidationError("Recovered pose-training experiment provenance changed")
+
+        # Current workflow experiments are also the source of comparison
+        # metrics and warnings. A replay must not expose an experiment ID
+        # whose scientific summary disagrees with its completed training run.
+        # Preserve legacy replay for records created before this contract.
+        if is_current_snapshot and (
+            experiment.dataset_version_id != run.dataset_version_id
+            or dict(experiment.summary_metrics_json or {}) != dict(run.metrics_json or {})
+            or list(experiment.comparison_warnings_json or []) != list(run.warnings_json or [])
+        ):
+            raise ValidationError("Recovered pose-training experiment provenance changed")
+
+        # Older experiment records may predate these fields. For current
+        # workflow snapshots, however, removing a frozen lineage assertion
+        # must not downgrade the experiment registry to unchecked evidence.
+        experiment_manifest = dict(experiment.artifact_manifest_json or {})
+        # Current experiments expose native metric rows and worker artifacts as
+        # well as checkpoint lineage. All persisted scientific evidence must
+        # still match the completed run, not only the selected lineage fields.
+        if is_current_snapshot and experiment_manifest != frozen_checkpoint:
+            raise ValidationError("Recovered pose-training experiment provenance changed")
+        for field in (
+            "pose_training_dataset_id",
+            "pose_validation_dataset_id",
+            "pose_schema_id",
+            "pose_schema_revision",
+            "pose_schema_content_hash",
+            "pose_split_manifest",
+            "pose_split_manifest_sha256",
+            "result_checkpoint_path",
+            "result_checkpoint_sha256",
+            "best_checkpoint_path",
+            "best_checkpoint_sha256",
+            "last_checkpoint_path",
+            "last_checkpoint_sha256",
+        ):
+            if (
+                is_current_snapshot
+                and field in frozen_checkpoint
+                and field not in experiment_manifest
+            ):
+                raise ValidationError("Recovered pose-training experiment provenance changed")
+            if field in experiment_manifest and experiment_manifest[field] != frozen_checkpoint.get(
+                field
+            ):
+                raise ValidationError("Recovered pose-training experiment provenance changed")
 
     validation_mode = str(dict(run.evaluation_config_json or {}).get("validation_mode") or "none")
 
@@ -384,6 +842,20 @@ def create_pose_workflow_training_result(
 ) -> dict[str, Any]:
     """Execute real Ultralytics pose retraining from immutable verified truth."""
 
+    # A saved workflow must identify both its run and its node. Accepting a
+    # partial or blank identity would create a training job without durable
+    # node-level provenance and bypass completed-node replay protection.
+    if (workflow_run_id is None) != (workflow_node_run_id is None) or (
+        workflow_run_id is not None
+        and (
+            not isinstance(workflow_run_id, str)
+            or not workflow_run_id.strip()
+            or not isinstance(workflow_node_run_id, str)
+            or not workflow_node_run_id.strip()
+        )
+    ):
+        raise ValidationError("Pose training workflow lineage requires both non-blank IDs")
+
     project = session.get(
         Project,
         project_id,
@@ -413,33 +885,52 @@ def create_pose_workflow_training_result(
     if validation_dataset is not None and validation_dataset.id == dataset.id:
         raise ValidationError("Pose validation dataset must be distinct from the training dataset")
 
-    if (
-        validation_dataset is not None
-        and validation_dataset.pose_schema_content_hash != dataset.pose_schema_content_hash
+    # Distinct frozen records are not independent validation truth if they
+    # contain frames from the same source video (even different frames/tracks).
+    if validation_dataset is not None:
+        training_videos = {str(item["video_sha256"]) for item in dataset.manifest_json["items"]}
+        validation_videos = {
+            str(item["video_sha256"]) for item in validation_dataset.manifest_json["items"]
+        }
+        if training_videos & validation_videos:
+            raise ValidationError("Pose validation dataset must use independent source videos")
+
+    # Matching landmark definitions do not establish identical scientific
+    # schema lineage: two reviewed schemas can share a content hash while
+    # representing different identities or revisions.
+    if validation_dataset is not None and (
+        validation_dataset.pose_schema_id != dataset.pose_schema_id
+        or validation_dataset.pose_schema_revision != dataset.pose_schema_revision
+        or validation_dataset.pose_schema_content_hash != dataset.pose_schema_content_hash
     ):
         raise ValidationError(
-            "Pose validation dataset must use the same landmark schema as training truth"
+            "Pose validation dataset must use the same landmark schema identity "
+            "and revision as training truth"
         )
 
-    require_validation = bool(
-        parameters.get(
-            "require_validation_dataset",
-            False,
-        )
-    )
+    # A truthy string such as "false" must not silently change whether
+    # independent scientist-verified validation data is required.
+    require_validation = parameters.get("require_validation_dataset", False)
+    if not isinstance(require_validation, bool):
+        raise ValidationError("Pose require_validation_dataset must be a boolean")
 
     if require_validation and validation_dataset is None:
         raise ValidationError(
             "This pose retraining configuration requires a separate frozen validation dataset"
         )
 
-    initialization_mode = str(
-        parameters.get("initialization_mode")
-        or ("registered_model" if initial_model_payload else "random")
-    )
+    # The planner's explicit "auto" default resolves from the connected
+    # seed artifact; an explicit null/falsy mode remains invalid.
+    requested_mode = parameters.get("initialization_mode", "auto")
+    if not isinstance(requested_mode, str) or not requested_mode:
+        raise ValidationError("Pose initialization_mode must be random or registered_model")
+    if requested_mode == "auto":
+        initialization_mode = "registered_model" if initial_model_payload is not None else "random"
+    else:
+        initialization_mode = requested_mode
     if initialization_mode not in {"random", "registered_model"}:
         raise ValidationError("Pose initialization_mode must be random or registered_model")
-    if initialization_mode == "random" and initial_model_payload:
+    if initialization_mode == "random" and initial_model_payload is not None:
         raise ValidationError("Random initialization cannot use an initial model")
     seed_model = (
         _seed_pose_model(
@@ -471,14 +962,23 @@ def create_pose_workflow_training_result(
         {},
     )
 
-    if supplied_config is None:
-        supplied_config = {}
-
+    # An omitted config uses defaults; an explicit null is not a valid
+    # saved scientific configuration and must not silently become defaults.
     if not isinstance(
         supplied_config,
         dict,
     ):
         raise ValidationError("Pose training_config must be an object")
+
+    # Never silently reinterpret a scientist's explicit validation setting.
+    # Only a separate frozen, verified dataset can authorize validation.
+    if "val" in supplied_config and (
+        not isinstance(supplied_config["val"], bool)
+        or supplied_config["val"] != (validation_dataset is not None)
+    ):
+        raise ValidationError(
+            "Pose training_config.val must match the separate frozen validation dataset"
+        )
 
     training_config = {
         **DEFAULT_POSE_TRAINING_CONFIG,
@@ -529,30 +1029,96 @@ def create_pose_workflow_training_result(
 
     metadata = dict(seed_model.metadata_json or {}) if seed_model else {}
 
-    architecture = str(
-        parameters.get("architecture")
-        or metadata.get("source_architecture")
-        or (seed_model.source_filename if seed_model else "yolo11n-pose.yaml")
-    ).strip()
+    # An explicitly supplied architecture is part of the training lineage.
+    # Never turn False, zero, or an empty container into a default model.
+    if "architecture" in parameters:
+        requested_architecture = parameters["architecture"]
+        if not isinstance(requested_architecture, str) or not requested_architecture.strip():
+            raise ValidationError("Pose training architecture must be a non-blank string")
+        architecture = requested_architecture.strip()
+    else:
+        architecture = str(
+            metadata.get("source_architecture")
+            or (seed_model.source_filename if seed_model else "yolo11n-pose.yaml")
+        ).strip()
 
     if seed_model is None and architecture not in {f"yolo11{scale}-pose.yaml" for scale in "nslmx"}:
         raise ValidationError("Random pose training requires a YOLO11 n/s/m/l/x pose architecture")
 
-    run_name = str(parameters.get("run_name") or "workflow-pose-retrain").strip()
+    # An explicit falsy or non-string name must not silently become a
+    # different persisted training identity on a saved workflow replay.
+    requested_run_name = parameters.get("run_name")
+    if requested_run_name is None:
+        run_name = "workflow-pose-retrain"
+    elif not isinstance(requested_run_name, str):
+        raise ValidationError("Pose training run_name must be a string")
+    else:
+        run_name = requested_run_name.strip()
 
     if not run_name:
         raise ValidationError("Pose training run_name cannot be blank")
 
-    device = str(
-        parameters.get(
-            "device",
-            "auto",
-        )
-    )
+    # Notes are persisted experiment context; changing them must not reuse
+    # an earlier completed workflow node under a different scientific label.
+    requested_notes = parameters.get("notes")
+    if requested_notes is None:
+        notes = None
+    elif not isinstance(requested_notes, str):
+        raise ValidationError("Pose training notes must be a string or null")
+    else:
+        notes = requested_notes.strip() or None
 
-    random_seed = (
-        int(parameters["random_seed"]) if parameters.get("random_seed") is not None else None
-    )
+    # Device selection is persisted as experimental configuration. Reject
+    # lossy string coercion before queuing a GPU job or recording its lineage.
+    requested_device = parameters.get("device", "auto")
+    if not isinstance(requested_device, str) or not requested_device.strip():
+        raise ValidationError("Pose training device must be a non-blank string")
+    device = requested_device.strip()
+
+    # Ultralytics also accepts a seed in training_config. When no top-level
+    # seed is supplied, persist that effective seed in the training run rather
+    # than recording null while the worker trains with a different value.
+    configured_seed_supplied = "seed" in supplied_config
+    # A coerced boolean, fractional float, or negative seed changes the
+    # scientist's requested random state (or can crash before a job exists).
+    # Preserve the legacy decimal-string input without silently truncating it.
+    raw_seed = parameters.get("random_seed")
+    if raw_seed is None and configured_seed_supplied:
+        raw_seed = supplied_config["seed"]
+    if raw_seed is None:
+        random_seed = None
+    elif isinstance(raw_seed, bool) or not (
+        isinstance(raw_seed, int)
+        or (
+            isinstance(raw_seed, str)
+            and raw_seed.strip().isascii()
+            and raw_seed.strip().isdecimal()
+        )
+    ):
+        raise ValidationError("Pose training random_seed must be a non-negative integer")
+    else:
+        # SQLite stores signed 64-bit integers. Reject out-of-range seeds
+        # before creating a run instead of failing at persistence time.
+        try:
+            random_seed = int(raw_seed)
+        except ValueError as exc:
+            raise ValidationError(
+                "Pose training random_seed must be a non-negative integer"
+            ) from exc
+        if not 0 <= random_seed <= (2**63 - 1):
+            raise ValidationError("Pose training random_seed must be a non-negative integer")
+
+    # A conflicting second seed would make the saved scientific configuration
+    # disagree with the actual worker invocation (which uses random_seed).
+    if configured_seed_supplied and supplied_config["seed"] != random_seed:
+        raise ValidationError("Pose training_config.seed must match random_seed")
+
+    # Missing limits use the unrestricted default, but an explicit null in
+    # a saved workflow must not silently discard its resource policy.
+    resource_limits = parameters.get("resource_limits", {})
+    if not isinstance(resource_limits, dict):
+        raise ValidationError("Pose training resource_limits must be an object")
+    resource_limits = dict(resource_limits)
 
     warning_list: list[str] = []
 
@@ -573,10 +1139,13 @@ def create_pose_workflow_training_result(
         split_manifest_sha256=(split_manifest_sha256),
         seed_model=seed_model,
         architecture=architecture,
+        run_name=run_name,
+        notes=notes,
         device=device,
         precision=precision,
         random_seed=random_seed,
         training_config=(training_config),
+        resource_limits=resource_limits,
     )
 
     if existing_completed_run is not None:
@@ -614,13 +1183,13 @@ def create_pose_workflow_training_result(
         device=device,
         precision=precision,
         run_name=run_name,
-        notes=(str(parameters.get("notes")).strip() if parameters.get("notes") else None),
+        notes=notes,
         random_seed=random_seed,
         tiling_config_json={"mode": "none"},
         training_config_json=(training_config),
         tuning_config_json={"mode": "disabled"},
         evaluation_config_json={"validation_mode": (split_manifest["validation_mode"])},
-        resource_limits_json=dict(parameters.get("resource_limits") or {}),
+        resource_limits_json=resource_limits,
         preflight_report_json={
             "status": "ready_with_warnings" if warning_list else "ready",
             "warnings": warning_list,
@@ -630,7 +1199,8 @@ def create_pose_workflow_training_result(
             "validation_mode": (split_manifest["validation_mode"]),
         },
         draft_snapshot_json={
-            "schema_version": ("pose-workflow-training-snapshot-0001"),
+            "schema_version": ("pose-workflow-training-snapshot-0002"),
+            "parameter_registry_version": provider_spec("ultralytics").provider_version,
             "pose_training_dataset_id": (dataset.id),
             "pose_training_dataset_manifest_sha256": (dataset.manifest_sha256),
             "pose_validation_dataset_id": (
@@ -728,10 +1298,91 @@ def create_pose_workflow_training_result(
     job = refreshed_job
     run = refreshed_run
 
+    # A worker must not replace the queued child job with another successful
+    # job, even if its request claims the same workflow and training run.
+    if run.job_id != job.id:
+        raise ValidationError("Completed pose training child job identity changed")
+
     if job.status != "succeeded" or run.status != "completed":
         detail = run.error_message or job.error_message or (f"job={job.status}, run={run.status}")
 
         raise ValidationError("Pose training child job failed: " + detail)
+
+    # First execution must verify the same persisted child-job lineage as
+    # checkpoint reuse. A worker must not substitute another workflow node's
+    # successful job and expose its model as this node's scientific result.
+    request = job.request_json
+    if (
+        job.project_id != project_id
+        or job.job_type != "training"
+        or not isinstance(request, dict)
+        or request.get("training_run_id") != run.id
+        or request.get("pose_training_dataset_id") != dataset.id
+        or request.get("pose_validation_dataset_id")
+        != (validation_dataset.id if validation_dataset is not None else None)
+        or request.get("created_by_workflow") is not True
+        or request.get("workflow_run_id") != workflow_run_id
+        or request.get("workflow_node_run_id") != workflow_node_run_id
+    ):
+        raise ValidationError("Completed pose training child job lineage changed")
+
+    # Validate the persisted run itself before first exposing its checkpoint.
+    # A worker can change training configuration after the job was queued;
+    # replay validation already rejects that drift, so first completion must too.
+    if workflow_run_id and workflow_node_run_id:
+        recovered = _completed_workflow_pose_training_run(
+            session,
+            project_id=project_id,
+            workflow_run_id=workflow_run_id,
+            workflow_node_run_id=workflow_node_run_id,
+            dataset=dataset,
+            validation_dataset=validation_dataset,
+            split_manifest_sha256=split_manifest_sha256,
+            seed_model=seed_model,
+            architecture=architecture,
+            run_name=run_name,
+            notes=notes,
+            device=device,
+            precision=precision,
+            random_seed=random_seed,
+            training_config=training_config,
+            resource_limits=resource_limits,
+        )
+        if recovered is None or recovered.id != run.id:
+            raise ValidationError("Completed pose training run lineage changed")
+
+    # The worker ran after frozen-truth preflight. Recheck the persisted
+    # scientist-reviewed rows before returning the checkpoint: a worker or
+    # concurrent writer must not mutate verified landmarks/review evidence
+    # after training was queued and still expose the result as frozen truth.
+    _pose_dataset(
+        session,
+        project_id=project_id,
+        payload={"dataset_id": dataset.id, "manifest_sha256": dataset.manifest_sha256},
+        role="training",
+    )
+    if validation_dataset is not None:
+        _pose_dataset(
+            session,
+            project_id=project_id,
+            payload={
+                "dataset_id": validation_dataset.id,
+                "manifest_sha256": validation_dataset.manifest_sha256,
+            },
+            role="validation",
+        )
+
+    # The registered seed was verified before launching the worker. Recheck
+    # its local bytes and schema binding after training: a concurrent change
+    # must not be published as reproducible checkpoint lineage.
+    if seed_model is not None:
+        _seed_pose_model(
+            session,
+            settings,
+            project_id=project_id,
+            payload={"model_id": seed_model.id, "sha256": seed_model.sha256},
+            dataset=dataset,
+        )
 
     if not run.result_checkpoint_path:
         raise ValidationError("Completed pose training did not produce a checkpoint")
@@ -741,60 +1392,153 @@ def create_pose_workflow_training_result(
         run.result_checkpoint_path,
     )
 
+    # Reject worker-substituted output paths before reading or hashing their
+    # bytes. Replay enforces this same run-local checkpoint contract, but
+    # first completion must not hash an unrelated managed model first.
+    expected_weights_dir = resolve_managed_project_path(
+        settings,
+        f"{project.storage_root}/training/{run.id}/runs/pose/weights",
+    )
+    if checkpoint.resolve().parent != expected_weights_dir.resolve() or checkpoint.name not in {
+        "best.pt",
+        "last.pt",
+    }:
+        raise ValidationError("Completed pose training checkpoint belongs to another output")
+
     if not checkpoint.is_file():
         raise ValidationError("Completed pose training checkpoint is missing")
 
     checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
 
+    # A worker may have already recorded a checkpoint identity. Do not
+    # overwrite conflicting evidence when finalizing a saved workflow node.
+    # Otherwise first completion could conceal an altered worker manifest,
+    # while a subsequent replay would appear to have valid provenance.
+    worker_manifest = dict(run.artifact_manifest_json or {})
+    if (
+        "result_checkpoint_sha256" in worker_manifest
+        and worker_manifest["result_checkpoint_sha256"] != checkpoint_sha256
+    ):
+        raise ValidationError("Completed pose training worker checkpoint checksum changed")
+    if (
+        "result_checkpoint_path" in worker_manifest
+        and worker_manifest["result_checkpoint_path"] != run.result_checkpoint_path
+    ):
+        raise ValidationError("Completed pose training worker checkpoint path changed")
+
+    # Pin all advertised checkpoint bytes, not just the selected result.
+    # Validate their exact run-local paths before hashing so a worker cannot
+    # point provenance checks at an unrelated managed file.
+    checkpoint_digests: dict[str, str] = {}
+    for path_field, digest_field, filename in (
+        ("best_checkpoint_path", "best_checkpoint_sha256", "best.pt"),
+        ("last_checkpoint_path", "last_checkpoint_sha256", "last.pt"),
+    ):
+        advertised = worker_manifest.get(path_field)
+        if advertised is None:
+            if digest_field in worker_manifest:
+                raise ValidationError("Completed pose training checkpoint artifact path is missing")
+            continue
+        if not isinstance(advertised, str):
+            raise ValidationError("Completed pose training checkpoint artifact path changed")
+        artifact_checkpoint = resolve_managed_project_path(settings, advertised)
+        if (
+            artifact_checkpoint.resolve() != (expected_weights_dir / filename).resolve()
+            or not artifact_checkpoint.is_file()
+        ):
+            raise ValidationError("Completed pose training checkpoint artifact path changed")
+        digest = (
+            checkpoint_sha256
+            if artifact_checkpoint.resolve() == checkpoint.resolve()
+            else hash_model_file(artifact_checkpoint)[0]
+        )
+        if digest_field in worker_manifest and worker_manifest[digest_field] != digest:
+            raise ValidationError(
+                "Completed pose training worker checkpoint artifact checksum changed"
+            )
+        checkpoint_digests[digest_field] = digest
+
+    # Bind the completed training result to its on-disk checkpoints so a
+    # retried Workflow Builder node cannot reuse different model weights.
+    run.artifact_manifest_json = {
+        **worker_manifest,
+        **checkpoint_digests,
+        "result_checkpoint_path": run.result_checkpoint_path,
+        "result_checkpoint_sha256": checkpoint_sha256,
+    }
+
+    # The worker finalizes the experiment record before the workflow pins
+    # checkpoint digests. Keep that persisted research record in sync with
+    # the verified training artifact instead of exporting stale provenance.
     experiment = session.scalar(
         select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
     )
+    if experiment is None or experiment.project_id != run.project_id:
+        raise ValidationError("Completed pose training experiment lineage changed")
+    if (
+        experiment.dataset_manifest_sha256 != run.dataset_manifest_sha256
+        or experiment.split_manifest_sha256 != run.split_manifest_sha256
+        or experiment.task != run.task
+        or experiment.provider_id != run.provider_id
+        or experiment.architecture != run.architecture
+    ):
+        raise ValidationError("Completed pose training experiment provenance changed")
+    # Freeze only genuine summary metric objects. Coercing key/value arrays
+    # would silently normalize malformed worker evidence on first completion.
+    if not isinstance(run.metrics_json, dict):
+        raise ValidationError("Completed pose-training summary metrics must be a JSON object")
 
-    return {
-        "schema_version": ("workflow-training-result-0001"),
-        "project_id": project_id,
-        "created_by_workflow": True,
-        "workflow_run_id": (workflow_run_id),
-        "workflow_node_run_id": (workflow_node_run_id),
-        "training_run_id": run.id,
-        "training_job_id": job.id,
-        "training_draft_id": None,
-        "experiment_id": (experiment.id if experiment is not None else None),
-        "dataset_version_id": None,
-        "dataset_manifest_sha256": (run.dataset_manifest_sha256),
-        "split_manifest_sha256": (run.split_manifest_sha256),
-        "pose_training_dataset_id": (dataset.id),
-        "pose_validation_dataset_id": (
-            validation_dataset.id if validation_dataset is not None else None
-        ),
-        "pose_schema_id": (dataset.pose_schema_id),
-        "pose_schema_revision": (dataset.pose_schema_revision),
-        "pose_schema_content_hash": (dataset.pose_schema_content_hash),
-        "validation_mode": (split_manifest["validation_mode"]),
-        "task": run.task,
-        "provider_id": run.provider_id,
-        "architecture": run.architecture,
-        "initialization_mode": (
-            "registered_model" if run.initial_checkpoint_model_id else "random"
-        ),
-        "initial_checkpoint_source": (run.initial_checkpoint_source),
-        "initial_checkpoint_model_id": (run.initial_checkpoint_model_id),
-        "resolved_model_asset_id": (run.resolved_model_asset_id),
-        "resolved_model_checksum": (run.resolved_model_checksum),
-        "parameter_registry_version": (run.parameter_registry_version),
-        "device": run.device,
-        "precision": run.precision,
-        "run_name": run.run_name,
-        "random_seed": run.random_seed,
-        "metrics": dict(run.metrics_json or {}),
-        "metrics_history": dict(run.metrics_history_json or {}),
-        "warnings": list(run.warnings_json or []),
-        "artifact_manifest": dict(run.artifact_manifest_json or {}),
-        "logs_path": run.logs_path,
-        "result_checkpoint_path": (run.result_checkpoint_path),
-        "result_checkpoint_sha256": (checkpoint_sha256),
-        "result_checkpoint_size_bytes": (checkpoint_size),
+    # Reject a worker-altered experiment summary before committing checkpoint
+    # provenance. A replay would detect the mismatch, but only after the
+    # first-completion transaction had already finalized the run's manifest.
+    if (
+        experiment.dataset_version_id != run.dataset_version_id
+        or dict(experiment.summary_metrics_json or {}) != dict(run.metrics_json or {})
+        or list(experiment.comparison_warnings_json or []) != list(run.warnings_json or [])
+    ):
+        raise ValidationError("Completed pose training experiment summary provenance changed")
+
+    # The worker creates the experiment from the complete training-run
+    # manifest. Do not overwrite independently altered native metrics or
+    # artifact evidence while pinning checkpoint digests at first completion.
+    # Replay already requires complete manifest equality, so enforce the
+    # same contract before the first provenance commit.
+    experiment_manifest = dict(experiment.artifact_manifest_json or {})
+    if experiment_manifest != worker_manifest:
+        raise ValidationError("Completed pose training experiment artifact provenance changed")
+
+    experiment.artifact_manifest_json = dict(run.artifact_manifest_json)
+
+    # A JSON array of key/value pairs can coerce to the same dict and digest
+    # as the original history. Require a genuine metrics object before freezing
+    # its scientific provenance; never normalize malformed worker evidence.
+    if not isinstance(run.metrics_history_json, dict):
+        raise ValidationError("Completed pose-training metrics history must be a JSON object")
+
+    # Upgrade the queued v2 snapshot only when the worker has completed.
+    # Historical completed v2 snapshots remain readable, while new results
+    # freeze epoch-level metrics in the same transaction as checkpoint hashes.
+    run.draft_snapshot_json = {
+        **dict(run.draft_snapshot_json or {}),
+        "schema_version": "pose-workflow-training-snapshot-0003",
+        "metrics_history_sha256": canonical_json_sha256(dict(run.metrics_history_json or {})),
     }
+
+    # Validate the final downstream artifact before committing checkpoint
+    # provenance. A worker-mutated frozen lineage must not leave a finalized
+    # digest behind when the replay contract rejects the first completion.
+    result = _reused_pose_training_result(
+        session,
+        settings,
+        run=run,
+        dataset=dataset,
+        validation_dataset=validation_dataset,
+        workflow_run_id=workflow_run_id,
+        workflow_node_run_id=workflow_node_run_id,
+        checkpoint_integrity=(checkpoint_sha256, checkpoint_size),
+    )
+    session.commit()
+    return result
 
 
 def execute_pose_model_training_adapter(
@@ -859,6 +1603,9 @@ def execute_pose_training_dataset_adapter(
                 "project_id": project_id,
                 "dataset_id": dataset.id,
                 "manifest_sha256": dataset.manifest_sha256,
+                "source_round_id": dataset.source_round_id,
+                "source_selection_sha256": dataset.source_selection_sha256,
+                "source_retraining_manifest_sha256": dataset.source_retraining_manifest_sha256,
                 "pose_schema_id": dataset.pose_schema_id,
                 "pose_schema_revision": dataset.pose_schema_revision,
                 "pose_schema_content_hash": dataset.pose_schema_content_hash,

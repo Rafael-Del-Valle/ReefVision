@@ -320,8 +320,10 @@ def test_interrupted_workflow_reuses_succeeded_artifacts_and_reopens_with_proven
     assert reopened_result["provenance_sha256"] == result["provenance_sha256"]
 
 
+@pytest.mark.parametrize("payload_corruption", ["changed_values", "equivalent_pairs"])
 def test_corrupted_succeeded_artifact_blocks_resume_instead_of_rerunning(
     client: TestClient,
+    payload_corruption: str,
 ) -> None:
     project = create_project(
         client,
@@ -351,9 +353,13 @@ def test_corrupted_succeeded_artifact_blocks_resume_instead_of_rerunning(
 
         assert artifact is not None
 
-        artifact.payload_json = {
-            "tampered": True,
-        }
+        if payload_corruption == "equivalent_pairs":
+            # The prior verifier coerced this JSON array back to a dict,
+            # producing the original SHA-256 despite a changed stored type.
+            artifact.payload_json = cast(Any, list(artifact.payload_json.items()))
+            assert canonical_json_sha256(dict(artifact.payload_json)) == artifact.payload_sha256
+        else:
+            artifact.payload_json = {"tampered": True}
 
         session.commit()
 
@@ -984,6 +990,10 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
     assert plan.status_code == 200, plan.text
 
     assert plan.json()["executable"] is True
+    # The saved workflow's omitted mode must resolve through the catalog's
+    # explicit auto default rather than an invalid null.
+    training_step = next(step for step in plan.json()["steps"] if step["node_id"] == "train")
+    assert training_step["parameters"]["initialization_mode"] == "auto"
 
     run_id, job_id = _save_and_queue(
         client,

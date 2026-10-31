@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import zipfile
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
@@ -45,6 +46,191 @@ MANIFEST_SCHEMA_VERSION = "pose-training-dataset-manifest-0001"
 ITEM_SCHEMA_VERSION = "pose-training-dataset-item-0001"
 PACKAGE_MANIFEST_FILENAME = "reefvision-pose-training-manifest.json"
 PACKAGE_ITEMS_FILENAME = "items.jsonl"
+PACKAGE_CHECKSUMS_FILENAME = "SHA256SUMS"
+
+
+def frozen_pose_item_evidence_sha256(item: PoseTrainingDatasetItem) -> str:
+    """Fingerprint frozen review and model provenance beyond landmark geometry."""
+    return canonical_json_sha256(
+        {
+            "video_revision": item.video_revision,
+            "label_class_id": item.label_class_id,
+            "source_models": item.source_models_json,
+            "source_job_ids": item.source_job_ids_json,
+            "review_provenance": item.review_provenance_json,
+        }
+    )
+
+
+def frozen_pose_item_fingerprints_match(
+    session: Session,
+    dataset: PoseTrainingDataset,
+) -> bool:
+    """Compare signed item summaries with independently persisted frozen items."""
+    manifest = dataset.manifest_json
+    if (
+        dataset.schema_version != DATASET_SCHEMA_VERSION
+        or not isinstance(manifest, dict)
+        or manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION
+        or not isinstance(manifest.get("items"), list)
+    ):
+        return False
+
+    rows = session.scalars(
+        select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset.id)
+    ).all()
+    # A re-signed, emptied dataset is not scientist-verified training truth.
+    # Freezing requires at least one verified item, even if the row count,
+    # manifest, and checksum have all been changed to agree on zero.
+    if dataset.item_count < 1 or len(rows) != dataset.item_count:
+        return False
+
+    # A matching manifest and item_sha256 column cannot prove that the
+    # persisted canonical landmarks are still the scientist-verified pose.
+    # Recompute the original verification fingerprint from frozen row data.
+    for row in rows:
+        # Every verified item must retain the frozen dataset's single landmark
+        # schema identity, even if its summary and manifest are re-signed.
+        if (
+            row.pose_schema_id != dataset.pose_schema_id
+            or row.pose_schema_revision != dataset.pose_schema_revision
+            or row.pose_schema_content_hash != dataset.pose_schema_content_hash
+        ):
+            return False
+        # Frozen human-review evidence must remain a valid verification record.
+        # Otherwise a corrupted JSON value could raise an AttributeError
+        # instead of rejecting the dataset before export or workflow execution.
+        review = row.review_provenance_json
+        if (
+            not isinstance(row.acquisition_provenance_json, dict)
+            or not isinstance(review, dict)
+            or review.get("action") != "verify_active_learning_pose"
+            or review.get("target_type") != "pose_active_learning_candidate"
+            or review.get("target_id") != row.candidate_id
+            or not isinstance(review.get("correction_id"), str)
+            or not review["correction_id"].strip()
+            # Re-signing a manifest cannot turn an unattributed or conflicting
+            # review into scientist-verified training truth.
+            or not isinstance(review.get("actor"), str)
+            or not review["actor"].strip()
+            or review.get("reviewed_by") != review["actor"]
+            or not isinstance(review.get("reviewed_at"), str)
+            or not review["reviewed_at"].strip()
+        ):
+            return False
+        # The correction's before/after snapshots are scientific audit
+        # evidence, not just arbitrary metadata. A re-signed manifest must
+        # not silently substitute the pose, schema, or acquisition lineage.
+        before = review.get("before")
+        after = review.get("after")
+        source_provenance_sha = canonical_json_sha256(row.acquisition_provenance_json)
+        if (
+            not isinstance(before, dict)
+            or before.get("candidate_id") != row.candidate_id
+            or before.get("candidate_provenance_sha256") != source_provenance_sha
+            or not isinstance(after, dict)
+            or after.get("verified_track_revision") != row.verified_track_revision
+            or after.get("verified_pose_sha256") != row.verified_pose_sha256
+            or after.get("pose_schema_id") != row.pose_schema_id
+            or after.get("pose_schema_revision") != row.pose_schema_revision
+        ):
+            return False
+
+        # Both timestamps originate from datetime.isoformat() when the
+        # scientist verifies a pose. A date-only string is accepted by
+        # datetime.fromisoformat(), but is not a verification timestamp.
+        # Preserve existing timezone-naive historical records while rejecting
+        # malformed or missing correction/review time evidence.
+        for field in ("reviewed_at", "correction_created_at"):
+            timestamp = review.get(field)
+            if not isinstance(timestamp, str) or len(timestamp) < 19 or timestamp[10] != "T":
+                return False
+            try:
+                datetime.fromisoformat(timestamp)
+            except ValueError:
+                return False
+
+        canonical_pose = row.canonical_pose_json
+        if (
+            not isinstance(canonical_pose, dict)
+            or canonical_pose.get("schema_version") != "reefvision-canonical-pose-frame-0001"
+            or canonical_pose.get("frame_index") != row.frame_index
+        ):
+            return False
+        # A matching recomputed hash cannot make an empty, re-signed pose
+        # scientifically valid. Freezing requires at least one verified
+        # landmark; enforce that invariant on every later read and export.
+        observations = canonical_pose.get("pose_observations")
+        keypoints = canonical_pose.get("keypoints")
+        if (
+            not isinstance(observations, list)
+            or not isinstance(keypoints, list)
+            or (not observations and not keypoints)
+        ):
+            return False
+        verified_payload = {
+            "schema_version": "pose-active-learning-verified-pose-0001",
+            "video_track_id": row.video_track_id,
+            "track_revision": row.verified_track_revision,
+            "focus_frame": row.frame_index,
+            "pose_schema_id": row.pose_schema_id,
+            "pose_schema_revision": row.pose_schema_revision,
+            "pose_observations": canonical_pose.get("pose_observations"),
+            "keypoints": canonical_pose.get("keypoints"),
+        }
+        if canonical_json_sha256(verified_payload) != row.verified_pose_sha256:
+            return False
+
+    # Fingerprints alone do not bind the manifest's source identities to
+    # persisted items: a re-signed summary could otherwise swap candidate,
+    # video, track, frame, or schema lineage without changing item_sha256.
+    expected = {
+        row.id: {
+            "item_sha256": row.item_sha256,
+            "candidate_id": row.candidate_id,
+            "video_id": row.video_id,
+            "video_sha256": row.video_sha256,
+            "video_track_id": row.video_track_id,
+            "frame_index": row.frame_index,
+            "verified_track_revision": row.verified_track_revision,
+            "verified_pose_sha256": row.verified_pose_sha256,
+            "pose_schema_id": row.pose_schema_id,
+            "pose_schema_revision": row.pose_schema_revision,
+            "pose_schema_content_hash": row.pose_schema_content_hash,
+            # The source candidate hash must remain bound to the frozen
+            # acquisition provenance, even if the manifest is re-signed.
+            "candidate_provenance_sha256": canonical_json_sha256(row.acquisition_provenance_json),
+            "correction_id": (row.review_provenance_json or {}).get("correction_id"),
+        }
+        for row in rows
+    }
+    observed: dict[str, dict[str, Any]] = {}
+    rows_by_id = {row.id: row for row in rows}
+    for summary in manifest["items"]:
+        if not isinstance(summary, dict) or not isinstance(summary.get("item_id"), str):
+            return False
+        item_id = summary["item_id"]
+        if item_id in observed:
+            return False
+        # New frozen manifests bind the *entire* canonical frame, including
+        # crop bbox and confidence omitted from the verified-landmark digest.
+        # Legacy manifests without this additive field remain readable.
+        if "canonical_pose_sha256" in summary:
+            manifest_row = rows_by_id.get(item_id)
+            if manifest_row is None or summary["canonical_pose_sha256"] != canonical_json_sha256(
+                manifest_row.canonical_pose_json
+            ):
+                return False
+        # Newly frozen manifests also bind model provenance, review actor,
+        # and source job identities. Legacy manifests remain readable.
+        if "frozen_evidence_sha256" in summary:
+            manifest_row = rows_by_id.get(item_id)
+            if manifest_row is None or summary[
+                "frozen_evidence_sha256"
+            ] != frozen_pose_item_evidence_sha256(manifest_row):
+                return False
+        observed[item_id] = {field: summary.get(field) for field in expected.get(item_id, {})}
+    return observed == expected
 
 
 class PoseTrainingDatasetService:
@@ -87,19 +273,29 @@ class PoseTrainingDatasetService:
                 PoseTrainingDataset.id,
             )
         )
-        return [PoseTrainingDatasetResponse.model_validate(row) for row in rows]
+        # Listing is also a scientific-data read path: never advertise a
+        # corrupted frozen dataset as complete when direct retrieval rejects it.
+        datasets = list(rows)
+        for dataset in datasets:
+            self.manifest(dataset.id)
+        return [PoseTrainingDatasetResponse.model_validate(row) for row in datasets]
 
     def get_dataset(
         self,
         dataset_id: str,
     ) -> PoseTrainingDatasetResponse:
+        # A direct dataset lookup must not advertise altered frozen science
+        # as complete when item retrieval and native export reject it.
+        self.manifest(dataset_id)
         return PoseTrainingDatasetResponse.model_validate(self._dataset(dataset_id))
 
     def items(
         self,
         dataset_id: str,
     ) -> list[PoseTrainingDatasetItemResponse]:
-        self._dataset(dataset_id)
+        # Never expose altered frozen landmarks or provenance through the
+        # item-list API when manifest retrieval and native export reject them.
+        self.manifest(dataset_id)
         rows = self.session.scalars(
             select(PoseTrainingDatasetItem)
             .where(PoseTrainingDatasetItem.dataset_id == dataset_id)
@@ -117,6 +313,55 @@ class PoseTrainingDatasetService:
         dataset_id: str,
     ) -> PoseTrainingDatasetManifestResponse:
         dataset = self._dataset(dataset_id)
+        if not isinstance(dataset.manifest_json, dict):
+            raise ConflictError("Pose training dataset manifest must be a JSON object")
+        if canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
+            raise ConflictError(
+                "Pose training dataset manifest checksum no longer matches frozen content"
+            )
+        # Retrieval must enforce the same frozen metadata and verification
+        # policy as native export and Workflow Builder execution. A re-signed
+        # checksum alone does not make changed source lineage trustworthy.
+        manifest = dataset.manifest_json
+        pose_schema = manifest.get("pose_schema")
+        if (
+            dataset.status != "complete"
+            or manifest.get("dataset_id") != dataset.id
+            or manifest.get("project_id") != dataset.project_id
+            or manifest.get("source_round_id") != dataset.source_round_id
+            or manifest.get("source_selection_sha256") != dataset.source_selection_sha256
+            or manifest.get("source_retraining_manifest_sha256")
+            != dataset.source_retraining_manifest_sha256
+            or not isinstance(pose_schema, dict)
+            or pose_schema.get("schema_id") != dataset.pose_schema_id
+            or pose_schema.get("schema_revision") != dataset.pose_schema_revision
+            or pose_schema.get("content_hash") != dataset.pose_schema_content_hash
+        ):
+            raise ConflictError(
+                "Pose training dataset manifest lineage no longer matches frozen truth"
+            )
+        if (
+            manifest.get("truth_policy") != "scientist_verified_only"
+            or manifest.get("skipped_candidates_included") is not False
+            or manifest.get("pending_candidates_included") is not False
+        ):
+            raise ConflictError(
+                "Pose training dataset manifest must contain only scientist-verified items"
+            )
+        if (
+            not isinstance(manifest.get("items"), list)
+            or manifest.get("item_count") != dataset.item_count
+            or len(manifest["items"]) != dataset.item_count
+        ):
+            raise ConflictError(
+                "Pose training dataset manifest item count no longer matches frozen truth"
+            )
+        # A valid manifest checksum alone cannot authenticate the persisted
+        # scientist-verified poses or their frozen source identities.
+        if not frozen_pose_item_fingerprints_match(self.session, dataset):
+            raise ConflictError(
+                "Pose training dataset item lineage no longer matches persisted verified items"
+            )
         return PoseTrainingDatasetManifestResponse(
             dataset_id=dataset.id,
             manifest_sha256=dataset.manifest_sha256,
@@ -291,6 +536,10 @@ class PoseTrainingDatasetService:
             )
 
         provenance = dict(candidate.provenance_json or {})
+        # A verified pose must not freeze with acquisition metadata changed
+        # after selection while its original candidate fingerprint remains.
+        if canonical_json_sha256(provenance) != candidate.provenance_sha256:
+            raise ConflictError("Pose acquisition provenance changed after selection")
         source_video_sha = provenance.get("video_sha256")
         if (
             isinstance(source_video_sha, str)
@@ -413,6 +662,8 @@ class PoseTrainingDatasetService:
             "frame_index": candidate.focus_frame,
             "verified_track_revision": track.revision,
             "verified_pose_sha256": (candidate.verified_pose_sha256),
+            "canonical_pose_sha256": canonical_json_sha256(canonical_pose),
+            "frozen_evidence_sha256": frozen_pose_item_evidence_sha256(item),
             "pose_schema_id": candidate.pose_schema_id,
             "pose_schema_revision": (candidate.pose_schema_revision),
             "pose_schema_content_hash": (schema["content_hash"]),
@@ -431,6 +682,8 @@ class PoseTrainingDatasetService:
             select(PoseTrainingDataset).where(PoseTrainingDataset.source_round_id == round_id)
         )
         if existing is not None:
+            # An idempotent freeze must not return corrupted persisted training truth.
+            self.manifest(existing.id)
             return PoseTrainingDatasetResponse.model_validate(existing)
 
         round_record = self._round(round_id)
@@ -577,6 +830,9 @@ class PoseTrainingDatasetService:
             date_time=(1980, 1, 1, 0, 0, 0),
         )
         info.compress_type = zipfile.ZIP_DEFLATED
+        # ZipInfo defaults to a host-specific OS marker. Pin it so the same
+        # frozen scientific package has identical bytes on Windows and Linux.
+        info.create_system = 3
         archive.writestr(info, content)
 
     def native_package(
@@ -601,6 +857,9 @@ class PoseTrainingDatasetService:
             raise ConflictError(
                 "Pose training dataset item count does not match its immutable manifest"
             )
+        # Reuse the retrieval contract so native exports cannot diverge from
+        # the frozen manifest, verification policy, or item lineage checks.
+        self.manifest(dataset_id)
 
         manifest_bytes = (
             json.dumps(
@@ -660,7 +919,25 @@ class PoseTrainingDatasetService:
             b"SLEAP/COCO/DLC/Ultralytics/NWB rendering are "
             b"performed in the next Phase 9 interoperability "
             b"layer.\n"
+            b"\n"
+            b"Verify extracted files before scientific reuse:\n"
+            b"  Linux: sha256sum -c SHA256SUMS\n"
+            b"  macOS: shasum -a 256 -c SHA256SUMS\n"
+            b"  Windows: compare Get-FileHash -Algorithm SHA256 results\n"
+            b"           with the SHA256SUMS entries for each file.\n"
+            b"Run these checks from the extracted package directory.\n"
         )
+
+        # A portable checksum index lets researchers validate extracted files
+        # independently of ZIP metadata or the original download response.
+        checksum_bytes = "".join(
+            f"{hashlib.sha256(payload).hexdigest()}  {name}\n"
+            for name, payload in (
+                (PACKAGE_MANIFEST_FILENAME, manifest_bytes),
+                (PACKAGE_ITEMS_FILENAME, item_bytes),
+                ("README.txt", readme),
+            )
+        ).encode("ascii")
 
         stream = io.BytesIO()
 
@@ -683,6 +960,11 @@ class PoseTrainingDatasetService:
                 archive,
                 "README.txt",
                 readme,
+            )
+            self._zip_member(
+                archive,
+                PACKAGE_CHECKSUMS_FILENAME,
+                checksum_bytes,
             )
 
         content = stream.getvalue()
