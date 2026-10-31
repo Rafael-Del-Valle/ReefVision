@@ -4630,3 +4630,41 @@ post-fix head must pass all applicable CI workflows before this is considered
 validated. Local Ruff/pytest remain unavailable without repository checkout
 and dependencies; Windows installed-GUI and independent ecological review
 remain required for release readiness.
+
+
+## Ecological candidate-report replay integrity (2026-10-30)
+
+The source-linked `ecology-candidate-report-0001` previously carried a
+`report_sha256` but did not verify that digest when loading persisted
+Workflow Builder report artifacts. The parent
+`EcologyMeasurementCandidatesResponse` also did not cross-check a report
+against the source candidate rows. A modified QC count, declared experimental
+unit count, or other descriptive figure could therefore be accepted with an
+unchanged source-input fingerprint.
+
+The existing report schema now recomputes the canonical report SHA-256 on
+deserialization. When a report is attached to a source-candidate response,
+the typed response additionally checks project/source lineage, candidate
+count, distinct source images and organisms, declared-unit count, sampling-date
+QC totals, exclusions and QC-status frequencies against its source rows.
+For historical declared-unit labels, either the earlier literal-label count
+or the canonical biological-unit alias count is admissible; neither is
+treated as proof of experimental independence. Historical candidate artifacts
+without the optional report remain readable. No new workflow node or
+migration was introduced.
+
+The focused API + saved executable Workflow Builder regression exercises
+standalone report deserialization, persisted `ecology_candidate_report`
+artifacts, tampered counts without updated digests, and forged counts
+with recomputed report digests. It also retains the legacy absent-report
+acceptance case. This is a reproducibility/integrity guard, **not**
+authenticated scientist review or independently verified growth.
+
+Pre-change exact-head `d8982fe1` completed 16/19 GitHub Actions workflows
+successfully, including Windows Desktop Build. Three backend workflows
+failed Ruff formatting checks in the source-candidate schema and endpoint
+replay test. This iteration applies the exact formatter-requested layout
+alongside the report integrity improvement. Fresh exact-head CI, full
+scientific acceptance, migration reconciliation with 1.1 and physical
+Windows MSI/GUI acceptance remain required. **1.2 NOT RELEASE-READY;
+1.3 not started.**
