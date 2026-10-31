@@ -399,6 +399,42 @@ def test_invalid_or_mutated_project_binding_is_rejected() -> None:
         compare_mesh_observations(before, after, reidentification_evidence=model)
 
 
+@pytest.mark.parametrize(
+    "invalid_project_id",
+    [
+        "",
+        "local study",
+        " local-study",
+        "local\nstudy",
+        "local\tstudy",
+        "local/study",
+        "a" * 129,
+    ],
+)
+def test_reidentification_project_id_rejects_invalid_labels(
+    invalid_project_id: str,
+) -> None:
+    evidence = {**_evidence(), "project_id": invalid_project_id}
+    with pytest.raises(PydanticValidationError):
+        MeshReidentificationEvidence.model_validate(evidence)
+
+
+def test_reidentification_project_id_boundary_and_mutated_replay() -> None:
+    before, after = _observations()
+    boundary_id = "a" * 128
+    before["project_id"] = boundary_id
+    after["project_id"] = boundary_id
+    evidence = {**_evidence(), "project_id": boundary_id}
+    valid = compare_mesh_observations(before, after, reidentification_evidence=evidence)
+    assert valid["provenance"]["reidentification_evidence"]["project_id"] == boundary_id
+    assert valid["provenance"]["specimen_identity_verified"] is False
+
+    model = MeshReidentificationEvidence.model_validate(evidence)
+    model.project_id = "a" * 127 + "\n"
+    with pytest.raises(ValueError, match="Invalid pairwise reidentification evidence"):
+        compare_mesh_observations(before, after, reidentification_evidence=model)
+
+
 @pytest.mark.parametrize("changed_observation", ["before", "after"])
 def test_reidentification_imported_original_binding_rejects_reexport_reuse(
     changed_observation: str,
