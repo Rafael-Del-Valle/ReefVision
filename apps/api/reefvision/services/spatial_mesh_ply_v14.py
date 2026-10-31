@@ -59,6 +59,7 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
     vertex_properties: list[str] = []
     vertex_property_types: list[str] = []
     face_property_seen = False
+    face_index_type: str | None = None
     format_seen = False
     end_header: int | None = None
     for position, raw in enumerate(lines[1:], 1):
@@ -112,11 +113,12 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                     or len(parts) != 5
                     or parts[1] != "list"
                     or parts[2] not in {"uchar", "uint8"}
-                    or parts[3] not in {"int", "uint", "int32", "uint32"}
+                    or parts[3] not in _INTEGER_BOUNDS
                     or parts[4] not in {"vertex_indices", "vertex_index"}
                 ):
                     raise ValueError("PLY faces require one vertex-index list property")
                 face_property_seen = True
+                face_index_type = parts[3]
             else:
                 raise ValueError("PLY property declared without an element")
         else:
@@ -159,6 +161,11 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             raise ValueError("PLY vertex properties must be finite")
         vertices.append([numeric[index] for index in xyz])
 
+    # The declared face index width is part of the source schema. Do not
+    # accept a token that could not be represented by the exported PLY type,
+    # even if it happens to be within the imported vertex array bounds.
+    assert face_index_type is not None
+    index_low, index_high = _INTEGER_BOUNDS[face_index_type]
     faces: list[list[int]] = []
     for row in rows[counts["vertex"] :]:
         values = row.split()
@@ -168,6 +175,8 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             indices = [int(value) for value in values[1:]]
         except ValueError as exc:
             raise ValueError("Invalid PLY face index") from exc
+        if any(index < index_low or index > index_high for index in indices):
+            raise ValueError("PLY face index outside declared integer type bounds")
         if any(index < 0 or index >= len(vertices) for index in indices):
             raise ValueError("PLY face index out of bounds")
         faces.append(indices)
