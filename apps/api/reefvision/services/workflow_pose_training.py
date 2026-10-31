@@ -1499,7 +1499,9 @@ def create_pose_workflow_training_result(
     # as the original history. Require a genuine metrics object before freezing
     # its scientific provenance; never normalize malformed worker evidence.
     if not isinstance(run.metrics_history_json, dict):
-        raise ValidationError("Completed pose-training metrics history must be a JSON object")
+        raise ValidationError(
+            "Completed pose-training metrics history must be a JSON object"
+        )
 
     # Upgrade the queued v2 snapshot only when the worker has completed.
     # Historical completed v2 snapshots remain readable, while new results
