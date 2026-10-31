@@ -537,18 +537,15 @@ def test_reused_imported_original_is_not_an_independent_longitudinal_observation
     """Byte-identical imports are flagged even with distinct observation IDs."""
     before = _imported_observation("early", 2)
     after = _imported_observation("late", 2)
-    assert before["provenance"]["source_payload_sha256"] == after["provenance"][
-        "source_payload_sha256"
-    ]
+    assert (
+        before["provenance"]["source_payload_sha256"]
+        == after["provenance"]["source_payload_sha256"]
+    )
     result = compare_mesh_observations(
         before, after, reidentification_evidence=_review(before, after)
     )
-    assert "identical_imported_source_payload_reused_across_observations" in result[
-        "qc_warnings"
-    ]
-    assert "identical_imported_source_payload_geometry_inconsistent" not in result[
-        "qc_warnings"
-    ]
+    assert "identical_imported_source_payload_reused_across_observations" in result["qc_warnings"]
+    assert "identical_imported_source_payload_geometry_inconsistent" not in result["qc_warnings"]
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["calibration_verified"] is False
 
@@ -558,9 +555,7 @@ def test_reused_imported_original_is_not_an_independent_longitudinal_observation
     changed = preview_from_request(
         MeshPreviewRequest.model_validate(
             {
-                "obj_text": (
-                    "# revised source note\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n"
-                ),
+                "obj_text": ("# revised source note\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n"),
                 "meters_per_unit": 1,
                 "calibration_method": "ruler",
                 "calibration_evidence": "Unverified ruler",
@@ -571,18 +566,17 @@ def test_reused_imported_original_is_not_an_independent_longitudinal_observation
         )
     )
     changed["project_id"] = "study-1"
+    assert changed["provenance"]["geometry_sha256"] == after["provenance"]["geometry_sha256"]
     assert (
-        changed["provenance"]["geometry_sha256"] == after["provenance"]["geometry_sha256"]
+        changed["provenance"]["source_payload_sha256"]
+        != after["provenance"]["source_payload_sha256"]
     )
-    assert changed["provenance"]["source_payload_sha256"] != after["provenance"][
-        "source_payload_sha256"
-    ]
     revised = compare_mesh_observations(
         before, changed, reidentification_evidence=_review(before, changed)
     )
-    assert "identical_imported_source_payload_reused_across_observations" not in revised[
-        "qc_warnings"
-    ]
+    assert (
+        "identical_imported_source_payload_reused_across_observations" not in revised["qc_warnings"]
+    )
     assert "identical_geometry_fingerprint" in revised["qc_warnings"]
 
 
@@ -621,9 +615,7 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     )
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    assert "identical_imported_source_payload_reused_across_observations" in expected[
-        "qc_warnings"
-    ]
+    assert "identical_imported_source_payload_reused_across_observations" in expected["qc_warnings"]
     assert expected["provenance"]["specimen_identity_verified"] is False
 
     graph = {
