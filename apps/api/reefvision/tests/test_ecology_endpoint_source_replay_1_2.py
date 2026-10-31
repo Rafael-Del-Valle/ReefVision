@@ -72,9 +72,7 @@ def test_rehashed_current_endpoint_rejects_unlinked_evidence(
     forged = _resign_derived_evidence(
         original.model_copy(update={"projected_endpoint_changes": [endpoint]})
     )
-    with pytest.raises(
-        PydanticValidationError, match="Current projected endpoint"
-    ):
+    with pytest.raises(PydanticValidationError, match="Current projected endpoint"):
         EcologyMeasurementCandidatesResponse.model_validate(
             forged.model_dump(mode="json")
         )
@@ -127,12 +125,9 @@ def test_rehashed_duplicate_endpoint_is_not_an_extra_replicate(
         )
 
 
-def test_historical_endpoint_contract_remains_readable(
-    client: TestClient,
-) -> None:
+def test_historical_endpoint_contract_remains_readable(client: TestClient) -> None:
     original = _dated_artifact(client)
     legacy = deepcopy(original.model_dump(mode="json"))
     legacy["source_fingerprint_contract"] = "ecology-measurement-candidates-0020"
-    assert EcologyMeasurementCandidatesResponse.model_validate(
-        legacy
-    ).projected_endpoint_changes[0].review_gate == "scientist_review_required"
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(legacy)
+    assert parsed.projected_endpoint_changes[0].review_gate == "scientist_review_required"
