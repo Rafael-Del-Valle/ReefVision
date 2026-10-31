@@ -213,6 +213,15 @@ def process_workflow_run_job(
             job.completed_at = _now()
             session.commit()
             return False
+        # A stale queued job must not reopen completed, failed, or cancelled
+        # scientific work. Check terminal state before validating job ownership:
+        # even a corrupted cross-project job must not rewrite frozen science.
+        if run.status in {"succeeded", "failed", "cancelled"}:
+            job.status = "failed"
+            job.error_message = "Workflow run is already terminal; refusing queued job replay"
+            job.completed_at = _now()
+            session.commit()
+            return False
         # A queued job and its run must remain in the same project. A stale
         # or corrupted job ownership field must not execute another project's
         # saved scientific workflow under the wrong job identity.
@@ -223,14 +232,6 @@ def process_workflow_run_job(
             run.status = "failed"
             run.error_message = job.error_message
             run.completed_at = job.completed_at
-            session.commit()
-            return False
-        # A stale queued job must not reopen completed, failed, or cancelled
-        # scientific work. Preserve the terminal run and its frozen artifacts.
-        if run.status in {"succeeded", "failed", "cancelled"}:
-            job.status = "failed"
-            job.error_message = "Workflow run is already terminal; refusing queued job replay"
-            job.completed_at = _now()
             session.commit()
             return False
         graph_record = session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
