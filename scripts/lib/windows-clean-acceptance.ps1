@@ -115,6 +115,18 @@ function Assert-ReefVisionSafeAcceptanceRoot {
     # narrower protected paths below (Windows, Program Files, user data, repo).
     # Rejecting all descendants of C:\ prevented every disposable C:\ test.
     $volumeRoot = Resolve-ReefVisionAcceptancePath ([System.IO.Path]::GetPathRoot($resolved))
+    # A path in another user's profile (including Public) is not disposable.
+    # The current user's Temp exception must not implicitly authorize sibling
+    # profiles or shared directories under C:\Users.
+    $profilesRoot = Resolve-ReefVisionAcceptancePath (Split-Path -Parent $env:USERPROFILE)
+    if ($resolved -ieq $profilesRoot -or
+        (Test-ReefVisionPathWithin -Path $resolved -Parent $profilesRoot)) {
+        $localTemp = Resolve-ReefVisionAcceptancePath (Join-Path $env:LOCALAPPDATA 'Temp')
+        if ($resolved -ieq $localTemp -or
+            -not (Test-ReefVisionPathWithin -Path $resolved -Parent $localTemp)) {
+            throw "Unsafe acceptance root '$resolved' overlaps shared or another user's profile directory '$profilesRoot'."
+        }
+    }
     $forbidden = @(
         (Resolve-ReefVisionAcceptancePath $RepositoryRoot),
         (Resolve-ReefVisionAcceptancePath $DefaultDataRoot),
