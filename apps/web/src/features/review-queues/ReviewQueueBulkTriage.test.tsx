@@ -62,13 +62,15 @@ function mountChangingItems(visible = items) {
 describe("ReviewQueueBulkTriage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(bulkTriageReviewQueueItems).mockResolvedValue({
-      queue_id: "queue-1",
-      action: "start",
-      changed_count: 1,
-      items: [],
-      requires_researcher_review: true,
-    });
+    vi.mocked(bulkTriageReviewQueueItems).mockImplementation(
+      async (queueId, payload) => ({
+        queue_id: queueId,
+        action: payload.action,
+        changed_count: 1,
+        items: [],
+        requires_researcher_review: true,
+      }),
+    );
   });
 
   it("requires explicit confirmation and only sends eligible visible IDs", async () => {
@@ -140,6 +142,63 @@ describe("ReviewQueueBulkTriage", () => {
       }),
     );
   });
+
+  it.each(["queue", "action", "gate"] as const)(
+    "preserves the exact bulk retry when the server response mismatches %s",
+    async (mismatch) => {
+      vi.mocked(bulkTriageReviewQueueItems)
+        .mockImplementationOnce(async (queueId, payload) => ({
+          queue_id: mismatch === "queue" ? "wrong-queue" : queueId,
+          action: mismatch === "action" ? "skip" : payload.action,
+          changed_count: 1,
+          items: [],
+          requires_researcher_review: mismatch !== "gate",
+        }))
+        .mockImplementationOnce(async (queueId, payload) => ({
+          queue_id: queueId,
+          action: payload.action,
+          changed_count: 0,
+          items: [],
+          requires_researcher_review: true,
+        }));
+      const invalidate = mount();
+      fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+        target: { value: "lab reviewer" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: /Select eligible on page/ }),
+      );
+      fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply start to 1 items" }),
+      );
+      const retry = await screen.findByRole("button", {
+        name: "Retry identical bulk action",
+      });
+      const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Bulk QC response did not match",
+      );
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(invalidate).not.toHaveBeenCalled();
+
+      fireEvent.click(retry);
+      await waitFor(() =>
+        expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(2),
+      );
+      expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1]).toEqual(
+        original,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain(
+          "scientific review remains required",
+        ),
+      );
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["review_queue_events", "queue-1"],
+      });
+    },
+  );
 
   it("retries uncertain outcomes using exactly the original payload", async () => {
     vi.mocked(bulkTriageReviewQueueItems)

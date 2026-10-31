@@ -146,8 +146,25 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
     setReviewedSelectionKey(null);
   }, [selectionKey]);
   const mutation = useMutation({
-    mutationFn: (request: ScopedBulkRequest) =>
-      bulkTriageReviewQueueItems(request.queueId, request.payload),
+    mutationFn: async (request: ScopedBulkRequest) => {
+      const result = await bulkTriageReviewQueueItems(
+        request.queueId,
+        request.payload,
+      );
+      // A lost or mismatched response is not proof that the server did
+      // nothing. Keep the original idempotency UUID for an exact retry.
+      if (
+        !result ||
+        result.queue_id !== request.queueId ||
+        result.action !== request.payload.action ||
+        result.requires_researcher_review !== true
+      ) {
+        throw new Error(
+          "Bulk QC response did not match the submitted queue, action, or researcher-review gate. Retry the identical request before taking another action.",
+        );
+      }
+      return result;
+    },
     onSuccess: async (result, request) => {
       // A delayed success cannot erase a different queue's uncertain retry.
       setUncertainRequests((current) => {
@@ -387,7 +404,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
               This batch may already have been committed. Discarding its
               original request UUID prevents an identical safe retry and a new
               submission could duplicate audit history. Confirm only after
-              reviewing the refreshed queue and event history before another action.
+              reviewing the refreshed queue and event history before another
+              action.
             </p>
           )}
           <button
