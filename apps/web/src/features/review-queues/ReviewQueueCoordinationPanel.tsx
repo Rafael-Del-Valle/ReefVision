@@ -1,3 +1,5 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -242,21 +244,57 @@ export function ReviewQueueCoordinationPanel({
   );
   const hasUnresolvedEvents = Object.keys(failedRequests).length > 0;
   const closeBlocked = mutation.isPending || hasUnresolvedEvents;
+  const unsafeWindowClose =
+    hasUnsentDrafts || hasUnresolvedEvents || mutation.isPending;
+  const [nativeCloseBlocked, setNativeCloseBlocked] = useState(false);
+  const [nativeCloseGuardUnavailable, setNativeCloseGuardUnavailable] =
+    useState(false);
+  // Tauri window-close requests do not reliably emit browser beforeunload.
+  // Refuse native closure while any biological note or audit UUID is at risk.
+  // Register only while unsafe; an asynchronous late registration is removed
+  // immediately after cleanup so it cannot protect an unrelated workspace.
+  useEffect(() => {
+    if (!unsafeWindowClose || !isTauri()) {
+      setNativeCloseBlocked(false);
+      setNativeCloseGuardUnavailable(false);
+      return;
+    }
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow()
+      .onCloseRequested((event) => {
+        if (!active) return;
+        event.preventDefault();
+        setNativeCloseBlocked(true);
+      })
+      .then((stop) => {
+        if (active) {
+          unlisten = stop;
+        } else {
+          stop();
+        }
+      })
+      .catch(() => {
+        if (active) setNativeCloseGuardUnavailable(true);
+      });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [unsafeWindowClose]);
   // The panel's close button is guarded, but browser reload/window close
   // bypasses it. Warn before losing unsent biological notes, an in-flight
   // audit event, or an uncertain idempotency UUID. This is a best-effort
   // browser confirmation, NOT durable recovery after an abrupt crash.
   useEffect(() => {
-    if (!hasUnsentDrafts && !hasUnresolvedEvents && !mutation.isPending) {
-      return;
-    }
+    if (!unsafeWindowClose) return;
     const warnOnUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warnOnUnload);
     return () => window.removeEventListener("beforeunload", warnOnUnload);
-  }, [hasUnsentDrafts, hasUnresolvedEvents, mutation.isPending]);
+  }, [unsafeWindowClose]);
 
   function requestClose() {
     // An unresolved request may already have reached the server. Keep its
@@ -285,6 +323,19 @@ export function ReviewQueueCoordinationPanel({
           Close coordination
         </button>
       </div>
+      {nativeCloseBlocked && unsafeWindowClose && (
+        <p role="alert">
+          Desktop window close was blocked to protect unsent reviewer notes or
+          an uncertain audit request. Resolve the event or explicitly discard
+          drafts in coordination before closing ReefVision.
+        </p>
+      )}
+      {nativeCloseGuardUnavailable && unsafeWindowClose && (
+        <p role="alert">
+          Desktop close protection could not be registered. Keep ReefVision
+          open until all unsent notes and uncertain requests are resolved.
+        </p>
+      )}
       {closeBlocked && (
         <p role="status">
           Finish the pending event or revisit any review item with an uncertain
