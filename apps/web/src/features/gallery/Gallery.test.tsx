@@ -122,7 +122,7 @@ describe("Gallery pending thumbnail refresh", () => {
     expect(thumbnail.getAttribute("src")).toContain("broken.jpg");
     fireEvent.error(thumbnail);
     expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
-    expect(screen.getByText("Thumbnail pending")).toBeInTheDocument();
+    expect(screen.getByText("Thumbnail unavailable")).toBeInTheDocument();
 
     // Refetching the same failed asset must not restart its broken request.
     await act(async () => {
@@ -130,7 +130,7 @@ describe("Gallery pending thumbnail refresh", () => {
     });
     expect(requests).toBe(2);
     expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
-    expect(screen.getByText("Thumbnail pending")).toBeInTheDocument();
+    expect(screen.getByText("Thumbnail unavailable")).toBeInTheDocument();
 
     // A genuinely regenerated path should retry, without reimporting the image.
     await act(async () => {
@@ -143,6 +143,51 @@ describe("Gallery pending thumbnail refresh", () => {
     expect(recovered.getAttribute("src")).not.toContain("broken.jpg");
     fireEvent.error(recovered);
     expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
+  });
+
+  it("retries a failed camera thumbnail even when its managed path is unchanged", async () => {
+    let metadataReads = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (!url.includes(`/projects/${project.id}/images`)) {
+        throw new Error(`Unexpected request ${url}`);
+      }
+      metadataReads += 1;
+      return jsonResponse({
+        items: [{ ...image, thumbnail_path: "thumbnails/stable-camera.jpg" }],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      });
+    });
+
+    const { queryClient } = renderGallery();
+    const first = await screen.findByAltText("Thumbnail of swiftia-01.png");
+    const originalUrl = first.getAttribute("src");
+    expect(originalUrl).toContain("stable-camera.jpg");
+    fireEvent.error(first);
+    expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
+    expect(screen.getByText("Thumbnail unavailable")).toBeInTheDocument();
+
+    // Refreshing metadata does not change the failed URL and must not
+    // automatically retry forever. A user can explicitly retry the same
+    // regenerated-on-disk path without reimporting scientific originals.
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
+    });
+    expect(metadataReads).toBe(2);
+    expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry thumbnail" }));
+    const retryOne = await screen.findByAltText("Thumbnail of swiftia-01.png");
+    expect(retryOne.getAttribute("src")).not.toBe(originalUrl);
+    expect(retryOne.getAttribute("src")).toContain("rv_retry=1");
+    fireEvent.error(retryOne);
+    await userEvent.click(screen.getByRole("button", { name: "Retry thumbnail" }));
+    const retryTwo = await screen.findByAltText("Thumbnail of swiftia-01.png");
+    expect(retryTwo.getAttribute("src")).toContain("rv_retry=2");
+    expect(metadataReads).toBe(2);
   });
 
   it("automatically reloads metadata after thumbnail job completion", async () => {
