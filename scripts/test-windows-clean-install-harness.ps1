@@ -325,6 +325,20 @@ try {
 } finally {
     if ([System.IO.Directory]::Exists($junctionRun)) { [System.IO.Directory]::Delete($junctionRun) }
 }
+# A valid ownership marker must not authorize recursive deletion through a
+# junction planted deeper in the disposable run after initial validation.
+$nestedDir = Join-Path $ownedRun 'nested'
+New-Item -ItemType Directory -Path $nestedDir -Force | Out-Null
+$nestedJunction = Join-Path $nestedDir 'external-data'
+$foreignSentinel = Join-Path $foreign 'must-survive.txt'
+Set-Content -LiteralPath $foreignSentinel -Value 'outside the disposable run'
+try {
+    New-Item -ItemType Junction -Path $nestedJunction -Target $foreign -ErrorAction Stop | Out-Null
+    Assert-Throws { Assert-ReefVisionOwnedAcceptanceRun -RunRoot $ownedRun -AcceptanceRoot $cleanupRoot -Token $token } 'Cleanup must reject a nested junction even with a valid run marker.'
+} finally {
+    if ([System.IO.Directory]::Exists($nestedJunction)) { [System.IO.Directory]::Delete($nestedJunction) }
+}
+Assert-True (Test-Path -LiteralPath $foreignSentinel -PathType Leaf) 'Nested-junction guard must not modify external data.'
 Assert-ReefVisionOwnedAcceptanceRun -RunRoot $ownedRun -AcceptanceRoot $cleanupRoot -Token $token
 Assert-True (Test-Path -LiteralPath $ownedRun -PathType Container) 'Ownership validation must not delete the run.'
 if (-not (Test-ReefVisionPathWithin -Path $ownedRun -Parent (Join-Path $Root '.artifacts'))) { throw 'Unsafe harness test cleanup path.' }
