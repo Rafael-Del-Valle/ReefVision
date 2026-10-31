@@ -196,3 +196,18 @@ without publishing a measurement artifact; valid signed relative attribute
 references retain identical standalone and workflow scientific provenance.
 None of these checks establishes verified scale, biological identity, or
 independent human review.
+
+### Bounded ASCII PLY triangle face index widths
+
+The local 1.4 mesh importer accepts standard signed and unsigned 8-, 16-,
+and 32-bit integer types for a PLY `property list uchar <type>
+vertex_indices` declaration (including `char`/`uchar`, `short`/`ushort`,
+`int`/`uint` and their `int8`/`uint8`/`int16`/`uint16`/`int32`/`uint32`
+aliases). Each parsed index must fit its declared integer type **and**
+reference an existing vertex; the face list count remains exactly three.
+This enables common compact triangle exports without silently accepting
+out-of-range source tokens. Standalone measurement and executable saved typed
+Workflow Builder graphs use the same parser, with regression coverage for
+valid widths, invalid widths, and failed workflow runs that publish no
+measurement artifact. No mesh topology, calibration, or biological identity
+is independently verified by an accepted integer index.
