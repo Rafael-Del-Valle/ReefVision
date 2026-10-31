@@ -188,6 +188,115 @@ describe("ReviewQueueCoordinationPanel", () => {
   });
 
   it.each([
+    ["Review comment", "Unsent observation for coral A"],
+    ["Reviewer to assign", "reviewer-a"],
+  ])(
+    "requires confirmation to close B when A has an unsent %s draft",
+    async (field, value) => {
+      const onClose = vi.fn();
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const view = (itemId: string) => (
+        <QueryClientProvider client={client}>
+          <ReviewQueueCoordinationPanel
+            queueId="queue-a"
+            itemId={itemId}
+            onClose={onClose}
+          />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(view("item-a"));
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText(field), {
+        target: { value },
+      });
+      rerender(view("item-b"));
+      expect(screen.getByLabelText(field)).toHaveProperty("value", "");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
+      expect(onClose).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Continue editing" }));
+      rerender(view("item-a"));
+      expect(screen.getByLabelText(field)).toHaveProperty("value", value);
+      rerender(view("item-b"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close without saving drafts" }),
+      );
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(addReviewQueueEvent).not.toHaveBeenCalled();
+    },
+  );
+
+  it("blocks closing B while A holds an uncertain event UUID", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Uncertain delivery for A"))
+      .mockImplementationOnce(async () => responseForCall());
+    const onClose = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId="queue-a"
+          itemId={itemId}
+          onClose={onClose}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Uncertain coral note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    const original = vi.mocked(addReviewQueueEvent).mock.calls[0];
+    rerender(view("item-b"));
+    const close = screen.getByRole("button", {
+      name: "Close coordination",
+    }) as HTMLButtonElement;
+    expect(close.disabled).toBe(true);
+    fireEvent.click(close);
+    expect(onClose).not.toHaveBeenCalled();
+
+    rerender(view("item-a"));
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[1]).toEqual(original);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull(),
+    );
+    rerender(view("item-b"));
+    expect(close.disabled).toBe(false);
+    // The resolved retry does not authorize discarding A's remaining draft.
+    fireEvent.click(close);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeTruthy();
+  });
+
+  it.each([
     ["queue-a", "item-b"],
     ["queue-b", "item-a"],
   ])(
