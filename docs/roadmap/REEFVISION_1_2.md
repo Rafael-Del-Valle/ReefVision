@@ -4981,3 +4981,29 @@ authenticated scientist-reviewed calibrated longitudinal measurements,
 registered true experimental-unit independence, representative biological
 and human/model acceptance, 1.1 Alembic migration reconciliation, and
 installed Windows MSI/GUI checks. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Paired-count saved-workflow envelope integrity repair (2026-10-31)
+
+The preceding 1.2 PR head `e00a5e56` passed 17/19 Actions but failed
+two backend jobs: 2,193 tests passed, two failed, 32 skipped. The new
+current-version response extra-field guard incorrectly rejected the four
+legitimate Workflow Builder metadata keys (`schema_version`, `project_id`,
+`reference_source_record_ids`, `model_source_record_ids`). This also
+blocked the existing saved paired-count CSV export node.
+
+The current paired-count validator now recognizes the **complete** existing
+workflow envelope, checks its schema version and project identifier, and
+reconciles each source roster against the persisted paired rows. It continues
+to reject unknown scientist-approval or independent-sample-size claims,
+including at nested provenance and per-row levels. Standalone responses
+require no envelope; historical algorithm versions remain unverified and
+readable. Existing typed ports, saved-workflow provenance, CSV exporter and
+review gates are reused, not duplicated.
+
+Added regression assertions using a genuinely executed and persisted
+paired-count Workflow Builder artifact, covering the real envelope, forged
+schema/project/source rosters, and a missing envelope field. The existing
+saved CSV workflow and standalone tests remain applicable acceptance gates.
+**Release HOLD:** new-head CI is not yet verified; full migrations, independent
+biological review, calibration, and installed Windows GUI/hardware acceptance
+remain outstanding. No release or merge is authorized.
