@@ -120,9 +120,7 @@ describe("ReviewQueueCoordinationPanel", () => {
       });
       const original = vi.mocked(addReviewQueueEvent).mock.calls[0];
       fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
-      await waitFor(() =>
-        expect(addReviewQueueEvent).toHaveBeenCalledTimes(2),
-      );
+      await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
       expect(vi.mocked(addReviewQueueEvent).mock.calls[1]).toEqual(original);
       await waitFor(() =>
         expect(invalidate).toHaveBeenCalledWith({
@@ -130,7 +128,9 @@ describe("ReviewQueueCoordinationPanel", () => {
         }),
       );
       await waitFor(() =>
-        expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull(),
+        expect(
+          screen.queryByRole("button", { name: "Retry event" }),
+        ).toBeNull(),
       );
     },
   );
