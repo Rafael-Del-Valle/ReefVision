@@ -247,13 +247,7 @@ def test_invalid_obj_attribute_declarations_fail_standalone_and_saved_workflow(
     client: TestClient, invalid_declaration: str
 ) -> None:
     project_id = str(create_project(client, "Reject malformed OBJ attribute declarations")["id"])
-    obj_text = (
-        "v 0 0 0\n"
-        "v 2 0 0\n"
-        "v 0 3 0\n"
-        f"{invalid_declaration}\n"
-        "f 1 2 3\n"
-    )
+    obj_text = f"v 0 0 0\nv 2 0 0\nv 0 3 0\n{invalid_declaration}\nf 1 2 3\n"
     params = {**COMMON, "obj_text": obj_text}
     with pytest.raises(ValueError, match=r"OBJ line 4: invalid (vt|vn) declaration"):
         preview_from_request(MeshPreviewRequest.model_validate(params))
@@ -271,16 +265,7 @@ def test_valid_obj_attribute_declaration_lengths_preserve_workflow_parity(
     client: TestClient,
 ) -> None:
     project_id = str(create_project(client, "Valid OBJ attribute declaration lengths")["id"])
-    obj_text = (
-        "v 0 0 0\n"
-        "v 2 0 0\n"
-        "v 0 3 0\n"
-        "vt 0\n"
-        "vt 1 0\n"
-        "vt 0 1 0\n"
-        "vn 0 0 1\n"
-        "f 1/1/1 2/2/1 3/3/1\n"
-    )
+    obj_text = "v 0 0 0\nv 2 0 0\nv 0 3 0\nvt 0\nvt 1 0\nvt 0 1 0\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n"
     params = {**COMMON, "obj_text": obj_text}
     standalone = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
