@@ -112,8 +112,30 @@ export function ReviewQueueCoordinationPanel({
     currentScope.current.itemId === request.itemId &&
     currentScope.current.epoch === request.scopeEpoch;
   const mutation = useMutation({
-    mutationFn: (request: EventMutationRequest) =>
-      addReviewQueueEvent(request.queueId, request.itemId, request.payload),
+    mutationFn: async (request: EventMutationRequest) => {
+      const result = await addReviewQueueEvent(
+        request.queueId,
+        request.itemId,
+        request.payload,
+      );
+      // A successful HTTP response must still match the exact audit event.
+      // Otherwise keep the UUID for an identical retry; do not clear drafts.
+      if (
+        !result ||
+        result.review_queue_id !== request.queueId ||
+        result.review_queue_item_id !== request.itemId ||
+        result.client_request_id !== request.payload.client_request_id ||
+        result.event_type !== request.payload.event_type ||
+        result.actor !== request.payload.actor ||
+        result.comment !== (request.payload.comment ?? null) ||
+        result.assignee !== (request.payload.assignee ?? null)
+      ) {
+        throw new Error(
+          "Review event response does not match the submitted queue, item, request UUID, actor, or event contents. Retry the identical request before taking another action.",
+        );
+      }
+      return result;
+    },
     onSuccess: async (_, request) => {
       // Clear only the matching item and request UUID, even if navigation
       // changed while the event was in flight. Other uncertain events survive.

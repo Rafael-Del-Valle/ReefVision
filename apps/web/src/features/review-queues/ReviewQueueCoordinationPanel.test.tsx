@@ -35,6 +35,25 @@ function mount(onClose = vi.fn()) {
   return onClose;
 }
 
+function responseForCall(
+  index = vi.mocked(addReviewQueueEvent).mock.calls.length - 1,
+): Awaited<ReturnType<typeof addReviewQueueEvent>> {
+  const [queueId, itemId, payload] =
+    vi.mocked(addReviewQueueEvent).mock.calls[index]!;
+  return {
+    id: "event-1",
+    review_queue_id: queueId,
+    review_queue_item_id: itemId,
+    project_id: "project-1",
+    client_request_id: payload.client_request_id,
+    event_type: payload.event_type,
+    actor: payload.actor,
+    comment: payload.comment ?? null,
+    assignee: payload.assignee ?? null,
+    created_at: "2026-10-18T20:00:00Z",
+  };
+}
+
 describe("ReviewQueueCoordinationPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -46,20 +65,101 @@ describe("ReviewQueueCoordinationPanel", () => {
       current_assignee: null,
       requires_researcher_review: true,
     });
-    vi.mocked(addReviewQueueEvent).mockImplementation(
-      async (_, __, payload) => ({
-        id: "event-1",
-        review_queue_id: "queue-1",
-        review_queue_item_id: "item-1",
-        project_id: "project-1",
-        client_request_id: payload.client_request_id,
-        event_type: payload.event_type,
-        actor: payload.actor,
-        comment: payload.comment ?? null,
-        assignee: payload.assignee ?? null,
-        created_at: "2026-10-18T20:00:00Z",
-      }),
+    vi.mocked(addReviewQueueEvent).mockImplementation(async () =>
+      responseForCall(),
     );
+  });
+
+  it.each([
+    ["queue", { review_queue_id: "wrong-queue" }],
+    ["item", { review_queue_item_id: "wrong-item" }],
+    ["request UUID", { client_request_id: "wrong-uuid" }],
+    ["event type", { event_type: "assign" as const }],
+    ["actor", { actor: "different-researcher" }],
+    ["comment", { comment: "Different coral observation" }],
+  ])(
+    "preserves an exact comment retry after mismatched %s response",
+    async (_field, mismatch) => {
+      vi.mocked(addReviewQueueEvent)
+        .mockImplementationOnce(async () => ({
+          ...responseForCall(),
+          ...mismatch,
+        }))
+        .mockImplementationOnce(async () => responseForCall());
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+      render(
+        <QueryClientProvider client={client}>
+          <ReviewQueueCoordinationPanel
+            queueId="queue-1"
+            itemId="item-1"
+            onClose={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+        target: { value: "scientist" },
+      });
+      fireEvent.change(screen.getByLabelText("Review comment"), {
+        target: { value: "Inspect coral polyp condition" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+      await screen.findByRole("button", { name: "Retry event" });
+      expect(screen.getByLabelText("Review comment")).toHaveProperty(
+        "value",
+        "Inspect coral polyp condition",
+      );
+      expect(invalidate).not.toHaveBeenCalledWith({
+        queryKey: ["review_queue_events", "queue-1", "item-1"],
+      });
+      const original = vi.mocked(addReviewQueueEvent).mock.calls[0];
+      fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+      await waitFor(() =>
+        expect(addReviewQueueEvent).toHaveBeenCalledTimes(2),
+      );
+      expect(vi.mocked(addReviewQueueEvent).mock.calls[1]).toEqual(original);
+      await waitFor(() =>
+        expect(invalidate).toHaveBeenCalledWith({
+          queryKey: ["review_queue_events", "queue-1", "item-1"],
+        }),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull(),
+      );
+    },
+  );
+
+  it("preserves the assignee draft if the server echoes a different reviewer", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockImplementationOnce(async () => ({
+        ...responseForCall(),
+        assignee: "another-reviewer",
+      }))
+      .mockImplementationOnce(async () => responseForCall());
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "assigned-reviewer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Assign reviewer" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+      "value",
+      "assigned-reviewer",
+    );
+    const original = vi.mocked(addReviewQueueEvent).mock.calls[0];
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[1]).toEqual(original);
   });
 
   it("requires explicit confirmation before discarding unsent biological notes", async () => {
@@ -442,18 +542,7 @@ describe("ReviewQueueCoordinationPanel", () => {
   it("retries an uncertain assignment with exactly the same request UUID", async () => {
     vi.mocked(addReviewQueueEvent)
       .mockRejectedValueOnce(new Error("Connection interrupted"))
-      .mockResolvedValueOnce({
-        id: "event-1",
-        review_queue_id: "queue-1",
-        review_queue_item_id: "item-1",
-        project_id: "project-1",
-        client_request_id: "same-id",
-        event_type: "assign",
-        actor: "scientist",
-        comment: null,
-        assignee: "reviewer-two",
-        created_at: "2026-10-18T20:00:00Z",
-      });
+      .mockImplementationOnce(async () => responseForCall());
     mount();
     await screen.findByText("Assigned reviewer: Unassigned");
     fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
@@ -495,7 +584,7 @@ describe("ReviewQueueCoordinationPanel", () => {
       target: { value: "New observation draft" },
     });
     await act(async () => {
-      resolveEvent({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      resolveEvent(responseForCall(0));
       await pending;
     });
     expect(screen.getByLabelText("Review comment")).toHaveProperty(
@@ -508,9 +597,7 @@ describe("ReviewQueueCoordinationPanel", () => {
   it("retries an uncertain assignment without deleting a newer assignee draft", async () => {
     vi.mocked(addReviewQueueEvent)
       .mockRejectedValueOnce(new Error("Connection interrupted"))
-      .mockResolvedValueOnce(
-        {} as Awaited<ReturnType<typeof addReviewQueueEvent>>,
-      );
+      .mockImplementationOnce(async () => responseForCall());
     mount();
     await screen.findByText("Assigned reviewer: Unassigned");
     fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
@@ -564,7 +651,7 @@ describe("ReviewQueueCoordinationPanel", () => {
       target: { value: "Observation A" },
     });
     await act(async () => {
-      resolveEvent({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      resolveEvent(responseForCall(0));
       await pending;
     });
     expect(screen.getByLabelText("Review comment")).toHaveProperty(
@@ -597,7 +684,7 @@ describe("ReviewQueueCoordinationPanel", () => {
       target: { value: "reviewer-two" },
     });
     await act(async () => {
-      resolveEvent({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      resolveEvent(responseForCall(0));
       await pending;
     });
     expect(vi.mocked(addReviewQueueEvent).mock.calls[0][2].actor).toBe(
@@ -633,7 +720,7 @@ describe("ReviewQueueCoordinationPanel", () => {
       target: { value: "reviewer-two" },
     });
     await act(async () => {
-      resolveEvent({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      resolveEvent(responseForCall(0));
       await pending;
     });
     expect(vi.mocked(addReviewQueueEvent).mock.calls[0][2].actor).toBe(
@@ -648,9 +735,7 @@ describe("ReviewQueueCoordinationPanel", () => {
   it("retries under original actor without clearing new draft", async () => {
     vi.mocked(addReviewQueueEvent)
       .mockRejectedValueOnce(new Error("Connection interrupted"))
-      .mockResolvedValueOnce(
-        {} as Awaited<ReturnType<typeof addReviewQueueEvent>>,
-      );
+      .mockImplementationOnce(async () => responseForCall());
     mount();
     await screen.findByText("Assigned reviewer: Unassigned");
     fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
@@ -722,7 +807,7 @@ describe("ReviewQueueCoordinationPanel", () => {
       target: { value: "Observation for B" },
     });
     await act(async () => {
-      resolveOld({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      resolveOld(responseForCall(0));
       await pendingOld;
     });
     expect(addReviewQueueEvent).toHaveBeenCalledWith(
@@ -793,7 +878,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     rerender(view("queue-b", "item-b"));
     rerender(view("queue-a", "item-a"));
     await act(async () => {
-      resolveOld({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      resolveOld(responseForCall(0));
       await pendingOld;
     });
     expect(screen.getByLabelText("Review comment")).toHaveProperty(
@@ -935,9 +1020,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     });
     vi.mocked(addReviewQueueEvent)
       .mockReturnValueOnce(pendingOriginal)
-      .mockResolvedValueOnce(
-        {} as Awaited<ReturnType<typeof addReviewQueueEvent>>,
-      );
+      .mockImplementationOnce(async () => responseForCall());
     const client = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -987,7 +1070,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     vi.mocked(addReviewQueueEvent)
       .mockRejectedValueOnce(new Error("Uncertain A"))
       .mockRejectedValueOnce(new Error("Uncertain B"))
-      .mockResolvedValue({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      .mockImplementation(async () => responseForCall());
     const client = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
