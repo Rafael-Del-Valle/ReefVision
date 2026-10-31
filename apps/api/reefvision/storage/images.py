@@ -127,6 +127,7 @@ def _json_safe(value: object) -> object | None:
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
     # Camera-local EXIF timestamps may include explicit UTC offsets and
+    # ASCII padding spaces/NULs; retain the raw fields in scientific metadata.
     # subsecond tags. Pair each date with its own offset and fractional time;
     # never borrow either from a different acquisition field.
     for key, offset_key, subsec_key in (
@@ -142,22 +143,22 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
         # Some camera libraries return ASCII EXIF values as bytes.
         if isinstance(raw, bytes):
             try:
-                raw = raw.decode("ascii").rstrip("\x00")
+                raw = raw.decode("ascii").strip(" \t\r\n\x00")
             except UnicodeDecodeError:
                 return None
         if not isinstance(raw, str):
             return None
-        raw = raw.rstrip("\x00")
+        raw = raw.strip(" \t\r\n\x00")
         offset = exif.get(offset_key)
         if isinstance(offset, bytes):
             try:
-                offset = offset.decode("ascii").rstrip("\x00")
+                offset = offset.decode("ascii").strip(" \t\r\n\x00")
             except UnicodeDecodeError:
                 return None
         if offset is not None and not isinstance(offset, str):
             return None
         if isinstance(offset, str):
-            offset = offset.rstrip("\x00")
+            offset = offset.strip(" \t\r\n\x00")
         if not offset:
             # EXIF camera time without a UTC offset is not a verified instant.
             # Keep the raw local timestamp in EXIF metadata, not in UTC fields.
@@ -172,11 +173,11 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
         fraction = exif.get(subsec_key)
         if isinstance(fraction, bytes):
             try:
-                fraction = fraction.decode("ascii").rstrip("\x00")
+                fraction = fraction.decode("ascii").strip(" \t\r\n\x00")
             except UnicodeDecodeError:
                 fraction = None
         if isinstance(fraction, str):
-            fraction = fraction.rstrip("\x00")
+            fraction = fraction.strip(" \t\r\n\x00")
         if isinstance(fraction, str) and fraction.isascii() and fraction.isdigit():
             # Datetimes represent microseconds; preserve the unmodified raw
             # EXIF string in metadata when cameras record finer precision.
