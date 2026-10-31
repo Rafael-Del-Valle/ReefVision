@@ -69,9 +69,7 @@ def test_replayed_longitudinal_artifacts_reject_invalid_identity_labels(
     before = preview_from_request(
         MeshPreviewRequest(**_mesh("survey-1", "2026-10-01T12:00:00Z", 1))
     )
-    after = preview_from_request(
-        MeshPreviewRequest(**_mesh("survey-2", "2026-10-02T12:00:00Z", 2))
-    )
+    after = preview_from_request(MeshPreviewRequest(**_mesh("survey-2", "2026-10-02T12:00:00Z", 2)))
     before["project_id"] = "project-1"
     after["project_id"] = "project-1"
     # This baseline is a valid provisional comparison. The API and saved
