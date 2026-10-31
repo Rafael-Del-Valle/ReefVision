@@ -196,6 +196,25 @@ class PairedCountComparisonResponse(BaseModel):
         )
         if version != "ecology-paired-count-0007":
             return value
+        # Reject unsupported top-level and provenance claims on current
+        # artifacts. Pydantic's default extra=ignore would otherwise discard
+        # a forged scientist approval or registered independent-unit claim.
+        # Historical saved artifacts retain their original decoding rules.
+        unexpected = sorted(set(value) - cls.model_fields.keys())
+        if unexpected:
+            raise ValueError(
+                "Directional persisted response contains unsupported fields: "
+                + ", ".join(unexpected)
+            )
+        if isinstance(provenance, dict):
+            unexpected_provenance = sorted(
+                set(provenance) - ScientificInputProvenance.model_fields.keys()
+            )
+            if unexpected_provenance:
+                raise ValueError(
+                    "Directional persisted provenance contains unsupported fields: "
+                    + ", ".join(unexpected_provenance)
+                )
         # Current saved scientific rows must not silently discard claims of
         # verification or independent replication embedded as extra fields.
         # Preserve legacy decoding; the original API never produced such fields.
