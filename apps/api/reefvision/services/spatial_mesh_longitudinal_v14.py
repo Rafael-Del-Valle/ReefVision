@@ -567,6 +567,15 @@ def compare_mesh_observations(
         "surface_area_change_is_not_verified_biological_growth",
         "average_change_per_day_is_not_a_biological_growth_rate",
     ]
+    # Recording a source SHA-256 is not the same as checking it against an
+    # expected original-file digest. Surface this distinction independently
+    # for each timepoint; missing legacy check flags remain unverified.
+    for label, metadata in (("before", first), ("after", second)):
+        if (
+            metadata.get("source_format") in ("obj", "ply_ascii", "glb_2_0")
+            and metadata.get("source_payload_integrity_checked") is not True
+        ):
+            warnings.append(f"{label}_imported_source_expected_digest_not_checked")
     # Bind provisional matching notes to this pair of observations. They are
     # audit evidence, never a verified specimen-identity determination.
     reidentification_record = None
