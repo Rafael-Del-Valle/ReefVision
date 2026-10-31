@@ -77,10 +77,13 @@ function ImageCard({
     ? `${imageThumbnailUrl(image.id)}&rv_thumb=${thumbnailVersion}`
     : null;
 
+  // Thumbnail completion and annotation-count polling replace the image object.
+  // Only persisted editable fields should reset an unsaved metadata draft;
+  // otherwise a background thumbnail refresh can silently erase user input.
   useEffect(() => {
     setGroupKey(image.group_key ?? "");
     setStatus(image.annotation_status);
-  }, [image]);
+  }, [image.id, image.group_key, image.annotation_status]);
 
   // A thumbnail job can finish after an earlier 404. Retry only when its
   // persisted path changes; ordinary query refreshes must not retry a
