@@ -229,6 +229,30 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
 
+    # A persisted output-ID object can carry the same artifact ID as the
+    # original array, but its JSON shape must not be silently coerced into
+    # valid scientific lineage when reopening the frozen pose workflow.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        original_output_ids = list(node.output_artifact_ids_json)
+        assert original_output_ids == [outputs[0]["id"]]
+        node.output_artifact_ids_json = {outputs[0]["id"]: True}
+        session.commit()
+
+    malformed_ids = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert malformed_ids.status_code == 409, malformed_ids.text
+    assert "output IDs must be a list" in malformed_ids.json()["detail"]
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.output_artifact_ids_json = original_output_ids
+        session.commit()
+    restored_ids = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert restored_ids.status_code == 200, restored_ids.text
+    assert restored_ids.json() == run
+
     # An explicitly saved output summary must retain its list shape. A
     # malformed object previously bypassed the lineage check even though
     # the frozen artifacts themselves still had valid checksums.
