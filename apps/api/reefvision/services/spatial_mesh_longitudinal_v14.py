@@ -645,6 +645,17 @@ def compare_mesh_observations(
             raise ValueError(
                 "Reidentification evidence must match both source geometry fingerprints"
             )
+        # The same triangles can be re-exported to different original files.
+        # Bind matching evidence to the exact imported payloads when supplied;
+        # absent historical bindings remain readable but explicitly flagged.
+        if identity.before_source_payload_sha256 is None:
+            if first.get("source_payload_sha256") or second.get("source_payload_sha256"):
+                warnings.append("reidentification_source_payload_binding_unavailable")
+        elif (
+            identity.before_source_payload_sha256 != first.get("source_payload_sha256")
+            or identity.after_source_payload_sha256 != second.get("source_payload_sha256")
+        ):
+            raise ValueError("Reidentification evidence must match both imported source payloads")
         reidentification_record = identity.model_dump(mode="json", exclude_none=True)
         if identity.specimen_id is None:
             warnings.append("reidentification_specimen_binding_unavailable")
