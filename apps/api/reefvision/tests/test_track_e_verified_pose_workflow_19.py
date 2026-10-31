@@ -19,6 +19,7 @@ from reefvision.db.models import (
     PoseTrainingDatasetItem,
     WorkflowArtifact,
     WorkflowGraphRecord,
+    WorkflowNodeRun,
 )
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
@@ -225,6 +226,32 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         artifact = session.get(WorkflowArtifact, outputs[0]["id"])
         assert artifact is not None
         artifact.producer_node_run_id = original_producer
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
+
+    # An explicitly saved output summary must retain its list shape. A
+    # malformed object previously bypassed the lineage check even though
+    # the frozen artifacts themselves still had valid checksums.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        original_node_result = dict(node.result_json or {})
+        saved_outputs = original_node_result.get("outputs")
+        assert isinstance(saved_outputs, list) and len(saved_outputs) == 1
+        node.result_json = {
+            **original_node_result,
+            "outputs": {"repacked": saved_outputs[0]},
+        }
+        session.commit()
+
+    malformed_summary = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert malformed_summary.status_code == 409, malformed_summary.text
+    assert "output summary must be a list" in malformed_summary.json()["detail"]
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.result_json = original_node_result
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
 
