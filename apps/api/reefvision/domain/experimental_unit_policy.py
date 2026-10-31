@@ -6,6 +6,7 @@ This is a conservative input safeguard, not study-design authentication.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 _TECHNICAL_REPLICATES = frozenset(
     {
@@ -134,6 +135,11 @@ def require_ecological_unit_id(value: str | None) -> str | None:
         raise ValueError("Experimental unit ID cannot be blank")
     if value != value.strip():
         raise ValueError("Experimental unit ID cannot have surrounding whitespace")
-    if any(ord(char) < 32 or ord(char) == 127 for char in value):
-        raise ValueError("Experimental unit ID cannot contain control characters")
+    if any(unicodedata.category(char) in {"Cc", "Cf", "Cs", "Zl", "Zp"} for char in value):
+        raise ValueError("Experimental unit ID cannot contain control or invisible characters")
+    # Compatibility and canonical Unicode aliases can otherwise split one physical
+    # unit into multiple apparent replicates (e.g. fullwidth IDs or decomposed é).
+    # Reject rather than silently rewriting the original evidence identifier.
+    if unicodedata.normalize("NFKC", value) != value:
+        raise ValueError("Experimental unit ID must use Unicode NFKC form")
     return value

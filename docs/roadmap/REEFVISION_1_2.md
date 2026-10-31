@@ -5179,3 +5179,34 @@ This is **identifier integrity**, not evidence of biological independence or
 scientist approval. Exact new-head CI, representative scientific validation,
 1.1 migration reconciliation and physical Windows installed-GUI acceptance
 remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Unicode-normalized physical experimental-unit ID safeguard (2026-10-31)
+
+The previous exact 1.2 head `6705564a61ee3992f7c82e06c65392f99c777e5a`
+passed **19/19 GitHub Actions workflows**, including backend CI, Pose Workflow
+Validation, ReefVision 1.0 Acceptance, and Windows Desktop Build.
+
+Registered physical-unit IDs now reject Unicode invisible formatting/control
+characters (including zero-width spaces, word joiners and bidirectional
+formatting controls), and IDs not already in Unicode NFKC normalization form.
+These previously permitted visually identical IDs (e.g. `tank-1` and
+fullwidth `ｔａｎｋ-1`, or composed/decomposed accented labels) to masquerade as
+different declared replicates. Fail closed instead of rewriting provenance;
+valid normalized non-ASCII labels remain allowed. This does **not** resolve
+all cross-script lookalikes or authenticate biological independence.
+
+The existing shared unit validator is used by organism registration,
+append-only identity revision, persisted registry readback and imported
+revision checks. Extended API acceptance to reject ambiguous create/revise
+requests without changing registry history, accept canonical `tank-café`, and
+parameterized imported-ID rejection through the standalone registry endpoint
+and an executed saved Workflow Builder identity-source graph. Existing typed
+ports, persisted run artifacts, review gates and offline-first operation remain
+unchanged; no new node, migration, environmental context or model weights.
+
+**Release HOLD:** exact-new-head CI and focused test execution still required;
+authenticated scientist-reviewed longitudinal measurements, actual independent
+unit design verification, representative biological validation, 1.1 migration
+reconciliation and physical Windows installed-GUI acceptance remain outstanding.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

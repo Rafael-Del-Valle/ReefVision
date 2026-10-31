@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -248,7 +249,7 @@ def test_alias_collision_revision_and_import_fail_closed_in_saved_workflow(
     )
 
 
-def test_padded_experimental_unit_ids_cannot_create_or_revise_registry(
+def test_ambiguous_experimental_unit_ids_cannot_create_or_revise_registry(
     client: TestClient,
 ) -> None:
     project_id = str(create_project(client, "Canonical physical unit IDs")["id"])
@@ -265,7 +266,18 @@ def test_padded_experimental_unit_ids_cannot_create_or_revise_registry(
         == 201
     )
     before = client.get(registry_url).json()
-    for invalid in ("tank-1 ", " tank-1", "tank-1\t", "tank-1\n"):
+    for invalid in (
+        "tank-1 ",
+        " tank-1",
+        "tank-1\t",
+        "tank-1\n",
+        "tank-1\u200b",  # zero-width space
+        "tank-1\u2060",  # invisible word joiner
+        "tank-\u202e1",  # right-to-left override
+        "ｔａｎｋ-1",  # NFKC-compatible fullwidth letters
+        "tank-①",  # NFKC-compatible circled digit
+        "tank-cafe\u0301",  # decomposed canonical accent
+    ):
         create = _register(
             client,
             project_id,
@@ -283,16 +295,34 @@ def test_padded_experimental_unit_ids_cannot_create_or_revise_registry(
                 "kind": "fragment",
                 "experimental_unit_type": "tank",
                 "experimental_unit_id": invalid,
-                "reason": "Attempt to split a physical unit by whitespace",
+                "reason": "Attempt to split a physical unit with ambiguous ID",
             },
         )
         assert revision.status_code in (400, 422), revision.text
         assert "Experimental unit ID" in revision.text
         assert client.get(registry_url).json() == before
 
+    # Non-ASCII identifiers in canonical form remain valid and unchanged.
+    accepted = _register(
+        client,
+        project_id,
+        "fragment-B",
+        "fragment",
+        experimental_unit_type="aquarium",
+        experimental_unit_id="tank-café",
+    )
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["experimental_unit_id"] == "tank-café"
 
-def test_imported_padded_unit_id_blocks_registry_and_executable_workflow(
+
+@pytest.mark.parametrize(
+    "invalid",
+    ["tank-1 ", "tank-1\u200b", "ｔａｎｋ-1", "tank-①"],
+    ids=["padded", "zero-width", "fullwidth", "compatibility-digit"],
+)
+def test_imported_ambiguous_unit_id_blocks_registry_and_executable_workflow(
     client: TestClient,
+    invalid: str,
 ) -> None:
     project_id = str(create_project(client, "Imported physical-unit ambiguity")["id"])
     assert (
@@ -316,8 +346,8 @@ def test_imported_padded_unit_id_blocks_registry_and_executable_workflow(
                 kind="fragment",
                 parent_colony_key=None,
                 experimental_unit_type="aquarium",
-                experimental_unit_id="tank-1 ",
-                reason="Simulated unreviewed padded unit import",
+                experimental_unit_id=invalid,
+                reason="Simulated unreviewed ambiguous unit import",
             )
         )
         session.commit()
@@ -327,7 +357,7 @@ def test_imported_padded_unit_id_blocks_registry_and_executable_workflow(
 
     graph: dict[str, Any] = {
         "graph_id": "ecology-unit-id-integrity-1-2",
-        "name": "Reject padded physical unit identifiers",
+        "name": "Reject ambiguous physical unit identifiers",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
