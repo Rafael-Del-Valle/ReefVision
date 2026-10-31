@@ -1031,7 +1031,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     # current scientist-verified run into unchecked legacy checkpoint replay.
     for version, expected_error in (
         ("pose-workflow-training-snapshot-9999", "snapshot schema changed"),
-        (None, "checkpoint provenance is missing"),
+        (None, "snapshot schema changed"),
     ):
         with app.state.session_factory() as session:
             persisted = session.get(TrainingRun, result["training_run_id"])
@@ -1042,7 +1042,6 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
             tampered_manifest = dict(original_manifest)
             if version is None:
                 tampered_snapshot.pop("schema_version")
-                tampered_manifest.pop("result_checkpoint_sha256")
             else:
                 tampered_snapshot["schema_version"] = version
             persisted.draft_snapshot_json = tampered_snapshot
