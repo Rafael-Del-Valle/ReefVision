@@ -798,4 +798,67 @@ describe("ReviewQueueBulkTriage", () => {
       original,
     );
   });
+  it("reports uncertain retry protection and preserves the exact UUID when visible items change", async () => {
+    vi.mocked(bulkTriageReviewQueueItems)
+      .mockRejectedValueOnce(new Error("Response lost during refresh"))
+      .mockResolvedValueOnce({
+        queue_id: "queue-1",
+        action: "start",
+        changed_count: 0,
+        items: responseItems("queue-1", "start", ["pending-1"]),
+        requires_researcher_review: true,
+      });
+    const onProtectedStateChange = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const panel = (rows: ReviewQueueItem[]) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueBulkTriage
+          queueId="queue-1"
+          items={rows}
+          onProtectedStateChange={onProtectedStateChange}
+        />
+      </QueryClientProvider>
+    );
+    const view = render(panel(items));
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "coral-reviewer" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select eligible on page/ }),
+    );
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply start to 1 items" }),
+    );
+    await screen.findByRole("button", { name: "Retry identical bulk action" });
+    await waitFor(() =>
+      expect(onProtectedStateChange).toHaveBeenLastCalledWith("queue-1"),
+    );
+    const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
+
+    // A filter or loading state may temporarily show no rows. It must not
+    // erase an uncertain server outcome or regenerate its retry UUID.
+    view.rerender(panel([]));
+    expect(
+      screen.getByRole("button", { name: "Retry identical bulk action" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry identical bulk action" }),
+    );
+    await waitFor(() =>
+      expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(2),
+    );
+    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1]).toEqual(
+      original,
+    );
+    await waitFor(() =>
+      expect(onProtectedStateChange).toHaveBeenLastCalledWith(null),
+    );
+  });
+
 });
