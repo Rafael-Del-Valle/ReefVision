@@ -18,7 +18,10 @@ vi.mock("../../api/client", () => ({
 
 function mount() {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
   });
   render(
     <QueryClientProvider client={client}>
@@ -337,7 +340,10 @@ describe("ReviewQueueCoordinationPanel", () => {
     });
     vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pendingOld);
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const invalidate = vi.spyOn(client, "invalidateQueries");
     const view = (queueId: string, itemId: string) => (
@@ -412,7 +418,10 @@ describe("ReviewQueueCoordinationPanel", () => {
     });
     vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pendingOld);
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const view = (queueId: string, itemId: string) => (
       <QueryClientProvider client={client}>
@@ -447,7 +456,10 @@ describe("ReviewQueueCoordinationPanel", () => {
 
   it("keeps unsent reviewer notes and attribution scoped to their review item", async () => {
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const view = (queueId: string, itemId: string) => (
       <QueryClientProvider client={client}>
@@ -532,7 +544,10 @@ describe("ReviewQueueCoordinationPanel", () => {
       }),
     );
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const view = (queueId: string, itemId: string) => (
       <QueryClientProvider client={client}>
