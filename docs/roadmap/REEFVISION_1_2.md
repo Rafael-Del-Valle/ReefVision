@@ -5029,3 +5029,34 @@ approval, calibrated growth validation or independent-unit authentication.
 Still required: exact-head CI, reviewed longitudinal source observations,
 study-design independence checks, representative biological acceptance,
 1.1 migration reconciliation and installed Windows GUI acceptance.
+
+
+## Current ecological unknown-claim replay guard (2026-10-31)
+
+At exact preceding 1.2 head \`30716ae5c4414f9bd89982211c227e4db90ca41c\`,
+all **19/19** registered GitHub Actions workflows completed successfully,
+including backend CI, Pose Workflow Validation, ReefVision 1.0 Acceptance,
+and Windows Desktop Build. This is pre-change evidence.
+
+The current \`ecology-measurement-candidates-0021\` typed readback now rejects
+unsupported keys at the top level and inside source candidates, UTC-date QC,
+projected visits, endpoint changes, unit/population summaries and exclusions.
+Without this guard, Pydantic could silently drop fabricated claims such as
+\`scientist_review_approved\` or \`independent_unit_registry_verified\` while
+accepting the recognized data. The separately persisted
+\`ecology-candidate-report-0001\` report also rejects unknown fields.
+Existing standalone API and executed saved Workflow Builder outputs share
+the same typed source contract; no duplicate node, migration, pretrained
+model, environmental-context provider, or cross-version merge was added.
+
+Focused regression checks real API/saved-workflow parity, forged approval
+claims across the scientific artifact, a separately persisted report,
+and historical v0020 source compatibility. Earlier source artifacts remain
+readable as \`linked_unverified\` with \`scientist_review_required\`; no
+historical evidence is promoted to verified biological growth.
+
+**Release HOLD:** fresh exact-head backend/frontend/E2E/Windows CI, authentic
+scientist-reviewed longitudinal source observations, registered experimental
+unit independence, representative ecological and human/model comparisons,
+1.1 Alembic migration reconciliation, and installed Windows MSI/GUI
+acceptance remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**

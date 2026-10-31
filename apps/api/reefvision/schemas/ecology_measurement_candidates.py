@@ -7,7 +7,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import to_jsonable_python
 
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
@@ -324,6 +324,8 @@ class EcologyProjectedPopulationSummary(BaseModel):
 
 class EcologyCandidateReport(BaseModel):
     """Deterministic ecological source/effort summary; never verified growth."""
+
+    model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["ecology-candidate-report-0001"] = "ecology-candidate-report-0001"
     project_id: str
@@ -743,6 +745,52 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         }
         if canonical_json_sha256(payload) != raw.get("input_sha256"):
             raise ValueError("Current ecological candidate source fingerprint mismatch")
+        return raw
+
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_unsupported_current_evidence_fields(cls, raw: Any) -> Any:
+        """Reject unsupported scientific claims in current saved evidence.
+
+        SHA-256 protects known canonical fields, but Pydantic's default extra
+        handling would silently discard unknown claims before a downstream
+        consumer could audit them. Historical source contracts remain readable.
+        This checks schema shape, not scientific authentication.
+        """
+        if (
+            not isinstance(raw, dict)
+            or raw.get("source_fingerprint_contract") != "ecology-measurement-candidates-0021"
+        ):
+            return raw
+        unknown = set(raw).difference(cls.model_fields)
+        if unknown:
+            raise ValueError(
+                "Current ecological artifact contains unsupported fields: "
+                + ", ".join(sorted(unknown))
+            )
+        collections: tuple[tuple[str, type[BaseModel]], ...] = (
+            ("candidates", EcologyMeasurementCandidate),
+            ("sampling_date_qc", EcologySamplingDateQC),
+            ("projected_visit_coverage", EcologyProjectedVisitCoverage),
+            ("projected_endpoint_changes", EcologyProjectedEndpointChange),
+            ("projected_unit_summaries", EcologyProjectedUnitSummary),
+            ("projected_population_summaries", EcologyProjectedPopulationSummary),
+            ("exclusions", EcologyMeasurementExclusion),
+        )
+        for collection, row_type in collections:
+            rows = raw.get(collection)
+            if not isinstance(rows, list):
+                continue  # Normal Pydantic type validation handles malformed collections.
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                unknown = set(row).difference(row_type.model_fields)
+                if unknown:
+                    raise ValueError(
+                        f"Current ecological {collection} contains unsupported fields: "
+                        + ", ".join(sorted(unknown))
+                    )
         return raw
 
 
