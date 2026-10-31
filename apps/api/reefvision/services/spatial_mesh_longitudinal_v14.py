@@ -1116,6 +1116,30 @@ def compare_mesh_observations(
         and _is_sha256_fingerprint(second_source_hash)
         and first_source_hash == second_source_hash
     )
+    # Re-exporting exactly the same triangles in a different byte stream does
+    # not create an independent growth timepoint. In particular, applying a
+    # different ruler scale to the same source geometry is recalibration, not
+    # measured biological change. Keep distinct-source/same-scale comparisons
+    # descriptive; do not infer acquisition independence from different bytes.
+    same_geometry_different_imported_source = (
+        not reused_imported_source_payload
+        and first_hash_valid
+        and second_hash_valid
+        and first_geometry_hash == second_geometry_hash
+        and _is_sha256_fingerprint(first_source_hash)
+        and _is_sha256_fingerprint(second_source_hash)
+        and first_source_hash != second_source_hash
+    )
+    rescaled_reexported_geometry = (
+        same_geometry_different_imported_source
+        and before_scale is not None
+        and after_scale is not None
+        and before_scale != after_scale
+    )
+    if same_geometry_different_imported_source:
+        warnings.append("identical_geometry_different_imported_source_payload")
+    if rescaled_reexported_geometry:
+        warnings.append("longitudinal_change_withheld_rescaled_reexported_geometry")
     if reused_imported_source_payload:
         warnings.append("identical_imported_source_payload_reused_across_observations")
         # A reprocessed or recalibrated copy of one original file cannot
@@ -1373,6 +1397,10 @@ def compare_mesh_observations(
                 and not identity_disputed
                 and not identity_inconclusive
                 and not reused_imported_source_payload
+                and not rescaled_reexported_geometry
+            ),
+            "longitudinal_change_withheld_due_to_rescaled_reexported_geometry": (
+                rescaled_reexported_geometry
             ),
             "longitudinal_change_withheld_due_to_reused_source_payload": (
                 reused_imported_source_payload
@@ -1383,10 +1411,15 @@ def compare_mesh_observations(
             ),
         },
     }
-    if identity_disputed or identity_inconclusive or reused_imported_source_payload:
+    if (
+        identity_disputed
+        or identity_inconclusive
+        or reused_imported_source_payload
+        or rescaled_reexported_geometry
+    ):
         # Keep original measurements and reconstruction QC intact. Disputed
-        # identity or byte-identical imported originals cannot establish two
-        # independent biological timepoints, even if the geometry is valid.
+        # identity, byte-identical originals, or rescaled re-exports of the
+        # same triangles cannot establish independent biological change.
         for key in (
             "delta_surface_area_to_bounding_diagonal_squared_ratio",
             "delta_patch_area_concentration_index",
