@@ -180,7 +180,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
         result.changed_count > expectedIds.size ||
         !Array.isArray(result.items) ||
         result.items.length !== expectedIds.size ||
-        new Set(result.items.map((item) => item.id)).size !== expectedIds.size ||
+        new Set(result.items.map((item) => item.id)).size !==
+          expectedIds.size ||
         result.items.some(
           (item) =>
             !expectedIds.has(item.id) ||
