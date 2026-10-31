@@ -39,12 +39,12 @@ function responseItems(
   action: ReviewQueueBulkAction,
   ids: string[],
 ): ReviewQueueItem[] {
-  const resultingState: ReviewQueueItem["review_state"] = {
+  const resultingState: ReviewQueueItem["review_state"] = ({
     start: "in_progress",
     skip: "skipped",
     return: "pending",
     complete: "completed",
-  }[action];
+  } as const)[action];
   return ids.map(
     (id) =>
       ({
