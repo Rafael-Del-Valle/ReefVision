@@ -271,6 +271,14 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                                 "EXIF camera-local time has no UTC offset; "
                                 "UTC capture timestamp not inferred"
                             )
+                        else:
+                            # A present offset is not necessarily parseable or
+                            # scientifically trustworthy (e.g. +99:99). Do not
+                            # silently omit the QC warning for malformed data.
+                            metadata["capture_time_warning"] = (
+                                "EXIF camera capture time or UTC offset is invalid; "
+                                "UTC capture timestamp not inferred"
+                            )
                         break
             return InspectedImage(
                 sha256=sha256,
