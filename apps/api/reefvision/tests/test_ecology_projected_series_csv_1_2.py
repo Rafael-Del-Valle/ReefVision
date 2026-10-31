@@ -222,9 +222,7 @@ def test_projected_candidate_rejects_contradictory_capture_metadata(
 def test_current_candidate_python_datetime_roundtrip(client: TestClient) -> None:
     """Python-mode saved artifacts with datetime objects retain their digest."""
     original = _dated_artifact(client)
-    parsed = EcologyMeasurementCandidatesResponse.model_validate(
-        original.model_dump(mode="python")
-    )
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(original.model_dump(mode="python"))
     assert parsed.input_sha256 == original.input_sha256
     assert parsed.candidates[0].capture_timestamp_utc == datetime(2026, 4, 3, 8, tzinfo=UTC)
 
