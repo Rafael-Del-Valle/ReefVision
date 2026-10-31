@@ -267,9 +267,7 @@ export function ReviewQueueCoordinationPanel({
       >
         Add comment
       </button>
-      {activeFailure && (
-        <p role="alert">{activeFailure.errorMessage}</p>
-      )}
+      {activeFailure && <p role="alert">{activeFailure.errorMessage}</p>}
       {activeFailedRequest && (
         <div role="group" aria-label="Failed review event">
           <p>
