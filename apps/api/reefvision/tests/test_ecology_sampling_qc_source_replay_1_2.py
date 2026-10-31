@@ -26,9 +26,7 @@ def test_api_and_saved_workflow_sampling_qc_replay_from_source(client: TestClien
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in workflow["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == response.json()
@@ -67,9 +65,12 @@ def test_rehashed_sampling_qc_cannot_invent_dates_or_replicates(
     client: TestClient, field: str, replacement: int | list[str]
 ) -> None:
     original = _dated_artifact(client)
-    assert EcologyMeasurementCandidatesResponse.model_validate(
-        original.model_dump(mode="json")
-    ).sampling_date_qc[0].qc_status == "date_series_candidate"
+    assert (
+        EcologyMeasurementCandidatesResponse.model_validate(original.model_dump(mode="json"))
+        .sampling_date_qc[0]
+        .qc_status
+        == "date_series_candidate"
+    )
     altered = original.sampling_date_qc[0].model_copy(update={field: replacement})
     forged = _resign_derived_evidence(original.model_copy(update={"sampling_date_qc": [altered]}))
     with pytest.raises(PydanticValidationError, match="sampling QC does not match source"):
