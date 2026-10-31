@@ -826,3 +826,22 @@ canonical payload, digest and provisional evidence flags. The digest does
 source hash came from a trusted instrument, or constitute a durable review
 ledger. Verified calibration, biological identity and full Windows GUI/GPU
 scientific acceptance remain release gates.
+
+### Bounded provisional identity labels on longitudinal artifact replay (Track C)
+
+The shared 1.4 longitudinal comparison engine now independently enforces the
+128-character maximum and restricted ASCII identifier syntax for provisional
+specimen and observation IDs, including when previously constructed preview
+artifacts are replayed directly rather than revalidated through an API request.
+Project IDs must also be nonempty, at most 128 characters, and free of
+whitespace/control characters. Matching malformed project IDs no longer pass
+merely because both timepoints repeat the same string. Boundary regression
+cases accept valid 128-character labels and reject oversized or malformed
+replayed labels. The existing standalone API and persisted typed Workflow
+Builder graph both call this same comparison engine; their existing saved-run
+scientific-output parity tests remain in place.
+
+These checks protect data association and artifact replay consistency; they
+**do not** authenticate a project, verify a specimen match, attest to human
+review, or establish biological growth. Durable versioned review persistence
+and independently verified identities remain release gates.
