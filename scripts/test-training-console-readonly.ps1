@@ -78,7 +78,12 @@ $script:logText = ('epoch=2', 'train/box_loss=0.25', 'train/cls_loss=0.30') -joi
 $script:logText += ([string][char]10) + ([string][char]0x001B) + ']0;spoofed log title' + ([string][char]0x0007) + 'train/dfl_loss=0.10'
 
 function Invoke-RestMethod {
-  param([string]$Uri, [string]$Method, [int]$TimeoutSec)
+  param([string]$Uri, [string]$Method, [int]$TimeoutSec, [int]$MaximumRedirection = -1)
+  # Never allow the loopback training API to redirect a GET to the Internet.
+  # A redirect could leak a run identifier or violate offline-first behavior.
+  if ($MaximumRedirection -ne 0) {
+    throw "Monitor allowed HTTP redirects for: $Uri"
+  }
   if ($Method -cne 'Get') {
     throw "Monitor attempted a non-read-only API method: $Method"
   }
