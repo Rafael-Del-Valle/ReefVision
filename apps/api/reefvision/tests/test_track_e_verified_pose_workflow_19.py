@@ -416,9 +416,10 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             session.commit()
 
     with app.state.session_factory() as session:
-        assert build_workflow_run_provenance(
-            session, run_id=str(queued.json()["id"])
-        ) == verified_provenance
+        assert (
+            build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+            == verified_provenance
+        )
 
     # A completed saved workflow must not expose a changed scientific output
     # through the run-detail API, even when its original digest remains stored.
