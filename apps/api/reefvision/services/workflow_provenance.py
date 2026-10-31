@@ -34,7 +34,12 @@ def verify_workflow_artifact(
     if expected_run_id is not None and artifact.workflow_run_id != expected_run_id:
         raise ConflictError("Workflow artifact belongs to a different workflow run")
 
-    actual = canonical_json_sha256(dict(artifact.payload_json or {}))
+    # A JSON array of key/value pairs can coerce to the same dictionary and
+    # digest as the original payload. Preserve the stored artifact type.
+    if not isinstance(artifact.payload_json, dict):
+        raise ConflictError("Workflow artifact payload must be a JSON object")
+
+    actual = canonical_json_sha256(artifact.payload_json)
 
     if actual != artifact.payload_sha256:
         raise ConflictError(f"Workflow artifact checksum failed for {artifact.id}")
