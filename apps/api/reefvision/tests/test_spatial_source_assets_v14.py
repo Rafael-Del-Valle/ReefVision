@@ -191,11 +191,95 @@ def test_standalone_longitudinal_comparison_resolves_project_assets(client: Test
         },
     )
     assert response.status_code == 200, response.text
-    assert response.json()["delta_surface_area_m2"] == pytest.approx(0)
+    expected = response.json()
+    # Two timestamps for the same immutable imported original are not
+    # independent observations, even when both asset reads pass SHA-256.
+    assert expected["before_surface_area_m2"] == pytest.approx(0.00005)
+    assert expected["after_surface_area_m2"] == pytest.approx(0.00005)
+    assert expected["delta_surface_area_m2"] is None
+    assert expected["relative_surface_area_change_percent"] is None
+    assert expected["average_surface_area_change_m2_per_day"] is None
+    assert expected["delta_surface_area_scale_interval_m2"] is None
+    assert expected["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"]
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["provenance"]["calibration_verified"] is False
+    assert "identical_imported_source_payload_reused_across_observations" in expected["qc_warnings"]
+    assert "longitudinal_change_withheld_reused_imported_source_payload" in expected["qc_warnings"]
     assert (
-        response.json()["provenance"]["before_geometry_sha256"]
-        == response.json()["provenance"]["after_geometry_sha256"]
+        expected["provenance"]["before_geometry_sha256"]
+        == expected["provenance"]["after_geometry_sha256"]
     )
+
+    # The persisted typed graph must make the same conservative scientific
+    # decision as the standalone endpoint when it re-reads the original.
+    before_params = {
+        **common,
+        "observation_id": "survey-1",
+        "observed_at_utc": "2026-10-01T12:00:00Z",
+    }
+    after_params = {
+        **common,
+        "observation_id": "survey-2",
+        "observed_at_utc": "2026-10-02T12:00:00Z",
+    }
+    graph = {
+        "graph_id": "reused-project-asset-longitudinal-v14",
+        "name": "Reject pseudo-replicated source observations",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "early",
+                "node_type": "mesh_surface_preview",
+                "parameters": before_params,
+            },
+            {
+                "node_id": "late",
+                "node_type": "mesh_surface_preview",
+                "parameters": after_params,
+            },
+            {"node_id": "compare", "node_type": "mesh_longitudinal_comparison"},
+        ],
+        "edges": [
+            {
+                "edge_id": f"project-{node}",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": node,
+                "target_port_id": "project",
+            }
+            for node in ("early", "late")
+        ]
+        + [
+            {
+                "edge_id": f"{node}-compare",
+                "source_node_id": node,
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": port,
+            }
+            for node, port in (("early", "before"), ("late", "after"))
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    comparisons = [
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    ]
+    assert comparisons == [expected]
 
 
 @pytest.mark.parametrize(
