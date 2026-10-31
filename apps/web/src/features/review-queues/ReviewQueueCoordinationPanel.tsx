@@ -271,9 +271,9 @@ export function ReviewQueueCoordinationPanel({
       </div>
       {closeBlocked && (
         <p role="status">
-          Finish the pending event or revisit any review item with an
-          uncertain outcome before closing. An interrupted request may
-          already be recorded; its original retry ID must be preserved.
+          Finish the pending event or revisit any review item with an uncertain
+          outcome before closing. An interrupted request may already be
+          recorded; its original retry ID must be preserved.
         </p>
       )}
       {closeConfirmationKey === closeApprovalScopeKey && (
