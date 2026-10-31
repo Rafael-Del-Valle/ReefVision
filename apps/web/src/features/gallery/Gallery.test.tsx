@@ -259,6 +259,49 @@ describe("Gallery", () => {
     );
   });
 
+  it("preserves unsaved image metadata when a background thumbnail becomes available", async () => {
+    let reads = 0;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (!url.includes(`/projects/${project.id}/images`)) {
+          throw new Error(`Unexpected request ${url}`);
+        }
+        reads += 1;
+        return jsonResponse({
+          items: [
+            {
+              ...image,
+              thumbnail_path: reads === 1 ? null : "thumbnails/ready.jpg",
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      });
+
+    renderGallery();
+    await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    const groupKey = screen.getByPlaceholderText("e.g. source-image-001");
+    const status = screen.getByLabelText("Image status");
+    await userEvent.type(groupKey, "unsaved-parent-fragment");
+    await userEvent.selectOptions(status, "reviewed");
+
+    // Background thumbnail completion changes the image object but not the
+    // persisted editable metadata. It must not overwrite the researcher's
+    // in-progress draft or submit it without an explicit save.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh pending thumbnails" }),
+    );
+    await screen.findByAltText("Thumbnail of swiftia-01.png");
+    expect(groupKey).toHaveValue("unsaved-parent-fragment");
+    expect(status).toHaveValue("reviewed");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("opens the annotation editor for a selected image", async () => {
     const onOpenAnnotation = vi.fn();
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
