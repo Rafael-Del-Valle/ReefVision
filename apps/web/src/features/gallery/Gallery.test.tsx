@@ -65,7 +65,7 @@ function renderGallery(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
+  return { ...render(
     <QueryClientProvider client={queryClient}>
       <Gallery
         project={project}
@@ -74,7 +74,7 @@ function renderGallery(
         onFocusedImageChange={onFocusedImageChange}
       />
     </QueryClientProvider>,
-  );
+  ), queryClient };
 }
 
 afterEach(() => {
@@ -93,6 +93,46 @@ describe("Gallery pending thumbnail refresh", () => {
     expect(galleryPendingThumbnailRefetchMs(pending, 13)).toBe(false);
     expect(galleryPendingThumbnailRefetchMs(complete, 1)).toBe(false);
     expect(galleryPendingThumbnailRefetchMs({ items: [] }, 1)).toBe(false);
+  });
+
+  it("recovers a failed thumbnail when the backend regenerates a new version", async () => {
+    let requests = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (!url.includes(`/projects/${project.id}/images`)) {
+        throw new Error(`Unexpected request ${url}`);
+      }
+      requests += 1;
+      return jsonResponse({
+        items: [{
+          ...image,
+          thumbnail_path: requests === 1
+            ? "thumbnails/broken.jpg"
+            : "thumbnails/regenerated.jpg",
+        }],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      });
+    });
+
+    const { queryClient } = renderGallery();
+    const thumbnail = await screen.findByAltText("Thumbnail of swiftia-01.png");
+    expect(thumbnail.getAttribute("src")).toContain("broken.jpg");
+    fireEvent.error(thumbnail);
+    expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
+    expect(screen.getByText("Thumbnail pending")).toBeInTheDocument();
+
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
+    });
+
+    const recovered = await screen.findByAltText("Thumbnail of swiftia-01.png");
+    expect(recovered.getAttribute("src")).toContain("regenerated.jpg");
+    expect(recovered.getAttribute("src")).not.toContain("broken.jpg");
+    fireEvent.error(recovered);
+    expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
   });
 
   it("automatically reloads metadata after thumbnail job completion", async () => {
