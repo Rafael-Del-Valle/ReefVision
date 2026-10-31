@@ -51,9 +51,7 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             # nonfinite declarations must not legitimize face references.
             kind = fields[0]
             count = len(fields) - 1
-            if (kind == "vt" and count not in {1, 2, 3}) or (
-                kind == "vn" and count != 3
-            ):
+            if (kind == "vt" and count not in {1, 2, 3}) or (kind == "vn" and count != 3):
                 raise ValueError(f"OBJ line {line_number}: invalid {kind} declaration")
             try:
                 attributes = [float(value) for value in fields[1:]]
