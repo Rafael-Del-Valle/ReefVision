@@ -51,10 +51,10 @@ def _rigid_transform() -> list[list[float]]:
 @pytest.mark.parametrize(
     ("field", "invalid", "error"),
     [
-        ("specimen_id", "   ", "valid provisional specimen_id"),
-        ("specimen_id", "colony 16", "valid provisional specimen_id"),
-        ("observation_id", "\t", "valid observation_id"),
-        ("observation_id", "survey 1", "valid observation_id"),
+        ("specimen_id", "   ", "valid syntax"),
+        ("specimen_id", "colony 16", "valid syntax"),
+        ("observation_id", "\t", "valid syntax"),
+        ("observation_id", "survey 1", "valid syntax"),
         ("project_id", "   ", "nonempty project_id"),
     ],
 )
