@@ -498,6 +498,89 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             raise ValueError("Ecological candidate report does not match source rows")
         return self
 
+    @model_validator(mode="after")
+    def require_current_endpoint_source_consistency(
+        self,
+    ) -> EcologyMeasurementCandidatesResponse:
+        """A rehashed projected endpoint must still match its linked observations.
+
+        This validates saved typed Workflow Builder artifacts as well as API
+        responses. It does not authenticate the observations or approve growth.
+        Earlier fingerprint contracts retain their historical replay behavior.
+        """
+        if self.source_fingerprint_contract != "ecology-measurement-candidates-0021":
+            return self
+        groups: dict[tuple[str, str], list[EcologyMeasurementCandidate]] = {}
+        for candidate in self.candidates:
+            groups.setdefault((candidate.organism_key, candidate.metric), []).append(candidate)
+        qc_statuses: dict[tuple[str, str], list[str]] = {}
+        for qc in self.sampling_date_qc:
+            qc_statuses.setdefault((qc.organism_key, qc.metric), []).append(qc.qc_status)
+
+        seen: set[tuple[str, str]] = set()
+        for endpoint in self.projected_endpoint_changes:
+            key = (endpoint.organism_key, endpoint.metric)
+            rows = groups.get(key, [])
+            if (
+                key in seen
+                or len(rows) < 2
+                or len(rows) != endpoint.observed_timepoint_count
+                or qc_statuses.get(key) != ["date_series_candidate"]
+                or any(
+                    row.capture_timestamp_utc is None
+                    or row.capture_timestamp_utc.tzinfo is None
+                    or row.capture_timestamp_utc.utcoffset() is None
+                    for row in rows
+                )
+            ):
+                raise ValueError("Current projected endpoint lacks a valid source date series")
+            seen.add(key)
+            ordered = sorted(
+                rows,
+                key=lambda row: (
+                    row.capture_timestamp_utc.astimezone(UTC),  # type: ignore[union-attr]
+                    row.image_id,
+                    row.annotation_evidence_id,
+                ),
+            )
+            first, last = ordered[0], ordered[-1]
+            if (
+                endpoint.identity_revision != first.identity_revision
+                or endpoint.parent_colony_key != first.parent_colony_key
+                or endpoint.experimental_unit_type != first.experimental_unit_type
+                or endpoint.experimental_unit_id != first.experimental_unit_id
+                or endpoint.unit != first.unit
+                or any(
+                    (
+                        row.identity_revision,
+                        row.parent_colony_key,
+                        row.experimental_unit_type,
+                        row.experimental_unit_id,
+                        row.unit,
+                    )
+                    != (
+                        first.identity_revision,
+                        first.parent_colony_key,
+                        first.experimental_unit_type,
+                        first.experimental_unit_id,
+                        first.unit,
+                    )
+                    for row in ordered
+                )
+                or endpoint.baseline_capture_timestamp_utc != first.capture_timestamp_utc
+                or endpoint.final_capture_timestamp_utc != last.capture_timestamp_utc
+                or endpoint.baseline_image_id != first.image_id
+                or endpoint.final_image_id != last.image_id
+                or endpoint.baseline_annotation_evidence_id != first.annotation_evidence_id
+                or endpoint.final_annotation_evidence_id != last.annotation_evidence_id
+                or endpoint.baseline_calibration_evidence_id != first.calibration_evidence_id
+                or endpoint.final_calibration_evidence_id != last.calibration_evidence_id
+                or endpoint.baseline_value != first.value
+                or endpoint.final_value != last.value
+            ):
+                raise ValueError("Current projected endpoint does not match source candidates")
+        return self
+
     @model_validator(mode="before")
     @classmethod
     def require_current_payload_fingerprint(cls, raw: Any) -> Any:
