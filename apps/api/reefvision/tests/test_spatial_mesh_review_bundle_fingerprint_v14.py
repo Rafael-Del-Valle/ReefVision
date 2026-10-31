@@ -824,16 +824,12 @@ def test_project_asset_reimport_changes_versioned_review_digest_without_changing
     initial = compare_mesh_observations(before, after, reidentification_evidence=review)
     initial_provenance = initial["provenance"]
     initial_bundle = initial_provenance["review_evidence_bundle"]
-    assert initial_provenance["review_evidence_bundle_schema_version"] == (
-        "mesh-review-bundle-0004"
-    )
+    assert initial_provenance["review_evidence_bundle_schema_version"] == "mesh-review-bundle-0004"
     assert initial_bundle["before_spatial_source_asset_id"] == (
         "11111111-1111-4111-8111-111111111111"
     )
-    assert initial_bundle["after_spatial_source_asset_id"] == (
-        "22222222-2222-4222-8222-222222222222"
-    )
-    assert sha256(
+    assert initial_bundle["after_spatial_source_asset_id"] == "22222222-2222-4222-8222-222222222222"
+    digest = sha256(
         dumps(
             initial_bundle,
             sort_keys=True,
@@ -841,7 +837,8 @@ def test_project_asset_reimport_changes_versioned_review_digest_without_changing
             ensure_ascii=False,
             allow_nan=False,
         ).encode("utf-8")
-    ).hexdigest() == initial_provenance["review_evidence_bundle_sha256"]
+    ).hexdigest()
+    assert digest == initial_provenance["review_evidence_bundle_sha256"]
 
     # Reimport the identical original under a different project-owned asset
     # without changing geometry, timestamps, calibration, or review notes.
