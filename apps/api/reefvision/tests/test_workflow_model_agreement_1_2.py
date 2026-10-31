@@ -223,6 +223,28 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
         json={"pairs": _pairs(), "reference_kind": "human_consensus"},
     )
     assert standalone.status_code == 200, standalone.text
+    # Neither standalone results nor persisted, typed Workflow Builder rows
+    # may silently drop a forged verification or replication claim on replay.
+    for evidence in (standalone.json(), payload):
+        assert evidence["analysis_provenance"]["algorithm_version"] == "ecology-paired-count-0007"
+        for collection, forged_field, forged_value in (
+            ("paired_differences", "scientist_verified", True),
+            ("unit_summaries", "independent_sample_size", 999),
+        ):
+            altered = dict(evidence)
+            altered[collection] = [dict(row) for row in evidence[collection]]
+            altered[collection][0][forged_field] = forged_value
+            with pytest.raises(SchemaValidationError, match="unsupported fields"):
+                PairedCountComparisonResponse.model_validate(altered)
+    # Older unverified artifacts retain their historical decoding contract.
+    historical = dict(payload)
+    historical["analysis_provenance"] = dict(payload["analysis_provenance"])
+    historical["analysis_provenance"]["algorithm_version"] = "ecology-paired-count-0006"
+    historical["paired_differences"] = [dict(row) for row in payload["paired_differences"]]
+    historical["paired_differences"][0]["scientist_verified"] = True
+    parsed_historical = PairedCountComparisonResponse.model_validate(historical)
+    assert parsed_historical.evidence_level == "caller_supplied_unverified"
+    assert parsed_historical.review_status == "requires_source_verification"
     assert (
         PairedCountComparisonResponse.model_validate(standalone.json()).paired_observation_count
         == 2
