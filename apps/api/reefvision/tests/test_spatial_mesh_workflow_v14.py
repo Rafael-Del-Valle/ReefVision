@@ -159,6 +159,10 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
     [
         pytest.param(MESH["obj_text"], id="cartesian"),
         pytest.param("v 0 0 0 2\nv 4 0 0 2\nv 0 6 0 2\nf 1 2 3\n", id="homogeneous"),
+        pytest.param(
+            "v 0 0 0 # origin\nv 2 0 0 # x\nv 0 3 0 # y\nf 1 2 3 # face\n",
+            id="inline-comments",
+        ),
     ],
 )
 def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> None:
@@ -248,6 +252,10 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> Non
     assert (
         artifact["payload_json"]["provenance"]["geometry_sha256"]
         == standalone.json()["provenance"]["geometry_sha256"]
+    )
+    assert (
+        artifact["payload_json"]["provenance"]["source_payload_sha256"]
+        == standalone.json()["provenance"]["source_payload_sha256"]
     )
 
 
