@@ -398,10 +398,14 @@ def _completed_workflow_pose_training_run(
 
         # Historical snapshots must not inherit newer provenance assertions
         # under a downgraded schema marker.
-        if snapshot_version not in {
+        registry_snapshots = (
             "pose-workflow-training-snapshot-0002",
             "pose-workflow-training-snapshot-0003",
-        } and "parameter_registry_version" in snapshot:
+        )
+        if (
+            snapshot_version not in registry_snapshots
+            and "parameter_registry_version" in snapshot
+        ):
             raise ValidationError("Recovered pose-training node snapshot schema changed")
         if (
             snapshot_version != "pose-workflow-training-snapshot-0003"
@@ -412,10 +416,7 @@ def _completed_workflow_pose_training_run(
         # Version 0002 freezes the provider parameter registry used for the
         # actual run. Never replay a model under silently rewritten registry
         # provenance; version 0001 remains readable for historical runs.
-        if snapshot_version in {
-            "pose-workflow-training-snapshot-0002",
-            "pose-workflow-training-snapshot-0003",
-        } and (
+        if snapshot_version in registry_snapshots and (
             not isinstance(snapshot.get("parameter_registry_version"), str)
             or snapshot["parameter_registry_version"] != candidate.parameter_registry_version
         ):
@@ -621,13 +622,13 @@ def _reused_pose_training_result(
     # remain readable; newly completed runs always persist one below.
     frozen_checkpoint = dict(run.artifact_manifest_json or {})
     snapshot = dict(run.draft_snapshot_json or {})
+    current_snapshot_versions = {
+        "pose-workflow-training-snapshot-0001",
+        "pose-workflow-training-snapshot-0002",
+        "pose-workflow-training-snapshot-0003",
+    }
     is_current_snapshot = (
-        snapshot.get("schema_version")
-        in {
-            "pose-workflow-training-snapshot-0001",
-            "pose-workflow-training-snapshot-0002",
-            "pose-workflow-training-snapshot-0003",
-        }
+        snapshot.get("schema_version") in current_snapshot_versions
         or "pose_training_dataset_manifest_sha256" in snapshot
     )
     if snapshot.get("schema_version") == "pose-workflow-training-snapshot-0003" and (
