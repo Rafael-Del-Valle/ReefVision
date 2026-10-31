@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
 from reefvision.services.spatial_mesh_obj_v14 import parse_obj_triangles
+from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 
 
@@ -42,5 +44,44 @@ def test_optional_rgb_and_weighted_rgb_vertices_are_accepted() -> None:
 )
 def test_invalid_homogeneous_or_color_layout_is_rejected(vertex: str) -> None:
     text = f"{vertex}\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
+    with pytest.raises(ValueError):
+        parse_obj_triangles(text)
+
+
+def test_inline_obj_comments_keep_geometry_but_change_byte_exact_source_identity() -> None:
+    clean = "v 0 0 0\nv 2 0 0\nv 0 3 0\nf 1 2 3\n"
+    commented = (
+        "# Local reconstruction export\n"
+        "v 0 0 0 # origin\n"
+        "v 2 0 0 # x control\n"
+        "v 0 3 0 # y control\n"
+        "f 1/1/1 2/2/2 3/3/3 # triangle\n"
+    )
+    common = {
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Provisional scale control",
+        "relative_scale_uncertainty": 0.05,
+    }
+    direct = preview_from_request(MeshPreviewRequest(obj_text=clean, **common))
+    annotated = preview_from_request(MeshPreviewRequest(obj_text=commented, **common))
+    assert annotated["surface_area_m2"] == pytest.approx(0.0003)
+    assert annotated["surface_area_m2"] == direct["surface_area_m2"]
+    assert annotated["surface_area_scale_interval_m2"] == direct["surface_area_scale_interval_m2"]
+    assert annotated["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
+    assert (
+        annotated["provenance"]["source_payload_sha256"]
+        != direct["provenance"]["source_payload_sha256"]
+    )
+    assert annotated["provenance"]["source_payload_size_bytes"] == len(commented.encode())
+    assert annotated["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    ["v 0 0 0 extra # trailing note", "f 1 2 3 4 # polygon"],
+)
+def test_inline_obj_comments_do_not_hide_malformed_geometry(invalid: str) -> None:
+    text = f"v 0 0 0\\nv 2 0 0\\nv 0 3 0\\n{invalid}\\n"
     with pytest.raises(ValueError):
         parse_obj_triangles(text)
