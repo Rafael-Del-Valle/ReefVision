@@ -75,10 +75,7 @@ export function ReviewQueueCoordinationPanel({
   // An approval to abandon unsent scientific notes is valid only for the
   // navigation epoch in which it was requested. A -> B -> A must not revive
   // a stale approval merely because the original item key matches again.
-  const closeApprovalScopeKey = JSON.stringify([
-    draftKey,
-    currentScope.current.epoch,
-  ]);
+  const closeApprovalScopeKey = JSON.stringify([draftKey, currentScope.current.epoch]);
   const [drafts, setDrafts] = useState<Record<string, CoordinationDraft>>({});
   const { actor, assignee, comment, page } = drafts[draftKey] ?? emptyDraft;
   const updateDraft = (patch: Partial<CoordinationDraft>) => {
