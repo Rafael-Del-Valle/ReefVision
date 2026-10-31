@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   act,
   fireEvent,
@@ -50,7 +51,26 @@ vi.mock("./ReviewQueueBulkTriage", () => ({
   ReviewQueueBulkTriage: () => null,
 }));
 vi.mock("./ReviewQueueCoordinationPanel", () => ({
-  ReviewQueueCoordinationPanel: () => null,
+  // Stateful stand-in: the real panel separately tests per-item drafts and
+  // UUID retries. Here we test whether the dashboard keeps it mounted.
+  ReviewQueueCoordinationPanel: ({ itemId }: { itemId: string }) => {
+    const [drafts, setDrafts] = useState<Record<string, string>>({});
+    return (
+      <label>
+        Coordination draft for {itemId}
+        <textarea
+          aria-label="Coordination test draft"
+          value={drafts[itemId] ?? ""}
+          onChange={(event) =>
+            setDrafts((current) => ({
+              ...current,
+              [itemId]: event.target.value,
+            }))
+          }
+        />
+      </label>
+    );
+  },
 }));
 
 function reviewItem(id: string, imageId: string): ReviewQueueItem {
@@ -138,6 +158,50 @@ describe("ReviewQueueDashboard scope isolation", () => {
       page_size: 25,
       pages: 1,
     } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+  });
+
+  it("keeps the coordination instance mounted across A-B-A and blocks queue changes", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-a", "image-a"), reviewItem("item-b", "image-b")],
+      total: 2,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
+    mount();
+    const open = await screen.findAllByRole("button", {
+      name: "Comments & assignments",
+    });
+    fireEvent.click(open[0]);
+    const draft = screen.getByLabelText(
+      "Coordination test draft",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(draft, {
+      target: { value: "Unsent observation for coral A" },
+    });
+    expect(screen.getByLabelText("Scope").hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Generate queue" }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Regenerate" }).hasAttribute("disabled"),
+    ).toBe(true);
+    const queueButtons = document.querySelectorAll<HTMLButtonElement>(
+      ".version-list .version-card",
+    );
+    expect(queueButtons).toHaveLength(2);
+    expect(queueButtons[1]?.disabled).toBe(true);
+    fireEvent.click(open[1]);
+    expect((screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement).value).toBe("");
+    fireEvent.click(open[0]);
+    expect((screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement).value).toBe(
+      "Unsent observation for coral A",
+    );
+    expect(screen.getByRole("status").textContent).toMatch(/uncertain audit-event retry IDs/);
   });
 
   it("does not fetch items from the previous project after navigation", async () => {
