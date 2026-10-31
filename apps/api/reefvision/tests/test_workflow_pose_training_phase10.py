@@ -832,6 +832,26 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # A persisted JSON array of metric pairs must not be silently coerced
+    # into the original summary dictionary during scientific replay.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_summary = dict(persisted.metrics_json or {})
+        persisted.metrics_json = [[key, value] for key, value in original_summary.items()]
+        session.commit()
+
+    with pytest.raises(ValidationError, match="summary metrics must be a JSON object"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.metrics_json = original_summary
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # The experiment registry is a second persisted scientific record, not
     # merely an ID to expose downstream. A replay must reject inconsistent
     # metadata or checkpoint evidence without starting another training run.
