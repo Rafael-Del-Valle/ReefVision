@@ -531,3 +531,150 @@ def test_unchecked_import_keeps_source_evidence_provisional() -> None:
     assert bundle["after_source_payload_integrity_checked"] is False
     assert result["provenance"]["calibration_verified"] is False
     assert result["provenance"]["specimen_identity_verified"] is False
+
+
+def test_reused_imported_original_is_not_an_independent_longitudinal_observation() -> None:
+    """Byte-identical imports are flagged even with distinct observation IDs."""
+    before = _imported_observation("early", 2)
+    after = _imported_observation("late", 2)
+    assert before["provenance"]["source_payload_sha256"] == after["provenance"][
+        "source_payload_sha256"
+    ]
+    result = compare_mesh_observations(
+        before, after, reidentification_evidence=_review(before, after)
+    )
+    assert "identical_imported_source_payload_reused_across_observations" in result[
+        "qc_warnings"
+    ]
+    assert "identical_imported_source_payload_geometry_inconsistent" not in result[
+        "qc_warnings"
+    ]
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["calibration_verified"] is False
+
+    # Changing only an OBJ comment preserves triangles but changes original
+    # source bytes. This is not an exact file reuse, though geometry remains
+    # identical and still requires independent biological interpretation.
+    changed = preview_from_request(
+        MeshPreviewRequest.model_validate(
+            {
+                "obj_text": (
+                    "# revised source note\\nv 0 0 0\\nv 1 0 0\\nv 0 2 0\\nf 1 2 3\\n"
+                ),
+                "meters_per_unit": 1,
+                "calibration_method": "ruler",
+                "calibration_evidence": "Unverified ruler",
+                "specimen_id": "colony-1",
+                "observation_id": "late",
+                "observed_at_utc": "2026-10-02T12:00:00Z",
+            }
+        )
+    )
+    changed["project_id"] = "study-1"
+    assert changed["provenance"]["geometry_sha256"] == after["provenance"]["geometry_sha256"]
+    assert changed["provenance"]["source_payload_sha256"] != after["provenance"][
+        "source_payload_sha256"
+    ]
+    revised = compare_mesh_observations(
+        before, changed, reidentification_evidence=_review(before, changed)
+    )
+    assert "identical_imported_source_payload_reused_across_observations" not in revised[
+        "qc_warnings"
+    ]
+    assert "identical_geometry_fingerprint" in revised["qc_warnings"]
+
+
+def test_reused_imported_original_qc_survives_saved_typed_workflow(
+    client: TestClient,
+) -> None:
+    """Standalone and persisted graphs report identical duplicate-source QC."""
+    project_id = str(create_project(client, "Repeated original 3D survey QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    original = "# source survey\\nv 0 0 0\\nv 1 0 0\\nv 0 2 0\\nf 1 2 3\\n"
+    common = {
+        "obj_text": original,
+        "meters_per_unit": 1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified ruler",
+        "specimen_id": "colony-1",
+    }
+    early = {
+        **common,
+        "observation_id": "early",
+        "observed_at_utc": "2026-10-01T12:00:00Z",
+    }
+    late = {
+        **common,
+        "observation_id": "late",
+        "observed_at_utc": "2026-10-02T12:00:00Z",
+    }
+    before = preview_from_request(MeshPreviewRequest.model_validate(early))
+    after = preview_from_request(MeshPreviewRequest.model_validate(late))
+    for record in (before, after):
+        record["project_id"] = project_id
+    review = {**_review(before, after), "project_id": project_id}
+    standalone = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={"before": early, "after": late, "reidentification_evidence": review},
+    )
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert "identical_imported_source_payload_reused_across_observations" in expected[
+        "qc_warnings"
+    ]
+    assert expected["provenance"]["specimen_identity_verified"] is False
+
+    graph = {
+        "graph_id": "reused-imported-source-qc-v14",
+        "name": "Reused original 3D survey scientific QC",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": early},
+            {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": late},
+            {
+                "node_id": "compare",
+                "node_type": "mesh_longitudinal_comparison",
+                "parameters": {"reidentification_evidence": review},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": f"project-{node}",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": node,
+                "target_port_id": "project",
+            }
+            for node in ("early", "late")
+        ]
+        + [
+            {
+                "edge_id": f"{node}-compare",
+                "source_node_id": node,
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": port,
+            }
+            for node, port in (("early", "before"), ("late", "after"))
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    comparisons = [
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    ]
+    assert comparisons == [expected]
