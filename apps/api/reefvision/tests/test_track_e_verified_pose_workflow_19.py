@@ -255,6 +255,28 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
 
+    # Duplicate declarations previously collapsed to one dictionary key,
+    # allowing altered lineage metadata to pass on a real frozen pose run.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.result_json = {
+            **original_node_result,
+            "outputs": [saved_outputs[0], saved_outputs[0]],
+        }
+        session.commit()
+
+    duplicate_summary = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert duplicate_summary.status_code == 409, duplicate_summary.text
+    assert "output summary count mismatch" in duplicate_summary.json()["detail"]
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.result_json = original_node_result
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
+
     # A completed saved workflow must not expose a changed scientific output
     # through the run-detail API, even when its original digest remains stored.
     with app.state.session_factory() as session:
