@@ -5123,3 +5123,32 @@ identity, longitudinal growth or biological independence.
 longitudinal observations and human/model comparisons, registered independent
 experimental units, 1.1 migration reconciliation, and installed Windows
 MSI/CAB/GUI acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Strict report test-fixture compatibility repair (2026-10-31)
+
+At predecessor `9111130103871af98e3fbbefae6be9172ef28905`, **17/19**
+registered Actions workflows passed, including Windows Desktop Build,
+frontend/E2E, and Pose Workflow Validation. Backend CI and ReefVision 1.0
+Acceptance both failed the full pytest suite with **146 failed, 2,063 passed,
+32 skipped**. The common traceback pointed to
+`test_ecology_projected_series_csv_1_2._dated_artifact`: unlike the repaired
+production report producer, the synthetic longitudinal fixture still passed
+the internal `algorithm_version` digest marker to the strict
+`EcologyCandidateReport` schema. This broke the fixture and every downstream
+scientific regression depending on it.
+
+The fixture now includes that marker **only in the canonical SHA-256 input**,
+not the persisted report payload, mirroring the existing production contract.
+A dedicated test checks a dated synthetic report's canonical digest,
+serialized readback and rejection of injected internal marker fields. This is
+a **test compatibility repair**, not new biological verification or a change
+to existing typed Workflow Builder nodes, provenance, review gates, or API
+contracts. Existing saved-workflow/standalone ecological tests remain
+required CI acceptance. No 1.1 branch, environmental context, pretrained
+weights, migration, or release was modified.
+
+**Release HOLD:** new-head full backend/frontend/E2E/Windows CI remains to be
+verified; independent scientist-reviewed longitudinal measurements,
+experimental-unit registry, representative human/model biological validation,
+1.1 migration reconciliation, and physical Windows installed-GUI acceptance
+remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
