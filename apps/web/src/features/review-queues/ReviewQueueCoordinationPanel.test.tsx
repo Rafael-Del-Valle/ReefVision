@@ -395,6 +395,14 @@ describe("ReviewQueueCoordinationPanel", () => {
       "value",
       "Unsent A note",
     );
+    // Returning to A restores the draft, never the old discard approval.
+    expect(
+      screen.queryByRole("group", {
+        name: "Discard unsent coordination drafts",
+      }),
+    ).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
     expect(
       screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
     ).toBeTruthy();
