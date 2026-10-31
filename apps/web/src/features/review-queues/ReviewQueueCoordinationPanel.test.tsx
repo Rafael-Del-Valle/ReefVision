@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { addReviewQueueEvent, getReviewQueueEvents } from "../../api/client";
@@ -317,6 +323,125 @@ describe("ReviewQueueCoordinationPanel", () => {
         "value",
         "Original observation",
       ),
+    );
+  });
+
+  it("keeps a delayed comment on its original queue after the panel changes items", async () => {
+    let resolveOld!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pendingOld = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pendingOld);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation for A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+
+    rerender(view("queue-b", "item-b"));
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-b" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation for B" },
+    });
+    await act(async () => {
+      resolveOld({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      await pendingOld;
+    });
+    expect(addReviewQueueEvent).toHaveBeenCalledWith(
+      "queue-a",
+      "item-a",
+      expect.objectContaining({
+        actor: "reviewer-a",
+        comment: "Observation for A",
+      }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["review_queue_events", "queue-a", "item-a"],
+    });
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: ["review_queue_events", "queue-b", "item-b"],
+    });
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Observation for B",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(addReviewQueueEvent).toHaveBeenLastCalledWith(
+      "queue-b",
+      "item-b",
+      expect.objectContaining({
+        actor: "reviewer-b",
+        comment: "Observation for B",
+      }),
+    );
+  });
+
+  it("does not clear a draft when an old response returns after A-B-A navigation", async () => {
+    let resolveOld!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pendingOld = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pendingOld);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Keep this draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    rerender(view("queue-b", "item-b"));
+    rerender(view("queue-a", "item-a"));
+    await act(async () => {
+      resolveOld({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      await pendingOld;
+    });
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Keep this draft",
     );
   });
 });
