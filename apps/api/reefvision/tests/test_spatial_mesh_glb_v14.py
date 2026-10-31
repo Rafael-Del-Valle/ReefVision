@@ -39,6 +39,16 @@ def make_glb(*, translated: bool = False, invalid_selector: str | None = None) -
         doc["scenes"][0]["nodes"] = [False]
     elif invalid_selector == "buffer":
         doc["bufferViews"][0]["buffer"] = False
+    elif invalid_selector == "mode_float":
+        doc["meshes"][0]["primitives"][0]["mode"] = 4.0
+    elif invalid_selector == "position_component_float":
+        doc["accessors"][0]["componentType"] = 5126.0
+    elif invalid_selector == "index_component_float":
+        doc["accessors"][1]["componentType"] = 5123.0
+    elif invalid_selector == "normalized_integer":
+        doc["accessors"][0]["normalized"] = 0
+    elif invalid_selector == "stride_float":
+        doc["bufferViews"][0]["byteStride"] = 12.0
     json_bytes = json.dumps(doc).encode()
     json_bytes += b" " * (-len(json_bytes) % 4)
     binary += b"\x00" * (-len(binary) % 4)
@@ -73,4 +83,20 @@ def test_rejects_invalid_base64() -> None:
 def test_rejects_boolean_glb_indices(invalid_selector: str) -> None:
     """JSON booleans must not masquerade as zero-valued glTF indices."""
     with pytest.raises(ValueError, match="index"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    [
+        "mode_float",
+        "position_component_float",
+        "index_component_float",
+        "normalized_integer",
+        "stride_float",
+    ],
+)
+def test_rejects_noncanonical_glb_numeric_geometry_metadata(invalid_selector: str) -> None:
+    """JSON floats and integers must not masquerade as glTF schema types."""
+    with pytest.raises(ValueError):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
