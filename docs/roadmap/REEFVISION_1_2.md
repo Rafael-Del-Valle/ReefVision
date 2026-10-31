@@ -5091,3 +5091,35 @@ scientist-reviewed longitudinal observations, registered independent
 experimental units, representative biological/human-model validation,
 1.1 migration reconciliation and installed Windows MSI/GUI acceptance.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Strict candidate-report producer compatibility repair (2026-10-31)
+
+Exact predecessor `f49eb0b5adf5c6654e795207f755236c936e0ed7` registered 19 GitHub Actions workflows:
+17 succeeded (including Windows Desktop Build, frontend/E2E and Pose
+Workflow Validation); backend CI and ReefVision 1.0 Acceptance failed.
+Both backend jobs reached pytest and reported **234 failed, 1,975 passed,
+32 skipped**. The failures share one cause: the report producer passed
+`algorithm_version` (an internal canonical-digest marker) to
+`EcologyCandidateReport.model_validate`, which now correctly rejects
+unknown fields after the strict report-schema safeguard. This blocked
+standalone ecological candidate APIs and executable saved Workflow Builder
+report outputs; it is not a failure of the canonical unit-count rule.
+
+The producer now excludes only the internal `algorithm_version` key
+from the serialized report while preserving that marker in the canonical
+SHA-256 digest input. The report still exposes `schema_version`, and
+strict unknown-field rejection remains active for persisted report readback.
+Existing standalone API, typed saved-workflow source/report ports and CSV
+export use the same producer; no new node, migration, pretrained checkpoint,
+environmental provider or independent-unit assertion was added.
+
+The focused regression checks API report serialization, strict rejection
+of an injected algorithm field, canonical digest reproducibility, and
+the existing executed/persisted Workflow Builder report parity test.
+This change is **not** scientific verification of calibration, organism
+identity, longitudinal growth or biological independence.
+
+**Release HOLD:** exact new-head CI, representative scientist-reviewed
+longitudinal observations and human/model comparisons, registered independent
+experimental units, 1.1 migration reconciliation, and installed Windows
+MSI/CAB/GUI acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**

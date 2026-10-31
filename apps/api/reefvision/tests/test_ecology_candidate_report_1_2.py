@@ -26,6 +26,22 @@ def test_ecological_qc_report_matches_api_csv_and_saved_workflow(client: TestCli
     assert response.status_code == 200, response.text
     payload = response.json()
     report = payload["candidate_report"]
+    # Algorithm version belongs in the canonical digest, not the strict
+    # persisted report envelope used by API and saved Workflow Builder ports.
+    assert report["schema_version"] == "ecology-candidate-report-0001"
+    assert "algorithm_version" not in report
+    assert EcologyCandidateReport.model_validate(report).report_sha256 == report["report_sha256"]
+    digest_values = {
+        key: value
+        for key, value in report.items()
+        if key not in {"schema_version", "report_sha256", "evidence_level", "review_gate"}
+    }
+    digest_values["algorithm_version"] = "ecology-candidate-report-0001"
+    assert canonical_json_sha256(digest_values) == report["report_sha256"]
+    with pytest.raises(PydanticValidationError, match="Extra inputs are not permitted"):
+        EcologyCandidateReport.model_validate(
+            {**report, "algorithm_version": "ecology-candidate-report-0001"}
+        )
     assert report["candidate_count"] == payload["candidate_count"]
     assert report["source_image_count"] == 1
     assert report["source_organism_count"] == 1
