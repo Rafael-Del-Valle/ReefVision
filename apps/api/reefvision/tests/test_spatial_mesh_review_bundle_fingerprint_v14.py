@@ -580,6 +580,39 @@ def test_reused_imported_original_is_not_an_independent_longitudinal_observation
     assert "identical_geometry_fingerprint" in revised["qc_warnings"]
 
 
+@pytest.mark.parametrize(
+    "revision",
+    [
+        {"source_payload_size_bytes": 1},
+        {"source_format": "ply_ascii"},
+    ],
+)
+def test_identical_imported_bytes_flag_conflicting_source_metadata(
+    revision: dict[str, object],
+) -> None:
+    """A repeated original cannot have two byte lengths or source formats."""
+    before = _imported_observation("early", 2)
+    after = _imported_observation("late", 2)
+    revised = {**after, "provenance": {**after["provenance"], **revision}}
+    result = compare_mesh_observations(before, revised)
+    assert "identical_imported_source_payload_reused_across_observations" in result["qc_warnings"]
+    assert "identical_imported_source_payload_metadata_inconsistent" in result["qc_warnings"]
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["calibration_verified"] is False
+
+
+def test_legacy_missing_import_size_does_not_invent_metadata_conflict() -> None:
+    """Unknown legacy source length is not evidence of a conflicting length."""
+    before = _imported_observation("early", 2)
+    after = _imported_observation("late", 2)
+    after["provenance"].pop("source_payload_size_bytes")
+    result = compare_mesh_observations(before, after)
+    assert "identical_imported_source_payload_reused_across_observations" in result["qc_warnings"]
+    assert "identical_imported_source_payload_metadata_inconsistent" not in result[
+        "qc_warnings"
+    ]
+
+
 def test_reused_imported_original_qc_survives_saved_typed_workflow(
     client: TestClient,
 ) -> None:
@@ -616,6 +649,9 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert "identical_imported_source_payload_reused_across_observations" in expected["qc_warnings"]
+    assert "identical_imported_source_payload_metadata_inconsistent" not in expected[
+        "qc_warnings"
+    ]
     assert expected["provenance"]["specimen_identity_verified"] is False
 
     graph = {
