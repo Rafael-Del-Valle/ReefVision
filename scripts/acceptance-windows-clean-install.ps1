@@ -103,7 +103,7 @@ function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [
     $log = Join-Path $EvidenceRoot $LogName
     $arguments = New-ReefVisionMsiArguments -Action $Action -PackageOrProduct $PackageOrProduct -InstallRoot $TargetRoot -LogPath $log
     $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
-    if ($process.ExitCode -notin @(0, 3010)) { throw "msiexec $Action failed with exit code $($process.ExitCode). See $log" }
+    Assert-ReefVisionMsiCompletedWithoutReboot -Action $Action -ExitCode $process.ExitCode -LogPath $log
     return $process.ExitCode
 }
 function Wait-BackendPort(
