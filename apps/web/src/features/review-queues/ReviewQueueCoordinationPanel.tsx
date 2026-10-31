@@ -247,6 +247,7 @@ export function ReviewQueueCoordinationPanel({
   const unsafeWindowClose =
     hasUnsentDrafts || hasUnresolvedEvents || mutation.isPending;
   const [nativeCloseBlocked, setNativeCloseBlocked] = useState(false);
+  const [nativeCloseGuardAttempt, setNativeCloseGuardAttempt] = useState(0);
   const [nativeCloseGuardUnavailable, setNativeCloseGuardUnavailable] =
     useState(false);
   // Tauri window-close requests do not reliably emit browser beforeunload.
@@ -270,6 +271,7 @@ export function ReviewQueueCoordinationPanel({
       .then((stop) => {
         if (active) {
           unlisten = stop;
+          setNativeCloseGuardUnavailable(false);
         } else {
           stop();
         }
@@ -281,7 +283,7 @@ export function ReviewQueueCoordinationPanel({
       active = false;
       unlisten?.();
     };
-  }, [unsafeWindowClose]);
+  }, [unsafeWindowClose, nativeCloseGuardAttempt]);
   // The panel's close button is guarded, but browser reload/window close
   // bypasses it. Warn before losing unsent biological notes, an in-flight
   // audit event, or an uncertain idempotency UUID. This is a best-effort
@@ -332,8 +334,18 @@ export function ReviewQueueCoordinationPanel({
       )}
       {nativeCloseGuardUnavailable && unsafeWindowClose && (
         <p role="alert">
-          Desktop close protection could not be registered. Keep ReefVision
-          open until all unsent notes and uncertain requests are resolved.
+          Desktop close protection could not be registered. Keep ReefVision open
+          until all unsent notes and uncertain requests are resolved.
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setNativeCloseGuardUnavailable(false);
+              setNativeCloseGuardAttempt((attempt) => attempt + 1);
+            }}
+          >
+            Retry desktop close protection
+          </button>
         </p>
       )}
       {closeBlocked && (
