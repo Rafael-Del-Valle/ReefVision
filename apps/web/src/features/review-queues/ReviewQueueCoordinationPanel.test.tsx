@@ -19,9 +19,9 @@ vi.mock("../../api/client", () => ({
 function mount() {
   const client = new QueryClient({
     defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
-      },
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
   });
   render(
     <QueryClientProvider client={client}>
@@ -581,4 +581,131 @@ describe("ReviewQueueCoordinationPanel", () => {
     await screen.findByText("Page 2");
   });
 
+
+  it("restores an uncertain event retry after delayed failure across item navigation", async () => {
+    let rejectOriginal!: (reason: Error) => void;
+    const pendingOriginal = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((_, reject) => {
+      rejectOriginal = reject;
+    });
+    vi.mocked(addReviewQueueEvent)
+      .mockReturnValueOnce(pendingOriginal)
+      .mockResolvedValueOnce(
+        {} as Awaited<ReturnType<typeof addReviewQueueEvent>>,
+      );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original observation for A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+
+    rerender(view("queue-b", "item-b"));
+    await act(async () => {
+      rejectOriginal(new Error("Uncertain delivery for A"));
+      await pendingOriginal.catch(() => undefined);
+    });
+    expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull();
+    expect(screen.queryByText("Uncertain delivery for A")).toBeNull();
+
+    rerender(view("queue-a", "item-a"));
+    expect(await screen.findByText("Uncertain delivery for A")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(addReviewQueueEvent).mock.calls;
+    expect(calls[1]).toEqual(calls[0]);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull(),
+    );
+  });
+
+  it("keeps separate uncertain retries and reviewer identities for two items", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Uncertain A"))
+      .mockRejectedValueOnce(new Error("Uncertain B"))
+      .mockResolvedValue(
+        {} as Awaited<ReturnType<typeof addReviewQueueEvent>>,
+      );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Note A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByText("Uncertain A");
+
+    rerender(view("queue-b", "item-b"));
+    expect(screen.queryByText("Uncertain A")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-b" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Note B" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByText("Uncertain B");
+
+    rerender(view("queue-a", "item-a"));
+    expect(screen.getByText("Uncertain A")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[2]).toEqual(
+      vi.mocked(addReviewQueueEvent).mock.calls[0],
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Uncertain A")).toBeNull(),
+    );
+
+    rerender(view("queue-b", "item-b"));
+    expect(screen.getByText("Uncertain B")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(4));
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[3]).toEqual(
+      vi.mocked(addReviewQueueEvent).mock.calls[1],
+    );
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[0][2].actor).toBe(
+      "reviewer-a",
+    );
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[1][2].actor).toBe(
+      "reviewer-b",
+    );
+  });
 });
