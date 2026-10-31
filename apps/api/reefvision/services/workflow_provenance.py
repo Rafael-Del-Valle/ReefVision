@@ -251,6 +251,11 @@ def build_workflow_run_provenance(
     node_manifest: list[dict[str, Any]] = []
 
     for node in nodes:
+        # Provenance export must enforce the same succeeded-node output
+        # declarations as run-detail retrieval and interrupted-run replay.
+        if node.status == "succeeded":
+            verify_succeeded_node_artifacts(session, run_id=run.id, node_run=node)
+
         input_ids = _artifact_ids(node.input_artifact_ids_json, field="input IDs")
 
         output_ids = _artifact_ids(node.output_artifact_ids_json, field="output IDs")
