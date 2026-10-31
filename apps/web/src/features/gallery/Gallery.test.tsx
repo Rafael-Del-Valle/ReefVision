@@ -358,6 +358,54 @@ describe("Gallery", () => {
     ).toBe(false);
   });
 
+  it("isolates card keyboard shortcuts from metadata and selection controls", async () => {
+    const onOpenAnnotation = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [image],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      }
+      throw new Error(`Unhandled request GET ${url}`);
+    });
+
+    renderGallery(onOpenAnnotation);
+    const card = await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    const groupKey = screen.getByPlaceholderText("e.g. source-image-001");
+    const checkbox = screen.getByLabelText("Select image");
+
+    // Typing spaces and Enter in a scientific grouping field must not
+    // toggle inference selection or unexpectedly open annotation.
+    await userEvent.type(groupKey, "parent fragment 7");
+    await userEvent.keyboard("{Enter}");
+    expect(groupKey).toHaveValue("parent fragment 7");
+    expect(checkbox).not.toBeChecked();
+    expect(onOpenAnnotation).not.toHaveBeenCalled();
+
+    // Double-clicking to select field text must not open the editor either.
+    await userEvent.dblClick(groupKey);
+    expect(onOpenAnnotation).not.toHaveBeenCalled();
+
+    // The checkbox's native Space action must toggle exactly once, while
+    // focusing the card itself must retain the documented shortcuts.
+    checkbox.focus();
+    await userEvent.keyboard(" ");
+    expect(checkbox).toBeChecked();
+    await userEvent.keyboard(" ");
+    expect(checkbox).not.toBeChecked();
+
+    card.focus();
+    await userEvent.keyboard(" ");
+    expect(checkbox).toBeChecked();
+    await userEvent.keyboard("{Enter}");
+    expect(onOpenAnnotation).toHaveBeenCalledExactlyOnceWith("image-1");
+  });
+
   it("opens the annotation editor for a selected image", async () => {
     const onOpenAnnotation = vi.fn();
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
