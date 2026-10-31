@@ -133,6 +133,23 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     )
     payload = artifact["payload_json"]
     assert PairedCountComparisonResponse.model_validate(payload).paired_observation_count == 2
+    # The producer's real Workflow Builder envelope must remain readable
+    # without silently trusting forged source lineage or project metadata.
+    assert payload["schema_version"] == "paired-count-comparison-0001"
+    for field_name, forged_value in (
+        ("schema_version", "paired-count-comparison-9999"),
+        ("project_id", "  "),
+        ("reference_source_record_ids", ["fabricated-human", "human-image-2"]),
+        ("model_source_record_ids", ["model-image-1", "fabricated-model"]),
+    ):
+        forged_envelope = dict(payload)
+        forged_envelope[field_name] = forged_value
+        with pytest.raises(SchemaValidationError, match="Directional workflow"):
+            PairedCountComparisonResponse.model_validate(forged_envelope)
+    incomplete_envelope = dict(payload)
+    incomplete_envelope.pop("model_source_record_ids")
+    with pytest.raises(SchemaValidationError, match="Directional workflow envelope"):
+        PairedCountComparisonResponse.model_validate(incomplete_envelope)
     # The persisted typed artifact must reject tampering even when the raw
     # direction-frequency totals themselves have not been modified.
     tampered = dict(payload)
