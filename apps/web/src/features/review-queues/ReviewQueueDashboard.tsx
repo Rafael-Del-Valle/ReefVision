@@ -700,6 +700,7 @@ export function ReviewQueueDashboard({
                 queueId={activeQueueId}
                 items={items.data?.items ?? []}
                 onProtectedStateChange={setBulkProtectedQueueId}
+                disabled={coordinationItemId !== null}
               />
             )}
             {activeQueueId && (
@@ -772,13 +773,15 @@ export function ReviewQueueDashboard({
                       type="button"
                       className="secondary"
                       disabled={
-                        coordinationQueueId !== null &&
-                        coordinationQueueId !== activeQueueId
+                        bulkProtectedQueueId !== null ||
+                        (coordinationQueueId !== null &&
+                          coordinationQueueId !== activeQueueId)
                       }
                       onClick={() => {
                         if (
-                          coordinationQueueId !== null &&
-                          coordinationQueueId !== activeQueueId
+                          bulkProtectedQueueId !== null ||
+                          (coordinationQueueId !== null &&
+                            coordinationQueueId !== activeQueueId)
                         ) return;
                         setCoordinationQueueId(activeQueueId);
                         setCoordinationItemId(item.id);
