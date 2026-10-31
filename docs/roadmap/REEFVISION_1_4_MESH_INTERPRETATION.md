@@ -829,3 +829,25 @@ metadata, while an actual checked OBJ import is compared against the
 corresponding saved-workflow artifact. A caller-supplied digest or check flag
 does **not** authenticate a source file, reviewer, calibration, or specimen
 identity. Durable, versioned human-review persistence remains outstanding.
+
+
+## Imported-original bindings for provisional reidentification
+
+ReefVision 1.4 accepts an **optional paired** `before_source_payload_sha256` /
+`after_source_payload_sha256` binding on `MeshReidentificationEvidence`.
+When supplied, both lowercase SHA-256 values must match the imported original
+payload fingerprints of the corresponding mesh previews. A partial or malformed
+pair is rejected. Evidence copied to a re-exported OBJ/PLY/GLB with different
+original bytes is rejected even when parsed triangles, observation labels, and
+provisional specimen identifiers remain unchanged.
+
+Legacy reidentification notes without this binding remain readable. When either
+timepoint has an imported-source fingerprint, the comparison records
+`reidentification_source_payload_binding_unavailable` rather than treating the
+unbound notes as authenticated. The standalone comparison endpoint and saved,
+executable, typed `mesh_longitudinal_comparison` Workflow Builder node use
+the same validator and preserve the evidence in comparison provenance. These
+checks establish **consistency of caller-supplied fingerprints only**; they do
+not independently authenticate the original files, prove two acquisitions are
+independent, verify calibration, or establish biological identity. In particular,
+reusing the same original bytes at two timepoints still withholds growth estimates.
