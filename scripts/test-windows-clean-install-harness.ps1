@@ -48,6 +48,10 @@ Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Split-Path -Parent $d
 # would allow an install or cleanup run to overlap unrelated researcher data.
 $localTempRoot = Join-Path $env:LOCALAPPDATA 'Temp\reefvision-disposable-acceptance'
 Assert-True ((Assert-ReefVisionSafeAcceptanceRoot -Path $localTempRoot -RepositoryRoot $Root -DefaultDataRoot $defaultData) -eq (Resolve-ReefVisionAcceptancePath $localTempRoot)) 'Disposable local Temp acceptance root was rejected.'
+# The shared Temp folder itself is not disposable: it can contain unrelated
+# user files, and installer cleanup must never target it directly.
+$sharedLocalTemp = Join-Path $env:LOCALAPPDATA 'Temp'
+Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $sharedLocalTemp -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Shared local Temp folder must not be an acceptance root.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $env:USERPROFILE 'Documents\reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'User Documents acceptance root must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $env:USERPROFILE 'Downloads\reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'User Downloads acceptance root must be rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path (Join-Path $env:USERPROFILE 'Desktop\reefvision-unsafe-test') -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'User Desktop acceptance root must be rejected.'
