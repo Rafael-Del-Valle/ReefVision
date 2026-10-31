@@ -392,26 +392,43 @@ def _completed_workflow_pose_training_run(
             None,
             "pose-workflow-training-snapshot-0001",
             "pose-workflow-training-snapshot-0002",
+            "pose-workflow-training-snapshot-0003",
         ):
             raise ValidationError("Recovered pose-training node snapshot schema changed")
 
-        # Only snapshot 0002 introduced a frozen provider-registry assertion.
-        # A replay must not accept a schema downgrade that leaves this
-        # assertion in place, silently skipping the version integrity check.
+        # Historical snapshots must not inherit newer provenance assertions
+        # under a downgraded schema marker.
+        if snapshot_version not in {
+            "pose-workflow-training-snapshot-0002",
+            "pose-workflow-training-snapshot-0003",
+        } and "parameter_registry_version" in snapshot:
+            raise ValidationError("Recovered pose-training node snapshot schema changed")
         if (
-            snapshot_version != "pose-workflow-training-snapshot-0002"
-            and "parameter_registry_version" in snapshot
+            snapshot_version != "pose-workflow-training-snapshot-0003"
+            and "metrics_history_sha256" in snapshot
         ):
             raise ValidationError("Recovered pose-training node snapshot schema changed")
 
         # Version 0002 freezes the provider parameter registry used for the
         # actual run. Never replay a model under silently rewritten registry
         # provenance; version 0001 remains readable for historical runs.
-        if snapshot_version == "pose-workflow-training-snapshot-0002" and (
+        if snapshot_version in {
+            "pose-workflow-training-snapshot-0002",
+            "pose-workflow-training-snapshot-0003",
+        } and (
             not isinstance(snapshot.get("parameter_registry_version"), str)
             or snapshot["parameter_registry_version"] != candidate.parameter_registry_version
         ):
             raise ValidationError("Recovered pose-training provider registry version changed")
+
+        # Completed v3 nodes freeze the epoch-by-epoch metric history, not
+        # just experiment summary metrics. Replays cannot silently rewrite it.
+        if snapshot_version == "pose-workflow-training-snapshot-0003" and (
+            not isinstance(snapshot.get("metrics_history_sha256"), str)
+            or snapshot["metrics_history_sha256"]
+            != canonical_json_sha256(dict(candidate.metrics_history_json or {}))
+        ):
+            raise ValidationError("Recovered pose-training metrics history changed")
 
         if (
             snapshot.get("pose_training_dataset_id") != dataset.id
@@ -606,9 +623,20 @@ def _reused_pose_training_result(
     snapshot = dict(run.draft_snapshot_json or {})
     is_current_snapshot = (
         snapshot.get("schema_version")
-        in {"pose-workflow-training-snapshot-0001", "pose-workflow-training-snapshot-0002"}
+        in {
+            "pose-workflow-training-snapshot-0001",
+            "pose-workflow-training-snapshot-0002",
+            "pose-workflow-training-snapshot-0003",
+        }
         or "pose_training_dataset_manifest_sha256" in snapshot
     )
+    if snapshot.get("schema_version") == "pose-workflow-training-snapshot-0003" and (
+        not isinstance(snapshot.get("metrics_history_sha256"), str)
+        or snapshot["metrics_history_sha256"]
+        != canonical_json_sha256(dict(run.metrics_history_json or {}))
+    ):
+        raise ValidationError("Recovered pose-training metrics history changed")
+
     # A saved node can advertise both best.pt and last.pt. Verify the bytes
     # of every checkpoint that was checksummed on first completion, not only
     # the selected result checkpoint. Older runs without these digests remain
@@ -1466,6 +1494,15 @@ def create_pose_workflow_training_result(
         raise ValidationError("Completed pose training experiment artifact provenance changed")
 
     experiment.artifact_manifest_json = dict(run.artifact_manifest_json)
+
+    # Upgrade the queued v2 snapshot only when the worker has completed.
+    # Historical completed v2 snapshots remain readable, while new results
+    # freeze epoch-level metrics in the same transaction as checkpoint hashes.
+    run.draft_snapshot_json = {
+        **dict(run.draft_snapshot_json or {}),
+        "schema_version": "pose-workflow-training-snapshot-0003",
+        "metrics_history_sha256": canonical_json_sha256(dict(run.metrics_history_json or {})),
+    }
 
     # Validate the final downstream artifact before committing checkpoint
     # provenance. A worker-mutated frozen lineage must not leave a finalized
