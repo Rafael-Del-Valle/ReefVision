@@ -1386,12 +1386,8 @@ def compare_mesh_observations(
             "reidentification_evidence": reidentification_record,
         }
         if has_asset_binding:
-            review_bundle["before_spatial_source_asset_id"] = first.get(
-                "spatial_source_asset_id"
-            )
-            review_bundle["after_spatial_source_asset_id"] = second.get(
-                "spatial_source_asset_id"
-            )
+            review_bundle["before_spatial_source_asset_id"] = first.get("spatial_source_asset_id")
+            review_bundle["after_spatial_source_asset_id"] = second.get("spatial_source_asset_id")
         review_bundle_sha256 = sha256(
             dumps(
                 review_bundle,
