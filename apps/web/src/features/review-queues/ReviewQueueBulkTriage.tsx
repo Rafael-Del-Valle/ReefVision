@@ -267,6 +267,8 @@ export function ReviewQueueBulkTriage({
 
   function submit() {
     if (!ready || locked) return;
+    // Pin the queue before the network request can race a background refetch.
+    onProtectedStateChange?.(queueId);
     mutation.mutate({
       queueId,
       scopeEpoch: currentScope.current.epoch,
