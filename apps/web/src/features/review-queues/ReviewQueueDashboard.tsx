@@ -122,15 +122,20 @@ export function ReviewQueueDashboard({
   const [coordinationQueueId, setCoordinationQueueId] = useState<string | null>(
     null,
   );
+  const [bulkProtectedQueueId, setBulkProtectedQueueId] = useState<string | null>(
+    null,
+  );
+  const reviewProtected =
+    coordinationItemId !== null || bulkProtectedQueueId !== null;
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
     useState(false);
 
   // The host workspace must not unmount coordination behind its guarded
   // close button: that would discard item-local drafts and audit retry UUIDs.
   useEffect(() => {
-    onCoordinationOpenChange?.(coordinationItemId !== null);
+    onCoordinationOpenChange?.(reviewProtected);
     return () => onCoordinationOpenChange?.(false);
-  }, [coordinationItemId, onCoordinationOpenChange]);
+  }, [reviewProtected, onCoordinationOpenChange]);
 
   // Mutation completions must never select a queue from a project or dataset
   // that the researcher has since navigated away from.
@@ -173,7 +178,15 @@ export function ReviewQueueDashboard({
     enabled: scopeReady,
   });
   // Do not query a stale queue from another project or dataset scope.
-  const activeQueueId = scopedReviewQueueId(selectedQueueId, queues.data);
+  const scopedQueueId = scopedReviewQueueId(selectedQueueId, queues.data);
+  // A transient queue-list omission must not unmount an unresolved bulk
+  // request and destroy its original idempotency UUID.
+  const activeQueueId =
+    scopedQueueId ||
+    (scopeProjectId === project.id &&
+    bulkProtectedQueueId === selectedQueueId
+      ? bulkProtectedQueueId
+      : "");
   const items = useQuery({
     queryKey: reviewQueueItemsQueryKey(
       activeQueueId,
@@ -211,6 +224,7 @@ export function ReviewQueueDashboard({
     setQuickReviewItemId(null);
     setCoordinationItemId(null);
     setCoordinationQueueId(null);
+    setBulkProtectedQueueId(null);
     setOpenQuickReviewWhenReady(false);
     setPage(1);
     setScopeProjectId(project.id);
@@ -228,8 +242,10 @@ export function ReviewQueueDashboard({
   useEffect(() => {
     // A background refresh can briefly omit the active queue. Keep the
     // coordination panel and host queue identity pinned until guarded close.
-    onSelectedQueueChange?.(coordinationQueueId || activeQueueId || null);
-  }, [onSelectedQueueChange, activeQueueId, coordinationQueueId]);
+    onSelectedQueueChange?.(
+      coordinationQueueId || bulkProtectedQueueId || activeQueueId || null,
+    );
+  }, [onSelectedQueueChange, activeQueueId, coordinationQueueId, bulkProtectedQueueId]);
 
   useEffect(
     () => () => {
@@ -368,7 +384,7 @@ export function ReviewQueueDashboard({
         </div>
         <button
           type="button"
-          disabled={!quickReviewItems.length}
+          disabled={!quickReviewItems.length || reviewProtected}
           onClick={() => setQuickReviewItemId(quickReviewItems[0].id)}
         >
           Open quick-review popout
@@ -387,7 +403,7 @@ export function ReviewQueueDashboard({
             <label>
               Scope
               <select
-                disabled={coordinationItemId !== null}
+                disabled={reviewProtected}
                 value={scopeType}
                 onChange={(event) => {
                   setScopeType(
@@ -410,7 +426,7 @@ export function ReviewQueueDashboard({
               <label>
                 Dataset version
                 <select
-                  disabled={coordinationItemId !== null}
+                  disabled={reviewProtected}
                   value={datasetVersionId}
                   onChange={(event) => {
                     setDatasetVersionId(event.target.value);
@@ -435,7 +451,7 @@ export function ReviewQueueDashboard({
             <label>
               Source QC run
               <select
-                disabled={!scopeReady || runs.isPending}
+                disabled={!scopeReady || runs.isPending || reviewProtected}
                 value={selectedRunId}
                 onChange={(event) => setSelectedRunId(event.target.value)}
               >
@@ -490,7 +506,7 @@ export function ReviewQueueDashboard({
                 type="button"
                 disabled={
                   !scopeReady ||
-                  coordinationItemId !== null ||
+                  reviewProtected ||
                   createQueue.isPending ||
                   (scopeType === "dataset_version" && !datasetVersionId)
                 }
@@ -509,7 +525,7 @@ export function ReviewQueueDashboard({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={coordinationItemId !== null}
+                  disabled={reviewProtected}
                   onClick={() =>
                     regenerateQueue.mutate({
                       ...currentScope.current,
@@ -535,11 +551,11 @@ export function ReviewQueueDashboard({
                 <h4>Generated queues</h4>
               </div>
             </div>
-            {coordinationItemId !== null && (
+            {reviewProtected && (
               <p className="annotation-helper" role="status">
-                Close researcher coordination before changing queues or scope;
-                unsent biological notes and uncertain audit-event retry IDs must
-                not be lost by unmounting the panel.
+                Resolve open researcher coordination or uncertain bulk QC
+                requests before changing queues or workspace. Unsent biological
+                notes and idempotent audit retry IDs must remain available.
               </p>
             )}
             {coordinationQueueId && activeQueueId !== coordinationQueueId && (
@@ -558,9 +574,9 @@ export function ReviewQueueDashboard({
                   className={`version-card ${
                     selectedQueueId === queue.id ? "selected" : ""
                   }`}
-                  disabled={coordinationItemId !== null}
+                  disabled={reviewProtected}
                   onClick={() => {
-                    if (coordinationItemId !== null) return;
+                    if (reviewProtected) return;
                     setSelectedQueueId(queue.id);
                     setQuickReviewItemId(null);
                     setCoordinationItemId(null);
@@ -678,19 +694,12 @@ export function ReviewQueueDashboard({
             </div>
             {items.isPending && <p>Loading review queue items...</p>}
             {items.error && <p className="form-error">{items.error.message}</p>}
-            {activeQueueId && items.data && (
+            {activeQueueId && (
               <ReviewQueueBulkTriage
-                key={[
-                  selectedQueueId,
-                  page,
-                  labelClassId,
-                  split,
-                  qcSeverity,
-                  reviewState,
-                  modelId,
-                ].join(":")}
-                queueId={selectedQueueId}
-                items={items.data.items}
+                key={activeQueueId}
+                queueId={activeQueueId}
+                items={items.data?.items ?? []}
+                onProtectedStateChange={setBulkProtectedQueueId}
               />
             )}
             {activeQueueId && (
@@ -744,7 +753,7 @@ export function ReviewQueueDashboard({
                   <div className="dashboard-actions">
                     <button
                       type="button"
-                      disabled={coordinationItemId !== null}
+                      disabled={reviewProtected}
                       onClick={() => setQuickReviewItemId(item.id)}
                     >
                       Quick review
@@ -752,9 +761,9 @@ export function ReviewQueueDashboard({
                     <button
                       type="button"
                       className="secondary"
-                      disabled={coordinationItemId !== null}
+                      disabled={reviewProtected}
                       onClick={() => {
-                        if (coordinationItemId === null) onOpenImage(item);
+                        if (!reviewProtected) onOpenImage(item);
                       }}
                     >
                       Open image
@@ -782,7 +791,9 @@ export function ReviewQueueDashboard({
                         type="button"
                         className="secondary"
                         disabled={
-                          !singleItemActor.trim() || startItem.isPending
+                          reviewProtected ||
+                          !singleItemActor.trim() ||
+                          startItem.isPending
                         }
                         onClick={() => startItem.mutate(itemRequest(item.id))}
                       >
@@ -794,7 +805,9 @@ export function ReviewQueueDashboard({
                         type="button"
                         className="secondary"
                         disabled={
-                          !singleItemActor.trim() || completeItem.isPending
+                          reviewProtected ||
+                          !singleItemActor.trim() ||
+                          completeItem.isPending
                         }
                         onClick={() => {
                           if (
@@ -814,7 +827,11 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
-                        disabled={!singleItemActor.trim() || skipItem.isPending}
+                        disabled={
+                          reviewProtected ||
+                          !singleItemActor.trim() ||
+                          skipItem.isPending
+                        }
                         onClick={() => skipItem.mutate(itemRequest(item.id))}
                       >
                         Skip
@@ -824,7 +841,9 @@ export function ReviewQueueDashboard({
                         type="button"
                         className="secondary"
                         disabled={
-                          !singleItemActor.trim() || returnItem.isPending
+                          reviewProtected ||
+                          !singleItemActor.trim() ||
+                          returnItem.isPending
                         }
                         onClick={() => returnItem.mutate(itemRequest(item.id))}
                       >
@@ -850,7 +869,7 @@ export function ReviewQueueDashboard({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={page === 1}
+                  disabled={page === 1 || reviewProtected}
                   onClick={() => setPage((current) => current - 1)}
                 >
                   Previous
@@ -861,7 +880,7 @@ export function ReviewQueueDashboard({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={page === items.data.pages}
+                  disabled={page === items.data.pages || reviewProtected}
                   onClick={() => setPage((current) => current + 1)}
                 >
                   Next
