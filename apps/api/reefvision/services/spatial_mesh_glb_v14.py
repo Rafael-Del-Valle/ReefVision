@@ -118,7 +118,8 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
     primitive = _as_object(primitives[0], "primitive")
     attributes = _as_object(primitive.get("attributes"), "attributes")
     if (
-        primitive.get("mode", 4) != 4
+        type(primitive.get("mode", 4)) is not int
+        or primitive.get("mode", 4) != 4
         or "POSITION" not in attributes
         or "indices" not in primitive
         or "targets" in primitive
@@ -133,25 +134,29 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         accessor = _as_object(accessors[accessor_index], "accessor")
         component = accessor.get("componentType")
         if position:
-            if component != 5126 or accessor.get("type") != "VEC3":
+            if type(component) is not int or component != 5126 or accessor.get("type") != "VEC3":
                 raise ValueError("GLB positions require float32 VEC3")
             fmt, width, limit = "<fff", 12, MAX_VERTICES
         else:
-            if component not in (5123, 5125) or accessor.get("type") != "SCALAR":
+            if type(component) is not int or component not in (5123, 5125) or accessor.get("type") != "SCALAR":
                 raise ValueError("GLB indices require unsigned 16/32-bit scalars")
             fmt, width = ("<H", 2) if component == 5123 else ("<I", 4)
             limit = 3 * MAX_FACES
         count = _as_int(accessor.get("count"), "accessor count", 1)
         if count > limit or (position and count < 3) or (not position and count % 3):
             raise ValueError("GLB accessor count is not a bounded triangle mesh")
-        if "sparse" in accessor or accessor.get("normalized", False):
+        if "sparse" in accessor or (
+            "normalized" in accessor
+            and (type(accessor["normalized"]) is not bool or accessor["normalized"])
+        ):
             raise ValueError("GLB sparse/normalized accessors are unsupported")
         view_index = _as_int(accessor.get("bufferView"), "bufferView index")
         if view_index >= len(views):
             raise ValueError("GLB bufferView index out of range")
         view = _as_object(views[view_index], "bufferView")
         if _as_int(view.get("buffer"), "buffer index") != 0 or (
-            "byteStride" in view and view["byteStride"] != width
+            "byteStride" in view
+            and (type(view["byteStride"]) is not int or view["byteStride"] != width)
         ):
             raise ValueError("GLB strided or external views are unsupported")
         start = _as_int(view.get("byteOffset", 0), "view offset")
