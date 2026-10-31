@@ -200,12 +200,51 @@ class PairedCountComparisonResponse(BaseModel):
         # artifacts. Pydantic's default extra=ignore would otherwise discard
         # a forged scientist approval or registered independent-unit claim.
         # Historical saved artifacts retain their original decoding rules.
-        unexpected = sorted(set(value) - cls.model_fields.keys())
+        # The executable Workflow Builder persists a four-field envelope in
+        # addition to the standalone comparison. Recognize and validate that
+        # known envelope rather than treating it as an unsupported scientific
+        # claim. Unknown fields must still fail closed.
+        workflow_fields = {
+            "schema_version",
+            "project_id",
+            "reference_source_record_ids",
+            "model_source_record_ids",
+        }
+        present_workflow_fields = set(value) & workflow_fields
+        unexpected = sorted(set(value) - cls.model_fields.keys() - workflow_fields)
         if unexpected:
             raise ValueError(
                 "Directional persisted response contains unsupported fields: "
                 + ", ".join(unexpected)
             )
+        if present_workflow_fields:
+            if present_workflow_fields != workflow_fields:
+                raise ValueError("Directional workflow envelope must be complete")
+            if value["schema_version"] != "paired-count-comparison-0001":
+                raise ValueError("Directional workflow schema version is unsupported")
+            project_id = value["project_id"]
+            if (
+                not isinstance(project_id, str)
+                or not project_id.strip()
+                or project_id != project_id.strip()
+            ):
+                raise ValueError("Directional workflow project ID is invalid")
+            rows = value.get("paired_differences")
+            if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+                raise ValueError("Directional workflow paired source rows are invalid")
+            for roster_field, row_field in (
+                ("reference_source_record_ids", "reference_source_record_id"),
+                ("model_source_record_ids", "model_source_record_id"),
+            ):
+                roster = value[roster_field]
+                source_ids = [row.get(row_field) for row in rows]
+                if (
+                    not isinstance(roster, list)
+                    or not all(isinstance(source, str) for source in roster)
+                    or not all(isinstance(source, str) for source in source_ids)
+                    or sorted(roster) != sorted(source_ids)
+                ):
+                    raise ValueError("Directional workflow source roster must match paired rows")
         if isinstance(provenance, dict):
             unexpected_provenance = sorted(
                 set(provenance) - ScientificInputProvenance.model_fields.keys()
