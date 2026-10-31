@@ -262,15 +262,24 @@ def test_cleanup_failure_on_corrupt_image_does_not_abort_later_batch_item(
 
 
 @pytest.mark.parametrize("subseconds", [b"123400\x00", "123400\x00"])
-def test_camera_exif_nul_terminated_subseconds_are_preserved(
+@pytest.mark.parametrize("offset", [None, b"+00:00\x00", "+00:00\x00"])
+def test_camera_exif_nul_terminated_subseconds_respect_timezone_provenance(
     subseconds: bytes | str,
+    offset: bytes | str | None,
 ) -> None:
-    """Camera EXIF ASCII fields may include a terminating NUL byte."""
-    timestamp = image_storage._capture_timestamp({36867: "2026:10:25 10:11:12", 37521: subseconds})
+    """NUL-terminated camera fractions are valid, but never imply a UTC offset."""
+    exif: dict[int, object] = {36867: "2026:10:25 10:11:12", 37521: subseconds}
+    if offset is not None:
+        exif[36881] = offset
+    timestamp = image_storage._capture_timestamp(exif)
 
-    assert timestamp is not None
-    assert timestamp.microsecond == 123400
-    assert timestamp.isoformat() == "2026-10-25T10:11:12.123400+00:00"
+    if offset is None:
+        # A camera-local wall clock is not a scientifically verified UTC instant.
+        assert timestamp is None
+    else:
+        assert timestamp is not None
+        assert timestamp.microsecond == 123400
+        assert timestamp.isoformat() == "2026-10-25T10:11:12.123400+00:00"
 
 
 @pytest.mark.parametrize("as_bytes", [False, True])
