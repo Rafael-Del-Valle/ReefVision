@@ -20,6 +20,7 @@ from reefvision.db.models import (
     WorkflowArtifact,
     WorkflowGraphRecord,
     WorkflowNodeRun,
+    WorkflowRun,
 )
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
@@ -387,6 +388,37 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             session, run_id=str(queued.json()["id"])
         )
     assert verified_provenance["nodes"][0]["parameters"] == original_parameters
+
+    # The same saved scientist-verified run must not export a JSON array of
+    # key/value pairs as if it were its original input or result object.
+    for field, expected_error in (
+        ("input_json", "Workflow run inputs must be a JSON object"),
+        ("result_json", "Workflow run result must be a JSON object"),
+    ):
+        with app.state.session_factory() as session:
+            saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
+            assert saved_run is not None
+            original_value = getattr(saved_run, field)
+            assert isinstance(original_value, dict)
+            setattr(saved_run, field, list(original_value.items()))
+            session.commit()
+
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ConflictError, match=expected_error),
+        ):
+            build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+        with app.state.session_factory() as session:
+            saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
+            assert saved_run is not None
+            setattr(saved_run, field, original_value)
+            session.commit()
+
+    with app.state.session_factory() as session:
+        assert build_workflow_run_provenance(
+            session, run_id=str(queued.json()["id"])
+        ) == verified_provenance
 
     # A completed saved workflow must not expose a changed scientific output
     # through the run-detail API, even when its original digest remains stored.
