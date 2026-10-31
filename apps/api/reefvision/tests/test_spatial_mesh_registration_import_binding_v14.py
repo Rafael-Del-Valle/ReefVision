@@ -340,3 +340,37 @@ def test_import_bound_registration_standalone_and_saved_workflow_parity(
         item["data_type"] == "mesh_longitudinal_comparison"
         for item in failed.json()["artifacts"]
     )
+
+    # Changing only provisional specimen labels must invalidate the registration
+    # even when both imported assets, their bytes and observation IDs are unchanged.
+    renamed_before = {**before, "specimen_id": "colony-reassigned"}
+    renamed_after = {**after, "specimen_id": "colony-reassigned"}
+    stale_identity = client.post(
+        endpoint,
+        json={
+            "before": renamed_before,
+            "after": renamed_after,
+            "registration_evidence": evidence,
+        },
+    )
+    assert stale_identity.status_code == 400, stale_identity.text
+    graph["graph_id"] = "registration-specimen-replay-rejected-v14"
+    graph["nodes"][1]["parameters"] = renamed_before
+    graph["nodes"][2]["parameters"] = renamed_after
+    saved_identity = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved_identity.status_code == 201, saved_identity.text
+    run_identity = client.post(
+        f"{base}/workflow-runs",
+        json={"graph_record_id": saved_identity.json()["id"]},
+    )
+    assert run_identity.status_code == 202, run_identity.text
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run_identity.json()["job_id"])
+    )
+    failed_identity = client.get(f"/api/v1/workflow-runs/{run_identity.json()['id']}")
+    assert failed_identity.status_code == 200, failed_identity.text
+    assert failed_identity.json()["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "mesh_longitudinal_comparison"
+        for item in failed_identity.json()["artifacts"]
+    )
