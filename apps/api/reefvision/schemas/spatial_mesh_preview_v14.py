@@ -335,7 +335,9 @@ class MeshReidentificationEvidence(BaseModel):
 
     # Optional project binding prevents reuse of otherwise identical local
     # observation labels in a different research project. Legacy evidence is flagged.
-    project_id: str | None = Field(default=None, min_length=1, max_length=128)
+    project_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
 
     # Optional for legacy evidence; when present, binds the observation pair
     # to a provisional specimen label and prevents cross-specimen reuse.
@@ -390,7 +392,9 @@ class MeshReidentificationEvidence(BaseModel):
         if (self.before_source_payload_sha256 is None) != (
             self.after_source_payload_sha256 is None
         ):
-            raise ValueError("Reidentification source payload binding requires both SHA-256 fingerprints")
+            raise ValueError(
+                "Reidentification source payload binding requires both SHA-256 fingerprints"
+            )
         if (self.before_observed_at_utc is None) != (self.after_observed_at_utc is None):
             raise ValueError("Reidentification timepoint binding requires both UTC timestamps")
         if not self.evidence_note.strip() or (
