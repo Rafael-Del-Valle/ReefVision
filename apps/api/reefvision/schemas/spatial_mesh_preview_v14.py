@@ -187,7 +187,7 @@ class MeshRegistrationEvidence(BaseModel):
     )
     target_spatial_source_asset_id: str | None = Field(
         default=None,
-        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     )
     # The same reconstruction may be recalibrated without changing its geometry
     # hash. Pairwise scale bindings prevent reusing a meter-valued transform
