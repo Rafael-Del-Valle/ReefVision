@@ -797,9 +797,6 @@ export function ReviewQueueDashboard({
             </div>
             {activeQueueId && coordinationItemId && (
               <ReviewQueueCoordinationPanel
-                // Preserve one mounted instance across A -> B -> A. Its own
-                // per-item draft and retry maps provide scope isolation; a
-                // React key here silently destroyed them on every item click.
                 queueId={selectedQueueId}
                 itemId={coordinationItemId}
                 onClose={() => setCoordinationItemId(null)}
