@@ -131,12 +131,17 @@ def test_saved_ecological_report_rejects_tampered_or_rehashed_source_counts(
             altered["candidate_report"][field] = {"missing_timestamps": 99}
         else:
             altered["candidate_report"][field] += 1
+        excluded_fields = {
+            "schema_version",
+            "report_sha256",
+            "evidence_level",
+            "review_gate",
+        }
         report_values = {
             **{
                 key: value
                 for key, value in altered["candidate_report"].items()
-                if key
-                not in ("schema_version", "report_sha256", "evidence_level", "review_gate")
+                if key not in excluded_fields
             },
             "algorithm_version": "ecology-candidate-report-0001",
         }
