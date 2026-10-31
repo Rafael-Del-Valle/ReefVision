@@ -82,9 +82,7 @@ def test_saved_ecological_report_rejects_tampered_or_rehashed_source_counts(
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     report_artifacts = [
-        row
-        for row in workflow["artifacts"]
-        if row["data_type"] == "ecology_candidate_report"
+        row for row in workflow["artifacts"] if row["data_type"] == "ecology_candidate_report"
     ]
     assert len(report_artifacts) == 1
     assert report_artifacts[0]["payload_json"] == report
