@@ -82,6 +82,6 @@ def test_inline_obj_comments_keep_geometry_but_change_byte_exact_source_identity
     ["v 0 0 0 extra # trailing note", "f 1 2 3 4 # polygon"],
 )
 def test_inline_obj_comments_do_not_hide_malformed_geometry(invalid: str) -> None:
-    text = f"v 0 0 0\\nv 2 0 0\\nv 0 3 0\\n{invalid}\\n"
+    text = f"v 0 0 0\nv 2 0 0\nv 0 3 0\n{invalid}\n"
     with pytest.raises(ValueError):
         parse_obj_triangles(text)
