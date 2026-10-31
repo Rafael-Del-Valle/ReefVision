@@ -454,6 +454,32 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def require_current_sampling_qc_source_consistency(
+        self,
+    ) -> EcologyMeasurementCandidatesResponse:
+        """Rebuild current UTC sampling QC from immutable source candidate rows.
+
+        A recomputed SHA-256 is not enough: an altered QC date, source image
+        roster or technical-replicate flag must not pass saved-workflow replay.
+        Older fingerprint contracts retain their historical deserialization.
+        """
+        if self.source_fingerprint_contract != "ecology-measurement-candidates-0021":
+            return self
+
+        # Import at validation time to avoid a schema/service import cycle.
+        from reefvision.services.ecology_measurement_candidates import (
+            summarize_sampling_date_qc,
+        )
+
+        expected = [
+            row.model_dump(mode="json") for row in summarize_sampling_date_qc(self.candidates)
+        ]
+        actual = [row.model_dump(mode="json") for row in self.sampling_date_qc]
+        if actual != expected:
+            raise ValueError("Current ecological sampling QC does not match source candidates")
+        return self
+
+    @model_validator(mode="after")
     def require_report_source_consistency(self) -> EcologyMeasurementCandidatesResponse:
         """Prevent a rehashed report from misrepresenting saved source rows.
 
