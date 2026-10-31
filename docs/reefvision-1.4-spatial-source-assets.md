@@ -171,3 +171,23 @@ This is not an identity, registration, or calibration verification. Invalid
 vertex layouts and non-triangular faces remain rejected. Standalone preview
 and saved executable typed Workflow Builder graph regression tests cover
 commented imports, exact source-digest parity, and unchanged measurements.
+
+## OBJ face attribute declaration bounds
+
+When a bounded OBJ import contains `vt` texture-coordinate or `vn` normal
+records before a triangle, face references to that declared attribute type
+must resolve within the records available at the face. Positive and negative
+relative indices are supported; zero, malformed tokens, and references beyond
+the declaration count fail closed. This prevents stale export indices from
+silently becoming apparently valid calibrated mesh measurements. Older OBJ
+files that include face attribute references but no corresponding `vt` or
+`vn` declarations remain supported for backward compatibility; those
+undeclared references are syntax-checked only. Texture coordinates and normals
+are not used for area, branch length, or scale calibration, and their numeric
+contents are not independently validated by this bounded preview parser.
+Standalone API previews and persisted typed Workflow Builder execution share
+the parser. Tests require rejected source references to fail a saved workflow
+without publishing a measurement artifact; valid signed relative attribute
+references retain identical standalone and workflow scientific provenance.
+None of these checks establishes verified scale, biological identity, or
+independent human review.
