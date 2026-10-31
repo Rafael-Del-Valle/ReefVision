@@ -187,22 +187,23 @@ def compare_mesh_observations(
     specimen = first.get("specimen_id")
     if (
         not isinstance(specimen, str)
+        or len(specimen) > 128
         or fullmatch(identity_pattern, specimen) is None
         or specimen != second.get("specimen_id")
     ):
         raise ValueError(
-            "Two observations require the same nonempty provisional specimen_id"
-            " with valid syntax"
+            "Two observations require the same nonempty provisional specimen_id with valid syntax"
         )
     first_id = first.get("observation_id")
     second_id = second.get("observation_id")
     if not all(
-        isinstance(value, str) and fullmatch(identity_pattern, value) is not None
+        isinstance(value, str)
+        and len(value) <= 128
+        and fullmatch(identity_pattern, value) is not None
         for value in (first_id, second_id)
     ):
         raise ValueError(
-            "Both observations require nonempty observation_id values"
-            " with valid syntax"
+            "Both observations require nonempty observation_id values with valid syntax"
         )
     if first_id == second_id:
         raise ValueError("Longitudinal comparison requires distinct observation_id values")
@@ -222,7 +223,8 @@ def compare_mesh_observations(
     project_after = after.get("project_id")
     if (
         not isinstance(project_before, str)
-        or not project_before.strip()
+        or len(project_before) > 128
+        or fullmatch(identity_pattern, project_before) is None
         or project_before != project_after
     ):
         raise ValueError("Longitudinal observations require the same nonempty project_id")
