@@ -807,3 +807,55 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
         if item["data_type"] == "mesh_longitudinal_comparison"
     ]
     assert comparisons == [expected]
+
+
+def test_project_asset_reimport_changes_versioned_review_digest_without_changing_bytes() -> None:
+    """Asset ownership changes must not silently retain a review snapshot hash."""
+    before = _imported_observation("early", 1)
+    after = _imported_observation("late", 2)
+    review = _review(before, after)
+    legacy = compare_mesh_observations(before, after, reidentification_evidence=review)
+    assert legacy["provenance"]["review_evidence_bundle_schema_version"] == (
+        "mesh-review-bundle-0003"
+    )
+
+    before["provenance"]["spatial_source_asset_id"] = "11111111-1111-4111-8111-111111111111"
+    after["provenance"]["spatial_source_asset_id"] = "22222222-2222-4222-8222-222222222222"
+    initial = compare_mesh_observations(before, after, reidentification_evidence=review)
+    initial_provenance = initial["provenance"]
+    initial_bundle = initial_provenance["review_evidence_bundle"]
+    assert initial_provenance["review_evidence_bundle_schema_version"] == (
+        "mesh-review-bundle-0004"
+    )
+    assert initial_bundle["before_spatial_source_asset_id"] == (
+        "11111111-1111-4111-8111-111111111111"
+    )
+    assert initial_bundle["after_spatial_source_asset_id"] == (
+        "22222222-2222-4222-8222-222222222222"
+    )
+    assert sha256(
+        dumps(
+            initial_bundle,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest() == initial_provenance["review_evidence_bundle_sha256"]
+
+    # Reimport the identical original under a different project-owned asset
+    # without changing geometry, timestamps, calibration, or review notes.
+    after["provenance"]["spatial_source_asset_id"] = "33333333-3333-4333-8333-333333333333"
+    revised = compare_mesh_observations(before, after, reidentification_evidence=review)
+    assert revised["provenance"]["review_evidence_bundle_schema_version"] == (
+        "mesh-review-bundle-0004"
+    )
+    assert (
+        revised["provenance"]["review_evidence_bundle_sha256"]
+        != initial_provenance["review_evidence_bundle_sha256"]
+    )
+    assert (
+        revised["provenance"]["review_evidence_bundle"]["after_source_payload_sha256"]
+        == initial_bundle["after_source_payload_sha256"]
+    )
+    assert revised["provenance"]["specimen_identity_verified"] is False
