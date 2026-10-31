@@ -349,9 +349,7 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           : `Apply ${action} to ${selectedIds.length} items`}
       </button>
       {lastResult && <p role="status">{lastResult}</p>}
-      {uncertainRequest && (
-        <p role="alert">{uncertainRequest.errorMessage}</p>
-      )}
+      {uncertainRequest && <p role="alert">{uncertainRequest.errorMessage}</p>}
       {uncertainRequest && (
         <div role="group" aria-label="Uncertain bulk triage outcome">
           <p>
