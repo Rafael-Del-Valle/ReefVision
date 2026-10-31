@@ -190,14 +190,20 @@ def compare_mesh_observations(
         or fullmatch(identity_pattern, specimen) is None
         or specimen != second.get("specimen_id")
     ):
-        raise ValueError("Two observations require the same nonempty provisional specimen_id with valid syntax")
+        raise ValueError(
+            "Two observations require the same nonempty provisional specimen_id"
+            " with valid syntax"
+        )
     first_id = first.get("observation_id")
     second_id = second.get("observation_id")
     if not all(
         isinstance(value, str) and fullmatch(identity_pattern, value) is not None
         for value in (first_id, second_id)
     ):
-        raise ValueError("Both observations require nonempty observation_id values with valid syntax")
+        raise ValueError(
+            "Both observations require nonempty observation_id values"
+            " with valid syntax"
+        )
     if first_id == second_id:
         raise ValueError("Longitudinal comparison requires distinct observation_id values")
     try:
