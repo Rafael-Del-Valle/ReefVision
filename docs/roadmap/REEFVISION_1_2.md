@@ -4819,3 +4819,38 @@ longitudinal measurements, registered experimental-unit independence,
 representative ecological/human-model validation, 1.1 Alembic reconciliation
 and physical installed Windows GUI/MSI acceptance. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+
+## Calibration-link source uniqueness and CI repair (2026-10-31)
+
+Pre-change head `ab787f079f1b6b93b405d1142130673fd7677dff` completed
+**16/19 PR-triggered Actions successfully**, including Windows Desktop Build.
+Backend CI, Pose Workflow Validation and 1.0 Acceptance failed before backend
+pytest because Ruff 0.17.3 requested two formatting changes in
+`test_ecology_sampling_qc_source_replay_1_2.py`. Applied the exact CI
+formatting changes without altering the QC assertions.
+
+A separate scientific replay gap remained: a saved current-contract
+(`ecology-measurement-candidates-0021`) artifact could include the same
+calibration evidence and metric twice, or reuse one calibration evidence ID
+for a different image/annotation/organism lineage. Even if its source SHA-256
+was recomputed, such a record could inflate sampling effort or disguise
+contradictory evidence. The typed response now rejects duplicate
+`(calibration_evidence_id, metric)` rows and requires every metric sharing
+a calibration evidence ID to retain identical source image, annotation,
+identity, biological unit, acquisition time and evidence digests. A box's
+width and height legitimately share one calibration ID and remain allowed.
+
+Focused regression covers the actual standalone API and executed, persisted
+Workflow Builder candidate artifact, re-signed duplicate rows, conflicting
+cross-metric lineage, and older v0020 records with no report. Existing typed
+ports, offline operation, immutable verified-dataset semantics and scientist
+review gates are unchanged. This is source-link *consistency*, not
+authentication of the calibration, independence of tanks/colonies or
+scientist-verified growth. No migration or 1.1 environmental context was added.
+
+**Release HOLD:** exact-new-head backend/frontend/E2E/Windows CI, authenticated
+scientist-reviewed longitudinal measurements, registered independent study
+units, human-model comparison on representative biological data, migration
+reconciliation with unmerged 1.1 and installed Windows GUI/MSI acceptance.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
