@@ -119,7 +119,9 @@ def test_persisted_obj_measurement_matches_saved_workflow_and_detects_tampering(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert (
@@ -200,11 +202,17 @@ def test_standalone_longitudinal_comparison_resolves_project_assets(client: Test
     assert expected["relative_surface_area_change_percent"] is None
     assert expected["average_surface_area_change_m2_per_day"] is None
     assert expected["delta_surface_area_scale_interval_m2"] is None
-    assert expected["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"]
+    assert (
+        expected["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"]
+    )
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert expected["provenance"]["calibration_verified"] is False
-    assert "identical_imported_source_payload_reused_across_observations" in expected["qc_warnings"]
-    assert "longitudinal_change_withheld_reused_imported_source_payload" in expected["qc_warnings"]
+    assert (
+        "identical_imported_source_payload_reused_across_observations" in expected["qc_warnings"]
+    )
+    assert (
+        "longitudinal_change_withheld_reused_imported_source_payload" in expected["qc_warnings"]
+    )
     assert (
         expected["provenance"]["before_geometry_sha256"]
         == expected["provenance"]["after_geometry_sha256"]
