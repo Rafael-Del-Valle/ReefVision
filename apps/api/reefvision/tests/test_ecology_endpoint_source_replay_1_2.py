@@ -24,9 +24,7 @@ def test_current_api_and_executed_workflow_replay_unverified_source(
     client: TestClient,
 ) -> None:
     project_id, _ = _source(client)
-    api = client.get(
-        f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
-    )
+    api = client.get(f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates")
     assert api.status_code == 200, api.text
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
@@ -61,21 +59,15 @@ def test_rehashed_current_endpoint_rejects_unlinked_evidence(
     assert EcologyMeasurementCandidatesResponse.model_validate(
         original.model_dump(mode="json")
     ).projected_endpoint_changes
-    endpoint = original.projected_endpoint_changes[0].model_copy(
-        update={field: replacement}
-    )
+    endpoint = original.projected_endpoint_changes[0].model_copy(update={field: replacement})
     # The endpoint remains arithmetically valid and the source/report digests
     # are both recomputed; only independent source-row linkage can reject it.
-    assert EcologyProjectedEndpointChange.model_validate(
-        endpoint.model_dump(mode="json")
-    )
+    assert EcologyProjectedEndpointChange.model_validate(endpoint.model_dump(mode="json"))
     forged = _resign_derived_evidence(
         original.model_copy(update={"projected_endpoint_changes": [endpoint]})
     )
     with pytest.raises(PydanticValidationError, match="Current projected endpoint"):
-        EcologyMeasurementCandidatesResponse.model_validate(
-            forged.model_dump(mode="json")
-        )
+        EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
 
 
 def test_rehashed_endpoint_rejects_fabricated_but_consistent_growth(
@@ -95,18 +87,12 @@ def test_rehashed_endpoint_rejects_fabricated_but_consistent_growth(
             "projected_baseline_percent_change_per_day": percent / endpoint.elapsed_days,
         }
     )
-    EcologyProjectedEndpointChange.model_validate(
-        forged_endpoint.model_dump(mode="json")
-    )
+    EcologyProjectedEndpointChange.model_validate(forged_endpoint.model_dump(mode="json"))
     forged = _resign_derived_evidence(
         original.model_copy(update={"projected_endpoint_changes": [forged_endpoint]})
     )
-    with pytest.raises(
-        PydanticValidationError, match="does not match source candidates"
-    ):
-        EcologyMeasurementCandidatesResponse.model_validate(
-            forged.model_dump(mode="json")
-        )
+    with pytest.raises(PydanticValidationError, match="does not match source candidates"):
+        EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
 
 
 def test_rehashed_duplicate_endpoint_is_not_an_extra_replicate(
@@ -117,12 +103,8 @@ def test_rehashed_duplicate_endpoint_is_not_an_extra_replicate(
     forged = _resign_derived_evidence(
         original.model_copy(update={"projected_endpoint_changes": [endpoint, endpoint]})
     )
-    with pytest.raises(
-        PydanticValidationError, match="lacks a valid source date series"
-    ):
-        EcologyMeasurementCandidatesResponse.model_validate(
-            forged.model_dump(mode="json")
-        )
+    with pytest.raises(PydanticValidationError, match="lacks a valid source date series"):
+        EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
 
 
 def test_historical_endpoint_contract_remains_readable(client: TestClient) -> None:
