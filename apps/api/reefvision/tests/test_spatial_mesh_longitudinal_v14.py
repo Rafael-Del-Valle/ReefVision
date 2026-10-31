@@ -48,6 +48,43 @@ def _rigid_transform() -> list[list[float]]:
     ]
 
 
+@pytest.mark.parametrize(
+    ("field", "invalid", "error"),
+    [
+        ("specimen_id", "   ", "valid provisional specimen_id"),
+        ("specimen_id", "colony 16", "valid provisional specimen_id"),
+        ("observation_id", "\t", "valid observation_id"),
+        ("observation_id", "survey 1", "valid observation_id"),
+        ("project_id", "   ", "nonempty project_id"),
+    ],
+)
+def test_replayed_longitudinal_artifacts_reject_invalid_identity_labels(
+    field: str, invalid: str, error: str
+) -> None:
+    """Direct artifact replay must enforce the same identity rules as API requests."""
+    before = preview_from_request(
+        MeshPreviewRequest(**_mesh("survey-1", "2026-10-01T12:00:00Z", 1))
+    )
+    after = preview_from_request(
+        MeshPreviewRequest(**_mesh("survey-2", "2026-10-02T12:00:00Z", 2))
+    )
+    before["project_id"] = "project-1"
+    after["project_id"] = "project-1"
+    # This baseline is a valid provisional comparison. The API and saved
+    # Workflow Builder already validate the request before constructing it.
+    assert compare_mesh_observations(before, after)["elapsed_days"] == pytest.approx(1)
+
+    if field == "project_id":
+        before[field] = invalid
+        after[field] = invalid
+    else:
+        before["provenance"][field] = invalid
+        if field == "specimen_id":
+            after["provenance"][field] = invalid
+    with pytest.raises(ValueError, match=error):
+        compare_mesh_observations(before, after)
+
+
 def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -> None:
     project_id = str(create_project(client, "Mesh timepoints")["id"])
     base = f"/api/v1/projects/{project_id}"
