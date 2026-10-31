@@ -1781,7 +1781,9 @@ describe("App", () => {
       await userEvent.click(
         screen.getByRole("tab", { name: "Quality control" }),
       );
-      expect(screen.getByRole("heading", { name: "Review Queue" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Review Queue" }),
+      ).toBeInTheDocument();
       expect(screen.getByLabelText("Review comment")).toHaveValue(
         "Unsent observation of polyp behavior",
       );
