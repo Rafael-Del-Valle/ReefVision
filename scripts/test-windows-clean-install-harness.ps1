@@ -91,7 +91,7 @@ try {
 # A Windows Installer reboot-required result is not a completed clean install.
 # The harness must not report PASS or remove its evidence while a reboot is
 # pending. Exercise both installation and uninstallation without running MSI.
-foreach ($msiAction in @('Install', 'Uninstall')) {
+foreach ($msiAction in @('Install', 'Uninstall', 'Extract')) {
     $successOutput = @(Assert-ReefVisionMsiCompletedWithoutReboot -Action $msiAction -ExitCode 0 -LogPath 'C:\\rv-test\\msi.log')
     Assert-True ($successOutput.Count -eq 0) "Successful $msiAction must emit no spurious pipeline output."
     foreach ($pendingCode in @(3010, 1641)) {
@@ -170,6 +170,7 @@ Assert-True ($ordinaryCab.Count -eq 1) 'Non-device cabinet basename must remain 
 # any package, without actually installing software in this harness.
 $msiVerifier = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verify-windows-msi.ps1') -Raw
 Assert-True ($msiVerifier.Contains('New-ReefVisionMsiAdministrativeArguments')) 'MSI verifier must quote extraction and log paths using the tested helper.'
+Assert-True ($msiVerifier.Contains('Assert-ReefVisionMsiCompletedWithoutReboot -Action Extract -ExitCode $MsiExitCode -LogPath $MsiLog')) 'MSI verifier must reject reboot-required administrative extraction before inspecting files.'
 Assert-True ($msiVerifier.Contains('Assert-ReefVisionNoReparseAncestors -Path $Msi.FullName')) 'MSI verifier does not reject reparse-point MSI paths.'
 Assert-True ($msiVerifier.Contains('Assert-ReefVisionNoReparseAncestors -Path $Cab.FullName')) 'MSI verifier does not reject reparse-point CAB paths.'
 Assert-True ($msiVerifier.IndexOf('Assert-ReefVisionNoReparseAncestors -Path $Msi.FullName') -lt $msiVerifier.IndexOf('OpenDatabase($Msi.FullName, 0)')) 'MSI reparse-point guard must run before opening the database.'
