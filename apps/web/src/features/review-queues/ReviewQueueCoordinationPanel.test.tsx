@@ -87,6 +87,59 @@ describe("ReviewQueueCoordinationPanel", () => {
     expect(addReviewQueueEvent).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["Review comment", "Revised coral note"],
+    ["Reviewer to assign", "reviewer-b"],
+    ["Your local reviewer label", "scientist-b"],
+  ])(
+    "requires fresh draft-discard approval after editing %s",
+    async (label, value) => {
+      const onClose = mount();
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText("Review comment"), {
+        target: { value: "Original unsent coral note" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+      expect(
+        screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+      ).toBeTruthy();
+
+      fireEvent.change(screen.getByLabelText(label), {
+        target: { value },
+      });
+      expect(
+        screen.queryByRole("group", { name: "Discard unsent coordination drafts" }),
+      ).toBeNull();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(addReviewQueueEvent).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+      expect(
+        screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+      ).toBeTruthy();
+    },
+  );
+
+  it("does not resurrect discard approval when a researcher restores old note text", async () => {
+    const onClose = mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original unsent coral note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Revised coral note" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original unsent coral note" },
+    });
+    expect(
+      screen.queryByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(addReviewQueueEvent).not.toHaveBeenCalled();
+  });
+
   it("keeps an uncertain audit UUID available until the researcher resolves it", async () => {
     vi.mocked(addReviewQueueEvent).mockRejectedValueOnce(
       new Error("Uncertain event delivery"),
