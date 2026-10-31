@@ -1,8 +1,8 @@
-# Provisional longitudinal review bundle v0002
+# Provisional longitudinal review bundles v0002–v0003
 
 The versioned review fingerprint now binds project, specimen, observation timestamps, geometry and source bytes, coordinate frames, calibration inputs, calibration review evidence, and independent registration/reidentification notes.
 
-A v0001 digest is not equivalent to a v0002 digest. Preserve schema version with the hash. Missing legacy provenance remains null. These caller-supplied records and deterministic hashes do not authenticate reviewers, certify calibration or identity, or substitute for immutable review persistence.
+A v0001 digest is not equivalent to a v0002 or v0003 digest. Current comparisons use `mesh-review-bundle-0003`, which additionally binds source import format, original byte count and integrity-check status. Preserve schema version with the hash. Missing legacy provenance remains null. These caller-supplied records and deterministic hashes do not authenticate reviewers, certify calibration or identity, or substitute for immutable review persistence.
 
 Standalone longitudinal comparisons and persisted executable Workflow Builder graphs share this provenance. Tests cover canonicalization, calibration revisions, and saved graph artifacts.
 
@@ -59,3 +59,23 @@ bytes may still produce identical triangles; the existing
 establishes coral growth, verified identity, or calibrated measurement.
 Standalone longitudinal API calls and saved executable typed Workflow Builder
 graphs share the same warnings and provisional review evidence.
+
+## Conflicting imported-original metadata
+
+If two observation previews report the same well-formed imported-source
+SHA-256 but disagree on **both known** original byte counts or source formats,
+the comparison additionally emits
+`identical_imported_source_payload_metadata_inconsistent`. Identical source
+bytes cannot have different lengths or different native import formats. This
+is an audit warning about contradictory caller-supplied provenance, not a
+biological change or proof of tampering. Missing historical size/format values
+remain unknown and do not trigger a fabricated conflict. An integrity-check
+flag can legitimately differ between previews because an expected hash may
+have been supplied in one import but not the other.
+
+The existing duplicate-source warning remains independent, and the comparison
+still labels calibration, specimen identity, and the longitudinal interpretation
+as provisional. Regression coverage exercises both inconsistent metadata and
+the clean duplicate-original path through a persisted typed Workflow Builder
+graph; no authenticated review ledger or durable calibration record is created
+by this check.
