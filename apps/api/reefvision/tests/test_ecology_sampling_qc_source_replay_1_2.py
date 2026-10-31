@@ -71,9 +71,7 @@ def test_rehashed_sampling_qc_cannot_invent_dates_or_replicates(
         original.model_dump(mode="json")
     ).sampling_date_qc[0].qc_status == "date_series_candidate"
     altered = original.sampling_date_qc[0].model_copy(update={field: replacement})
-    forged = _resign_derived_evidence(
-        original.model_copy(update={"sampling_date_qc": [altered]})
-    )
+    forged = _resign_derived_evidence(original.model_copy(update={"sampling_date_qc": [altered]}))
     with pytest.raises(PydanticValidationError, match="sampling QC does not match source"):
         EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
 
