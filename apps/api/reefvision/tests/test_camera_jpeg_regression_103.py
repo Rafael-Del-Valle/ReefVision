@@ -496,6 +496,50 @@ def test_camera_exif_ascii_byte_strings_keep_explicit_offset_and_subseconds() ->
     assert _capture_timestamp(exif) == datetime(2026, 10, 1, 16, 30, 0, 123000, tzinfo=UTC)
 
 
+@pytest.mark.parametrize(
+    ("capture", "offset", "subseconds"),
+    [
+        (" 2026:10:01 12:30:00 \x00", "-04:00 \x00", "123 \x00"),
+        (b"2026:10:01 12:30:00 \x00", b" -04:00\x00", b"123\x00 "),
+    ],
+)
+def test_padded_camera_exif_fields_preserve_verified_utc(
+    capture: str | bytes, offset: str | bytes, subseconds: str | bytes
+) -> None:
+    """EXIF ASCII padding must not invalidate an otherwise verified exposure."""
+    assert _capture_timestamp(
+        {36867: capture, 36881: offset, 37521: subseconds}
+    ) == datetime(2026, 10, 1, 16, 30, 0, 123000, tzinfo=UTC)
+
+
+def test_padded_nested_camera_exif_survives_jpeg_import_without_reencoding(
+    client: TestClient,
+) -> None:
+    """Preserve padded raw camera tags and original JPEG bytes alongside UTC."""
+    project = create_project(client, "Padded nested camera EXIF")
+    original_date = "2026:10:01 12:30:00 \x00"
+    original_offset = "-04:00 \x00"
+    exif = Image.Exif()
+    exif[34665] = {
+        36867: original_date,
+        36881: original_offset,
+        37521: "123 \x00",
+    }
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_PADDED.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"].startswith("2026-10-01T16:30:00.123")
+    assert metadata["metadata_json"]["exif"]["DateTimeOriginal"] == original_date
+    assert metadata["metadata_json"]["exif"]["OffsetTimeOriginal"] == original_offset
+    assert "capture_time_warning" not in metadata["metadata_json"]
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
 def test_malformed_camera_exposure_does_not_become_digitized_time_in_api(
     client: TestClient,
 ) -> None:
