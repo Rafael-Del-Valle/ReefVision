@@ -221,7 +221,8 @@ def test_imported_source_digest_check_qc_matches_saved_comparison(
     assert "after_imported_source_expected_digest_not_checked" in warnings
     assert "identical_imported_source_payload_reused_across_observations" in warnings
     assert "reidentification_source_payload_binding_unavailable" not in warnings
-    assert expected["provenance"]["reidentification_evidence"]["before_source_payload_sha256"] == digest
+    bound_evidence = expected["provenance"]["reidentification_evidence"]
+    assert bound_evidence["before_source_payload_sha256"] == digest
     assert expected["delta_surface_area_m2"] is None
     assert expected["provenance"]["specimen_identity_verified"] is False
 
