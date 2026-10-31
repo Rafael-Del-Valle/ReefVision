@@ -69,6 +69,11 @@ def _validate_source_import_provenance(metadata: dict[str, Any]) -> None:
         raise ValueError("Source payload integrity check requires a positive source byte count")
     if source_format is None and (digest is not None or size is not None):
         raise ValueError("Source payload metadata requires an imported mesh format")
+    # A real imported OBJ/PLY/GLB original cannot contain zero bytes. This
+    # remains true for unchecked legacy previews: a supplied digest alone
+    # must not turn an impossible empty import into plausible source evidence.
+    if source_format in ("obj", "ply_ascii", "glb_2_0") and size == 0:
+        raise ValueError("Imported mesh source byte count must be positive")
 
 
 def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | None:
