@@ -117,6 +117,11 @@ export function ReviewQueueDashboard({
   const [coordinationItemId, setCoordinationItemId] = useState<string | null>(
     null,
   );
+  // Pin the original queue while coordination is open. An asynchronous queue
+  // refresh must never unmount drafts or uncertain audit-event retry UUIDs.
+  const [coordinationQueueId, setCoordinationQueueId] = useState<string | null>(
+    null,
+  );
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
     useState(false);
 
@@ -205,6 +210,7 @@ export function ReviewQueueDashboard({
     setSelectedQueueId("");
     setQuickReviewItemId(null);
     setCoordinationItemId(null);
+    setCoordinationQueueId(null);
     setOpenQuickReviewWhenReady(false);
     setPage(1);
     setScopeProjectId(project.id);
@@ -220,9 +226,10 @@ export function ReviewQueueDashboard({
   }, [queues.data, selectedQueueId]);
 
   useEffect(() => {
-    setCoordinationItemId(null);
-    onSelectedQueueChange?.(activeQueueId || null);
-  }, [onSelectedQueueChange, activeQueueId]);
+    // A background refresh can briefly omit the active queue. Keep the
+    // coordination panel and host queue identity pinned until guarded close.
+    onSelectedQueueChange?.(coordinationQueueId || activeQueueId || null);
+  }, [onSelectedQueueChange, activeQueueId, coordinationQueueId]);
 
   useEffect(
     () => () => {
@@ -411,6 +418,7 @@ export function ReviewQueueDashboard({
                     setSelectedQueueId("");
                     setQuickReviewItemId(null);
                     setCoordinationItemId(null);
+                    setCoordinationQueueId(null);
                     setOpenQuickReviewWhenReady(false);
                     setPage(1);
                   }}
@@ -534,6 +542,14 @@ export function ReviewQueueDashboard({
                 not be lost by unmounting the panel.
               </p>
             )}
+            {coordinationQueueId && activeQueueId !== coordinationQueueId && (
+              <p className="annotation-helper" role="status">
+                The selected queue is temporarily absent from the refreshed
+                list. Coordination remains open on its original queue to protect
+                unsent notes and audit retry IDs. Close it using its protected
+                controls before selecting another queue.
+              </p>
+            )}
             <div className="version-list">
               {queues.data?.map((queue) => (
                 <button
@@ -542,13 +558,13 @@ export function ReviewQueueDashboard({
                   className={`version-card ${
                     selectedQueueId === queue.id ? "selected" : ""
                   }`}
-                  disabled={
-                    coordinationItemId !== null && selectedQueueId !== queue.id
-                  }
+                  disabled={coordinationItemId !== null}
                   onClick={() => {
+                    if (coordinationItemId !== null) return;
                     setSelectedQueueId(queue.id);
                     setQuickReviewItemId(null);
                     setCoordinationItemId(null);
+                    setCoordinationQueueId(null);
                     setOpenQuickReviewWhenReady(false);
                     setPage(1);
                   }}
@@ -746,7 +762,18 @@ export function ReviewQueueDashboard({
                     <button
                       type="button"
                       className="secondary"
-                      onClick={() => setCoordinationItemId(item.id)}
+                      disabled={
+                        coordinationQueueId !== null &&
+                        coordinationQueueId !== activeQueueId
+                      }
+                      onClick={() => {
+                        if (
+                          coordinationQueueId !== null &&
+                          coordinationQueueId !== activeQueueId
+                        ) return;
+                        setCoordinationQueueId(activeQueueId);
+                        setCoordinationItemId(item.id);
+                      }}
                     >
                       Comments &amp; assignments
                     </button>
@@ -808,11 +835,14 @@ export function ReviewQueueDashboard({
                 </article>
               ))}
             </div>
-            {activeQueueId && coordinationItemId && (
+            {coordinationQueueId && coordinationItemId && (
               <ReviewQueueCoordinationPanel
-                queueId={selectedQueueId}
+                queueId={coordinationQueueId}
                 itemId={coordinationItemId}
-                onClose={() => setCoordinationItemId(null)}
+                onClose={() => {
+                  setCoordinationItemId(null);
+                  setCoordinationQueueId(null);
+                }}
               />
             )}
             {items.data && items.data.pages > 1 && (
