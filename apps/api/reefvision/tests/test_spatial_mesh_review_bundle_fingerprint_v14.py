@@ -608,9 +608,7 @@ def test_legacy_missing_import_size_does_not_invent_metadata_conflict() -> None:
     after["provenance"].pop("source_payload_size_bytes")
     result = compare_mesh_observations(before, after)
     assert "identical_imported_source_payload_reused_across_observations" in result["qc_warnings"]
-    assert "identical_imported_source_payload_metadata_inconsistent" not in result[
-        "qc_warnings"
-    ]
+    assert "identical_imported_source_payload_metadata_inconsistent" not in result["qc_warnings"]
 
 
 def test_reused_imported_original_qc_survives_saved_typed_workflow(
@@ -649,9 +647,7 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert "identical_imported_source_payload_reused_across_observations" in expected["qc_warnings"]
-    assert "identical_imported_source_payload_metadata_inconsistent" not in expected[
-        "qc_warnings"
-    ]
+    assert "identical_imported_source_payload_metadata_inconsistent" not in expected["qc_warnings"]
     assert expected["provenance"]["specimen_identity_verified"] is False
 
     graph = {
