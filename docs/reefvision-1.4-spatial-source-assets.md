@@ -158,3 +158,16 @@ These IDs provide provenance consistency, **not** authenticated human review,
 verified organism identity, independent observations, or biological growth.
 A durable versioned reviewer ledger and full installed-Windows/GPU scientific
 acceptance are still required before release.
+
+## Inline OBJ comments in provisional mesh previews
+
+Bounded OBJ triangle parsing accepts standard `#` comments at the end of
+vertex and triangular-face records, as well as standalone comment lines.
+Comments do not contribute geometry, calibrated area, uncertainty, or mesh
+paths. The original UTF-8 bytes (including comments) still determine the
+source-payload SHA-256; identical geometry exported with different comments
+can therefore share a geometry digest but **must not** share a source digest.
+This is not an identity, registration, or calibration verification. Invalid
+vertex layouts and non-triangular faces remain rejected. Standalone preview
+and saved executable typed Workflow Builder graph regression tests cover
+commented imports, exact source-digest parity, and unchanged measurements.
