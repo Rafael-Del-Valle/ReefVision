@@ -185,10 +185,14 @@ describe("ReviewQueueDashboard scope isolation", () => {
     });
     expect(screen.getByLabelText("Scope").hasAttribute("disabled")).toBe(true);
     expect(
-      screen.getByRole("button", { name: "Generate queue" }).hasAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "Generate queue" })
+        .hasAttribute("disabled"),
     ).toBe(true);
     expect(
-      screen.getByRole("button", { name: "Regenerate" }).hasAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "Regenerate" })
+        .hasAttribute("disabled"),
     ).toBe(true);
     const queueButtons = document.querySelectorAll<HTMLButtonElement>(
       ".version-list .version-card",
@@ -196,13 +200,19 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect(queueButtons).toHaveLength(2);
     expect(queueButtons[1]?.disabled).toBe(true);
     fireEvent.click(open[1]);
-    expect((screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement).value).toBe("");
-    fireEvent.click(open[0]);
-    expect((screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement).value).toBe(
-      "Unsent observation for coral A",
-    );
     expect(
-      screen.getByText(/unsent biological notes and uncertain audit-event retry IDs/),
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("");
+    fireEvent.click(open[0]);
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent observation for coral A");
+    expect(
+      screen.getByText(
+        /unsent biological notes and uncertain audit-event retry IDs/,
+      ),
     ).toBeTruthy();
   });
 
