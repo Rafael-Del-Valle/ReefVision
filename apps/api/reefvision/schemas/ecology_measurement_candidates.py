@@ -437,20 +437,19 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             (classify_ecological_unit_level(unit_type) or unit_type, unit_id)
             for unit_type, unit_id in declared_units
         }
+        pass_series_count = qc_counts.get("date_series_candidate", 0)
         expected = (
             report.project_id == self.project_id
             and report.source_input_sha256 == self.input_sha256
             and report.candidate_count == len(self.candidates)
-            and report.source_image_count
-            == len({row.image_id for row in self.candidates})
-            and report.source_organism_count
-            == len({row.organism_key for row in self.candidates})
-            and report.declared_experimental_unit_count
-            in (len(declared_units), len(canonical_units))
-            and report.date_qc_pass_series_count
-            == qc_counts.get("date_series_candidate", 0)
-            and report.excluded_series_count
-            == len(self.sampling_date_qc) - qc_counts.get("date_series_candidate", 0)
+            and report.source_image_count == len({row.image_id for row in self.candidates})
+            and report.source_organism_count == len({row.organism_key for row in self.candidates})
+            and report.declared_experimental_unit_count in (
+                len(declared_units),
+                len(canonical_units),
+            )
+            and report.date_qc_pass_series_count == pass_series_count
+            and report.excluded_series_count == len(self.sampling_date_qc) - pass_series_count
             and report.excluded_source_count == len(self.exclusions)
             and report.qc_status_counts == qc_counts
         )
