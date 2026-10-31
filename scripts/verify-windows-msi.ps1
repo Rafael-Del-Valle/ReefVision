@@ -100,9 +100,15 @@ try {
         -LogPath $MsiLog
     $MsiProcess = Start-Process -FilePath 'msiexec.exe' -ArgumentList $AdminExtractArguments -Wait -PassThru -WindowStyle Hidden
     $MsiExitCode = $MsiProcess.ExitCode
-    if ($MsiExitCode -notin @(0, 3010)) {
+    # Administrative extraction must finish completely before the extracted
+    # files can be trusted for release verification. Exit 3010/1641 means
+    # Windows still has pending operations, not a completed acceptance.
+    try {
+        Assert-ReefVisionMsiCompletedWithoutReboot -Action Extract -ExitCode $MsiExitCode -LogPath $MsiLog
+    }
+    catch {
         Show-Tail -Path $MsiLog
-        throw "Windows Installer administrative extraction failed with exit code $MsiExitCode."
+        throw
     }
 
     $ExtractedFiles = @(Get-ChildItem -Path $ExtractRoot -Recurse -File)
