@@ -211,9 +211,16 @@ def build_workflow_run_provenance(
     if graph is None:
         raise NotFoundError("Workflow graph revision not found")
 
-    calculated_graph_sha = canonical_json_sha256(dict(graph.graph_json or {}))
-
-    if calculated_graph_sha != graph.graph_sha256 or graph.graph_sha256 != run.graph_sha256:
+    # A digest authenticates graph contents, not the owning project or the
+    # saved revision identity. Match the run-detail API's lineage checks.
+    if (
+        graph.project_id != run.project_id
+        or not isinstance(graph.graph_json, dict)
+        or graph.graph_key != graph.graph_json.get("graph_id")
+        or graph.schema_version != graph.graph_json.get("schema_version")
+        or graph.graph_sha256 != run.graph_sha256
+        or canonical_json_sha256(graph.graph_json) != run.graph_sha256
+    ):
         raise ConflictError("Workflow graph provenance checksum failed")
 
     nodes = list(
