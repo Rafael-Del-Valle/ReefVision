@@ -81,9 +81,22 @@ function Show-Tail {
     }
 }
 
+# Track only directories created by this invocation. A token collision must
+# fail rather than reuse an existing path; it must never authorize deletion.
+$CreatedRoots = @()
 try {
-    New-Item -ItemType Directory -Force -Path $ExtractRoot | Out-Null
-    New-Item -ItemType Directory -Force -Path $SelfTestData | Out-Null
+    foreach ($entry in @(
+        @{ Path = $ExtractRoot; Kind = 'rv1' },
+        @{ Path = $SelfTestData; Kind = 'rvd' }
+    )) {
+        if (Test-Path -LiteralPath $entry.Path) {
+            throw "Refusing to reuse an existing MSI verification directory: $($entry.Path)"
+        }
+        New-Item -ItemType Directory -Path $entry.Path -ErrorAction Stop | Out-Null
+        $marker = Join-Path $entry.Path '.reefvision-msi-verification-run'
+        Set-Content -LiteralPath $marker -Value ("{0}:{1}" -f $entry.Kind, $Token) -NoNewline -Encoding Ascii -ErrorAction Stop
+        $CreatedRoots += $entry
+    }
 
     Write-Host "Verifying MSI: $($Msi.FullName)"
     Write-Host "External CAB files: $($CabFiles.Count)"
@@ -226,13 +239,11 @@ try {
 }
 finally {
     if (-not $KeepExtracted) {
-        foreach ($cleanupPath in @($ExtractRoot, $SelfTestData)) {
-            $resolvedCleanupPath = [System.IO.Path]::GetFullPath($cleanupPath)
-            if ($resolvedCleanupPath -notin @((Join-Path $SystemDrive "rv1-$Token"), (Join-Path $SystemDrive "rvd-$Token"))) {
-                throw "Refusing cleanup outside the generated verification directories: $resolvedCleanupPath"
-            }
+        foreach ($entry in $CreatedRoots) {
+            # Revalidate ownership and all nested links immediately before
+            # removal. Failure intentionally preserves evidence for inspection.
+            Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $entry.Path -ParentRoot $SystemDrive -Kind $entry.Kind -Token $Token
+            Remove-Item -LiteralPath $entry.Path -Recurse -Force -ErrorAction Stop
         }
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $ExtractRoot
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $SelfTestData
     }
 }
