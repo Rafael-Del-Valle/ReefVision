@@ -134,6 +134,11 @@ def verify_succeeded_node_artifacts(
                 "Succeeded workflow node references an output produced by another node"
             )
 
+    # A JSON array of key/value pairs can coerce into the original dictionary,
+    # concealing structural corruption of persisted scientific run evidence.
+    if node_run.result_json is not None and not isinstance(node_run.result_json, dict):
+        raise ConflictError("Succeeded workflow node result must be a JSON object")
+
     result = dict(node_run.result_json or {})
 
     declared_outputs = result.get("outputs")
