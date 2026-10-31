@@ -117,7 +117,9 @@ describe("ReviewQueueCoordinationPanel", () => {
       fireEvent.change(screen.getByLabelText("Review comment"), {
         target: { value: "Unsent polyp observation for A" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
       expect(
         screen.getByRole("group", {
           name: "Discard unsent coordination drafts",
@@ -143,7 +145,9 @@ describe("ReviewQueueCoordinationPanel", () => {
       expect(onClose).not.toHaveBeenCalled();
       expect(addReviewQueueEvent).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
       expect(
         screen.getByRole("group", {
           name: "Discard unsent coordination drafts",
