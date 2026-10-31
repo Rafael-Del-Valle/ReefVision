@@ -173,9 +173,7 @@ def test_malformed_obj_rejected_by_api_and_persisted_workflow(
     project_id = str(create_project(client, "Reject malformed OBJ references")["id"])
     obj_text = f"v 0 0 0\nv 2 0 0\nv 0 3 0\n{invalid_face}\n"
     params = {**COMMON, "obj_text": obj_text}
-    response = client.post(
-        f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params
-    )
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
     assert response.status_code == 400, response.text
     assert "OBJ line 4:" in response.text
 
