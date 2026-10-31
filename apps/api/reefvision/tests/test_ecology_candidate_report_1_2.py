@@ -78,7 +78,7 @@ def test_saved_ecological_report_rejects_tampered_or_rehashed_source_counts(
     assert EcologyCandidateReport.model_validate(report).report_sha256 == report["report_sha256"]
 
     # A separately persisted executable Workflow Builder report port must
-    # deserialize under the same signed, unverified scientific contract.
+    # deserialize under the same hashed, unverified scientific contract.
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "succeeded"
     report_artifacts = [
