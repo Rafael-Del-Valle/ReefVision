@@ -1246,7 +1246,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     );
   });
 
-  it("warns on browser reload only while an unsent biological note exists", async () => {
+  it("warns on reload while an unsent biological note exists", async () => {
     mount();
     await screen.findByText("Assigned reviewer: Unassigned");
     const beforeUnloadPrevented = () => {
@@ -1268,7 +1268,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     expect(addReviewQueueEvent).not.toHaveBeenCalled();
   });
 
-  it("warns on browser reload during an in-flight event even with no draft", async () => {
+  it("warns on reload during an in-flight event without a draft", async () => {
     let resolveEvent!: (
       value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
     ) => void;
@@ -1291,7 +1291,9 @@ describe("ReviewQueueCoordinationPanel", () => {
     fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
       target: { value: "scientist" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Unassign reviewer" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Unassign reviewer" }),
+    );
     await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
     const unload = new Event("beforeunload", { cancelable: true });
     act(() => {
@@ -1311,7 +1313,7 @@ describe("ReviewQueueCoordinationPanel", () => {
     });
   });
 
-  it("warns about an uncertain event UUID until its retry is explicitly abandoned", async () => {
+  it("warns until an uncertain event UUID is explicitly abandoned", async () => {
     vi.mocked(getReviewQueueEvents).mockResolvedValueOnce({
       items: [],
       total: 0,
@@ -1328,15 +1330,21 @@ describe("ReviewQueueCoordinationPanel", () => {
     fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
       target: { value: "scientist" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Unassign reviewer" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Unassign reviewer" }),
+    );
     await screen.findByRole("button", { name: "Retry event" });
     const uncertainUnload = new Event("beforeunload", { cancelable: true });
     act(() => {
       window.dispatchEvent(uncertainUnload);
     });
     expect(uncertainUnload.defaultPrevented).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Discard failed action" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm abandon retry" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard failed action" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm abandon retry" }),
+    );
     const clearedUnload = new Event("beforeunload", { cancelable: true });
     act(() => {
       window.dispatchEvent(clearedUnload);
