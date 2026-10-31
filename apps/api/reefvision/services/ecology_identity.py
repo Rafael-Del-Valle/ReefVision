@@ -23,7 +23,10 @@ from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.project import Project
-from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
+from reefvision.domain.ecology_lineage_policy import (
+    classify_ecological_unit_level,
+    require_unique_ecological_unit_spellings,
+)
 from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
 from reefvision.domain.ecology_polygon_qc import validate_ecological_polygon_topology
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
@@ -129,6 +132,10 @@ class EcologyIdentityService:
         This validates declared identifiers, not the independence of the
         biological design. Tank/site units may contain multiple organisms.
         """
+        try:
+            require_unique_ecological_unit_spellings(latest.values())
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
         single_organism_units: dict[tuple[str, str], str] = {}
         colony_units: dict[tuple[str, str], str] = {}
         lineage_units: dict[str, str] = {}
