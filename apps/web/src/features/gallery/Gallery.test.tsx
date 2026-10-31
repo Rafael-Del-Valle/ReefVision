@@ -106,7 +106,7 @@ describe("Gallery pending thumbnail refresh", () => {
       return jsonResponse({
         items: [{
           ...image,
-          thumbnail_path: requests === 1
+          thumbnail_path: requests <= 2
             ? "thumbnails/broken.jpg"
             : "thumbnails/regenerated.jpg",
         }],
@@ -124,9 +124,19 @@ describe("Gallery pending thumbnail refresh", () => {
     expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
     expect(screen.getByText("Thumbnail pending")).toBeInTheDocument();
 
+    // Refetching the same failed asset must not restart its broken request.
     await act(async () => {
       await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
     });
+    expect(requests).toBe(2);
+    expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
+    expect(screen.getByText("Thumbnail pending")).toBeInTheDocument();
+
+    // A genuinely regenerated path should retry, without reimporting the image.
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
+    });
+    expect(requests).toBe(3);
 
     const recovered = await screen.findByAltText("Thumbnail of swiftia-01.png");
     expect(recovered.getAttribute("src")).toContain("regenerated.jpg");
