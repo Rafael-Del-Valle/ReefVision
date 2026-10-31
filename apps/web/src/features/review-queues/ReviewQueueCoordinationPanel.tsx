@@ -75,6 +75,10 @@ export function ReviewQueueCoordinationPanel({
   const [drafts, setDrafts] = useState<Record<string, CoordinationDraft>>({});
   const { actor, assignee, comment, page } = drafts[draftKey] ?? emptyDraft;
   const updateDraft = (patch: Partial<CoordinationDraft>) => {
+    // A confirmation authorizes discarding only the draft the researcher saw.
+    // Any edit, including a reviewer-label change or edit-then-revert, must
+    // require a fresh explicit decision before closing the panel.
+    setCloseConfirmationKey(null);
     setDrafts((current) => ({
       ...current,
       [draftKey]: { ...(current[draftKey] ?? emptyDraft), ...patch },
