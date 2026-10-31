@@ -926,6 +926,15 @@ def compare_mesh_observations(
             warnings.append("registration_project_binding_unavailable")
         elif registration.project_id != project_before:
             raise ValueError("Registration evidence must match the project ID")
+        # Registration evidence may otherwise be replayed against a different
+        # coral with identical survey labels and imported reconstruction bytes.
+        if registration.source_specimen_id is None:
+            warnings.append("registration_specimen_binding_unavailable")
+        elif (
+            registration.source_specimen_id != first.get("specimen_id")
+            or registration.target_specimen_id != second.get("specimen_id")
+        ):
+            raise ValueError("Registration evidence must match both specimen IDs")
         if registration.source_observation_id is None:
             warnings.append("registration_observation_binding_unavailable")
         elif (
