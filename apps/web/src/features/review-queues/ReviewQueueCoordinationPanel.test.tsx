@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { addReviewQueueEvent, getReviewQueueEvents } from "../../api/client";
@@ -112,5 +112,71 @@ describe("ReviewQueueCoordinationPanel", () => {
     const calls = vi.mocked(addReviewQueueEvent).mock.calls;
     expect(calls[1][2].client_request_id).toBe(calls[0][2].client_request_id);
     expect(calls[1][2].event_type).toBe("assign");
+  });
+
+  it("preserves a newer comment draft after the prior comment succeeds", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original observation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "New observation draft" },
+    });
+    await act(async () => {
+      resolveEvent({} as Awaited<ReturnType<typeof addReviewQueueEvent>>);
+      await pending;
+    });
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "New observation draft",
+    );
+    expect(addReviewQueueEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries an uncertain assignment without deleting a newer assignee draft", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Connection interrupted"))
+      .mockResolvedValueOnce(
+        {} as Awaited<ReturnType<typeof addReviewQueueEvent>>,
+      );
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "reviewer-one" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Assign reviewer" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "reviewer-two" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(addReviewQueueEvent).mock.calls;
+    expect(calls[1][2].assignee).toBe("reviewer-one");
+    expect(calls[1][2].client_request_id).toBe(calls[0][2].client_request_id);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+        "value",
+        "reviewer-two",
+      ),
+    );
   });
 });
