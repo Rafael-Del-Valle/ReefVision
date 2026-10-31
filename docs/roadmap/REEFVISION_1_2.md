@@ -5264,3 +5264,26 @@ registered independent experimental-unit design, representative biological
 and human/model scientific acceptance, 1.1 Alembic reconciliation and
 physical installed Windows MSI/GUI tests remain outstanding.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Source-mask raster pixel-count plausibility (2026-10-31)
+
+The existing linked, reviewed-human mask evidence path now rejects a
+`mask_projected_area` source whose stored raster pixel count exceeds the
+complete source image or its declared source-pixel bounding-box envelope.
+The latter allows a conservative one-pixel rounding margin on each edge;
+raster counts are **not** equated to polygon shoelace area. Previously a
+positive but physically impossible imported `area_pixels` could enter a
+calibrated area candidate and inflate longitudinal projected-area change.
+
+This check runs before ecological annotation linking and again during
+project-owned registry readback, so the existing typed
+`ecology_identity_registry_source` saved Workflow Builder node fails closed
+on a changed/imported mask. Focused tests cover pre-link rejection of both
+image-wide and bounding-box violations, revocation after linking, and
+valid unverified API/saved-workflow parity. No migration, new node, new
+environmental provider, model download, or scientific approval is implied.
+
+**Release HOLD:** exact-head CI, scientist-reviewed calibration/identity and
+longitudinal biological acceptance, registered independent-unit verification,
+representative human-model comparisons, 1.1 migration reconciliation and
+installed Windows MSI/GUI testing. **1.2 NOT RELEASE-READY; 1.3 not started.**

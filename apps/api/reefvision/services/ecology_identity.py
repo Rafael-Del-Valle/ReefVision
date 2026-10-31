@@ -383,6 +383,28 @@ class EcologyIdentityService:
         if isinstance(annotation, MaskAnnotation):
             if annotation.area_pixels is not None and annotation.area_pixels <= 0:
                 raise ValidationError("Ecological mask evidence requires positive pixel area")
+            if annotation.area_pixels is not None:
+                # A linked mask cannot contain more raster pixels than its
+                # source image or the inclusive pixel envelope of its bounds.
+                # Permit a one-pixel rounding margin on each edge: the raster
+                # count need not equal the geometric polygon's shoelace area.
+                if annotation.area_pixels > image.width_px * image.height_px:
+                    raise ValidationError(
+                        "Ecological mask pixel area exceeds source image dimensions"
+                    )
+                if all(value is not None for value in bounds):
+                    saved_bounds = [float(value) for value in bounds if value is not None]
+                    x_min, y_min, x_max, y_max = saved_bounds
+                    possible_width = min(
+                        image.width_px, math.ceil(x_max) - math.floor(x_min) + 2
+                    )
+                    possible_height = min(
+                        image.height_px, math.ceil(y_max) - math.floor(y_min) + 2
+                    )
+                    if annotation.area_pixels > possible_width * possible_height:
+                        raise ValidationError(
+                            "Ecological mask pixel area exceeds its source-pixel bounds"
+                        )
             polygon = annotation.polygon_json
             if polygon is not None:
                 if not isinstance(polygon, list) or len(polygon) < 3:
