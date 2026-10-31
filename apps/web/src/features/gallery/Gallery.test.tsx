@@ -302,6 +302,59 @@ describe("Gallery", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("preserves unsaved group and status edits when persisted metadata changes", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const response = (groupKey: string | null, status: ProjectImage["annotation_status"]) => ({
+      items: [{ ...image, group_key: groupKey, annotation_status: status }],
+      total: 1,
+      page: 1,
+      page_size: 24,
+      pages: 1,
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(response(null, "unannotated")),
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Gallery project={project} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    const groupKey = screen.getByPlaceholderText("e.g. source-image-001");
+    const status = screen.getByLabelText("Image status");
+    await userEvent.type(groupKey, "unsaved-parent-fragment");
+
+    // Another editor updates both persisted fields. The local group draft
+    // remains unsaved, but the untouched status should follow the server.
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response("server-group", "reviewed"),
+      );
+    });
+    await waitFor(() => expect(status).toHaveValue("reviewed"));
+    expect(groupKey).toHaveValue("unsaved-parent-fragment");
+
+    // A second refresh must also preserve an unsaved status edit rather than
+    // silently reclassifying the researcher's in-progress observation.
+    await userEvent.selectOptions(status, "annotated");
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response("server-group-2", "excluded"),
+      );
+    });
+    expect(groupKey).toHaveValue("unsaved-parent-fragment");
+    expect(status).toHaveValue("annotated");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      fetchMock.mock.calls.some(([, options]) => options?.method === "PATCH"),
+    ).toBe(false);
+  });
+
   it("opens the annotation editor for a selected image", async () => {
     const onOpenAnnotation = vi.fn();
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
