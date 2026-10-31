@@ -782,6 +782,82 @@ describe("Gallery", () => {
     );
   });
 
+  it("discards pending wrap navigation when a researcher changes gallery filters", async () => {
+    const firstPage = Array.from({ length: 24 }, (_, index) => ({
+      ...image,
+      id: `image-${index + 1}`,
+      original_filename: `swiftia-${String(index + 1).padStart(2, "0")}.png`,
+    }));
+    const secondPage = [25, 26].map((index) => ({
+      ...image,
+      id: `image-${index}`,
+      original_filename: `swiftia-${index}.png`,
+    }));
+    let resolveSecondPage!: (response: Response) => void;
+    const pendingSecondPage = new Promise<Response>((resolve) => {
+      resolveSecondPage = resolve;
+    });
+    const onFocusedImageChange = vi.fn();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = new URL(String(input), "http://localhost");
+        if (!url.pathname.includes(`/projects/${project.id}/images`)) {
+          throw new Error(`Unexpected request ${url}`);
+        }
+        const requestedPage = Number(url.searchParams.get("page") ?? "1");
+        const filtered = Boolean(url.searchParams.get("filename"));
+        if (requestedPage === 2 && !filtered) return pendingSecondPage;
+        return jsonResponse({
+          items: filtered ? firstPage.slice(0, 2) : firstPage,
+          total: filtered ? 2 : 26,
+          page: 1,
+          page_size: 24,
+          pages: filtered ? 1 : 2,
+        });
+      });
+
+    renderGallery(undefined, undefined, onFocusedImageChange);
+    await screen.findByAltText("Focused project image: swiftia-01.png");
+    await userEvent.click(screen.getByLabelText("Wrap image navigation"));
+    const viewer = screen.getByRole("region", { name: "Image workbench" });
+    viewer.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("page=2"),
+        expect.any(Object),
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByAltText("Focused project image: swiftia-01.png"),
+      ).toBeNull(),
+    );
+
+    // The old page-two request is still in flight. A new filter must take
+    // precedence over the stale "focus last image" keyboard intent.
+    fireEvent.change(screen.getByPlaceholderText("Search filenames"), {
+      target: { value: "swiftia" },
+    });
+    expect(
+      await screen.findByAltText("Focused project image: swiftia-01.png"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByAltText("Focused project image: swiftia-02.png"),
+    ).toBeNull();
+    expect(onFocusedImageChange).not.toHaveBeenCalledWith("image-2");
+    resolveSecondPage(
+      jsonResponse({
+        items: secondPage,
+        total: 26,
+        page: 2,
+        page_size: 24,
+        pages: 2,
+      }),
+    );
+  });
+
   it("does not navigate from editor controls and persists optional wrapping", async () => {
     const secondImage: ProjectImage = {
       ...image,
