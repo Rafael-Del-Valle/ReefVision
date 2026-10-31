@@ -1092,6 +1092,19 @@ def compare_mesh_observations(
     second_hash_valid = _is_sha256_fingerprint(second_geometry_hash)
     if not (first_hash_valid and second_hash_valid):
         warnings.append("geometry_fingerprint_missing_or_invalid")
+    # Reusing the exact imported file across distinct timepoints is not an
+    # independent observation, even if scale, notes, or reconstruction settings
+    # have changed. A source digest is still caller-supplied, not authenticated.
+    first_source_hash = first.get("source_payload_sha256")
+    second_source_hash = second.get("source_payload_sha256")
+    if (
+        _is_sha256_fingerprint(first_source_hash)
+        and _is_sha256_fingerprint(second_source_hash)
+        and first_source_hash == second_source_hash
+    ):
+        warnings.append("identical_imported_source_payload_reused_across_observations")
+        if first_hash_valid and second_hash_valid and first_geometry_hash != second_geometry_hash:
+            warnings.append("identical_imported_source_payload_geometry_inconsistent")
     if first_hash_valid and second_hash_valid and first_geometry_hash == second_geometry_hash:
         warnings.append("identical_geometry_fingerprint")
         # A fingerprint covers the original triangles; calibration cannot alter
