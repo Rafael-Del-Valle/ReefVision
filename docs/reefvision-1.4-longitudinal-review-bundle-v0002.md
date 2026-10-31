@@ -101,3 +101,21 @@ as provisional. Regression coverage exercises both inconsistent metadata and
 the clean duplicate-original path through a persisted typed Workflow Builder
 graph; no authenticated review ledger or durable calibration record is created
 by this check.
+
+## Per-timepoint imported-source digest-check QC
+
+Longitudinal comparisons now distinguish a recorded SHA-256 fingerprint from
+checking the imported original against an independently supplied expected
+SHA-256. An imported OBJ, ASCII PLY, or GLB observation with no successful
+expected-digest check receives a timepoint-specific warning:
+`before_imported_source_expected_digest_not_checked` or
+`after_imported_source_expected_digest_not_checked`. A historical missing
+check flag is treated as unchecked, not as a successful verification. Inline
+indexed triangles have no imported original and do not receive this warning.
+
+A successful byte-for-byte expected-digest comparison does **not** authenticate
+acquisition, calibration, specimen identity, or reviewer credentials. Reused
+source bytes still trigger longitudinal withholding even when either or both
+imports have matching expected digests. Regression tests compare standalone
+analysis with persisted executable typed Workflow Builder graphs for OBJ,
+PLY and GLB, including mixed checked/unchecked timepoints.
