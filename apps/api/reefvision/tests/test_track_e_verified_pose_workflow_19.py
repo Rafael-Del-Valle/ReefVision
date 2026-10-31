@@ -31,6 +31,7 @@ from reefvision.services.pose_training_datasets import (
     frozen_pose_item_evidence_sha256,
 )
 from reefvision.services.workflow_execution import WorkflowExecutionService
+from reefvision.services.workflow_provenance import build_workflow_run_provenance
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
     execute_pose_training_dataset_adapter,
@@ -298,6 +299,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     malformed_summary = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert malformed_summary.status_code == 409, malformed_summary.text
     assert "output summary must be a list" in malformed_summary.json()["detail"]
+
+    # The provenance export is a separate scientific read path. It must
+    # reject the same altered saved declaration rather than authenticate it.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="output summary must be a list"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
 
     with app.state.session_factory() as session:
         node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
