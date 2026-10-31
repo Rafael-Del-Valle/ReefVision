@@ -5152,3 +5152,30 @@ verified; independent scientist-reviewed longitudinal measurements,
 experimental-unit registry, representative human/model biological validation,
 1.1 migration reconciliation, and physical Windows installed-GUI acceptance
 remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Registered experimental-unit ID ambiguity guard (2026-10-31)
+
+The preceding exact 1.2 head `92a51df923da75ba5636bd2e4a412d4d6e4332f2`
+completed **19/19 successful GitHub Actions workflows**, including backend CI,
+Pose Workflow Validation, ReefVision 1.0 Acceptance, and Windows Desktop Build.
+
+The registered ecological identity contract previously accepted physical-unit IDs
+with leading/trailing whitespace or embedded control characters. Thus
+`tank-1` and `tank-1 ` could appear as different declared units, inflating
+replication without changing the physical tank. A shared validator now **rejects**
+ambiguous IDs rather than silently trimming them. The rule applies to create
+and revision requests, persisted identity readback, and imported database
+revisions before producing the existing typed, persisted Workflow Builder
+identity registry. Source declarations are not silently rewritten; invalid
+imports fail closed and require an explicit correction through the audited
+identity revision workflow.
+
+Focused tests exercise create/revision rejection without mutating registry
+history and a simulated unreviewed imported revision rejected by both the
+standalone registry API and an executable saved Workflow Builder graph. No new
+node, migration, environmental context, pretrained weights, or branch merge.
+This is **identifier integrity**, not evidence of biological independence or
+scientist approval. Exact new-head CI, representative scientific validation,
+1.1 migration reconciliation and physical Windows installed-GUI acceptance
+remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**

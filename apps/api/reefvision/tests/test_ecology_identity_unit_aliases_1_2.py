@@ -246,3 +246,124 @@ def test_alias_collision_revision_and_import_fail_closed_in_saved_workflow(
     assert not any(
         row["data_type"] == "ecology_identity_registry" for row in detail.json()["artifacts"]
     )
+
+
+def test_padded_experimental_unit_ids_cannot_create_or_revise_registry(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Canonical physical unit IDs")["id"])
+    registry_url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
+    assert (
+        _register(
+            client,
+            project_id,
+            "fragment-A",
+            "fragment",
+            experimental_unit_type="tank",
+            experimental_unit_id="tank-1",
+        ).status_code
+        == 201
+    )
+    before = client.get(registry_url).json()
+    for invalid in ("tank-1 ", " tank-1", "tank-1\\t", "tank-1\\n"):
+        create = _register(
+            client,
+            project_id,
+            "fragment-B",
+            "fragment",
+            experimental_unit_type="aquarium",
+            experimental_unit_id=invalid,
+        )
+        assert create.status_code in (400, 422), create.text
+        assert "Experimental unit ID" in create.text
+        revision = client.post(
+            f"/api/v1/projects/{project_id}/ecology/organisms/fragment-A/revisions",
+            json={
+                "expected_revision": 1,
+                "kind": "fragment",
+                "experimental_unit_type": "tank",
+                "experimental_unit_id": invalid,
+                "reason": "Attempt to split a physical unit by whitespace",
+            },
+        )
+        assert revision.status_code in (400, 422), revision.text
+        assert "Experimental unit ID" in revision.text
+        assert client.get(registry_url).json() == before
+
+
+def test_imported_padded_unit_id_blocks_registry_and_executable_workflow(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Imported physical-unit ambiguity")["id"])
+    assert (
+        _register(
+            client,
+            project_id,
+            "fragment-A",
+            "fragment",
+            experimental_unit_type="tank",
+            experimental_unit_id="tank-1",
+        ).status_code
+        == 201
+    )
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        session.add(
+            EcologyIdentityRevision(
+                project_id=project_id,
+                organism_key="fragment-A",
+                revision=2,
+                kind="fragment",
+                parent_colony_key=None,
+                experimental_unit_type="aquarium",
+                experimental_unit_id="tank-1 ",
+                reason="Simulated unreviewed padded unit import",
+            )
+        )
+        session.commit()
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "invalid experimental unit ID" in registry.text
+
+    graph: dict[str, Any] = {
+        "graph_id": "ecology-unit-id-integrity-1-2",
+        "name": "Reject padded physical unit identifiers",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert "invalid experimental unit ID" in detail.json()["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in detail.json()["artifacts"]
+    )

@@ -27,7 +27,10 @@ from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_le
 from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
 from reefvision.domain.ecology_polygon_qc import validate_ecological_polygon_topology
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
-from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
+from reefvision.domain.experimental_unit_policy import (
+    require_ecological_unit_id,
+    require_ecological_unit_type,
+)
 from reefvision.schemas.ecology_identity import (
     EcologyAnnotationEvidenceCreate,
     EcologyAnnotationEvidenceRow,
@@ -145,6 +148,12 @@ class EcologyIdentityService:
             except ValueError as exc:
                 raise ValidationError(
                     "Ecological identity registry contains an invalid experimental unit type"
+                ) from exc
+            try:
+                require_ecological_unit_id(unit_id)
+            except ValueError as exc:
+                raise ValidationError(
+                    "Ecological identity registry contains an invalid experimental unit ID"
                 ) from exc
             normalized_type = classify_ecological_unit_level(unit_type)
             if normalized_type == "organism":

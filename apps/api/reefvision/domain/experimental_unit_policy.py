@@ -119,3 +119,21 @@ def require_ecological_unit_type(value: str | None) -> str | None:
             "not independent ecological experimental units"
         )
     return cleaned
+
+
+def require_ecological_unit_id(value: str | None) -> str | None:
+    """Preserve physical-unit identity without silently changing its label.
+
+    A padded ID such as "tank-1 " must not count as an independent unit
+    alongside "tank-1". Reject ambiguity rather than stripping provenance.
+    This validates syntax, not the existence or independence of a unit.
+    """
+    if value is None:
+        return None
+    if not value.strip():
+        raise ValueError("Experimental unit ID cannot be blank")
+    if value != value.strip():
+        raise ValueError("Experimental unit ID cannot have surrounding whitespace")
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError("Experimental unit ID cannot contain control characters")
+    return value

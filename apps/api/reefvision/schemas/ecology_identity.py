@@ -8,7 +8,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
+from reefvision.domain.experimental_unit_policy import (
+    require_ecological_unit_id,
+    require_ecological_unit_type,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 Key = str
@@ -32,6 +35,11 @@ class EcologyIdentityFields(BaseModel):
     @classmethod
     def reject_technical_replicates(cls, value: str | None) -> str | None:
         return require_ecological_unit_type(value)
+
+    @field_validator("experimental_unit_id")
+    @classmethod
+    def require_unambiguous_unit_id(cls, value: str | None) -> str | None:
+        return require_ecological_unit_id(value)
 
     @model_validator(mode="after")
     def require_complete_unit(self) -> EcologyIdentityFields:
@@ -84,8 +92,7 @@ class EcologyIdentityRow(BaseModel):
             )
         if self.experimental_unit_type is not None:
             require_ecological_unit_type(self.experimental_unit_type)
-        if self.experimental_unit_id is not None and not self.experimental_unit_id.strip():
-            raise ValueError("Recorded ecological experimental unit ID cannot be blank")
+        require_ecological_unit_id(self.experimental_unit_id)
         if self.parent_colony_key is not None and self.kind != "fragment":
             raise ValueError("Only recorded fragments can reference a parent colony")
         return self
