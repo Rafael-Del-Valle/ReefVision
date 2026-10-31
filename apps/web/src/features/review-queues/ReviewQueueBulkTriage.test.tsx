@@ -860,5 +860,4 @@ describe("ReviewQueueBulkTriage", () => {
       expect(onProtectedStateChange).toHaveBeenLastCalledWith(null),
     );
   });
-
 });
