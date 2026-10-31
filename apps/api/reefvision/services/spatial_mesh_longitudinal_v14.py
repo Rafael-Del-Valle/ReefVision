@@ -1206,6 +1206,27 @@ def compare_mesh_observations(
     # have changed. A source digest is still caller-supplied, not authenticated.
     first_source_hash = first.get("source_payload_sha256")
     second_source_hash = second.get("source_payload_sha256")
+    # Project-owned spatial assets represent immutable imported originals.
+    # Reusing one asset ID across dates cannot establish an independent scan,
+    # even if a legacy artifact lacks source-byte fingerprints. Two different
+    # hashes for the same asset ID instead contradict that immutable identity.
+    first_asset_id = first.get("spatial_source_asset_id")
+    second_asset_id = second.get("spatial_source_asset_id")
+    reused_spatial_source_asset = (
+        isinstance(first_asset_id, str)
+        and bool(first_asset_id)
+        and first_asset_id == second_asset_id
+    )
+    if (
+        reused_spatial_source_asset
+        and _is_sha256_fingerprint(first_source_hash)
+        and _is_sha256_fingerprint(second_source_hash)
+        and first_source_hash != second_source_hash
+    ):
+        raise ValueError("Reused spatial source asset ID has conflicting original payloads")
+    if reused_spatial_source_asset:
+        warnings.append("same_spatial_source_asset_reused_across_observations")
+        warnings.append("longitudinal_change_withheld_reused_spatial_source_asset")
     reused_imported_source_payload = (
         _is_sha256_fingerprint(first_source_hash)
         and _is_sha256_fingerprint(second_source_hash)
@@ -1492,6 +1513,7 @@ def compare_mesh_observations(
                 and not identity_disputed
                 and not identity_inconclusive
                 and not reused_imported_source_payload
+                and not reused_spatial_source_asset
                 and not rescaled_reexported_geometry
             ),
             "longitudinal_change_withheld_due_to_rescaled_reexported_geometry": (
@@ -1499,6 +1521,9 @@ def compare_mesh_observations(
             ),
             "longitudinal_change_withheld_due_to_reused_source_payload": (
                 reused_imported_source_payload
+            ),
+            "longitudinal_change_withheld_due_to_reused_spatial_source_asset": (
+                reused_spatial_source_asset
             ),
             "longitudinal_change_withheld_due_to_identity_dispute": identity_disputed,
             "longitudinal_change_withheld_due_to_inconclusive_identity_review": (
@@ -1510,11 +1535,12 @@ def compare_mesh_observations(
         identity_disputed
         or identity_inconclusive
         or reused_imported_source_payload
+        or reused_spatial_source_asset
         or rescaled_reexported_geometry
     ):
         # Keep original measurements and reconstruction QC intact. Disputed
-        # identity, byte-identical originals, or rescaled re-exports of the
-        # same triangles cannot establish independent biological change.
+        # identity, reused project-owned assets, byte-identical originals,
+        # or rescaled re-exports cannot establish independent biological change.
         for key in (
             "delta_surface_area_to_bounding_diagonal_squared_ratio",
             "delta_patch_area_concentration_index",
