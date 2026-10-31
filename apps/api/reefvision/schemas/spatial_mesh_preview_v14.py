@@ -164,6 +164,15 @@ class MeshRegistrationEvidence(BaseModel):
     # Optional project, observation and timepoint bindings prevent evidence
     # reuse across surveys with recycled local frame labels or geometry.
     project_id: str | None = Field(default=None, min_length=1, max_length=128)
+    # Optional paired specimen labels bind alignment evidence to the organism,
+    # not just survey frames, observation IDs, or reconstruction fingerprints.
+    # Caller-supplied labels are provisional, not authenticated identities.
+    source_specimen_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    target_specimen_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
     source_observation_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
     )
@@ -236,6 +245,8 @@ class MeshRegistrationEvidence(BaseModel):
 
     @model_validator(mode="after")
     def validate_rigid_transform(self) -> MeshRegistrationEvidence:
+        if (self.source_specimen_id is None) != (self.target_specimen_id is None):
+            raise ValueError("Registration specimen binding requires both specimen IDs")
         if (self.source_observation_id is None) != (self.target_observation_id is None):
             raise ValueError("Registration observation binding requires both observation IDs")
         if (self.source_observed_at_utc is None) != (self.target_observed_at_utc is None):
