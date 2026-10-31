@@ -454,6 +454,48 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def require_current_calibration_source_uniqueness(
+        self,
+    ) -> EcologyMeasurementCandidatesResponse:
+        """One calibration link supplies at most one row per metric.
+
+        Box width and height may legitimately share a calibration link, but
+        they must point to the same annotation, image and biological identity.
+        Duplicate or conflicting replayed rows must not inflate sampling effort.
+        Historical contracts retain their original decoding semantics.
+        """
+        if self.source_fingerprint_contract != "ecology-measurement-candidates-0021":
+            return self
+        seen_metrics: set[tuple[str, str]] = set()
+        source_by_calibration: dict[str, tuple[object, ...]] = {}
+        for row in self.candidates:
+            key = (row.calibration_evidence_id, row.metric)
+            if key in seen_metrics:
+                raise ValueError("Current ecological source has duplicate calibration metric")
+            seen_metrics.add(key)
+            source = (
+                row.organism_key,
+                row.identity_revision,
+                row.parent_colony_key,
+                row.experimental_unit_type,
+                row.experimental_unit_id,
+                row.image_id,
+                row.image_sha256.casefold(),
+                row.annotation_evidence_id,
+                row.annotation_kind,
+                row.annotation_id,
+                row.annotation_revision,
+                row.annotation_sha256.casefold(),
+                row.calibration_sha256.casefold(),
+                row.capture_time_status,
+                row.capture_timestamp_utc,
+            )
+            previous = source_by_calibration.setdefault(row.calibration_evidence_id, source)
+            if previous != source:
+                raise ValueError("Current ecological source has conflicting calibration lineage")
+        return self
+
+    @model_validator(mode="after")
     def require_current_sampling_qc_source_consistency(
         self,
     ) -> EcologyMeasurementCandidatesResponse:
