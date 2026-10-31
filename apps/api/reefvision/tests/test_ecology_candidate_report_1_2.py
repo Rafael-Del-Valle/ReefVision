@@ -166,7 +166,6 @@ def test_saved_ecological_report_rejects_tampered_or_rehashed_source_counts(
     assert EcologyMeasurementCandidatesResponse.model_validate(legacy).candidate_report is None
 
 
-
 def test_saved_workflow_ecological_qc_histogram_rejects_rehashed_invalid_series(
     client: TestClient,
 ) -> None:
@@ -207,11 +206,7 @@ def test_saved_workflow_ecological_qc_histogram_rejects_rehashed_invalid_series(
             "review_gate",
         }
         digest_input = {
-            **{
-                key: value
-                for key, value in altered.items()
-                if key not in excluded_fields
-            },
+            **{key: value for key, value in altered.items() if key not in excluded_fields},
             "algorithm_version": "ecology-candidate-report-0001",
         }
         altered["report_sha256"] = canonical_json_sha256(digest_input)
