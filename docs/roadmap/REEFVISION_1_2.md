@@ -5060,3 +5060,34 @@ scientist-reviewed longitudinal source observations, registered experimental
 unit independence, representative ecological and human/model comparisons,
 1.1 Alembic migration reconciliation, and installed Windows MSI/GUI
 acceptance remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Canonical physical-unit count replay and CI formatting repair (2026-10-31)
+
+The preceding exact 1.2 head `a7149662330d2ced74b03d39918f92c03d449a06`
+passed 16/19 GitHub Actions workflows, including Windows Desktop Build.
+Backend CI, Pose Workflow Validation and ReefVision 1.0 Acceptance failed
+at Ruff formatting before pytest: one extra blank line before the current
+evidence-field validator in `ecology_measurement_candidates.py`.
+Removed that blank line without changing the evidence-field contract.
+
+The v0021 ecological candidate producer already canonicalizes declared
+experimental-unit levels: `tank` and `aquarium` with the same physical ID
+represent **one** unit, not two independent biological replicates. However,
+the signed candidate-report readback previously accepted either the literal
+or canonical count, a historical compatibility allowance. Current v0021
+reports now require the **canonical** count; v0018–v0020 signed reports retain
+historical literal-label compatibility and remain `linked_unverified`.
+
+The focused regression starts from a real standalone API result and executed,
+persisted Workflow Builder candidate artifact, constructs two unverified
+organism records with alias declarations for the same physical tank, replays
+date/visit/endpoint/unit/population summaries and report fingerprints, and
+checks that a re-signed inflated report is rejected. It also checks historical
+readback without scientist approval. No new workflow node, 1.1 environmental
+context, model weights, migration or cross-version merge was introduced.
+
+**Release HOLD:** fresh exact-head CI and scientific test evidence, authenticated
+scientist-reviewed longitudinal observations, registered independent
+experimental units, representative biological/human-model validation,
+1.1 migration reconciliation and installed Windows MSI/GUI acceptance.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
