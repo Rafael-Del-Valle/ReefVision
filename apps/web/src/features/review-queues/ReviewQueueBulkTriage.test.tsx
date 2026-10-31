@@ -860,4 +860,31 @@ describe("ReviewQueueBulkTriage", () => {
       expect(onProtectedStateChange).toHaveBeenLastCalledWith(null),
     );
   });
+  it("blocks a new bulk submission while coordination is protected", () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <ReviewQueueBulkTriage queueId="queue-1" items={items} disabled />
+      </QueryClientProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "coral-reviewer" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select eligible on page/ }),
+    );
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    const apply = screen.getByRole("button", {
+      name: "Apply start to 1 items",
+    });
+    expect(apply).toHaveProperty("disabled", true);
+    fireEvent.click(apply);
+    expect(bulkTriageReviewQueueItems).not.toHaveBeenCalled();
+  });
+
 });
