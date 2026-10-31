@@ -54,6 +54,36 @@ def classify_ecological_unit_level(experimental_unit_type: str | None) -> str | 
     return next(iter(declared_levels), None)
 
 
+class RegisteredEcologicalUnit(Protocol):
+    experimental_unit_type: str | None
+    experimental_unit_id: str | None
+
+
+def require_unique_ecological_unit_spellings(
+    records: Iterable[RegisteredEcologicalUnit],
+) -> None:
+    """Reject case-only aliases of one registered physical sampling unit.
+
+    The same exact ID may be shared by organisms in one unit. Known sampling
+    labels such as tank/aquarium are equivalent, but different sampling levels
+    have separate namespaces. Do not rewrite source identifiers or claim
+    biological independence.
+    """
+    spellings: dict[tuple[str, str], str] = {}
+    for record in records:
+        unit_type = record.experimental_unit_type
+        unit_id = record.experimental_unit_id
+        if unit_type is None or unit_id is None:
+            continue
+        level = classify_ecological_unit_level(unit_type) or unit_type.casefold()
+        key = (level, unit_id.casefold())
+        prior = spellings.setdefault(key, unit_id)
+        if prior != unit_id:
+            raise ValueError(
+                "Ecological experimental unit IDs differ only by case at the same sampling level"
+            )
+
+
 def ecological_unit_types_equivalent(left: str, right: str) -> bool:
     """Compare declared sampling levels without authenticating study design.
 
