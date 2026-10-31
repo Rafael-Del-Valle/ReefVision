@@ -46,10 +46,25 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             vertices.append(point)
             if len(vertices) > MAX_VERTICES:
                 raise ValueError("OBJ preview exceeds vertex limit")
-        elif fields[0] == "vt":
-            texture_coordinate_count += 1
-        elif fields[0] == "vn":
-            normal_count += 1
+        elif fields[0] in {"vt", "vn"}:
+            # Attribute values do not affect measurements, but malformed or
+            # nonfinite declarations must not legitimize face references.
+            kind = fields[0]
+            count = len(fields) - 1
+            if (kind == "vt" and count not in {1, 2, 3}) or (
+                kind == "vn" and count != 3
+            ):
+                raise ValueError(f"OBJ line {line_number}: invalid {kind} declaration")
+            try:
+                attributes = [float(value) for value in fields[1:]]
+            except (ValueError, OverflowError) as exc:
+                raise ValueError(f"OBJ line {line_number}: invalid {kind} declaration") from exc
+            if not all(isfinite(value) for value in attributes):
+                raise ValueError(f"OBJ line {line_number}: invalid {kind} declaration")
+            if kind == "vt":
+                texture_coordinate_count += 1
+            else:
+                normal_count += 1
         elif fields[0] == "f":
             if len(fields) != 4:
                 raise ValueError(f"OBJ line {line_number}: only triangular faces are supported")
