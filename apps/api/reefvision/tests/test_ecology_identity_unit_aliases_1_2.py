@@ -274,7 +274,7 @@ def test_ambiguous_experimental_unit_ids_cannot_create_or_revise_registry(
         "tank-1\u200b",  # zero-width space
         "tank-1\u2060",  # invisible word joiner
         "tank-\u202e1",  # right-to-left override
-        "ｔａｎｋ-1",  # NFKC-compatible fullwidth letters
+        "\uff54\uff41\uff4e\uff4b-1",  # NFKC-compatible fullwidth letters
         "tank-①",  # NFKC-compatible circled digit
         "tank-cafe\u0301",  # decomposed canonical accent
     ):
@@ -317,7 +317,7 @@ def test_ambiguous_experimental_unit_ids_cannot_create_or_revise_registry(
 
 @pytest.mark.parametrize(
     "invalid",
-    ["tank-1 ", "tank-1\u200b", "ｔａｎｋ-1", "tank-①"],
+    ["tank-1 ", "tank-1\u200b", "\uff54\uff41\uff4e\uff4b-1", "tank-①"],
     ids=["padded", "zero-width", "fullwidth", "compatibility-digit"],
 )
 def test_imported_ambiguous_unit_id_blocks_registry_and_executable_workflow(
