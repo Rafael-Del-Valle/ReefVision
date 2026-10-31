@@ -137,3 +137,24 @@ such sources are retained but cannot yet be previewed. Large-file streaming,
 migration/Windows installation verification, and all remaining scientific
 release gates remain open. No asset is automatically calibrated, registered,
 or biologically verified.
+
+### Asset-bound longitudinal reidentification evidence
+
+Optional paired `before_spatial_source_asset_id` and
+`after_spatial_source_asset_id` fields now bind provisional human specimen
+matching notes to the actual project-owned OBJ/PLY/GLB originals. Both must
+be supplied together as canonical lowercase UUIDs. A matching source-file
+SHA-256 alone is insufficient to identify a specific import. Reusing evidence
+with another asset ID is rejected, including when an observation is replayed
+through a saved, typed Workflow Builder graph. Historical evidence without
+the pair remains readable but receives
+`reidentification_spatial_source_asset_binding_unavailable` when a stored
+asset was used. Inline-only meshes have no asset identity to bind.
+
+The standalone longitudinal endpoint and persisted executable workflow
+share the same comparison engine. Regression coverage checks correct,
+mismatched, partial and legacy asset bindings and exact saved-artifact parity.
+These IDs provide provenance consistency, **not** authenticated human review,
+verified organism identity, independent observations, or biological growth.
+A durable versioned reviewer ledger and full installed-Windows/GPU scientific
+acceptance are still required before release.
