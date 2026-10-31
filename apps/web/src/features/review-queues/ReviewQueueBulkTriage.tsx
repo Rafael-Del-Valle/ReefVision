@@ -163,6 +163,35 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           "Bulk QC response did not match the submitted queue, action, or researcher-review gate. Retry the identical request before taking another action.",
         );
       }
+      // An HTTP 200 with a different set of biological review items is not
+      // evidence that this batch was applied. Exact retries may legitimately
+      // report zero changed items, but must still return the requested items
+      // in their resulting state. Never clear the original UUID on mismatch.
+      const expectedState: ReviewQueueItem["review_state"] = {
+        start: "in_progress",
+        skip: "skipped",
+        return: "pending",
+        complete: "completed",
+      }[request.payload.action];
+      const expectedIds = new Set(request.payload.item_ids);
+      if (
+        !Number.isInteger(result.changed_count) ||
+        result.changed_count < 0 ||
+        result.changed_count > expectedIds.size ||
+        !Array.isArray(result.items) ||
+        result.items.length !== expectedIds.size ||
+        new Set(result.items.map((item) => item.id)).size !== expectedIds.size ||
+        result.items.some(
+          (item) =>
+            !expectedIds.has(item.id) ||
+            item.review_queue_id !== request.queueId ||
+            item.review_state !== expectedState,
+        )
+      ) {
+        throw new Error(
+          "Bulk QC response item identities, states, or changed count did not match the submitted batch. Retry the identical request before taking another action.",
+        );
+      }
       return result;
     },
     onSuccess: async (result, request) => {
