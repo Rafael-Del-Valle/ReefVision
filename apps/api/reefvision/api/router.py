@@ -18,6 +18,7 @@ from reefvision.api.routes.class_visibility import router as class_visibility_ro
 from reefvision.api.routes.classification import router as classification_router
 from reefvision.api.routes.coral_structure import router as coral_structure_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
+from reefvision.api.routes.ecology_identity import router as ecology_identity_router
 from reefvision.api.routes.geographic_movement_analytics import (
     router as geographic_movement_analytics_router,
 )
@@ -28,8 +29,10 @@ from reefvision.api.routes.health import router as health_router
 from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.jobs import router as jobs_router
 from reefvision.api.routes.learning_evaluation import router as learning_evaluation_router
+from reefvision.api.routes.longitudinal_monitoring import router as longitudinal_monitoring_router
 from reefvision.api.routes.mask_refinements import router as mask_refinements_router
 from reefvision.api.routes.measurements import router as measurements_router
+from reefvision.api.routes.model_agreement import router as model_agreement_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router
@@ -103,6 +106,9 @@ api_router.include_router(advanced_providers_router)
 api_router.include_router(advanced_provider_execution_router)
 api_router.include_router(workflow_graphs_router)
 api_router.include_router(learning_evaluation_router)
+api_router.include_router(longitudinal_monitoring_router)
+api_router.include_router(ecology_identity_router)
+api_router.include_router(model_agreement_router)
 api_router.include_router(segmentation_learning_evaluation_router)
 api_router.include_router(segmentation_deployment_router)
 api_router.include_router(segmentation_evaluation_queue_router)

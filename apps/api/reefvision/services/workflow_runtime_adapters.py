@@ -21,6 +21,8 @@ from reefvision.db.models import (
     WorkflowNodeRun,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.longitudinal_monitoring import analyze_longitudinal
+from reefvision.domain.model_agreement import compare_paired_counts
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
@@ -42,6 +44,13 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "relative_depth_estimation",
     "mask_measurements",
     "video_tracking",
+    "ecology_longitudinal_analysis",
+    "ecology_identity_registry_source",
+    "ecology_connected_branch_preview",
+    "ecology_measurement_csv_export",
+    "ecology_population_csv_export",
+    "ecology_paired_count_comparison",
+    "ecology_paired_count_csv_export",
 }
 
 
@@ -789,6 +798,319 @@ def _video_tracking(
     ]
 
 
+def _ecology_connected_branch_preview(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.schemas.connected_branch_editing import ConnectedBranchPreviewRequest
+    from reefvision.services.connected_branch_preview import preview_saved_branch_addition
+
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    allowed = runtime_keys | {"analysis_id", "edit_id", "points"}
+    if set(parameters) - allowed:
+        raise ValidationError("Connected branch preview has unsupported parameters")
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Connected branch preview requires the current project source")
+    analysis_id = parameters.get("analysis_id")
+    if not isinstance(analysis_id, str) or not analysis_id:
+        raise ValidationError("Connected branch preview requires a saved analysis ID")
+    request = ConnectedBranchPreviewRequest.model_validate(
+        {"edit_id": parameters.get("edit_id"), "points": parameters.get("points")}
+    )
+    preview = preview_saved_branch_addition(session, settings, analysis_id, request)
+    image = session.get(ImageAsset, preview.image_id)
+    if image is None or image.project_id != project_id:
+        raise ValidationError("Connected branch preview source belongs to another project")
+    return [
+        {
+            "port_id": "preview",
+            "data_type": "connected_branch_preview",
+            "payload": {"project_id": project_id, **preview.model_dump(mode="json")},
+        }
+    ]
+
+
+def _ecology_identity_registry_source(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.services.ecology_identity import EcologyIdentityService
+    from reefvision.services.ecology_measurement_candidates import (
+        EcologyMeasurementCandidateService,
+    )
+
+    del settings
+    # The workflow executor injects these two run-trace identifiers into every
+    # runtime adapter. They are not scientist-configurable node parameters.
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    if set(parameters) - runtime_keys:
+        raise ValidationError("Ecological identity registry source accepts no parameters")
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Identity registry requires the current project source")
+    snapshot = EcologyIdentityService(session).registry(project_id)
+    if not snapshot.identities:
+        raise ValidationError("Register an organism before sourcing an identity registry")
+    measurement = EcologyMeasurementCandidateService(session).candidates(
+        project_id, registry=snapshot
+    )
+    if measurement.candidate_report is None:
+        raise ValidationError("Ecological candidate report was not generated")
+    return [
+        {
+            "port_id": "registry",
+            "data_type": "ecology_identity_registry",
+            "payload": snapshot.model_dump(mode="json"),
+        },
+        {
+            "port_id": "measurement_candidates",
+            "data_type": "ecology_measurement_candidates",
+            "payload": measurement.model_dump(mode="json"),
+        },
+        {
+            "port_id": "candidate_report",
+            "data_type": "ecology_candidate_report",
+            "payload": measurement.candidate_report.model_dump(mode="json"),
+        },
+    ]
+
+
+def _ecology_measurement_csv_export(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.schemas.ecology_measurement_candidates import (
+        EcologyMeasurementCandidatesResponse,
+    )
+    from reefvision.services.ecology_candidate_measurements_export import (
+        MEASUREMENT_CSV_SCHEMA_VERSION,
+        four_layer_source_digests_present,
+        render_ecology_measurements_csv,
+    )
+
+    del session, settings
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    if set(parameters) - runtime_keys:
+        raise ValidationError("Ecological measurement CSV export accepts no parameters")
+    source = EcologyMeasurementCandidatesResponse.model_validate(
+        _single_payload(inputs, "candidates")
+    )
+    if source.project_id != project_id:
+        raise ValidationError("Ecological measurement export requires current project sources")
+    csv_text = render_ecology_measurements_csv(source)
+    fingerprint_rechecked = source.source_fingerprint_contract is not None
+    report = source.candidate_report
+    if report is None:
+        raise ValidationError("Ecological candidate report is missing")
+    return [
+        {
+            "port_id": "csv",
+            "data_type": "ecology_measurement_csv",
+            "payload": {
+                "schema_version": MEASUREMENT_CSV_SCHEMA_VERSION,
+                "project_id": project_id,
+                "source_input_sha256": source.input_sha256,
+                "report_sha256": report.report_sha256,
+                "source_fingerprint_rechecked": fingerprint_rechecked,
+                "source_fingerprint_contract": source.source_fingerprint_contract,
+                "source_registry_history_sha256": source.source_registry_history_sha256,
+                "source_image_evidence_sha256": source.source_image_evidence_sha256,
+                "source_annotation_evidence_sha256": source.source_annotation_evidence_sha256,
+                "source_calibration_evidence_sha256": source.source_calibration_evidence_sha256,
+                "four_layer_source_digests_present": four_layer_source_digests_present(source),
+                "independent_unit_inference_allowed": False,
+                "csv_text": csv_text,
+                "evidence_level": "linked_unverified",
+                "review_gate": "scientist_review_required",
+            },
+        }
+    ]
+
+
+def _ecology_population_csv_export(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    import hashlib
+
+    from reefvision.schemas.ecology_measurement_candidates import (
+        EcologyMeasurementCandidatesResponse,
+    )
+    from reefvision.services.ecology_population_export import (
+        POPULATION_CSV_SCHEMA_VERSION,
+        render_ecology_population_csv,
+    )
+
+    del session, settings
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    if set(parameters) - runtime_keys:
+        raise ValidationError("Ecological population CSV export accepts no parameters")
+    source = EcologyMeasurementCandidatesResponse.model_validate(
+        _single_payload(inputs, "candidates")
+    )
+    if source.project_id != project_id:
+        raise ValidationError("Ecological population export requires current project sources")
+    csv_text = render_ecology_population_csv(source)
+    report = source.candidate_report
+    if report is None:
+        raise ValidationError("Ecological candidate report is missing")
+    return [
+        {
+            "port_id": "csv",
+            "data_type": "ecology_population_csv",
+            "payload": {
+                "schema_version": POPULATION_CSV_SCHEMA_VERSION,
+                "project_id": project_id,
+                "source_input_sha256": source.input_sha256,
+                "report_sha256": report.report_sha256,
+                "source_fingerprint_rechecked": True,
+                "source_fingerprint_contract": source.source_fingerprint_contract,
+                "source_candidate_count": report.candidate_count,
+                "source_declared_experimental_unit_count": (
+                    report.declared_experimental_unit_count
+                ),
+                "independent_unit_inference_allowed": False,
+                "csv_sha256": hashlib.sha256(csv_text.encode("utf-8")).hexdigest(),
+                "csv_text": csv_text,
+                "evidence_level": "linked_unverified",
+                "review_gate": "scientist_review_required",
+            },
+        }
+    ]
+
+
+def _ecology_longitudinal_analysis(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisRequest
+
+    del session, settings
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Longitudinal analysis requires the current project source")
+    request = LongitudinalAnalysisRequest.model_validate(
+        {
+            "observations": parameters.get("observations"),
+            "experimental_unit_type": parameters.get("experimental_unit_type"),
+            "expected_organism_ids_by_unit": parameters.get("expected_organism_ids_by_unit"),
+            "expected_sampling_dates_by_unit": parameters.get("expected_sampling_dates_by_unit"),
+        }
+    )
+    analysis = analyze_longitudinal(request)
+    return [
+        {
+            "port_id": "analysis",
+            "data_type": "longitudinal_analysis",
+            "payload": {
+                "schema_version": "longitudinal-analysis-0001",
+                "project_id": project_id,
+                "source_record_ids": [obs.source_record_id for obs in request.observations],
+                **analysis.model_dump(mode="json"),
+            },
+        }
+    ]
+
+
+def _ecology_paired_count_comparison(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.schemas.model_agreement import PairedCountComparisonRequest
+
+    del session, settings
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Paired count comparison requires the current project source")
+    request = PairedCountComparisonRequest.model_validate(
+        {
+            "pairs": parameters.get("pairs"),
+            "reference_kind": parameters.get("reference_kind"),
+            "experimental_unit_type": parameters.get("experimental_unit_type"),
+        }
+    )
+    comparison = compare_paired_counts(request)
+    return [
+        {
+            "port_id": "comparison",
+            "data_type": "paired_count_comparison",
+            "payload": {
+                "schema_version": "paired-count-comparison-0001",
+                "project_id": project_id,
+                "reference_source_record_ids": [
+                    pair.reference_source_record_id for pair in request.pairs
+                ],
+                "model_source_record_ids": [pair.model_source_record_id for pair in request.pairs],
+                **comparison.model_dump(mode="json"),
+            },
+        }
+    ]
+
+
+def _ecology_paired_count_csv_export(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    """Recheck a saved comparison and persist an unverified CSV artifact."""
+    import hashlib
+
+    from reefvision.schemas.model_agreement import PairedCountComparisonResponse
+    from reefvision.services.ecology_paired_count_export import (
+        PAIRED_COUNT_CSV_SCHEMA_VERSION,
+        render_paired_count_csv,
+    )
+
+    del session, settings
+    runtime_keys = {"__workflow_run_id", "__workflow_node_run_id"}
+    if set(parameters) - runtime_keys:
+        raise ValidationError("Paired count CSV export accepts no parameters")
+    payload = _single_payload(inputs, "comparison")
+    if payload.get("project_id") != project_id:
+        raise ValidationError("Paired count CSV export requires current project sources")
+    comparison = PairedCountComparisonResponse.model_validate(payload)
+    csv_text = render_paired_count_csv(comparison)
+    return [
+        {
+            "port_id": "csv",
+            "data_type": "paired_count_comparison_csv",
+            "payload": {
+                "schema_version": PAIRED_COUNT_CSV_SCHEMA_VERSION,
+                "project_id": project_id,
+                "source_input_sha256": (comparison.analysis_provenance.canonical_input_sha256),
+                "source_record_ids": comparison.analysis_provenance.source_record_ids,
+                "algorithm_version": comparison.analysis_provenance.algorithm_version,
+                "csv_sha256": hashlib.sha256(csv_text.encode("utf-8")).hexdigest(),
+                "csv_text": csv_text,
+                "evidence_level": "caller_supplied_unverified",
+                "review_status": "requires_source_verification",
+                "independent_unit_inference_allowed": False,
+            },
+        }
+    ]
+
+
 _ADAPTERS = {
     "segmentation_inference": _segmentation_inference,
     "classification_inference": _classification_inference,
@@ -800,6 +1122,13 @@ _ADAPTERS = {
     "relative_depth_estimation": _relative_depth_estimation,
     "mask_measurements": _mask_measurements,
     "video_tracking": _video_tracking,
+    "ecology_longitudinal_analysis": _ecology_longitudinal_analysis,
+    "ecology_identity_registry_source": _ecology_identity_registry_source,
+    "ecology_connected_branch_preview": _ecology_connected_branch_preview,
+    "ecology_measurement_csv_export": _ecology_measurement_csv_export,
+    "ecology_population_csv_export": _ecology_population_csv_export,
+    "ecology_paired_count_comparison": _ecology_paired_count_comparison,
+    "ecology_paired_count_csv_export": _ecology_paired_count_csv_export,
 }
 
 
