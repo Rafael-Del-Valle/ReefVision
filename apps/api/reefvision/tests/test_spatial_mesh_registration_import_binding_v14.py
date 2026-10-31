@@ -125,8 +125,12 @@ def test_registration_reimport_with_identical_bytes_rejects_stale_asset() -> Non
 
 @pytest.mark.parametrize(
     "missing",
-    ["source_payload_sha256", "target_payload_sha256",
-     "source_spatial_source_asset_id", "target_spatial_source_asset_id"],
+    [
+        "source_payload_sha256",
+        "target_payload_sha256",
+        "source_spatial_source_asset_id",
+        "target_spatial_source_asset_id",
+    ],
 )
 def test_registration_requires_complete_import_bindings(missing: str) -> None:
     before, after = _previews("project-1", asset_ids=True)
@@ -138,9 +142,8 @@ def test_registration_requires_complete_import_bindings(missing: str) -> None:
 
 def test_registration_rejects_mutated_binding_after_initial_validation() -> None:
     before, after = _previews("project-1", asset_ids=True)
-    evidence = MeshRegistrationEvidence.model_validate(
-        _registration(before, after, asset_ids=True)
-    )
+    evidence_values = _registration(before, after, asset_ids=True)
+    evidence = MeshRegistrationEvidence.model_validate(evidence_values)
     evidence.target_payload_sha256 = "a" * 64
     with pytest.raises(ValueError, match="both imported source payloads"):
         compare_mesh_observations(before, after, registration_evidence=evidence)
