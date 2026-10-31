@@ -375,7 +375,9 @@ describe("Gallery", () => {
     });
 
     renderGallery(onOpenAnnotation);
-    const card = await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    const card = await screen.findByRole("article", {
+      name: /swiftia-01\.png/,
+    });
     const groupKey = screen.getByPlaceholderText("e.g. source-image-001");
     const checkbox = screen.getByLabelText("Select image");
 
@@ -403,7 +405,8 @@ describe("Gallery", () => {
     await userEvent.keyboard(" ");
     expect(checkbox).toBeChecked();
     await userEvent.keyboard("{Enter}");
-    expect(onOpenAnnotation).toHaveBeenCalledExactlyOnceWith("image-1");
+    expect(onOpenAnnotation).toHaveBeenCalledTimes(1);
+    expect(onOpenAnnotation).toHaveBeenCalledWith("image-1");
   });
 
   it("opens the annotation editor for a selected image", async () => {
