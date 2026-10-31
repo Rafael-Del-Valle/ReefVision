@@ -203,7 +203,7 @@ function Test-FiniteMetricValue {
 Write-Host 'ReefVision training monitor (read-only). Close this window to stop monitoring.'
 while ($true) {
   try {
-    $run = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10
+    $run = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -MaximumRedirection 0
     Clear-Host
     Write-Host ('ReefVision - {0}' -f (Format-SafeText $run.run_name))
     Write-Host ('Status: {0} | Stage: {1}' -f (Format-SafeText $run.status), (Format-SafeText $run.stage))
@@ -259,10 +259,11 @@ while ($true) {
         Write-Host ('  {0,-30} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]))
       }
     }
+    # Never follow an API redirect to a remote host: monitoring stays on loopback.
     # The API reads only the persisted run log, with path confinement and a
     # bounded tail. This console never opens a training process or writes logs.
     try {
-      $tail = Invoke-RestMethod -Uri ($url + '/logs/tail') -Method Get -TimeoutSec 5
+      $tail = Invoke-RestMethod -Uri ($url + '/logs/tail') -Method Get -TimeoutSec 5 -MaximumRedirection 0
       if ($tail.available -and $tail.text) {
         Write-Host ''
         Write-Host 'Training job log (last 20 lines, read-only)'
