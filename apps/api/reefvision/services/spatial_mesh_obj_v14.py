@@ -15,7 +15,9 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
     vertices: list[list[float]] = []
     faces: list[list[int]] = []
     for line_number, line in enumerate(text.splitlines(), 1):
-        fields = line.strip().split()
+        # OBJ permits trailing # comments on geometry records. Strip only
+        # parser tokens; the original bytes remain bound in source provenance.
+        fields = line.split("#", 1)[0].strip().split()
         if not fields or fields[0].startswith("#"):
             continue
         if fields[0] == "v":
