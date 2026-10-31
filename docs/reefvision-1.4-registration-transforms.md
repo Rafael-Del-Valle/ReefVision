@@ -253,3 +253,29 @@ Distinct reviewer identifiers remain caller-supplied audit metadata, **not**
 authenticated identities or proof of independent review. Existing supporting
 reviews do not change `specimen_identity_verified` or
 `coordinate_registration_verified` from `false`.
+
+## Optional paired biological specimen binding
+
+Registration evidence can now include `source_specimen_id` and
+`target_specimen_id`, each a bounded (1–128 character) provisional
+specimen label. Supply **both or neither**. The longitudinal comparison
+rejects a registration if either bound label differs from the corresponding
+mesh-preview provenance, even if the imported OBJ/PLY/GLB bytes, geometry
+fingerprints, coordinate frames and observation IDs have not changed.
+This prevents a saved alignment from silently being reused after both
+observations are reassigned to a different coral.
+
+Legacy evidence without specimen bindings remains readable and emits
+`registration_specimen_binding_unavailable` rather than inventing a
+biological identity check. A changed or partially removed binding is
+revalidated and rejected even if a Pydantic model was modified after its
+initial construction. Regression tests cover standalone comparisons,
+a successfully persisted typed Workflow Builder graph, and rejection of
+a cross-specimen replay in a separately saved executable graph.
+
+**Scientific limitation:** Matching caller-provided specimen labels do not
+prove that the same colony was sampled twice, that independent observers
+agreed, or that the registration is spatially accurate. Reidentification
+review and calibrated, independently verified evidence remain necessary;
+`coordinate_registration_verified` and `specimen_identity_verified`
+are not promoted by these bindings.
