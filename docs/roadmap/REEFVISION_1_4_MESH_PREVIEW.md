@@ -178,3 +178,24 @@ camera invariance, zero-length edges, missing versus zero uncertainty,
 keyboard selection, and immutable scientific source data. Representative
 coral scans, independently verified calibration, persistent 3D asset storage,
 and installed Windows/GPU acceptance remain outstanding.
+
+
+### OBJ face-reference integrity (development)
+
+The bounded OBJ triangle parser accepts the standard vertex-reference forms
+`v`, `v/vt`, `v//vn`, and `v/vt/vn`, including signed relative vertex
+indices and inline `#` comments. It now rejects malformed references
+(trailing slashes, extra slash components, non-ASCII or non-integer indices,
+and zero-valued vertex/texture/normal indices) instead of silently taking
+only the first token component and measuring a possibly corrupted face.
+This applies equally to the standalone preview endpoint and persisted,
+typed, executable Workflow Builder graphs. Tests cover supported syntax,
+fail-closed standalone and saved-workflow execution, and matching scientific
+artifacts for valid mixed-reference inputs.
+
+Only the vertex indices are resolved into spatial triangles. Auxiliary
+texture/normal indices are checked for syntax and nonzero values, **not**
+validated against separate `vt`/`vn` declarations or used for geometry,
+calibration, tissue segmentation, or biological identity. A syntactically
+accepted OBJ is not a verified reconstruction. The full original source
+bytes remain distinct from geometry fingerprints for provenance.
