@@ -507,16 +507,28 @@ describe("ReviewQueueBulkTriage", () => {
     );
     await screen.findByRole("button", { name: "Retry identical bulk action" });
     const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
-    expect(screen.queryByRole("button", { name: "Discard and refresh" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Discard and refresh" }),
+    ).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Review discard risk" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review discard risk" }),
+    );
     expect(screen.getByText(/may already have been committed/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Retry identical bulk action" })).toBeTruthy();
-    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[0]).toEqual(original);
+    expect(
+      screen.getByRole("button", { name: "Retry identical bulk action" }),
+    ).toBeTruthy();
+    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[0]).toEqual(
+      original,
+    );
     expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Discard and refresh" }));
-    expect(screen.queryByRole("button", { name: "Retry identical bulk action" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard and refresh" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Retry identical bulk action" }),
+    ).toBeNull();
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({
         queryKey: ["review_queue_items", "queue-1"],
@@ -536,7 +548,10 @@ describe("ReviewQueueBulkTriage", () => {
         requires_researcher_review: true,
       });
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const view = (id: string) => (
       <QueryClientProvider client={client}>
@@ -556,19 +571,32 @@ describe("ReviewQueueBulkTriage", () => {
     );
     await screen.findByRole("button", { name: "Retry identical bulk action" });
     const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
-    fireEvent.click(screen.getByRole("button", { name: "Review discard risk" }));
-    expect(screen.getByRole("button", { name: "Discard and refresh" })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review discard risk" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Discard and refresh" }),
+    ).toBeTruthy();
 
     rerender(view("queue-b"));
-    expect(screen.queryByRole("button", { name: "Discard and refresh" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Discard and refresh" }),
+    ).toBeNull();
     rerender(view("queue-a"));
-    expect(screen.queryByRole("button", { name: "Discard and refresh" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Review discard risk" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry identical bulk action" }));
+    expect(
+      screen.queryByRole("button", { name: "Discard and refresh" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Review discard risk" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry identical bulk action" }),
+    );
     await waitFor(() =>
       expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(2),
     );
-    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1]).toEqual(original);
+    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1]).toEqual(
+      original,
+    );
   });
-
 });
