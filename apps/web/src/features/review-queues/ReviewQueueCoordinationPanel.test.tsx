@@ -146,7 +146,9 @@ describe("ReviewQueueCoordinationPanel", () => {
 
     rerender(view("queue-b", "item-b"));
     expect(
-      screen.queryByRole("group", { name: "Discard unsent coordination drafts" }),
+      screen.queryByRole("group", {
+        name: "Discard unsent coordination drafts",
+      }),
     ).toBeNull();
     rerender(view("queue-a", "item-a"));
     expect(screen.getByLabelText("Review comment")).toHaveProperty(
