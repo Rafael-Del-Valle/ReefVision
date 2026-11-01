@@ -319,7 +319,9 @@ by four. This supports common interleaved vertex records with additional
 per-vertex bytes, while only the decoded XYZ positions contribute to
 surface area, dimensions, topology, or source geometry fingerprints. The
 accessor must fit fully inside its declared buffer view, including the
-last strided vertex; an attribute cannot cross its own stride boundary.
+last strided vertex; a four-byte-aligned POSITION accessor may start after
+other bytes in each record, but its XYZ values cannot cross a stride
+boundary.
 Index accessors remain tightly packed and reject `byteStride`.
 
 Missing stride metadata still means tightly packed positions. Invalid
