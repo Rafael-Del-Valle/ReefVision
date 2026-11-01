@@ -1004,7 +1004,7 @@ describe("Gallery", () => {
       undefined,
       onInferenceSelectionChange,
     );
-    await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    await screen.findByRole("article", { name: /swiftia-01\.png/ });
     await userEvent.click(screen.getAllByLabelText("Select image")[0]);
     await waitFor(() =>
       expect(onInferenceSelectionChange).toHaveBeenLastCalledWith(["image-1"]),
@@ -1023,10 +1023,10 @@ describe("Gallery", () => {
       expect(onInferenceSelectionChange).toHaveBeenLastCalledWith([]);
     });
     expect(
-      screen.queryByRole("article", { name: /swiftia-01\\.png/ }),
+      screen.queryByRole("article", { name: /swiftia-01\.png/ }),
     ).toBeNull();
     expect(
-      screen.getByRole("article", { name: /swiftia-02\\.JPG/ }),
+      screen.getByRole("article", { name: /swiftia-02\.JPG/ }),
     ).toBeInTheDocument();
   });
 
