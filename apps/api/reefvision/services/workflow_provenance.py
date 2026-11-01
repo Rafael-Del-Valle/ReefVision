@@ -352,6 +352,10 @@ def build_workflow_run_provenance(
     # Never silently discard malformed entries from a persisted run.
     if "recovery_history" in result and not isinstance(raw_history, list):
         raise ConflictError("Workflow recovery history must be a list")
+    # The list itself can be valid while individual audit entries have been
+    # replaced with scalars. Preserve recovery-event structure on export.
+    if any(not isinstance(entry, dict) for entry in raw_history):
+        raise ConflictError("Workflow recovery history entries must be JSON objects")
 
     recovery_history = list(raw_history)
 
