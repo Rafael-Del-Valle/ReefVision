@@ -52,7 +52,12 @@ scientific acceptance remain release blockers.
 
 GLB 2.0 base64 (`glb_base64`) supports one embedded indexed or
 non-indexed TRIANGLES primitive, including bounded interleaved float32 POSITION
-records and unsigned 8/16/32-bit indices. Scene transforms, compression,
+records and unsigned 8/16/32-bit indices. Parser and saved-graph tests now
+compare 32-bit index geometry and fingerprints with 16-bit equivalents,
+including declared index extrema; out-of-range 32-bit indices fail standalone
+and persisted graph execution without a measurement artifact. This is a
+compatibility and integrity check, not a claim of verified reconstruction.
+Scene transforms, compression,
 sparse accessors and external buffers remain unsupported. Optional POSITION
 and index-accessor min/max arrays are checked against decoded geometry;
 contradictory, nonfinite or malformed bounds fail closed rather than silently
