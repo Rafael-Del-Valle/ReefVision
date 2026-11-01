@@ -265,6 +265,8 @@ def make_glb(
         doc["extras"] = {"nonfinite": float("inf")}
     elif invalid_selector == "json_negative_infinity":
         doc["extras"] = {"nonfinite": float("-inf")}
+    elif invalid_selector in {"json_exponent_overflow", "json_negative_exponent_overflow"}:
+        doc["extras"] = {"nonfinite": "overflow_marker"}
     if explicit_targets:
         doc["bufferViews"][0]["target"] = 34962
         doc["bufferViews"][1]["target"] = 34963
@@ -283,6 +285,9 @@ def make_glb(
         doc["accessors"][0]["normalized"] = False
         doc["bufferViews"][0]["byteStride"] = 12
     json_bytes = json.dumps(doc).encode()
+    if invalid_selector in {"json_exponent_overflow", "json_negative_exponent_overflow"}:
+        exponent = b"-1e400" if invalid_selector == "json_negative_exponent_overflow" else b"1e400"
+        json_bytes = json_bytes.replace(b'"overflow_marker"', exponent)
     json_bytes += b" " * (-len(json_bytes) % 4)
     binary += b"\x00" * (-len(binary) % 4)
     if invalid_selector == "nonzero_bin_padding":
@@ -414,7 +419,14 @@ def test_explicit_canonical_glb_numeric_metadata_preserves_geometry() -> None:
 
 @pytest.mark.parametrize(
     "invalid_selector",
-    ["json_nan", "json_infinity", "json_negative_infinity", "nonzero_bin_padding"],
+    [
+        "json_nan",
+        "json_infinity",
+        "json_negative_infinity",
+        "json_exponent_overflow",
+        "json_negative_exponent_overflow",
+        "nonzero_bin_padding",
+    ],
 )
 def test_rejects_nonstandard_json_and_nonzero_binary_padding(invalid_selector: str) -> None:
     """Nonfinite JSON extensions and nonzero BIN padding are not valid glTF 2.0."""
