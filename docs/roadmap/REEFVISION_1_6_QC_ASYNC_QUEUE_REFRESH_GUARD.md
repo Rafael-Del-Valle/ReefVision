@@ -94,3 +94,11 @@ This is a frontend regression repair only. Exact-head Vitest, TypeScript,
 formatting, full E2E, installed-Windows GUI and MSI upgrade/rollback must still
 pass independently. No claim of release readiness or crash-durable draft
 recovery follows from these test changes.
+
+## Follow-up: exercise real queue-history refresh and avoid global mutation-cache races (2026-11-01)
+
+[CI 41307538412](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/41307538412) at `c94c16eb` passed the backend job but failed the frontend Vitest job: 610 tests passed and four scope-isolation tests failed. The missing-queue warning assertion observed the original cached queue after a synthetic cache write, the pending-regenerate scenario attempted to open coordination during a transient item-list render, and the manual-selection cases waited on a global mutation-cache status that remained pending while the success callback awaited history invalidation.
+
+The updated regressions now simulate an actual `getReviewQueues` refetch for the omitted/restored historical queue, wait for the researcher-facing warning and coordination control, and observe a new history request as evidence that the delayed mutation's success callback executed. The tests still require the original queue and unsent coral note to survive, and prohibit selecting/fetching the new queue after a researcher manually selects another. This does not change the QC API, scientific review gate, typed executable saved `qc_review_queue` Workflow Builder, migrations, or user data.
+
+**Verification status:** the edited test blob is committed on the isolated 1.6 branch; full exact-head frontend/backend CI is required before calling these repairs successful. Local npm/Vitest/Playwright execution remains unavailable because GitHub DNS resolution prevents a checkout. Native Windows installed-GUI, MSI upgrade/rollback, representative biological-data acceptance, durable crash recovery, and the independent 1.1/1.6 Alembic 0038 collision remain release blockers. **Release HOLD.**
