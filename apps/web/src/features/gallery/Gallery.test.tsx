@@ -619,8 +619,26 @@ describe("Gallery", () => {
       throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
     });
 
-    renderGallery();
+    const { queryClient } = renderGallery();
     await screen.findByText("No images yet");
+    // Simulate a previous session exhausting its bounded thumbnail refreshes.
+    // A new import must restart that budget on the same project/page query.
+    const galleryQuery = queryClient.getQueryCache().findAll({
+      queryKey: ["images", project.id],
+    })[0];
+    if (!galleryQuery) throw new Error("Expected a cached gallery query");
+    await act(async () => {
+      for (let index = 0; index < 13; index += 1) {
+        queryClient.setQueryData(galleryQuery.queryKey, {
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 24,
+          pages: 0,
+        });
+      }
+    });
+    expect(galleryQuery.state.dataUpdateCount).toBeGreaterThan(12);
     const file = new File(["image bytes"], "coral.JPEG", {
       type: "image/jpeg",
     });
@@ -629,6 +647,9 @@ describe("Gallery", () => {
 
     expect(await screen.findByText("1 files processed")).toBeInTheDocument();
     expect(screen.getByText("1 imported")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(galleryQuery.state.dataUpdateCount).toBeLessThan(12),
+    );
     expect(fileInput.value).toBe("");
     await userEvent.upload(fileInput, file);
     await waitFor(() => expect(importCalls).toHaveBeenCalledTimes(2));
