@@ -16,6 +16,7 @@ def make_glb(
     translated: bool = False,
     invalid_selector: str | None = None,
     explicit_canonical: bool = False,
+    explicit_min_version: bool = False,
     explicit_targets: bool = False,
     nonindexed_vertices: int | None = None,
     unsigned_byte_indices: bool = False,
@@ -179,8 +180,9 @@ def make_glb(
         doc["bufferViews"][0]["target"] = 34962.0
     elif invalid_selector == "target_boolean":
         doc["bufferViews"][0]["target"] = True
-    if explicit_canonical:
+    if explicit_min_version:
         doc["asset"]["minVersion"] = "2.0"
+    if explicit_canonical:
         doc["meshes"][0]["primitives"][0]["mode"] = 4
         doc["accessors"][0]["normalized"] = False
         doc["bufferViews"][0]["byteStride"] = 12
@@ -202,7 +204,7 @@ def make_glb(
 
 def test_explicit_glb_minimum_version_preserves_geometry() -> None:
     """A valid glTF 2.0 minimum version does not change decoded geometry."""
-    assert parse_glb_triangles(make_glb(explicit_canonical=True)) == parse_glb_triangles(make_glb())
+    assert parse_glb_triangles(make_glb(explicit_min_version=True)) == parse_glb_triangles(make_glb())
 
 
 @pytest.mark.parametrize(
