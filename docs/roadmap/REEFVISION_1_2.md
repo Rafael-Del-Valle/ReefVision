@@ -5651,3 +5651,29 @@ cross-version merge is introduced. Pre-change head `e96a05e0` passed
 longitudinal data, migration reconciliation with 1.1 and physical Windows
 MSI/GUI acceptance remain release blockers. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+
+## Revision chronology CI unblock and independent-specimen acceptance (2026-11-01)
+
+At predecessor `72c1baaa990c66ba640471bbaeb358ef205bb5aa`, 19 PR-triggered
+GitHub Actions workflows completed: 16 succeeded, including Windows Desktop
+Build and frontend/E2E, while backend CI, Pose Workflow Validation and
+ReefVision 1.0 Acceptance stopped at Ruff `format --check` before pytest.
+The exact job log identified two layout differences in
+`test_ecology_identity_revision_chronology_1_2.py` (an artifact assertion
+and a `pytest.raises` context). Applied both formatter-requested changes.
+
+Added a focused scientific regression confirming that independent organisms
+may have different, interleaved revision timelines: chronology must be
+nondecreasing *within each organism*, not globally across specimens. A
+backdated revision for either organism remains rejected. This protects
+legitimate asynchronously registered specimens while retaining fail-closed
+corrupted-history checks. Existing standalone registry, saved executable
+Workflow Builder, typed artifact, provenance and scientist-review acceptance
+remain in place; no new environmental provider, migration or model weights.
+
+**Release HOLD:** Await exact-new-head Ruff/pytest and backend/frontend/E2E/
+Windows CI; independently authenticate calibrated scientist-reviewed
+longitudinal observations, actual independent experimental units, representative
+human/model comparisons, 1.1 migration reconciliation, and installed Windows
+MSI/GUI acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
