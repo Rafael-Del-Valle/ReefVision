@@ -24,7 +24,14 @@ function Invoke-ReefVisionIsolatedEnvironment {
         TRANSFORMERS_OFFLINE = '1'
         YOLO_AUTOINSTALL = 'false'
     }
-    foreach ($Key in $AdditionalEnvironment.Keys) { $Isolated[$Key] = $AdditionalEnvironment[$Key] }
+    # These values enforce offline model policy and disposable cache roots.
+    # A caller-supplied environment must not silently override the guardrails.
+    foreach ($Key in $AdditionalEnvironment.Keys) {
+        if ($Isolated.ContainsKey($Key)) {
+            throw "Acceptance isolation variable '$Key' cannot be overridden."
+        }
+        $Isolated[$Key] = $AdditionalEnvironment[$Key]
+    }
 
     # Build a flat, case-insensitive name set. Do not concatenate arrays
     # through a pipeline: a nested collection can cause environment names
