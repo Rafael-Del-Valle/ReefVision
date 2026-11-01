@@ -203,9 +203,8 @@ def test_version_qc_freezes_annotations_while_project_and_workflow_track_live_ed
     assert project_after["input_checksum"] != project_before["input_checksum"]
     workflow_after = _queue_item(client, workflow_after_id)
     assert workflow_after["input_checksum"] == project_after["input_checksum"]
-    assert _queue_item(client, workflow_before_id)["input_checksum"] == workflow_before[
-        "input_checksum"
-    ]
+    historical_workflow = _queue_item(client, workflow_before_id)
+    assert historical_workflow["input_checksum"] == workflow_before["input_checksum"]
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         historical_queue = session.get(ReviewQueue, workflow_before_id)
