@@ -158,7 +158,7 @@ describe("ReviewQueueBulkTriage", () => {
     expect(submitted.item_ids).not.toContain("coral-104");
   });
 
-  it("prevents a 101st manual selection and permits replacing a selected coral", async () => {
+  it("caps manual selection at 100 and permits replacement", async () => {
     const dense = Array.from({ length: 105 }, (_, index) => ({
       ...items[0]!,
       id: `coral-${index}`,
