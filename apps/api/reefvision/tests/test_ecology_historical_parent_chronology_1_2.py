@@ -68,9 +68,7 @@ def test_imported_fragment_predating_parent_fails_api_writes_and_saved_graph(
     assert succeeded is False
     assert detail["run"]["status"] == "failed"
     assert "not registered before fragment" in detail["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in detail["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in detail["artifacts"])
 
 
 def test_parent_reclassified_to_colony_before_fragment_preserves_workflow(
@@ -152,6 +150,94 @@ def test_resigned_registry_rejects_fragment_predating_parent(client: TestClient)
     )
     with pytest.raises(PydanticValidationError, match="not registered before fragment"):
         EcologyIdentityRegistryResponse.model_validate(changed)
+
+
+def test_resigned_registry_rejects_later_parent_reclassification(
+    client: TestClient,
+) -> None:
+    """A valid historical link must not hide an invalid latest parent kind."""
+    project_id = str(create_project(client, "Re-signed latest parent lineage")["id"])
+    base = _parent_and_fragment(client, project_id)
+    response = client.get(f"{base}/identity-registry")
+    assert response.status_code == 200, response.text
+    source = response.json()
+    parent = next(row for row in source["identities"] if row["organism_key"] == "parent-A")
+    fragment = next(row for row in source["identities"] if row["organism_key"] == "fragment-A")
+
+    # Simulate an imported revision *after* the fragment was linked. Historical
+    # parent-at-link checks still pass; the current parent is now an individual.
+    revised_parent = deepcopy(parent)
+    revised_parent["id"] = "imported-parent-revision-2"
+    revised_parent["revision"] = 2
+    revised_parent["kind"] = "individual"
+    revised_parent["reason"] = "Imported later parent reclassification"
+    fragment_time = datetime.fromisoformat(fragment["created_at"].replace("Z", "+00:00"))
+    revised_parent["created_at"] = (fragment_time + timedelta(days=1)).isoformat()
+    latest = [revised_parent if row["organism_key"] == "parent-A" else row for row in source["identities"]]
+    history = sorted(
+        [*source["identity_history"], revised_parent],
+        key=lambda row: (row["organism_key"], row["revision"]),
+    )
+    snapshot_sha256 = canonical_json_sha256(
+        {
+            "schema_version": "ecology-identity-registry-0001",
+            "project_id": project_id,
+            "identities": [
+                {
+                    field: row[field]
+                    for field in (
+                        "id",
+                        "organism_key",
+                        "revision",
+                        "kind",
+                        "parent_colony_key",
+                        "experimental_unit_type",
+                        "experimental_unit_id",
+                    )
+                }
+                for row in latest
+            ],
+        }
+    )
+    history_sha256 = canonical_json_sha256(
+        {
+            "algorithm_version": "ecology-identity-history-0001",
+            "project_id": project_id,
+            "revisions": [
+                {
+                    **{
+                        field: row[field]
+                        for field in (
+                            "id",
+                            "organism_key",
+                            "revision",
+                            "kind",
+                            "parent_colony_key",
+                            "experimental_unit_type",
+                            "experimental_unit_id",
+                            "reason",
+                        )
+                    },
+                    "created_at": datetime.fromisoformat(
+                        row["created_at"].replace("Z", "+00:00")
+                    ).isoformat(),
+                }
+                for row in history
+            ],
+        }
+    )
+    forged = {
+        "project_id": project_id,
+        "identities": latest,
+        "snapshot_sha256": snapshot_sha256,
+        "identity_history": history,
+        "history_revision_count": len(history),
+        "history_sha256": history_sha256,
+        "evidence_level": "registered_unverified",
+        "review_gate": "scientist_review_required",
+    }
+    with pytest.raises(PydanticValidationError, match="invalid parent-colony link"):
+        EcologyIdentityRegistryResponse.model_validate(forged)
 
 
 def test_parent_chronology_uses_utc_instead_of_wall_clock_order() -> None:
