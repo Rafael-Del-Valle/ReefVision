@@ -217,6 +217,14 @@ class WorkflowExecutionService:
             raise ConflictError("Workflow run inputs must be a JSON object")
         if run.result_json is not None and not isinstance(run.result_json, dict):
             raise ConflictError("Workflow run result must be a JSON object")
+        # Recovery events are scientific audit evidence. The run-detail API
+        # must not expose malformed history that provenance export rejects.
+        result = run.result_json or {}
+        history = result.get("recovery_history", [])
+        if "recovery_history" in result and not isinstance(history, list):
+            raise ConflictError("Workflow recovery history must be a list")
+        if any(not isinstance(entry, dict) for entry in history):
+            raise ConflictError("Workflow recovery history entries must be JSON objects")
         # Run-detail retrieval must enforce the same saved-graph lineage as
         # provenance export. Artifact checksums alone cannot establish which
         # workflow produced a scientific result after its graph is altered.
