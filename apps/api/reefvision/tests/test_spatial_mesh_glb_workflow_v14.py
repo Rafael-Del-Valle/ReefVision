@@ -143,6 +143,8 @@ def test_saved_glb(
         "asset_min_version_boolean",
         "node_morph_weights",
         "mesh_morph_weights",
+        "animated_node",
+        "unbound_skin",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
