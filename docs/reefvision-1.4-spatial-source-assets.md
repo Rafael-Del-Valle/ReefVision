@@ -242,7 +242,7 @@ primitives and standard non-indexed `TRIANGLES` (primitive mode 4). When the
 `indices` attribute is absent, each consecutive triplet of `POSITION`
 vertices is treated as one independent triangle; vertex counts that are not
 multiples of three fail closed. Triangle strips and fans, scene transforms,
-external buffers, compression, and sparse/interleaved geometry remain
+external buffers, compression, and sparse or unsupported geometry remain
 unsupported rather than being interpreted as biological measurements.
 The source format and original-file SHA-256 remain distinct from canonical
 geometry provenance. Regression tests require equivalent indexed/non-indexed
@@ -286,7 +286,7 @@ starts for float32 `POSITION` data even when the start is not a multiple of
 its **component** width, not the whole vector. This avoids rejecting valid
 reconstruction exports with four-byte prefix padding. All offsets remain
 bounded by the declared embedded buffer and view lengths; no scene transforms,
-external buffers, sparse accessors, or interleaved vertex data are inferred.
+external buffers, sparse accessors, or unbounded vertex layouts are inferred.
 
 Malformed `bufferView` starts and index-buffer `byteStride` declarations
 are rejected rather than interpreted as measured coral geometry. Tests cover
@@ -310,3 +310,24 @@ Regression tests cover valid and malformed bounds through direct parsing,
 standalone scientific API execution, and saved executable typed Workflow
 Builder graphs. Failed graph execution must not publish a mesh measurement
 artifact; valid bounds must preserve the geometry digest and surface area.
+
+## Interleaved GLB 2.0 POSITION accessors (1.4 development)
+
+Bounded GLB imports now decode float32 VEC3 `POSITION` accessors whose
+`bufferView.byteStride` is an integer from 12 through 252 bytes, divisible
+by four. This supports common interleaved vertex records with additional
+per-vertex bytes, while only the decoded XYZ positions contribute to
+surface area, dimensions, topology, or source geometry fingerprints. The
+accessor must fit fully inside its declared buffer view, including the
+last strided vertex; an attribute cannot cross its own stride boundary.
+Index accessors remain tightly packed and reject `byteStride`.
+
+Missing stride metadata still means tightly packed positions. Invalid
+strides (including booleans, floats, undersized, misaligned, and oversized
+values) or truncated views fail closed. Parser, standalone API, and
+persisted executable typed Workflow Builder tests cover matching geometry,
+source provenance, and failure without publishing a mesh measurement
+artifact. This does not add scene transforms, compressed geometry,
+external buffers, sparse accessors, verified scale, biological identity,
+or authenticated scientific review. Original source bytes remain distinct
+from canonical geometry and are never replaced by a derived mesh.
