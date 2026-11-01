@@ -262,23 +262,30 @@ export function ReviewQueueCoordinationPanel({
     }
     let active = true;
     let unlisten: (() => void) | undefined;
-    void getCurrentWindow()
-      .onCloseRequested((event) => {
-        if (!active) return;
-        event.preventDefault();
-        setNativeCloseBlocked(true);
-      })
-      .then((stop) => {
-        if (active) {
-          unlisten = stop;
-          setNativeCloseGuardUnavailable(false);
-        } else {
-          stop();
-        }
-      })
-      .catch(() => {
-        if (active) setNativeCloseGuardUnavailable(true);
-      });
+    // Native bridge access and listener registration can fail synchronously
+    // before a Promise exists. Treat both failures like a rejected listener
+    // registration; never discard unsent observations or retry UUIDs.
+    try {
+      void getCurrentWindow()
+        .onCloseRequested((event) => {
+          if (!active) return;
+          event.preventDefault();
+          setNativeCloseBlocked(true);
+        })
+        .then((stop) => {
+          if (active) {
+            unlisten = stop;
+            setNativeCloseGuardUnavailable(false);
+          } else {
+            stop();
+          }
+        })
+        .catch(() => {
+          if (active) setNativeCloseGuardUnavailable(true);
+        });
+    } catch {
+      if (active) setNativeCloseGuardUnavailable(true);
+    }
     return () => {
       active = false;
       unlisten?.();
