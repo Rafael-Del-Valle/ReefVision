@@ -564,7 +564,9 @@ export function ReviewQueueDashboard({
                 notes and idempotent audit retry IDs must remain available.
               </p>
             )}
-            {coordinationQueueId && !scopedQueueId && activeQueueId === coordinationQueueId && (
+            {coordinationQueueId &&
+              !scopedQueueId &&
+              activeQueueId === coordinationQueueId && (
               <p className="annotation-helper" role="status">
                 The selected queue is temporarily absent from the refreshed
                 list. Coordination remains open on its original queue to protect
