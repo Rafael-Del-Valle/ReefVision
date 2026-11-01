@@ -28,6 +28,14 @@ def _reject_nonfinite_json_constant(value: str) -> None:
     raise ValueError(f"GLB JSON contains nonfinite constant: {value}")
 
 
+def _finite_json_float(value: str) -> float:
+    """Reject JSON exponent overflow, including in otherwise ignored metadata."""
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise ValueError("GLB JSON contains nonfinite number")
+    return parsed
+
+
 def _as_object(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"GLB {name} must be an object")
@@ -82,6 +90,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
                 chunks[0][1].decode("utf-8"),
                 object_pairs_hook=_unique_keys,
                 parse_constant=_reject_nonfinite_json_constant,
+                parse_float=_finite_json_float,
             ),
             "root",
         )
