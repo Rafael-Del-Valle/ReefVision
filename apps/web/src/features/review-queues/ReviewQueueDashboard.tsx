@@ -53,6 +53,7 @@ type QueueMutationScope = {
 };
 
 type CreateQueueRequest = QueueMutationScope & {
+  selectionRevision: number;
   sourceRunId: string;
   weights: ReviewScoreWeights;
   reviewBelowConfidence: string;
@@ -129,6 +130,8 @@ export function ReviewQueueDashboard({
     coordinationItemId !== null || bulkProtectedQueueId !== null;
   // Queue generation may finish after coordination opens. Keep its original
   // selection until the researcher explicitly closes protected review work.
+  // Background queue generation must not override a later explicit selection.
+  const queueSelectionRevision = useRef(0);
   const reviewProtectedRef = useRef(reviewProtected);
   reviewProtectedRef.current = reviewProtected;
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
@@ -297,6 +300,7 @@ export function ReviewQueueDashboard({
     onSuccess: async (queue, request) => {
       if (
         sameQueueScope(currentScope.current, request) &&
+        request.selectionRevision === queueSelectionRevision.current &&
         !reviewProtectedRef.current
       ) {
         setSelectedQueueId(queue.id);
@@ -313,11 +317,17 @@ export function ReviewQueueDashboard({
     },
   });
   const regenerateQueue = useMutation({
-    mutationFn: (request: QueueMutationScope & { queueId: string }) =>
+    mutationFn: (
+      request: QueueMutationScope & {
+        queueId: string;
+        selectionRevision: number;
+      },
+    ) =>
       regenerateReviewQueue(request.queueId),
     onSuccess: async (queue, request) => {
       if (
         sameQueueScope(currentScope.current, request) &&
+        request.selectionRevision === queueSelectionRevision.current &&
         !reviewProtectedRef.current
       ) {
         setSelectedQueueId(queue.id);
@@ -529,6 +539,7 @@ export function ReviewQueueDashboard({
                 onClick={() =>
                   createQueue.mutate({
                     ...currentScope.current,
+                    selectionRevision: queueSelectionRevision.current,
                     sourceRunId: selectedRunId,
                     weights: { ...weights },
                     reviewBelowConfidence,
@@ -546,6 +557,7 @@ export function ReviewQueueDashboard({
                     regenerateQueue.mutate({
                       ...currentScope.current,
                       queueId: selectedQueue.id,
+                      selectionRevision: queueSelectionRevision.current,
                     })
                   }
                 >
@@ -595,6 +607,7 @@ export function ReviewQueueDashboard({
                   disabled={reviewProtected}
                   onClick={() => {
                     if (reviewProtected) return;
+                    queueSelectionRevision.current += 1;
                     setSelectedQueueId(queue.id);
                     setQuickReviewItemId(null);
                     setCoordinationItemId(null);
