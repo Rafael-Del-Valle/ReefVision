@@ -126,7 +126,6 @@ def test_imported_revision_gap_blocks_api_writes_and_saved_workflow(
     )
 
 
-
 @pytest.mark.parametrize("technical_unit", ["video_frame", "sampling_date"])
 def test_superseded_technical_unit_history_blocks_writes_and_saved_workflow(
     client: TestClient, technical_unit: str
