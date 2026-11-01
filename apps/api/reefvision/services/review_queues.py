@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import (
     DatasetVersion,
+    DatasetVersionItem,
     QualityControlRun,
     ReviewQueue,
     ReviewQueueItem,
@@ -136,6 +137,7 @@ class ReviewQueueService:
         project = self.quality_control._project(project_id)
         project_context = self.quality_control._build_project_context(project)
         split_by_image_id: dict[str, str | None] = {}
+        version_items_by_image_id: dict[str, DatasetVersionItem] = {}
         scoped_image_ids: set[str]
         if dataset_version is None:
             scoped_image_ids = {image.image_id for image in project_context.images}
@@ -145,6 +147,7 @@ class ReviewQueueService:
             )
             scoped_image_ids = {item.image_id for item in version_items}
             split_by_image_id = {item.image_id: item.split for item in version_items}
+            version_items_by_image_id = {item.image_id: item for item in version_items}
         source_run = self._source_run(
             project_id=project.id,
             dataset_version_id=dataset_version.id if dataset_version else None,
@@ -212,6 +215,11 @@ class ReviewQueueService:
         ]
         reference_time = max(reference_timestamps) if reference_timestamps else _utc_now()
         for image in scoped_images:
+            version_item = version_items_by_image_id.get(image.image_id)
+            image_group_key = version_item.group_key if version_item else image.group_key
+            image_sha256 = version_item.image_sha256 if version_item else image.sha256
+            image_width_px = version_item.width_px if version_item else image.width_px
+            image_height_px = version_item.height_px if version_item else image.height_px
             annotations = project_context.annotations_by_image.get(image.image_id, [])
             predictions = project_context.predictions_by_image.get(image.image_id, [])
             pending_predictions = [
@@ -288,7 +296,7 @@ class ReviewQueueService:
             )
             unreviewed_state = 1.0 if image.annotation_status != "reviewed" else 0.0
             missing_group_metadata = (
-                0.0 if image.group_key is not None and image.group_key.strip() else 1.0
+                0.0 if image_group_key is not None and image_group_key.strip() else 1.0
             )
             provenance_total = sum(
                 1
@@ -372,13 +380,14 @@ class ReviewQueueService:
                 "image_id": image.image_id,
                 # The source-image digest, not its mutable filename or path,
                 # identifies the pixels that a researcher is asked to review.
-                "image_sha256": image.sha256,
+                "image_sha256": image_sha256,
                 # Biological experimental grouping and pixel dimensions affect
                 # interpretation even when object counts and priority stay fixed.
-                # Dataset-version queues use the frozen image snapshot fields.
-                "group_key": image.group_key,
-                "width_px": image.width_px,
-                "height_px": image.height_px,
+                # Dataset-version queues use frozen image-item metadata, not
+                # later live group reassignment or changed pixel dimensions.
+                "group_key": image_group_key,
+                "width_px": image_width_px,
+                "height_px": image_height_px,
                 "split": split_by_image_id.get(image.image_id),
                 "annotation_status": image.annotation_status,
                 "annotation_count": annotation_count,

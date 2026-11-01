@@ -71,3 +71,67 @@ def test_group_reassignment_changes_new_qc_evidence_not_saved_review_history(
         ).all()
         validate_saved_queue_snapshot(historical_queue, historical_items)
         assert historical_items[0].review_state == "pending"
+
+
+def test_version_scoped_qc_keeps_frozen_group_while_project_scope_tracks_live_group(
+    client: TestClient,
+) -> None:
+    from reefvision.tests.test_dataset_versions import create_version, save_annotations
+
+    project = create_project(client, "Frozen coral tank dataset")
+    project_id = project["id"]
+    imported = import_one(client, project_id, filename="frozen-coral.png")
+    image_id = imported["successful"][0]["image_id"]
+    app = cast(FastAPI, client.app)
+    saved = save_annotations(
+        client,
+        image_id,
+        base_revision=0,
+        annotation_status="reviewed",
+        annotations=[
+            {
+                "id": str(uuid4()),
+                "label_class_id": project["label_classes"][0]["id"],
+                "x_min": 5,
+                "y_min": 5,
+                "x_max": 25,
+                "y_max": 25,
+            }
+        ],
+    )
+    assert saved["image"]["annotation_status"] == "reviewed"
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        original_updated_at = image.updated_at
+        image.group_key = "tank-A"
+        image.updated_at = original_updated_at
+        session.commit()
+    version = create_version(client, project_id, name="Frozen tank-A study")
+    url = f"/api/v1/dataset-versions/{version['id']}/review-queues"
+
+    frozen_before = client.post(url, json={})
+    assert frozen_before.status_code == 201, frozen_before.text
+    frozen_item = _queue_item(client, frozen_before.json()["id"])
+    project_before = client.post(f"/api/v1/projects/{project_id}/review-queues", json={})
+    assert project_before.status_code == 201, project_before.text
+    live_item = _queue_item(client, project_before.json()["id"])
+
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        image.group_key = "tank-B"
+        image.updated_at = original_updated_at
+        session.commit()
+
+    frozen_after = client.post(url, json={})
+    assert frozen_after.status_code == 201, frozen_after.text
+    frozen_updated = _queue_item(client, frozen_after.json()["id"])
+    assert frozen_updated["score"] == frozen_item["score"]
+    assert frozen_updated["input_checksum"] == frozen_item["input_checksum"]
+
+    project_after = client.post(f"/api/v1/projects/{project_id}/review-queues", json={})
+    assert project_after.status_code == 201, project_after.text
+    live_updated = _queue_item(client, project_after.json()["id"])
+    assert live_updated["score"] == live_item["score"]
+    assert live_updated["input_checksum"] != live_item["input_checksum"]
