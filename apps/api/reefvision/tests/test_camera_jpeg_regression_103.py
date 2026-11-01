@@ -333,7 +333,7 @@ def test_non_rgb_camera_jpeg_source_aligned_display_and_oriented_thumbnail(
 
 @pytest.mark.parametrize(
     ("timestamp_tag", "offset_tag"),
-    [(36867, 36881), (36868, 36882), (306, 36880)],
+    [(36867, 36881)],
 )
 @pytest.mark.parametrize(
     ("offset", "expected_utc"),
@@ -360,6 +360,46 @@ def test_camera_exif_offset_normalizes_capture_time_without_mutating_original(
     image_id = report["successful"][0]["image_id"]
     metadata = client.get(f"/api/v1/images/{image_id}").json()
     assert metadata["capture_timestamp"].startswith(expected_utc)
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+@pytest.mark.parametrize(
+    ("timestamp_tag", "offset_tag", "subsec_tag", "date_name"),
+    [
+        (36868, 36882, 37522, "DateTimeDigitized"),
+        (306, 36880, 37520, "DateTime"),
+    ],
+)
+def test_camera_processing_times_do_not_become_acquisition_times(
+    client: TestClient,
+    timestamp_tag: int,
+    offset_tag: int,
+    subsec_tag: int,
+    date_name: str,
+) -> None:
+    """Even a timezone-aware processing clock cannot establish exposure time."""
+    project = create_project(client, "Processing-only camera EXIF")
+    exif = Image.Exif()
+    tags = {
+        timestamp_tag: "2026:10:01 12:30:00",
+        offset_tag: "-04:00",
+        subsec_tag: "123",
+    }
+    if timestamp_tag == 306:
+        exif.update(tags)
+    else:
+        exif[34665] = tags
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_PROCESSING.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"] is None
+    assert "digitization or file-modification" in metadata["metadata_json"]["capture_time_warning"]
+    assert metadata["metadata_json"]["exif"][date_name] == "2026:10:01 12:30:00"
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
 
 
@@ -415,8 +455,6 @@ def test_real_camera_nested_exif_ifd_capture_time_and_provenance(
     ("timestamp_tag", "offset_tag", "subsec_tag", "subsec_name"),
     [
         (36867, 36881, 37521, "SubsecTimeOriginal"),
-        (36868, 36882, 37522, "SubsecTimeDigitized"),
-        (306, 36880, 37520, "SubsecTime"),
     ],
 )
 @pytest.mark.parametrize(

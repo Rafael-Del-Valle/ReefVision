@@ -126,64 +126,61 @@ def _json_safe(value: object) -> object | None:
 
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
-    # Camera-local EXIF timestamps may include explicit UTC offsets and
-    # ASCII padding spaces/NULs; retain the raw fields in scientific metadata.
-    # subsecond tags. Pair each date with its own offset and fractional time;
-    # never borrow either from a different acquisition field.
-    for key, offset_key, subsec_key in (
-        (36867, 36881, 37521),
-        (36868, 36882, 37522),
-        (306, 36880, 37520),
-    ):
-        raw = exif.get(key)
-        if raw is None:
-            continue
-        # A present but malformed exposure timestamp is not evidence that a
-        # later digitization or file-modification timestamp is the exposure.
-        # Some camera libraries return ASCII EXIF values as bytes.
-        if isinstance(raw, bytes):
-            try:
-                raw = raw.decode("ascii").strip(" \t\r\n\x00")
-            except UnicodeDecodeError:
-                return None
-        if not isinstance(raw, str):
-            return None
-        raw = raw.strip(" \t\r\n\x00")
-        offset = exif.get(offset_key)
-        if isinstance(offset, bytes):
-            try:
-                offset = offset.decode("ascii").strip(" \t\r\n\x00")
-            except UnicodeDecodeError:
-                return None
-        if offset is not None and not isinstance(offset, str):
-            return None
-        if isinstance(offset, str):
-            offset = offset.strip(" \t\r\n\x00")
-        if not offset:
-            # EXIF camera time without a UTC offset is not a verified instant.
-            # Keep the raw local timestamp in EXIF metadata, not in UTC fields.
-            return None
-        try:
-            timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
-        except ValueError:
-            # Do not silently substitute DateTimeDigitized/DateTime when a
-            # higher-priority acquisition field exists but cannot be trusted.
-            return None
+    """Return verified UTC exposure time, never digitization or file-modification time."""
 
-        fraction = exif.get(subsec_key)
-        if isinstance(fraction, bytes):
-            try:
-                fraction = fraction.decode("ascii").strip(" \t\r\n\x00")
-            except UnicodeDecodeError:
-                fraction = None
-        if isinstance(fraction, str):
-            fraction = fraction.strip(" \t\r\n\x00")
-        if isinstance(fraction, str) and fraction.isascii() and fraction.isdigit():
-            # Datetimes represent microseconds; preserve the unmodified raw
-            # EXIF string in metadata when cameras record finer precision.
-            timestamp = timestamp.replace(microsecond=int(fraction[:6].ljust(6, "0")))
-        return timestamp
-    return None
+    # DateTimeOriginal (36867) describes the exposure. DateTimeDigitized
+    # (36868) and DateTime (306) may describe later processing or edits, even
+    # with a valid offset. Preserve those tags as raw metadata, not acquisition.
+    raw = exif.get(36867)
+    if raw is None:
+        return None
+    offset_key = 36881
+    subsec_key = 37521
+    # A present but malformed exposure timestamp is not evidence that a
+    # later digitization or file-modification timestamp is the exposure.
+    # Some camera libraries return ASCII EXIF values as bytes.
+    if isinstance(raw, bytes):
+        try:
+            raw = raw.decode("ascii").strip(" \t\r\n\x00")
+        except UnicodeDecodeError:
+            return None
+    if not isinstance(raw, str):
+        return None
+    raw = raw.strip(" \t\r\n\x00")
+    offset = exif.get(offset_key)
+    if isinstance(offset, bytes):
+        try:
+            offset = offset.decode("ascii").strip(" \t\r\n\x00")
+        except UnicodeDecodeError:
+            return None
+    if offset is not None and not isinstance(offset, str):
+        return None
+    if isinstance(offset, str):
+        offset = offset.strip(" \t\r\n\x00")
+    if not offset:
+        # EXIF camera time without a UTC offset is not a verified instant.
+        # Keep the raw local timestamp in EXIF metadata, not in UTC fields.
+        return None
+    try:
+        timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
+    except ValueError:
+        # Do not silently substitute DateTimeDigitized/DateTime when a
+        # higher-priority acquisition field exists but cannot be trusted.
+        return None
+
+    fraction = exif.get(subsec_key)
+    if isinstance(fraction, bytes):
+        try:
+            fraction = fraction.decode("ascii").strip(" \t\r\n\x00")
+        except UnicodeDecodeError:
+            fraction = None
+    if isinstance(fraction, str):
+        fraction = fraction.strip(" \t\r\n\x00")
+    if isinstance(fraction, str) and fraction.isascii() and fraction.isdigit():
+        # Datetimes represent microseconds; preserve the unmodified raw
+        # EXIF string in metadata when cameras record finer precision.
+        timestamp = timestamp.replace(microsecond=int(fraction[:6].ljust(6, "0")))
+    return timestamp
 
 
 def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> InspectedImage:
@@ -259,28 +256,22 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             if exif_warning is not None:
                 metadata["exif_warning"] = exif_warning
             elif capture_timestamp is None:
-                # Keep timezone uncertainty visible to scientific consumers
-                # without fabricating UTC from a camera-local wall clock.
-                for date_tag, offset_tag in (
-                    (36867, 36881),
-                    (36868, 36882),
-                    (306, 36880),
-                ):
-                    if exif.get(date_tag) is not None:
-                        if not exif.get(offset_tag):
-                            metadata["capture_time_warning"] = (
-                                "EXIF camera-local time has no UTC offset; "
-                                "UTC capture timestamp not inferred"
-                            )
-                        else:
-                            # A present offset is not necessarily parseable or
-                            # scientifically trustworthy (e.g. +99:99). Do not
-                            # silently omit the QC warning for malformed data.
-                            metadata["capture_time_warning"] = (
-                                "EXIF camera capture time or UTC offset is invalid; "
-                                "UTC capture timestamp not inferred"
-                            )
-                        break
+                if exif.get(36867) is not None:
+                    if not exif.get(36881):
+                        metadata["capture_time_warning"] = (
+                            "EXIF camera-local exposure time has no UTC offset; "
+                            "UTC capture timestamp not inferred"
+                        )
+                    else:
+                        metadata["capture_time_warning"] = (
+                            "EXIF camera exposure time or UTC offset is invalid; "
+                            "UTC capture timestamp not inferred"
+                        )
+                elif any(exif.get(tag) is not None for tag in (36868, 306)):
+                    metadata["capture_time_warning"] = (
+                        "EXIF contains digitization or file-modification time but no "
+                        "DateTimeOriginal exposure time; UTC capture timestamp not inferred"
+                    )
             return InspectedImage(
                 sha256=sha256,
                 width_px=width,
