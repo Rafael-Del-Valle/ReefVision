@@ -136,6 +136,9 @@ function reviewItem(id: string, imageId: string): ReviewQueueItem {
 function queue(id: string): ReviewQueueRecord {
   return {
     id,
+    project_id: id === "queue-b" ? "project-b" : "project-a",
+    dataset_version_id: id === "dataset-queue" ? "dataset-1" : null,
+    scope_type: id === "dataset-queue" ? "dataset_version" : "project",
     created_at: "2026-10-23T12:00:00Z",
     formula_id: "qc",
     formula_version: "1",
@@ -242,6 +245,68 @@ describe("ReviewQueueDashboard scope isolation", () => {
       );
     },
   );
+
+  it.each(["generate", "regenerate"] as const)(
+    "rejects a %s response with foreign QC provenance without switching queues",
+    async (operation) => {
+      const foreign = {
+        ...queue("queue-foreign"),
+        project_id: "project-b",
+      };
+      if (operation === "generate") {
+        vi.mocked(createReviewQueue).mockResolvedValueOnce(foreign);
+      } else {
+        vi.mocked(regenerateReviewQueue).mockResolvedValueOnce(foreign);
+      }
+      const { onSelectedQueueChange } = mount();
+      await waitFor(() =>
+        expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: operation === "generate" ? "Generate queue" : "Regenerate",
+        }),
+      );
+      expect(
+        await screen.findByText(
+          /Queue response does not match the requested project\/dataset scope/,
+        ),
+      ).toBeTruthy();
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+      expect(getReviewQueueItems).not.toHaveBeenCalledWith(
+        "queue-foreign",
+        expect.anything(),
+        expect.anything(),
+      );
+    },
+  );
+
+  it.each([
+    ["wrong dataset", { dataset_version_id: "dataset-foreign" }],
+    ["wrong scope type", { scope_type: "dataset_version" }],
+    ["missing queue ID", { id: "" }],
+  ])("rejects generated QC queue with %s", async (_reason, fields) => {
+    vi.mocked(createReviewQueue).mockResolvedValueOnce({
+      ...queue("queue-new"),
+      ...fields,
+    });
+    const { onSelectedQueueChange } = mount();
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate queue" }));
+    expect(
+      await screen.findByText(
+        /Queue response does not match the requested project\/dataset scope/,
+      ),
+    ).toBeTruthy();
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(getReviewQueueItems).not.toHaveBeenCalledWith(
+      "queue-new",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
 
   it("rejects negative QC ranking weights without creating a queue", () => {
     mount();
