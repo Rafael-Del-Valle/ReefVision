@@ -74,6 +74,26 @@ def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     assert fetched.status_code == 200, fetched.text
     assert fetched.json() == receipt
 
+    # Every revision remains addressable; paging must not silently hide older
+    # scientific review receipts or change their chronological ordering.
+    for note in ("Second provisional assessment", "Third provisional assessment"):
+        revised = client.post(
+            reviews_url,
+            json={"evidence": {**evidence, "independent_review_note": note}},
+        )
+        assert revised.status_code == 201, revised.text
+    all_reviews = client.get(reviews_url)
+    assert all_reviews.status_code == 200, all_reviews.text
+    reviews = all_reviews.json()
+    assert len(reviews) == 3
+    first_page = client.get(reviews_url, params={"limit": 2, "offset": 0})
+    last_page = client.get(reviews_url, params={"limit": 2, "offset": 2})
+    assert first_page.json() == reviews[:2]
+    assert last_page.json() == reviews[2:]
+    assert client.get(reviews_url, params={"offset": 3}).json() == []
+    for invalid in ({"limit": 0}, {"limit": 101}, {"offset": -1}):
+        assert client.get(reviews_url, params=invalid).status_code == 422
+
     # A saved review is evidence, not an authentication or verification token.
     # The same evidence must pass the existing geometry/scale binding checks
     # in both the standalone API and the executable persisted typed graph.
@@ -93,14 +113,20 @@ def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     assert evidence_digest == receipt["evidence_sha256"]
     assert "persisted_calibration_review_unverified" in expected["qc_warnings"]
     assert expected["surface_area_m2"] == inline.json()["surface_area_m2"]
-    assert client.post(
-        f"{base}/spatial/mesh-preview",
-        json={**params, "calibration_review": receipt["evidence"]},
-    ).status_code == 422
-    assert client.post(
-        f"{base}/spatial/mesh-preview",
-        json={**params, "asset_id": None, "vertices": [[0, 0, 0]], "faces": [[0, 0, 0]]},
-    ).status_code == 422
+    assert (
+        client.post(
+            f"{base}/spatial/mesh-preview",
+            json={**params, "calibration_review": receipt["evidence"]},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            f"{base}/spatial/mesh-preview",
+            json={**params, "asset_id": None, "vertices": [[0, 0, 0]], "faces": [[0, 0, 0]]},
+        ).status_code
+        == 422
+    )
     graph = {
         "graph_id": "durable-review-replay-v14",
         "name": "Review receipt with project-owned source",
@@ -262,6 +288,4 @@ def test_point_cloud_saved_calibration_receipt_replays_and_fails_closed(
     assert rejected.status_code == 400
     failed = _run_saved_cloud(client, project_id, params)
     assert failed["run"]["status"] == "failed"
-    assert not any(
-        a["data_type"] == "point_cloud_measurement_preview" for a in failed["artifacts"]
-    )
+    assert not any(a["data_type"] == "point_cloud_measurement_preview" for a in failed["artifacts"])
