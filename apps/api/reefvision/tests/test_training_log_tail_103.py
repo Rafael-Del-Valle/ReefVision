@@ -40,9 +40,9 @@ def test_log_tail_rejects_file_swapped_between_validation_and_open(
 ) -> None:
     """Do not expose another run's log if a local process replaces the file."""
     log = tmp_path / "training.log"
-    log.write_bytes(b"train/box_loss=0.25\\n")
+    log.write_bytes(b"train/box_loss=0.25\n")
     replacement = tmp_path / "other-run.log"
-    private_bytes = b"another run's private metrics\\n"
+    private_bytes = b"another run's private metrics\n"
     replacement.write_bytes(private_bytes)
     original_open = Path.open
     swapped = False
