@@ -132,7 +132,6 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         type(primitive.get("mode", 4)) is not int
         or primitive.get("mode", 4) != 4
         or "POSITION" not in attributes
-        or "indices" not in primitive
         or "targets" in primitive
         or "extensions" in primitive
     ):
@@ -193,7 +192,14 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
     vertices = [list(row) for row in read_accessor(attributes["POSITION"], position=True)]
     if any(not isfinite(v) or abs(v) > 1_000_000_000 for row in vertices for v in row):
         raise ValueError("GLB positions must be bounded and finite")
-    indices = [int(row[0]) for row in read_accessor(primitive["indices"], position=False)]
-    if any(index >= len(vertices) for index in indices):
-        raise ValueError("GLB face index out of bounds")
+    if "indices" in primitive:
+        indices = [int(row[0]) for row in read_accessor(primitive["indices"], position=False)]
+        if any(index >= len(vertices) for index in indices):
+            raise ValueError("GLB face index out of bounds")
+    else:
+        # glTF TRIANGLES may omit indices; each consecutive vertex triplet
+        # forms one independent face. Never infer a triangle strip or fan.
+        if len(vertices) % 3 or len(vertices) // 3 > MAX_FACES:
+            raise ValueError("GLB non-indexed TRIANGLES require complete vertex triplets")
+        indices = list(range(len(vertices)))
     return vertices, [indices[i : i + 3] for i in range(0, len(indices), 3)]
