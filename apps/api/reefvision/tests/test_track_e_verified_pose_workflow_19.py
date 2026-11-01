@@ -289,6 +289,35 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
 
+    # A frozen dataset's explicitly pinned manifest cannot be silently
+    # substituted in the persisted node parameters while the graph SHA stays
+    # unchanged. Verify both read paths against this actual saved execution.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        original_parameters = dict(node.parameters_json)
+        assert original_parameters["manifest_sha256"] == dataset["manifest_sha256"]
+        node.parameters_json = {**original_parameters, "manifest_sha256": "0" * 64}
+        session.commit()
+
+    substituted_parameters = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert substituted_parameters.status_code == 409, substituted_parameters.text
+    assert substituted_parameters.json() == {
+        "detail": "Workflow run node lineage does not match saved graph"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="node lineage does not match saved graph"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.parameters_json = original_parameters
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+
     # Historical node results can omit an output summary. Duplicate output
     # artifact IDs must still be rejected on the saved verified-pose run;
     # otherwise one frozen artifact appears twice in its scientific lineage.
