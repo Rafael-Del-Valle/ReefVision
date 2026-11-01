@@ -104,9 +104,7 @@ class SpatialCalibrationReviewService:
         except IntegrityError:
             # A concurrent identical submission can win the unique constraint.
             self.session.rollback()
-            existing = self.session.scalar(
-                select(SpatialCalibrationReviewRecord).where(*condition)
-            )
+            existing = self.session.scalar(select(SpatialCalibrationReviewRecord).where(*condition))
             if existing is None:
                 raise
             return self._response(project_id, asset_id, existing)
@@ -126,9 +124,7 @@ class SpatialCalibrationReviewService:
             raise NotFoundError("Spatial calibration review not found for project asset")
         return self._response(project_id, asset_id, record)
 
-    def list(
-        self, project_id: str, asset_id: str
-    ) -> list[SpatialCalibrationReviewResponse]:
+    def list(self, project_id: str, asset_id: str) -> list[SpatialCalibrationReviewResponse]:
         self.sources.get(project_id, asset_id)
         records = self.session.scalars(
             select(SpatialCalibrationReviewRecord)
