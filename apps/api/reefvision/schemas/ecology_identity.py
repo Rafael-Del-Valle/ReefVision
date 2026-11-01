@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from reefvision.domain.ecology_lineage_policy import (
     require_chronological_ecological_identity_revisions,
+    require_current_ecological_parent_registration,
     require_historical_ecological_parent_registration,
     require_unique_ecological_organism_key_spellings,
     require_unique_ecological_unit_spellings,
@@ -388,6 +389,9 @@ class EcologyIdentityRegistryResponse(BaseModel):
                     ):
                         raise ValueError("Ecological registry calibration source image mismatch")
 
+        # Historical parent validity alone is insufficient: a later imported
+        # parent reclassification can invalidate the latest fragment link.
+        require_current_ecological_parent_registration(self.identities)
         latest = {row.organism_key: row for row in self.identities}
         if "identity_history" in self.model_fields_set:
             # Present-but-empty history is not the same as a legacy artifact
