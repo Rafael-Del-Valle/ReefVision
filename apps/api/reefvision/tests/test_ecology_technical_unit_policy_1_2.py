@@ -13,6 +13,7 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisRequest
 from reefvision.schemas.model_agreement import PairedCountComparisonRequest
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_ecology_unit_type_aliases_1_2 import _case
 from reefvision.tests.test_workflow_ecology_1_2 import _graph as longitudinal_graph
 from reefvision.tests.test_workflow_ecology_1_2 import _observations
 from reefvision.tests.test_workflow_model_agreement_1_2 import (
@@ -42,6 +43,13 @@ from reefvision.tests.test_workflow_model_agreement_1_2 import (
         "segmentation_polygon",
         "screenshot",
         "subframe",
+        "timepoint",
+        "TimePoint",
+        "sampling_date",
+        "observationEvent",
+        "site_visit",
+        "measurement",
+        "timestamp",
     ],
 )
 def test_technical_unit_is_rejected_in_both_schema_contracts(
@@ -82,7 +90,15 @@ def test_technical_unit_is_rejected_in_both_schema_contracts(
 
 @pytest.mark.parametrize(
     "technical_type",
-    ["image", "roi", "model_prediction", "pose_keypoint", "tracking_tracklet"],
+    [
+        "image",
+        "roi",
+        "model_prediction",
+        "pose_keypoint",
+        "tracking_tracklet",
+        "timepoint",
+        "sampling_date",
+    ],
 )
 @pytest.mark.parametrize(
     ("node_type", "artifact_type"),
@@ -177,3 +193,64 @@ def test_standalone_api_rejects_technical_units(
     response = client.post(endpoint, json=payload)
     assert response.status_code == 422, response.text
     assert "technical replicates" in response.text
+
+
+@pytest.mark.parametrize("kind", ["longitudinal", "paired"])
+@pytest.mark.parametrize("temporal_type", ["TimePoint", "observationEvent"])
+def test_temporal_unit_fails_standalone_and_saved_workflow(
+    client: TestClient, kind: str, temporal_type: str
+) -> None:
+    endpoint, payload, graph, artifact_type = _case(kind)
+    rows_key = "observations" if kind == "longitudinal" else "pairs"
+    for row in payload[rows_key]:
+        row["experimental_unit_type"] = temporal_type
+    graph["nodes"][1]["parameters"][rows_key] = payload[rows_key]
+
+    rejected = client.post(endpoint, json=payload)
+    assert rejected.status_code == 422, rejected.text
+    assert "technical replicates" in rejected.text
+
+    project_id = str(create_project(client, f"Temporal-unit QC {kind}")["id"])
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert all(row["data_type"] != artifact_type for row in detail.json()["artifacts"])
+
+
+@pytest.mark.parametrize("temporal_type", ["timepoint", "sampling_date", "measurement"])
+def test_temporal_unit_cannot_register_as_physical_biological_unit(
+    client: TestClient, temporal_type: str
+) -> None:
+    project_id = str(create_project(client, "Temporal identity QC")["id"])
+    rejected = client.post(
+        f"/api/v1/projects/{project_id}/ecology/organisms",
+        json={
+            "organism_key": "fragment-A",
+            "kind": "individual",
+            "experimental_unit_type": temporal_type,
+            "experimental_unit_id": "unit-A",
+            "reason": "Attempt to count repeated observations as independent units",
+        },
+    )
+    assert rejected.status_code == 422, rejected.text
+    assert "technical replicates" in rejected.text
+    registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert registry.status_code == 200, registry.text
+    assert registry.json()["identities"] == []
