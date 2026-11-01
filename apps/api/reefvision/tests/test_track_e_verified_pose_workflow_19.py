@@ -292,9 +292,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         saved_result = dict(node.result_json or {})
         assert saved_output_ids == [outputs[0]["id"]]
         node.output_artifact_ids_json = []
-        node.result_json = {
-            key: value for key, value in saved_result.items() if key != "outputs"
-        }
+        node.result_json = {key: value for key, value in saved_result.items() if key != "outputs"}
         session.commit()
 
     orphan_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
