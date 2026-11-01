@@ -5877,3 +5877,14 @@ authenticated calibrated longitudinal observations, true study-design
 independence, representative human/model acceptance, 1.1 migration
 reconciliation, and physical Windows MSI/GUI/GPU acceptance remain open.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Imported historical experimental-unit diagnostics and superseded revision acceptance (2026-11-01; development only)
+
+**Pre-change exact-head evidence:** At `73d06717f216d9183e5c4deb345292ab213a4c81`, 19 pull-request Actions completed: 17 passed, including Pose Workflow Validation and Build Windows Desktop; backend CI and ReefVision 1.0 Acceptance failed. Backend pytest reported **12 failed, 2291 passed, 32 skipped**. Every failure was an assertion on the specific validation error: the earlier history-wide `EcologyIdentityRow` Pydantic check rejected invalid imported technical unit types or ambiguous physical-unit IDs with the generic `invalid recorded design` message, before the pre-existing specific experimental-unit policy diagnostics ran. These were real regression failures, not an accepted green gate.
+
+**Repair:** History-wide registry validation now explicitly checks completeness, technical-replicate unit type and ambiguous physical-unit ID for **every** append-only revision before running the unchanged Pydantic row validator. This retains the fail-closed scientific safeguard while restoring specific, stable diagnostics expected by standalone API clients and persisted executable Workflow Builder failure records. Both error types still reject scientific registry artifact creation; no data is rewritten, and biological independence remains unverified.
+
+**Acceptance strengthened:** The existing parameterized standalone/API and saved executable Workflow Builder regression cases now include a subsequent valid revision after an imported invalid technical-unit or physical-unit-ID revision. The registry must still reject the earlier malformed history and the workflow must fail without a successful `ecology_identity_registry` artifact. Existing typed ports, project provenance, append-only revision history, `registered_unverified` status and scientist review gates remain unchanged. No migration, 1.1 environmental provider, weights, dataset promotion or cross-version merge.
+
+**Release HOLD:** Verify exact-new-head Ruff, mypy, pytest, frontend/E2E and Windows CI. Local checkout is blocked by GitHub DNS resolution; repository pytest/Ruff and physical installed Windows MSI/GUI/GPU tests are not claimed. Authenticated calibrated longitudinal observations, true independent experimental units, representative scientist-reviewed human/model comparison, and reviewed 1.1 migration reconciliation remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
