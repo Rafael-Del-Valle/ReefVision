@@ -81,3 +81,21 @@ Dataset-version queues rank only the image membership frozen inside the selected
 ## What the queue does not claim
 
 The current score is an explainable heuristic prioritization score. It is not a calibrated uncertainty estimate, not a training-loss metric, and not a guarantee that the top-ranked image contains an actual mistake.
+
+## Failed reviewer actions and audit confirmation
+
+Single-item `Start review`, `Mark complete`, `Skip`, and `Return to queue`
+requests may be rejected by the local API (for example, when another reviewer
+has changed the item). The dashboard now shows a visible, item-specific failure
+message instead of silently leaving the researcher to infer success from the
+unchanged state chip. A delayed failure is associated with its originating
+project, dataset scope, and historical queue; it is not shown as an error for a
+different queue after navigation.
+
+A failed request is **not** evidence that a state transition occurred. Inspect
+the item's current state and append-only reviewer event history before retrying,
+especially if the response was interrupted or the server's commit status is
+uncertain. This UI safeguard does not replace server-side idempotency,
+authenticated researcher identity, or durable crash recovery. Saved executable
+`qc_review_queue` Workflow Builder nodes continue to require explicit human
+review and preserve scientific provenance.
