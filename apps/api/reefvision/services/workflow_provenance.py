@@ -193,6 +193,31 @@ def verify_succeeded_node_artifacts(
     }
 
 
+
+def verify_completed_run_artifact_ownership(
+    run: WorkflowRun,
+    nodes: list[WorkflowNodeRun],
+    artifacts: list[WorkflowArtifact],
+) -> None:
+    """Reject undeclared artifacts in a completed scientific workflow run."""
+
+    # Interrupted or review-paused runs can still be recovering their node
+    # declarations. A succeeded run must account for every saved artifact.
+    if run.status != "succeeded":
+        return
+
+    declared_by_producer = {
+        node.id: set(_artifact_ids(node.output_artifact_ids_json, field="output IDs"))
+        for node in nodes
+        if node.status == "succeeded"
+    }
+    for artifact in artifacts:
+        if artifact.id not in declared_by_producer.get(artifact.producer_node_run_id, set()):
+            raise ConflictError(
+                "Succeeded workflow run contains an undeclared output artifact"
+            )
+
+
 def build_workflow_run_provenance(
     session: Session,
     *,
@@ -258,6 +283,8 @@ def build_workflow_run_provenance(
     )
 
     artifacts_by_id = {artifact.id: artifact for artifact in artifacts}
+
+    verify_completed_run_artifact_ownership(run, nodes, artifacts)
 
     for persisted_artifact in artifacts:
         verify_workflow_artifact(
