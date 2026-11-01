@@ -208,9 +208,9 @@ def test_rejects_incompatible_glb_buffer_view_targets(invalid_selector: str) -> 
 
 def test_unsigned_byte_indices_match_unsigned_short_geometry() -> None:
     """glTF 2.0 permits UNSIGNED_BYTE index accessors (componentType 5121)."""
-    assert parse_glb_triangles(make_glb(unsigned_byte_indices=True)) == parse_glb_triangles(
-        make_glb()
-    )
+    byte_mesh = parse_glb_triangles(make_glb(unsigned_byte_indices=True))
+    short_mesh = parse_glb_triangles(make_glb())
+    assert byte_mesh == short_mesh
 
 
 def test_rejects_out_of_bounds_unsigned_byte_indices() -> None:
