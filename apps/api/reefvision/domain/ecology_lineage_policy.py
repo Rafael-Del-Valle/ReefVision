@@ -200,6 +200,33 @@ def require_unique_ecological_organism_key_spellings(keys: Iterable[str]) -> Non
             raise ValueError("Ecological organism keys differ only by case")
 
 
+class CurrentEcologicalParentRecord(Protocol):
+    """Latest registered identity used to check current parent relationships."""
+
+    organism_key: str
+    kind: str
+    parent_colony_key: str | None
+
+
+def require_current_ecological_parent_registration(
+    records: Iterable[CurrentEcologicalParentRecord],
+) -> None:
+    """Reject latest fragment links to absent or reclassified parent colonies.
+
+    A historically valid parent can later be reclassified in an imported
+    revision. Both project reads and saved-workflow replay must reject the
+    resulting inconsistent *current* lineage, even with recomputed digests.
+    This is identity consistency, not verification of biological parentage.
+    """
+    latest = {record.organism_key: record for record in records}
+    for record in latest.values():
+        if record.parent_colony_key is None:
+            continue
+        parent = latest.get(record.parent_colony_key)
+        if record.kind != "fragment" or parent is None or parent.kind != "colony":
+            raise ValueError("Ecological identity registry contains an invalid parent-colony link")
+
+
 class ChronologicalEcologicalIdentityRevision(Protocol):
     """Identity revision carrying its recorded audit timestamp."""
 
@@ -256,9 +283,7 @@ def require_historical_ecological_parent_registration(
             key=lambda parent: (_identity_revision_utc(parent.created_at), parent.revision),
         )
         if parent_at_link.kind != "colony":
-            raise ValueError(
-                "Ecological fragment parent was not a colony at fragment revision"
-            )
+            raise ValueError("Ecological fragment parent was not a colony at fragment revision")
 
 
 def require_chronological_ecological_identity_revisions(
