@@ -393,7 +393,13 @@ evidence. The record includes a SHA-256 digest of canonicalized, typed review
 evidence, the immutable source's SHA-256, the project and source asset IDs, and
 the creation timestamp. Repeated identical submissions return the same receipt;
 a revised note or decision creates a distinct receipt rather than overwriting
-the original. The first 100 records are returned in chronological order.
+the original. The collection defaults to 100 records in chronological order
+(with receipt ID as a stable tie-breaker). Callers can retrieve older or later
+pages using `?limit=100&offset=100`, with `limit` constrained to 1–100 and
+`offset` to nonnegative integers. Invalid pagination returns HTTP 422. This
+prevents the former fixed first-100 listing from silently hiding subsequent
+review revisions. Paging does not change the immutable receipt IDs or their
+replay semantics; it does not establish reviewer authentication.
 
 The server requires a source-asset ID and source-byte digest in each review,
 checks both against the project-owned original, and re-verifies the source
