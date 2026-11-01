@@ -110,9 +110,14 @@ def require_ecological_unit_type(value: str | None) -> str | None:
     cleaned = value.strip()
     if not cleaned:
         raise ValueError("Experimental unit type cannot be blank")
+    if any(unicodedata.category(char) in {"Cc", "Cf", "Cs", "Zl", "Zp"} for char in cleaned):
+        raise ValueError("Experimental unit type cannot contain control or invisible characters")
+    # Classify Unicode compatibility forms (e.g. fullwidth 'image') without
+    # rewriting the source declaration retained in scientific provenance.
+    normalized = unicodedata.normalize("NFKC", cleaned)
     # Split lower-to-upper boundaries before case folding (e.g. VideoFrame).
     # Explicit compact tokens also reject all-lowercase exports (videoframe).
-    words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", cleaned)
+    words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", normalized)
     tokens = set(re.findall(r"[a-z0-9]+", words.casefold()))
     if tokens & (_TECHNICAL_REPLICATES | _COMPACT_TECHNICAL_REPLICATES):
         raise ValueError(

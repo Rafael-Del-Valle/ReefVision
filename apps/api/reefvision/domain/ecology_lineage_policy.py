@@ -7,6 +7,7 @@ any claimed biological identity or experimental design is authentic.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable
 from typing import Protocol
 
@@ -27,7 +28,8 @@ def classify_ecological_unit_level(experimental_unit_type: str | None) -> str | 
     """
     # A CamelCase label can otherwise hide mixed biological levels (TankColony).
     # Keep the original declaration in provenance; normalize only for classification.
-    split_label = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", experimental_unit_type or "")
+    normalized = unicodedata.normalize("NFKC", experimental_unit_type or "")
+    split_label = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", normalized)
     words = {
         word
         for word in re.findall(r"[a-z0-9]+", split_label.casefold())

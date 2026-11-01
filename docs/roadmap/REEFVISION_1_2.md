@@ -5421,3 +5421,29 @@ scientist-reviewed calibrated longitudinal observations and true experimental
 unit design; independently validate representative human/model comparisons;
 reconcile 1.1 migrations; and test installed Windows MSI/CAB/GUI and hardware.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Unicode-compatible sampling-level and technical-replicate QC (2026-11-01)
+
+The existing ecological unit-type classifier only tokenized ASCII letters
+without Unicode compatibility normalization. Consequently, visually
+equivalent fullwidth labels such as `ｉｍａｇｅ` could evade the
+technical-replicate ban, while `ｔａｎｋ` could fail to match the biological
+tank/aquarium sampling level. Embedded zero-width format characters could
+also split a prohibited label. This is a *declared study-design* QC issue,
+not evidence of an actual independent experimental unit.
+
+Unit-type policy now rejects control/invisible characters and classifies
+NFKC-normalized compatibility forms while retaining the original accepted
+source label in provenance. Biological sampling-level classification uses
+the same compatibility interpretation, so compatible tank/aquarium aliases
+do not create a new experimental-unit namespace. Focused regression tests
+cover rejection through both standalone ecological APIs and executed,
+persisted saved Workflow Builder graphs, plus valid shared-tank workflows
+with unchanged unverified review gates and standalone/artifact fingerprints.
+No migration, new workflow node, environmental provider or model weights.
+
+**Release HOLD:** exact-head Ruff/pytest/backend/frontend/E2E/Windows CI;
+scientist-reviewed calibrated longitudinal observations, authenticated
+independent-unit design, representative human/model biological comparisons,
+1.1 migration reconciliation and installed Windows MSI/GUI acceptance.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
