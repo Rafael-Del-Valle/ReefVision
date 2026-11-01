@@ -154,11 +154,7 @@ try {
     }) -Description 'bundled-model manifest'
 
     $Manifest = Get-Content -Raw -Path $BundledManifest.FullName | ConvertFrom-Json
-    if ($Manifest.model_policy -ne 'architecture_first_no_pretrained_weights' -or
-        [int]$Manifest.asset_count -ne 0 -or [int]$Manifest.provider_asset_count -ne 0 -or
-        [long]$Manifest.total_size_bytes -ne 0) {
-        throw 'Extracted MSI model manifest violates the weight-free release policy.'
-    }
+    Assert-ReefVisionWeightFreeManifest -Manifest $Manifest
     $AuditPython = Join-Path $RepositoryRoot '.venv\Scripts\python.exe'
     $ModelAuditScript = Join-Path $PSScriptRoot 'audit-model-downloadability.py'
     & $AuditPython $ModelAuditScript --catalog $ModelCatalog.FullName --bundle-root $BundledManifest.Directory.FullName --runtime-root $ExtractRoot

@@ -158,6 +158,32 @@ Assert-Throws { $null = Get-ReefVisionUniquePackagedFile -Candidates @($packaged
 Assert-Throws { $null = Get-ReefVisionUniquePackagedFile -Candidates @($packagedDesktop) -Description ' ' } 'Blank MSI payload description must fail.'
 Assert-True ([regex]::Matches($msiVerifierSource, 'Get-ReefVisionUniquePackagedFile -Candidates').Count -eq 6) 'MSI verifier must enforce uniqueness for all six critical payload types.'
 
+# Missing JSON fields previously cast to zero, allowing incomplete model
+# manifests to pass the weight-free MSI gate. Exercise the parsed JSON types.
+$weightFreeJson = '{"model_policy":"architecture_first_no_pretrained_weights","asset_count":0,"provider_asset_count":0,"total_size_bytes":0}'
+$weightFreeManifest = $weightFreeJson | ConvertFrom-Json
+Assert-True (@(Assert-ReefVisionWeightFreeManifest -Manifest $weightFreeManifest).Count -eq 0) 'Valid weight-free model manifest was rejected.'
+foreach ($missingField in @('model_policy', 'asset_count', 'provider_asset_count', 'total_size_bytes')) {
+    $missing = [pscustomobject]@{}
+    foreach ($property in $weightFreeManifest.PSObject.Properties) {
+        if ($property.Name -cne $missingField) {
+            $missing | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value
+        }
+    }
+    Assert-Throws { Assert-ReefVisionWeightFreeManifest -Manifest $missing } "Missing bundled-model manifest field $missingField must fail."
+}
+foreach ($invalidValue in @('0', 0.5, -1, $true, $null)) {
+    $invalid = $weightFreeJson | ConvertFrom-Json
+    $invalid.asset_count = $invalidValue
+    Assert-Throws { Assert-ReefVisionWeightFreeManifest -Manifest $invalid } 'Invalid bundled-model asset count must fail.'
+}
+$wrongPolicy = $weightFreeJson | ConvertFrom-Json
+$wrongPolicy.model_policy = 'pretrained_weights_allowed'
+Assert-Throws { Assert-ReefVisionWeightFreeManifest -Manifest $wrongPolicy } 'Non-weight-free model policy must fail.'
+Assert-Throws { Assert-ReefVisionWeightFreeManifest -Manifest @{} } 'Non-JSON-object manifest must fail.'
+Assert-True ($msiVerifierSource.Contains('Assert-ReefVisionWeightFreeManifest -Manifest $Manifest')) 'MSI verifier must enforce strict manifest schema before the model audit.'
+
+
 $msiCleanupGuard = $msiVerifierSource.IndexOf('Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $entry.Path')
 $msiCleanupDelete = $msiVerifierSource.IndexOf('Remove-Item -LiteralPath $entry.Path -Recurse -Force')
 Assert-True ($msiCleanupGuard -ge 0 -and $msiCleanupDelete -gt $msiCleanupGuard) 'MSI verifier must check disposable ownership before recursive deletion.'

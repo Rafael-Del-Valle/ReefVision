@@ -263,6 +263,30 @@ function Assert-ReefVisionOwnedMsiVerificationRun {
 
 # An MSI with duplicate critical payloads is ambiguous even when one copy
 # passes a version or model-policy check. Never silently select the first one.
+# An absent manifest field must not be silently cast to numeric zero. Counts
+# are JSON integer fields, not strings, booleans, nulls, or fractional values.
+# This is a release-policy gate: no pretrained/provider assets are packaged.
+function Assert-ReefVisionWeightFreeManifest {
+    param([Parameter(Mandatory = $true)]$Manifest)
+    if ($null -eq $Manifest -or $Manifest -isnot [pscustomobject]) {
+        throw 'Bundled-model manifest must be a JSON object.'
+    }
+    $policy = @($Manifest.PSObject.Properties | Where-Object { $_.Name -ceq 'model_policy' })
+    if ($policy.Count -ne 1 -or $policy[0].Value -cne 'architecture_first_no_pretrained_weights') {
+        throw 'Bundled-model manifest has a missing or invalid model policy.'
+    }
+    foreach ($name in @('asset_count', 'provider_asset_count', 'total_size_bytes')) {
+        $field = @($Manifest.PSObject.Properties | Where-Object { $_.Name -ceq $name })
+        if ($field.Count -ne 1) {
+            throw "Bundled-model manifest is missing required integer field: $name"
+        }
+        $value = $field[0].Value
+        if (($value -isnot [int] -and $value -isnot [long]) -or $value -ne 0) {
+            throw "Bundled-model manifest field $name must be the integer zero."
+        }
+    }
+}
+
 function Get-ReefVisionUniquePackagedFile {
     param(
         [AllowEmptyCollection()][object[]]$Candidates = @(),
