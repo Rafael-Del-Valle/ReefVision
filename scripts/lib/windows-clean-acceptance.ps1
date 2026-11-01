@@ -440,10 +440,45 @@ function Get-ReefVisionAutomatedAcceptanceGaps {
         'upgrade', 'uninstall', 'data_retention'
     )
     foreach ($name in $required) {
-        $entry = $Report[$name]
-        $status = if ($null -eq $entry) { 'MISSING' } else { [string]$entry.status }
+        # Reports are written as ordered dictionaries but are commonly
+        # inspected after ConvertFrom-Json, which yields PSCustomObject.
+        # Validate both representations without trusting malformed entries.
+        $entry = if ($Report -is [System.Collections.IDictionary]) {
+            $Report[$name]
+        } else {
+            $property = $Report.PSObject.Properties[$name]
+            if ($null -ne $property) { $property.Value } else { $null }
+        }
+        if ($null -eq $entry) {
+            "$($name): MISSING"
+            continue
+        }
+        $fields = @{}
+        foreach ($field in @('status', 'detail', 'timestamp_utc')) {
+            if ($entry -is [System.Collections.IDictionary]) {
+                $fields[$field] = $entry[$field]
+            } else {
+                $property = $entry.PSObject.Properties[$field]
+                $fields[$field] = if ($null -ne $property) { $property.Value } else { $null }
+            }
+        }
+        $status = [string]$fields.status
         if ($status -cne 'PASS') {
             "$($name): $status"
+            continue
+        }
+        # A bare PASS without a recorded observation or timestamp is not
+        # reproducible installer evidence, even if every gate is named.
+        if ([string]::IsNullOrWhiteSpace([string]$fields.detail)) {
+            "$($name): MISSING DETAIL"
+        }
+        $timestamp = [string]$fields.timestamp_utc
+        $parsedTimestamp = [DateTimeOffset]::MinValue
+        if (-not [DateTimeOffset]::TryParseExact(
+            $timestamp, 'o', [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsedTimestamp
+        )) {
+            "$($name): INVALID TIMESTAMP"
         }
     }
 }

@@ -406,9 +406,24 @@ $requiredAcceptanceFields = @(
 )
 $completeEvidence = @{}
 foreach ($name in $requiredAcceptanceFields) {
-    $completeEvidence[$name] = New-ReefVisionEvidenceResult -Status 'PASS'
+    $completeEvidence[$name] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Recorded observation for $name"
 }
 Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'All required automated MSI gates should permit a complete report.'
+# Evidence survives JSON persistence; a naked PASS, missing time, or malformed
+# record must never be accepted as verified clean-install evidence.
+$persistedEvidence = $completeEvidence | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $persistedEvidence).Count -eq 0) 'Persisted JSON evidence should retain valid gate provenance.'
+$completeEvidence['camera_jpeg'].detail = '  '
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence) -ccontains 'camera_jpeg: MISSING DETAIL') 'PASS without an observation must not count as camera acceptance.'
+$completeEvidence['camera_jpeg'].detail = 'Recorded camera import and original hash'
+$completeEvidence['camera_jpeg'].timestamp_utc = 'not-a-time'
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence) -ccontains 'camera_jpeg: INVALID TIMESTAMP') 'PASS without a valid timestamp must not count as camera acceptance.'
+$completeEvidence['camera_jpeg'].timestamp_utc = [DateTime]::UtcNow.ToString('o')
+$completeEvidence['camera_jpeg'] = [ordered]@{ status = 'PASS' }
+$missingProvenance = @(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence)
+Assert-True ($missingProvenance -ccontains 'camera_jpeg: MISSING DETAIL') 'Missing observation field must fail closed.'
+Assert-True ($missingProvenance -ccontains 'camera_jpeg: INVALID TIMESTAMP') 'Missing timestamp field must fail closed.'
+$completeEvidence['camera_jpeg'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Recorded camera import and original hash'
 $completeEvidence['upgrade'] = New-ReefVisionEvidenceResult -Status 'SKIPPED'
 $completeEvidence['camera_jpeg'] = New-ReefVisionEvidenceResult -Status 'SKIPPED'
 $completeEvidence['uninstall'] = New-ReefVisionEvidenceResult -Status 'NOT RUN'
