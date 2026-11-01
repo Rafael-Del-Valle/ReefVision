@@ -183,7 +183,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
                 raise ValueError("GLB strided index views are unsupported")
             candidate = view["byteStride"]
             if type(candidate) is not int or not 12 <= candidate <= 252 or candidate % 4:
-                raise ValueError("GLB vertex byteStride must be 12–252, divisible by four")
+                raise ValueError("GLB vertex byteStride must be 12-252, divisible by four")
             stride = candidate
         start = _as_int(view.get("byteOffset", 0), "view offset")
         size = _as_int(view.get("byteLength"), "view length")
@@ -231,6 +231,21 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         indices = [int(row[0]) for row in read_accessor(primitive["indices"], position=False)]
         if any(index >= len(vertices) for index in indices):
             raise ValueError("GLB face index out of bounds")
+        # Optional exporter min/max metadata must describe the actual decoded
+        # index buffer. It is not independent evidence of mesh correctness.
+        index_accessor = _as_object(accessors[primitive["indices"]], "index accessor")
+        for field, reducer in (("min", min), ("max", max)):
+            if field not in index_accessor:
+                continue
+            declared = _as_list(index_accessor[field], f"index {field}")
+            expected = reducer(indices)
+            if (
+                len(declared) != 1
+                or type(declared[0]) not in (int, float)
+                or not isfinite(declared[0])
+                or declared[0] != expected
+            ):
+                raise ValueError("GLB index bounds conflict with decoded indices")
     else:
         # glTF TRIANGLES may omit indices; each consecutive vertex triplet
         # forms one independent face. Never infer a triangle strip or fan.
