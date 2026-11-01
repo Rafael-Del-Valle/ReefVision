@@ -879,9 +879,13 @@ describe("Gallery", () => {
       await screen.findByText("Images could not be imported"),
     ).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(10));
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "10 of 11 files confirmed in completed batches; 1 file has an unconfirmed import outcome.",
+    const importUncertainty = await screen.findByText(
+      /10 of 11 files confirmed in completed batches; 1 file has an unconfirmed import outcome\./,
     );
+    expect(importUncertainty).toHaveTextContent(
+      "The failed batch may have reached the server.",
+    );
+    expect(importUncertainty).toHaveTextContent("Review the gallery before retrying");
     expect(importRequests).toBe(2);
     expect(
       screen.getByRole("article", { name: /coral-01\.JPG/ }),
@@ -919,9 +923,13 @@ describe("Gallery", () => {
     expect(
       await screen.findByText("Images could not be imported"),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "0 of 1 files confirmed in completed batches; 1 file has an unconfirmed import outcome.",
+    const importUncertainty = await screen.findByText(
+      /0 of 1 files confirmed in completed batches; 1 file has an unconfirmed import outcome\./,
     );
+    expect(importUncertainty).toHaveTextContent(
+      "The failed batch may have reached the server.",
+    );
+    expect(importUncertainty).toHaveTextContent("Review the gallery before retrying");
     expect(screen.queryByText("1 files processed")).toBeNull();
   });
 
