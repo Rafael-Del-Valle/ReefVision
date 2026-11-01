@@ -257,6 +257,38 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect(createReviewQueue).not.toHaveBeenCalled();
   });
 
+  it("preserves an empty ranking input instead of silently treating it as zero", async () => {
+    vi.mocked(createReviewQueue).mockResolvedValue(queue("queue-new"));
+    mount();
+    const input = screen.getByLabelText(
+      "low mean confidence",
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+    expect(input.value).toBe("");
+    const generate = screen.getByRole("button", { name: "Generate queue" });
+    expect(generate).toHaveProperty("disabled", true);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Review score weights must be finite, nonnegative, and have a positive finite total.",
+    );
+    expect(createReviewQueue).not.toHaveBeenCalled();
+
+    // An explicit zero is valid when the other ranking signals remain positive.
+    fireEvent.change(input, { target: { value: "0" } });
+    expect(input.value).toBe("0");
+    expect(generate).toHaveProperty("disabled", false);
+    fireEvent.click(generate);
+    await waitFor(() =>
+      expect(createReviewQueue).toHaveBeenCalledWith(
+        "project-a",
+        expect.objectContaining({
+          signal_weights: expect.objectContaining({
+            low_mean_confidence: 0,
+          }),
+        }),
+      ),
+    );
+  });
+
   it("rejects an all-zero QC ranking policy and permits explicit correction", () => {
     mount();
     const weightLabels = [
