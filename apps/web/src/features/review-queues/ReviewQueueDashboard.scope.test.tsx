@@ -178,7 +178,10 @@ function mount(onCoordinationOpenChange = vi.fn()) {
 
 describe("ReviewQueueDashboard scope isolation", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // clearAllMocks leaves unused mockReturnValueOnce implementations queued
+    // across parameterized tests, allowing a previous run's resolved mutation
+    // to replace a later researcher's active QC queue.
+    vi.resetAllMocks();
     vi.mocked(getDatasetVersions).mockResolvedValue([
       { id: "dataset-1", version_number: 1, name: "Frozen set" },
     ] as Awaited<ReturnType<typeof getDatasetVersions>>);
@@ -761,8 +764,13 @@ describe("ReviewQueueDashboard scope isolation", () => {
       const pending = new Promise<ReviewQueueRecord>((resolve) => {
         resolvePending = resolve;
       });
-      vi.mocked(createReviewQueue).mockReturnValueOnce(pending);
-      vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pending);
+      // Only mock the operation under test. A spare one-shot response can
+      // leak into the next parameterized case and silently change queues.
+      if (operation === "generate") {
+        vi.mocked(createReviewQueue).mockReturnValueOnce(pending);
+      } else {
+        vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pending);
+      }
       vi.mocked(getReviewQueueItems).mockResolvedValue({
         items: [reviewItem("item-a", "image-a")],
         total: 1,
@@ -839,8 +847,13 @@ describe("ReviewQueueDashboard scope isolation", () => {
       const pending = new Promise<ReviewQueueRecord>((resolve) => {
         resolvePending = resolve;
       });
-      vi.mocked(createReviewQueue).mockReturnValueOnce(pending);
-      vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pending);
+      // Only mock the operation under test. A spare one-shot response can
+      // leak into the next parameterized case and silently change queues.
+      if (operation === "generate") {
+        vi.mocked(createReviewQueue).mockReturnValueOnce(pending);
+      } else {
+        vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pending);
+      }
       vi.mocked(getReviewQueues).mockResolvedValue([
         queue("queue-a"),
         queue("queue-other"),
