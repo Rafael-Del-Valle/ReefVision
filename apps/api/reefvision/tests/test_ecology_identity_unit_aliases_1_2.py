@@ -590,7 +590,5 @@ def test_resigned_registry_cannot_replay_historical_unit_alias(
             ],
         }
     )
-    with pytest.raises(
-        PydanticValidationError, match="experimental unit IDs differ only by case"
-    ):
+    with pytest.raises(PydanticValidationError, match="experimental unit IDs differ only by case"):
         EcologyIdentityRegistryResponse.model_validate(forged)
