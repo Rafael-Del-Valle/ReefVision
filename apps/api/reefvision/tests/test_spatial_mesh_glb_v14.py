@@ -21,6 +21,7 @@ def make_glb(
     unsigned_byte_indices: bool = False,
     position_offset: int = 0,
     position_stride: int | None = None,
+    position_leading_bytes: int = 0,
     position_bounds: bool = False,
 ) -> str:
     if invalid_selector == "misaligned_position_view":
@@ -35,10 +36,15 @@ def make_glb(
         position_stride = True
     elif invalid_selector == "stride_truncated":
         position_stride = 16
+    elif invalid_selector == "stride_overlap":
+        position_stride = 16
+        position_leading_bytes = 8
     positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, 0)
     if type(position_stride) is int and position_stride >= 12:
         positions = b"".join(
-            positions[index : index + 12] + b"\x00" * (position_stride - 12)
+            b"\x00" * position_leading_bytes
+            + positions[index : index + 12]
+            + b"\x00" * max(0, position_stride - 12 - position_leading_bytes)
             for index in range(0, len(positions), 12)
         )
     position_size = len(positions)
@@ -93,6 +99,8 @@ def make_glb(
         del doc["meshes"][0]["primitives"][0]["indices"]
     if position_stride is not None:
         doc["bufferViews"][0]["byteStride"] = position_stride
+    if position_leading_bytes:
+        doc["accessors"][0]["byteOffset"] = position_leading_bytes
     if invalid_selector == "stride_truncated":
         doc["bufferViews"][0]["byteLength"] = 36
     if position_bounds:
@@ -288,12 +296,20 @@ def test_interleaved_position_stride_preserves_geometry(stride: int) -> None:
         "stride_oversize",
         "stride_boolean",
         "stride_truncated",
+        "stride_overlap",
     ],
 )
 def test_rejects_invalid_interleaved_glb_stride(invalid_selector: str) -> None:
     """Reject invalid stride metadata and views that truncate the last vertex."""
     with pytest.raises(ValueError, match=r"byteStride|exceeds|misaligns"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_interleaved_position_with_leading_attribute_bytes() -> None:
+    """The POSITION accessor can start four bytes into each vertex record."""
+    assert parse_glb_triangles(
+        make_glb(position_stride=16, position_leading_bytes=4)
+    ) == parse_glb_triangles(make_glb())
 
 
 def test_valid_glb_position_bounds_match_unannotated_geometry() -> None:
