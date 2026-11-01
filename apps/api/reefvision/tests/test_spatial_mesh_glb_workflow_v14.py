@@ -118,6 +118,7 @@ def test_saved_glb(
         "stride_oversize",
         "stride_boolean",
         "stride_truncated",
+        "stride_overlap",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
