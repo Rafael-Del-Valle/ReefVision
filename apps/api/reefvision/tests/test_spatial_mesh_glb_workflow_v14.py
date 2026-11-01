@@ -12,7 +12,10 @@ from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 
 
 @pytest.mark.parametrize(
-    "nonindexed,explicit_targets,unsigned_byte_indices,position_offset,position_bounds,position_stride,index_bounds",
+    (
+        "nonindexed,explicit_targets,unsigned_byte_indices,position_offset,"
+        "position_bounds,position_stride,index_bounds"
+    ),
     [
         (False, False, False, 0, False, None, False),
         (False, True, False, 0, False, None, False),
