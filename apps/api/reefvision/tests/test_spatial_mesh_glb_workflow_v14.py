@@ -44,6 +44,7 @@ def test_saved_glb(
         "glb_base64": make_glb(
             nonindexed_vertices=3 if nonindexed else None,
             explicit_targets=explicit_targets,
+            explicit_min_version=explicit_targets and unsigned_byte_indices,
             unsigned_byte_indices=unsigned_byte_indices,
             position_offset=position_offset,
             position_bounds=position_bounds,
