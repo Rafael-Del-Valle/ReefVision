@@ -57,8 +57,14 @@ compare 32-bit index geometry and fingerprints with 16-bit equivalents,
 including declared index extrema; out-of-range 32-bit indices fail standalone
 and persisted graph execution without a measurement artifact. This is a
 compatibility and integrity check, not a claim of verified reconstruction.
-Scene transforms, compression,
-sparse accessors and external buffers remain unsupported. Optional POSITION
+Scene transforms, animations, skinning, compression,
+sparse accessors and external buffers remain unsupported. The importer now
+rejects top-level `animations` and `skins` declarations before measuring a
+bind-pose mesh, even if a skin is not attached to the visible node. A valid
+animated translation fixture and an unbound skin fixture must fail both
+standalone preview and executed persisted Workflow Builder graphs without
+publishing `mesh_measurement_preview`. This is fail-closed scene interpretation,
+not support for animated coral reconstructions. Optional POSITION
 and index-accessor min/max arrays are checked against decoded geometry;
 contradictory, nonfinite or malformed bounds fail closed rather than silently
 entering provisional measurements. These exporter-supplied extrema are **not**
