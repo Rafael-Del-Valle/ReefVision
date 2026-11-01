@@ -531,6 +531,9 @@ function GalleryContent({
   // A second picker event can fire before React rerenders the pending state.
   // Keep imports serialized so progress and per-file reports cannot race.
   const importInFlight = useRef(false);
+  // Count only batches for which the API returned a complete response.
+  // A failed request may still have committed on the server.
+  const confirmedImportCount = useRef(0);
   const initialPreference = useRef(
     readBrowserGalleryPreference(project.id),
   );
@@ -549,6 +552,10 @@ function GalleryContent({
     groupKey: "",
   });
   const [report, setReport] = useState<ImageImportReport | null>(null);
+  const [unconfirmedImport, setUnconfirmedImport] = useState<{
+    confirmed: number;
+    total: number;
+  } | null>(null);
   const [importProgress, setImportProgress] = useState<{
     processed: number;
     total: number;
@@ -619,6 +626,8 @@ function GalleryContent({
         failed: [],
       };
       setReport(null);
+      setUnconfirmedImport(null);
+      confirmedImportCount.current = 0;
       setImportProgress({ processed: 0, total: files.length });
 
       for (
@@ -634,6 +643,7 @@ function GalleryContent({
         combined.failed.push(...result.failed);
 
         const processed = Math.min(index + batch.length, files.length);
+        confirmedImportCount.current = processed;
         setImportProgress({ processed, total: files.length });
         setReport({
           ...combined,
@@ -647,6 +657,7 @@ function GalleryContent({
       return combined;
     },
     onSuccess: async (result) => {
+      setUnconfirmedImport(null);
       setPendingNavigationEdge(null);
       setReport(result);
       setSortBy("newest");
@@ -656,7 +667,11 @@ function GalleryContent({
       // jobs, so reset the cached query's success count before refetching.
       await queryClient.resetQueries({ queryKey: ["images", project.id] });
     },
-    onError: async () => {
+    onError: async (_error, files) => {
+      setUnconfirmedImport({
+        confirmed: confirmedImportCount.current,
+        total: files.length,
+      });
       // Imports are persisted one batch at a time. If a later batch fails,
       // earlier camera originals are already safely imported. Refresh the
       // gallery so those successful files remain visible and reviewable,
@@ -971,6 +986,11 @@ function GalleryContent({
         />
       )}
       {report && <ImportSummary report={report} />}
+      {importer.isError && unconfirmedImport && (
+        <p className="form-error" role="status">
+          {`${unconfirmedImport.confirmed} of ${unconfirmedImport.total} files confirmed in completed batches; ${unconfirmedImport.total - unconfirmedImport.confirmed} ${unconfirmedImport.total - unconfirmedImport.confirmed === 1 ? "file has" : "files have"} an unconfirmed import outcome. The failed batch may have reached the server. Review the gallery before retrying; duplicate detection preserves existing originals.`}
+        </p>
+      )}
 
       {focusedImage && (
         <section
