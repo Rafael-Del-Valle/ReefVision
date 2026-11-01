@@ -292,6 +292,7 @@ def verify_workflow_run_node_graph_lineage(
     edges = graph.graph_json.get("edges", [])
     if not isinstance(edges, list):
         raise ConflictError(error)
+    incoming_counts = {node_id: 0 for node_id in positions}
     for edge in edges:
         if not isinstance(edge, dict):
             raise ConflictError(error)
@@ -305,6 +306,16 @@ def verify_workflow_run_node_graph_lineage(
             or positions[source_id] >= positions[target_id]
         ):
             raise ConflictError(error)
+        incoming_counts[target_id] += 1
+
+    # A completed node must retain one recorded input for each pinned graph
+    # edge. Otherwise deleting an input ID can erase scientific dependencies
+    # without altering the graph checksum or any remaining artifact digest.
+    for node in nodes:
+        if node.status == "succeeded" and len(
+            _artifact_ids(node.input_artifact_ids_json, field="input IDs")
+        ) != incoming_counts[node.node_id]:
+            raise ConflictError("Succeeded workflow node input count does not match saved graph")
 
 
 def build_workflow_run_provenance(
