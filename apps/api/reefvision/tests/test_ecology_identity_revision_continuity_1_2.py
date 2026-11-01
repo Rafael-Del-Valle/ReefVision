@@ -173,7 +173,7 @@ def test_superseded_technical_unit_history_blocks_writes_and_saved_workflow(
 
     registry = client.get(f"{base}/identity-registry")
     assert registry.status_code == 400, registry.text
-    assert "invalid recorded design" in registry.json()["detail"]
+    assert "invalid experimental unit type" in registry.json()["detail"]
 
     rejected_create = client.post(
         f"{base}/organisms",
@@ -184,6 +184,7 @@ def test_superseded_technical_unit_history_blocks_writes_and_saved_workflow(
         },
     )
     assert rejected_create.status_code == 400, rejected_create.text
+    assert "invalid experimental unit type" in rejected_create.json()["detail"]
     rejected_revision = client.post(
         f"{base}/organisms/fragment-20/revisions",
         json={
@@ -193,6 +194,7 @@ def test_superseded_technical_unit_history_blocks_writes_and_saved_workflow(
         },
     )
     assert rejected_revision.status_code == 400, rejected_revision.text
+    assert "invalid experimental unit type" in rejected_revision.json()["detail"]
     with app.state.session_factory() as session:
         rows = list(
             session.scalars(
@@ -245,7 +247,7 @@ def test_superseded_technical_unit_history_blocks_writes_and_saved_workflow(
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
-    assert "invalid recorded design" in detail.json()["run"]["error_message"]
+    assert "invalid experimental unit type" in detail.json()["run"]["error_message"]
     assert not any(
         row["data_type"] == "ecology_identity_registry" for row in detail.json()["artifacts"]
     )
