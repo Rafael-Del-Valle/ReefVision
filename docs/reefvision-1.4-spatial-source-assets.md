@@ -225,3 +225,12 @@ is used by standalone preview and persisted typed Workflow Builder execution;
 regressions require invalid saved runs to fail without publishing a mesh
 measurement artifact. Accepted GLB geometry is still provisional and does
 not independently verify scale, biological identity, or registration.
+
+The GLB JSON parser also rejects nonstandard nonfinite constants (`NaN`,
+`Infinity`, `-Infinity`) even in ignored metadata fields, instead of relying
+on Python's permissive JSON decoder defaults. Embedded BIN padding bytes
+beyond the declared buffer length must be zero. The original imported bytes
+and their SHA-256 remain unchanged. Regression coverage includes standalone
+scientific analysis and saved executable typed Workflow Builder rejection,
+with no measurement artifact published on failure. These checks establish
+format integrity, not scientific calibration or independent biological review.
