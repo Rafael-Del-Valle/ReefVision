@@ -5709,3 +5709,32 @@ scientist-reviewed calibrated longitudinal observations, registered
 independent study designs, representative human/model comparisons,
 1.1 migration reconciliation, and installed Windows MSI/GUI/GPU
 acceptance are still required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Latest parent-colony replay consistency (2026-11-01; development only)
+
+**Pre-change validation:** The preceding 1.2 head `17b734867983ae48069bf8b8e558cb1907d83d8e`
+completed 19 GitHub Actions workflows: 16 passed (including frontend/E2E and
+Windows Desktop Build), and three backend gates failed at Ruff formatting
+before pytest. The exact CI diff identified one line in the shared lineage
+policy and one assertion in the historical-parent test; both were corrected.
+
+**Scientific integrity:** A fragment may have had a valid colony parent when
+linked, but a later *imported* revision can reclassify that parent as an
+individual. The standalone registry already rejected this invalid latest
+relationship; a re-signed saved registry artifact previously checked historical
+parent-at-link chronology without independently checking the **current**
+parent relationship. The same shared latest-parent validator now powers the
+standalone registry and typed saved-artifact schema, rejecting missing or
+non-colony latest parents even when identity snapshot and revision-history
+fingerprints have been recomputed. Existing saved Workflow Builder negative
+acceptance for malformed imported current lineage is preserved, with a new
+re-signed replay regression for a historically valid but currently invalid
+parent. No new node, migration, environmental provider, model weights, dataset
+promotion or review bypass is introduced. This establishes internal registry
+consistency, **not** authenticated biological parentage or independence.
+
+**Release HOLD:** Verify exact new-head Ruff, pytest, full CI and installed
+Windows GUI; authenticate scientist-reviewed calibrated longitudinal
+measurements and true experimental units; reconcile 1.1 migrations; and run
+representative biological/human-model acceptance. **1.2 NOT RELEASE-READY;
+1.3 not started.**
