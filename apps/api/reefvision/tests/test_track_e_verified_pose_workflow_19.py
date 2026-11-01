@@ -255,6 +255,37 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert restored_ids.status_code == 200, restored_ids.text
     assert restored_ids.json() == run
 
+    # A checksummed graph also fixes the identities of its persisted nodes.
+    # Forging a node ID or type must not re-label this saved frozen-pose run.
+    for field, forged in (
+        ("node_id", "forged-pose-node"),
+        ("node_type", "project_source"),
+    ):
+        with app.state.session_factory() as session:
+            node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+            assert node is not None
+            original_value = getattr(node, field)
+            setattr(node, field, forged)
+            session.commit()
+
+        changed_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+        assert changed_detail.status_code == 409, changed_detail.text
+        assert changed_detail.json() == {
+            "detail": "Workflow run node lineage does not match saved graph"
+        }
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ConflictError, match="node lineage does not match saved graph"),
+        ):
+            build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+        with app.state.session_factory() as session:
+            node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+            assert node is not None
+            setattr(node, field, original_value)
+            session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+
     # Historical node results can omit an output summary. Duplicate output
     # artifact IDs must still be rejected on the saved verified-pose run;
     # otherwise one frozen artifact appears twice in its scientific lineage.

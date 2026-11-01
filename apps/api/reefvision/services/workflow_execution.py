@@ -52,6 +52,7 @@ from reefvision.services.workflow_provenance import (
     verify_completed_run_artifact_ownership,
     verify_succeeded_node_artifacts,
     verify_workflow_artifact,
+    verify_workflow_run_node_graph_lineage,
 )
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
@@ -237,6 +238,7 @@ class WorkflowExecutionService:
                 .order_by(WorkflowNodeRun.execution_order, WorkflowNodeRun.node_id)
             )
         )
+        verify_workflow_run_node_graph_lineage(graph, nodes)
         artifacts = list(
             self.session.scalars(
                 select(WorkflowArtifact)

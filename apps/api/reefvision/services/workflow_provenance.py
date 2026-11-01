@@ -216,6 +216,38 @@ def verify_completed_run_artifact_ownership(
             raise ConflictError("Succeeded workflow run contains an undeclared output artifact")
 
 
+def verify_workflow_run_node_graph_lineage(
+    graph: WorkflowGraphRecord,
+    nodes: list[WorkflowNodeRun],
+) -> None:
+    """Bind saved node identities to the checksum-pinned workflow graph."""
+
+    raw_nodes = graph.graph_json.get("nodes")
+    error = "Workflow run node lineage does not match saved graph"
+    if not isinstance(raw_nodes, list) or not raw_nodes:
+        raise ConflictError(error)
+
+    expected: dict[str, str] = {}
+    for item in raw_nodes:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("node_id"), str)
+            or not isinstance(item.get("node_type"), str)
+            or item["node_id"] in expected
+        ):
+            raise ConflictError(error)
+        expected[item["node_id"]] = item["node_type"]
+
+    if len(nodes) != len(expected):
+        raise ConflictError(error)
+
+    seen: set[str] = set()
+    for node in nodes:
+        if node.node_id in seen or expected.get(node.node_id) != node.node_type:
+            raise ConflictError(error)
+        seen.add(node.node_id)
+
+
 def build_workflow_run_provenance(
     session: Session,
     *,
@@ -268,6 +300,8 @@ def build_workflow_run_provenance(
             )
         )
     )
+
+    verify_workflow_run_node_graph_lineage(graph, nodes)
 
     artifacts = list(
         session.scalars(
