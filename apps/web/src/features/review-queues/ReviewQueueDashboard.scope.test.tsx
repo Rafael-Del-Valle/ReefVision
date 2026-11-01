@@ -250,7 +250,7 @@ describe("ReviewQueueDashboard scope isolation", () => {
     ).toBe("Unsent observation for coral A");
     expect(
       screen.getByText(
-        /unsent biological notes and uncertain audit-event retry IDs/,
+        /Unsent biological notes and idempotent audit retry IDs/,
       ),
     ).toBeTruthy();
   });
@@ -360,7 +360,7 @@ describe("ReviewQueueDashboard scope isolation", () => {
       screen.getByRole("button", { name: "Open quick-review popout" }),
     ).toHaveProperty("disabled", true);
     expect(
-      screen.getByRole("button", { name: "Comments & assignments" }),
+      await screen.findByRole("button", { name: "Comments & assignments" }),
     ).toHaveProperty("disabled", true);
     fireEvent.click(
       screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
