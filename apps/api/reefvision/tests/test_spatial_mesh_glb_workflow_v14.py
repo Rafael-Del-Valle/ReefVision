@@ -12,14 +12,15 @@ from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 
 
 @pytest.mark.parametrize(
-    "nonindexed,explicit_targets,unsigned_byte_indices,position_offset",
+    "nonindexed,explicit_targets,unsigned_byte_indices,position_offset,position_bounds",
     [
-        (False, False, False, 0),
-        (False, True, False, 0),
-        (True, False, False, 0),
-        (False, False, True, 0),
-        (False, True, True, 0),
-        (False, False, False, 4),
+        (False, False, False, 0, False),
+        (False, True, False, 0, False),
+        (True, False, False, 0, False),
+        (False, False, True, 0, False),
+        (False, True, True, 0, False),
+        (False, False, False, 4, False),
+        (False, False, False, 0, True),
     ],
 )
 def test_saved_glb(
@@ -28,6 +29,7 @@ def test_saved_glb(
     explicit_targets: bool,
     unsigned_byte_indices: bool,
     position_offset: int,
+    position_bounds: bool,
 ) -> None:
     pid = create_project(client, "GLB saved")["id"]
     params = {
@@ -36,6 +38,7 @@ def test_saved_glb(
             explicit_targets=explicit_targets,
             unsigned_byte_indices=unsigned_byte_indices,
             position_offset=position_offset,
+            position_bounds=position_bounds,
         ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
@@ -102,6 +105,10 @@ def test_saved_glb(
         "byte_index_oob",
         "misaligned_position_view",
         "index_stride",
+        "bounds_short",
+        "bounds_boolean",
+        "bounds_nan",
+        "bounds_mismatch",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
