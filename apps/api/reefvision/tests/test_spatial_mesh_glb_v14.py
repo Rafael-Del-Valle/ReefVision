@@ -20,6 +20,7 @@ def make_glb(
     explicit_targets: bool = False,
     nonindexed_vertices: int | None = None,
     unsigned_byte_indices: bool = False,
+    unsigned_int_indices: bool = False,
     position_offset: int = 0,
     position_stride: int | None = None,
     position_leading_bytes: int = 0,
@@ -50,9 +51,14 @@ def make_glb(
             for index in range(0, len(positions), 12)
         )
     position_size = len(positions)
-    index_bytes = (
-        struct.pack("<3B", 0, 1, 2) if unsigned_byte_indices else struct.pack("<3H", 0, 1, 2)
-    )
+    if unsigned_byte_indices and unsigned_int_indices:
+        raise ValueError("Test fixture index widths are mutually exclusive")
+    if unsigned_int_indices:
+        index_bytes = struct.pack("<3I", 0, 1, 2)
+    elif unsigned_byte_indices:
+        index_bytes = struct.pack("<3B", 0, 1, 2)
+    else:
+        index_bytes = struct.pack("<3H", 0, 1, 2)
     binary = b"\x00" * position_offset + positions + index_bytes
     doc = {
         "asset": {"version": "2.0"},
@@ -62,14 +68,14 @@ def make_glb(
             {
                 "buffer": 0,
                 "byteOffset": position_offset + position_size,
-                "byteLength": 3 if unsigned_byte_indices else 6,
+                "byteLength": len(index_bytes),
             },
         ],
         "accessors": [
             {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
             {
                 "bufferView": 1,
-                "componentType": 5121 if unsigned_byte_indices else 5123,
+                "componentType": 5125 if unsigned_int_indices else (5121 if unsigned_byte_indices else 5123),
                 "count": 3,
                 "type": "SCALAR",
             },
@@ -135,6 +141,8 @@ def make_glb(
         doc["accessors"][1]["max"] = [10**400]
     if invalid_selector == "byte_index_oob" and unsigned_byte_indices:
         binary = binary[:-1] + b"\x03"
+    if invalid_selector == "dword_index_oob" and unsigned_int_indices:
+        binary = binary[:-4] + struct.pack("<I", 3)
     if invalid_selector == "asset_min_version_future":
         doc["asset"]["minVersion"] = "2.1"
     elif invalid_selector == "asset_min_version_numeric":
@@ -204,7 +212,9 @@ def make_glb(
 
 def test_explicit_glb_minimum_version_preserves_geometry() -> None:
     """A valid glTF 2.0 minimum version does not change decoded geometry."""
-    assert parse_glb_triangles(make_glb(explicit_min_version=True)) == parse_glb_triangles(make_glb())
+    assert parse_glb_triangles(
+        make_glb(explicit_min_version=True)
+    ) == parse_glb_triangles(make_glb())
 
 
 @pytest.mark.parametrize(
@@ -306,6 +316,28 @@ def test_unsigned_byte_indices_match_unsigned_short_geometry() -> None:
 def test_rejects_out_of_bounds_unsigned_byte_indices() -> None:
     with pytest.raises(ValueError, match="index out of bounds"):
         parse_glb_triangles(make_glb(unsigned_byte_indices=True, invalid_selector="byte_index_oob"))
+
+
+def test_unsigned_int_indices_match_unsigned_short_geometry() -> None:
+    """32-bit glTF triangle indices must preserve geometry and winding."""
+    assert parse_glb_triangles(make_glb(unsigned_int_indices=True)) == parse_glb_triangles(
+        make_glb()
+    )
+
+
+def test_unsigned_int_index_bounds_preserve_geometry() -> None:
+    """Optional extrema also bind 32-bit indices to the decoded triangles."""
+    assert parse_glb_triangles(make_glb(unsigned_int_indices=True, index_bounds=True)) == (
+        parse_glb_triangles(make_glb())
+    )
+
+
+def test_rejects_out_of_bounds_unsigned_int_indices() -> None:
+    """A 32-bit index outside the vertex array cannot become a measurement."""
+    with pytest.raises(ValueError, match="index out of bounds"):
+        parse_glb_triangles(
+            make_glb(unsigned_int_indices=True, invalid_selector="dword_index_oob")
+        )
 
 
 def test_glb_position_buffer_view_accepts_four_byte_component_alignment() -> None:
