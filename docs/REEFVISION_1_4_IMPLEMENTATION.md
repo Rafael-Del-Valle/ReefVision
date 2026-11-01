@@ -845,3 +845,19 @@ These checks protect data association and artifact replay consistency; they
 **do not** authenticate a project, verify a specimen match, attest to human
 review, or establish biological growth. Durable versioned review persistence
 and independently verified identities remain release gates.
+
+## Explicit identity GLB transforms (Track C)
+
+The bounded GLB 2.0 importer now accepts node-level `translation: [0,0,0]`,
+`rotation: [0,0,0,1]`, and `scale: [1,1,1]` metadata, including combinations
+of these exact identity TRS values. These declarations do not alter source-frame
+vertices and therefore preserve geometry fingerprints, calibrated preview
+measurements, and standalone versus saved executable typed Workflow Builder
+results. Nonidentity TRS, malformed lengths, Boolean coordinates, node matrices,
+scene hierarchies, animation, and skinning still fail closed. The parser does
+**not** apply any spatial transformation or verify calibration. The source
+bytes and the geometry digest remain separate provenance fields, and the
+measurement stays caller-supplied and unverified. Parser regressions and
+saved-workflow positive/negative tests cover the compatibility change; complete
+scientific, CI, installed Windows GUI, GPU, and MSI/CAB acceptance is still
+required before release.
