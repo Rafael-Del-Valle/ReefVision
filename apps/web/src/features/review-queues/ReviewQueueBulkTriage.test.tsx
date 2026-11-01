@@ -307,7 +307,10 @@ describe("ReviewQueueBulkTriage", () => {
   it.each([
     {
       name: "foreign project",
-      mutate: (row: ReviewQueueItem) => ({ ...row, project_id: "foreign-project" }),
+      mutate: (row: ReviewQueueItem) => ({
+        ...row,
+        project_id: "foreign-project",
+      }),
     },
     {
       name: "different source image",
