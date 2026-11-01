@@ -194,6 +194,32 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # An empty saved input list must not erase the graph's producer edge.
+    # This checks an actual completed two-node run, not a fabricated fixture.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        consumer.input_artifact_ids_json = []
+        session.commit()
+
+    missing_binding = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert missing_binding.status_code == 409, missing_binding.text
+    assert missing_binding.json() == {
+        "detail": "Succeeded workflow node input count does not match saved graph"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="input count does not match saved graph"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        consumer.input_artifact_ids_json = payload["nodes"][1]["input_artifact_ids_json"]
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
 
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(
     client: TestClient,
