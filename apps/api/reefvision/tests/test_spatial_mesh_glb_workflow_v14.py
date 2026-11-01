@@ -15,25 +15,26 @@ from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
     (
         "nonindexed,explicit_targets,unsigned_byte_indices,position_offset,"
         "position_bounds,position_stride,index_bounds,unsigned_int_indices,"
-        "identity_transform"
+        "identity_transform,explicit_empty_extensions"
     ),
     [
-        (False, False, False, 0, False, None, False, False, None),
-        (False, True, False, 0, False, None, False, False, None),
-        (True, False, False, 0, False, None, False, False, None),
-        (False, False, True, 0, False, None, False, False, None),
-        (False, True, True, 0, False, None, False, False, None),
-        (False, False, False, 4, False, None, False, False, None),
-        (False, False, False, 0, True, None, False, False, None),
-        (False, False, False, 0, True, 16, False, False, None),
-        (False, False, False, 0, False, 20, False, False, None),
-        (False, False, False, 0, False, None, True, False, None),
-        (False, False, False, 0, False, None, False, True, None),
-        (False, False, False, 0, False, None, True, True, None),
-        (False, False, False, 0, False, None, False, False, "translation"),
-        (False, False, False, 0, False, None, False, False, "rotation"),
-        (False, False, False, 0, False, None, False, False, "scale"),
-        (False, False, False, 0, False, None, False, False, "matrix"),
+        (False, False, False, 0, False, None, False, False, None, False),
+        (False, True, False, 0, False, None, False, False, None, False),
+        (True, False, False, 0, False, None, False, False, None, False),
+        (False, False, True, 0, False, None, False, False, None, False),
+        (False, True, True, 0, False, None, False, False, None, False),
+        (False, False, False, 4, False, None, False, False, None, False),
+        (False, False, False, 0, True, None, False, False, None, False),
+        (False, False, False, 0, True, 16, False, False, None, False),
+        (False, False, False, 0, False, 20, False, False, None, False),
+        (False, False, False, 0, False, None, True, False, None, False),
+        (False, False, False, 0, False, None, False, True, None, False),
+        (False, False, False, 0, False, None, True, True, None, False),
+        (False, False, False, 0, False, None, False, False, "translation", False),
+        (False, False, False, 0, False, None, False, False, "rotation", False),
+        (False, False, False, 0, False, None, False, False, "scale", False),
+        (False, False, False, 0, False, None, False, False, "matrix", False),
+        (False, False, False, 0, False, None, False, False, None, True),
     ],
 )
 def test_saved_glb(
@@ -47,6 +48,7 @@ def test_saved_glb(
     index_bounds: bool,
     unsigned_int_indices: bool,
     identity_transform: str | None,
+    explicit_empty_extensions: bool,
 ) -> None:
     pid = create_project(client, "GLB saved")["id"]
     params = {
@@ -61,6 +63,7 @@ def test_saved_glb(
             position_stride=position_stride,
             index_bounds=index_bounds,
             identity_transform=identity_transform,
+            explicit_empty_extensions=explicit_empty_extensions,
         ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
@@ -122,6 +125,11 @@ def test_saved_glb(
         "json_nan",
         "json_exponent_overflow",
         "json_negative_exponent_overflow",
+        "extensions_used_object",
+        "extensions_used_false",
+        "extensions_required_zero",
+        "extensions_used_nonempty",
+        "extensions_root_object",
         "nonzero_bin_padding",
         "nonindexed_partial",
         "position_target_index",
