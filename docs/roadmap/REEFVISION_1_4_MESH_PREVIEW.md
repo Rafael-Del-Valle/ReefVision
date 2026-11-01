@@ -50,11 +50,21 @@ and `pytest apps/api/reefvision/tests/test_spatial_mesh_ply_v14.py`.
 Windows installer, interactive UI, GPU, real coral scans, full CI and
 scientific acceptance remain release blockers.
 
-GLB 2.0 base64 (`glb_base64`) is supported for one embedded indexed triangle
-primitive without scene transforms, compression or external buffers. The same
-bounded parser is used by the standalone API and saved Workflow Builder node.
-Measurements remain provisional with `source_format=glb_2_0`; no persistent
-3D asset storage, direct file-import viewer or biological validation is implied.
+GLB 2.0 base64 (`glb_base64`) supports one embedded indexed or
+non-indexed TRIANGLES primitive, including bounded interleaved float32 POSITION
+records and unsigned 8/16/32-bit indices. Scene transforms, compression,
+sparse accessors and external buffers remain unsupported. Optional POSITION
+and index-accessor min/max arrays are checked against decoded geometry;
+contradictory, nonfinite or malformed bounds fail closed rather than silently
+entering provisional measurements. These exporter-supplied extrema are **not**
+independent calibration, registration, source authentication or biological
+identity evidence. The standalone API and persisted, executable typed Workflow
+Builder use the same parser, with regression coverage for valid bounds and
+invalid-bound rejection without publishing a measurement artifact.
+Project-scoped source persistence is described separately in
+`docs/reefvision-1.4-spatial-source-assets.md`. Measurements remain
+provisional with `source_format=glb_2_0`; imported files are not biologically
+validated.
 
 Mesh topology QC also reports `edge_connected_patch_count` (face patches
 connected by shared edges) and `inconsistent_winding_edge_count` (shared edges
