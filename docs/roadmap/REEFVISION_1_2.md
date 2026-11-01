@@ -5844,3 +5844,36 @@ calibrated longitudinal observations, independent experimental-unit
 verification, representative human/model acceptance, 1.1 migration
 reconciliation, and installed Windows MSI/GUI/GPU acceptance remain
 outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Superseded technical experimental-unit integrity (2026-11-01; development only)
+
+**Pre-change CI:** At `ca13e63a43df4eda61d422e454158990e32e3028`,
+16 of 19 PR-triggered workflows passed, including Windows Desktop Build.
+CI, Pose Workflow Validation and ReefVision 1.0 Acceptance failed on the
+same Ruff formatter request in the revision-continuity regression; this
+increment restores the exact requested one-line assertion.
+
+**Scientific fix:** The append-only registry now validates the recorded
+experimental-unit fields of **every historical organism revision** before
+allowing registration/revision writes or producing the registry source for an
+executable saved Workflow Builder. Previously, a malformed imported
+`video_frame` or `sampling_date` unit in revision 2 could be hidden by
+a valid tank declaration in revision 3 for write-time validation, although
+the full registry serialization would subsequently reject the history.
+Historical rows are checked with the existing persisted `EcologyIdentityRow`
+Pydantic design contract; no new definition of independent units is invented.
+
+**Regression:** Both technical-unit variants must fail standalone registry
+reads, reject subsequent writes without database mutation, and fail executable
+saved-workflow execution without a successful `ecology_identity_registry`
+artifact. Existing typed ports, project provenance, append-only history,
+`registered_unverified` evidence and scientist-review gates are preserved.
+No migrations, model weights, environment-context duplication or branch
+integration are involved.
+
+**Release HOLD:** Exact new-head Ruff/mypy/pytest/frontend/Windows CI,
+authenticated calibrated longitudinal observations, true study-design
+independence, representative human/model acceptance, 1.1 migration
+reconciliation, and physical Windows MSI/GUI/GPU acceptance remain open.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

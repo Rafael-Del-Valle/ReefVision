@@ -80,9 +80,7 @@ def test_imported_revision_gap_blocks_api_writes_and_saved_workflow(
                 )
             )
         )
-    assert stored_revisions == sorted(
-        [("colony-20", 1), ("colony-20", imported_revision)]
-    )
+    assert stored_revisions == sorted([("colony-20", 1), ("colony-20", imported_revision)])
 
     graph = {
         "graph_id": f"ecology-revision-gap-{imported_revision}",
@@ -123,6 +121,132 @@ def test_imported_revision_gap_blocks_api_writes_and_saved_workflow(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert "revision history is not contiguous" in detail.json()["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in detail.json()["artifacts"]
+    )
+
+
+
+@pytest.mark.parametrize("technical_unit", ["video_frame", "sampling_date"])
+def test_superseded_technical_unit_history_blocks_writes_and_saved_workflow(
+    client: TestClient, technical_unit: str
+) -> None:
+    """A later valid revision must not launder a technical sampling unit."""
+    project_id = str(create_project(client, "Superseded technical design")["id"])
+    base = f"/api/v1/projects/{project_id}/ecology"
+    created = client.post(
+        f"{base}/organisms",
+        json={
+            "organism_key": "fragment-20",
+            "kind": "individual",
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-A",
+            "reason": "Original independent tank assignment",
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        session.add_all(
+            [
+                EcologyIdentityRevision(
+                    project_id=project_id,
+                    organism_key="fragment-20",
+                    revision=2,
+                    kind="individual",
+                    experimental_unit_type=technical_unit,
+                    experimental_unit_id="technical-2",
+                    reason="Imported technical pseudoreplicate",
+                ),
+                EcologyIdentityRevision(
+                    project_id=project_id,
+                    organism_key="fragment-20",
+                    revision=3,
+                    kind="individual",
+                    experimental_unit_type="tank",
+                    experimental_unit_id="tank-A",
+                    reason="Imported later correction to tank",
+                ),
+            ]
+        )
+        session.commit()
+
+    registry = client.get(f"{base}/identity-registry")
+    assert registry.status_code == 400, registry.text
+    assert "invalid recorded design" in registry.json()["detail"]
+
+    rejected_create = client.post(
+        f"{base}/organisms",
+        json={
+            "organism_key": "another-organism",
+            "kind": "individual",
+            "reason": "Do not append to corrupted design history",
+        },
+    )
+    assert rejected_create.status_code == 400, rejected_create.text
+    rejected_revision = client.post(
+        f"{base}/organisms/fragment-20/revisions",
+        json={
+            "expected_revision": 3,
+            "kind": "individual",
+            "reason": "Do not hide an imported technical unit",
+        },
+    )
+    assert rejected_revision.status_code == 400, rejected_revision.text
+    with app.state.session_factory() as session:
+        rows = list(
+            session.scalars(
+                select(EcologyIdentityRevision).where(
+                    EcologyIdentityRevision.project_id == project_id
+                )
+            )
+        )
+    assert sorted((row.organism_key, row.revision) for row in rows) == [
+        ("fragment-20", 1),
+        ("fragment-20", 2),
+        ("fragment-20", 3),
+    ]
+
+    graph = {
+        "graph_id": f"ecology-superseded-technical-{technical_unit}",
+        "name": "Reject hidden technical experimental units",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert "invalid recorded design" in detail.json()["run"]["error_message"]
     assert not any(
         row["data_type"] == "ecology_identity_registry" for row in detail.json()["artifacts"]
     )

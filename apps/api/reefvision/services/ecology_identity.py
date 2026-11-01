@@ -6,6 +6,7 @@ import math
 from collections.abc import Mapping
 from datetime import UTC
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -110,6 +111,17 @@ class EcologyIdentityService:
                 raise ValidationError("Ecological identity revision history is not contiguous")
             expected_revision[record.organism_key] = expected + 1
             latest[record.organism_key] = record
+        # Imported histories may contain a superseded technical replicate or
+        # incomplete unit assignment even when the latest revision is clean.
+        # Validate every recorded revision before accepting further writes or
+        # publishing an executable Workflow Builder source artifact.
+        for record in records:
+            try:
+                EcologyIdentityRow.model_validate(record)
+            except PydanticValidationError as exc:
+                raise ValidationError(
+                    "Ecological identity history contains invalid recorded design"
+                ) from exc
         # A contiguous chain must also be chronological and preserve the
         # parent-colony state at every fragment linkage.
         try:
