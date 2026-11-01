@@ -26,7 +26,7 @@ OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
         ("reviewed_geometry_sha256", "not-a-sha"),
     ],
 )
-def test_mutated_review_cannot_be_persisted_or_replayed(
+def test_mutated_review_cannot_be_persisted(
     client: TestClient, field: str, value: object
 ) -> None:
     project_id = str(create_project(client, "Mutation-safe calibration receipt")["id"])
