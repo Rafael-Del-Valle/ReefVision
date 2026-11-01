@@ -116,6 +116,25 @@ class EcologyIdentityService:
         # Validate every recorded revision before accepting further writes or
         # publishing an executable Workflow Builder source artifact.
         for record in records:
+            # Keep specific, stable error diagnostics for imported technical
+            # replicates and ambiguous physical-unit IDs. Pydantic's row-level
+            # validator still enforces the complete persisted schema below.
+            if (record.experimental_unit_type is None) != (record.experimental_unit_id is None):
+                raise ValidationError(
+                    "Ecological identity history contains an incomplete experimental unit"
+                )
+            try:
+                require_ecological_unit_type(record.experimental_unit_type)
+            except ValueError as exc:
+                raise ValidationError(
+                    "Ecological identity history contains an invalid experimental unit type"
+                ) from exc
+            try:
+                require_ecological_unit_id(record.experimental_unit_id)
+            except ValueError as exc:
+                raise ValidationError(
+                    "Ecological identity history contains an invalid experimental unit ID"
+                ) from exc
             try:
                 EcologyIdentityRow.model_validate(record)
             except PydanticValidationError as exc:
