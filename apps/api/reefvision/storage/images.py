@@ -162,7 +162,14 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
         # Keep the raw local timestamp in EXIF metadata, not in UTC fields.
         return None
     try:
-        timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z").astimezone(UTC)
+        local_timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z")
+        # Python accepts syntactically valid offsets as large as +/-23:59.
+        # Offsets beyond UTC+/-14:00 are not plausible civil camera zones;
+        # treating them as verified instants would fabricate acquisition time.
+        utc_offset = local_timestamp.utcoffset()
+        if utc_offset is None or abs(utc_offset.total_seconds()) > 14 * 3600:
+            return None
+        timestamp = local_timestamp.astimezone(UTC)
     except ValueError:
         # Do not silently substitute DateTimeDigitized/DateTime when a
         # higher-priority acquisition field exists but cannot be trusted.

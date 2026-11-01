@@ -525,6 +525,47 @@ def test_malformed_exposure_exif_does_not_fall_back_to_digitization_or_file_time
     assert _capture_timestamp(exif) is None
 
 
+
+@pytest.mark.parametrize("offset", ["+14:30", "-14:30", "+23:00", "-23:59"])
+def test_exif_rejects_impossible_civil_utc_offsets(offset: str) -> None:
+    """A parseable but implausible camera offset must not invent capture time."""
+    exif = {
+        36867: "2026:10:01 12:30:00",
+        36881: offset,
+        36868: "2026:10:02 13:00:00",
+        36882: "+00:00",
+    }
+    assert _capture_timestamp(exif) is None
+
+
+def test_exif_accepts_boundary_utc_plus_fourteen() -> None:
+    """UTC+14:00 remains valid at the upper civil-offset boundary."""
+    assert _capture_timestamp({36867: "2026:10:01 12:30:00", 36881: "+14:00"}) == datetime(
+        2026, 9, 30, 22, 30, tzinfo=UTC
+    )
+
+
+@pytest.mark.parametrize("offset", ["+14:30", "-23:00"])
+def test_impossible_camera_offset_keeps_original_and_reports_uncertainty(
+    client: TestClient, offset: str
+) -> None:
+    project = create_project(client, "Implausible camera UTC offset")
+    exif = Image.Exif()
+    exif[34665] = {36867: "2026:10:01 12:30:00", 36881: offset}
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
+    payload = stream.getvalue()
+
+    report = import_one(client, project["id"], filename="DSC_OFFSET.JPEG", content=payload)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert metadata["capture_timestamp"] is None
+    assert "invalid" in metadata["metadata_json"]["capture_time_warning"]
+    assert metadata["metadata_json"]["exif"]["OffsetTimeOriginal"] == offset
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
 def test_camera_exif_ascii_byte_strings_keep_explicit_offset_and_subseconds() -> None:
     """Preserve acquisition time when camera decoders expose EXIF ASCII as bytes."""
     exif = {
