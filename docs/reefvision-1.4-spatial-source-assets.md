@@ -449,3 +449,20 @@ This isolated 1.4 branch introduces Alembic revision `0039` after `0038`.
 Other version branches may independently use the same revision identifier;
 their migration histories must be reconciled explicitly during reviewed
 integration, without silently merging unreviewed versions.
+
+## Mutation-safe durable review creation
+
+Direct service callers may hold a typed `MeshCalibrationReviewEvidence` object
+and mutate it after its initial Pydantic validation. The durable receipt service
+now revalidates **current** evidence values before computing the canonical
+SHA-256 or writing a record. This rejects changed reviewer/operator identities,
+unsupported decisions, malformed geometry hashes, and invalid physical scale
+values instead of storing an invalid receipt. Rejected submissions create no
+receipt; unchanged valid evidence remains append-only and deduplicated.
+
+This guards the persistence boundary as well as the existing standalone and
+saved executable typed Workflow Builder replay boundary. Regression tests
+exercise post-construction mutation and successful retrieval of a valid receipt.
+The digest is an integrity check, not a signature: reviewer attribution remains
+self-declared, and calibration, specimen identity, and acquisition accuracy
+remain unverified.
