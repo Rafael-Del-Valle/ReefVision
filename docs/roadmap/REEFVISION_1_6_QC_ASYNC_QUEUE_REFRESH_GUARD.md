@@ -110,3 +110,32 @@ The updated regressions now simulate an actual `getReviewQueues` refetch for the
 The suite now uses `vi.resetAllMocks()` before reinstating explicit per-test API defaults, and each parameterized scenario installs a pending response **only** on the operation under test. This prevents a stale generated queue from leaking into the next scientific-review scenario. Existing assertions continue to require preservation of the researcher's explicit historical queue selection, unsent coral notes, and prohibition on fetching the newly generated queue during protected review. This is test-fixture isolation, not a change to reviewer decisions, immutable evidence, production APIs, migrations or the executable saved `qc_review_queue` Workflow Builder node.
 
 **Acceptance:** exact-head TypeScript/format/Vitest/E2E and backend checks remain necessary; a committed fixture repair is not itself evidence that the regressions pass. Windows MSI upgrade/rollback, installed-GUI, representative biological-data acceptance, crash-durable recovery and independent 1.1/1.6 Alembic 0038 reconciliation remain blocked. **Release HOLD.**
+
+## Follow-up: missing-queue warning for protected bulk QC (2026-11-01)
+
+The previous history-refresh warning appeared only when single-item
+coordination was pinned. An unresolved **bulk** QC request already pinned its
+queue and prevented navigation, but a background queue-list response that
+temporarily omitted that queue left no explanation for the disabled controls.
+This could prompt a researcher to discard or retry an uncertain review action
+without first recognizing the history-list inconsistency.
+
+The dashboard now uses the shared protected queue identity for the warning,
+covering both coordination drafts and unresolved bulk review requests. The
+warning explicitly states that protected QC work remains on its original
+queue; it does not claim that a missing history entry is deleted. A regression
+exercises a real queue-history refetch that omits the queue, confirms the
+original host selection and bulk retry controls remain available, then
+restores the listing and confirms the warning clears **without** clearing
+the protected request. The researcher still resolves the request explicitly.
+
+No biological annotations, reviewer decisions, audit events, API payloads,
+database migrations, or saved executable `qc_review_queue` Workflow Builder
+graphs/runs were changed. Existing typed provenance, idempotent retry, and
+human-review gates remain authoritative. This is an in-memory UI safeguard,
+not durable crash recovery or proof of installed-Windows acceptance.
+
+**Release HOLD:** exact-head frontend/backend CI, independent 1.1/1.6
+Alembic revision-0038 reconciliation, Windows MSI upgrade/rollback and
+installed-GUI, representative biological-data acceptance and durable crash
+recovery remain required.
