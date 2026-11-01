@@ -25,8 +25,8 @@ from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import (
     classify_ecological_unit_level,
-    require_unique_ecological_unit_spellings,
     require_unique_ecological_organism_key_spellings,
+    require_unique_ecological_unit_spellings,
 )
 from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
 from reefvision.domain.ecology_polygon_qc import validate_ecological_polygon_topology
@@ -73,14 +73,16 @@ class EcologyIdentityService:
         the highest revision would silently conceal missing earlier records.
         Both API reads and saved Workflow Builder sources use this check.
         """
-        records = list(self.session.scalars(
-            select(EcologyIdentityRevision)
-            .where(EcologyIdentityRevision.project_id == project_id)
-            .order_by(
-                EcologyIdentityRevision.organism_key,
-                EcologyIdentityRevision.revision,
+        records = list(
+            self.session.scalars(
+                select(EcologyIdentityRevision)
+                .where(EcologyIdentityRevision.project_id == project_id)
+                .order_by(
+                    EcologyIdentityRevision.organism_key,
+                    EcologyIdentityRevision.revision,
+                )
             )
-        ))
+        )
         try:
             require_unique_ecological_organism_key_spellings(
                 record.organism_key for record in records
