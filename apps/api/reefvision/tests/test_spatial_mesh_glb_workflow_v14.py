@@ -12,15 +12,27 @@ from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 
 
 @pytest.mark.parametrize(
-    "nonindexed,explicit_targets",
-    [(False, False), (False, True), (True, False)],
+    "nonindexed,explicit_targets,unsigned_byte_indices",
+    [
+        (False, False, False),
+        (False, True, False),
+        (True, False, False),
+        (False, False, True),
+        (False, True, True),
+    ],
 )
-def test_saved_glb(client: TestClient, nonindexed: bool, explicit_targets: bool) -> None:
+def test_saved_glb(
+    client: TestClient,
+    nonindexed: bool,
+    explicit_targets: bool,
+    unsigned_byte_indices: bool,
+) -> None:
     pid = create_project(client, "GLB saved")["id"]
     params = {
         "glb_base64": make_glb(
             nonindexed_vertices=3 if nonindexed else None,
             explicit_targets=explicit_targets,
+            unsigned_byte_indices=unsigned_byte_indices,
         ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
@@ -84,6 +96,7 @@ def test_saved_glb(client: TestClient, nonindexed: bool, explicit_targets: bool)
         "index_target_vertex",
         "target_float",
         "target_boolean",
+        "byte_index_oob",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
@@ -95,6 +108,7 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
         "glb_base64": make_glb(
             invalid_selector=invalid_selector,
             nonindexed_vertices=4 if invalid_selector == "nonindexed_partial" else None,
+            unsigned_byte_indices=invalid_selector == "byte_index_oob",
         ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
