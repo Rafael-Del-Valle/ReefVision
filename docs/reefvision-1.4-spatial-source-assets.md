@@ -277,3 +277,20 @@ short-indexed equivalents. Out-of-bounds byte indices fail closed in both
 execution paths without publishing a mesh measurement artifact. No new
 calibration, registration, specimen identification, or reviewer verification
 is inferred from a valid GLB index format.
+
+### GLB 2.0 buffer alignment and typed-workflow parity
+
+The bounded GLB triangle importer accepts four-byte-aligned `bufferView`
+starts for float32 `POSITION` data even when the start is not a multiple of
+12 bytes (the complete VEC3 width). An accessor's own offset must align to
+its **component** width, not the whole vector. This avoids rejecting valid
+reconstruction exports with four-byte prefix padding. All offsets remain
+bounded by the declared embedded buffer and view lengths; no scene transforms,
+external buffers, sparse accessors, or interleaved vertex data are inferred.
+
+Malformed `bufferView` starts and index-buffer `byteStride` declarations
+are rejected rather than interpreted as measured coral geometry. Tests cover
+aligned and misaligned files through the parser, standalone API and persisted,
+executable typed Workflow Builder graph, including failure without publishing
+measurement artifacts. Passing import checks does not establish calibrated
+scale, verified organism identity, reconstruction accuracy, or human review.
