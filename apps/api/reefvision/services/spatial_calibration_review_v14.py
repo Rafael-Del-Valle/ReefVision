@@ -39,9 +39,7 @@ class SpatialCalibrationReviewService:
     def _canonical(evidence: MeshCalibrationReviewEvidence) -> tuple[dict[str, Any], str]:
         # Pydantic models can be mutated after construction; validate the current
         # values before persisting or hashing scientific review evidence.
-        evidence = MeshCalibrationReviewEvidence.model_validate(
-            evidence.model_dump(mode="python")
-        )
+        evidence = MeshCalibrationReviewEvidence.model_validate(evidence.model_dump(mode="python"))
         payload = evidence.model_dump(mode="json")
         encoded = json.dumps(
             payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
@@ -138,6 +136,13 @@ class SpatialCalibrationReviewService:
         offset: int = 0,
         after_review_id: str | None = None,
     ) -> list[SpatialCalibrationReviewResponse]:
+        # The HTTP route already bounds pagination, but the persistence service
+        # must also fail closed for direct callers (SQLite treats LIMIT -1 as
+        # unbounded, which could silently export an entire review ledger).
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValidationError("Spatial review page limit must be an integer from 1 to 100")
+        if type(offset) is not int or offset < 0:
+            raise ValidationError("Spatial review page offset must be a nonnegative integer")
         self.sources.get(project_id, asset_id)
         query = select(SpatialCalibrationReviewRecord).where(
             SpatialCalibrationReviewRecord.project_id == project_id,
