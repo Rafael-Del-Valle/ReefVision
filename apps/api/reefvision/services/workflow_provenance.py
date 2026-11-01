@@ -139,9 +139,7 @@ def verify_succeeded_node_artifacts(
             or producer.status != "succeeded"
             or producer.execution_order >= node_run.execution_order
         ):
-            raise ConflictError(
-                "Succeeded workflow node input lacks an earlier succeeded producer"
-            )
+            raise ConflictError("Succeeded workflow node input lacks an earlier succeeded producer")
 
     for artifact in outputs:
         if artifact.producer_node_run_id != node_run.id:
