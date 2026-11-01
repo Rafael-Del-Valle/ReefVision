@@ -29,6 +29,9 @@ type ScopedBulkRequest = {
   queueId: string;
   scopeEpoch: number;
   payload: BulkRequest;
+  // The exact immutable evidence shown when the researcher approved the batch.
+  // This stays with the original UUID through lost-response retries.
+  evidenceById: Record<string, string>;
 };
 
 type UncertainBulkRequest = {
@@ -53,6 +56,31 @@ function newBulkRequestId(): string {
     hex.slice(16, 20),
     hex.slice(20),
   ].join("-");
+}
+
+// A queue action changes bookkeeping state/timestamps, never the underlying
+// biological evidence. Compare immutable fields in a fixed order rather than
+// relying on JSON object key order from different HTTP response serializers.
+function immutableEvidence(item: ReviewQueueItem): string {
+  return JSON.stringify([
+    item.project_id,
+    item.image_id,
+    item.dataset_version_id,
+    item.input_checksum,
+    item.score,
+    item.rank_position,
+    item.highest_qc_severity,
+    item.label_class_ids_json,
+    item.model_ids_json,
+    item.related_issue_ids_json,
+    item.signal_values_json,
+    item.normalized_signals_json,
+    item.weights_json,
+    item.score_breakdown_json,
+    item.reason_summary,
+    item.split,
+    item.created_at,
+  ]);
 }
 
 function eligible(
@@ -190,11 +218,12 @@ export function ReviewQueueBulkTriage({
           (item) =>
             !expectedIds.has(item.id) ||
             item.review_queue_id !== request.queueId ||
-            item.review_state !== expectedState,
+            item.review_state !== expectedState ||
+            immutableEvidence(item) !== request.evidenceById[item.id],
         )
       ) {
         throw new Error(
-          "Bulk QC response item identities, states, or changed count did not match the submitted batch. Retry the identical request before taking another action.",
+          "Bulk QC response item identities, states, immutable biological evidence, or changed count did not match the submitted batch. Retry the identical request before taking another action.",
         );
       }
       return result;
@@ -320,6 +349,12 @@ export function ReviewQueueBulkTriage({
     mutation.mutate({
       queueId,
       scopeEpoch: currentScope.current.epoch,
+      evidenceById: Object.fromEntries(
+        selectedIds.map((id) => [
+          id,
+          immutableEvidence(available.find((item) => item.id === id)!),
+        ]),
+      ),
       payload: {
         item_ids: selectedIds,
         action,
@@ -502,7 +537,7 @@ export function ReviewQueueBulkTriage({
           </button>
         </p>
       )}
-      {uncertainRequest && <p role="alert">{uncertainRequest.errorMessage}</p>
+      {uncertainRequest && <p role="alert">{uncertainRequest.errorMessage}</p>}
       {uncertainRequest && (
         <div role="group" aria-label="Uncertain bulk triage outcome">
           <p>
