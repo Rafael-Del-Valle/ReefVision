@@ -316,6 +316,18 @@ def test_imported_technical_unit_cannot_enter_registry_or_saved_workflow(
                 reason="Simulated imported technical pseudoreplicate",
             )
         )
+        # A later clean revision must not conceal an invalid historical unit.
+        session.add(
+            EcologyIdentityRevision(
+                project_id=project_id,
+                organism_key="fragment-technical",
+                revision=3,
+                kind="fragment",
+                experimental_unit_type="tank",
+                experimental_unit_id="tank-1",
+                reason="Simulated subsequent valid tank correction",
+            )
+        )
         session.commit()
 
     registry_url = f"/api/v1/projects/{project_id}/ecology/identity-registry"
