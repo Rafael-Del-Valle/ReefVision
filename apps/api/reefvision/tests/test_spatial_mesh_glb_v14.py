@@ -55,10 +55,13 @@ def make_glb(
         raise ValueError("Test fixture index widths are mutually exclusive")
     if unsigned_int_indices:
         index_bytes = struct.pack("<3I", 0, 1, 2)
+        index_component_type = 5125
     elif unsigned_byte_indices:
         index_bytes = struct.pack("<3B", 0, 1, 2)
+        index_component_type = 5121
     else:
         index_bytes = struct.pack("<3H", 0, 1, 2)
+        index_component_type = 5123
     binary = b"\x00" * position_offset + positions + index_bytes
     doc = {
         "asset": {"version": "2.0"},
@@ -75,7 +78,7 @@ def make_glb(
             {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
             {
                 "bufferView": 1,
-                "componentType": 5125 if unsigned_int_indices else (5121 if unsigned_byte_indices else 5123),
+                "componentType": index_component_type,
                 "count": 3,
                 "type": "SCALAR",
             },
