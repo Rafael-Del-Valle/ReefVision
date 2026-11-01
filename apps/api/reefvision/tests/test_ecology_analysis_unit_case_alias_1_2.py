@@ -113,9 +113,7 @@ def test_same_exact_physical_unit_remains_one_unverified_vote(
 
 
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
-def test_request_level_unit_type_also_rejects_case_aliases(
-    client: TestClient, kind: str
-) -> None:
+def test_request_level_unit_type_also_rejects_case_aliases(client: TestClient, kind: str) -> None:
     endpoint, payload, _, _ = _case(kind, "Tank-A", "tank-a")
     rows = payload["observations"] if kind == "longitudinal" else payload["pairs"]
     for row in rows:
@@ -124,3 +122,47 @@ def test_request_level_unit_type_also_rejects_case_aliases(
     rejected = client.post(endpoint, json=payload)
     assert rejected.status_code == 400, rejected.text
     assert "differ only by case" in rejected.json()["detail"]
+
+
+@pytest.mark.parametrize("kind", ["longitudinal", "paired"])
+def test_shared_tank_alias_saved_workflow_preserves_one_unit_and_review(
+    client: TestClient, kind: str
+) -> None:
+    endpoint, payload, graph, artifact_type = _case(kind, "Tank-A", "Tank-A")
+    standalone = client.post(endpoint, json=payload)
+    assert standalone.status_code == 200, standalone.text
+
+    project_id = str(create_project(client, f"Shared tank {kind}")["id"])
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+    ) is True
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in detail.json()["artifacts"] if row["data_type"] == artifact_type
+    ]
+    assert len(artifacts) == 1
+    result = artifacts[0]["payload_json"]
+    count_field = (
+        "independent_unit_count"
+        if kind == "longitudinal"
+        else "declared_independent_unit_count"
+    )
+    assert result[count_field] == standalone.json()[count_field] == 1
+    assert result["evidence_level"] == "caller_supplied_unverified"
+    assert result["analysis_provenance"] == standalone.json()["analysis_provenance"]
