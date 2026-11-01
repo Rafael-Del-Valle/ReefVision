@@ -460,14 +460,24 @@ export function ReviewQueueBulkTriage({
           <label key={item.id}>
             <input
               type="checkbox"
-              disabled={locked}
+              disabled={
+                locked ||
+                (selectedIds.length >= 100 && !selectedIds.includes(item.id))
+              }
               checked={selectedIds.includes(item.id)}
               onChange={(event) => {
-                setSelected((current) =>
-                  event.target.checked
-                    ? [...current, item.id]
-                    : current.filter((id) => id !== item.id),
-                );
+                setSelected((current) => {
+                  if (!event.target.checked) {
+                    return current.filter((id) => id !== item.id);
+                  }
+                  if (current.includes(item.id)) return current;
+                  // Recheck the current state as well as the rendered checkbox
+                  // guard: rapid changes must never create a >100-item batch.
+                  const visibleCount = current.filter((id) =>
+                    available.some((row) => row.id === id),
+                  ).length;
+                  return visibleCount >= 100 ? current : [...current, item.id];
+                });
                 setConfirmedSelectionKey(null);
                 setReviewedSelectionKey(null);
               }}
