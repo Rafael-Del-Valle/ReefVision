@@ -2,6 +2,8 @@
 
 from typing import cast
 
+import pytest
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -57,11 +59,14 @@ def test_saved_glb(client: TestClient) -> None:
     )
 
 
-def test_invalid_glb_mode_fails_standalone_and_saved_graph(client: TestClient) -> None:
-    """Reject a float-typed glTF mode before publishing any scientific artifact."""
-    pid = create_project(client, "GLB numeric metadata rejection")["id"]
+@pytest.mark.parametrize("invalid_selector", ["mode_float", "json_nan", "nonzero_bin_padding"])
+def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
+    client: TestClient, invalid_selector: str
+) -> None:
+    """Reject malformed glTF metadata before publishing any scientific artifact."""
+    pid = create_project(client, f"GLB metadata rejection {invalid_selector}")["id"]
     params = {
-        "glb_base64": make_glb(invalid_selector="mode_float"),
+        "glb_base64": make_glb(invalid_selector=invalid_selector),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
         "calibration_evidence": "Pending verification",
@@ -70,7 +75,7 @@ def test_invalid_glb_mode_fails_standalone_and_saved_graph(client: TestClient) -
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 400, standalone.text
     graph = {
-        "graph_id": "glb-numeric-metadata-v14",
+        "graph_id": f"glb-invalid-{invalid_selector}-v14",
         "name": "Reject noninteger glTF mode",
         "nodes": [
             {"node_id": "p", "node_type": "project_source"},
