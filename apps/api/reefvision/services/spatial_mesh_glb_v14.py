@@ -177,16 +177,26 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             raise ValueError("GLB bufferView target conflicts with accessor role")
         if _as_int(view.get("buffer"), "buffer index") != 0 or (
             "byteStride" in view
-            and (type(view["byteStride"]) is not int or view["byteStride"] != width)
+            and (
+                not position
+                or type(view["byteStride"]) is not int
+                or view["byteStride"] != width
+            )
         ):
             raise ValueError("GLB strided or external views are unsupported")
         start = _as_int(view.get("byteOffset", 0), "view offset")
         size = _as_int(view.get("byteLength"), "view length")
         accessor_offset = _as_int(accessor.get("byteOffset", 0), "accessor offset")
+        # glTF bufferView offsets are four-byte aligned. Accessor offsets
+        # align to the component type (float32 positions: 4 bytes), not the
+        # entire VEC3 element (12 bytes). A valid position view may start at
+        # byte 4 without being a multiple of 12.
+        component_width = 4 if position else width
         if (
             start + size > buffer_length
             or accessor_offset + count * width > size
-            or (start + accessor_offset) % width
+            or start % 4
+            or accessor_offset % component_width
         ):
             raise ValueError("GLB accessor exceeds or misaligns its buffer view")
         offset = start + accessor_offset
