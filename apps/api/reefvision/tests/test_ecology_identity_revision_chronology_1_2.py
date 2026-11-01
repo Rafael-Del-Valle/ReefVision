@@ -43,13 +43,15 @@ def _run_saved_registry(client: TestClient, project_id: str) -> tuple[bool, dict
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "identity", "node_type": "ecology_identity_registry_source"},
         ],
-        "edges": [{
-            "edge_id": "project-identity",
-            "source_node_id": "project",
-            "source_port_id": "project",
-            "target_node_id": "identity",
-            "target_port_id": "project",
-        }],
+        "edges": [
+            {
+                "edge_id": "project-identity",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "identity",
+                "target_port_id": "project",
+            }
+        ],
     }
     saved = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
@@ -77,11 +79,13 @@ def test_imported_reverse_chronology_blocks_writes_and_saved_workflow(
     base = _history(client, project_id)
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
-        rows = list(session.scalars(
-            select(EcologyIdentityRevision)
-            .where(EcologyIdentityRevision.project_id == project_id)
-            .order_by(EcologyIdentityRevision.revision)
-        ))
+        rows = list(
+            session.scalars(
+                select(EcologyIdentityRevision)
+                .where(EcologyIdentityRevision.project_id == project_id)
+                .order_by(EcologyIdentityRevision.revision)
+            )
+        )
         assert len(rows) == 2
         rows[0].created_at = rows[1].created_at + timedelta(days=1)
         session.commit()
@@ -110,11 +114,13 @@ def test_equal_revision_timestamps_preserve_unverified_workflow_artifact(
     base = _history(client, project_id)
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
-        rows = list(session.scalars(
-            select(EcologyIdentityRevision)
-            .where(EcologyIdentityRevision.project_id == project_id)
-            .order_by(EcologyIdentityRevision.revision)
-        ))
+        rows = list(
+            session.scalars(
+                select(EcologyIdentityRevision)
+                .where(EcologyIdentityRevision.project_id == project_id)
+                .order_by(EcologyIdentityRevision.revision)
+            )
+        )
         rows[0].created_at = rows[1].created_at
         session.commit()
     response = client.get(f"{base}/identity-registry")
@@ -141,27 +147,36 @@ def test_resigned_history_replay_rejects_reversed_timestamps(client: TestClient)
     history = sorted(changed["identity_history"], key=lambda row: row["revision"])
     latest_time = datetime.fromisoformat(history[1]["created_at"].replace("Z", "+00:00"))
     history[0]["created_at"] = (latest_time + timedelta(days=1)).isoformat()
-    changed["history_sha256"] = canonical_json_sha256({
-        "algorithm_version": "ecology-identity-history-0001",
-        "project_id": project_id,
-        "revisions": [
-            {
-                **{
-                    field: row[field]
-                    for field in (
-                        "id", "organism_key", "revision", "kind",
-                        "parent_colony_key", "experimental_unit_type",
-                        "experimental_unit_id", "reason",
-                    )
-                },
-                "created_at": datetime.fromisoformat(
-                    row["created_at"].replace("Z", "+00:00")
-                ).isoformat(),
-            }
-            for row in changed["identity_history"]
-        ],
-    })
-    with pytest.raises(PydanticValidationError, match="revision timestamps are not chronological"):
+    changed["history_sha256"] = canonical_json_sha256(
+        {
+            "algorithm_version": "ecology-identity-history-0001",
+            "project_id": project_id,
+            "revisions": [
+                {
+                    **{
+                        field: row[field]
+                        for field in (
+                            "id",
+                            "organism_key",
+                            "revision",
+                            "kind",
+                            "parent_colony_key",
+                            "experimental_unit_type",
+                            "experimental_unit_id",
+                            "reason",
+                        )
+                    },
+                    "created_at": datetime.fromisoformat(
+                        row["created_at"].replace("Z", "+00:00")
+                    ).isoformat(),
+                }
+                for row in changed["identity_history"]
+            ],
+        }
+    )
+    with pytest.raises(
+        PydanticValidationError, match="revision timestamps are not chronological"
+    ):
         EcologyIdentityRegistryResponse.model_validate(changed)
 
 
