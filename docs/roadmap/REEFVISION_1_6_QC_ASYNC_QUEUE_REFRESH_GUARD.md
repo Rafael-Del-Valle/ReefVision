@@ -43,3 +43,28 @@ coordination.
 Dashboard regressions check that reselecting the same queue cannot discard a draft; that replacing the list with another queue preserves a coral observation, original host queue identity and the open panel; and that restoring the list leaves the draft unchanged. Existing standalone QC event tests and saved executable Workflow Builder regression suites remain mandatory; this UI-only change does not alter typed graph execution.
 
 This is in-memory protection, **not** durable crash recovery. Native Windows installed-GUI/MSI upgrade and rollback, representative biological-data acceptance, complete exact-head CI, and independent 1.1/1.6 Alembic revision-0038 reconciliation remain required. Version 1.6 is **not release-ready**.
+
+## Explicit queue selection during an in-flight mutation (2026-11-01)
+
+The previous protected-coordination guard did not cover an unprotected
+researcher manually selecting a different historical queue while a generation
+or regeneration request was pending. The late response would replace that
+intentional selection, potentially shifting the ranked biological observations
+under inspection. The dashboard now records a monotonically increasing
+selection revision on explicit queue-history clicks and captures that revision
+with each queue-generation request. The response may auto-select its new queue
+only when project/dataset navigation, the captured selection revision, and
+current QC protection state all still permit it. Regardless of selection, the
+server-created queue remains in history after normal query invalidation.
+
+Two parameterized React regressions cover generate and regenerate, with a
+manual queue switch before resolution. They require the manually chosen queue
+to remain selected and prohibit fetching the newly generated queue. The
+previous exact-head frontend CI failure was a Prettier-only assertion layout
+difference in the pending-coordination regression; that exact layout was also
+corrected. No standalone QC API, typed saved Workflow Builder execution,
+scientific review gate, database migration or user asset was changed.
+
+The new regressions still require exact-head CI confirmation. This UI safeguard
+does not guarantee cross-process crash recovery or constitute installed Windows
+GUI acceptance. Release remains **HOLD**.
