@@ -177,7 +177,14 @@ def make_glb(
         )
         doc["accessors"].extend(
             [
-                {"bufferView": 2, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0]},
+                {
+                    "bufferView": 2,
+                    "componentType": 5126,
+                    "count": 2,
+                    "type": "SCALAR",
+                    "min": [0.0],
+                    "max": [1.0],
+                },
                 {"bufferView": 3, "componentType": 5126, "count": 2, "type": "VEC3"},
             ]
         )
