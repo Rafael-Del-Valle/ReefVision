@@ -294,3 +294,19 @@ aligned and misaligned files through the parser, standalone API and persisted,
 executable typed Workflow Builder graph, including failure without publishing
 measurement artifacts. Passing import checks does not establish calibrated
 scale, verified organism identity, reconstruction accuracy, or human review.
+
+## GLB POSITION accessor bounds and provenance
+
+For bounded GLB 2.0 triangle imports, optional `POSITION` accessor `min` and
+`max` arrays must contain three finite, bounded JSON numbers (not booleans).
+When present, each axis must agree with the extrema recomputed from decoded
+float32 vertices within a small exporter-rounding tolerance (relative 1e-6,
+absolute 1e-8). Missing bounds remain supported. A contradictory or malformed
+bound fails closed before provisional surface area or dimensions are reported.
+These metadata values are not used as independent measurements or evidence
+of physical scale, registration, specimen identity, or human verification.
+
+Regression tests cover valid and malformed bounds through direct parsing,
+standalone scientific API execution, and saved executable typed Workflow
+Builder graphs. Failed graph execution must not publish a mesh measurement
+artifact; valid bounds must preserve the geometry digest and surface area.
