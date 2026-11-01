@@ -263,3 +263,17 @@ provenance as equivalent exports without explicit targets. Direct parser,
 standalone API, and saved executable typed Workflow Builder regressions cover
 accepted and rejected cases. These checks do not validate physical scale,
 biological specimen identity, or human reviewer authentication.
+
+## Unsigned-byte GLB triangle index compatibility
+
+The bounded GLB 2.0 mesh importer now supports all three glTF triangle-index
+component types: `UNSIGNED_BYTE` (`5121`), `UNSIGNED_SHORT` (`5123`), and
+`UNSIGNED_INT` (`5125`). Indexed triangles still require complete groups of
+three indices, and every index must refer to a decoded vertex. This allows
+compact valid coral-mesh exports without converting their index buffers.
+Parser, standalone preview, and persisted executable typed Workflow Builder
+regressions compare byte-indexed geometry and measurement provenance against
+short-indexed equivalents. Out-of-bounds byte indices fail closed in both
+execution paths without publishing a mesh measurement artifact. No new
+calibration, registration, specimen identification, or reviewer verification
+is inferred from a valid GLB index format.
