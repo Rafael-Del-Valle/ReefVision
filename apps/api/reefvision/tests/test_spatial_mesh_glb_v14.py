@@ -18,6 +18,7 @@ def make_glb(
     explicit_canonical: bool = False,
     explicit_min_version: bool = False,
     explicit_targets: bool = False,
+    identity_transform: str | None = None,
     nonindexed_vertices: int | None = None,
     unsigned_byte_indices: bool = False,
     unsigned_int_indices: bool = False,
@@ -152,8 +153,23 @@ def make_glb(
         doc["asset"]["minVersion"] = 2.0
     elif invalid_selector == "asset_min_version_boolean":
         doc["asset"]["minVersion"] = True
+    if identity_transform is not None:
+        identities = {
+            "translation": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1, 1, 1],
+        }
+        doc["nodes"][0][identity_transform] = identities[identity_transform]
     if translated:
         doc["nodes"] = [{"mesh": 0, "translation": [1, 0, 0]}]
+    if invalid_selector == "nonidentity_scale":
+        doc["nodes"][0]["scale"] = [1, 2, 1]
+    elif invalid_selector == "nonidentity_rotation":
+        doc["nodes"][0]["rotation"] = [0, 0, 1, 0]
+    elif invalid_selector == "boolean_identity_translation":
+        doc["nodes"][0]["translation"] = [0, False, 0]
+    elif invalid_selector == "short_identity_translation":
+        doc["nodes"][0]["translation"] = [0, 0]
     if invalid_selector == "node_morph_weights":
         doc["nodes"][0]["weights"] = [0.5]
     elif invalid_selector == "mesh_morph_weights":
@@ -195,9 +211,7 @@ def make_glb(
         doc["animations"] = [
             {
                 "samplers": [{"input": 2, "output": 3, "interpolation": "LINEAR"}],
-                "channels": [
-                    {"sampler": 0, "target": {"node": 0, "path": "translation"}}
-                ],
+                "channels": [{"sampler": 0, "target": {"node": 0, "path": "translation"}}],
             }
         ]
         binary += time_data + translation_data
@@ -287,9 +301,32 @@ def test_single_glb_triangle() -> None:
     assert faces == [[0, 1, 2]]
 
 
+@pytest.mark.parametrize("identity_transform", ["translation", "rotation", "scale"])
+def test_explicit_identity_glb_transform_preserves_geometry(identity_transform: str) -> None:
+    """Explicit no-op TRS must not change the measured source-frame geometry."""
+    assert parse_glb_triangles(make_glb(identity_transform=identity_transform)) == (
+        parse_glb_triangles(make_glb())
+    )
+
+
 def test_rejects_scene_transforms() -> None:
     with pytest.raises(ValueError, match="transforms"):
         parse_glb_triangles(make_glb(translated=True))
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    [
+        "nonidentity_scale",
+        "nonidentity_rotation",
+        "boolean_identity_translation",
+        "short_identity_translation",
+    ],
+)
+def test_rejects_nonidentity_or_malformed_trs(invalid_selector: str) -> None:
+    """Do not silently ignore applied, malformed or Boolean node transforms."""
+    with pytest.raises(ValueError, match="transforms"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
 @pytest.mark.parametrize("invalid_selector", ["node_morph_weights", "mesh_morph_weights"])
