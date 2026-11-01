@@ -290,13 +290,16 @@ describe("ReviewQueueDashboard scope isolation", () => {
 
     // A stale or incomplete server list must not unmount the open panel or
     // change the host's selected queue identity to a foreign queue.
+    // Exercise the real queue-history refetch rather than a synthetic
+    // cache write that can race with the query observer's initial fetch.
+    vi.mocked(getReviewQueues).mockResolvedValue([queue("queue-other")]);
     await act(async () => {
-      client.setQueryData(reviewQueuesQueryKey("project-a", "project", ""), [
-        queue("queue-other"),
-      ]);
+      await client.invalidateQueries({
+        queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+      });
     });
     expect(
-      screen.getByText(/temporarily absent from the refreshed/),
+      await screen.findByText(/temporarily absent from the refreshed/),
     ).toBeTruthy();
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
     expect(
@@ -313,15 +316,20 @@ describe("ReviewQueueDashboard scope isolation", () => {
         .value,
     ).toBe("Unsent octocoral polyp observation");
 
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
     await act(async () => {
-      client.setQueryData(reviewQueuesQueryKey("project-a", "project", ""), [
-        queue("queue-a"),
-        queue("queue-other"),
-      ]);
+      await client.invalidateQueries({
+        queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+      });
     });
-    expect(
-      screen.queryByText(/temporarily absent from the refreshed/),
-    ).toBeNull();
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/temporarily absent from the refreshed/),
+      ).toBeNull(),
+    );
     expect(
       (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
         .value,
@@ -778,8 +786,10 @@ describe("ReviewQueueDashboard scope isolation", () => {
           expect(regenerateReviewQueue).toHaveBeenCalledWith("queue-a");
         }
       });
+      // Regeneration can temporarily re-render the item list while the
+      // request is in flight. Wait for the actual coordination control.
       fireEvent.click(
-        screen.getByRole("button", { name: "Comments & assignments" }),
+        await screen.findByRole("button", { name: "Comments & assignments" }),
       );
       fireEvent.change(screen.getByLabelText("Coordination test draft"), {
         target: { value: "Unsent coral colony health observation" },
@@ -835,7 +845,7 @@ describe("ReviewQueueDashboard scope isolation", () => {
         queue("queue-a"),
         queue("queue-other"),
       ]);
-      const { client, onSelectedQueueChange } = mount();
+      const { onSelectedQueueChange } = mount();
       await waitFor(() =>
         expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
       );
@@ -866,13 +876,23 @@ describe("ReviewQueueDashboard scope isolation", () => {
         ),
       );
       vi.mocked(getReviewQueueItems).mockClear();
+      // onSuccess awaits query-history invalidation. A global mutation-cache
+      // status can still be pending during refetch, so observe the actual
+      // queue-history request that proves the success handler executed.
+      vi.mocked(getReviewQueues).mockResolvedValue([
+        queue("queue-a"),
+        queue("queue-other"),
+        queue("queue-new"),
+      ]);
+      const queueFetchesBeforeResolution =
+        vi.mocked(getReviewQueues).mock.calls.length;
       await act(async () => {
         resolvePending(queue("queue-new"));
         await pending;
       });
       await waitFor(() =>
-        expect(client.getMutationCache().getAll().at(-1)?.state.status).toBe(
-          "success",
+        expect(vi.mocked(getReviewQueues).mock.calls.length).toBeGreaterThan(
+          queueFetchesBeforeResolution,
         ),
       );
       expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-other");
