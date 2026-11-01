@@ -170,16 +170,17 @@ export function ReviewQueueDashboard({
         ]),
       ) as Record<keyof ReviewScoreWeights, string>,
   );
-  const weights = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(weightInputs).map(([key, value]) => [
-          key,
-          value.trim() === "" ? Number.NaN : Number(value),
-        ]),
-      ) as ReviewScoreWeights,
-    [weightInputs],
-  );
+  const weights = useMemo(() => {
+    // Begin with the complete typed scoring contract rather than casting an
+    // arbitrary string-keyed object to ReviewScoreWeights. Blank fields remain
+    // invalid (NaN), while a researcher-entered zero stays a valid zero.
+    const parsed: ReviewScoreWeights = { ...defaultWeights };
+    for (const key of Object.keys(defaultWeights) as (keyof ReviewScoreWeights)[]) {
+      const value = weightInputs[key];
+      parsed[key] = value.trim() === "" ? Number.NaN : Number(value);
+    }
+    return parsed;
+  }, [weightInputs]);
   const [reviewBelowConfidence, setReviewBelowConfidence] = useState("");
   const queueConfigurationError = validateQueueConfiguration(
     weights,
