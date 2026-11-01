@@ -18,18 +18,29 @@ def make_glb(
     explicit_canonical: bool = False,
     explicit_targets: bool = False,
     nonindexed_vertices: int | None = None,
+    unsigned_byte_indices: bool = False,
 ) -> str:
-    binary = struct.pack("<9f3H", 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 1, 2)
+    positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, 0)
+    binary = positions + (
+        struct.pack("<3B", 0, 1, 2)
+        if unsigned_byte_indices
+        else struct.pack("<3H", 0, 1, 2)
+    )
     doc = {
         "asset": {"version": "2.0"},
         "buffers": [{"byteLength": len(binary)}],
         "bufferViews": [
             {"buffer": 0, "byteOffset": 0, "byteLength": 36},
-            {"buffer": 0, "byteOffset": 36, "byteLength": 6},
+            {"buffer": 0, "byteOffset": 36, "byteLength": 3 if unsigned_byte_indices else 6},
         ],
         "accessors": [
             {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
-            {"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"},
+            {
+                "bufferView": 1,
+                "componentType": 5121 if unsigned_byte_indices else 5123,
+                "count": 3,
+                "type": "SCALAR",
+            },
         ],
         "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
         "nodes": [{"mesh": 0}],
@@ -53,6 +64,8 @@ def make_glb(
             }
         ]
         del doc["meshes"][0]["primitives"][0]["indices"]
+    if invalid_selector == "byte_index_oob" and unsigned_byte_indices:
+        binary = binary[:-1] + b"\x03"
     if translated:
         doc["nodes"] = [{"mesh": 0, "translation": [1, 0, 0]}]
     if invalid_selector == "scene":
@@ -187,3 +200,17 @@ def test_rejects_incompatible_glb_buffer_view_targets(invalid_selector: str) -> 
     """An explicitly declared buffer target must match its accessor role."""
     with pytest.raises(ValueError, match="target"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_unsigned_byte_indices_match_unsigned_short_geometry() -> None:
+    """glTF 2.0 permits UNSIGNED_BYTE index accessors (componentType 5121)."""
+    assert parse_glb_triangles(make_glb(unsigned_byte_indices=True)) == parse_glb_triangles(
+        make_glb()
+    )
+
+
+def test_rejects_out_of_bounds_unsigned_byte_indices() -> None:
+    with pytest.raises(ValueError, match="index out of bounds"):
+        parse_glb_triangles(
+            make_glb(unsigned_byte_indices=True, invalid_selector="byte_index_oob")
+        )
