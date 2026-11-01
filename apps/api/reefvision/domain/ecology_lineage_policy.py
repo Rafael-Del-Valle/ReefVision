@@ -208,6 +208,59 @@ class ChronologicalEcologicalIdentityRevision(Protocol):
     created_at: datetime
 
 
+def _identity_revision_utc(value: datetime) -> datetime:
+    """Normalize application UTC timestamps and offset-aware imports."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+class HistoricalEcologicalParentRevision(ChronologicalEcologicalIdentityRevision, Protocol):
+    kind: str
+    parent_colony_key: str | None
+
+
+def require_historical_ecological_parent_registration(
+    records: Iterable[HistoricalEcologicalParentRevision],
+) -> None:
+    """Fail closed if a fragment predates its registered parent-colony identity.
+
+    The append-only API requires a parent to be registered as a colony before
+    linking a fragment. Imported histories and re-signed workflow artifacts
+    must honor that same provenance ordering. This checks recorded identity
+    chronology, not biological parentage or timestamp authorship.
+    """
+    rows = list(records)
+    by_key: dict[str, list[HistoricalEcologicalParentRevision]] = {}
+    for row in rows:
+        by_key.setdefault(row.organism_key, []).append(row)
+
+    for row in rows:
+        parent_key = row.parent_colony_key
+        if parent_key is None:
+            continue
+        if row.kind != "fragment" or parent_key == row.organism_key:
+            raise ValueError("Historical ecological parent links require a distinct fragment")
+        child_time = _identity_revision_utc(row.created_at)
+        eligible = [
+            parent
+            for parent in by_key.get(parent_key, [])
+            if _identity_revision_utc(parent.created_at) <= child_time
+        ]
+        if not eligible:
+            raise ValueError(
+                "Ecological fragment parent colony was not registered before fragment revision"
+            )
+        parent_at_link = max(
+            eligible,
+            key=lambda parent: (_identity_revision_utc(parent.created_at), parent.revision),
+        )
+        if parent_at_link.kind != "colony":
+            raise ValueError(
+                "Ecological fragment parent was not a colony at fragment revision"
+            )
+
+
 def require_chronological_ecological_identity_revisions(
     records: Iterable[ChronologicalEcologicalIdentityRevision],
 ) -> None:
@@ -219,11 +272,7 @@ def require_chronological_ecological_identity_revisions(
     """
     previous_by_key: dict[str, datetime] = {}
     for row in sorted(records, key=lambda item: (item.organism_key, item.revision)):
-        recorded = row.created_at
-        if recorded.tzinfo is None or recorded.utcoffset() is None:
-            recorded_utc = recorded.replace(tzinfo=UTC)
-        else:
-            recorded_utc = recorded.astimezone(UTC)
+        recorded_utc = _identity_revision_utc(row.created_at)
         previous = previous_by_key.get(row.organism_key)
         if previous is not None and recorded_utc < previous:
             raise ValueError("Ecological identity revision timestamps are not chronological")
