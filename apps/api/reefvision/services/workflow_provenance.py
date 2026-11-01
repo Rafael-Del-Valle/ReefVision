@@ -227,16 +227,17 @@ def verify_workflow_run_node_graph_lineage(
     if not isinstance(raw_nodes, list) or not raw_nodes:
         raise ConflictError(error)
 
-    expected: dict[str, str] = {}
+    expected: dict[str, tuple[str, dict[str, Any]]] = {}
     for item in raw_nodes:
         if (
             not isinstance(item, dict)
             or not isinstance(item.get("node_id"), str)
             or not isinstance(item.get("node_type"), str)
+            or not isinstance(item.get("parameters", {}), dict)
             or item["node_id"] in expected
         ):
             raise ConflictError(error)
-        expected[item["node_id"]] = item["node_type"]
+        expected[item["node_id"]] = (item["node_type"], item.get("parameters", {}))
 
     if len(nodes) != len(expected):
         raise ConflictError(error)
@@ -250,7 +251,15 @@ def verify_workflow_run_node_graph_lineage(
 
     seen: set[str] = set()
     for node in nodes:
-        if node.node_id in seen or expected.get(node.node_id) != node.node_type:
+        graph_node = expected.get(node.node_id)
+        if node.node_id in seen or graph_node is None or graph_node[0] != node.node_type:
+            raise ConflictError(error)
+        # The planner may add optional defaults, but it must preserve every
+        # explicitly saved scientific parameter from the checksum-pinned graph.
+        if isinstance(node.parameters_json, dict) and any(
+            key not in node.parameters_json or node.parameters_json[key] != value
+            for key, value in graph_node[1].items()
+        ):
             raise ConflictError(error)
         seen.add(node.node_id)
 
