@@ -162,7 +162,7 @@ def make_glb(
         # A valid two-keyframe translation changes the scene at t=1 second.
         # Its bind-pose vertices must not be measured as the animated coral.
         aligned_start = (len(binary) + 3) // 4 * 4
-        binary += b"\\x00" * (aligned_start - len(binary))
+        binary += b"\x00" * (aligned_start - len(binary))
         time_data = struct.pack("<2f", 0.0, 1.0)
         translation_data = struct.pack("<6f", 0, 0, 0, 1, 0, 0)
         doc["bufferViews"].extend(
