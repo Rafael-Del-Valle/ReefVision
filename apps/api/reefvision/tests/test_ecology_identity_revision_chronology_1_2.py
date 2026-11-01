@@ -207,11 +207,7 @@ def test_independent_organism_revision_clocks_do_not_require_global_order() -> N
     second_b = SimpleNamespace(
         organism_key="coral-B", revision=2, created_at=datetime(2026, 1, 2, tzinfo=UTC)
     )
-    require_chronological_ecological_identity_revisions(
-        [second_a, second_b, first_a, first_b]
-    )
+    require_chronological_ecological_identity_revisions([second_a, second_b, first_a, first_b])
     second_b.created_at = datetime(2025, 12, 31, tzinfo=UTC)
     with pytest.raises(ValueError, match="revision timestamps are not chronological"):
-        require_chronological_ecological_identity_revisions(
-            [first_a, second_a, first_b, second_b]
-        )
+        require_chronological_ecological_identity_revisions([first_a, second_a, first_b, second_b])
