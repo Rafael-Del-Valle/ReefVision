@@ -89,7 +89,8 @@ def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert expected["provenance"]["calibration_review_record_id"] == receipt["id"]
-    assert expected["provenance"]["calibration_review_evidence_sha256"] == receipt["evidence_sha256"]
+    evidence_digest = expected["provenance"]["calibration_review_evidence_sha256"]
+    assert evidence_digest == receipt["evidence_sha256"]
     assert "persisted_calibration_review_unverified" in expected["qc_warnings"]
     assert expected["surface_area_m2"] == inline.json()["surface_area_m2"]
     assert client.post(
