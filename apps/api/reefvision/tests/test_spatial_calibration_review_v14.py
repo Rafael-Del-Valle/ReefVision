@@ -1,0 +1,170 @@
+"""Durable 1.4 review receipts preserve provenance without promoting scientific claims."""
+
+from __future__ import annotations
+
+from typing import cast
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from reefvision.db.models import SpatialCalibrationReviewRecord
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.tests.test_annotations import create_project
+
+OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
+
+
+def test_calibration_receipt_replays_standalone_and_persisted_workflow(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Durable spatial review")[ "id" ])
+    base = f"/api/v1/projects/{project_id}"
+    imported = client.post(f"{base}/spatial/assets", files={"file": ("colony.obj", OBJ)})
+    assert imported.status_code == 201, imported.text
+    asset = imported.json()
+    params = {
+        "asset_id": asset["id"],
+        "expected_source_payload_sha256": asset["sha256"],
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Field scale bar not independently verified",
+        "relative_scale_uncertainty": 0.05,
+        "specimen_id": "colony-16",
+        "observation_id": "survey-1",
+        "observed_at_utc": "2026-10-01T12:00:00Z",
+        "coordinate_frame_id": "local-survey-A",
+    }
+    baseline = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert baseline.status_code == 200, baseline.text
+    evidence = {
+        "calibration_operator_id": "operator-1",
+        "independent_reviewer_id": "reviewer-2",
+        "independent_review_decision": "inconclusive",
+        "independent_review_note": "Survey ruler still requires field verification",
+        "reviewed_at_utc": "2026-10-02T12:00:00Z",
+        "reviewed_geometry_sha256": baseline.json()["provenance"]["geometry_sha256"],
+        "reviewed_source_payload_sha256": asset["sha256"],
+        "reviewed_spatial_source_asset_id": asset["id"],
+        "reviewed_coordinate_frame_id": params["coordinate_frame_id"],
+        "reviewed_specimen_id": params["specimen_id"],
+        "reviewed_observation_id": params["observation_id"],
+        "reviewed_observed_at_utc": params["observed_at_utc"],
+        "reviewed_meters_per_unit": 0.01,
+        "reviewed_calibration_method": params["calibration_method"],
+        "reviewed_calibration_evidence": params["calibration_evidence"],
+        "reviewed_relative_scale_uncertainty": 0.05,
+    }
+    reviews_url = f"{base}/spatial/assets/{asset['id']}/calibration-reviews"
+    created = client.post(reviews_url, json={"evidence": evidence})
+    assert created.status_code == 201, created.text
+    receipt = created.json()
+    assert receipt["review_status"] == "attributed_unverified"
+    assert receipt["reviewer_authenticated"] is False
+    assert receipt["calibration_verified"] is False
+    assert receipt["specimen_identity_verified"] is False
+    assert receipt["source_integrity_checked"] is True
+    assert receipt["evidence_sha256"] != asset["sha256"]
+    repeated = client.post(reviews_url, json={"evidence": evidence})
+    assert repeated.status_code == 201, repeated.text
+    assert repeated.json()["id"] == receipt["id"]
+    assert client.get(reviews_url).json() == [receipt]
+    fetched = client.get(f"{reviews_url}/{receipt['id']}")
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json() == receipt
+
+    # A saved review is evidence, not an authentication or verification token.
+    # The same evidence must pass the existing geometry/scale binding checks
+    # in both the standalone API and the executable persisted typed graph.
+    params["calibration_review"] = fetched.json()["evidence"]
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    graph = {
+        "graph_id": "durable-review-replay-v14",
+        "name": "Review receipt with project-owned source",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    ]
+    assert artifacts == [expected]
+
+
+def test_calibration_receipts_fail_closed_on_cross_project_and_tampering(
+    client: TestClient,
+) -> None:
+    first = str(create_project(client, "First spatial review project")["id"])
+    second = str(create_project(client, "Second spatial review project")["id"])
+    imported = client.post(
+        f"/api/v1/projects/{first}/spatial/assets", files={"file": ("colony.obj", OBJ)}
+    )
+    assert imported.status_code == 201, imported.text
+    asset = imported.json()
+    reviews_url = f"/api/v1/projects/{first}/spatial/assets/{asset['id']}/calibration-reviews"
+    evidence = {
+        "calibration_operator_id": "operator-1",
+        "independent_reviewer_id": "reviewer-2",
+        "independent_review_decision": "disputes_scale",
+        "independent_review_note": "Scale is not supported",
+        "reviewed_at_utc": "2026-10-02T12:00:00Z",
+        "reviewed_geometry_sha256": "a" * 64,
+        "reviewed_source_payload_sha256": asset["sha256"],
+        "reviewed_spatial_source_asset_id": asset["id"],
+        "reviewed_meters_per_unit": 0.01,
+        "reviewed_calibration_method": "ruler",
+        "reviewed_calibration_evidence": "Unverified scale",
+        "reviewed_relative_scale_uncertainty": 0.05,
+    }
+    for altered in (
+        {**evidence, "reviewed_spatial_source_asset_id": None},
+        {**evidence, "reviewed_source_payload_sha256": "0" * 64},
+    ):
+        rejected = client.post(reviews_url, json={"evidence": altered})
+        assert rejected.status_code == 400, rejected.text
+    assert client.get(reviews_url).json() == []
+    created = client.post(reviews_url, json={"evidence": evidence})
+    assert created.status_code == 201, created.text
+    review_id = created.json()["id"]
+    assert client.get(
+        f"/api/v1/projects/{second}/spatial/assets/{asset['id']}/calibration-reviews/{review_id}"
+    ).status_code == 404
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        record = session.get(SpatialCalibrationReviewRecord, review_id)
+        assert record is not None
+        record.evidence_json = {**record.evidence_json, "independent_review_note": "Altered"}
+        session.commit()
+    tampered = client.get(f"{reviews_url}/{review_id}")
+    assert tampered.status_code == 400, tampered.text
+    assert "integrity validation" in tampered.text
