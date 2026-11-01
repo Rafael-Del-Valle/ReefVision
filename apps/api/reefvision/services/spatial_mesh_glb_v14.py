@@ -23,6 +23,11 @@ def _unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _reject_nonfinite_json_constant(value: str) -> None:
+    """Reject Python JSON decoder extensions forbidden by glTF 2.0 JSON."""
+    raise ValueError(f"GLB JSON contains nonfinite constant: {value}")
+
+
 def _as_object(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"GLB {name} must be an object")
@@ -73,7 +78,11 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         raise ValueError("GLB preview requires one JSON and one BIN chunk")
     try:
         doc = _as_object(
-            json.loads(chunks[0][1].decode("utf-8"), object_pairs_hook=_unique_keys),
+            json.loads(
+                chunks[0][1].decode("utf-8"),
+                object_pairs_hook=_unique_keys,
+                parse_constant=_reject_nonfinite_json_constant,
+            ),
             "root",
         )
     except (UnicodeError, json.JSONDecodeError, RecursionError) as exc:
@@ -95,6 +104,8 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
     binary = chunks[1][1]
     if "uri" in buffer or not buffer_length <= len(binary) <= buffer_length + 3:
         raise ValueError("GLB requires one embedded binary buffer")
+    if any(binary[buffer_length:]):
+        raise ValueError("GLB binary padding must be zero")
     node = _as_object(nodes[0], "node")
     scene = _as_object(scenes[0], "scene")
     scene_index = _as_int(doc.get("scene"), "scene index")
