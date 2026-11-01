@@ -144,11 +144,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         accessor = _as_object(accessors[accessor_index], "accessor")
         component = accessor.get("componentType")
         if position:
-            if (
-                type(component) is not int
-                or component != 5126
-                or accessor.get("type") != "VEC3"
-            ):
+            if type(component) is not int or component != 5126 or accessor.get("type") != "VEC3":
                 raise ValueError("GLB positions require float32 VEC3")
             fmt, width, limit = "<fff", 12, MAX_VERTICES
         else:
@@ -172,6 +168,13 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         if view_index >= len(views):
             raise ValueError("GLB bufferView index out of range")
         view = _as_object(views[view_index], "bufferView")
+        # glTF bufferView targets are optional; when present they must match
+        # the accessor's role. Never interpret index bytes as vertex data.
+        expected_target = 34962 if position else 34963
+        if "target" in view and (
+            type(view["target"]) is not int or view["target"] != expected_target
+        ):
+            raise ValueError("GLB bufferView target conflicts with accessor role")
         if _as_int(view.get("buffer"), "buffer index") != 0 or (
             "byteStride" in view
             and (type(view["byteStride"]) is not int or view["byteStride"] != width)
