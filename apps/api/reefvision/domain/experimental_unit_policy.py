@@ -73,6 +73,22 @@ _TECHNICAL_REPLICATES = frozenset(
         "screenshots",
         "subframe",
         "subframes",
+        # Repeated temporal observations and derived measurements are not
+        # independent biological experimental units, even across visits.
+        "observation",
+        "observations",
+        "measurement",
+        "measurements",
+        "timepoint",
+        "timepoints",
+        "timestamp",
+        "timestamps",
+        "visit",
+        "visits",
+        "date",
+        "dates",
+        "session",
+        "sessions",
     }
 )
 
@@ -92,6 +108,9 @@ _COMPACT_TECHNICAL_REPLICATES = frozenset(
         "imagecrop",
         "cameraview",
         "detectionbox",
+        "samplingdate",
+        "samplingtime",
+        "observationevent",
     }
 )
 
@@ -99,7 +118,7 @@ _COMPACT_TECHNICAL_REPLICATES = frozenset(
 def require_ecological_unit_type(value: str | None) -> str | None:
     """Validate declared units without asserting their biological independence.
 
-    Reject common image-processing/technical replicate types, including compound
+    Reject common image-processing, temporal and technical replicate types, including compound
     labels such as ``video_frame``, ``per-image``, ``bounding_box``, and
     ``model_prediction``. These are measurements or processing outputs, not
     independent biological units. Other declarations remain
