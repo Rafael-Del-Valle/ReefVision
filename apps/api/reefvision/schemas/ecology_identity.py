@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from reefvision.domain.ecology_lineage_policy import (
     require_chronological_ecological_identity_revisions,
+    require_historical_ecological_parent_registration,
     require_unique_ecological_organism_key_spellings,
     require_unique_ecological_unit_spellings,
 )
@@ -333,6 +334,7 @@ class EcologyIdentityRegistryResponse(BaseModel):
         if "identity_history" in self.model_fields_set:
             # A recomputed digest cannot authorize impossible audit chronology.
             require_chronological_ecological_identity_revisions(self.identity_history)
+            require_historical_ecological_parent_registration(self.identity_history)
         for collection in (
             "identities",
             "identity_history",
