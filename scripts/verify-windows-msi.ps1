@@ -192,13 +192,19 @@ try {
     Write-Host "Migration files: $($MigrationFiles.Count)"
     Write-Host "Bundled model assets: $($Manifest.asset_count)"
 
-    Write-Host 'Running packaged backend self-test...'
-    $SidecarProcess = Start-Process -FilePath $SidecarExe.FullName -ArgumentList @(
-        '--self-test',
-        '--safe-mode',
-        '--data-dir', $SelfTestData,
-        '--log-file', ('"{0}"' -f $SidecarLog)
-    ) -Wait -PassThru -WindowStyle Hidden
+    Write-Host 'Running packaged backend self-test in an isolated offline environment...'
+    # The sidecar inherits the verifier's process environment. Do not let a
+    # developer's REEFVISION_* configuration or shared model caches affect the
+    # result, mutate unrelated research data, or fetch pretrained weights.
+    # The isolated environment is restored after Start-Process returns.
+    $SidecarProcess = Invoke-ReefVisionIsolatedEnvironment -DataRoot $SelfTestData -Action {
+        Start-Process -FilePath $SidecarExe.FullName -ArgumentList @(
+            '--self-test',
+            '--safe-mode',
+            '--data-dir', $SelfTestData,
+            '--log-file', ('"{0}"' -f $SidecarLog)
+        ) -Wait -PassThru -WindowStyle Hidden
+    }
     if ($SidecarProcess.ExitCode -ne 0) {
         Show-Tail -Path $SidecarLog
         throw "Packaged reefvision-api.exe self-test failed with exit code $($SidecarProcess.ExitCode)."
