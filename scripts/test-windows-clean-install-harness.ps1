@@ -30,6 +30,31 @@ try {
 } finally {
     if ($HadConfig) { $env:REEFVISION_CONFIG_DIR = $OldConfig } else { Remove-Item Env:REEFVISION_CONFIG_DIR -ErrorAction SilentlyContinue }
 }
+# The packaged MSI sidecar self-test must inherit only disposable offline
+# caches, and the verifier must restore the caller environment even if the
+# sidecar cannot start. No process or MSI is launched by these assertions.
+$previousHfHome = [Environment]::GetEnvironmentVariable('HF_HOME', 'Process')
+$previousOffline = [Environment]::GetEnvironmentVariable('HF_HUB_OFFLINE', 'Process')
+$previousYoloConfig = [Environment]::GetEnvironmentVariable('YOLO_CONFIG_DIR', 'Process')
+try {
+    $env:HF_HOME = 'C:\developer-cache-must-not-leak'
+    $env:HF_HUB_OFFLINE = '0'
+    $env:YOLO_CONFIG_DIR = 'C:\developer-yolo-must-not-leak'
+    Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\disposable-msi-self-test' -Action {
+        Assert-True ($env:HF_HOME -eq 'C:\disposable-msi-self-test\cache\huggingface') 'Packaged sidecar inherited developer Hugging Face cache.'
+        Assert-True ($env:YOLO_CONFIG_DIR -eq 'C:\disposable-msi-self-test\cache\ultralytics') 'Packaged sidecar inherited developer Ultralytics cache.'
+        Assert-True ($env:HF_HUB_OFFLINE -eq '1') 'Packaged sidecar could access online model downloads.'
+    }
+    Assert-True ($env:HF_HOME -eq 'C:\developer-cache-must-not-leak') 'MSI self-test did not restore caller Hugging Face cache.'
+    Assert-True ($env:YOLO_CONFIG_DIR -eq 'C:\developer-yolo-must-not-leak') 'MSI self-test did not restore caller Ultralytics cache.'
+    Assert-True ($env:HF_HUB_OFFLINE -eq '0') 'MSI self-test did not restore caller offline setting.'
+    Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\disposable-msi-self-test' -Action { throw 'Simulated packaged sidecar startup failure' } } 'Failed packaged sidecar startup must propagate an error.'
+    Assert-True ($env:HF_HOME -eq 'C:\developer-cache-must-not-leak' -and $env:HF_HUB_OFFLINE -eq '0') 'Failed packaged sidecar startup leaked acceptance environment.'
+} finally {
+    if ($null -eq $previousHfHome) { Remove-Item Env:HF_HOME -ErrorAction SilentlyContinue } else { $env:HF_HOME = $previousHfHome }
+    if ($null -eq $previousOffline) { Remove-Item Env:HF_HUB_OFFLINE -ErrorAction SilentlyContinue } else { $env:HF_HUB_OFFLINE = $previousOffline }
+    if ($null -eq $previousYoloConfig) { Remove-Item Env:YOLO_CONFIG_DIR -ErrorAction SilentlyContinue } else { $env:YOLO_CONFIG_DIR = $previousYoloConfig }
+}
 $safeRoot = Join-Path $env:SystemDrive 'reefvision-clean-acceptance-tests'
 Assert-True ((Assert-ReefVisionSafeAcceptanceRoot -Path $safeRoot -RepositoryRoot $Root -DefaultDataRoot $defaultData) -eq (Resolve-ReefVisionAcceptancePath $safeRoot)) 'Safe temp root was rejected.'
 # A disposable directory under C:\ must be allowed, but C:\ itself and
@@ -208,6 +233,11 @@ Assert-True ($ordinaryCab.Count -eq 1) 'Non-device cabinet basename must remain 
 # Verification must reject symlinked MSI/CAB inputs before opening or extracting
 # any package, without actually installing software in this harness.
 $msiVerifier = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verify-windows-msi.ps1') -Raw
+Assert-True ($msiVerifier.Contains('$SidecarProcess = Invoke-ReefVisionIsolatedEnvironment -DataRoot $SelfTestData -Action {')) 'MSI verifier must launch the packaged sidecar inside the disposable offline environment.'
+$isolatedLaunch = $msiVerifier.IndexOf('$SidecarProcess = Invoke-ReefVisionIsolatedEnvironment -DataRoot $SelfTestData -Action {')
+$sidecarLaunch = $msiVerifier.IndexOf('Start-Process -FilePath $SidecarExe.FullName')
+$sidecarCheck = $msiVerifier.IndexOf('if ($SidecarProcess.ExitCode -ne 0)')
+Assert-True ($isolatedLaunch -ge 0 -and $sidecarLaunch -gt $isolatedLaunch -and $sidecarCheck -gt $sidecarLaunch) 'MSI sidecar launch and exit-code check must follow offline isolation.'
 Assert-True ($msiVerifier.Contains('New-ReefVisionMsiAdministrativeArguments')) 'MSI verifier must quote extraction and log paths using the tested helper.'
 Assert-True ($msiVerifier.Contains('Assert-ReefVisionMsiCompletedWithoutReboot -Action Extract -ExitCode $MsiExitCode -LogPath $MsiLog')) 'MSI verifier must reject reboot-required administrative extraction before inspecting files.'
 Assert-True ($msiVerifier.Contains('Assert-ReefVisionNoReparseAncestors -Path $Msi.FullName')) 'MSI verifier does not reject reparse-point MSI paths.'
