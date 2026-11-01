@@ -312,9 +312,11 @@ def verify_workflow_run_node_graph_lineage(
     # edge. Otherwise deleting an input ID can erase scientific dependencies
     # without altering the graph checksum or any remaining artifact digest.
     for node in nodes:
-        if node.status == "succeeded" and len(
-            _artifact_ids(node.input_artifact_ids_json, field="input IDs")
-        ) != incoming_counts[node.node_id]:
+        if (
+            node.status == "succeeded"
+            and len(_artifact_ids(node.input_artifact_ids_json, field="input IDs"))
+            != incoming_counts[node.node_id]
+        ):
             raise ConflictError("Succeeded workflow node input count does not match saved graph")
 
 
