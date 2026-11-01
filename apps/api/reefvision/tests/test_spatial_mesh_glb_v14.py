@@ -42,9 +42,7 @@ def make_glb(
         values = positions[: 3 * nonindexed_vertices]
         binary = struct.pack(f"<{len(values)}f", *values)
         doc["buffers"][0]["byteLength"] = len(binary)
-        doc["bufferViews"] = [
-            {"buffer": 0, "byteOffset": 0, "byteLength": len(binary)}
-        ]
+        doc["bufferViews"] = [{"buffer": 0, "byteOffset": 0, "byteLength": len(binary)}]
         doc["accessors"] = [
             {
                 "bufferView": 0,
