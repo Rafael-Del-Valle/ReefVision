@@ -9,6 +9,7 @@ from datetime import date
 from reefvision.domain.ecology_expected_roster import validate_expected_roster
 from reefvision.domain.ecology_lineage_policy import (
     cross_unit_shared_parent_colony_ids,
+    require_unique_ecological_unit_spellings,
     validate_declared_lineage,
 )
 from reefvision.domain.ecology_unit_coverage import (
@@ -165,6 +166,15 @@ def analyze_longitudinal(
     This is an exploratory calculator for caller-supplied measurements, NOT a read of
     verified ReefVision annotations. It does not estimate survival or significance.
     """
+    # A case-only alias cannot turn one declared tank/colony into two votes.
+    # The shared registry policy also applies to caller-supplied analyses and
+    # their persisted executable Workflow Builder results.
+    try:
+        require_unique_ecological_unit_spellings(
+            request.observations, default_unit_type=request.experimental_unit_type
+        )
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
     validate_declared_lineage(
         request.observations, experimental_unit_type=request.experimental_unit_type
     )

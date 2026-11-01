@@ -5342,3 +5342,32 @@ authenticated scientist-reviewed longitudinal evidence, representative
 human/model comparisons, real independent experimental-unit verification,
 1.1 Alembic reconciliation, and physical installed Windows MSI/GUI
 acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Caller-supplied physical-unit case-alias guard (2026-10-31)
+
+At preceding 1.2 head `523f03a0eba3bf90d6b38daa85c62058d09e8fdb`,
+**19/19** GitHub Actions workflows passed, including backend CI, Pose
+Workflow Validation, Windows Desktop Build and 1.0 Acceptance.
+
+The existing registered-identity casefold safeguard did not extend to
+caller-supplied longitudinal and human/model comparison calculators. A study
+could declare `Tank-A` and `tank-a` (or Unicode casefold equivalents) as
+two independent tanks, inflating unit-level descriptive denominators without
+adding a physical replicate. Both calculators now reuse the same shared
+identity policy, including tank/aquarium aliases and request-level fallback
+when row-level types are absent. Conflicts fail closed before summary
+calculation; original source labels are not silently rewritten. Exact
+identifiers reused by multiple organisms remain one declared unit.
+
+Focused acceptance covers both standalone APIs and saved executable typed
+Workflow Builder nodes (failure without a successful scientific artifact),
+plus a valid one-tank control and request-level declaration fallback. Results
+remain caller-supplied, unverified, local-first and subject to scientist
+review; this does not authenticate the physical design or add inferential
+statistics. No 1.1 environmental context, migrations or weights changed.
+
+**Release HOLD:** exact-head CI, scientist-reviewed calibrated longitudinal
+evidence, real experimental-unit verification, representative human/model
+biological acceptance, migration reconciliation and physical installed
+Windows MSI/GUI tests. **1.2 NOT RELEASE-READY; 1.3 not started.**

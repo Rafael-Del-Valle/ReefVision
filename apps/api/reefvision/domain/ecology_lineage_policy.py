@@ -61,17 +61,19 @@ class RegisteredEcologicalUnit(Protocol):
 
 def require_unique_ecological_unit_spellings(
     records: Iterable[RegisteredEcologicalUnit],
+    *,
+    default_unit_type: str | None = None,
 ) -> None:
     """Reject case-only aliases of one registered physical sampling unit.
 
     The same exact ID may be shared by organisms in one unit. Known sampling
     labels such as tank/aquarium are equivalent, but different sampling levels
-    have separate namespaces. Do not rewrite source identifiers or claim
-    biological independence.
+    have separate namespaces. Request-level unit types apply when individual
+    rows omit their type. Do not rewrite source IDs or claim independence.
     """
     spellings: dict[tuple[str, str], str] = {}
     for record in records:
-        unit_type = record.experimental_unit_type
+        unit_type = record.experimental_unit_type or default_unit_type
         unit_id = record.experimental_unit_id
         if unit_type is None or unit_id is None:
             continue

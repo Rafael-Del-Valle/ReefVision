@@ -9,6 +9,7 @@ from reefvision.domain.ecology_lineage_policy import (
     canonical_declared_unit_type,
     cross_unit_shared_parent_colony_ids,
     ecological_unit_types_equivalent,
+    require_unique_ecological_unit_spellings,
     validate_declared_lineage,
 )
 from reefvision.domain.errors import ValidationError
@@ -57,6 +58,11 @@ def compare_paired_counts(
         raise ValidationError("experimental_unit_type is required when unit IDs are supplied")
     if unit_type is not None and any(item.experimental_unit_id is None for item in pairs):
         raise ValidationError("All paired observations require experimental_unit_id")
+    # Physical-unit case aliases must not inflate human-model comparison n.
+    try:
+        require_unique_ecological_unit_spellings(pairs, default_unit_type=unit_type)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
     memberships: dict[str, str] = {}
     for item in pairs:
         if (
