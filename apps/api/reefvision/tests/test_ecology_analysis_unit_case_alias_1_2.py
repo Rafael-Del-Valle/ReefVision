@@ -55,7 +55,7 @@ def _case(
     ("first_id", "second_id"),
     [
         ("Tank-A", "tank-a"),
-        ("Stra\\u00dfe-A", "STRASSE-A"),
+        ("Stra\u00dfe-A", "STRASSE-A"),
     ],
     ids=["ascii-case", "unicode-casefold"],
 )
@@ -92,9 +92,7 @@ def test_case_alias_fails_standalone_and_saved_workflow(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert "differ only by case" in detail.json()["run"]["error_message"]
-    assert all(
-        row["data_type"] != artifact_type for row in detail.json()["artifacts"]
-    )
+    assert all(row["data_type"] != artifact_type for row in detail.json()["artifacts"])
 
 
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
