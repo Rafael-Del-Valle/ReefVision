@@ -709,9 +709,26 @@ function GalleryContent({
     project.id,
   ]);
 
+  // A background image refresh can remove or replace an image without
+  // changing the current page or filters. Drop stale selection IDs so the
+  // batch toolbar never advertises an image that is no longer visible.
   useEffect(() => {
-    onInferenceSelectionChange?.(selectedImageIds);
-  }, [onInferenceSelectionChange, selectedImageIds]);
+    if (!images.data) return;
+    const availableIds = new Set(images.data.items.map((item) => item.id));
+    setSelectedImageIds((current) => {
+      const retained = current.filter((id) => availableIds.has(id));
+      return retained.length === current.length ? current : retained;
+    });
+  }, [images.data]);
+
+  useEffect(() => {
+    // Reconcile against the latest server page before notifying downstream
+    // inference controls, even on the render before the cleanup effect runs.
+    const availableIds = new Set(images.data?.items.map((item) => item.id) ?? []);
+    onInferenceSelectionChange?.(
+      selectedImageIds.filter((id) => availableIds.has(id)),
+    );
+  }, [images.data, onInferenceSelectionChange, selectedImageIds]);
 
   useEffect(
     () => () => {

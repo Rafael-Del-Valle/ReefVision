@@ -975,6 +975,61 @@ describe("Gallery", () => {
     );
   });
 
+  it("removes stale inference selections after an image disappears on refresh", async () => {
+    const onInferenceSelectionChange = vi.fn();
+    const remainingImage: ProjectImage = {
+      ...image,
+      id: "image-2",
+      original_filename: "swiftia-02.JPG",
+      managed_path: "projects/project-1/images/originals/image-2.jpg",
+      sha256: "b".repeat(64),
+    };
+    let currentItems: ProjectImage[] = [image, remainingImage];
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: currentItems,
+          total: currentItems.length,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      }
+      throw new Error(`Unhandled request GET ${url}`);
+    });
+
+    const { queryClient } = renderGallery(
+      undefined,
+      onInferenceSelectionChange,
+    );
+    await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    await userEvent.click(screen.getAllByLabelText("Select image")[0]);
+    await waitFor(() =>
+      expect(onInferenceSelectionChange).toHaveBeenLastCalledWith(["image-1"]),
+    );
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+
+    // Another process can remove an image while this project stays open.
+    // The gallery must not send its old ID to the model deployment controls.
+    currentItems = [remainingImage];
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("0 selected")).toBeInTheDocument();
+      expect(onInferenceSelectionChange).toHaveBeenLastCalledWith([]);
+    });
+    expect(
+      screen.queryByRole("article", { name: /swiftia-01\\.png/ }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("article", { name: /swiftia-02\\.JPG/ }),
+    ).toBeInTheDocument();
+  });
+
   it("publishes the focused image for morphometrics context", async () => {
     const onFocusedImageChange = vi.fn();
 
