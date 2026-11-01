@@ -600,12 +600,12 @@ export function ReviewQueueDashboard({
                 notes and idempotent audit retry IDs must remain available.
               </p>
             )}
-            {coordinationQueueId &&
+            {protectedQueueId &&
               !scopedQueueId &&
-              activeQueueId === coordinationQueueId && (
+              activeQueueId === protectedQueueId && (
                 <p className="annotation-helper" role="status">
                   The selected queue is temporarily absent from the refreshed
-                  list. Coordination remains open on its original queue to
+                  list. Protected QC work remains open on its original queue to
                   protect unsent notes and audit retry IDs. Close it using its
                   protected controls before selecting another queue.
                 </p>
