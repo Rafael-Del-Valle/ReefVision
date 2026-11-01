@@ -43,9 +43,7 @@ def _saved_workflow_queue(client: TestClient, project_id: str, graph_id: str) ->
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] and plan.json()["executable"]
-    saved = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     app = cast(FastAPI, client.app)
     queued = client.post(
@@ -122,18 +120,12 @@ def test_standalone_and_saved_qc_queues_bind_annotation_geometry_without_rewriti
     updated = _queue_item(client, after.json()["id"])
     assert updated["label_class_ids_json"] == original["label_class_ids_json"]
     assert updated["input_checksum"] != original["input_checksum"]
-    assert _queue_item(client, workflow_id)["input_checksum"] == saved_original[
-        "input_checksum"
-    ]
+    assert _queue_item(client, workflow_id)["input_checksum"] == saved_original["input_checksum"]
 
     # A new executable saved workflow run must use the changed evidence while
     # its predecessor remains a valid immutable, unapproved research snapshot.
-    newer_workflow_id = _saved_workflow_queue(
-        client, project_id, f"qc-evidence-after-{uuid4()}"
-    )
-    assert _queue_item(client, newer_workflow_id)["input_checksum"] == updated[
-        "input_checksum"
-    ]
+    newer_workflow_id = _saved_workflow_queue(client, project_id, f"qc-evidence-after-{uuid4()}")
+    assert _queue_item(client, newer_workflow_id)["input_checksum"] == updated["input_checksum"]
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         queue = session.get(ReviewQueue, workflow_id)
