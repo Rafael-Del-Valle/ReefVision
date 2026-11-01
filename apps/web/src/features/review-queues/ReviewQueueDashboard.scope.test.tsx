@@ -639,24 +639,20 @@ describe("ReviewQueueDashboard scope isolation", () => {
         resolvePending(queue("queue-new"));
         await pending;
       });
-      await waitFor(() =>
-        expect(
-          client
-            .getMutationCache()
-            .getAll()
-            .some((mutation) => mutation.state.status === "success"),
-        ).toBe(true),
-      );
+      await waitFor(() => {
+        const mutations = client.getMutationCache().getAll();
+        expect(mutations.at(-1)?.state.status).toBe("success");
+      });
       expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
       expect(
         (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
           .value,
       ).toBe("Unsent coral colony health observation");
-      expect(
-        document.querySelector<HTMLButtonElement>(
-          '.version-list .version-card.selected',
-        )?.textContent,
-      ).toContain("qc");
+      expect(getReviewQueueItems).not.toHaveBeenCalledWith(
+        "queue-new",
+        expect.anything(),
+        expect.anything(),
+      );
       expect(
         screen.getByRole("button", { name: "Generate queue" }),
       ).toHaveProperty("disabled", true);
