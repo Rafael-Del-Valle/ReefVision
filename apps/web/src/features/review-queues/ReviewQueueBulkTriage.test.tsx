@@ -158,6 +158,61 @@ describe("ReviewQueueBulkTriage", () => {
     expect(submitted.item_ids).not.toContain("coral-104");
   });
 
+  it("prevents a 101st manual selection and permits replacing a selected coral", async () => {
+    const dense = Array.from({ length: 105 }, (_, index) => ({
+      ...items[0]!,
+      id: `coral-${index}`,
+      image_id: `frame-${index}`,
+      rank_position: index + 1,
+      review_state: "pending" as const,
+    }));
+    vi.mocked(bulkTriageReviewQueueItems).mockImplementationOnce(
+      async (queueId, payload) => ({
+        queue_id: queueId,
+        action: payload.action,
+        changed_count: payload.item_ids.length,
+        items: payload.item_ids.map((id) => ({
+          ...dense.find((row) => row.id === id)!,
+          review_queue_id: queueId,
+          review_state: "in_progress" as const,
+        })),
+        requires_researcher_review: true,
+      }),
+    );
+    mount(dense);
+    const checkboxes = screen
+      .getByRole("group", { name: "Eligible review items" })
+      .querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "coral researcher" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select eligible on page (100 of 105)",
+      }),
+    );
+    expect(checkboxes[104]!.disabled).toBe(true);
+    fireEvent.click(checkboxes[104]!);
+    expect(screen.getByText("100 selected on this page")).toBeTruthy();
+    fireEvent.click(checkboxes[0]!);
+    expect(checkboxes[104]!.disabled).toBe(false);
+    fireEvent.click(checkboxes[104]!);
+    expect(screen.getByText("100 selected on this page")).toBeTruthy();
+    expect(checkboxes[0]!.checked).toBe(false);
+    expect(checkboxes[104]!.checked).toBe(true);
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply start to 100 items" }),
+    );
+    await waitFor(() =>
+      expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(1),
+    );
+    const submitted = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0]![1];
+    expect(submitted.item_ids).toHaveLength(100);
+    expect(submitted.item_ids).not.toContain("coral-0");
+    expect(submitted.item_ids).toContain("coral-104");
+  });
+
   it("requires explicit confirmation and only sends eligible visible IDs", async () => {
     const invalidate = mount();
     fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
