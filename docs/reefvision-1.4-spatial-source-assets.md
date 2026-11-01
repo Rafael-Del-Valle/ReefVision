@@ -234,3 +234,19 @@ and their SHA-256 remain unchanged. Regression coverage includes standalone
 scientific analysis and saved executable typed Workflow Builder rejection,
 with no measurement artifact published on failure. These checks establish
 format integrity, not scientific calibration or independent biological review.
+
+## Non-indexed GLB 2.0 TRIANGLES previews
+
+The bounded GLB 2.0 mesh parser accepts both explicitly indexed triangle
+primitives and standard non-indexed `TRIANGLES` (primitive mode 4). When the
+`indices` attribute is absent, each consecutive triplet of `POSITION`
+vertices is treated as one independent triangle; vertex counts that are not
+multiples of three fail closed. Triangle strips and fans, scene transforms,
+external buffers, compression, and sparse/interleaved geometry remain
+unsupported rather than being interpreted as biological measurements.
+The source format and original-file SHA-256 remain distinct from canonical
+geometry provenance. Regression tests require equivalent indexed/non-indexed
+geometry to agree and require standalone analysis and persisted executable
+typed Workflow Builder artifacts to agree; incomplete triplets must fail
+without publishing measurement artifacts. All reported scale and geometry
+remain provisional pending independent calibration and scientific review.
