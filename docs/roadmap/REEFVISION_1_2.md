@@ -5499,3 +5499,37 @@ and Windows CI; authenticate scientist-reviewed calibrated longitudinal
 measurements and real experimental-unit design; reconcile 1.1 migrations;
 perform representative biological/human-model acceptance and installed Windows
 MSI/GUI testing. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Temporal observation pseudoreplication guard (2026-11-01)
+
+**Pre-change evidence:** The preceding 1.2 head `663d534057fb17dd7a69f609f02a15b8d0c5b7e6`
+passed **19/19** PR-triggered GitHub Actions workflows (including backend CI,
+Pose Workflow Validation, frontend/E2E and Windows Desktop Build). Draft PR #74
+remains open; main was `e94dad6a`; no isolated 1.3 branch was found.
+
+**Scientific gap:** The shared experimental-unit type policy rejected images,
+frames and other spatial technical replicates, but still accepted repeated
+*temporal* observations (e.g. `timepoint`, `sampling_date`, `visit`,
+`measurement`) as independent biological experimental-unit types. A study
+could therefore declare each visit as a separate biological replicate, inflating
+descriptive independent-unit denominators. The shared policy now rejects these
+technical observation types, including CamelCase/compact equivalents such as
+`TimePoint` and `observationEvent`. Existing legitimate biological unit types
+(`tank`, `colony`, `organism`, `site`) and original provenance labels are
+unchanged. Unknown study-specific declarations remain unverified and require
+scientist review; no physical independence is inferred.
+
+**Acceptance added:** Schema tests for both longitudinal and paired human/model
+calculators; standalone API and **executed, persisted saved Workflow Builder**
+rejection for row-level temporal unit declarations; request-level saved-workflow
+rejection; and ecological organism-registration rejection with unchanged empty
+registry. Failed workflows must not emit successful scientific analysis artifacts.
+This reuses the existing typed Workflow Builder nodes, provenance and review
+gates. No 1.1 environmental context, migration, model weights or datasets changed.
+
+**Release HOLD:** verify exact-head Ruff/pytest and complete backend/frontend/E2E/
+Windows CI, authenticated scientist-reviewed calibrated longitudinal observations,
+independent experimental design, representative human/model biological comparison,
+1.1 migration reconciliation and installed Windows MSI/GUI acceptance.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
