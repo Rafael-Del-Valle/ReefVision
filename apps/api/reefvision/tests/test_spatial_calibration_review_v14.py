@@ -17,7 +17,7 @@ OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
 def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     client: TestClient,
 ) -> None:
-    project_id = str(create_project(client, "Durable spatial review")[ "id" ])
+    project_id = str(create_project(client, "Durable spatial review")["id"])
     base = f"/api/v1/projects/{project_id}"
     imported = client.post(f"{base}/spatial/assets", files={"file": ("colony.obj", OBJ)})
     assert imported.status_code == 201, imported.text
