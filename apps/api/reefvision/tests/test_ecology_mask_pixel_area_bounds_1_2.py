@@ -53,8 +53,15 @@ def test_impossible_mask_area_rejected_before_source_link(
     assert registry.json()["annotation_evidence_count"] == 0
 
 
+@pytest.mark.parametrize(
+    ("area_pixels", "message"),
+    [
+        (5000, "exceeds source image dimensions"),
+        (1000, "exceeds its source-pixel bounds"),
+    ],
+)
 def test_corrupted_linked_mask_area_revokes_api_and_saved_workflow(
-    client: TestClient,
+    client: TestClient, area_pixels: int, message: str
 ) -> None:
     project_id, image_link_id, mask_id = _source(client)
     linked = _annotation_link(client, project_id, image_link_id, "mask", mask_id)
@@ -68,18 +75,16 @@ def test_corrupted_linked_mask_area_revokes_api_and_saved_workflow(
     with app.state.session_factory() as session:
         mask = session.get(MaskAnnotation, mask_id)
         assert mask is not None
-        mask.area_pixels = 5000
+        mask.area_pixels = area_pixels
         session.commit()
 
     rejected = client.get(registry_url)
     assert rejected.status_code == 400, rejected.text
-    assert "exceeds source image dimensions" in rejected.json()["detail"]
+    assert message in rejected.json()["detail"]
     workflow = _workflow(client, project_id)
     assert workflow["run"]["status"] == "failed"
-    assert "exceeds source image dimensions" in workflow["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"]
-    )
+    assert message in workflow["run"]["error_message"]
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
 
 
 def test_plausible_mask_area_keeps_unverified_saved_workflow_parity(

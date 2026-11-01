@@ -396,10 +396,12 @@ class EcologyIdentityService:
                     saved_bounds = [float(value) for value in bounds if value is not None]
                     x_min, y_min, x_max, y_max = saved_bounds
                     possible_width = min(
-                        image.width_px, math.ceil(x_max) - math.floor(x_min) + 2,
+                        image.width_px,
+                        math.ceil(x_max) - math.floor(x_min) + 2,
                     )
                     possible_height = min(
-                        image.height_px, math.ceil(y_max) - math.floor(y_min) + 2,
+                        image.height_px,
+                        math.ceil(y_max) - math.floor(y_min) + 2,
                     )
                     if annotation.area_pixels > possible_width * possible_height:
                         raise ValidationError(

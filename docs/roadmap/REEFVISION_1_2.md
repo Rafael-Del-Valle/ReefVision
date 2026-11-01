@@ -5287,3 +5287,29 @@ environmental provider, model download, or scientific approval is implied.
 longitudinal biological acceptance, registered independent-unit verification,
 representative human-model comparisons, 1.1 migration reconciliation and
 installed Windows MSI/GUI testing. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Mask pixel-envelope CI unblock and persisted-workflow regression (2026-10-31)
+
+Exact predecessor `5706d3ba01b9fa23ac6a82d71ac86b5f43b2927c` completed **16/19** GitHub Actions workflows,
+including the Windows desktop build and frontend/E2E. The three failing
+backend-containing workflows stopped at Ruff 0.17.3 `format --check` before
+pytest. Logs pinpointed only two files: the two `min(...)` calls in
+`ecology_identity.py` and a multiline `assert not any(...)` in
+`test_ecology_mask_pixel_area_bounds_1_2.py`. Applied the exact Ruff
+layout changes without altering the scientific mask-envelope calculation.
+
+Expanded the existing standalone API and **executed saved Workflow Builder**
+corrupted-linked-mask test to cover both an image-wide impossible pixel count
+and a count exceeding only the mask's own source-pixel bounding envelope.
+Both cases must revoke the ecological registry and fail the saved workflow
+without emitting an `ecology_identity_registry` artifact. The unchanged
+plausible-mask test still requires an unverified artifact and scientist review.
+This is source-evidence plausibility and CI repair, **not** proof of a true
+segmentation, verified growth or independent biological replicate. No
+migration, model download, environmental context or cross-version merge.
+
+**Release HOLD:** exact new-head Ruff/pytest/backend/frontend/E2E/Windows CI;
+scientist-reviewed calibrated longitudinal evidence, representative
+human/model ecological acceptance, registered independent experimental units,
+1.1 Alembic reconciliation and installed Windows MSI/GUI acceptance.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
