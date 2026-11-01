@@ -349,3 +349,18 @@ exercised through standalone project-scoped analysis and saved executable
 typed Workflow Builder graphs; failed runs must not publish a mesh measurement
 artifact. These checks validate source-format consistency only. They do not
 verify physical calibration, organism identity, growth, or scientific review.
+
+## GLB morph-weight safety for provisional coral measurements
+
+The bounded GLB 2.0 mesh preview rejects `node.weights` and `mesh.weights`
+metadata rather than silently measuring undeformed base vertices when a source
+claims morph-target weights. Morph-target primitives were already unsupported;
+this additional check fails closed for contradictory or malformed exporters.
+It does not add morph-target animation, skinning, registration, or transform
+support. Direct parser regressions and standalone API plus persisted executable
+typed Workflow Builder rejection tests require no measurement artifact for
+these inputs. Existing valid unweighted GLB previews remain unchanged.
+
+An accepted source remains caller-calibrated and biologically unverified.
+Geometry digests and source-byte provenance are not proof of coral identity,
+branch growth, registration, or independently reviewed scale.
