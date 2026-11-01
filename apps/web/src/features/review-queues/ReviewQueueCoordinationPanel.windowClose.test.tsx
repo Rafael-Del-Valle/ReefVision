@@ -264,4 +264,104 @@ describe("native QC window close protection", () => {
     await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
     expect(addReviewQueueEvent).not.toHaveBeenCalled();
   });
+
+  it.each(["window accessor", "listener registration"])(
+    "recovers from synchronous native close %s failure without losing a coral note",
+    async (failure) => {
+      if (failure === "window accessor") {
+        vi.mocked(getCurrentWindow).mockImplementationOnce(() => {
+          throw new Error("Desktop bridge not ready");
+        });
+      } else {
+        onCloseRequested.mockImplementationOnce(() => {
+          throw new Error("Native close listener unavailable");
+        });
+      }
+      mount();
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText("Review comment"), {
+        target: { value: "Unsent octocoral health observation" },
+      });
+      const retry = await screen.findByRole("button", {
+        name: "Retry desktop close protection",
+      });
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(true);
+      expect(addReviewQueueEvent).not.toHaveBeenCalled();
+
+      fireEvent.click(retry);
+      await waitFor(() => expect(getCurrentWindow).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", {
+            name: "Retry desktop close protection",
+          }),
+        ).toBeNull(),
+      );
+      const preventDefault = vi.fn();
+      act(() => closeHandler?.({ preventDefault }));
+      expect(preventDefault).toHaveBeenCalledTimes(1);
+      expect(screen.getByLabelText("Review comment")).toHaveProperty(
+        "value",
+        "Unsent octocoral health observation",
+      );
+      fireEvent.change(screen.getByLabelText("Review comment"), {
+        target: { value: "" },
+      });
+      await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
+    },
+  );
+
+  it("retains the exact uncertain event UUID when native registration throws synchronously", async () => {
+    onCloseRequested.mockImplementationOnce(() => {
+      throw new Error("Native listener not initialized");
+    });
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Lost server response"))
+      .mockImplementationOnce(async (queueId, itemId, payload) => ({
+        id: "event-replayed",
+        project_id: "project-a",
+        review_queue_id: queueId,
+        review_queue_item_id: itemId,
+        client_request_id: payload.client_request_id,
+        event_type: payload.event_type,
+        actor: payload.actor,
+        comment: payload.comment ?? null,
+        assignee: payload.assignee ?? null,
+        created_at: "2026-10-31T12:00:00Z",
+      }));
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Uncertain coral observation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    const retryGuard = await screen.findByRole("button", {
+      name: "Retry desktop close protection",
+    });
+    const original = vi.mocked(addReviewQueueEvent).mock.calls[0];
+    expect(original?.[2].client_request_id).toBeTruthy();
+    fireEvent.click(retryGuard);
+    await waitFor(() => expect(onCloseRequested).toHaveBeenCalledTimes(2));
+    const preventDefault = vi.fn();
+    act(() => closeHandler?.({ preventDefault }));
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[1]).toEqual(original);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull(),
+    );
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "",
+    );
+    await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
+  });
 });
