@@ -102,6 +102,17 @@ def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     assert client.get(
         reviews_url, params={"after_review_id": "missing-review"}
     ).status_code == 404
+    other_asset = client.post(
+        f"{base}/spatial/assets",
+        files={"file": ("other.obj", b"v 0 0 0\\nv 2 0 0\\nv 0 2 0\\nf 1 2 3\\n")},
+    )
+    assert other_asset.status_code == 201, other_asset.text
+    other_reviews_url = (
+        f"{base}/spatial/assets/{other_asset.json()['id']}/calibration-reviews"
+    )
+    assert client.get(
+        other_reviews_url, params={"after_review_id": reviews[0]["id"]}
+    ).status_code == 404
     assert client.get(
         reviews_url, params={"after_review_id": reviews[0]["id"], "offset": 1}
     ).status_code == 400
