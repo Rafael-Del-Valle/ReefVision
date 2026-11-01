@@ -139,9 +139,9 @@ class SpatialCalibrationReviewService:
         # The HTTP route already bounds pagination, but the persistence service
         # must also fail closed for direct callers (SQLite treats LIMIT -1 as
         # unbounded, which could silently export an entire review ledger).
-        if type(limit) is not int or not 1 <= limit <= 100:
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100:
             raise ValidationError("Spatial review page limit must be an integer from 1 to 100")
-        if type(offset) is not int or offset < 0:
+        if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
             raise ValidationError("Spatial review page offset must be a nonnegative integer")
         self.sources.get(project_id, asset_id)
         query = select(SpatialCalibrationReviewRecord).where(
