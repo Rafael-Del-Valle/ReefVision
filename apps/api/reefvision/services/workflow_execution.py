@@ -266,9 +266,7 @@ class WorkflowExecutionService:
             if isinstance(node.result_json, dict):
                 approval = node.result_json.get("review_approval")
                 if approval is not None and not isinstance(approval, dict):
-                    raise ConflictError(
-                        "Workflow node review approval must be a JSON object"
-                    )
+                    raise ConflictError("Workflow node review approval must be a JSON object")
         return WorkflowRunDetailResponse(
             run=WorkflowRunResponse.model_validate(run),
             nodes=[WorkflowNodeRunResponse.model_validate(node) for node in nodes],
