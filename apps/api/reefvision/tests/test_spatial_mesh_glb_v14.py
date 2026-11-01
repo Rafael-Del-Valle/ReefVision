@@ -31,7 +31,11 @@ def make_glb(
         "buffers": [{"byteLength": len(binary)}],
         "bufferViews": [
             {"buffer": 0, "byteOffset": 0, "byteLength": 36},
-            {"buffer": 0, "byteOffset": 36, "byteLength": 3 if unsigned_byte_indices else 6},
+            {
+                "buffer": 0,
+                "byteOffset": 36,
+                "byteLength": 3 if unsigned_byte_indices else 6,
+            },
         ],
         "accessors": [
             {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
