@@ -15,9 +15,10 @@ from sqlalchemy import select
 
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
 from reefvision.domain.ecology_lineage_policy import (
+    require_current_ecological_parent_registration,
     require_historical_ecological_parent_registration,
 )
-from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
+from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse, EcologyIdentityRow
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_ecology_identity_registry_1_2 import _register
@@ -261,3 +262,41 @@ def test_parent_chronology_uses_utc_instead_of_wall_clock_order() -> None:
     fragment.created_at -= timedelta(seconds=1)
     with pytest.raises(ValueError, match="not registered before fragment"):
         require_historical_ecological_parent_registration([parent, fragment])
+
+
+def test_pydantic_identity_rows_share_current_and_historical_parent_policy() -> None:
+    """Both lineage validators must accept the typed persisted registry rows."""
+    recorded = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+    parent = EcologyIdentityRow(
+        id="parent-record",
+        project_id="project-A",
+        organism_key="parent-A",
+        revision=1,
+        kind="colony",
+        parent_colony_key=None,
+        experimental_unit_type=None,
+        experimental_unit_id=None,
+        reason="Registered parent colony",
+        created_at=recorded,
+    )
+    fragment = EcologyIdentityRow(
+        id="fragment-record",
+        project_id="project-A",
+        organism_key="fragment-A",
+        revision=1,
+        kind="fragment",
+        parent_colony_key="parent-A",
+        experimental_unit_type=None,
+        experimental_unit_id=None,
+        reason="Registered linked fragment",
+        created_at=recorded + timedelta(minutes=1),
+    )
+    require_current_ecological_parent_registration([parent, fragment])
+    require_historical_ecological_parent_registration([parent, fragment])
+
+    # A later imported kind change cannot be hidden by the same row contract.
+    invalid_parent = parent.model_copy(update={"kind": "individual"})
+    with pytest.raises(ValueError, match="invalid parent-colony link"):
+        require_current_ecological_parent_registration([invalid_parent, fragment])
+    with pytest.raises(ValueError, match="not a colony at fragment revision"):
+        require_historical_ecological_parent_registration([invalid_parent, fragment])

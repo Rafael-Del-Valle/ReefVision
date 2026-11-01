@@ -5785,3 +5785,30 @@ is a CI and acceptance-test hardening increment, not a new biological
 identity attestation. Exact-head CI, scientist review, calibrated longitudinal
 acceptance, independent experimental units, 1.1 migration reconciliation and
 installed Windows GUI/GPU acceptance remain required before release.
+
+
+## Strict backend typing gate for ecological lineage (2026-11-01)
+
+**Pre-change exact-head CI:** At `6c45fc7fa166a0be7a9106853d3acb1f1e24d6a6`, 19
+PR-triggered workflows completed: 16 passed (including frontend/E2E and
+Windows Desktop Build), while CI backend, Pose Workflow Validation backend
+and ReefVision 1.0 Acceptance backend failed on two mypy errors in
+`schemas/ecology_identity.py`. Ruff lint and formatting had already passed.
+The persisted `EcologyIdentityRow.kind` is a narrower Pydantic `Literal`,
+while both lineage policy Protocols declared a writable `str` attribute;
+mypy correctly rejected passing typed registry rows to those validators.
+
+**Repair:** Express the policy's `kind` requirement as a read-only Protocol
+property. Both validators only read that field; the narrower persisted kind
+therefore satisfies the structural contract without `Any`, casts, type ignores
+or runtime schema relaxation. Add a focused Pydantic-row regression proving
+valid parent/fragment links are accepted and reclassified parents fail both
+current and historical policy checks. The existing standalone registry and
+saved executable Workflow Builder use these same validators, typed provenance,
+scientist-review gate and persisted artifacts; no new node or migration is needed.
+
+**Release HOLD:** Verify exact new-head mypy, Ruff, backend tests, frontend/E2E
+and Windows CI. Authenticated calibrated longitudinal observations, true
+independent study designs, scientist-reviewed biological acceptance, 1.1
+migration reconciliation and installed Windows MSI/GUI/GPU tests remain open.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

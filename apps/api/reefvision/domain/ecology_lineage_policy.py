@@ -209,8 +209,12 @@ class CurrentEcologicalParentRecord(Protocol):
     """Latest registered identity used to check current parent relationships."""
 
     organism_key: str
-    kind: str
     parent_colony_key: str | None
+
+    @property
+    def kind(self) -> str:
+        """Read-only kind supports narrower Pydantic Literal identity fields."""
+        ...
 
 
 def require_current_ecological_parent_registration(
@@ -248,8 +252,12 @@ def _identity_revision_utc(value: datetime) -> datetime:
 
 
 class HistoricalEcologicalParentRevision(ChronologicalEcologicalIdentityRevision, Protocol):
-    kind: str
     parent_colony_key: str | None
+
+    @property
+    def kind(self) -> str:
+        """Read-only kind supports narrower Pydantic Literal identity fields."""
+        ...
 
 
 def require_historical_ecological_parent_registration(
