@@ -10,6 +10,8 @@ from fastapi.testclient import TestClient
 from reefvision.db.models import SpatialCalibrationReviewRecord
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_spatial_point_cloud_assets_v14 import PLY
+from reefvision.tests.test_spatial_point_cloud_source_binding_v14 import _run_saved_cloud
 
 OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
 
@@ -188,3 +190,77 @@ def test_calibration_receipts_fail_closed_on_cross_project_and_tampering(
     tampered = client.get(f"{reviews_url}/{review_id}")
     assert tampered.status_code == 400, tampered.text
     assert "integrity validation" in tampered.text
+
+
+def test_point_cloud_saved_calibration_receipt_replays_and_fails_closed(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Saved point-cloud calibration receipt")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    imported = client.post(f"{base}/spatial/assets", files={"file": ("cloud.ply", PLY)})
+    assert imported.status_code == 201, imported.text
+    asset = imported.json()
+    params = {
+        "asset_id": asset["id"],
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified ruler on PLY survey",
+        "relative_scale_uncertainty": 0.05,
+        "expected_source_payload_sha256": asset["sha256"],
+    }
+    baseline = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert baseline.status_code == 200, baseline.text
+    evidence = {
+        "calibration_operator_id": "operator-1",
+        "independent_reviewer_id": "reviewer-2",
+        "independent_review_decision": "inconclusive",
+        "independent_review_note": "Source scale not independently verified",
+        "reviewed_at_utc": "2026-10-02T12:00:00Z",
+        "reviewed_geometry_sha256": baseline.json()["provenance"]["geometry_sha256"],
+        "reviewed_source_payload_sha256": asset["sha256"],
+        "reviewed_spatial_source_asset_id": asset["id"],
+        "reviewed_meters_per_unit": params["meters_per_unit"],
+        "reviewed_calibration_method": params["calibration_method"],
+        "reviewed_calibration_evidence": params["calibration_evidence"],
+        "reviewed_relative_scale_uncertainty": params["relative_scale_uncertainty"],
+    }
+    reviews_url = f"{base}/spatial/assets/{asset['id']}/calibration-reviews"
+    created = client.post(reviews_url, json={"evidence": evidence})
+    assert created.status_code == 201, created.text
+    receipt = created.json()
+    params["calibration_review_id"] = receipt["id"]
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["provenance"]["calibration_review_record_id"] == receipt["id"]
+    assert expected["provenance"]["calibration_verified"] is False
+    assert "persisted_calibration_review_unverified" in expected["qc_warnings"]
+    saved = _run_saved_cloud(client, project_id, params)
+    assert saved["completed"] is True
+    assert saved["run"]["status"] == "succeeded"
+    artifacts = [
+        a["payload_json"]
+        for a in saved["artifacts"]
+        if a["data_type"] == "point_cloud_measurement_preview"
+    ]
+    assert artifacts == [expected]
+
+    # The saved receipt cannot be used with inline geometry or an unowned asset.
+    rejected = client.post(
+        f"{base}/spatial/point-cloud-preview",
+        json={**params, "asset_id": None, "points": [[0, 0, 0]]},
+    )
+    assert rejected.status_code == 422
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        record = session.get(SpatialCalibrationReviewRecord, receipt["id"])
+        assert record is not None
+        record.evidence_json = {**record.evidence_json, "independent_review_note": "Altered"}
+        session.commit()
+    rejected = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert rejected.status_code == 400
+    failed = _run_saved_cloud(client, project_id, params)
+    assert failed["run"]["status"] == "failed"
+    assert not any(
+        a["data_type"] == "point_cloud_measurement_preview" for a in failed["artifacts"]
+    )
