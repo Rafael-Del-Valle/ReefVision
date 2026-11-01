@@ -17,6 +17,7 @@ def make_glb(
     invalid_selector: str | None = None,
     explicit_canonical: bool = False,
     explicit_min_version: bool = False,
+    explicit_empty_extensions: bool = False,
     explicit_targets: bool = False,
     identity_transform: str | None = None,
     nonindexed_vertices: int | None = None,
@@ -267,6 +268,19 @@ def make_glb(
         doc["extras"] = {"nonfinite": float("-inf")}
     elif invalid_selector in {"json_exponent_overflow", "json_negative_exponent_overflow"}:
         doc["extras"] = {"nonfinite": "overflow_marker"}
+    if explicit_empty_extensions:
+        doc["extensionsUsed"] = []
+        doc["extensionsRequired"] = []
+    if invalid_selector == "extensions_used_object":
+        doc["extensionsUsed"] = {}
+    elif invalid_selector == "extensions_used_false":
+        doc["extensionsUsed"] = False
+    elif invalid_selector == "extensions_required_zero":
+        doc["extensionsRequired"] = 0
+    elif invalid_selector == "extensions_used_nonempty":
+        doc["extensionsUsed"] = ["KHR_mesh_quantization"]
+    elif invalid_selector == "extensions_root_object":
+        doc["extensions"] = {}
     if explicit_targets:
         doc["bufferViews"][0]["target"] = 34962
         doc["bufferViews"][1]["target"] = 34963
@@ -286,9 +300,7 @@ def make_glb(
         doc["bufferViews"][0]["byteStride"] = 12
     json_bytes = json.dumps(doc).encode()
     if invalid_selector in {"json_exponent_overflow", "json_negative_exponent_overflow"}:
-        exponent = (
-            b"-1e400" if invalid_selector == "json_negative_exponent_overflow" else b"1e400"
-        )
+        exponent = b"-1e400" if invalid_selector == "json_negative_exponent_overflow" else b"1e400"
         json_bytes = json_bytes.replace(b'"overflow_marker"', exponent)
     json_bytes += b" " * (-len(json_bytes) % 4)
     binary += b"\x00" * (-len(binary) % 4)
@@ -319,6 +331,29 @@ def test_explicit_glb_minimum_version_preserves_geometry() -> None:
 def test_rejects_unsupported_glb_minimum_version(invalid_selector: str) -> None:
     """Do not interpret geometry requiring a newer or malformed glTF reader."""
     with pytest.raises(ValueError, match="minimum version"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_empty_glb_extension_declarations_preserve_geometry() -> None:
+    """Valid empty extension arrays do not change the measured geometry."""
+    assert parse_glb_triangles(make_glb(explicit_empty_extensions=True)) == parse_glb_triangles(
+        make_glb()
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    [
+        "extensions_used_object",
+        "extensions_used_false",
+        "extensions_required_zero",
+        "extensions_used_nonempty",
+        "extensions_root_object",
+    ],
+)
+def test_rejects_unsupported_glb_extension_metadata(invalid_selector: str) -> None:
+    """Malformed or undeclared extensions cannot be treated as plain geometry."""
+    with pytest.raises(ValueError, match=r"extensions|array"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
