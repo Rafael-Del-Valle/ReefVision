@@ -282,6 +282,38 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
 
+    # Historical node results may omit the output summary. A succeeded run
+    # must still claim its real frozen-pose artifact through the producer's
+    # saved output IDs; otherwise an orphan can appear as terminal science.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        saved_output_ids = list(node.output_artifact_ids_json)
+        saved_result = dict(node.result_json or {})
+        assert saved_output_ids == [outputs[0]["id"]]
+        node.output_artifact_ids_json = []
+        node.result_json = {
+            key: value for key, value in saved_result.items() if key != "outputs"
+        }
+        session.commit()
+
+    orphan_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert orphan_detail.status_code == 409, orphan_detail.text
+    assert "undeclared output artifact" in orphan_detail.json()["detail"]
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="undeclared output artifact"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.output_artifact_ids_json = saved_output_ids
+        node.result_json = saved_result
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+
     # An explicitly saved output summary must retain its list shape. A
     # malformed object previously bypassed the lineage check even though
     # the frozen artifacts themselves still had valid checksums.
