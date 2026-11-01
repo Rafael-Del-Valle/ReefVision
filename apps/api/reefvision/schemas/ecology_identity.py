@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from reefvision.domain.ecology_lineage_policy import (
+    require_chronological_ecological_identity_revisions,
     require_unique_ecological_organism_key_spellings,
     require_unique_ecological_unit_spellings,
 )
@@ -329,6 +330,9 @@ class EcologyIdentityRegistryResponse(BaseModel):
         require_unique_ecological_organism_key_spellings(
             row.organism_key for row in self.identity_history
         )
+        if "identity_history" in self.model_fields_set:
+            # A recomputed digest cannot authorize impossible audit chronology.
+            require_chronological_ecological_identity_revisions(self.identity_history)
         for collection in (
             "identities",
             "identity_history",

@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from typing import Protocol
 
 from reefvision.domain.errors import ValidationError
@@ -197,3 +198,33 @@ def require_unique_ecological_organism_key_spellings(keys: Iterable[str]) -> Non
         prior = spellings.setdefault(key.casefold(), key)
         if prior != key:
             raise ValueError("Ecological organism keys differ only by case")
+
+
+class ChronologicalEcologicalIdentityRevision(Protocol):
+    """Identity revision carrying its recorded audit timestamp."""
+
+    organism_key: str
+    revision: int
+    created_at: datetime
+
+
+def require_chronological_ecological_identity_revisions(
+    records: Iterable[ChronologicalEcologicalIdentityRevision],
+) -> None:
+    """Reject backwards identity history, normalizing offsets to UTC.
+
+    SQLite returns naive UTC timestamps for some database backends. Treat
+    those as UTC and permit equal timestamps when storage precision differs.
+    This is chronology QC, not proof of audit record authorship.
+    """
+    previous_by_key: dict[str, datetime] = {}
+    for row in sorted(records, key=lambda item: (item.organism_key, item.revision)):
+        recorded = row.created_at
+        if recorded.tzinfo is None or recorded.utcoffset() is None:
+            recorded_utc = recorded.replace(tzinfo=UTC)
+        else:
+            recorded_utc = recorded.astimezone(UTC)
+        previous = previous_by_key.get(row.organism_key)
+        if previous is not None and recorded_utc < previous:
+            raise ValueError("Ecological identity revision timestamps are not chronological")
+        previous_by_key[row.organism_key] = recorded_utc

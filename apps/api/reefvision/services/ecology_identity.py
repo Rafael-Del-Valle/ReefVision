@@ -25,6 +25,7 @@ from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import (
     classify_ecological_unit_level,
+    require_chronological_ecological_identity_revisions,
     require_unique_ecological_organism_key_spellings,
     require_unique_ecological_unit_spellings,
 )
@@ -93,6 +94,11 @@ class EcologyIdentityService:
         # snapshot and falsely suggest distinct physical sampling units.
         try:
             require_unique_ecological_unit_spellings(records)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        # Imported historical timestamp corruption must block later writes.
+        try:
+            require_chronological_ecological_identity_revisions(records)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
         latest: dict[str, EcologyIdentityRevision] = {}

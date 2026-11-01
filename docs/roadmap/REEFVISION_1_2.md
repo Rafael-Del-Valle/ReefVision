@@ -5627,3 +5627,27 @@ the three backend gates stopped at a single Ruff-format violation in
 New-head CI, authenticated scientist-reviewed longitudinal records,
 migration reconciliation with 1.1, representative scientific datasets,
 and installed Windows GUI/installer acceptance remain outstanding.
+
+
+## Append-only organism identity chronology integrity (2026-11-01; development only)
+
+Registered organism/colony revision timestamps must now be **nondecreasing
+in UTC** when ordered by identity revision. The shared validator treats
+SQLite-naive stored application timestamps as UTC, normalizes offset-aware
+imports, and permits equal timestamps for differing storage precision.
+Corrupted imported histories fail closed on standalone registry reads and
+registration/revision writes. The existing executable, persisted, typed
+`ecology_identity_registry_source` Workflow Builder node fails without a
+successful scientific artifact; re-fingerprinted saved registry replay is
+also rejected. Tests cover invalid and valid histories, saved-workflow
+artifact parity, and UTC offset normalization.
+
+This is audit chronology QC, **not** evidence of timestamp authorship,
+verified organism identity, growth, or independent experimental units.
+Existing `registered_unverified` and `scientist_review_required` gates
+remain unchanged; no migration, environmental context, model download or
+cross-version merge is introduced. Pre-change head `e96a05e0` passed
+**19/19** PR-triggered Actions workflows. Exact-new-head CI, real reviewed
+longitudinal data, migration reconciliation with 1.1 and physical Windows
+MSI/GUI acceptance remain release blockers. **1.2 NOT RELEASE-READY;
+1.3 not started.**
