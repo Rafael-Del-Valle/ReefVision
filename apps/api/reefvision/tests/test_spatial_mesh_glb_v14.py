@@ -118,7 +118,9 @@ def make_glb(
     if index_bounds:
         doc["accessors"][1]["min"] = [0]
         doc["accessors"][1]["max"] = [2]
-    if invalid_selector == "index_bounds_short":
+    if invalid_selector == "index_bounds_float":
+        doc["accessors"][1]["max"] = [2.0]
+    elif invalid_selector == "index_bounds_short":
         doc["accessors"][1]["min"] = [0, 1]
     elif invalid_selector == "index_bounds_boolean":
         doc["accessors"][1]["min"] = [False]
@@ -132,6 +134,12 @@ def make_glb(
         doc["accessors"][1]["max"] = [10**400]
     if invalid_selector == "byte_index_oob" and unsigned_byte_indices:
         binary = binary[:-1] + b"\x03"
+    if invalid_selector == "asset_min_version_future":
+        doc["asset"]["minVersion"] = "2.1"
+    elif invalid_selector == "asset_min_version_numeric":
+        doc["asset"]["minVersion"] = 2.0
+    elif invalid_selector == "asset_min_version_boolean":
+        doc["asset"]["minVersion"] = True
     if translated:
         doc["nodes"] = [{"mesh": 0, "translation": [1, 0, 0]}]
     if invalid_selector == "scene":
@@ -172,6 +180,7 @@ def make_glb(
     elif invalid_selector == "target_boolean":
         doc["bufferViews"][0]["target"] = True
     if explicit_canonical:
+        doc["asset"]["minVersion"] = "2.0"
         doc["meshes"][0]["primitives"][0]["mode"] = 4
         doc["accessors"][0]["normalized"] = False
         doc["bufferViews"][0]["byteStride"] = 12
@@ -189,6 +198,21 @@ def make_glb(
         + binary
     )
     return base64.b64encode(glb).decode()
+
+
+def test_explicit_glb_minimum_version_preserves_geometry() -> None:
+    """A valid glTF 2.0 minimum version does not change decoded geometry."""
+    assert parse_glb_triangles(make_glb(explicit_canonical=True)) == parse_glb_triangles(make_glb())
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    ["asset_min_version_future", "asset_min_version_numeric", "asset_min_version_boolean"],
+)
+def test_rejects_unsupported_glb_minimum_version(invalid_selector: str) -> None:
+    """Do not interpret geometry requiring a newer or malformed glTF reader."""
+    with pytest.raises(ValueError, match="minimum version"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
 def test_single_glb_triangle() -> None:
@@ -299,9 +323,7 @@ def test_rejects_invalid_glb_alignment_or_index_stride(invalid_selector: str) ->
 @pytest.mark.parametrize("stride", [12, 16, 20, 252])
 def test_interleaved_position_stride_preserves_geometry(stride: int) -> None:
     """POSITION may occupy a subset of each aligned glTF vertex record."""
-    assert parse_glb_triangles(make_glb(position_stride=stride)) == parse_glb_triangles(
-        make_glb()
-    )
+    assert parse_glb_triangles(make_glb(position_stride=stride)) == parse_glb_triangles(make_glb())
 
 
 @pytest.mark.parametrize(
@@ -342,6 +364,7 @@ def test_rejects_invalid_or_contradictory_glb_position_bounds(invalid_selector: 
     with pytest.raises(ValueError, match=r"bounds|nonfinite"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
+
 def test_valid_glb_index_bounds_preserve_geometry() -> None:
     """Optional index extrema are checked, not trusted as independent evidence."""
     assert parse_glb_triangles(make_glb(index_bounds=True)) == parse_glb_triangles(make_glb())
@@ -351,6 +374,7 @@ def test_valid_glb_index_bounds_preserve_geometry() -> None:
     "invalid_selector",
     [
         "index_bounds_short",
+        "index_bounds_float",
         "index_bounds_boolean",
         "index_bounds_mismatch",
         "index_bounds_negative",
