@@ -267,6 +267,10 @@ def verify_workflow_run_node_graph_lineage(
         graph_node = expected.get(node.node_id)
         if node.node_id in seen or graph_node is None or graph_node[0] != node.node_type:
             raise ConflictError(error)
+        # A missing parameter object must not erase explicitly pinned
+        # scientific inputs (for example, a frozen pose dataset checksum).
+        if node.parameters_json is None and graph_node[1]:
+            raise ConflictError(error)
         # The planner may add optional defaults, but it must preserve every
         # explicitly saved scientific parameter from the checksum-pinned graph.
         if isinstance(node.parameters_json, dict) and any(
