@@ -34,6 +34,21 @@ if ((Format-SafeText $scientific) -cne $scientific) {
 if ((Format-SafeText $null) -ne '') {
   throw 'Null metadata must render as empty text.'
 }
+# Imported filenames, model labels, and persisted worker log lines can be
+# arbitrarily long. The monitor must bound only its rendered copy, leaving
+# actual persisted training logs and scientific provenance untouched.
+$oversized = ('X' * 5000) + 'hidden train/box_loss=0.00'
+$bounded = Format-SafeText $oversized
+if ($bounded.Length -gt 1040 -or -not $bounded.EndsWith(' [truncated]') -or
+    $bounded.Contains('hidden train/box_loss=0.00')) {
+  throw 'Oversized untrusted monitor fields were not bounded for display.'
+}
+# The initial 4096-character cap may split an ANSI OSC control sequence.
+# The sanitizer must still discard its unterminated payload, not render it.
+$unterminatedOsc = 'prefix ' + [char]0x001B + ']0;' + ('spoofed' * 800) + [char]0x0007 + 'real text'
+if ((Format-SafeText $unterminatedOsc) -cne 'prefix ') {
+  throw 'A truncated terminal-control payload escaped display sanitization.'
+}
 # The actual persisted log-tail rendering must sanitize untrusted log bytes,
 # not only the run name and metric metadata. Keep this source assertion next
 # to the executable formatter regression so removing the call fails Windows CI.
