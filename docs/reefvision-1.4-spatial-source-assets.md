@@ -409,14 +409,23 @@ attributed human note do **not** validate the physical scale, geometry,
 identity, or survey independence. These receipts do not change the preview's
 verification tier.
 
-A receipt's `evidence` can be supplied as `calibration_review` in the
-existing standalone mesh preview or a saved, typed, executable Workflow
-Builder graph. Both paths independently check the review's geometry,
-calibration, observation, and source bindings. Acceptance tests exercise
-idempotent persistence, cross-project rejection, tamper detection, and
-standalone/saved-workflow measurement parity. Automatic receipt-ID resolution
-inside workflow nodes, authenticated reviewer sessions, independent physical
-scale verification, and installed Windows acceptance remain future work.
+A receipt's `evidence` can be supplied as `calibration_review`, or its
+`id` as `calibration_review_id`, in project-owned standalone mesh/point-cloud
+previews and persisted, typed, executable Workflow Builder nodes. The two
+fields are mutually exclusive. A receipt ID requires `asset_id`; inline
+geometry cannot reference a stored review. At execution, the server retrieves
+the project-scoped receipt, verifies its evidence digest and original source
+bytes, and rechecks geometry, scale, and observation bindings. Successful
+measurements include `calibration_review_record_id` and
+`calibration_review_evidence_sha256` in provenance plus a provisional-review
+QC warning. A stale, cross-project, or tampered receipt fails closed without
+publishing a measurement artifact. Tests exercise mesh and PLY point-cloud
+standalone/saved-workflow parity and tamper rejection.
+
+The saved ID is a reproducibility reference, **not** a verification token.
+Authenticated reviewer sessions, independent physical-scale verification,
+scientific approval workflows, and installed Windows acceptance remain future
+work.
 
 This isolated 1.4 branch introduces Alembic revision `0039` after `0038`.
 Other version branches may independently use the same revision identifier;
