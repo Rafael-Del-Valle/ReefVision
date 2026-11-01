@@ -38,8 +38,12 @@ def test_unicode_technical_labels_rejected_without_rewriting_source(
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
 @pytest.mark.parametrize(
     "technical_type",
-    ["\uff49\uff4d\uff41\uff47\uff45", "im\u200bage"],
-    ids=["fullwidth-image", "zero-width-image"],
+    [
+        "\uff49\uff4d\uff41\uff47\uff45",
+        "\uff56\uff49\uff44\uff45\uff4f\uff3f\uff46\uff52\uff41\uff4d\uff45",
+        "im\u200bage",
+    ],
+    ids=["fullwidth-image", "fullwidth-video-frame", "zero-width-image"],
 )
 def test_unicode_technical_unit_fails_standalone_and_saved_workflow(
     client: TestClient, kind: str, technical_type: str
@@ -54,15 +58,10 @@ def test_unicode_technical_unit_fails_standalone_and_saved_workflow(
 
     standalone = client.post(endpoint, json=payload)
     assert standalone.status_code == 422, standalone.text
-    assert (
-        "technical replicates" in standalone.text
-        or "control or invisible" in standalone.text
-    )
+    assert "technical replicates" in standalone.text or "control or invisible" in standalone.text
 
     project_id = str(create_project(client, f"Unicode technical QC {kind}")["id"])
-    plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     saved = client.post(
@@ -128,9 +127,7 @@ def test_compatibility_biological_alias_keeps_one_unverified_unit_in_saved_workf
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
-    artifacts = [
-        row for row in detail.json()["artifacts"] if row["data_type"] == artifact_type
-    ]
+    artifacts = [row for row in detail.json()["artifacts"] if row["data_type"] == artifact_type]
     assert len(artifacts) == 1
     stored = artifacts[0]["payload_json"]
     count_field = "independent_unit_count"
