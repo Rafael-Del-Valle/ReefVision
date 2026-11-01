@@ -5888,3 +5888,33 @@ reconciliation, and physical Windows MSI/GUI/GPU acceptance remain open.
 **Acceptance strengthened:** The existing parameterized standalone/API and saved executable Workflow Builder regression cases now include a subsequent valid revision after an imported invalid technical-unit or physical-unit-ID revision. The registry must still reject the earlier malformed history and the workflow must fail without a successful `ecology_identity_registry` artifact. Existing typed ports, project provenance, append-only revision history, `registered_unverified` status and scientist review gates remain unchanged. No migration, 1.1 environmental provider, weights, dataset promotion or cross-version merge.
 
 **Release HOLD:** Verify exact-new-head Ruff, mypy, pytest, frontend/E2E and Windows CI. Local checkout is blocked by GitHub DNS resolution; repository pytest/Ruff and physical installed Windows MSI/GUI/GPU tests are not claimed. Authenticated calibrated longitudinal observations, true independent experimental units, representative scientist-reviewed human/model comparison, and reviewed 1.1 migration reconciliation remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Historical technical-unit diagnostic CI repair (2026-11-01; development only)
+
+**Exact predecessor CI:** At `727fc4c27877c72dae3d340fb5e0f8b40b0fa88f`,
+17 of 19 PR-triggered workflows passed, including Pose Workflow Validation,
+frontend/E2E and Windows Desktop Build. Backend CI and ReefVision 1.0
+Acceptance failed only two parameterized assertions in
+`test_ecology_identity_revision_continuity_1_2.py`: the tests expected the
+obsolete generic `invalid recorded design` diagnostic, but the shared
+history-wide scientific policy now correctly reports
+`invalid experimental unit type`. Backend pytest: **2301 passed, 2 failed,
+32 skipped**. Ruff and mypy passed before pytest.
+
+**Acceptance repair:** The superseded `video_frame` and `sampling_date`
+regressions now explicitly require the specific technical-unit diagnostic
+from standalone registry reads, rejected registration and revision writes,
+and persisted executable saved Workflow Builder failure records. They still
+verify that rejected writes leave all three append-only revisions intact
+and that a failed workflow publishes no successful ecological identity
+registry artifact. This is a test-contract correction, **not** relaxation
+of the fail-closed pseudoreplication safeguard, proof of biological
+independence, or promotion to verified observations. Typed workflow ports,
+provenance, local-first execution and scientist-review gates remain unchanged.
+
+**Release HOLD:** Exact-new-head backend Ruff/mypy/pytest and full Actions
+must pass. Authenticated scientist-reviewed calibrated longitudinal data,
+independent experimental units, representative human/model comparison,
+1.1 migration reconciliation, and physical installed Windows MSI/GUI/GPU
+acceptance remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
