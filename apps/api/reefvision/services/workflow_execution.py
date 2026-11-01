@@ -254,6 +254,10 @@ class WorkflowExecutionService:
         # Checksums authenticate payload bytes, not which completed node made
         # them. Verify the saved producer/output lineage before exposing it.
         for node in nodes:
+            # A saved node's parameters are scientific provenance, not an
+            # iterable of pairs that may be silently coerced on read.
+            if node.parameters_json is not None and not isinstance(node.parameters_json, dict):
+                raise ConflictError("Workflow node parameters must be a JSON object")
             if node.status == "succeeded":
                 verify_succeeded_node_artifacts(self.session, run_id=run.id, node_run=node)
         return WorkflowRunDetailResponse(
