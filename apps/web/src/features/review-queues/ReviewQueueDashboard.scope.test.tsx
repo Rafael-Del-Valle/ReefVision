@@ -44,9 +44,16 @@ vi.mock("../../api/client", () => ({
 vi.mock("./QuickConfidenceReviewDialog", () => ({
   QuickConfidenceReviewDialog: ({
     onMarkComplete,
+    completionError,
   }: {
     onMarkComplete?: () => void;
-  }) => <button onClick={onMarkComplete}>Quick modal complete</button>,
+    completionError?: string | null;
+  }) => (
+    <>
+      <button onClick={onMarkComplete}>Quick modal complete</button>
+      {completionError && <p role="alert">{completionError}</p>}
+    </>
+  ),
 }));
 vi.mock("./ReviewQueueBulkTriage", () => ({
   ReviewQueueBulkTriage: ({
@@ -633,6 +640,50 @@ describe("ReviewQueueDashboard scope isolation", () => {
           "item-1",
           "reef-scientist",
         ),
+      );
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it("keeps a failed quick-modal QC completion visible for researcher verification", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-quick", "image-quick")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(completeReviewQueueItem).mockRejectedValueOnce(
+      new Error("Audit event conflict"),
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      mount();
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Quick review" }),
+      );
+      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+        target: { value: "reef-scientist" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      );
+      await waitFor(() =>
+        expect(
+          screen
+            .getAllByRole("alert")
+            .some((alert) => alert.textContent === "Audit event conflict"),
+        ).toBe(true),
+      );
+      expect(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      ).toBeTruthy();
+      expect(screen.getByText("pending")).toBeTruthy();
+      expect(completeReviewQueueItem).toHaveBeenCalledWith(
+        "item-quick",
+        "reef-scientist",
+        true,
       );
     } finally {
       confirm.mockRestore();
