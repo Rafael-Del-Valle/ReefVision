@@ -303,18 +303,9 @@ def test_project_exchange_round_trip_preserves_restart_safe_metric_3d_science(
         "schema_version": "workflow-graph-0001",
         "graph_id": "metric-3d-exchange",
         "name": "Metric 3D exchange",
+        # This exchange fixture executes only the depth-3D adapter. Do not
+        # claim source nodes ran when no corresponding node-run evidence exists.
         "nodes": [
-            {"node_id": "project", "node_type": "project_source", "parameters": {}},
-            {
-                "node_id": "video",
-                "node_type": "project_video_source",
-                "parameters": {"video_id": source_video_id},
-            },
-            {
-                "node_id": "tracks",
-                "node_type": "video_tracking",
-                "parameters": {"verified_track_ids": [source_track_id]},
-            },
             {
                 "node_id": "depth3d",
                 "node_type": "video_depth_3d_analytics",
