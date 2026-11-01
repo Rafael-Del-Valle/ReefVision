@@ -167,7 +167,11 @@ def make_glb(
         translation_data = struct.pack("<6f", 0, 0, 0, 1, 0, 0)
         doc["bufferViews"].extend(
             [
-                {"buffer": 0, "byteOffset": aligned_start, "byteLength": len(time_data)},
+                {
+                    "buffer": 0,
+                    "byteOffset": aligned_start,
+                    "byteLength": len(time_data),
+                },
                 {
                     "buffer": 0,
                     "byteOffset": aligned_start + len(time_data),
@@ -191,7 +195,9 @@ def make_glb(
         doc["animations"] = [
             {
                 "samplers": [{"input": 2, "output": 3, "interpolation": "LINEAR"}],
-                "channels": [{"sampler": 0, "target": {"node": 0, "path": "translation"}}],
+                "channels": [
+                    {"sampler": 0, "target": {"node": 0, "path": "translation"}}
+                ],
             }
         ]
         binary += time_data + translation_data
