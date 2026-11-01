@@ -202,6 +202,95 @@ describe("ReviewQueueDashboard scope isolation", () => {
     } as Awaited<ReturnType<typeof getReviewQueueItems>>);
   });
 
+  it.each(["-1", "101"])(
+    "blocks an out-of-range %s percent QC review threshold before any API request",
+    (value) => {
+      mount();
+      fireEvent.change(
+        screen.getByLabelText(/Review predictions at or below confidence/),
+        { target: { value } },
+      );
+      expect(
+        screen.getByRole("button", { name: "Generate queue" }),
+      ).toHaveProperty("disabled", true);
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Review confidence threshold must be between 0 and 100%.",
+      );
+      expect(createReviewQueue).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["0", "100"])(
+    "submits valid %s percent QC review thresholds without changing their meaning",
+    async (value) => {
+      vi.mocked(createReviewQueue).mockResolvedValue(queue("queue-new"));
+      mount();
+      fireEvent.change(
+        screen.getByLabelText(/Review predictions at or below confidence/),
+        { target: { value } },
+      );
+      const button = screen.getByRole("button", { name: "Generate queue" });
+      expect(button).toHaveProperty("disabled", false);
+      fireEvent.click(button);
+      await waitFor(() =>
+        expect(createReviewQueue).toHaveBeenCalledWith(
+          "project-a",
+          expect.objectContaining({
+            review_below_confidence: Number(value) / 100,
+          }),
+        ),
+      );
+    },
+  );
+
+  it("rejects negative QC ranking weights without creating a queue", () => {
+    mount();
+    fireEvent.change(screen.getByLabelText("low mean confidence"), {
+      target: { value: "-1" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Generate queue" }),
+    ).toHaveProperty("disabled", true);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Review score weights must be finite, nonnegative, and have a positive finite total.",
+    );
+    expect(createReviewQueue).not.toHaveBeenCalled();
+  });
+
+  it("rejects an all-zero QC ranking policy and permits explicit correction", () => {
+    mount();
+    const weightLabels = [
+      "low mean confidence",
+      "low min confidence",
+      "pending proposals",
+      "rejection rate",
+      "count disagreement",
+      "unresolved qc severity",
+      "rare class presence",
+      "edited acceptance rate",
+      "unreviewed state",
+      "missing group metadata",
+      "incomplete provenance",
+      "recent import",
+      "stale review state",
+    ];
+    for (const label of weightLabels) {
+      fireEvent.change(screen.getByLabelText(label), {
+        target: { value: "0" },
+      });
+    }
+    const button = screen.getByRole("button", { name: "Generate queue" });
+    expect(button).toHaveProperty("disabled", true);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Review score weights must be finite, nonnegative, and have a positive finite total.",
+    );
+    fireEvent.change(screen.getByLabelText("low mean confidence"), {
+      target: { value: "1" },
+    });
+    expect(button).toHaveProperty("disabled", false);
+    expect(createReviewQueue).not.toHaveBeenCalled();
+  });
+
   it("keeps the coordination instance mounted across A-B-A and blocks queue changes", async () => {
     vi.mocked(getReviewQueueItems).mockResolvedValue({
       items: [reviewItem("item-a", "image-a"), reviewItem("item-b", "image-b")],
