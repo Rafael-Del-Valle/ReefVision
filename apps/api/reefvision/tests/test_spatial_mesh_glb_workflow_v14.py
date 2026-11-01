@@ -11,11 +11,17 @@ from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 
 
-@pytest.mark.parametrize("nonindexed", [False, True])
-def test_saved_glb(client: TestClient, nonindexed: bool) -> None:
+@pytest.mark.parametrize(
+    "nonindexed,explicit_targets",
+    [(False, False), (False, True), (True, False)],
+)
+def test_saved_glb(client: TestClient, nonindexed: bool, explicit_targets: bool) -> None:
     pid = create_project(client, "GLB saved")["id"]
     params = {
-        "glb_base64": make_glb(nonindexed_vertices=3 if nonindexed else None),
+        "glb_base64": make_glb(
+            nonindexed_vertices=3 if nonindexed else None,
+            explicit_targets=explicit_targets,
+        ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
         "calibration_evidence": "Pending review",
@@ -69,7 +75,16 @@ def test_saved_glb(client: TestClient, nonindexed: bool) -> None:
 
 @pytest.mark.parametrize(
     "invalid_selector",
-    ["mode_float", "json_nan", "nonzero_bin_padding", "nonindexed_partial"],
+    [
+        "mode_float",
+        "json_nan",
+        "nonzero_bin_padding",
+        "nonindexed_partial",
+        "position_target_index",
+        "index_target_vertex",
+        "target_float",
+        "target_boolean",
+    ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
     client: TestClient, invalid_selector: str
