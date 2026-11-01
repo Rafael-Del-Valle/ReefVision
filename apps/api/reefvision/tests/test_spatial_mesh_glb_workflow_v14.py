@@ -2,20 +2,20 @@
 
 from typing import cast
 
-import pytest
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 
 
-def test_saved_glb(client: TestClient) -> None:
+@pytest.mark.parametrize("nonindexed", [False, True])
+def test_saved_glb(client: TestClient, nonindexed: bool) -> None:
     pid = create_project(client, "GLB saved")["id"]
     params = {
-        "glb_base64": make_glb(),
+        "glb_base64": make_glb(nonindexed_vertices=3 if nonindexed else None),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
         "calibration_evidence": "Pending review",
@@ -38,6 +38,8 @@ def test_saved_glb(client: TestClient) -> None:
         ],
     }
     base = f"/api/v1/projects/{pid}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
@@ -52,21 +54,33 @@ def test_saved_glb(client: TestClient) -> None:
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = detail.json()["artifacts"]
-    assert any(
-        a["payload_json"]["provenance"]["source_format"] == "glb_2_0"
-        for a in artifacts
-        if a["data_type"] == "mesh_measurement_preview"
+    measurement = next(
+        artifact["payload_json"]
+        for artifact in artifacts
+        if artifact["data_type"] == "mesh_measurement_preview"
+    )
+    assert measurement["provenance"]["source_format"] == "glb_2_0"
+    assert measurement["surface_area_m2"] == standalone.json()["surface_area_m2"]
+    assert (
+        measurement["provenance"]["geometry_sha256"]
+        == standalone.json()["provenance"]["geometry_sha256"]
     )
 
 
-@pytest.mark.parametrize("invalid_selector", ["mode_float", "json_nan", "nonzero_bin_padding"])
+@pytest.mark.parametrize(
+    "invalid_selector",
+    ["mode_float", "json_nan", "nonzero_bin_padding", "nonindexed_partial"],
+)
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
     client: TestClient, invalid_selector: str
 ) -> None:
     """Reject malformed glTF metadata before publishing any scientific artifact."""
     pid = create_project(client, f"GLB metadata rejection {invalid_selector}")["id"]
     params = {
-        "glb_base64": make_glb(invalid_selector=invalid_selector),
+        "glb_base64": make_glb(
+            invalid_selector=invalid_selector,
+            nonindexed_vertices=4 if invalid_selector == "nonindexed_partial" else None,
+        ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
         "calibration_evidence": "Pending verification",
