@@ -123,20 +123,25 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         or mesh_index != 0
         or len(scene_nodes) != 1
         or _as_int(scene_nodes[0], "scene node index") != 0
-        or any(
-            key in node
-            for key in (
-                "matrix",
-                "translation",
-                "rotation",
-                "scale",
-                "children",
-                "skin",
-                "weights",
-            )
-        )
+        or any(key in node for key in ("matrix", "children", "skin", "weights"))
     ):
         raise ValueError("GLB scene transforms, hierarchy and morph weights are unsupported")
+    # Explicit identity TRS values are common in otherwise untransformed GLB
+    # exports. Accept only exact identities; never silently apply a transform
+    # to a specimen's calibrated geometry.
+    for name, identity in (
+        ("translation", (0.0, 0.0, 0.0)),
+        ("rotation", (0.0, 0.0, 0.0, 1.0)),
+        ("scale", (1.0, 1.0, 1.0)),
+    ):
+        if name not in node:
+            continue
+        values = _as_list(node[name], f"node {name}")
+        if len(values) != len(identity) or any(
+            type(value) not in (int, float) or not isfinite(value) or value != expected
+            for value, expected in zip(values, identity, strict=True)
+        ):
+            raise ValueError("GLB nonidentity or invalid scene transforms are unsupported")
     mesh = _as_object(meshes[0], "mesh")
     if "weights" in mesh:
         raise ValueError("GLB morph weights are unsupported")
