@@ -26,6 +26,7 @@ from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import (
     classify_ecological_unit_level,
     require_chronological_ecological_identity_revisions,
+    require_historical_ecological_parent_registration,
     require_unique_ecological_organism_key_spellings,
     require_unique_ecological_unit_spellings,
 )
@@ -99,6 +100,7 @@ class EcologyIdentityService:
         # Imported historical timestamp corruption must block later writes.
         try:
             require_chronological_ecological_identity_revisions(records)
+            require_historical_ecological_parent_registration(records)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
         latest: dict[str, EcologyIdentityRevision] = {}
