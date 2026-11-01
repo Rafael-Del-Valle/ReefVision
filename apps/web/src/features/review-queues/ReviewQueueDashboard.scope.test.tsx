@@ -371,11 +371,27 @@ describe("ReviewQueueDashboard scope isolation", () => {
       screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
     ).toBeTruthy();
 
+    // Exercise a real server-history refresh rather than synthetic cache
+    // replacement; an uncertain bulk retry must remain visible and scoped.
+    await waitFor(() =>
+      expect(
+        client.isFetching({
+          queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+        }),
+      ).toBe(0),
+    );
+    vi.mocked(getReviewQueues).mockResolvedValue([queue("queue-other")]);
     await act(async () => {
-      client.setQueryData(reviewQueuesQueryKey("project-a", "project", ""), [
-        queue("queue-other"),
-      ]);
+      await client.invalidateQueries({
+        queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+      });
     });
+    expect(
+      await screen.findByText(/temporarily absent from the refreshed/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Protected QC work remains open on its original queue/),
+    ).toBeTruthy();
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
     expect(
       screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
