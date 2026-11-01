@@ -175,9 +175,8 @@ def test_version_qc_freezes_annotations_while_project_and_workflow_track_live_ed
     workflow_before_id = _saved_workflow_queue(
         client, project_id, f"qc-frozen-annotation-before-{uuid4()}"
     )
-    assert _queue_item(client, workflow_before_id)["input_checksum"] == project_before[
-        "input_checksum"
-    ]
+    workflow_before = _queue_item(client, workflow_before_id)
+    assert workflow_before["input_checksum"] == project_before["input_checksum"]
 
     # Edit the same annotation after freezing the dataset: the number of
     # organisms and review state stay identical, but its geometry changes.
@@ -202,10 +201,9 @@ def test_version_qc_freezes_annotations_while_project_and_workflow_track_live_ed
     assert frozen_after["input_checksum"] == frozen_before["input_checksum"]
     assert frozen_after["score"] == frozen_before["score"]
     assert project_after["input_checksum"] != project_before["input_checksum"]
-    assert _queue_item(client, workflow_after_id)["input_checksum"] == project_after[
-        "input_checksum"
-    ]
-    assert _queue_item(client, workflow_before_id)["input_checksum"] == project_before[
+    workflow_after = _queue_item(client, workflow_after_id)
+    assert workflow_after["input_checksum"] == project_after["input_checksum"]
+    assert _queue_item(client, workflow_before_id)["input_checksum"] == workflow_before[
         "input_checksum"
     ]
     app = cast(FastAPI, client.app)
@@ -213,7 +211,9 @@ def test_version_qc_freezes_annotations_while_project_and_workflow_track_live_ed
         historical_queue = session.get(ReviewQueue, workflow_before_id)
         assert historical_queue is not None
         historical_items = session.scalars(
-            select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == workflow_before_id)
+            select(ReviewQueueItem).where(
+                ReviewQueueItem.review_queue_id == workflow_before_id
+            )
         ).all()
         validate_saved_queue_snapshot(historical_queue, historical_items)
         assert historical_items[0].review_state == "pending"
