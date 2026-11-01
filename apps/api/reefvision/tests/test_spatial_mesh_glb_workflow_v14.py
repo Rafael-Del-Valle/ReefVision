@@ -14,19 +14,21 @@ from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 @pytest.mark.parametrize(
     (
         "nonindexed,explicit_targets,unsigned_byte_indices,position_offset,"
-        "position_bounds,position_stride,index_bounds"
+        "position_bounds,position_stride,index_bounds,unsigned_int_indices"
     ),
     [
-        (False, False, False, 0, False, None, False),
-        (False, True, False, 0, False, None, False),
-        (True, False, False, 0, False, None, False),
-        (False, False, True, 0, False, None, False),
-        (False, True, True, 0, False, None, False),
-        (False, False, False, 4, False, None, False),
-        (False, False, False, 0, True, None, False),
-        (False, False, False, 0, True, 16, False),
-        (False, False, False, 0, False, 20, False),
-        (False, False, False, 0, False, None, True),
+        (False, False, False, 0, False, None, False, False),
+        (False, True, False, 0, False, None, False, False),
+        (True, False, False, 0, False, None, False, False),
+        (False, False, True, 0, False, None, False, False),
+        (False, True, True, 0, False, None, False, False),
+        (False, False, False, 4, False, None, False, False),
+        (False, False, False, 0, True, None, False, False),
+        (False, False, False, 0, True, 16, False, False),
+        (False, False, False, 0, False, 20, False, False),
+        (False, False, False, 0, False, None, True, False),
+        (False, False, False, 0, False, None, False, True),
+        (False, False, False, 0, False, None, True, True),
     ],
 )
 def test_saved_glb(
@@ -38,6 +40,7 @@ def test_saved_glb(
     position_bounds: bool,
     position_stride: int | None,
     index_bounds: bool,
+    unsigned_int_indices: bool,
 ) -> None:
     pid = create_project(client, "GLB saved")["id"]
     params = {
@@ -46,6 +49,7 @@ def test_saved_glb(
             explicit_targets=explicit_targets,
             explicit_min_version=explicit_targets and unsigned_byte_indices,
             unsigned_byte_indices=unsigned_byte_indices,
+            unsigned_int_indices=unsigned_int_indices,
             position_offset=position_offset,
             position_bounds=position_bounds,
             position_stride=position_stride,
@@ -114,6 +118,7 @@ def test_saved_glb(
         "target_float",
         "target_boolean",
         "byte_index_oob",
+        "dword_index_oob",
         "misaligned_position_view",
         "index_stride",
         "bounds_short",
@@ -148,6 +153,7 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
             invalid_selector=invalid_selector,
             nonindexed_vertices=4 if invalid_selector == "nonindexed_partial" else None,
             unsigned_byte_indices=invalid_selector == "byte_index_oob",
+            unsigned_int_indices=invalid_selector == "dword_index_oob",
         ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
