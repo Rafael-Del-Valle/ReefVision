@@ -128,24 +128,17 @@ export function ReviewQueueBulkTriage({
   const selectedIds = selected.filter((id) =>
     available.some((item) => item.id === id),
   );
-  // A background refetch can change eligibility after manual confirmation.
-  // Bind both confirmations to the visible review scope and source-evidence\n  // fingerprint. A refreshed score, checksum, severity, or item update must\n  // invalidate confirmation even when the same IDs remain eligible.
+  // Bind both approvals to the full server-provided biological evidence row,
+  // reviewer identity and skip rationale. Checksums/timestamps alone may stay
+  // unchanged during a partial refresh or a corrected import. Conservatively
+  // require fresh human confirmation whenever any selected evidence changes.
+  // This is only a UI guard; the server still validates each transition.
   const selectionKey = JSON.stringify({
     queueId,
     action,
-    items: selectedIds.map((id) => {
-      const item = available.find((candidate) => candidate.id === id);
-      return [
-        id,
-        item?.image_id,
-        item?.rank_position,
-        item?.review_state,
-        item?.input_checksum,
-        item?.score,
-        item?.highest_qc_severity,
-        item?.updated_at,
-      ];
-    }),
+    actor: actor.trim(),
+    reason: action === "skip" ? reason.trim() : null,
+    items: selectedIds.map((id) => available.find((item) => item.id === id)),
   });
   const confirmed = confirmedSelectionKey === selectionKey;
   const reviewedConfirmed = reviewedSelectionKey === selectionKey;
