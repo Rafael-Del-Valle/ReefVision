@@ -281,7 +281,9 @@ describe("bulk QC browser and native window-close integrity", () => {
     });
     await screen.findByText(/scientific review remains required/);
     await act(async () => {
-      resolveListener(unlisten);
+      resolveListener(() => {
+        unlisten();
+      });
       await subscription;
     });
     await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
