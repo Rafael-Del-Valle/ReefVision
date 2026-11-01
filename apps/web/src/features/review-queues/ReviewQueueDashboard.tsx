@@ -103,6 +103,28 @@ function validateQueueConfiguration(
   return null;
 }
 
+// A successful HTTP status is not evidence that the returned queue belongs to
+// the researcher's requested project and dataset. Never activate an unrelated
+// queue or open its review panel after a mismatched response.
+function assertQueueResponseScope(
+  queue: ReviewQueueRecord,
+  request: QueueMutationScope,
+): ReviewQueueRecord {
+  const expectedDataset =
+    request.scopeType === "dataset_version" ? request.datasetVersionId : null;
+  if (
+    !queue.id ||
+    queue.project_id !== request.projectId ||
+    queue.scope_type !== request.scopeType ||
+    queue.dataset_version_id !== expectedDataset
+  ) {
+    throw new Error(
+      "Queue response does not match the requested project/dataset scope. Inspect queue history before retrying; the response was not selected.",
+    );
+  }
+  return queue;
+}
+
 export function ReviewQueueDashboard({
   project,
   onOpenImage,
@@ -139,10 +161,14 @@ export function ReviewQueueDashboard({
   // (Number("") === 0). Explicit zero remains a valid weight.
   const [weightInputs, setWeightInputs] = useState<
     Record<keyof ReviewScoreWeights, string>
-  >(() =>
-    Object.fromEntries(
-      Object.entries(defaultWeights).map(([key, value]) => [key, String(value)]),
-    ) as Record<keyof ReviewScoreWeights, string>,
+  >(
+    () =>
+      Object.fromEntries(
+        Object.entries(defaultWeights).map(([key, value]) => [
+          key,
+          String(value),
+        ]),
+      ) as Record<keyof ReviewScoreWeights, string>,
   );
   const weights = useMemo(
     () =>
@@ -345,9 +371,11 @@ export function ReviewQueueDashboard({
             ? undefined
             : Number(request.reviewBelowConfidence) / 100,
       };
-      return request.scopeType === "dataset_version"
-        ? createDatasetVersionReviewQueue(request.datasetVersionId, payload)
-        : createReviewQueue(request.projectId, payload);
+      const queue =
+        request.scopeType === "dataset_version"
+          ? await createDatasetVersionReviewQueue(request.datasetVersionId, payload)
+          : await createReviewQueue(request.projectId, payload);
+      return assertQueueResponseScope(queue, request);
     },
     onSuccess: async (queue, request) => {
       if (
@@ -369,12 +397,15 @@ export function ReviewQueueDashboard({
     },
   });
   const regenerateQueue = useMutation({
-    mutationFn: (
+    mutationFn: async (
       request: QueueMutationScope & {
         queueId: string;
         selectionRevision: number;
       },
-    ) => regenerateReviewQueue(request.queueId),
+    ) => {
+      const queue = await regenerateReviewQueue(request.queueId);
+      return assertQueueResponseScope(queue, request);
+    },
     onSuccess: async (queue, request) => {
       if (
         sameQueueScope(currentScope.current, request) &&
