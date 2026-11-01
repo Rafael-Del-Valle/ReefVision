@@ -112,21 +112,18 @@ def test_prediction_box_edit_changes_standalone_and_saved_workflow_qc_evidence(
     assert updated["score"] == original["score"]
     assert updated["model_ids_json"] == original["model_ids_json"]
     assert updated["input_checksum"] != original["input_checksum"]
-    assert _queue_item(client, original_workflow_id)["input_checksum"] == saved_original[
-        "input_checksum"
-    ]
-
-    newer_workflow_id = _saved_workflow_queue(
-        client, project_id, f"qc-prediction-after-{uuid4()}"
+    assert (
+        _queue_item(client, original_workflow_id)["input_checksum"]
+        == saved_original["input_checksum"]
     )
+
+    newer_workflow_id = _saved_workflow_queue(client, project_id, f"qc-prediction-after-{uuid4()}")
     assert _queue_item(client, newer_workflow_id)["input_checksum"] == updated["input_checksum"]
     with app.state.session_factory() as session:
         historical_queue = session.get(ReviewQueue, original_workflow_id)
         assert historical_queue is not None
         historical_items = session.scalars(
-            select(ReviewQueueItem).where(
-                ReviewQueueItem.review_queue_id == original_workflow_id
-            )
+            select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == original_workflow_id)
         ).all()
         validate_saved_queue_snapshot(historical_queue, historical_items)
         assert historical_items[0].review_state == "pending"
@@ -240,23 +237,18 @@ def test_non_bbox_prediction_evidence_changes_standalone_and_saved_qc_fingerprin
     assert updated["score"] == original["score"]
     assert updated["model_ids_json"] == original["model_ids_json"]
     assert updated["input_checksum"] != original["input_checksum"]
-    assert _queue_item(client, original_workflow_id)["input_checksum"] == saved_original[
-        "input_checksum"
-    ]
-
-    newer_workflow_id = _saved_workflow_queue(
-        client, project_id, f"qc-multimodal-after-{uuid4()}"
+    assert (
+        _queue_item(client, original_workflow_id)["input_checksum"]
+        == saved_original["input_checksum"]
     )
-    assert _queue_item(client, newer_workflow_id)["input_checksum"] == updated[
-        "input_checksum"
-    ]
+
+    newer_workflow_id = _saved_workflow_queue(client, project_id, f"qc-multimodal-after-{uuid4()}")
+    assert _queue_item(client, newer_workflow_id)["input_checksum"] == updated["input_checksum"]
     with app.state.session_factory() as session:
         historical_queue = session.get(ReviewQueue, original_workflow_id)
         assert historical_queue is not None
         historical_items = session.scalars(
-            select(ReviewQueueItem).where(
-                ReviewQueueItem.review_queue_id == original_workflow_id
-            )
+            select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == original_workflow_id)
         ).all()
         validate_saved_queue_snapshot(historical_queue, historical_items)
         assert historical_items[0].review_state == "pending"
