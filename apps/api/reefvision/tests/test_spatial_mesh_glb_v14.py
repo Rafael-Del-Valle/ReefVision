@@ -16,6 +16,7 @@ def make_glb(
     translated: bool = False,
     invalid_selector: str | None = None,
     explicit_canonical: bool = False,
+    explicit_targets: bool = False,
     nonindexed_vertices: int | None = None,
 ) -> str:
     binary = struct.pack("<9f3H", 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 1, 2)
@@ -78,6 +79,17 @@ def make_glb(
         doc["extras"] = {"nonfinite": float("inf")}
     elif invalid_selector == "json_negative_infinity":
         doc["extras"] = {"nonfinite": float("-inf")}
+    if explicit_targets:
+        doc["bufferViews"][0]["target"] = 34962
+        doc["bufferViews"][1]["target"] = 34963
+    if invalid_selector == "position_target_index":
+        doc["bufferViews"][0]["target"] = 34963
+    elif invalid_selector == "index_target_vertex":
+        doc["bufferViews"][1]["target"] = 34962
+    elif invalid_selector == "target_float":
+        doc["bufferViews"][0]["target"] = 34962.0
+    elif invalid_selector == "target_boolean":
+        doc["bufferViews"][0]["target"] = True
     if explicit_canonical:
         doc["meshes"][0]["primitives"][0]["mode"] = 4
         doc["accessors"][0]["normalized"] = False
@@ -139,9 +151,7 @@ def test_rejects_noncanonical_glb_numeric_geometry_metadata(invalid_selector: st
 
 def test_explicit_canonical_glb_numeric_metadata_preserves_geometry() -> None:
     """Valid explicit JSON integer/boolean metadata must remain supported."""
-    assert parse_glb_triangles(make_glb(explicit_canonical=True)) == parse_glb_triangles(
-        make_glb()
-    )
+    assert parse_glb_triangles(make_glb(explicit_canonical=True)) == parse_glb_triangles(make_glb())
 
 
 @pytest.mark.parametrize(
@@ -156,11 +166,24 @@ def test_rejects_nonstandard_json_and_nonzero_binary_padding(invalid_selector: s
 
 def test_nonindexed_triangles_match_indexed_geometry() -> None:
     """Non-indexed glTF TRIANGLES have consecutive, independent vertex triplets."""
-    assert parse_glb_triangles(make_glb(nonindexed_vertices=3)) == parse_glb_triangles(
-        make_glb()
-    )
+    assert parse_glb_triangles(make_glb(nonindexed_vertices=3)) == parse_glb_triangles(make_glb())
 
 
 def test_rejects_incomplete_nonindexed_triangle() -> None:
     with pytest.raises(ValueError, match="complete vertex triplets"):
         parse_glb_triangles(make_glb(nonindexed_vertices=4))
+
+
+def test_explicit_glb_buffer_view_targets_preserve_geometry() -> None:
+    """Canonical vertex and index targets do not alter measured geometry."""
+    assert parse_glb_triangles(make_glb(explicit_targets=True)) == parse_glb_triangles(make_glb())
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    ["position_target_index", "index_target_vertex", "target_float", "target_boolean"],
+)
+def test_rejects_incompatible_glb_buffer_view_targets(invalid_selector: str) -> None:
+    """An explicitly declared buffer target must match its accessor role."""
+    with pytest.raises(ValueError, match="target"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
