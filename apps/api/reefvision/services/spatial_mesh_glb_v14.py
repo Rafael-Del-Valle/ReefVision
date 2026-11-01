@@ -94,6 +94,10 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         raise ValueError("GLB asset minimum version must be 2.0")
     if doc.get("extensionsUsed") or doc.get("extensionsRequired"):
         raise ValueError("GLB extensions are unsupported")
+    # An animated node can change the measured geometry after the bind pose.
+    # This bounded preview has no animation timeline or skinning evaluation.
+    if "animations" in doc or "skins" in doc:
+        raise ValueError("GLB animations and skinning are unsupported")
     buffers = _as_list(doc.get("buffers"), "buffers")
     views = _as_list(doc.get("bufferViews"), "bufferViews")
     accessors = _as_list(doc.get("accessors"), "accessors")
@@ -132,9 +136,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             )
         )
     ):
-        raise ValueError(
-            "GLB scene transforms, hierarchy and morph weights are unsupported"
-        )
+        raise ValueError("GLB scene transforms, hierarchy and morph weights are unsupported")
     mesh = _as_object(meshes[0], "mesh")
     if "weights" in mesh:
         raise ValueError("GLB morph weights are unsupported")
