@@ -5474,3 +5474,28 @@ CI, scientist-reviewed calibrated longitudinal observations, authenticated
 independent experimental units, representative human/model comparisons,
 1.1 migration reconciliation, and installed Windows MSI/GUI acceptance.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Unicode technical-replicate workflow CI repair (2026-11-01)
+
+At predecessor `0f8346a6d2b8cd77473b481ec3ddd1339b40a6f5`,
+**16/19** PR-triggered GitHub Actions workflows passed, including frontend/E2E
+and the Windows desktop build. Backend CI, Pose Workflow Validation and
+ReefVision 1.0 Acceptance failed at Ruff 0.17.3 `format --check` before
+pytest. The exact backend job log identified three formatting locations in
+`test_ecology_unicode_unit_type_1_2.py` (assertion, workflow-plan POST, and
+saved-artifact list comprehension). Applied those precise layout corrections.
+
+Expanded the existing **standalone API and executed, persisted Workflow
+Builder** negative acceptance to include a fullwidth Unicode `video_frame`
+technical unit, alongside fullwidth `image` and zero-width `image`.
+A valid graph may be planned and saved, but execution must fail without a
+successful longitudinal or human/model scientific artifact. This tests the
+existing NFKC technical-replicate safeguard with genuine Unicode inputs; it
+does not change the production validator, infer true physical independence,
+approve unverified observations, or change local model weights.
+
+**Release HOLD:** verify exact-new-head Ruff, pytest, backend, frontend/E2E
+and Windows CI; authenticate scientist-reviewed calibrated longitudinal
+measurements and real experimental-unit design; reconcile 1.1 migrations;
+perform representative biological/human-model acceptance and installed Windows
+MSI/GUI testing. **1.2 NOT RELEASE-READY; 1.3 not started.**
