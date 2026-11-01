@@ -428,6 +428,26 @@ function Assert-ReefVisionMsiCabinetSet {
     return [pscustomobject]@{ Count = $expected.Count; Names = @($expected | Sort-Object) }
 }
 
+# An automated MSI smoke test is not release acceptance if required evidence
+# was skipped. In particular, a successful API probe does not establish real
+# camera compatibility, an upgrade, or a complete uninstall.
+function Get-ReefVisionAutomatedAcceptanceGaps {
+    param([Parameter(Mandatory = $true)]$Report)
+    $required = @(
+        'install', 'shortcuts', 'first_launch', 'frontend_backend_connectivity',
+        'model_policy', 'external_annotation_imports', 'camera_jpeg',
+        'project_persistence', 'restart', 'project_exchange',
+        'upgrade', 'uninstall', 'data_retention'
+    )
+    foreach ($name in $required) {
+        $entry = $Report[$name]
+        $status = if ($null -eq $entry) { 'MISSING' } else { [string]$entry.status }
+        if ($status -cne 'PASS') {
+            "$($name): $status"
+        }
+    }
+}
+
 function New-ReefVisionEvidenceResult {
     param([string]$Status = 'NOT RUN', [string]$Detail = '')
     return [ordered]@{ status = $Status; detail = $Detail; timestamp_utc = [DateTime]::UtcNow.ToString('o') }

@@ -95,10 +95,24 @@ $report = [ordered]@{
     upgrade = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
     uninstall = if ($SkipUninstall) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUninstall requested' } else { New-ReefVisionEvidenceResult }
     data_retention = New-ReefVisionEvidenceResult
+    # These gates require interactive installed-GUI and physical GPU evidence.
+    # A loopback API probe or synthetic CI fixture cannot satisfy them.
+    webview2_gui = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Interactive installed WebView2 image, scrolling and annotation acceptance required'
+    gpu_scientific = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Physical GPU training/inference and scientific QC acceptance required'
+    automated_acceptance_complete = $false
+    automated_acceptance_gaps = @()
     failure_reason = $null
 }
 
-function Save-Report { Write-ReefVisionEvidenceReport -Report $report -Path $ReportPath }
+function Save-Report {
+    $report.automated_acceptance_gaps = @(Get-ReefVisionAutomatedAcceptanceGaps -Report $report)
+    $report.automated_acceptance_complete = (
+        -not $report.plan_only -and
+        $null -eq $report.failure_reason -and
+        $report.automated_acceptance_gaps.Count -eq 0
+    )
+    Write-ReefVisionEvidenceReport -Report $report -Path $ReportPath
+}
 function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [string]$TargetRoot = '') {
     $log = Join-Path $EvidenceRoot $LogName
     $arguments = New-ReefVisionMsiArguments -Action $Action -PackageOrProduct $PackageOrProduct -InstallRoot $TargetRoot -LogPath $log
@@ -650,5 +664,9 @@ try {
     }
 }
 
-Write-Host 'ReefVision clean Windows acceptance passed.' -ForegroundColor Green
+if ($report.automated_acceptance_complete) {
+    Write-Host 'Automated Windows MSI acceptance passed; interactive WebView2 and physical GPU/scientific acceptance remain NOT RUN.' -ForegroundColor Green
+} else {
+    Write-Warning ("Automated Windows MSI acceptance is incomplete: " + ($report.automated_acceptance_gaps -join '; '))
+}
 Write-Host "Evidence report: $ReportPath"

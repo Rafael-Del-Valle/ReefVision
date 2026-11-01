@@ -396,6 +396,33 @@ Assert-True ($acceptanceScript -match 'Stop-AcceptanceDesktop\s+\$desktop\s*\r?\
 Assert-True ($acceptanceScript -match 'Where-Object\s+FullName\s+-eq\s+''reefvision-exchange-manifest\.json''') 'Project Exchange validation does not require the canonical manifest name.'
 Assert-True ($acceptanceScript -notmatch 'Where-Object\s+FullName\s+-eq\s+''manifest\.json''') 'Project Exchange validation still accepts the incorrect manifest.json name.'
 
+# Release evidence must not turn skipped upgrade, real-camera, or uninstall
+# checks into a false clean-install PASS. No installer is launched here.
+$requiredAcceptanceFields = @(
+    'install', 'shortcuts', 'first_launch', 'frontend_backend_connectivity',
+    'model_policy', 'external_annotation_imports', 'camera_jpeg',
+    'project_persistence', 'restart', 'project_exchange',
+    'upgrade', 'uninstall', 'data_retention'
+)
+$completeEvidence = @{}
+foreach ($name in $requiredAcceptanceFields) {
+    $completeEvidence[$name] = New-ReefVisionEvidenceResult -Status 'PASS'
+}
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'All required automated MSI gates should permit a complete report.'
+$completeEvidence['upgrade'] = New-ReefVisionEvidenceResult -Status 'SKIPPED'
+$completeEvidence['camera_jpeg'] = New-ReefVisionEvidenceResult -Status 'SKIPPED'
+$completeEvidence['uninstall'] = New-ReefVisionEvidenceResult -Status 'NOT RUN'
+$gaps = @(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence)
+Assert-True ($gaps.Count -eq 3) 'Skipped camera, upgrade and uninstall evidence must each block automated acceptance.'
+foreach ($expectedGap in @('camera_jpeg: SKIPPED', 'upgrade: SKIPPED', 'uninstall: NOT RUN')) {
+    Assert-True ($gaps -ccontains $expectedGap) "Missing release evidence gap: $expectedGap"
+}
+$completeEvidence.Remove('model_policy')
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence) -ccontains 'model_policy: MISSING') 'Missing model-policy evidence must fail closed.'
+Assert-True ($acceptanceScript.Contains('webview2_gui = New-ReefVisionEvidenceResult')) 'Acceptance must explicitly record untested installed WebView2 GUI.'
+Assert-True ($acceptanceScript.Contains('gpu_scientific = New-ReefVisionEvidenceResult')) 'Acceptance must explicitly record untested physical GPU/scientific workflows.'
+Assert-True ($acceptanceScript.Contains('automated_acceptance_complete')) 'Acceptance report must distinguish full automated evidence from partial tests.'
+
 $reportPath = Join-Path $Root ('.artifacts\reefvision-evidence-' + [guid]::NewGuid().ToString('N') + '.json')
 $report = [ordered]@{ upgrade = New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied'; failure_reason = $null }
 Write-ReefVisionEvidenceReport -Report $report -Path $reportPath
