@@ -5398,3 +5398,26 @@ scientist-reviewed calibrated longitudinal evidence, real independent-unit
 design verification, representative human/model biological acceptance,
 1.1 migration reconciliation and installed Windows MSI/GUI validation.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Saved ecological workflow artifact formatter repair (2026-10-31)
+
+At predecessor `af474966ed2a92a1eed92b56fe409d03121fcc70`, all 19
+PR-triggered Actions completed: 16 succeeded (including the Windows Desktop
+Build and frontend/E2E), while backend CI, Pose Workflow Validation and
+ReefVision 1.0 Acceptance failed at the same Ruff format check. Ruff lint
+passed; pytest was not reached in those jobs. CI pinpointed exactly one
+list-comprehension layout in
+`test_ecology_analysis_unit_case_alias_1_2.py` (line 159).
+The exact Ruff-requested one-line layout was applied, without altering
+production scientific calculations, schemas, provenance, review gates or
+typed Workflow Builder ports. The existing test exercises successful saved
+workflow execution and persistence for shared physical tanks across both
+longitudinal and paired human/model analyses, with one declared independent
+unit, unverified evidence and standalone/saved fingerprint parity.
+
+**Release HOLD:** verify the new exact-head full CI and pytest; authenticate
+scientist-reviewed calibrated longitudinal observations and true experimental
+unit design; independently validate representative human/model comparisons;
+reconcile 1.1 migrations; and test installed Windows MSI/CAB/GUI and hardware.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
