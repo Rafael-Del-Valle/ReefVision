@@ -261,6 +261,23 @@ function Assert-ReefVisionOwnedMsiVerificationRun {
     }
 }
 
+# An MSI with duplicate critical payloads is ambiguous even when one copy
+# passes a version or model-policy check. Never silently select the first one.
+function Get-ReefVisionUniquePackagedFile {
+    param(
+        [AllowEmptyCollection()][object[]]$Candidates = @(),
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+    if ([string]::IsNullOrWhiteSpace($Description)) {
+        throw 'Packaged file description must not be empty.'
+    }
+    $found = @($Candidates | Where-Object { $null -ne $_ })
+    if ($found.Count -ne 1) {
+        throw "Expected exactly one $Description in extracted MSI; found $($found.Count)."
+    }
+    return $found[0]
+}
+
 function New-ReefVisionMsiArguments {
     param(
         [Parameter(Mandatory = $true)][ValidateSet('Install', 'Uninstall')][string]$Action,
