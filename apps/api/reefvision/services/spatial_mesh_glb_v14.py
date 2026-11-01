@@ -179,13 +179,10 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             raise ValueError("GLB external buffer views are unsupported")
         stride = width
         if "byteStride" in view:
+            if not position:
+                raise ValueError("GLB strided index views are unsupported")
             candidate = view["byteStride"]
-            if (
-                not position
-                or type(candidate) is not int
-                or not 12 <= candidate <= 252
-                or candidate % 4
-            ):
+            if type(candidate) is not int or not 12 <= candidate <= 252 or candidate % 4:
                 raise ValueError("GLB vertex byteStride must be 12–252, divisible by four")
             stride = candidate
         start = _as_int(view.get("byteOffset", 0), "view offset")
