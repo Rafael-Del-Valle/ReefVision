@@ -179,6 +179,24 @@ class SpatialSourceAssetService:
         return data
 
 
+def _load_saved_calibration_review(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    asset_id: str,
+    review_id: str,
+) -> tuple[Any, str]:
+    # Local import avoids a module cycle with the review receipt service.
+    from reefvision.services.spatial_calibration_review_v14 import SpatialCalibrationReviewService
+
+    receipt = SpatialCalibrationReviewService(session, settings).get(
+        project_id, asset_id, review_id
+    )
+    # get() rechecks the original bytes, project/asset binding and evidence digest.
+    # The receipt is attributed audit evidence, never an authenticated approval.
+    return receipt.evidence, receipt.evidence_sha256
+
+
 def preview_project_mesh(
     session: Session,
     settings: Settings,
@@ -202,6 +220,11 @@ def preview_project_mesh(
     # The byte digest alone does not identify a project-owned original:
     # two projects may import identical source bytes independently.
     review = payload.calibration_review
+    review_digest: str | None = None
+    if payload.calibration_review_id is not None:
+        review, review_digest = _load_saved_calibration_review(
+            session, settings, project_id, asset.id, payload.calibration_review_id
+        )
     if (
         review is not None
         and review.reviewed_spatial_source_asset_id is not None
@@ -213,7 +236,8 @@ def preview_project_mesh(
         and payload.expected_source_payload_sha256 != asset.sha256
     ):
         raise ValidationError("Project mesh asset SHA-256 differs from expected source")
-    fields = payload.model_dump(mode="python", exclude={"asset_id"})
+    fields = payload.model_dump(mode="python", exclude={"asset_id", "calibration_review_id"})
+    fields["calibration_review"] = review
     fields["expected_source_payload_sha256"] = asset.sha256
     if asset.source_format == "glb":
         encoded = base64.b64encode(original).decode("ascii")
@@ -238,6 +262,10 @@ def preview_project_mesh(
     result["provenance"]["spatial_source_asset_id"] = asset.id
     result["provenance"]["spatial_source_asset_sha256"] = asset.sha256
     result["qc_warnings"].append("project_source_original_unreviewed")
+    if review_digest is not None:
+        result["provenance"]["calibration_review_record_id"] = payload.calibration_review_id
+        result["provenance"]["calibration_review_evidence_sha256"] = review_digest
+        result["qc_warnings"].append("persisted_calibration_review_unverified")
     if review is not None and review.reviewed_spatial_source_asset_id is None:
         result["qc_warnings"].append("independent_calibration_review_source_asset_unbound")
     return result
@@ -268,6 +296,11 @@ def preview_project_point_cloud(
     # The byte digest alone does not identify a project-owned original:
     # two projects may import identical source bytes independently.
     review = payload.calibration_review
+    review_digest: str | None = None
+    if payload.calibration_review_id is not None:
+        review, review_digest = _load_saved_calibration_review(
+            session, settings, project_id, asset.id, payload.calibration_review_id
+        )
     if (
         review is not None
         and review.reviewed_spatial_source_asset_id is not None
@@ -285,7 +318,8 @@ def preview_project_point_cloud(
         text = original.decode("ascii", errors="strict")
     except UnicodeDecodeError as exc:
         raise ValidationError("Project point-cloud preview requires ASCII PLY") from exc
-    fields = payload.model_dump(mode="python", exclude={"asset_id"})
+    fields = payload.model_dump(mode="python", exclude={"asset_id", "calibration_review_id"})
+    fields["calibration_review"] = review
     fields["ply_text"] = text
     fields["expected_source_payload_sha256"] = asset.sha256
     try:
@@ -296,6 +330,10 @@ def preview_project_point_cloud(
     result["provenance"]["spatial_source_asset_id"] = asset.id
     result["provenance"]["spatial_source_asset_sha256"] = asset.sha256
     result["qc_warnings"].append("project_source_original_unreviewed")
+    if review_digest is not None:
+        result["provenance"]["calibration_review_record_id"] = payload.calibration_review_id
+        result["provenance"]["calibration_review_evidence_sha256"] = review_digest
+        result["qc_warnings"].append("persisted_calibration_review_unverified")
     if review is not None and review.reviewed_spatial_source_asset_id is None:
         result["qc_warnings"].append("independent_calibration_review_source_asset_unbound")
     return result
