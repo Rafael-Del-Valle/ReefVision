@@ -322,8 +322,7 @@ export function ReviewQueueDashboard({
         queueId: string;
         selectionRevision: number;
       },
-    ) =>
-      regenerateReviewQueue(request.queueId),
+    ) => regenerateReviewQueue(request.queueId),
     onSuccess: async (queue, request) => {
       if (
         sameQueueScope(currentScope.current, request) &&
@@ -399,6 +398,21 @@ export function ReviewQueueDashboard({
     typeof storedThreshold === "number" && Number.isFinite(storedThreshold)
       ? storedThreshold
       : null;
+  // Never hide a failed reviewer action behind an unchanged queue chip.
+  // A late failure from a different project, dataset or historical queue
+  // must not be presented as a failure of the researcher's current item.
+  const failedItemActions = [
+    { label: "Start review", mutation: startItem },
+    { label: "Mark complete", mutation: completeItem },
+    { label: "Skip review", mutation: skipItem },
+    { label: "Return to queue", mutation: returnItem },
+  ].filter(
+    ({ mutation }) =>
+      mutation.isError &&
+      mutation.variables?.queueId === activeQueueId &&
+      mutation.variables !== undefined &&
+      sameQueueScope(currentScope.current, mutation.variables),
+  );
 
   return (
     <section className="dashboard-panel">
@@ -745,6 +759,13 @@ export function ReviewQueueDashboard({
                 />
               </label>
             )}
+            {failedItemActions.map(({ label, mutation }) => (
+              <p className="form-error" role="alert" key={label}>
+                {label} was not confirmed for item {mutation.variables?.itemId}.
+                Verify its current review state and audit history before
+                retrying. {mutation.error?.message}
+              </p>
+            ))}
             <div className="dashboard-list">
               {items.data?.items.map((item) => (
                 <article key={item.id} className="dashboard-row">
