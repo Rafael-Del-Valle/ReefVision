@@ -65,3 +65,31 @@ the standalone queue API. This change does not alter persisted queues,
 reviewer decisions, source images, migration state or workflow graph formats.
 Release HOLD remains until exact-head CI and the existing Windows, migration,
 scientific and crash-recovery acceptance gates are satisfied.
+
+
+## Follow-up: queue creation/regeneration response provenance (2026-11-01)
+
+A successful HTTP response is not sufficient evidence that a newly generated or
+regenerated queue belongs to the project and dataset the researcher requested.
+Previously, the dashboard trusted the returned queue ID and could select it,
+even if a stale or malformed server response referred to another project or
+dataset. This is a distinct scope-isolation problem, not a new QC scoring
+formula or a new Workflow Builder node.
+
+Both generation and regeneration now validate the returned queue's nonempty ID,
+project ID, scope type, and exact dataset-version binding **before** mutation
+success can change the selected queue, open quick review, or invalidate queue
+history. A mismatched response is surfaced as an error, and the existing
+selection is preserved. Because the server may already have persisted the
+queue, the error explicitly asks the researcher to inspect queue history before
+retrying; the client does not delete, regenerate, or auto-approve any records.
+
+React regressions cover foreign-project responses for both operations, plus
+mismatched dataset, scope type and empty IDs for generation. The existing
+standalone QC endpoints and typed executable saved `qc_review_queue`
+Workflow Builder node remain authoritative and unchanged, including persisted
+graphs/runs, provenance, retry identities and researcher approval gates.
+
+CI must confirm frontend formatting, types, Vitest, E2E and production build.
+Native installed-Windows GUI, cross-version migration reconciliation and
+representative biological-science acceptance remain release blockers.
