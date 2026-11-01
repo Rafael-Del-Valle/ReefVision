@@ -174,8 +174,7 @@ def test_resigned_registry_rejects_later_parent_reclassification(
     fragment_time = datetime.fromisoformat(fragment["created_at"].replace("Z", "+00:00"))
     revised_parent["created_at"] = (fragment_time + timedelta(days=1)).isoformat()
     latest = [
-        revised_parent if row["organism_key"] == "parent-A" else row
-        for row in source["identities"]
+        revised_parent if row["organism_key"] == "parent-A" else row for row in source["identities"]
     ]
     history = sorted(
         [*source["identity_history"], revised_parent],

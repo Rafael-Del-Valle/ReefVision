@@ -188,16 +188,19 @@ def cross_unit_shared_parent_colony_ids(
 
 
 def require_unique_ecological_organism_key_spellings(keys: Iterable[str]) -> None:
-    """Reject case-only aliases that split a registered biological identity.
+    """Reject case and Unicode-compatibility aliases of biological identities.
 
-    Repeated revisions of the *same* exact organism key remain valid. The
-    check does not prove that differently named organisms are distinct.
+    Imported records can bypass the ASCII-only registration schema; fullwidth
+    or other compatibility spellings must not create independent organisms.
+    Preserve original identifiers and repeated exact-key revisions. This
+    does not prove that differently named organisms are biologically distinct.
     """
     spellings: dict[str, str] = {}
     for key in keys:
-        prior = spellings.setdefault(key.casefold(), key)
+        canonical = unicodedata.normalize("NFKC", key).casefold()
+        prior = spellings.setdefault(canonical, key)
         if prior != key:
-            raise ValueError("Ecological organism keys differ only by case")
+            raise ValueError("Ecological organism keys differ only by case or Unicode compatibility")
 
 
 class CurrentEcologicalParentRecord(Protocol):

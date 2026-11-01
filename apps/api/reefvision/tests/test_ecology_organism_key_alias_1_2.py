@@ -1,4 +1,4 @@
-"""Organism identity keys must not split into case-only biological aliases."""
+"""Organism identity keys must not split into case or Unicode aliases."""
 
 from __future__ import annotations
 
@@ -45,8 +45,9 @@ def test_organism_case_alias_registration_rejected_without_mutating_registry(
     assert registry.json()["history_revision_count"] == 2
 
 
+@pytest.mark.parametrize("alias", ["coral-01", "Ｃｏｒａｌ-01"])
 def test_imported_case_alias_blocks_registry_writes_and_saved_workflow(
-    client: TestClient,
+    client: TestClient, alias: str
 ) -> None:
     project_id = str(create_project(client, "Imported organism alias")["id"])
     base = f"/api/v1/projects/{project_id}/ecology"
@@ -56,10 +57,10 @@ def test_imported_case_alias_blocks_registry_writes_and_saved_workflow(
         session.add(
             EcologyIdentityRevision(
                 project_id=project_id,
-                organism_key="coral-01",
+                organism_key=alias,
                 revision=1,
                 kind="colony",
-                reason="Simulated imported case-aliased biological identity",
+                reason="Simulated imported compatibility-aliased biological identity",
             )
         )
         session.commit()
@@ -112,8 +113,9 @@ def test_imported_case_alias_blocks_registry_writes_and_saved_workflow(
     )
 
 
+@pytest.mark.parametrize("alias", ["coral-01", "Ｃｏｒａｌ-01"])
 def test_resigned_registry_cannot_replay_organism_case_alias(
-    client: TestClient,
+    client: TestClient, alias: str
 ) -> None:
     project_id = str(create_project(client, "Resigned organism aliases")["id"])
     assert _register(client, project_id, "Coral-01").status_code == 201
@@ -127,7 +129,7 @@ def test_resigned_registry_cannot_replay_organism_case_alias(
     for collection in ("identities", "identity_history"):
         for row in changed[collection]:
             if row["organism_key"] == "coral-02":
-                row["organism_key"] = "coral-01"
+                row["organism_key"] = alias
     changed["snapshot_sha256"] = canonical_json_sha256(
         {
             "schema_version": changed["schema_version"],

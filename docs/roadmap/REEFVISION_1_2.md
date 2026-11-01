@@ -5738,3 +5738,35 @@ Windows GUI; authenticate scientist-reviewed calibrated longitudinal
 measurements and true experimental units; reconcile 1.1 migrations; and run
 representative biological/human-model acceptance. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+## Unicode-compatibility organism identity alias integrity (2026-11-01; development only)
+
+**Pre-change evidence:** At `24672738e9c2879c0b260e5358d0c2e8d9289ef3`,
+19 PR-triggered Actions completed: 16 succeeded, while backend CI, Pose
+Workflow Validation and ReefVision 1.0 Acceptance stopped at the same single
+Ruff formatting discrepancy in the historical-parent replay regression. The
+formatter-requested one-line comprehension is restored in this increment.
+
+**Scientific safeguard:** Project-owned organism identity keys are already
+ASCII-only for normal registration, but imported historical rows and replayed
+artifacts can contain Unicode. The shared organism-key collision policy now
+compares NFKC-normalized, casefolded forms without rewriting source keys.
+This prevents an imported fullwidth `Ｃｏｒａｌ-01` from being counted as
+separate from `Coral-01`. Exact repeated keys across append-only revisions
+and genuinely different keys remain valid. This is a conservative identity
+integrity rule, not independent biological identity verification.
+
+**Acceptance added:** Parameterized existing standalone imported-history and
+executable saved Workflow Builder rejection tests for both case-only and
+fullwidth compatibility aliases; invalid runs must publish no successful
+`ecology_identity_registry` artifact. Parameterized re-fingerprinted typed
+registry replay to reject the same aliases even after snapshot and history
+SHA-256 digests are recomputed. Existing typed ports, project provenance,
+`registered_unverified` evidence and `scientist_review_required` gate
+remain unchanged. No migrations, 1.1 environmental context, external model
+weights, or cross-version changes are introduced.
+
+**Release HOLD:** Exact-new-head CI, authenticated scientist-reviewed calibrated
+longitudinal measurements, actual independent experimental units, representative
+human/model acceptance, 1.1 migration reconciliation, and installed Windows
+MSI/GUI/GPU acceptance remain. **1.2 NOT RELEASE-READY; 1.3 not started.**
