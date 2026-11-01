@@ -439,6 +439,29 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         saved_run.result_json = original_run_result
         session.commit()
 
+    # A list of malformed recovery entries is also invalid audit evidence.
+    # Exercise the persisted scientist-verified run rather than a mock record.
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
+        assert saved_run is not None
+        saved_run.result_json = {
+            **original_run_result,
+            "recovery_history": [{"attempt": 1}, "invalid-recovery-entry"],
+        }
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="history entries must be JSON objects"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
+        assert saved_run is not None
+        saved_run.result_json = original_run_result
+        session.commit()
+
     with app.state.session_factory() as session:
         assert (
             build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
