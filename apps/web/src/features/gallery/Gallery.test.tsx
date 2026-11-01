@@ -817,6 +817,77 @@ describe("Gallery", () => {
     expect(await screen.findByText("21 files processed")).toBeInTheDocument();
     expect(batchSizes).toEqual([10, 10, 1]);
   });
+  it("keeps successfully imported camera batches visible when a later batch fails", async () => {
+    const persisted: ProjectImage[] = [];
+    let importRequests = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/projects/${project.id}/imports/images`)) {
+        importRequests += 1;
+        const files = (init?.body as FormData).getAll("files") as File[];
+        if (importRequests === 2) {
+          return jsonResponse({ detail: "Temporary import failure" }, 503);
+        }
+        for (const file of files) {
+          persisted.push({
+            ...image,
+            id: `imported-${persisted.length + 1}`,
+            original_filename: file.name,
+          });
+        }
+        return jsonResponse({
+          project_id: project.id,
+          successful: persisted.map((item) => ({
+            filename: item.original_filename,
+            relative_path: item.original_filename,
+            status: "successful",
+            detail: null,
+            image_id: item.id,
+            duplicate_image_id: null,
+            thumbnail_job_id: null,
+          })),
+          duplicates: [],
+          unsupported: [],
+          failed: [],
+        });
+      }
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [...persisted],
+          total: persisted.length,
+          page: 1,
+          page_size: 24,
+          pages: persisted.length ? 1 : 0,
+        });
+      }
+      throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderGallery();
+    await screen.findByText("No images yet");
+    const files = Array.from({ length: 11 }, (_, index) =>
+      new File(
+        ["camera bytes"],
+        `coral-${String(index + 1).padStart(2, "0")}.${index % 2 ? "JPEG" : "JPG"}`,
+        { type: "image/jpeg" },
+      ),
+    );
+    await userEvent.upload(screen.getByLabelText("Import files"), files);
+
+    expect(await screen.findByText("10 files processed")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Images could not be imported"),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(10));
+    expect(importRequests).toBe(2);
+    expect(
+      screen.getByRole("article", { name: /coral-01\.JPG/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("article", { name: /coral-11\.JPG/ }),
+    ).toBeNull();
+  });
+
   it("publishes the selected image batch to workbench inference controls", async () => {
     const onInferenceSelectionChange = vi.fn();
 
