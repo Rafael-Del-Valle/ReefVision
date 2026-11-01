@@ -373,6 +373,28 @@ class ReviewQueueService:
                 "split": split_by_image_id.get(image.image_id),
                 "annotation_status": image.annotation_status,
                 "annotation_count": annotation_count,
+                # A stable count alone cannot distinguish moved, relabeled, or
+                # re-authored biological observations. Bind each new queue's
+                # immutable input checksum to the actual annotation evidence.
+                # Older persisted queue checksums remain valid and untouched.
+                "annotation_evidence": [
+                    {
+                        "id": annotation.id,
+                        "label_class_id": annotation.label_class_id,
+                        "bbox_xyxy": [
+                            annotation.x_min,
+                            annotation.y_min,
+                            annotation.x_max,
+                            annotation.y_max,
+                        ],
+                        "revision": annotation.revision,
+                        "source_type": annotation.source_type,
+                        "source_model_id": annotation.source_model_id,
+                        "source_prediction_id": annotation.source_prediction_id,
+                        "provenance": annotation.provenance_json,
+                    }
+                    for annotation in sorted(annotations, key=lambda item: item.id)
+                ],
                 "prediction_ids": sorted(item.id for item in predictions),
                 "issue_ids": sorted(issue.id for issue in image_issues),
                 "signal_values": signal_values,
