@@ -39,7 +39,9 @@ class SpatialCalibrationReviewService:
     def _canonical(evidence: MeshCalibrationReviewEvidence) -> tuple[dict[str, Any], str]:
         # Pydantic models can be mutated after construction; validate the current
         # values before persisting or hashing scientific review evidence.
-        evidence = MeshCalibrationReviewEvidence.model_validate(evidence.model_dump(mode="python"))
+        evidence = MeshCalibrationReviewEvidence.model_validate(
+            evidence.model_dump(mode="python")
+        )
         payload = evidence.model_dump(mode="json")
         encoded = json.dumps(
             payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
