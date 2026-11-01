@@ -267,6 +267,43 @@ describe("Gallery pending thumbnail refresh", () => {
 });
 
 describe("Gallery", () => {
+  it("recovers a deleted saved page and restores the first available camera image", async () => {
+    const preferenceKey = "reefvision.gallery.project-1.v1";
+    window.localStorage.setItem(
+      preferenceKey,
+      JSON.stringify({ imageId: "deleted-image", page: 50, wrap: true }),
+    );
+    const requestedPages: number[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      if (!url.pathname.endsWith(`/projects/${project.id}/images`)) {
+        throw new Error(`Unexpected request ${url}`);
+      }
+      const requestedPage = Number(url.searchParams.get("page"));
+      requestedPages.push(requestedPage);
+      return jsonResponse({
+        items: requestedPage === 1 ? [image] : [],
+        total: 1,
+        page: requestedPage,
+        page_size: 24,
+        pages: 1,
+      });
+    });
+
+    renderGallery();
+    expect(
+      await screen.findByAltText("Focused project image: swiftia-01.png"),
+    ).toBeInTheDocument();
+    expect(requestedPages).toEqual([50, 1]);
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(preferenceKey) ?? "null")).toEqual({
+        imageId: "image-1",
+        page: 1,
+        wrap: true,
+      });
+    });
+  });
+
   it("displays the first image when WebView2 blocks localStorage access", async () => {
     const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
     if (!descriptor) throw new Error("Expected a localStorage property descriptor");

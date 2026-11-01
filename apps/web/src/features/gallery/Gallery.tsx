@@ -596,6 +596,19 @@ function GalleryContent({
         signal,
       ),
   });
+  // A previously saved page may no longer exist after image deletion or a
+  // dataset refresh. The API returns the actual page count even for an empty
+  // out-of-range request; recover the nearest valid page so the initial
+  // scientific image is visible instead of leaving an empty workbench.
+  useEffect(() => {
+    if (!images.data) return;
+    const lastPage = Math.max(1, images.data.pages);
+    if (page > lastPage) {
+      setPendingNavigationEdge("first");
+      setPage(lastPage);
+    }
+  }, [images.data, page]);
+
   const importer = useMutation({
     mutationFn: async (files: File[]) => {
       const combined: ImageImportReport = {
