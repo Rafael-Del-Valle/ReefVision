@@ -68,6 +68,22 @@ def test_imported_revision_gap_blocks_api_writes_and_saved_workflow(
     )
     assert revise.status_code == 400, revise.text
 
+    # Neither rejected write may append a fragment or another revision.
+    # The original plus the deliberately malformed imported row are all
+    # that may remain in this project's append-only identity history.
+    with app.state.session_factory() as session:
+        stored_revisions = sorted(
+            (row.organism_key, row.revision)
+            for row in session.scalars(
+                select(EcologyIdentityRevision).where(
+                    EcologyIdentityRevision.project_id == project_id
+                )
+            )
+        )
+    assert stored_revisions == sorted(
+        [("colony-20", 1), ("colony-20", imported_revision)]
+    )
+
     graph = {
         "graph_id": f"ecology-revision-gap-{imported_revision}",
         "name": "Fail closed on missing biological identity history",
