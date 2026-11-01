@@ -90,6 +90,8 @@ class MeshPreviewRequest(BaseModel):
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
     relative_scale_uncertainty: StrictFloat | StrictInt | None = Field(default=None, ge=0, le=1)
     calibration_review: MeshCalibrationReviewEvidence | None = None
+    # Project-scoped immutable review receipt; resolved only at execution.
+    calibration_review_id: str | None = Field(default=None, min_length=1, max_length=64)
     source_label: str | None = Field(default=None, max_length=200)
     # Optional replay guard for imported source bytes (OBJ/PLY UTF-8 or decoded GLB).
     # Matching bytes do not establish calibration, specimen identity or human review.
@@ -111,6 +113,11 @@ class MeshPreviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
+        if self.calibration_review_id is not None:
+            if self.asset_id is None:
+                raise ValueError("Saved calibration review requires a project asset ID")
+            if self.calibration_review is not None:
+                raise ValueError("Use a saved review ID or inline review, not both")
         if not self.calibration_evidence.strip():
             raise ValueError("Mesh calibration evidence cannot be blank")
         supplied_text = sum(
