@@ -12,17 +12,18 @@ from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 
 
 @pytest.mark.parametrize(
-    "nonindexed,explicit_targets,unsigned_byte_indices,position_offset,position_bounds,position_stride",
+    "nonindexed,explicit_targets,unsigned_byte_indices,position_offset,position_bounds,position_stride,index_bounds",
     [
-        (False, False, False, 0, False, None),
-        (False, True, False, 0, False, None),
-        (True, False, False, 0, False, None),
-        (False, False, True, 0, False, None),
-        (False, True, True, 0, False, None),
-        (False, False, False, 4, False, None),
-        (False, False, False, 0, True, None),
-        (False, False, False, 0, True, 16),
-        (False, False, False, 0, False, 20),
+        (False, False, False, 0, False, None, False),
+        (False, True, False, 0, False, None, False),
+        (True, False, False, 0, False, None, False),
+        (False, False, True, 0, False, None, False),
+        (False, True, True, 0, False, None, False),
+        (False, False, False, 4, False, None, False),
+        (False, False, False, 0, True, None, False),
+        (False, False, False, 0, True, 16, False),
+        (False, False, False, 0, False, 20, False),
+        (False, False, False, 0, False, None, True),
     ],
 )
 def test_saved_glb(
@@ -33,6 +34,7 @@ def test_saved_glb(
     position_offset: int,
     position_bounds: bool,
     position_stride: int | None,
+    index_bounds: bool,
 ) -> None:
     pid = create_project(client, "GLB saved")["id"]
     params = {
@@ -43,6 +45,7 @@ def test_saved_glb(
             position_offset=position_offset,
             position_bounds=position_bounds,
             position_stride=position_stride,
+            index_bounds=index_bounds,
         ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
@@ -119,6 +122,11 @@ def test_saved_glb(
         "stride_boolean",
         "stride_truncated",
         "stride_overlap",
+        "index_bounds_short",
+        "index_bounds_boolean",
+        "index_bounds_mismatch",
+        "index_bounds_negative",
+        "index_bounds_nan",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
