@@ -111,6 +111,10 @@ _COMPACT_TECHNICAL_REPLICATES = frozenset(
         "samplingdate",
         "samplingtime",
         "observationevent",
+        "timepoint",
+        "timepoints",
+        "timestamp",
+        "timestamps",
     }
 )
 
@@ -138,7 +142,12 @@ def require_ecological_unit_type(value: str | None) -> str | None:
     # Explicit compact tokens also reject all-lowercase exports (videoframe).
     words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", normalized)
     tokens = set(re.findall(r"[a-z0-9]+", words.casefold()))
-    if tokens & (_TECHNICAL_REPLICATES | _COMPACT_TECHNICAL_REPLICATES):
+    # CamelCase TimePoint becomes two harmless-looking tokens (time, point).
+    # Also check its compact form without changing the recorded source label.
+    compact = "".join(re.findall(r"[a-z0-9]+", normalized.casefold()))
+    if tokens & (_TECHNICAL_REPLICATES | _COMPACT_TECHNICAL_REPLICATES) or (
+        compact in _COMPACT_TECHNICAL_REPLICATES
+    ):
         raise ValueError(
             "Image, frame, camera and annotation records are technical replicates, "
             "not independent ecological experimental units"
