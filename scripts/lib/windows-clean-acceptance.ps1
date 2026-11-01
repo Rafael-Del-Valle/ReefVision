@@ -495,7 +495,10 @@ function Get-ReefVisionAutomatedAcceptanceGaps {
         if (-not $canonicalUtc -or -not [DateTimeOffset]::TryParse(
             $timestamp, [Globalization.CultureInfo]::InvariantCulture,
             [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsedTimestamp
-        ) -or $parsedTimestamp.Offset -ne [TimeSpan]::Zero) {
+        ) -or $parsedTimestamp.Offset -ne [TimeSpan]::Zero -or
+            $parsedTimestamp.UtcDateTime -gt [DateTime]::UtcNow.AddMinutes(5)) {
+            # A future-dated PASS is not an observed installation result.
+            # Allow five minutes of clock skew between acceptance machines.
             "$($name): INVALID TIMESTAMP"
         }
     }
