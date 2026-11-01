@@ -102,9 +102,7 @@ def test_imported_reverse_chronology_blocks_writes_and_saved_workflow(
     assert succeeded is False
     assert detail["run"]["status"] == "failed"
     assert "revision timestamps are not chronological" in detail["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in detail["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in detail["artifacts"])
 
 
 def test_equal_revision_timestamps_preserve_unverified_workflow_artifact(
@@ -174,9 +172,7 @@ def test_resigned_history_replay_rejects_reversed_timestamps(client: TestClient)
             ],
         }
     )
-    with pytest.raises(
-        PydanticValidationError, match="revision timestamps are not chronological"
-    ):
+    with pytest.raises(PydanticValidationError, match="revision timestamps are not chronological"):
         EcologyIdentityRegistryResponse.model_validate(changed)
 
 
@@ -195,3 +191,27 @@ def test_chronology_normalizes_timezone_offsets() -> None:
     second.created_at = datetime(2026, 1, 1, 4, 59, tzinfo=UTC)
     with pytest.raises(ValueError, match="revision timestamps are not chronological"):
         require_chronological_ecological_identity_revisions([first, second])
+
+
+def test_independent_organism_revision_clocks_do_not_require_global_order() -> None:
+    """Separate specimens have independent append-only revision chronologies."""
+    first_a = SimpleNamespace(
+        organism_key="coral-A", revision=1, created_at=datetime(2026, 2, 3, tzinfo=UTC)
+    )
+    second_a = SimpleNamespace(
+        organism_key="coral-A", revision=2, created_at=datetime(2026, 2, 4, tzinfo=UTC)
+    )
+    first_b = SimpleNamespace(
+        organism_key="coral-B", revision=1, created_at=datetime(2026, 1, 1, tzinfo=UTC)
+    )
+    second_b = SimpleNamespace(
+        organism_key="coral-B", revision=2, created_at=datetime(2026, 1, 2, tzinfo=UTC)
+    )
+    require_chronological_ecological_identity_revisions(
+        [second_a, second_b, first_a, first_b]
+    )
+    second_b.created_at = datetime(2025, 12, 31, tzinfo=UTC)
+    with pytest.raises(ValueError, match="revision timestamps are not chronological"):
+        require_chronological_ecological_identity_revisions(
+            [first_a, second_a, first_b, second_b]
+        )
