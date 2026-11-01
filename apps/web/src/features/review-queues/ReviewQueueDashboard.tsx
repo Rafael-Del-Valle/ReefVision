@@ -127,6 +127,10 @@ export function ReviewQueueDashboard({
   >(null);
   const reviewProtected =
     coordinationItemId !== null || bulkProtectedQueueId !== null;
+  // Queue generation may finish after coordination opens. Keep its original
+  // selection until the researcher explicitly closes protected review work.
+  const reviewProtectedRef = useRef(reviewProtected);
+  reviewProtectedRef.current = reviewProtected;
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
     useState(false);
 
@@ -291,7 +295,10 @@ export function ReviewQueueDashboard({
         : createReviewQueue(request.projectId, payload);
     },
     onSuccess: async (queue, request) => {
-      if (sameQueueScope(currentScope.current, request)) {
+      if (
+        sameQueueScope(currentScope.current, request) &&
+        !reviewProtectedRef.current
+      ) {
         setSelectedQueueId(queue.id);
         setQuickReviewItemId(null);
         setOpenQuickReviewWhenReady(request.reviewBelowConfidence !== "");
@@ -309,7 +316,10 @@ export function ReviewQueueDashboard({
     mutationFn: (request: QueueMutationScope & { queueId: string }) =>
       regenerateReviewQueue(request.queueId),
     onSuccess: async (queue, request) => {
-      if (sameQueueScope(currentScope.current, request)) {
+      if (
+        sameQueueScope(currentScope.current, request) &&
+        !reviewProtectedRef.current
+      ) {
         setSelectedQueueId(queue.id);
       }
       await queryClient.invalidateQueries({
@@ -567,13 +577,13 @@ export function ReviewQueueDashboard({
             {coordinationQueueId &&
               !scopedQueueId &&
               activeQueueId === coordinationQueueId && (
-              <p className="annotation-helper" role="status">
-                The selected queue is temporarily absent from the refreshed
-                list. Coordination remains open on its original queue to protect
-                unsent notes and audit retry IDs. Close it using its protected
-                controls before selecting another queue.
-              </p>
-            )}
+                <p className="annotation-helper" role="status">
+                  The selected queue is temporarily absent from the refreshed
+                  list. Coordination remains open on its original queue to
+                  protect unsent notes and audit retry IDs. Close it using its
+                  protected controls before selecting another queue.
+                </p>
+              )}
             <div className="version-list">
               {queues.data?.map((queue) => (
                 <button
