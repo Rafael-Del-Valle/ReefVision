@@ -33,6 +33,7 @@ from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
         (False, False, False, 0, False, None, False, False, "translation"),
         (False, False, False, 0, False, None, False, False, "rotation"),
         (False, False, False, 0, False, None, False, False, "scale"),
+        (False, False, False, 0, False, None, False, False, "matrix"),
     ],
 )
 def test_saved_glb(
@@ -157,6 +158,11 @@ def test_saved_glb(
         "nonidentity_rotation",
         "boolean_identity_translation",
         "short_identity_translation",
+        "nonidentity_matrix",
+        "boolean_identity_matrix",
+        "short_identity_matrix",
+        "mixed_matrix_trs",
+        "huge_identity_matrix",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
