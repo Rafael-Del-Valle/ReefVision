@@ -123,9 +123,30 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         or mesh_index != 0
         or len(scene_nodes) != 1
         or _as_int(scene_nodes[0], "scene node index") != 0
-        or any(key in node for key in ("matrix", "children", "skin", "weights"))
+        or any(key in node for key in ("children", "skin", "weights"))
     ):
         raise ValueError("GLB scene transforms, hierarchy and morph weights are unsupported")
+    # Some exporters write a column-major 4x4 identity matrix rather than
+    # omitting transforms. Accept only that exact no-op, never silently
+    # measure a translated, rotated, scaled, or malformed scene.
+    if "matrix" in node:
+        if any(key in node for key in ("translation", "rotation", "scale")):
+            raise ValueError("GLB matrix and TRS transforms cannot be combined")
+        matrix = _as_list(node["matrix"], "node matrix")
+        identity_matrix = (
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        )
+        if len(matrix) != 16 or any(
+            type(value) not in (int, float)
+            or not -1_000_000_000 <= value <= 1_000_000_000
+            or not isfinite(value)
+            or value != expected
+            for value, expected in zip(matrix, identity_matrix, strict=True)
+        ):
+            raise ValueError("GLB nonidentity or invalid scene transforms are unsupported")
     # Explicit identity TRS values are common in otherwise untransformed GLB
     # exports. Accept only exact identities; never silently apply a transform
     # to a specimen's calibrated geometry.
