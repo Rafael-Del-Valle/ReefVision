@@ -158,6 +158,12 @@ def make_glb(
             "translation": [0, 0, 0],
             "rotation": [0, 0, 0, 1],
             "scale": [1, 1, 1],
+            "matrix": [
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1,
+            ],
         }
         doc["nodes"][0][identity_transform] = identities[identity_transform]
     if translated:
@@ -170,6 +176,30 @@ def make_glb(
         doc["nodes"][0]["translation"] = [0, False, 0]
     elif invalid_selector == "short_identity_translation":
         doc["nodes"][0]["translation"] = [0, 0]
+    if invalid_selector in {
+        "nonidentity_matrix",
+        "boolean_identity_matrix",
+        "short_identity_matrix",
+        "mixed_matrix_trs",
+        "huge_identity_matrix",
+    }:
+        doc["nodes"][0]["matrix"] = [
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1,
+        ]
+        matrix = doc["nodes"][0]["matrix"]
+        if invalid_selector == "nonidentity_matrix":
+            matrix[12] = 1
+        elif invalid_selector == "boolean_identity_matrix":
+            matrix[0] = True
+        elif invalid_selector == "short_identity_matrix":
+            matrix.pop()
+        elif invalid_selector == "mixed_matrix_trs":
+            doc["nodes"][0]["translation"] = [0, 0, 0]
+        elif invalid_selector == "huge_identity_matrix":
+            matrix[0] = 10**400
     if invalid_selector == "node_morph_weights":
         doc["nodes"][0]["weights"] = [0.5]
     elif invalid_selector == "mesh_morph_weights":
@@ -301,12 +331,28 @@ def test_single_glb_triangle() -> None:
     assert faces == [[0, 1, 2]]
 
 
-@pytest.mark.parametrize("identity_transform", ["translation", "rotation", "scale"])
+@pytest.mark.parametrize("identity_transform", ["translation", "rotation", "scale", "matrix"])
 def test_explicit_identity_glb_transform_preserves_geometry(identity_transform: str) -> None:
     """Explicit no-op TRS must not change the measured source-frame geometry."""
     assert parse_glb_triangles(make_glb(identity_transform=identity_transform)) == (
         parse_glb_triangles(make_glb())
     )
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    [
+        "nonidentity_matrix",
+        "boolean_identity_matrix",
+        "short_identity_matrix",
+        "mixed_matrix_trs",
+        "huge_identity_matrix",
+    ],
+)
+def test_rejects_nonidentity_or_malformed_glb_matrix(invalid_selector: str) -> None:
+    """Unapplied, ambiguous or unbounded matrices cannot define coral dimensions."""
+    with pytest.raises(ValueError, match=r"matrix|transforms"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
 def test_rejects_scene_transforms() -> None:
