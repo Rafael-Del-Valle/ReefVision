@@ -277,6 +277,16 @@ describe("ReviewQueueDashboard scope isolation", () => {
     fireEvent.change(screen.getByLabelText("Coordination test draft"), {
       target: { value: "Unsent octocoral polyp observation" },
     });
+    // Finish the initial query before replacing the cached list. Otherwise
+    // its still-in-flight response can overwrite this synthetic refresh and
+    // the test never exercises the missing-queue protection branch.
+    await waitFor(() =>
+      expect(
+        client.isFetching({
+          queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+        }),
+      ).toBe(0),
+    );
 
     // A stale or incomplete server list must not unmount the open panel or
     // change the host's selected queue identity to a foreign queue.
@@ -752,8 +762,12 @@ describe("ReviewQueueDashboard scope isolation", () => {
         page_size: 25,
         pages: 1,
       } as Awaited<ReturnType<typeof getReviewQueueItems>>);
-      const { client, onSelectedQueueChange } = mount();
-      const action = await screen.findByRole("button", {
+      const { onSelectedQueueChange } = mount();
+      // Ensure the initial queue and item queries have settled before
+      // starting generation; otherwise the coordination control may not yet
+      // exist when the delayed mutation is deliberately held open.
+      await screen.findByRole("button", { name: "Comments & assignments" });
+      const action = screen.getByRole("button", {
         name: operation === "generate" ? "Generate queue" : "Regenerate",
       });
       fireEvent.click(action);
@@ -775,14 +789,20 @@ describe("ReviewQueueDashboard scope isolation", () => {
         queue("queue-a"),
         queue("queue-new"),
       ]);
+      const queueFetchesBeforeResolution =
+        vi.mocked(getReviewQueues).mock.calls.length;
       await act(async () => {
         resolvePending(queue("queue-new"));
         await pending;
       });
-      await waitFor(() => {
-        const mutations = client.getMutationCache().getAll();
-        expect(mutations.at(-1)?.state.status).toBe("success");
-      });
+      // The queue-history invalidation proves the mutation success handler
+      // ran. Avoid relying on the unrelated ordering of React Query's global
+      // mutation cache or on when an async invalidation changes its status.
+      await waitFor(() =>
+        expect(vi.mocked(getReviewQueues).mock.calls.length).toBeGreaterThan(
+          queueFetchesBeforeResolution,
+        ),
+      );
       expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
       expect(
         (
