@@ -205,7 +205,10 @@ def test_standalone_api_rejects_technical_units(
 
 
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
-@pytest.mark.parametrize("temporal_type", ["TimePoint", "observationEvent"])
+@pytest.mark.parametrize(
+    "temporal_type",
+    ["TimePoint", "observationEvent", "sampling_event", "survey_visit", "census_date"],
+)
 def test_temporal_unit_fails_standalone_and_saved_workflow(
     client: TestClient, kind: str, temporal_type: str
 ) -> None:
