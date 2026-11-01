@@ -415,6 +415,30 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             setattr(saved_run, field, original_value)
             session.commit()
 
+    # A corrupted saved recovery history must not disappear from exported
+    # scientific audit evidence for this actual frozen-pose workflow run.
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
+        assert saved_run is not None
+        original_run_result = dict(saved_run.result_json or {})
+        saved_run.result_json = {
+            **original_run_result,
+            "recovery_history": {"attempt": 1},
+        }
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="recovery history must be a list"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
+        assert saved_run is not None
+        saved_run.result_json = original_run_result
+        session.commit()
+
     with app.state.session_factory() as session:
         assert (
             build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
