@@ -406,6 +406,9 @@ class ReviewQueueService:
                     {
                         "id": prediction.id,
                         "model_id": prediction.model_id,
+                        "model_checksum": prediction.model_checksum,
+                        "inference_job_id": prediction.inference_job_id,
+                        "inference_settings": prediction.inference_settings_json,
                         "label_class_id": prediction.label_class_id,
                         "predicted_label": prediction.predicted_label,
                         "predicted_index": prediction.predicted_index,
@@ -416,9 +419,15 @@ class ReviewQueueService:
                             prediction.x_max,
                             prediction.y_max,
                         ],
+                        # A polygon or mask may change without changing its
+                        # enclosing bounding box, class, count or priority.
+                        "geometry_kind": prediction.geometry_kind,
+                        "polygon_xy": prediction.polygon_json,
+                        "mask_content_sha256": prediction.mask_content_sha256,
                         "review_status": prediction.review_status,
                         "was_edited": prediction.was_edited,
                         "accepted_annotation_id": prediction.accepted_annotation_id,
+                        "accepted_mask_annotation_id": prediction.accepted_mask_annotation_id,
                         "provenance": prediction.provenance_json,
                     }
                     for prediction in sorted(predictions, key=lambda item: item.id)
