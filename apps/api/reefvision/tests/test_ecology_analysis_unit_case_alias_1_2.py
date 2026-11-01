@@ -147,9 +147,12 @@ def test_shared_tank_alias_saved_workflow_preserves_one_unit_and_review(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
@@ -158,11 +161,9 @@ def test_shared_tank_alias_saved_workflow_preserves_one_unit_and_review(
     ]
     assert len(artifacts) == 1
     result = artifacts[0]["payload_json"]
-    count_field = (
-        "independent_unit_count"
-        if kind == "longitudinal"
-        else "declared_independent_unit_count"
-    )
+    count_field = "independent_unit_count"
+    if kind == "paired":
+        count_field = "declared_independent_unit_count"
     assert result[count_field] == standalone.json()[count_field] == 1
     assert result["evidence_level"] == "caller_supplied_unverified"
     assert result["analysis_provenance"] == standalone.json()["analysis_provenance"]
