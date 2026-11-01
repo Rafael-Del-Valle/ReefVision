@@ -304,6 +304,102 @@ describe("ReviewQueueBulkTriage", () => {
     },
   );
 
+  it.each([
+    {
+      name: "foreign project",
+      mutate: (row: ReviewQueueItem) => ({ ...row, project_id: "foreign-project" }),
+    },
+    {
+      name: "different source image",
+      mutate: (row: ReviewQueueItem) => ({ ...row, image_id: "other-image" }),
+    },
+    {
+      name: "changed dataset version",
+      mutate: (row: ReviewQueueItem) => ({
+        ...row,
+        dataset_version_id: "other-dataset",
+      }),
+    },
+    {
+      name: "changed source checksum",
+      mutate: (row: ReviewQueueItem) => ({
+        ...row,
+        input_checksum: "new-source-checksum",
+      }),
+    },
+    {
+      name: "changed priority score",
+      mutate: (row: ReviewQueueItem) => ({ ...row, score: 987 }),
+    },
+    {
+      name: "changed biological class evidence",
+      mutate: (row: ReviewQueueItem) => ({
+        ...row,
+        label_class_ids_json: ["other-species"],
+      }),
+    },
+    {
+      name: "changed reason summary",
+      mutate: (row: ReviewQueueItem) => ({
+        ...row,
+        reason_summary: "Different biological evidence",
+      }),
+    },
+  ])(
+    "keeps the exact bulk UUID when HTTP success returns $name",
+    async ({ mutate }) => {
+      vi.mocked(bulkTriageReviewQueueItems)
+        .mockImplementationOnce(async (queueId, payload) => ({
+          queue_id: queueId,
+          action: payload.action,
+          changed_count: 1,
+          items: responseItems(queueId, payload.action, payload.item_ids).map(
+            mutate,
+          ),
+          requires_researcher_review: true,
+        }))
+        .mockImplementationOnce(async (queueId, payload) => ({
+          queue_id: queueId,
+          action: payload.action,
+          changed_count: 0,
+          items: responseItems(queueId, payload.action, payload.item_ids),
+          requires_researcher_review: true,
+        }));
+      const invalidate = mount();
+      fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+        target: { value: "coral reviewer" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: /Select eligible on page/ }),
+      );
+      fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply start to 1 items" }),
+      );
+      const retry = await screen.findByRole("button", {
+        name: "Retry identical bulk action",
+      });
+      const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
+      expect(screen.getByRole("alert").textContent).toContain(
+        "immutable biological evidence",
+      );
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(invalidate).not.toHaveBeenCalled();
+      fireEvent.click(retry);
+      await waitFor(() =>
+        expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(2),
+      );
+      expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1]).toEqual(
+        original,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain(
+          "scientific review remains required",
+        ),
+      );
+    },
+  );
+
   it.each([-1, 2, 0.5, Number.NaN])(
     "rejects invalid bulk changed count %s without acknowledging a batch",
     async (changedCount) => {
