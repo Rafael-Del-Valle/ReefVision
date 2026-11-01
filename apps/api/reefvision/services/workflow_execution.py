@@ -209,6 +209,13 @@ class WorkflowExecutionService:
 
     def get_run_detail(self, run_id: str) -> WorkflowRunDetailResponse:
         run = self._run(run_id)
+        # The run-detail API exposes persisted scientific evidence just like
+        # provenance export. Reject malformed JSON instead of returning a 500
+        # from response serialization (or coercing key/value pairs).
+        if run.input_json is not None and not isinstance(run.input_json, dict):
+            raise ConflictError("Workflow run inputs must be a JSON object")
+        if run.result_json is not None and not isinstance(run.result_json, dict):
+            raise ConflictError("Workflow run result must be a JSON object")
         # Run-detail retrieval must enforce the same saved-graph lineage as
         # provenance export. Artifact checksums alone cannot establish which
         # workflow produced a scientific result after its graph is altered.
