@@ -109,6 +109,12 @@ _COMPACT_TECHNICAL_REPLICATES = frozenset(
         "cameraview",
         "detectionbox",
         "samplingdate",
+        "samplingevent",
+        "samplingoccasion",
+        "surveyvisit",
+        "surveyround",
+        "censusdate",
+        "censusvisit",
         "samplingtime",
         "observationevent",
         "timepoint",
@@ -145,9 +151,7 @@ def require_ecological_unit_type(value: str | None) -> str | None:
     # CamelCase TimePoint becomes two harmless-looking tokens (time, point).
     # Also check its compact form without changing the recorded source label.
     compact = "".join(re.findall(r"[a-z0-9]+", normalized.casefold()))
-    is_technical_token = bool(
-        tokens & (_TECHNICAL_REPLICATES | _COMPACT_TECHNICAL_REPLICATES)
-    )
+    is_technical_token = bool(tokens & (_TECHNICAL_REPLICATES | _COMPACT_TECHNICAL_REPLICATES))
     if is_technical_token or compact in _COMPACT_TECHNICAL_REPLICATES:
         raise ValueError(
             "Image, frame, camera and annotation records are technical replicates, "
