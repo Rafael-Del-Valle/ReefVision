@@ -84,7 +84,7 @@ def extend_mesh_registry(
                 "Uses the same bounded preview engine as the standalone API.",
                 "Geometry and calibration remain caller_supplied_unverified.",
                 "Independent calibration review is provisional geometry-bound audit evidence.",
-                "Saved calibration_review_id is project/asset-scoped and integrity-checked at run time.",
+                "Saved review IDs are project-bound and integrity-checked at run time.",
                 "Project asset IDs are resolved from SHA-256-verified local originals at run time.",
                 "Large stored originals remain subject to bounded preview parser limits.",
                 "Optional source SHA-256 binding rejects changed OBJ/PLY/GLB bytes on replay.",
@@ -139,7 +139,7 @@ def extend_mesh_registry(
             implementation_notes=[
                 "Same bounded point-cloud engine as standalone API.",
                 "Independent point-cloud calibration review is provisional source-bound QC.",
-                "Saved calibration_review_id is project/asset-scoped and integrity-checked at run time.",
+                "Saved review IDs are project-bound and integrity-checked at run time.",
                 "Calibration and coordinate registration remain unverified.",
                 "No surface area or biological branch length is inferred.",
                 "Selected point-pair chords are not biological branch lengths.",
