@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -76,7 +76,7 @@ def test_mutated_review_cannot_be_persisted(client: TestClient, field: str, valu
             {"offset": 1.5},
         ):
             with pytest.raises(ValidationError):
-                service.list(project_id, asset["id"], **pagination)
+                service.list(project_id, asset["id"], **cast(dict[str, Any], pagination))
         assert [record.id for record in service.list(project_id, asset["id"])] == [valid.id]
     fetched = client.get(f"{base}/spatial/assets/{asset['id']}/calibration-reviews/{valid.id}")
     assert fetched.status_code == 200, fetched.text
