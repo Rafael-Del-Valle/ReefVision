@@ -210,6 +210,33 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert preserved.status_code == 200, preserved.text
     assert preserved.json() == run
 
+    # A saved successful frozen-pose run must not advertise completion if
+    # its only planned node is later marked failed, even when its artifact
+    # checksum and output ownership remain unchanged.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.status = "failed"
+        session.commit()
+
+    incomplete_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert incomplete_detail.status_code == 409, incomplete_detail.text
+    assert incomplete_detail.json() == {
+        "detail": "Succeeded workflow run contains an incomplete node"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="run contains an incomplete node"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.status = "succeeded"
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+
     # A digest-valid artifact is not trustworthy if its saved producer has
     # changed. The run-detail API must reject that lineage drift, not merely
     # the provenance-export endpoint.
