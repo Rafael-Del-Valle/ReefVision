@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError as PydanticValidationError
 
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
 from reefvision.services.spatial_calibration_review_v14 import SpatialCalibrationReviewService
 from reefvision.tests.test_annotations import create_project
@@ -26,9 +27,7 @@ OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
         ("reviewed_geometry_sha256", "not-a-sha"),
     ],
 )
-def test_mutated_review_cannot_be_persisted(
-    client: TestClient, field: str, value: object
-) -> None:
+def test_mutated_review_cannot_be_persisted(client: TestClient, field: str, value: object) -> None:
     project_id = str(create_project(client, "Mutation-safe calibration receipt")["id"])
     base = f"/api/v1/projects/{project_id}"
     imported = client.post(f"{base}/spatial/assets", files={"file": ("colony.obj", OBJ)})
@@ -63,6 +62,21 @@ def test_mutated_review_cannot_be_persisted(
         )
         assert valid.calibration_verified is False
         assert valid.reviewer_authenticated is False
+        assert [record.id for record in service.list(project_id, asset["id"])] == [valid.id]
+        # Internal consumers must obey the same bounded, integer-only contract
+        # as the HTTP route. In SQLite, LIMIT -1 would otherwise expose all rows.
+        for pagination in (
+            {"limit": 0},
+            {"limit": -1},
+            {"limit": 101},
+            {"limit": True},
+            {"limit": 1.5},
+            {"offset": -1},
+            {"offset": True},
+            {"offset": 1.5},
+        ):
+            with pytest.raises(ValidationError):
+                service.list(project_id, asset["id"], **pagination)
         assert [record.id for record in service.list(project_id, asset["id"])] == [valid.id]
     fetched = client.get(f"{base}/spatial/assets/{asset['id']}/calibration-reviews/{valid.id}")
     assert fetched.status_code == 200, fetched.text
