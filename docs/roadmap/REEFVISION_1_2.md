@@ -5371,3 +5371,30 @@ statistics. No 1.1 environmental context, migrations or weights changed.
 evidence, real experimental-unit verification, representative human/model
 biological acceptance, migration reconciliation and physical installed
 Windows MSI/GUI tests. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Case-alias CI unblock and valid saved-workflow parity (2026-10-31)
+
+At predecessor `dddb5fe1a7fc195cad7145e1e672560edf438aac`, all 19
+GitHub Actions workflows completed: 16 passed (including Windows Desktop
+Build and frontend/E2E), while backend CI, Pose Workflow Validation and
+ReefVision 1.0 Acceptance failed at Ruff formatting before pytest.
+The log identifies a single wrapped function signature in
+`test_ecology_analysis_unit_case_alias_1_2.py`; Ruff lint passed.
+The exact requested signature formatting has been applied without changing
+the biological case-alias validator.
+
+The regression suite additionally exercises **successful execution of saved,
+persisted Workflow Builder graphs** for a shared physical tank under equivalent
+`tank`/`aquarium` labels, for both longitudinal and paired human/model
+analyses. Each must yield exactly one independent-unit vote, retain
+`caller_supplied_unverified` evidence, and match the standalone analysis
+fingerprint. Existing invalid-case saved graphs must still fail without
+publishing an analysis artifact. This checks both rejection and valid-use
+compatibility, not authenticated biological independence or scientific review.
+
+**Release HOLD:** exact new-head Ruff/pytest/backend/frontend/E2E/Windows CI;
+scientist-reviewed calibrated longitudinal evidence, real independent-unit
+design verification, representative human/model biological acceptance,
+1.1 migration reconciliation and installed Windows MSI/GUI validation.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
