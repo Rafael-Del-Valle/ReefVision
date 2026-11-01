@@ -267,7 +267,7 @@ describe("Gallery pending thumbnail refresh", () => {
 });
 
 describe("Gallery", () => {
-  it("recovers a deleted saved page and restores the first available camera image", async () => {
+  it("recovers an out-of-range saved page and first image", async () => {
     const preferenceKey = "reefvision.gallery.project-1.v1";
     window.localStorage.setItem(
       preferenceKey,
@@ -296,7 +296,9 @@ describe("Gallery", () => {
     ).toBeInTheDocument();
     expect(requestedPages).toEqual([50, 1]);
     await waitFor(() => {
-      expect(JSON.parse(window.localStorage.getItem(preferenceKey) ?? "null")).toEqual({
+      expect(
+        JSON.parse(window.localStorage.getItem(preferenceKey) ?? "null"),
+      ).toEqual({
         imageId: "image-1",
         page: 1,
         wrap: true,
