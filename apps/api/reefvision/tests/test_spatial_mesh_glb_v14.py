@@ -20,14 +20,13 @@ def make_glb(
     nonindexed_vertices: int | None = None,
     unsigned_byte_indices: bool = False,
     position_offset: int = 0,
+    position_bounds: bool = False,
 ) -> str:
     if invalid_selector == "misaligned_position_view":
         position_offset = 2
     positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, 0)
     index_bytes = (
-        struct.pack("<3B", 0, 1, 2)
-        if unsigned_byte_indices
-        else struct.pack("<3H", 0, 1, 2)
+        struct.pack("<3B", 0, 1, 2) if unsigned_byte_indices else struct.pack("<3H", 0, 1, 2)
     )
     binary = b"\x00" * position_offset + positions + index_bytes
     doc = {
@@ -75,6 +74,17 @@ def make_glb(
             }
         ]
         del doc["meshes"][0]["primitives"][0]["indices"]
+    if position_bounds:
+        doc["accessors"][0]["min"] = [0.0, 0.0, 0.0]
+        doc["accessors"][0]["max"] = [2.0, 3.0, 0.0]
+    if invalid_selector == "bounds_short":
+        doc["accessors"][0]["min"] = [0.0, 0.0]
+    elif invalid_selector == "bounds_boolean":
+        doc["accessors"][0]["max"] = [2.0, True, 0.0]
+    elif invalid_selector == "bounds_nan":
+        doc["accessors"][0]["min"] = [0.0, float("nan"), 0.0]
+    elif invalid_selector == "bounds_mismatch":
+        doc["accessors"][0]["max"] = [3.0, 3.0, 0.0]
     if invalid_selector == "byte_index_oob" and unsigned_byte_indices:
         binary = binary[:-1] + b"\x03"
     if translated:
@@ -234,10 +244,23 @@ def test_glb_position_buffer_view_accepts_four_byte_component_alignment() -> Non
     assert offset_mesh == default_mesh
 
 
-@pytest.mark.parametrize(
-    "invalid_selector", ["misaligned_position_view", "index_stride"]
-)
+@pytest.mark.parametrize("invalid_selector", ["misaligned_position_view", "index_stride"])
 def test_rejects_invalid_glb_alignment_or_index_stride(invalid_selector: str) -> None:
     """Reject non-four-byte views and byteStride on index buffer views."""
     with pytest.raises(ValueError, match=r"misaligns|strided"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_valid_glb_position_bounds_match_unannotated_geometry() -> None:
+    """Exporter bounds are checked but never treated as scale verification."""
+    assert parse_glb_triangles(make_glb(position_bounds=True)) == parse_glb_triangles(make_glb())
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    ["bounds_short", "bounds_boolean", "bounds_nan", "bounds_mismatch"],
+)
+def test_rejects_invalid_or_contradictory_glb_position_bounds(invalid_selector: str) -> None:
+    """Untrusted min/max metadata must not contradict the decoded geometry."""
+    with pytest.raises(ValueError, match=r"bounds|nonfinite"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
