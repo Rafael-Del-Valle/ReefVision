@@ -573,9 +573,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
 
     malformed_history = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert malformed_history.status_code == 409, malformed_history.text
-    assert malformed_history.json() == {
-        "detail": "Workflow recovery history must be a list"
-    }
+    assert malformed_history.json() == {"detail": "Workflow recovery history must be a list"}
 
     with app.state.session_factory() as session:
         saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
