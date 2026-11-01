@@ -109,6 +109,15 @@ class EvaluatedPrediction:
     accepted_annotation_id: str | None
     provenance_json: dict[str, Any] | None
     created_at: datetime
+    # Keep optional fields at the end for existing QC context constructors.
+    # Multimodal proposal evidence must not be collapsed to its bounding box.
+    geometry_kind: str = "bounding_box"
+    polygon_json: list[list[float]] | None = None
+    mask_content_sha256: str | None = None
+    model_checksum: str | None = None
+    inference_job_id: str | None = None
+    accepted_mask_annotation_id: str | None = None
+    inference_settings_json: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -1759,6 +1768,13 @@ class QualityControlService:
                 accepted_annotation_id=prediction.accepted_annotation_id,
                 provenance_json=prediction.provenance_json,
                 created_at=prediction.created_at,
+                geometry_kind=prediction.geometry_kind,
+                polygon_json=prediction.polygon_json,
+                mask_content_sha256=prediction.mask_content_sha256,
+                model_checksum=prediction.model_checksum,
+                inference_job_id=prediction.inference_job_id,
+                accepted_mask_annotation_id=prediction.accepted_mask_annotation_id,
+                inference_settings_json=prediction.inference_settings_json,
             )
             for prediction in self.session.scalars(prediction_statement)
         ]
