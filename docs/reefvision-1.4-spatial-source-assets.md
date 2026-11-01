@@ -382,3 +382,43 @@ area parity, and rejection without a measurement artifact. This is source-format
 compatibility only: accepted geometry remains provisionally calibrated,
 biological identity and registration remain unverified, and the preview does
 not evaluate general scene transforms, animation, or skinning.
+
+## Durable provisional calibration review receipts (1.4 development)
+
+An imported OBJ/PLY/GLB asset can now store append-only, project-scoped
+calibration review receipts through
+`POST /api/v1/projects/{project_id}/spatial/assets/{asset_id}/calibration-reviews`.
+The corresponding `GET` collection and detail endpoints return the recorded
+evidence. The record includes a SHA-256 digest of canonicalized, typed review
+evidence, the immutable source's SHA-256, the project and source asset IDs, and
+the creation timestamp. Repeated identical submissions return the same receipt;
+a revised note or decision creates a distinct receipt rather than overwriting
+the original. The first 100 records are returned in chronological order.
+
+The server requires a source-asset ID and source-byte digest in each review,
+checks both against the project-owned original, and re-verifies the source
+bytes before recording or returning evidence. Stored review evidence is
+revalidated against its digest on read. Cross-project access is rejected.
+No endpoint updates or deletes review records.
+
+**Important:** Reviewer/operator IDs are self-declared strings, not
+authenticated accounts. The API explicitly returns
+`reviewer_authenticated=false`, `calibration_verified=false`, and
+`specimen_identity_verified=false`. A matching source digest and an
+attributed human note do **not** validate the physical scale, geometry,
+identity, or survey independence. These receipts do not change the preview's
+verification tier.
+
+A receipt's `evidence` can be supplied as `calibration_review` in the
+existing standalone mesh preview or a saved, typed, executable Workflow
+Builder graph. Both paths independently check the review's geometry,
+calibration, observation, and source bindings. Acceptance tests exercise
+idempotent persistence, cross-project rejection, tamper detection, and
+standalone/saved-workflow measurement parity. Automatic receipt-ID resolution
+inside workflow nodes, authenticated reviewer sessions, independent physical
+scale verification, and installed Windows acceptance remain future work.
+
+This isolated 1.4 branch introduces Alembic revision `0039` after `0038`.
+Other version branches may independently use the same revision identifier;
+their migration histories must be reconciled explicitly during reviewed
+integration, without silently merging unreviewed versions.
