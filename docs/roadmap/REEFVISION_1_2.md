@@ -5313,3 +5313,32 @@ scientist-reviewed calibrated longitudinal evidence, representative
 human/model ecological acceptance, registered independent experimental units,
 1.1 Alembic reconciliation and installed Windows MSI/GUI acceptance.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Polygon-versus-raster QC regression isolation and source restoration (2026-10-31)
+
+At predecessor `491b8c79e7bb1a1b3b57ce694fada5687ef18390`, all 19 Actions
+workflows completed: 17 succeeded (including Windows Desktop Build,
+Pose Workflow Validation and frontend/E2E), while backend CI and ReefVision
+1.0 Acceptance each reported **1 failed, 2,223 passed, 32 skipped**.
+The sole failure was
+`test_polygon_bbox_change_revokes_registry_and_saved_workflow`:
+the new source-mask pixel-envelope guard correctly rejected an artificially
+shrunken bounding box **before** the polygon-versus-bbox assertion could
+run. The old test expected the later error message. This is test-fixture
+interference between two independently valid scientific QC safeguards,
+not evidence that a corrupted mask was accepted.
+
+The regression now sets a plausible temporary raster pixel count while
+shrinking the bbox, so the intended polygon-extent check is exercised by
+both the standalone ecological registry and an executed saved Workflow
+Builder graph. It also restores the **exact original** source bbox and
+raster count, then verifies standalone registry recovery, typed persisted
+workflow-artifact parity, and the unchanged `scientist_review_required`
+gate. This does not create a verified biological observation, change
+model weights, merge another branch, or bypass independent-unit QC.
+
+**Release HOLD:** exact new-head CI and repository test execution,
+authenticated scientist-reviewed longitudinal evidence, representative
+human/model comparisons, real independent experimental-unit verification,
+1.1 Alembic reconciliation, and physical installed Windows MSI/GUI
+acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
