@@ -34,6 +34,27 @@ SQLite transaction committed and its HTTP response was lost.
   download, research-record deletion or persistent storage of self-reported
   reviewer identities is introduced.
 
+## Coordination queue refresh protection
+
+When a background queue-list refresh temporarily omits the active queue,
+the dashboard pins **either** an unresolved bulk request **or** an open
+single-item coordination session to its original queue. The coordination
+panel remains mounted so unsent biological notes and uncertain audit-event
+retry identities are not lost. A visible warning explains the missing
+queue-list entry, while queue switching and editor navigation remain
+disabled until the researcher explicitly closes or resolves the session.
+This pin is scoped to the original project and selected queue; it must
+not select a queue from another project. A temporary list omission does
+not establish that the underlying queue or scientific data was deleted.
+
+`ReviewQueueDashboard.scope.test.tsx` exercises the coordination draft,
+missing-list refresh, protected queue identity and uncertain bulk retry
+paths. A filtered-item query may resolve asynchronously; assertions must
+wait for the item rather than treating a transient loading state as a
+permanent absence. These UI protections are not durable crash recovery,
+and they do not change the existing executable, saved, typed
+`qc_review_queue` Workflow Builder node.
+
 ## Acceptance and limitations
 
 `ReviewQueueBulkTriage.windowClose.test.tsx` covers idle closure,
