@@ -124,7 +124,9 @@ class SpatialCalibrationReviewService:
             raise NotFoundError("Spatial calibration review not found for project asset")
         return self._response(project_id, asset_id, record)
 
-    def list(self, project_id: str, asset_id: str) -> list[SpatialCalibrationReviewResponse]:
+    def list(
+        self, project_id: str, asset_id: str, *, limit: int = 100, offset: int = 0
+    ) -> list[SpatialCalibrationReviewResponse]:
         self.sources.get(project_id, asset_id)
         records = self.session.scalars(
             select(SpatialCalibrationReviewRecord)
@@ -133,6 +135,7 @@ class SpatialCalibrationReviewService:
                 SpatialCalibrationReviewRecord.spatial_source_asset_id == asset_id,
             )
             .order_by(SpatialCalibrationReviewRecord.created_at, SpatialCalibrationReviewRecord.id)
-            .limit(100)
+            .limit(limit)
+            .offset(offset)
         )
         return [self._response(project_id, asset_id, record) for record in records]
