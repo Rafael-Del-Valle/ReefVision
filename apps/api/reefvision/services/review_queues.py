@@ -373,6 +373,12 @@ class ReviewQueueService:
                 # The source-image digest, not its mutable filename or path,
                 # identifies the pixels that a researcher is asked to review.
                 "image_sha256": image.sha256,
+                # Biological experimental grouping and pixel dimensions affect
+                # interpretation even when object counts and priority stay fixed.
+                # Dataset-version queues use the frozen image snapshot fields.
+                "group_key": image.group_key,
+                "width_px": image.width_px,
+                "height_px": image.height_px,
                 "split": split_by_image_id.get(image.image_id),
                 "annotation_status": image.annotation_status,
                 "annotation_count": annotation_count,
