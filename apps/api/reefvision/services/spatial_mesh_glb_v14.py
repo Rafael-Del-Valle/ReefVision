@@ -121,11 +121,13 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         or _as_int(scene_nodes[0], "scene node index") != 0
         or any(
             key in node
-            for key in ("matrix", "translation", "rotation", "scale", "children", "skin")
+            for key in ("matrix", "translation", "rotation", "scale", "children", "skin", "weights")
         )
     ):
         raise ValueError("GLB scene transforms and hierarchy are unsupported")
     mesh = _as_object(meshes[0], "mesh")
+    if "weights" in mesh:
+        raise ValueError("GLB morph weights are unsupported")
     primitives = _as_list(mesh.get("primitives"), "primitives")
     if len(primitives) != 1:
         raise ValueError("GLB preview requires one primitive")
@@ -242,11 +244,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
                 continue
             declared = _as_list(index_accessor[field], f"index {field}")
             expected = reducer(indices)
-            if (
-                len(declared) != 1
-                or type(declared[0]) is not int
-                or declared[0] != expected
-            ):
+            if len(declared) != 1 or type(declared[0]) is not int or declared[0] != expected:
                 raise ValueError("GLB index bounds conflict with decoded indices")
     else:
         # glTF TRIANGLES may omit indices; each consecutive vertex triplet
