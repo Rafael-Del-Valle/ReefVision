@@ -222,7 +222,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
 
     producer_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert producer_detail.status_code == 409, producer_detail.text
-    assert "output produced by another node" in producer_detail.json()["detail"]
+    assert "undeclared output artifact" in producer_detail.json()["detail"]
 
     with app.state.session_factory() as session:
         artifact = session.get(WorkflowArtifact, outputs[0]["id"])
