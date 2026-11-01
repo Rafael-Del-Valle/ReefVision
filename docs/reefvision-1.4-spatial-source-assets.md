@@ -333,3 +333,19 @@ artifact. This does not add scene transforms, compressed geometry,
 external buffers, sparse accessors, verified scale, biological identity,
 or authenticated scientific review. Original source bytes remain distinct
 from canonical geometry and are never replaced by a derived mesh.
+
+## GLB minimum-reader version and index extrema integrity
+
+For glTF 2.0 previews, an optional `asset.minVersion` must explicitly be the
+string `"2.0"`; malformed types and newer minimum-reader requirements fail
+closed instead of being treated as compatible. Optional index-accessor `min`
+and `max` metadata must be JSON integers, not numerically equal floats or
+booleans, and must agree with the decoded unsigned index buffer. Missing
+optional fields remain supported. This avoids trusting malformed exporter
+metadata when preparing provisional coral surface measurements.
+
+Parser regressions cover valid and invalid metadata. The same rejection is
+exercised through standalone project-scoped analysis and saved executable
+typed Workflow Builder graphs; failed runs must not publish a mesh measurement
+artifact. These checks validate source-format consistency only. They do not
+verify physical calibration, organism identity, growth, or scientific review.
