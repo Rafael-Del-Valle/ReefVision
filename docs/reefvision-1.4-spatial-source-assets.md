@@ -466,3 +466,19 @@ exercise post-construction mutation and successful retrieval of a valid receipt.
 The digest is an integrity check, not a signature: reviewer attribution remains
 self-declared, and calibration, specimen identity, and acquisition accuracy
 remain unverified.
+
+## Service-boundary review pagination hardening
+
+The calibration-review service now enforces the same `limit=1..100` and
+nonnegative `offset` contract as its HTTP route. Direct Python callers
+(including future scientific automation) cannot bypass the route to request
+unbounded or negative SQLite page limits. Booleans and fractional numbers
+are rejected as pagination values even though Python and SQLite can coerce
+some of them. Rejected requests do not alter the append-only review ledger.
+Regression tests cover the service boundary and preserved valid receipt
+retrieval; the existing typed persisted Workflow Builder review replay
+remains unchanged.
+
+This is an auditability and resource-bounding safeguard, **not** evidence
+of authenticated reviewers, independently verified calibration, registered
+survey coordinates, or confirmed biological identity.
