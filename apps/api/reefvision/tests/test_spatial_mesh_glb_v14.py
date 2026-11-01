@@ -158,6 +158,40 @@ def make_glb(
         doc["nodes"][0]["weights"] = [0.5]
     elif invalid_selector == "mesh_morph_weights":
         doc["meshes"][0]["weights"] = [0.5]
+    if invalid_selector == "animated_node":
+        # A valid two-keyframe translation changes the scene at t=1 second.
+        # Its bind-pose vertices must not be measured as the animated coral.
+        aligned_start = (len(binary) + 3) // 4 * 4
+        binary += b"\\x00" * (aligned_start - len(binary))
+        time_data = struct.pack("<2f", 0.0, 1.0)
+        translation_data = struct.pack("<6f", 0, 0, 0, 1, 0, 0)
+        doc["bufferViews"].extend(
+            [
+                {"buffer": 0, "byteOffset": aligned_start, "byteLength": len(time_data)},
+                {
+                    "buffer": 0,
+                    "byteOffset": aligned_start + len(time_data),
+                    "byteLength": len(translation_data),
+                },
+            ]
+        )
+        doc["accessors"].extend(
+            [
+                {"bufferView": 2, "componentType": 5126, "count": 2, "type": "SCALAR"},
+                {"bufferView": 3, "componentType": 5126, "count": 2, "type": "VEC3"},
+            ]
+        )
+        doc["animations"] = [
+            {
+                "samplers": [{"input": 2, "output": 3, "interpolation": "LINEAR"}],
+                "channels": [{"sampler": 0, "target": {"node": 0, "path": "translation"}}],
+            }
+        ]
+        binary += time_data + translation_data
+        doc["buffers"][0]["byteLength"] = len(binary)
+    elif invalid_selector == "unbound_skin":
+        # Even an unbound skin is unsupported metadata in this strict preview.
+        doc["skins"] = [{"joints": [0]}]
     if invalid_selector == "scene":
         doc["scene"] = False
     elif invalid_selector == "mesh":
@@ -249,6 +283,13 @@ def test_rejects_scene_transforms() -> None:
 def test_rejects_unapplied_glb_morph_weights(invalid_selector: str) -> None:
     """Do not measure base vertices while silently ignoring morph weights."""
     with pytest.raises(ValueError, match="morph weights"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+@pytest.mark.parametrize("invalid_selector", ["animated_node", "unbound_skin"])
+def test_rejects_animated_or_skinned_glb(invalid_selector: str) -> None:
+    """Do not silently report undeformed vertices as a time-varying scene."""
+    with pytest.raises(ValueError, match="animations and skinning"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
