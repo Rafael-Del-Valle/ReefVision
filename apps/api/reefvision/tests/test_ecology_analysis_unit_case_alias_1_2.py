@@ -156,9 +156,7 @@ def test_shared_tank_alias_saved_workflow_preserves_one_unit_and_review(
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
-    artifacts = [
-        row for row in detail.json()["artifacts"] if row["data_type"] == artifact_type
-    ]
+    artifacts = [row for row in detail.json()["artifacts"] if row["data_type"] == artifact_type]
     assert len(artifacts) == 1
     result = artifacts[0]["payload_json"]
     count_field = "independent_unit_count"
