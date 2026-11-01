@@ -120,6 +120,8 @@ def test_saved_glb(
     [
         "mode_float",
         "json_nan",
+        "json_exponent_overflow",
+        "json_negative_exponent_overflow",
         "nonzero_bin_padding",
         "nonindexed_partial",
         "position_target_index",
