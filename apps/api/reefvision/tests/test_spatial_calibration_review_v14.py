@@ -91,6 +91,20 @@ def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     assert first_page.json() == reviews[:2]
     assert last_page.json() == reviews[2:]
     assert client.get(reviews_url, params={"offset": 3}).json() == []
+    cursor_page = client.get(
+        reviews_url, params={"limit": 2, "after_review_id": reviews[0]["id"]}
+    )
+    assert cursor_page.status_code == 200, cursor_page.text
+    assert cursor_page.json() == reviews[1:]
+    assert client.get(
+        reviews_url, params={"after_review_id": reviews[-1]["id"]}
+    ).json() == []
+    assert client.get(
+        reviews_url, params={"after_review_id": "missing-review"}
+    ).status_code == 404
+    assert client.get(
+        reviews_url, params={"after_review_id": reviews[0]["id"], "offset": 1}
+    ).status_code == 400
     for invalid in ({"limit": 0}, {"limit": 101}, {"offset": -1}):
         assert client.get(reviews_url, params=invalid).status_code == 422
 
@@ -165,6 +179,33 @@ def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     ]
     assert artifacts == [expected]
 
+    # A later, cursor-discovered revision must also replay through the same
+    # standalone measurement engine and an independently persisted typed graph.
+    later_params = {**params, "calibration_review_id": reviews[-1]["id"]}
+    later = client.post(f"{base}/spatial/mesh-preview", json=later_params)
+    assert later.status_code == 200, later.text
+    assert later.json()["provenance"]["calibration_verified"] is False
+    assert later.json()["provenance"]["calibration_review_record_id"] == reviews[-1]["id"]
+    graph["graph_id"] = "durable-review-cursor-replay-v14"
+    graph["nodes"][1]["parameters"] = later_params
+    saved_later = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved_later.status_code == 201, saved_later.text
+    run_later = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved_later.json()["id"]}
+    )
+    assert run_later.status_code == 202, run_later.text
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run_later.json()["job_id"])
+    )
+    detail_later = client.get(f"/api/v1/workflow-runs/{run_later.json()['id']}")
+    assert detail_later.status_code == 200, detail_later.text
+    assert detail_later.json()["run"]["status"] == "succeeded"
+    assert [
+        item["payload_json"]
+        for item in detail_later.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    ] == [later.json()]
+
 
 def test_calibration_receipts_fail_closed_on_cross_project_and_tampering(
     client: TestClient,
@@ -217,6 +258,10 @@ def test_calibration_receipts_fail_closed_on_cross_project_and_tampering(
     tampered = client.get(f"{reviews_url}/{review_id}")
     assert tampered.status_code == 400, tampered.text
     assert "integrity validation" in tampered.text
+    # A modified persisted review cannot be used as a pagination cursor.
+    cursor_rejected = client.get(reviews_url, params={"after_review_id": review_id})
+    assert cursor_rejected.status_code == 400, cursor_rejected.text
+    assert "integrity validation" in cursor_rejected.text
 
 
 def test_point_cloud_saved_calibration_receipt_replays_and_fails_closed(
