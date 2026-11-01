@@ -1013,5 +1013,4 @@ describe("ReviewQueueBulkTriage", () => {
     fireEvent.click(apply);
     expect(bulkTriageReviewQueueItems).not.toHaveBeenCalled();
   });
-
 });

@@ -55,10 +55,7 @@ vi.mock("./ReviewQueueBulkTriage", () => ({
     onProtectedStateChange?: (queueId: string | null) => void;
   }) => (
     <div>
-      <button
-        type="button"
-        onClick={() => onProtectedStateChange?.("queue-a")}
-      >
+      <button type="button" onClick={() => onProtectedStateChange?.("queue-a")}>
         Simulate unresolved bulk request
       </button>
       <button type="button" onClick={() => onProtectedStateChange?.(null)}>
@@ -281,7 +278,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
         queue("queue-other"),
       ]);
     });
-    expect(screen.getByText(/temporarily absent from the refreshed/)).toBeTruthy();
+    expect(
+      screen.getByText(/temporarily absent from the refreshed/),
+    ).toBeTruthy();
     expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
     expect(
       (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
@@ -303,7 +302,9 @@ describe("ReviewQueueDashboard scope isolation", () => {
         queue("queue-other"),
       ]);
     });
-    expect(screen.queryByText(/temporarily absent from the refreshed/)).toBeNull();
+    expect(
+      screen.queryByText(/temporarily absent from the refreshed/),
+    ).toBeNull();
     expect(
       (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
         .value,
@@ -352,9 +353,8 @@ describe("ReviewQueueDashboard scope isolation", () => {
       screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
     ).toBeTruthy();
     expect(
-      document.querySelector<HTMLButtonElement>(
-        ".version-list .version-card",
-      )?.disabled,
+      document.querySelector<HTMLButtonElement>(".version-list .version-card")
+        ?.disabled,
     ).toBe(true);
     expect(
       screen.getByRole("button", { name: "Open quick-review popout" }),

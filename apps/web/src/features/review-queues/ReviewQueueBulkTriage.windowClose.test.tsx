@@ -71,8 +71,7 @@ function validResult() {
 
 describe("bulk QC browser and native window-close integrity", () => {
   let closeHandler:
-    | ((event: { preventDefault: () => void }) => void)
-    | undefined;
+    ((event: { preventDefault: () => void }) => void) | undefined;
   let unlisten: ReturnType<typeof vi.fn>;
   let onCloseRequested: ReturnType<typeof vi.fn>;
 
@@ -104,11 +103,9 @@ describe("bulk QC browser and native window-close integrity", () => {
     let rejectRequest!: (error: Error) => void;
     const pending = new Promise<
       Awaited<ReturnType<typeof bulkTriageReviewQueueItems>>
-    >(
-      (_resolve, reject) => {
-        rejectRequest = reject;
-      },
-    );
+    >((_resolve, reject) => {
+      rejectRequest = reject;
+    });
     vi.mocked(bulkTriageReviewQueueItems)
       .mockReturnValueOnce(pending)
       .mockResolvedValueOnce(validResult());
@@ -271,11 +268,9 @@ describe("bulk QC browser and native window-close integrity", () => {
     ) => void;
     const pending = new Promise<
       Awaited<ReturnType<typeof bulkTriageReviewQueueItems>>
-    >(
-      (resolve) => {
-        resolveRequest = resolve;
-      },
-    );
+    >((resolve) => {
+      resolveRequest = resolve;
+    });
     vi.mocked(bulkTriageReviewQueueItems).mockReturnValueOnce(pending);
     mount();
     submitBulkReview();

@@ -122,9 +122,9 @@ export function ReviewQueueDashboard({
   const [coordinationQueueId, setCoordinationQueueId] = useState<string | null>(
     null,
   );
-  const [bulkProtectedQueueId, setBulkProtectedQueueId] = useState<string | null>(
-    null,
-  );
+  const [bulkProtectedQueueId, setBulkProtectedQueueId] = useState<
+    string | null
+  >(null);
   const reviewProtected =
     coordinationItemId !== null || bulkProtectedQueueId !== null;
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
@@ -183,8 +183,7 @@ export function ReviewQueueDashboard({
   // request and destroy its original idempotency UUID.
   const activeQueueId =
     scopedQueueId ||
-    (scopeProjectId === project.id &&
-    bulkProtectedQueueId === selectedQueueId
+    (scopeProjectId === project.id && bulkProtectedQueueId === selectedQueueId
       ? bulkProtectedQueueId
       : "");
   const items = useQuery({
@@ -787,7 +786,8 @@ export function ReviewQueueDashboard({
                           bulkProtectedQueueId !== null ||
                           (coordinationQueueId !== null &&
                             coordinationQueueId !== activeQueueId)
-                        ) return;
+                        )
+                          return;
                         setCoordinationQueueId(activeQueueId);
                         setCoordinationItemId(item.id);
                       }}

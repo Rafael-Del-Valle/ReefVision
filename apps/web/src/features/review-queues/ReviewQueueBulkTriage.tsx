@@ -516,15 +516,15 @@ export function ReviewQueueBulkTriage({
       {lastResult && <p role="status">{lastResult}</p>}
       {nativeCloseBlocked && locked && (
         <p role="alert">
-          Desktop window close was blocked to preserve an in-flight or
-          uncertain bulk QC request. Resolve or explicitly discard the
-          original request before closing ReefVision.
+          Desktop window close was blocked to preserve an in-flight or uncertain
+          bulk QC request. Resolve or explicitly discard the original request
+          before closing ReefVision.
         </p>
       )}
       {nativeCloseGuardUnavailable && locked && (
         <p role="alert">
-          Desktop close protection could not be registered. Keep ReefVision
-          open until the bulk QC request is resolved.
+          Desktop close protection could not be registered. Keep ReefVision open
+          until the bulk QC request is resolved.
           <button
             type="button"
             className="secondary"
