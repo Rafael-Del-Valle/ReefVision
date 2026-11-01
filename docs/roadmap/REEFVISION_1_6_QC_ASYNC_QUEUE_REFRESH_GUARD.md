@@ -68,3 +68,29 @@ scientific review gate, database migration or user asset was changed.
 The new regressions still require exact-head CI confirmation. This UI safeguard
 does not guarantee cross-process crash recovery or constitute installed Windows
 GUI acceptance. Release remains **HOLD**.
+
+## Deterministic asynchronous regression preconditions (2026-11-01)
+
+The exact-head frontend CI at `51bb299e` reported three failures in the
+scope-isolation suite (all other 611 frontend tests passed; backend CI passed).
+The missing-queue fixture could be overwritten by its initial in-flight
+history request, and a pending generation fixture could attempt to open
+coordination before the ranked-item query had rendered the control. The
+regeneration fixture additionally assumed the last global React Query mutation
+would already report `success` even while its async history invalidation was
+still settling. These were test synchronization/observation gaps, not evidence
+that a reviewer action had been accepted or that a saved scientific workflow
+had executed.
+
+The regression now waits for initial queue-history fetch completion before
+injecting the missing-list response, waits for the actual coordination control
+before starting the delayed queue mutation, and checks that history refetch
+began after mutation resolution instead of depending on a global mutation-cache
+ordering. The original assertions protecting unsent biological observations,
+queue identity and refusal to fetch a different queue remain in place. These
+changes do **not** weaken researcher approval, retry UUID or provenance checks.
+
+This is a frontend regression repair only. Exact-head Vitest, TypeScript,
+formatting, full E2E, installed-Windows GUI and MSI upgrade/rollback must still
+pass independently. No claim of release readiness or crash-durable draft
+recovery follows from these test changes.
