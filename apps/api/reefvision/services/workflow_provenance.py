@@ -212,7 +212,8 @@ def verify_completed_run_artifact_ownership(
         if node.status == "succeeded"
     }
     for artifact in artifacts:
-        if artifact.id not in declared_by_producer.get(artifact.producer_node_run_id, set()):
+        producer_outputs = declared_by_producer.get(artifact.producer_node_run_id, set())
+        if artifact.id not in producer_outputs:
             raise ConflictError(
                 "Succeeded workflow run contains an undeclared output artifact"
             )
