@@ -130,6 +130,7 @@ def test_saved_glb(
         "index_bounds_mismatch",
         "index_bounds_negative",
         "index_bounds_nan",
+        "index_bounds_huge",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
