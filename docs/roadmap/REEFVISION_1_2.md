@@ -5770,3 +5770,18 @@ weights, or cross-version changes are introduced.
 longitudinal measurements, actual independent experimental units, representative
 human/model acceptance, 1.1 migration reconciliation, and installed Windows
 MSI/GUI/GPU acceptance remain. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Direct registration and Unicode regression gate (2026-11-01)
+
+The registered-organism API now has explicit regression coverage for both
+case-only collisions (`409 Conflict`) and NFKC-compatible fullwidth IDs
+(`422` from the existing ASCII-only request schema). Neither rejected write
+may mutate the append-only registry; a legitimate revision of the original
+organism must still succeed. Existing imported-history and re-fingerprinted
+saved Workflow Builder tests continue to exercise NFKC/casefold collision
+rejection, with escaped Unicode test fixtures to satisfy Ruff RUF001. This
+is a CI and acceptance-test hardening increment, not a new biological
+identity attestation. Exact-head CI, scientist review, calibrated longitudinal
+acceptance, independent experimental units, 1.1 migration reconciliation and
+installed Windows GUI/GPU acceptance remain required before release.

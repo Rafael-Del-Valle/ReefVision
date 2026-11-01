@@ -19,16 +19,21 @@ from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_ecology_identity_registry_1_2 import _register
 
 
+@pytest.mark.parametrize(
+    ("alias", "expected_status"),
+    [("coral-01", 409), ("\uff23\uff4f\uff52\uff41\uff4c-01", 422)],
+)
 def test_organism_case_alias_registration_rejected_without_mutating_registry(
-    client: TestClient,
+    client: TestClient, alias: str, expected_status: int
 ) -> None:
     project_id = str(create_project(client, "Case-safe coral identity")["id"])
     base = f"/api/v1/projects/{project_id}/ecology"
     assert _register(client, project_id, "Coral-01").status_code == 201
     before = client.get(f"{base}/identity-registry").json()
-    alias = _register(client, project_id, "coral-01")
-    assert alias.status_code == 409, alias.text
-    assert "organism keys differ only by case" in alias.text
+    attempt = _register(client, project_id, alias)
+    assert attempt.status_code == expected_status, attempt.text
+    if expected_status == 409:
+        assert "organism keys differ only by case" in attempt.text
     assert client.get(f"{base}/identity-registry").json() == before
 
     revised = client.post(
@@ -45,7 +50,7 @@ def test_organism_case_alias_registration_rejected_without_mutating_registry(
     assert registry.json()["history_revision_count"] == 2
 
 
-@pytest.mark.parametrize("alias", ["coral-01", "Ｃｏｒａｌ-01"])
+@pytest.mark.parametrize("alias", ["coral-01", "\uff23\uff4f\uff52\uff41\uff4c-01"])
 def test_imported_case_alias_blocks_registry_writes_and_saved_workflow(
     client: TestClient, alias: str
 ) -> None:
@@ -113,7 +118,7 @@ def test_imported_case_alias_blocks_registry_writes_and_saved_workflow(
     )
 
 
-@pytest.mark.parametrize("alias", ["coral-01", "Ｃｏｒａｌ-01"])
+@pytest.mark.parametrize("alias", ["coral-01", "\uff23\uff4f\uff52\uff41\uff4c-01"])
 def test_resigned_registry_cannot_replay_organism_case_alias(
     client: TestClient, alias: str
 ) -> None:
