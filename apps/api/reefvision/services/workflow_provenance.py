@@ -313,6 +313,11 @@ def build_workflow_run_provenance(
 
         review_approval = result.get("review_approval")
 
+        # An explicitly persisted approval is scientific review evidence.
+        # Do not silently turn a malformed approval into an absent one.
+        if review_approval is not None and not isinstance(review_approval, dict):
+            raise ConflictError("Workflow node review approval must be a JSON object")
+
         node_manifest.append(
             {
                 "node_run_id": node.id,
