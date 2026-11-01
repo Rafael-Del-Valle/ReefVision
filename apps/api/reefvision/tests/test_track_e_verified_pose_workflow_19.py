@@ -389,6 +389,32 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         )
     assert verified_provenance["nodes"][0]["parameters"] == original_parameters
 
+    # An invalid explicit review approval must not vanish from scientific
+    # provenance as though the saved node had no review evidence.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        original_node_result = dict(node.result_json or {})
+        node.result_json = {**original_node_result, "review_approval": "approved"}
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="review approval must be a JSON object"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        node.result_json = original_node_result
+        session.commit()
+    with app.state.session_factory() as session:
+        assert (
+            build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+            == verified_provenance
+        )
+
     # The same saved scientist-verified run must not export a JSON array of
     # key/value pairs as if it were its original input or result object.
     for field, expected_error in (
