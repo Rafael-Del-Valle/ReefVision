@@ -104,7 +104,7 @@ def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     ).status_code == 404
     other_asset = client.post(
         f"{base}/spatial/assets",
-        files={"file": ("other.obj", b"v 0 0 0\\nv 2 0 0\\nv 0 2 0\\nf 1 2 3\\n")},
+        files={"file": ("other.obj", b"v 0 0 0\nv 2 0 0\nv 0 2 0\nf 1 2 3\n")},
     )
     assert other_asset.status_code == 201, other_asset.text
     other_reviews_url = (
