@@ -20,11 +20,28 @@ def make_glb(
     nonindexed_vertices: int | None = None,
     unsigned_byte_indices: bool = False,
     position_offset: int = 0,
+    position_stride: int | None = None,
     position_bounds: bool = False,
 ) -> str:
     if invalid_selector == "misaligned_position_view":
         position_offset = 2
+    if invalid_selector == "stride_too_small":
+        position_stride = 8
+    elif invalid_selector == "stride_unaligned":
+        position_stride = 14
+    elif invalid_selector == "stride_oversize":
+        position_stride = 256
+    elif invalid_selector == "stride_boolean":
+        position_stride = True
+    elif invalid_selector == "stride_truncated":
+        position_stride = 16
     positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, 0)
+    if type(position_stride) is int and position_stride >= 12:
+        positions = b"".join(
+            positions[index : index + 12] + b"\x00" * (position_stride - 12)
+            for index in range(0, len(positions), 12)
+        )
+    position_size = len(positions)
     index_bytes = (
         struct.pack("<3B", 0, 1, 2) if unsigned_byte_indices else struct.pack("<3H", 0, 1, 2)
     )
@@ -33,10 +50,10 @@ def make_glb(
         "asset": {"version": "2.0"},
         "buffers": [{"byteLength": len(binary)}],
         "bufferViews": [
-            {"buffer": 0, "byteOffset": position_offset, "byteLength": 36},
+            {"buffer": 0, "byteOffset": position_offset, "byteLength": position_size},
             {
                 "buffer": 0,
-                "byteOffset": position_offset + 36,
+                "byteOffset": position_offset + position_size,
                 "byteLength": 3 if unsigned_byte_indices else 6,
             },
         ],
@@ -74,6 +91,10 @@ def make_glb(
             }
         ]
         del doc["meshes"][0]["primitives"][0]["indices"]
+    if position_stride is not None:
+        doc["bufferViews"][0]["byteStride"] = position_stride
+    if invalid_selector == "stride_truncated":
+        doc["bufferViews"][0]["byteLength"] = 36
     if position_bounds:
         doc["accessors"][0]["min"] = [0.0, 0.0, 0.0]
         doc["accessors"][0]["max"] = [2.0, 3.0, 0.0]
@@ -248,6 +269,30 @@ def test_glb_position_buffer_view_accepts_four_byte_component_alignment() -> Non
 def test_rejects_invalid_glb_alignment_or_index_stride(invalid_selector: str) -> None:
     """Reject non-four-byte views and byteStride on index buffer views."""
     with pytest.raises(ValueError, match=r"misaligns|strided"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+@pytest.mark.parametrize("stride", [12, 16, 20, 252])
+def test_interleaved_position_stride_preserves_geometry(stride: int) -> None:
+    """POSITION may occupy a subset of each aligned glTF vertex record."""
+    assert parse_glb_triangles(make_glb(position_stride=stride)) == parse_glb_triangles(
+        make_glb()
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    [
+        "stride_too_small",
+        "stride_unaligned",
+        "stride_oversize",
+        "stride_boolean",
+        "stride_truncated",
+    ],
+)
+def test_rejects_invalid_interleaved_glb_stride(invalid_selector: str) -> None:
+    """Reject invalid stride metadata and views that truncate the last vertex."""
+    with pytest.raises(ValueError, match=r"byteStride|exceeds|misaligns"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
