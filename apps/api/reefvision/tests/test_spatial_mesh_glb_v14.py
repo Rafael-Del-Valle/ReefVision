@@ -12,7 +12,10 @@ from reefvision.services.spatial_mesh_glb_v14 import parse_glb_triangles
 
 
 def make_glb(
-    *, translated: bool = False, invalid_selector: str | None = None, explicit_canonical: bool = False
+    *,
+    translated: bool = False,
+    invalid_selector: str | None = None,
+    explicit_canonical: bool = False,
 ) -> str:
     binary = struct.pack("<9f3H", 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 1, 2)
     doc = {
@@ -51,6 +54,12 @@ def make_glb(
         doc["accessors"][0]["normalized"] = 0
     elif invalid_selector == "stride_float":
         doc["bufferViews"][0]["byteStride"] = 12.0
+    elif invalid_selector == "json_nan":
+        doc["extras"] = {"nonfinite": float("nan")}
+    elif invalid_selector == "json_infinity":
+        doc["extras"] = {"nonfinite": float("inf")}
+    elif invalid_selector == "json_negative_infinity":
+        doc["extras"] = {"nonfinite": float("-inf")}
     if explicit_canonical:
         doc["meshes"][0]["primitives"][0]["mode"] = 4
         doc["accessors"][0]["normalized"] = False
@@ -58,6 +67,8 @@ def make_glb(
     json_bytes = json.dumps(doc).encode()
     json_bytes += b" " * (-len(json_bytes) % 4)
     binary += b"\x00" * (-len(binary) % 4)
+    if invalid_selector == "nonzero_bin_padding":
+        binary = binary[:-1] + b"\x01"
     length = 12 + 8 + len(json_bytes) + 8 + len(binary)
     glb = (
         struct.pack("<4sII", b"glTF", 2, length)
@@ -113,3 +124,13 @@ def test_explicit_canonical_glb_numeric_metadata_preserves_geometry() -> None:
     assert parse_glb_triangles(make_glb(explicit_canonical=True)) == parse_glb_triangles(
         make_glb()
     )
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    ["json_nan", "json_infinity", "json_negative_infinity", "nonzero_bin_padding"],
+)
+def test_rejects_nonstandard_json_and_nonzero_binary_padding(invalid_selector: str) -> None:
+    """Nonfinite JSON extensions and nonzero BIN padding are not valid glTF 2.0."""
+    with pytest.raises(ValueError, match="nonfinite|padding"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
