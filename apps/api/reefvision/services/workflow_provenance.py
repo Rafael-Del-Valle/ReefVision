@@ -241,6 +241,12 @@ def verify_workflow_run_node_graph_lineage(
     if len(nodes) != len(expected):
         raise ConflictError(error)
 
+    # The planner persists a one-based, contiguous execution order. Missing,
+    # duplicated, or out-of-range positions corrupt the scientific run order
+    # even when node IDs and types still match the checksum-pinned graph.
+    if sorted(node.execution_order for node in nodes) != list(range(1, len(expected) + 1)):
+        raise ConflictError(error)
+
     seen: set[str] = set()
     for node in nodes:
         if node.node_id in seen or expected.get(node.node_id) != node.node_type:
