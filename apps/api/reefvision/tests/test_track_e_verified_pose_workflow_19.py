@@ -571,6 +571,12 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     ):
         build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
 
+    malformed_history = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert malformed_history.status_code == 409, malformed_history.text
+    assert malformed_history.json() == {
+        "detail": "Workflow recovery history must be a list"
+    }
+
     with app.state.session_factory() as session:
         saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
         assert saved_run is not None
@@ -593,6 +599,12 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         pytest.raises(ConflictError, match="history entries must be JSON objects"),
     ):
         build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
+
+    malformed_entries = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert malformed_entries.status_code == 409, malformed_entries.text
+    assert malformed_entries.json() == {
+        "detail": "Workflow recovery history entries must be JSON objects"
+    }
 
     with app.state.session_factory() as session:
         saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
