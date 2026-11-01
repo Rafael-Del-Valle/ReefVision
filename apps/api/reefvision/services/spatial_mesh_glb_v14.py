@@ -101,8 +101,13 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         raise ValueError("GLB asset must declare version 2.0")
     if "minVersion" in asset and asset["minVersion"] != "2.0":
         raise ValueError("GLB asset minimum version must be 2.0")
-    if doc.get("extensionsUsed") or doc.get("extensionsRequired"):
-        raise ValueError("GLB extensions are unsupported")
+    # glTF extension declarations must be arrays, even when empty. A falsey
+    # scalar or object must not bypass the unsupported-extension guard.
+    for field in ("extensionsUsed", "extensionsRequired"):
+        if field in doc and _as_list(doc[field], field):
+            raise ValueError("GLB extensions are unsupported")
+    if "extensions" in doc:
+        raise ValueError("GLB root extensions are unsupported")
     # An animated node can change the measured geometry after the bind pose.
     # This bounded preview has no animation timeline or skinning evaluation.
     if "animations" in doc or "skins" in doc:
