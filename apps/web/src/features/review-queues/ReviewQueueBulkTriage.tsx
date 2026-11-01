@@ -382,9 +382,17 @@ export function ReviewQueueBulkTriage({
         <span>{selectedIds.length} selected on this page</span>
       </div>
       <p className="annotation-helper">
-        Only visible eligible items can be selected. These actions never approve
-        model predictions or verify scientific observations.
+        Only visible eligible items can be selected. A bulk request is limited
+        to 100 items. These actions never approve model predictions or verify
+        scientific observations.
       </p>
+      {available.length > 100 && (
+        <p role="note">
+          {available.length} eligible items are visible. Select eligible on page
+          chooses only the first 100 in the current order; review the remaining
+          items in a separate batch.
+        </p>
+      )}
       <label>
         Local reviewer label (self-reported, not an authenticated account)
         <input
@@ -430,7 +438,9 @@ export function ReviewQueueBulkTriage({
             setReviewedSelectionKey(null);
           }}
         >
-          Select eligible on page ({available.length})
+          {`Select eligible on page (${Math.min(available.length, 100)}${
+            available.length > 100 ? ` of ${available.length}` : ""
+          })`}
         </button>
         <button
           type="button"
