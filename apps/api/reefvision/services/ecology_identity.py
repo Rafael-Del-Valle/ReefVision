@@ -98,12 +98,10 @@ class EcologyIdentityService:
             require_unique_ecological_unit_spellings(records)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
-        # Imported historical timestamp corruption must block later writes.
-        try:
-            require_chronological_ecological_identity_revisions(records)
-            require_historical_ecological_parent_registration(records)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
+        # Check revision numbering before timestamp chronology: an imported
+        # revision zero is sorted before revision one but may have been inserted
+        # later. Report the broken append-only chain deterministically instead
+        # of masking it with a secondary timestamp-order violation.
         latest: dict[str, EcologyIdentityRevision] = {}
         expected_revision: dict[str, int] = {}
         for record in records:
@@ -112,6 +110,13 @@ class EcologyIdentityService:
                 raise ValidationError("Ecological identity revision history is not contiguous")
             expected_revision[record.organism_key] = expected + 1
             latest[record.organism_key] = record
+        # A contiguous chain must also be chronological and preserve the
+        # parent-colony state at every fragment linkage.
+        try:
+            require_chronological_ecological_identity_revisions(records)
+            require_historical_ecological_parent_registration(records)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
         return latest
 
     @staticmethod
