@@ -46,6 +46,12 @@ from reefvision.tests.test_workflow_model_agreement_1_2 import (
         "timepoint",
         "TimePoint",
         "sampling_date",
+        "sampling_event",
+        "sampling_occasion",
+        "survey_visit",
+        "survey_round",
+        "census_date",
+        "census_visit",
         "observationEvent",
         "site_visit",
         "measurement",
@@ -98,6 +104,9 @@ def test_technical_unit_is_rejected_in_both_schema_contracts(
         "tracking_tracklet",
         "timepoint",
         "sampling_date",
+        "sampling_event",
+        "survey_visit",
+        "census_date",
     ],
 )
 @pytest.mark.parametrize(
