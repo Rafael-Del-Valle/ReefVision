@@ -42,3 +42,26 @@ Release HOLD until exact-head CI passes, the independent 1.1/1.6 Alembic
 revision-0038 collision is reconciled, native Windows MSI upgrade/rollback and
 installed-GUI acceptance are performed, and representative biological-data
 scientific validation and crash-safe QC recovery are complete.
+
+## Follow-up: cleared numeric weights (2026-11-01)
+
+A remaining UI gap was found after the initial ranking validation: React's
+numeric weight change handler called `Number(event.target.value)` immediately.
+Clearing a weight field produces `""`, which JavaScript converts to zero.
+This silently changes the researcher's intended scoring policy and makes a
+missing value indistinguishable from an explicitly chosen zero.
+
+The dashboard now retains raw weight input strings, maps blank fields to an
+invalid value for validation, and only builds numeric score weights when
+submitting an otherwise valid configuration. A blank input remains visibly
+blank and disables queue generation; an explicit zero is permitted provided
+the total of all weights is positive. The backend and existing executable
+saved `qc_review_queue` workflow still enforce their original scientific
+constraints, with typed outputs, provenance and human-review gates.
+
+The new React regression checks blank-input preservation, absence of an API
+request, correction to an explicit zero, and the exact numeric zero sent to
+the standalone queue API. This change does not alter persisted queues,
+reviewer decisions, source images, migration state or workflow graph formats.
+Release HOLD remains until exact-head CI and the existing Windows, migration,
+scientific and crash-recovery acceptance gates are satisfied.
