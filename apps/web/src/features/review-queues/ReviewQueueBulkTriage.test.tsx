@@ -457,6 +457,34 @@ describe("ReviewQueueBulkTriage", () => {
     { name: "QC score", change: { score: 72 } },
     { name: "QC severity", change: { highest_qc_severity: "warning" } },
     {
+      name: "biological reason summary",
+      change: { reason_summary: "Uncertain polyp margins" },
+    },
+    {
+      name: "class evidence",
+      change: { label_class_ids_json: ["swiftia-open"] },
+    },
+    {
+      name: "model provenance",
+      change: { model_ids_json: ["local-checkpoint-2"] },
+    },
+    {
+      name: "linked QC issue",
+      change: { related_issue_ids_json: ["issue-2"] },
+    },
+    {
+      name: "normalized signal",
+      change: { normalized_signals_json: { uncertainty: 0.9 } },
+    },
+    {
+      name: "score component",
+      change: { score_breakdown_json: [{ name: "uncertainty", score: 0.9 }] },
+    },
+    {
+      name: "dataset provenance",
+      change: { dataset_version_id: "dataset-v2" },
+    },
+    {
       name: "item update timestamp",
       change: { updated_at: "2026-10-30T01:00:00Z" },
     },
