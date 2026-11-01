@@ -14,21 +14,25 @@ from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 @pytest.mark.parametrize(
     (
         "nonindexed,explicit_targets,unsigned_byte_indices,position_offset,"
-        "position_bounds,position_stride,index_bounds,unsigned_int_indices"
+        "position_bounds,position_stride,index_bounds,unsigned_int_indices,"
+        "identity_transform"
     ),
     [
-        (False, False, False, 0, False, None, False, False),
-        (False, True, False, 0, False, None, False, False),
-        (True, False, False, 0, False, None, False, False),
-        (False, False, True, 0, False, None, False, False),
-        (False, True, True, 0, False, None, False, False),
-        (False, False, False, 4, False, None, False, False),
-        (False, False, False, 0, True, None, False, False),
-        (False, False, False, 0, True, 16, False, False),
-        (False, False, False, 0, False, 20, False, False),
-        (False, False, False, 0, False, None, True, False),
-        (False, False, False, 0, False, None, False, True),
-        (False, False, False, 0, False, None, True, True),
+        (False, False, False, 0, False, None, False, False, None),
+        (False, True, False, 0, False, None, False, False, None),
+        (True, False, False, 0, False, None, False, False, None),
+        (False, False, True, 0, False, None, False, False, None),
+        (False, True, True, 0, False, None, False, False, None),
+        (False, False, False, 4, False, None, False, False, None),
+        (False, False, False, 0, True, None, False, False, None),
+        (False, False, False, 0, True, 16, False, False, None),
+        (False, False, False, 0, False, 20, False, False, None),
+        (False, False, False, 0, False, None, True, False, None),
+        (False, False, False, 0, False, None, False, True, None),
+        (False, False, False, 0, False, None, True, True, None),
+        (False, False, False, 0, False, None, False, False, "translation"),
+        (False, False, False, 0, False, None, False, False, "rotation"),
+        (False, False, False, 0, False, None, False, False, "scale"),
     ],
 )
 def test_saved_glb(
@@ -41,6 +45,7 @@ def test_saved_glb(
     position_stride: int | None,
     index_bounds: bool,
     unsigned_int_indices: bool,
+    identity_transform: str | None,
 ) -> None:
     pid = create_project(client, "GLB saved")["id"]
     params = {
@@ -54,6 +59,7 @@ def test_saved_glb(
             position_bounds=position_bounds,
             position_stride=position_stride,
             index_bounds=index_bounds,
+            identity_transform=identity_transform,
         ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
@@ -99,6 +105,8 @@ def test_saved_glb(
         if artifact["data_type"] == "mesh_measurement_preview"
     )
     assert measurement["provenance"]["source_format"] == "glb_2_0"
+    assert measurement["measurement_status"] == "caller_supplied_unverified"
+    assert measurement["provenance"]["calibration_verified"] is False
     assert measurement["surface_area_m2"] == standalone.json()["surface_area_m2"]
     assert (
         measurement["provenance"]["geometry_sha256"]
@@ -145,6 +153,10 @@ def test_saved_glb(
         "mesh_morph_weights",
         "animated_node",
         "unbound_skin",
+        "nonidentity_scale",
+        "nonidentity_rotation",
+        "boolean_identity_translation",
+        "short_identity_translation",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
