@@ -355,6 +355,19 @@ def test_imported_ambiguous_unit_id_blocks_registry_and_executable_workflow(
                 reason="Simulated unreviewed ambiguous unit import",
             )
         )
+        # A valid current record cannot sanitize a malformed earlier unit ID.
+        session.add(
+            EcologyIdentityRevision(
+                project_id=project_id,
+                organism_key="fragment-A",
+                revision=3,
+                kind="fragment",
+                parent_colony_key=None,
+                experimental_unit_type="tank",
+                experimental_unit_id="tank-1",
+                reason="Simulated subsequent valid unit correction",
+            )
+        )
         session.commit()
     registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
     assert registry.status_code == 400, registry.text
