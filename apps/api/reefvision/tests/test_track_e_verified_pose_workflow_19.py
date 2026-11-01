@@ -465,6 +465,12 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         ):
             build_workflow_run_provenance(session, run_id=str(queued.json()["id"]))
 
+        # The public run-detail endpoint must fail closed with the same
+        # scientific integrity error rather than a serialization failure.
+        malformed_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+        assert malformed_detail.status_code == 409, malformed_detail.text
+        assert malformed_detail.json() == {"detail": expected_error}
+
         with app.state.session_factory() as session:
             saved_run = session.get(WorkflowRun, str(queued.json()["id"]))
             assert saved_run is not None
