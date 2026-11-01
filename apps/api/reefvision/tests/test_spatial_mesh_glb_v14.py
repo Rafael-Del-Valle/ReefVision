@@ -229,11 +229,15 @@ def test_rejects_out_of_bounds_unsigned_byte_indices() -> None:
 
 def test_glb_position_buffer_view_accepts_four_byte_component_alignment() -> None:
     """glTF float32 VEC3 positions need four-byte, not 12-byte, alignment."""
-    assert parse_glb_triangles(make_glb(position_offset=4)) == parse_glb_triangles(make_glb())
+    offset_mesh = parse_glb_triangles(make_glb(position_offset=4))
+    default_mesh = parse_glb_triangles(make_glb())
+    assert offset_mesh == default_mesh
 
 
-@pytest.mark.parametrize("invalid_selector", ["misaligned_position_view", "index_stride"])
-def test_rejects_invalid_glb_buffer_alignment_or_index_stride(invalid_selector: str) -> None:
+@pytest.mark.parametrize(
+    "invalid_selector", ["misaligned_position_view", "index_stride"]
+)
+def test_rejects_invalid_glb_alignment_or_index_stride(invalid_selector: str) -> None:
     """Reject non-four-byte views and byteStride on index buffer views."""
     with pytest.raises(ValueError, match=r"misaligns|strided"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
