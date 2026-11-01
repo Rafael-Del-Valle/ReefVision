@@ -364,3 +364,19 @@ these inputs. Existing valid unweighted GLB previews remain unchanged.
 An accepted source remains caller-calibrated and biologically unverified.
 Geometry digests and source-byte provenance are not proof of coral identity,
 branch growth, registration, or independently reviewed scale.
+
+## GLB explicit identity matrix compatibility (1.4 development)
+
+The bounded glTF 2.0 importer now accepts a node-level, column-major 4-by-4
+`matrix` only when its 16 finite numeric entries are **exactly the identity**.
+This supports exports that explicitly serialize a no-op scene transform without
+silently applying an unverified translation, rotation, or scale. A matrix cannot
+be combined with node-level TRS fields. Nonidentity, Boolean, incomplete, and
+unbounded matrices fail closed before calibrated measurements are published.
+
+Direct parser tests and standalone project-scoped API versus persisted,
+executable typed Workflow Builder tests check accepted geometry fingerprints,
+area parity, and rejection without a measurement artifact. This is source-format
+compatibility only: accepted geometry remains provisionally calibrated,
+biological identity and registration remain unverified, and the preview does
+not evaluate general scene transforms, animation, or skinning.
