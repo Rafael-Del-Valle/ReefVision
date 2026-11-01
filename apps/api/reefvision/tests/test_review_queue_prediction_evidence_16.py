@@ -111,7 +111,9 @@ def test_prediction_box_edit_changes_standalone_and_saved_workflow_qc_evidence(
     assert updated["score"] == original["score"]
     assert updated["model_ids_json"] == original["model_ids_json"]
     assert updated["input_checksum"] != original["input_checksum"]
-    assert _queue_item(client, original_workflow_id)["input_checksum"] == saved_original["input_checksum"]
+    assert _queue_item(client, original_workflow_id)["input_checksum"] == saved_original[
+        "input_checksum"
+    ]
 
     newer_workflow_id = _saved_workflow_queue(
         client, project_id, f"qc-prediction-after-{uuid4()}"
