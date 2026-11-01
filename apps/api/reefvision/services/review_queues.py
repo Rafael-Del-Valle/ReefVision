@@ -135,7 +135,15 @@ class ReviewQueueService:
         regenerated_from_queue_id: str | None = None,
     ) -> ReviewQueue:
         project = self.quality_control._project(project_id)
-        project_context = self.quality_control._build_project_context(project)
+        # Dataset-version queues must rank the immutable snapshot, not the
+        # project's later annotation edits or unreviewed live predictions.
+        # Reuse the existing QC snapshot builder instead of reconstructing
+        # partially frozen evidence here.
+        project_context = (
+            self.quality_control._build_dataset_version_context(dataset_version)
+            if dataset_version is not None
+            else self.quality_control._build_project_context(project)
+        )
         split_by_image_id: dict[str, str | None] = {}
         version_items_by_image_id: dict[str, DatasetVersionItem] = {}
         scoped_image_ids: set[str]
