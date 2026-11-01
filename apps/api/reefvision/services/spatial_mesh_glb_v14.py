@@ -6,7 +6,7 @@ import base64
 import binascii
 import json
 import struct
-from math import isfinite
+from math import isclose, isfinite
 from typing import Any
 
 from reefvision.services.spatial_mesh_obj_v14 import MAX_FACES, MAX_VERTICES
@@ -177,11 +177,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             raise ValueError("GLB bufferView target conflicts with accessor role")
         if _as_int(view.get("buffer"), "buffer index") != 0 or (
             "byteStride" in view
-            and (
-                not position
-                or type(view["byteStride"]) is not int
-                or view["byteStride"] != width
-            )
+            and (not position or type(view["byteStride"]) is not int or view["byteStride"] != width)
         ):
             raise ValueError("GLB strided or external views are unsupported")
         start = _as_int(view.get("byteOffset", 0), "view offset")
@@ -205,6 +201,26 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
     vertices = [list(row) for row in read_accessor(attributes["POSITION"], position=True)]
     if any(not isfinite(v) or abs(v) > 1_000_000_000 for row in vertices for v in row):
         raise ValueError("GLB positions must be bounded and finite")
+    # POSITION min/max are optional exporter metadata, not independent
+    # calibration. When supplied, bind them to the actual decoded vertices.
+    position_accessor = _as_object(accessors[attributes["POSITION"]], "position accessor")
+    for field, reducer in (("min", min), ("max", max)):
+        if field not in position_accessor:
+            continue
+        declared = _as_list(position_accessor[field], f"position {field}")
+        if len(declared) != 3 or any(
+            type(value) not in (int, float)
+            or not -1_000_000_000 <= value <= 1_000_000_000
+            or not isfinite(value)
+            for value in declared
+        ):
+            raise ValueError("GLB position bounds require three bounded finite numbers")
+        actual = [reducer(row[axis] for row in vertices) for axis in range(3)]
+        if any(
+            not isclose(value, expected, rel_tol=1e-6, abs_tol=1e-8)
+            for value, expected in zip(declared, actual)
+        ):
+            raise ValueError("GLB position bounds conflict with decoded geometry")
     if "indices" in primitive:
         indices = [int(row[0]) for row in read_accessor(primitive["indices"], position=False)]
         if any(index >= len(vertices) for index in indices):
