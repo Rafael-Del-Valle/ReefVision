@@ -219,6 +219,10 @@ export function ReviewQueueBulkTriage({
             !expectedIds.has(item.id) ||
             item.review_queue_id !== request.queueId ||
             item.review_state !== expectedState ||
+            // The researcher's exclusion rationale is part of the scientific
+            // audit record, not just a bookkeeping state transition.
+            (request.payload.action === "skip" &&
+              item.skip_reason !== request.payload.reason) ||
             immutableEvidence(item) !== request.evidenceById[item.id],
         )
       ) {

@@ -96,7 +96,14 @@ describe("ReviewQueueBulkTriage", () => {
         queue_id: queueId,
         action: payload.action,
         changed_count: 1,
-        items: responseItems(queueId, payload.action, payload.item_ids),
+        items: responseItems(queueId, payload.action, payload.item_ids).map(
+          (item) => ({
+            ...item,
+            ...(payload.action === "skip"
+              ? { skip_reason: payload.reason }
+              : {}),
+          }),
+        ),
         requires_researcher_review: true,
       }),
     );
@@ -433,6 +440,63 @@ describe("ReviewQueueBulkTriage", () => {
       expect(screen.getByRole("alert").textContent).toContain("changed count");
     },
   );
+
+  it("retains the original request when a skip response changes the exclusion rationale", async () => {
+    vi.mocked(bulkTriageReviewQueueItems)
+      .mockImplementationOnce(async (queueId, payload) => ({
+        queue_id: queueId,
+        action: payload.action,
+        changed_count: 1,
+        items: responseItems(queueId, payload.action, payload.item_ids).map(
+          (item) => ({ ...item, skip_reason: "different biological rationale" }),
+        ),
+        requires_researcher_review: true,
+      }))
+      .mockImplementationOnce(async (queueId, payload) => ({
+        queue_id: queueId,
+        action: payload.action,
+        changed_count: 0,
+        items: responseItems(queueId, payload.action, payload.item_ids).map(
+          (item) => ({ ...item, skip_reason: payload.reason }),
+        ),
+        requires_researcher_review: true,
+      }));
+    const invalidate = mount();
+    fireEvent.change(screen.getByLabelText("Bulk triage reviewer label"), {
+      target: { value: "coral reviewer" },
+    });
+    fireEvent.change(screen.getByLabelText("Triage action"), {
+      target: { value: "skip" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select eligible on page/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Bulk skip reason"), {
+      target: { value: "Polyp margins cannot be resolved" },
+    });
+    fireEvent.click(screen.getByLabelText("Confirm manual triage"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply skip to 2 items" }),
+    );
+    const retry = await screen.findByRole("button", {
+      name: "Retry identical bulk action",
+    });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(invalidate).not.toHaveBeenCalled();
+    const original = vi.mocked(bulkTriageReviewQueueItems).mock.calls[0];
+    fireEvent.click(retry);
+    await waitFor(() =>
+      expect(bulkTriageReviewQueueItems).toHaveBeenCalledTimes(2),
+    );
+    expect(vi.mocked(bulkTriageReviewQueueItems).mock.calls[1]).toEqual(
+      original,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain(
+        "scientific review remains required",
+      ),
+    );
+  });
 
   it("retries uncertain outcomes using exactly the original payload", async () => {
     vi.mocked(bulkTriageReviewQueueItems)

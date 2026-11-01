@@ -1,0 +1,7 @@
+# ReefVision 1.6 — bulk QC exclusion-reason response integrity
+
+Bulk QC `skip` records a researcher-entered reason for excluding or deferring biological review items. The previous client-side success check verified queue, item IDs, resulting state, scientific evidence and review gate, but did not verify the server-returned `skip_reason`. An HTTP-success response with the wrong reason could therefore be acknowledged as the intended action.
+
+The bulk QC client now requires every returned skipped item to carry the exact submitted, trimmed `reason`. On mismatch, the response is treated as uncertain: the original queue, item IDs, researcher label, evidence snapshot and idempotency UUID remain available for an identical retry. The UI does not report success or invalidate review caches until a matching response arrives. A saved Workflow Builder `qc_review_queue` node is not reimplemented; its existing typed outputs, saved runs, provenance and human-review gate remain intact.
+
+The regression covers two skipped items, a substituted biological exclusion reason, no premature cache invalidation, preservation of the original request/UUID, and a valid idempotent replay with `changed_count=0`. The backend already records the normalized reason in both the review item and append-only event. This client guard does not establish authenticated researcher identity, durable crash recovery or installed-Windows acceptance. Those remain release gates.
