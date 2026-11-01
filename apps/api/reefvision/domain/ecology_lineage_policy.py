@@ -200,7 +200,9 @@ def require_unique_ecological_organism_key_spellings(keys: Iterable[str]) -> Non
         canonical = unicodedata.normalize("NFKC", key).casefold()
         prior = spellings.setdefault(canonical, key)
         if prior != key:
-            raise ValueError("Ecological organism keys differ only by case or Unicode compatibility")
+            raise ValueError(
+                "Ecological organism keys differ only by case or Unicode compatibility"
+            )
 
 
 class CurrentEcologicalParentRecord(Protocol):
