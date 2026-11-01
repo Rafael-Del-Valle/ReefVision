@@ -402,6 +402,11 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         node.parameters_json = list(original_parameters.items())
         session.commit()
 
+    malformed_parameters = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert malformed_parameters.status_code == 409, malformed_parameters.text
+    assert malformed_parameters.json() == {
+        "detail": "Workflow node parameters must be a JSON object"
+    }
     with (
         app.state.session_factory() as session,
         pytest.raises(ConflictError, match="parameters must be a JSON object"),
