@@ -124,7 +124,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             for key in ("matrix", "translation", "rotation", "scale", "children", "skin", "weights")
         )
     ):
-        raise ValueError("GLB scene transforms and hierarchy are unsupported")
+        raise ValueError("GLB scene transforms, hierarchy and morph weights are unsupported")
     mesh = _as_object(meshes[0], "mesh")
     if "weights" in mesh:
         raise ValueError("GLB morph weights are unsupported")
