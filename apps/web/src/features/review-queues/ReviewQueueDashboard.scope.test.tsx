@@ -406,6 +406,27 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect(
       await screen.findByRole("button", { name: "Comments & assignments" }),
     ).toHaveProperty("disabled", true);
+
+    // Restoring the queue listing clears the warning, not the protected
+    // bulk retry ownership or its original queue selection.
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+      });
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/temporarily absent from the refreshed/),
+      ).toBeNull(),
+    );
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(
+      screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
     );
