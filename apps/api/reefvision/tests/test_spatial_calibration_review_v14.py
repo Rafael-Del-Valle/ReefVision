@@ -75,12 +75,29 @@ def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     # A saved review is evidence, not an authentication or verification token.
     # The same evidence must pass the existing geometry/scale binding checks
     # in both the standalone API and the executable persisted typed graph.
-    params["calibration_review"] = fetched.json()["evidence"]
+    inline = client.post(
+        f"{base}/spatial/mesh-preview",
+        json={**params, "calibration_review": fetched.json()["evidence"]},
+    )
+    assert inline.status_code == 200, inline.text
+    params["calibration_review_id"] = receipt["id"]
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["provenance"]["calibration_review_record_id"] == receipt["id"]
+    assert expected["provenance"]["calibration_review_evidence_sha256"] == receipt["evidence_sha256"]
+    assert "persisted_calibration_review_unverified" in expected["qc_warnings"]
+    assert expected["surface_area_m2"] == inline.json()["surface_area_m2"]
+    assert client.post(
+        f"{base}/spatial/mesh-preview",
+        json={**params, "calibration_review": receipt["evidence"]},
+    ).status_code == 422
+    assert client.post(
+        f"{base}/spatial/mesh-preview",
+        json={**params, "asset_id": None, "vertices": [[0, 0, 0]], "faces": [[0, 0, 0]]},
+    ).status_code == 422
     graph = {
         "graph_id": "durable-review-replay-v14",
         "name": "Review receipt with project-owned source",
