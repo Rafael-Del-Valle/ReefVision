@@ -129,47 +129,29 @@ try {
         throw 'MSI extraction completed without producing files.'
     }
 
-    $DesktopExe = @($ExtractedFiles | Where-Object { $_.Name -ieq 'ReefVision.exe' }) | Select-Object -First 1
-    if (-not $DesktopExe) {
-        throw 'Extracted MSI does not contain ReefVision.exe.'
-    }
+    $DesktopExe = Get-ReefVisionUniquePackagedFile -Candidates @($ExtractedFiles | Where-Object { $_.Name -ieq 'ReefVision.exe' }) -Description 'ReefVision.exe'
     $DesktopVersion = $DesktopExe.VersionInfo.ProductVersion
     if ($DesktopVersion -notin @($ExpectedVersion, "$ExpectedVersion.0")) {
         throw "Desktop version $DesktopVersion does not match expected $ExpectedVersion."
     }
-    $SidecarExe = @($ExtractedFiles | Where-Object { $_.Name -ieq 'reefvision-api.exe' }) | Select-Object -First 1
-    if (-not $SidecarExe) {
-        throw 'Extracted MSI does not contain reefvision-api.exe.'
-    }
-    $ModelCatalog = @($ExtractedFiles | Where-Object { $_.Name -ieq 'model_catalog.json' }) | Select-Object -First 1
-    if (-not $ModelCatalog) {
-        throw 'Extracted MSI does not contain model_catalog.json.'
-    }
-    $PydanticCoreBinary = @(
+    $SidecarExe = Get-ReefVisionUniquePackagedFile -Candidates @($ExtractedFiles | Where-Object { $_.Name -ieq 'reefvision-api.exe' }) -Description 'reefvision-api.exe'
+    $ModelCatalog = Get-ReefVisionUniquePackagedFile -Candidates @($ExtractedFiles | Where-Object { $_.Name -ieq 'model_catalog.json' }) -Description 'model_catalog.json'
+    $PydanticCoreBinary = Get-ReefVisionUniquePackagedFile -Candidates @(
         $ExtractedFiles | Where-Object {
             $_.Name -like '_pydantic_core*.pyd' -and
             $_.FullName -match '[\\/]pydantic_core[\\/]'
         }
-    ) | Select-Object -First 1
-    if (-not $PydanticCoreBinary) {
-        throw 'Extracted MSI does not contain the compiled pydantic_core extension.'
-    }
-    $AlembicIni = @($ExtractedFiles | Where-Object { $_.Name -ieq 'alembic.ini' }) | Select-Object -First 1
-    if (-not $AlembicIni) {
-        throw 'Extracted MSI does not contain packaged alembic.ini.'
-    }
+    ) -Description 'compiled pydantic_core extension'
+    $AlembicIni = Get-ReefVisionUniquePackagedFile -Candidates @($ExtractedFiles | Where-Object { $_.Name -ieq 'alembic.ini' }) -Description 'alembic.ini'
     $MigrationFiles = @($ExtractedFiles | Where-Object {
         $_.Extension -ieq '.py' -and $_.FullName -match '[\\/]migrations[\\/]versions[\\/]'
     })
     if ($MigrationFiles.Count -eq 0) {
         throw 'Extracted MSI does not contain Alembic migration version files.'
     }
-    $BundledManifest = @($ExtractedFiles | Where-Object {
+    $BundledManifest = Get-ReefVisionUniquePackagedFile -Candidates @($ExtractedFiles | Where-Object {
         $_.Name -ieq 'manifest.json' -and $_.FullName -match '[\\/]bundled-models[\\/]'
-    }) | Select-Object -First 1
-    if (-not $BundledManifest) {
-        throw 'Extracted MSI does not contain the bundled-model manifest.'
-    }
+    }) -Description 'bundled-model manifest'
 
     $Manifest = Get-Content -Raw -Path $BundledManifest.FullName | ConvertFrom-Json
     if ($Manifest.model_policy -ne 'architecture_first_no_pretrained_weights' -or
