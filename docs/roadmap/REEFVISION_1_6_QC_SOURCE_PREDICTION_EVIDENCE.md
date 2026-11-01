@@ -15,6 +15,10 @@ the per-item input checksum to:
 - a prediction-ID-sorted list of prediction IDs, model/class identifiers,
   predicted label/index, confidence, source-pixel box coordinates,
   review status, edited flag, accepted-annotation link, and provenance;
+- the prediction's geometry kind, polygon vertices and stored mask-content
+  SHA-256 (when present), even when its bounding box remains unchanged;
+- its recorded model-checkpoint checksum, inference-job identity, inference
+  settings and accepted-mask annotation link;
 - the previously implemented annotation evidence, QC issue identifiers,
   weights and scoring inputs.
 
@@ -27,8 +31,12 @@ review priority calculations, annotate images, or approve predictions.
 The image SHA-256 value is the digest recorded at import, **not** a fresh
 read of the underlying image bytes at queue creation. Out-of-band disk
 tampering without updating stored metadata requires separate storage
-integrity checks. This increment does not hash polygon/mask payloads or
-the full model checkpoint file; those require explicit follow-up coverage.
+integrity checks. Polygon vertices are included in the canonical
+input fingerprint, and masks are bound by their **stored content digest**.
+This does **not** rehash mask files or model checkpoints from disk; missing
+or stale stored digests and out-of-band file tampering still require separate
+file-integrity checks. Historical saved queue fingerprints are not retroactively
+recomputed.
 
 Existing queue records, scoring rules, reviewer decisions, saved workflow
 artifacts, migration lineage and immutable historical evidence are not
@@ -45,6 +53,13 @@ executable saved `project_source -> qc_review_queue` Workflow Builder
 graph. Moving the prediction box while holding the detection count, model
 ID and priority score fixed must change the new checksum. The old saved
 queue must still pass its integrity validation and remain pending review.
+
+The parameterized follow-up regressions change polygon vertices, stored
+mask-content digests and inference settings while holding the enclosing box,
+object count and priority score constant. Each case runs standalone and
+persisted executable Workflow Builder graphs and checks immutable history.
+The mask case deliberately uses synthetic metadata rather than claiming
+that any actual image-mask bytes were read or verified.
 
 Native Windows MSI upgrade/rollback and installed-GUI checks, representative
 biological-data acceptance, durable QC crash recovery and independent
