@@ -879,6 +879,9 @@ describe("Gallery", () => {
       await screen.findByText("Images could not be imported"),
     ).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(10));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "10 of 11 files confirmed in completed batches; 1 file has an unconfirmed import outcome.",
+    );
     expect(importRequests).toBe(2);
     expect(
       screen.getByRole("article", { name: /coral-01\.JPG/ }),
@@ -886,6 +889,40 @@ describe("Gallery", () => {
     expect(
       screen.queryByRole("article", { name: /coral-11\.JPG/ }),
     ).toBeNull();
+  });
+
+  it("does not claim camera files were imported when the first batch has no response", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/projects/${project.id}/imports/images`)) {
+        return jsonResponse({ detail: "Connection interrupted" }, 503);
+      }
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 24,
+          pages: 0,
+        });
+      }
+      throw new Error(`Unhandled request GET ${url}`);
+    });
+
+    renderGallery();
+    await screen.findByText("No images yet");
+    await userEvent.upload(
+      screen.getByLabelText("Import files"),
+      new File(["camera bytes"], "DSC_0001.JPEG", { type: "image/jpeg" }),
+    );
+
+    expect(
+      await screen.findByText("Images could not be imported"),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "0 of 1 files confirmed in completed batches; 1 file has an unconfirmed import outcome.",
+    );
+    expect(screen.queryByText("1 files processed")).toBeNull();
   });
 
   it("publishes the selected image batch to workbench inference controls", async () => {
