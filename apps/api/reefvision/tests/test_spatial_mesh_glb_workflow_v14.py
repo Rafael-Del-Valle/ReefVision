@@ -141,6 +141,8 @@ def test_saved_glb(
         "asset_min_version_future",
         "asset_min_version_numeric",
         "asset_min_version_boolean",
+        "node_morph_weights",
+        "mesh_morph_weights",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
