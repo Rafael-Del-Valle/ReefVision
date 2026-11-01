@@ -167,6 +167,35 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # The completed image-collection node cannot consume its own output.
+    # That output has a valid checksum and belongs to the same run, so
+    # artifact integrity alone cannot detect the falsified input lineage.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        consumer.input_artifact_ids_json = [
+            payload["nodes"][1]["output_artifact_ids_json"][0]
+        ]
+        session.commit()
+
+    invalid_input = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert invalid_input.status_code == 409, invalid_input.text
+    assert invalid_input.json() == {
+        "detail": "Succeeded workflow node input lacks an earlier succeeded producer"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="input lacks an earlier succeeded producer"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        consumer.input_artifact_ids_json = payload["nodes"][1]["input_artifact_ids_json"]
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
 
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(
     client: TestClient,
