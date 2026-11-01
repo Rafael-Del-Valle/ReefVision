@@ -401,6 +401,18 @@ prevents the former fixed first-100 listing from silently hiding subsequent
 review revisions. Paging does not change the immutable receipt IDs or their
 replay semantics; it does not establish reviewer authentication.
 
+For stable continuation without manually calculating offsets, callers can use
+`?limit=2&after_review_id=<receipt-id>` on the same collection. This returns
+records strictly after that project-owned, asset-owned receipt in
+`(created_at, id)` order, even when two receipts share a timestamp. The
+cursor receipt's source and evidence integrity are rechecked before paging;
+unknown or cross-asset cursors return 404, and altered evidence fails closed.
+Cursor paging and a nonzero `offset` cannot be combined (HTTP 400).
+The cursor is an immutable receipt identifier, not an authentication token,
+verified chronology of field observations, or a frozen snapshot of future
+submissions. Tests cover cursor boundaries, invalid/tampered cursors, and
+standalone-versus-saved typed Workflow Builder replay of a later review.
+
 The server requires a source-asset ID and source-byte digest in each review,
 checks both against the project-owned original, and re-verifies the source
 bytes before recording or returning evidence. Stored review evidence is
