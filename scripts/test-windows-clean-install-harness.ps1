@@ -147,6 +147,17 @@ try {
 # The verifier must invoke the ownership check immediately before deletion,
 # rather than relying on a pre-extraction path check or a filename prefix.
 $msiVerifierSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verify-windows-msi.ps1') -Raw
+# Reject ambiguous extracted payloads before checking the first matching file.
+# These synthetic records do not invoke msiexec or touch installed software.
+$packagedDesktop = [pscustomobject]@{ Name = 'ReefVision.exe'; FullName = 'C:\rv-test\ReefVision.exe' }
+$duplicateDesktop = [pscustomobject]@{ Name = 'REEFVISION.EXE'; FullName = 'C:\rv-test\shadow\REEFVISION.EXE' }
+$uniqueDesktop = Get-ReefVisionUniquePackagedFile -Candidates @($packagedDesktop) -Description 'ReefVision.exe'
+Assert-True ($uniqueDesktop.FullName -ceq $packagedDesktop.FullName) 'Unique MSI payload was not selected.'
+Assert-Throws { $null = Get-ReefVisionUniquePackagedFile -Candidates @() -Description 'ReefVision.exe' } 'Missing critical MSI payload must fail.'
+Assert-Throws { $null = Get-ReefVisionUniquePackagedFile -Candidates @($packagedDesktop, $duplicateDesktop) -Description 'ReefVision.exe' } 'Duplicate critical MSI payload must fail.'
+Assert-Throws { $null = Get-ReefVisionUniquePackagedFile -Candidates @($packagedDesktop) -Description ' ' } 'Blank MSI payload description must fail.'
+Assert-True ([regex]::Matches($msiVerifierSource, 'Get-ReefVisionUniquePackagedFile -Candidates').Count -eq 6) 'MSI verifier must enforce uniqueness for all six critical payload types.'
+
 $msiCleanupGuard = $msiVerifierSource.IndexOf('Assert-ReefVisionOwnedMsiVerificationRun -RunRoot $entry.Path')
 $msiCleanupDelete = $msiVerifierSource.IndexOf('Remove-Item -LiteralPath $entry.Path -Recurse -Force')
 Assert-True ($msiCleanupGuard -ge 0 -and $msiCleanupDelete -gt $msiCleanupGuard) 'MSI verifier must check disposable ownership before recursive deletion.'
