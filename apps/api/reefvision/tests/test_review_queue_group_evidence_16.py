@@ -38,9 +38,7 @@ def test_group_reassignment_changes_new_qc_evidence_not_saved_review_history(
     before = client.post(f"/api/v1/projects/{project_id}/review-queues", json={})
     assert before.status_code == 201, before.text
     original = _queue_item(client, before.json()["id"])
-    first_workflow_id = _saved_workflow_queue(
-        client, project_id, f"qc-tank-before-{uuid4()}"
-    )
+    first_workflow_id = _saved_workflow_queue(client, project_id, f"qc-tank-before-{uuid4()}")
     saved_original = _queue_item(client, first_workflow_id)
     assert saved_original["input_checksum"] == original["input_checksum"]
 
@@ -63,19 +61,13 @@ def test_group_reassignment_changes_new_qc_evidence_not_saved_review_history(
         == saved_original["input_checksum"]
     )
 
-    second_workflow_id = _saved_workflow_queue(
-        client, project_id, f"qc-tank-after-{uuid4()}"
-    )
-    assert _queue_item(client, second_workflow_id)["input_checksum"] == updated[
-        "input_checksum"
-    ]
+    second_workflow_id = _saved_workflow_queue(client, project_id, f"qc-tank-after-{uuid4()}")
+    assert _queue_item(client, second_workflow_id)["input_checksum"] == updated["input_checksum"]
     with app.state.session_factory() as session:
         historical_queue = session.get(ReviewQueue, first_workflow_id)
         assert historical_queue is not None
         historical_items = session.scalars(
-            select(ReviewQueueItem).where(
-                ReviewQueueItem.review_queue_id == first_workflow_id
-            )
+            select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == first_workflow_id)
         ).all()
         validate_saved_queue_snapshot(historical_queue, historical_items)
         assert historical_items[0].review_state == "pending"
