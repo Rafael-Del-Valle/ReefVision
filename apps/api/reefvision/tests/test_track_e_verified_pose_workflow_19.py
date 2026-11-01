@@ -255,11 +255,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert restored_ids.status_code == 200, restored_ids.text
     assert restored_ids.json() == run
 
-    # A checksummed graph also fixes the identities of its persisted nodes.
-    # Forging a node ID or type must not re-label this saved frozen-pose run.
+    # A checksummed graph also fixes node identities and planner positions.
+    # Forged IDs, types, or noncontiguous execution orders must not re-label
+    # or reorder the saved scientist-verified frozen-pose workflow.
     for field, forged in (
         ("node_id", "forged-pose-node"),
         ("node_type", "project_source"),
+        ("execution_order", 0),
+        ("execution_order", 2),
     ):
         with app.state.session_factory() as session:
             node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
