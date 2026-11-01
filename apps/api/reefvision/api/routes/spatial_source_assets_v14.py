@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.schemas.spatial_calibration_review_v14 import (
+    SpatialCalibrationReviewCreate,
+    SpatialCalibrationReviewResponse,
+)
 from reefvision.schemas.spatial_source_asset_v14 import SpatialSourceAssetResponse
+from reefvision.services.spatial_calibration_review_v14 import SpatialCalibrationReviewService
 from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 
 router = APIRouter(tags=["spatial-source-assets"])
@@ -69,3 +74,47 @@ def read_spatial_source(
         content=_service(request, session).read_verified(project_id, asset_id),
         media_type="application/octet-stream",
     )
+
+
+def _review_service(request: Request, session: Session) -> SpatialCalibrationReviewService:
+    settings: Settings = request.app.state.settings
+    return SpatialCalibrationReviewService(session, settings)
+
+
+@router.post(
+    "/projects/{project_id}/spatial/assets/{asset_id}/calibration-reviews",
+    response_model=SpatialCalibrationReviewResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_spatial_calibration_review(
+    project_id: str,
+    asset_id: str,
+    payload: SpatialCalibrationReviewCreate,
+    request: Request,
+    session: DbSession,
+) -> SpatialCalibrationReviewResponse:
+    return _review_service(request, session).create(project_id, asset_id, payload.evidence)
+
+
+@router.get(
+    "/projects/{project_id}/spatial/assets/{asset_id}/calibration-reviews",
+    response_model=list[SpatialCalibrationReviewResponse],
+)
+def list_spatial_calibration_reviews(
+    project_id: str, asset_id: str, request: Request, session: DbSession
+) -> list[SpatialCalibrationReviewResponse]:
+    return _review_service(request, session).list(project_id, asset_id)
+
+
+@router.get(
+    "/projects/{project_id}/spatial/assets/{asset_id}/calibration-reviews/{review_id}",
+    response_model=SpatialCalibrationReviewResponse,
+)
+def get_spatial_calibration_review(
+    project_id: str,
+    asset_id: str,
+    review_id: str,
+    request: Request,
+    session: DbSession,
+) -> SpatialCalibrationReviewResponse:
+    return _review_service(request, session).get(project_id, asset_id, review_id)
