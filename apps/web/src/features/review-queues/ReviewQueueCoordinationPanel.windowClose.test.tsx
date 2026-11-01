@@ -358,10 +358,7 @@ describe("native QC window close protection", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull(),
     );
-    expect(screen.getByLabelText("Review comment")).toHaveProperty(
-      "value",
-      "",
-    );
+    expect(screen.getByLabelText("Review comment")).toHaveProperty("value", "");
     await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
   });
 });
