@@ -91,31 +91,27 @@ def test_calibration_receipt_replays_standalone_and_persisted_workflow(
     assert first_page.json() == reviews[:2]
     assert last_page.json() == reviews[2:]
     assert client.get(reviews_url, params={"offset": 3}).json() == []
-    cursor_page = client.get(
-        reviews_url, params={"limit": 2, "after_review_id": reviews[0]["id"]}
-    )
+    cursor_page = client.get(reviews_url, params={"limit": 2, "after_review_id": reviews[0]["id"]})
     assert cursor_page.status_code == 200, cursor_page.text
     assert cursor_page.json() == reviews[1:]
-    assert client.get(
-        reviews_url, params={"after_review_id": reviews[-1]["id"]}
-    ).json() == []
-    assert client.get(
-        reviews_url, params={"after_review_id": "missing-review"}
-    ).status_code == 404
+    assert client.get(reviews_url, params={"after_review_id": reviews[-1]["id"]}).json() == []
+    assert client.get(reviews_url, params={"after_review_id": "missing-review"}).status_code == 404
     other_asset = client.post(
         f"{base}/spatial/assets",
         files={"file": ("other.obj", b"v 0 0 0\nv 2 0 0\nv 0 2 0\nf 1 2 3\n")},
     )
     assert other_asset.status_code == 201, other_asset.text
-    other_reviews_url = (
-        f"{base}/spatial/assets/{other_asset.json()['id']}/calibration-reviews"
+    other_reviews_url = f"{base}/spatial/assets/{other_asset.json()['id']}/calibration-reviews"
+    assert (
+        client.get(other_reviews_url, params={"after_review_id": reviews[0]["id"]}).status_code
+        == 404
     )
-    assert client.get(
-        other_reviews_url, params={"after_review_id": reviews[0]["id"]}
-    ).status_code == 404
-    assert client.get(
-        reviews_url, params={"after_review_id": reviews[0]["id"], "offset": 1}
-    ).status_code == 400
+    assert (
+        client.get(
+            reviews_url, params={"after_review_id": reviews[0]["id"], "offset": 1}
+        ).status_code
+        == 400
+    )
     for invalid in ({"limit": 0}, {"limit": 101}, {"offset": -1}):
         assert client.get(reviews_url, params=invalid).status_code == 422
 
