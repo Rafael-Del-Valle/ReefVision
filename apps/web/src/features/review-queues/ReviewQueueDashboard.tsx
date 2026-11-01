@@ -179,12 +179,14 @@ export function ReviewQueueDashboard({
   });
   // Do not query a stale queue from another project or dataset scope.
   const scopedQueueId = scopedReviewQueueId(selectedQueueId, queues.data);
-  // A transient queue-list omission must not unmount an unresolved bulk
-  // request and destroy its original idempotency UUID.
+  // A transient queue-list omission must not unmount either an unresolved
+  // bulk request or open coordination with unsent notes and audit retry UUIDs.
+  // Only pin the queue belonging to this project and the current selection.
+  const protectedQueueId = coordinationQueueId ?? bulkProtectedQueueId;
   const activeQueueId =
     scopedQueueId ||
-    (scopeProjectId === project.id && bulkProtectedQueueId === selectedQueueId
-      ? bulkProtectedQueueId
+    (scopeProjectId === project.id && protectedQueueId === selectedQueueId
+      ? protectedQueueId
       : "");
   const items = useQuery({
     queryKey: reviewQueueItemsQueryKey(
@@ -562,7 +564,7 @@ export function ReviewQueueDashboard({
                 notes and idempotent audit retry IDs must remain available.
               </p>
             )}
-            {coordinationQueueId && activeQueueId !== coordinationQueueId && (
+            {coordinationQueueId && !scopedQueueId && activeQueueId === coordinationQueueId && (
               <p className="annotation-helper" role="status">
                 The selected queue is temporarily absent from the refreshed
                 list. Coordination remains open on its original queue to protect
