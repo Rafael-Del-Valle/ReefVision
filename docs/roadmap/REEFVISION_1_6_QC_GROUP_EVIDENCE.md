@@ -10,9 +10,25 @@ image's `group_key`, `width_px`, and `height_px`, alongside its stored
 source-image SHA-256 and previously captured annotation, prediction and
 scoring evidence. For dataset-version contexts, these image-level fields and the missing-group
 priority signal come from the frozen image-item snapshot, not a later live
-reassignment. The existing QC queue continues to evaluate annotations and
-predictions from live project context; that broader version-snapshot parity
-requires separate scientific acceptance and must not be inferred here.
+reassignment. Dataset-version review queues now reuse the existing immutable dataset-version
+QC context builder: frozen annotation IDs/classes/geometry, annotation status,
+image grouping/dimensions and source checksums are used for scoring and evidence.
+Unreviewed predictions added to the live project after snapshot creation are
+**not** silently attributed to the frozen version. Project-scoped queues still
+use live annotations and predictions. This fixes a former mixed-context defect
+where version-level image metadata was frozen but annotation counts and
+coordinates were drawn from the mutable project.
+
+The additional regression edits the same coral annotation after dataset
+versioning, then checks unchanged version-scoped fingerprints and priority,
+changed project-scoped evidence, fresh executable saved project workflows,
+and historical workflow snapshot integrity with review still pending.
+
+**Scientific limit:** dataset-version QC ranking is snapshot-scoped, not a
+re-evaluation of later project inference; the latest QC issue run may have its
+own historical provenance and should be evaluated independently. The existing
+Workflow Builder `qc_review_queue` node takes a project reference and is
+unchanged; this iteration does not claim a new dataset-version workflow port.
 The fields are not treated as proof that a coral was verified or that a
 particular tank is an independent statistical replicate.
 
