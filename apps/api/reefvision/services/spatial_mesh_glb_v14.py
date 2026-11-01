@@ -133,12 +133,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         if any(key in node for key in ("translation", "rotation", "scale")):
             raise ValueError("GLB matrix and TRS transforms cannot be combined")
         matrix = _as_list(node["matrix"], "node matrix")
-        identity_matrix = (
-            1.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0,
-        )
+        identity_matrix = tuple(1.0 if index % 5 == 0 else 0.0 for index in range(16))
         if len(matrix) != 16 or any(
             type(value) not in (int, float)
             or not -1_000_000_000 <= value <= 1_000_000_000
