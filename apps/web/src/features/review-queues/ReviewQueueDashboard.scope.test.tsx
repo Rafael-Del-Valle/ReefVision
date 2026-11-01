@@ -581,9 +581,7 @@ describe("ReviewQueueDashboard scope isolation", () => {
         // The mocked rejection is expected; React Query owns the mutation.
       }
     });
-    expect(
-      screen.queryByText(/Start review was not confirmed/),
-    ).toBeNull();
+    expect(screen.queryByText(/Start review was not confirmed/)).toBeNull();
   });
 
   it("requires a reviewer label and confirmation before single-item completion", async () => {
