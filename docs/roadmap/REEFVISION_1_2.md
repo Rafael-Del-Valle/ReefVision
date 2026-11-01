@@ -5533,3 +5533,38 @@ Windows CI, authenticated scientist-reviewed calibrated longitudinal observation
 independent experimental design, representative human/model biological comparison,
 1.1 migration reconciliation and installed Windows MSI/GUI acceptance.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Temporal sampling-event aliases and exact-head Ruff unblock (2026-11-01)
+
+**Pre-change audit:** Draft PR #74 remained open on `develop/reefvision-1.2`
+at `0a4b084fcdccd4ebb492089c85c4d29eee5d99d9`. All 19 PR-triggered
+workflows completed: 16 passed, while CI backend, Pose Workflow Validation
+backend and ReefVision 1.0 Acceptance backend failed at Ruff formatting
+before pytest. The failing log identified exactly one multiline
+`is_technical_token` expression in `experimental_unit_policy.py`.
+
+**Implementation:** Applied the exact Ruff 0.17.3-requested one-line expression.
+Extended the existing shared declared-unit policy to reject specific temporal
+sampling occasions (`sampling_event`, `sampling_occasion`, `survey_visit`,
+`survey_round`, `census_date`, `census_visit`) including compact and
+CamelCase variants. A sampling occasion is a repeated observation, not a
+separate biological experimental unit. Unlike a blanket `event` or
+`survey` token ban, the explicit compound vocabulary avoids rejecting
+unrelated study-specific biological unit names. This is a declared-design QC
+safeguard, not evidence of authentic physical independence.
+
+**Acceptance added:** Existing schema checks now cover all six temporal-event
+aliases; standalone API and executed, saved Workflow Builder tests cover
+`sampling_event`, `survey_visit` and `census_date` for both longitudinal
+and paired human/model analyses. Rejected workflows must fail without
+publishing a successful scientific analysis artifact. Typed ports, persistence,
+provenance, immutable verified datasets, and scientist-review gates are reused
+unchanged. No migration, 1.1 environmental context, model weights, or unrelated
+version branch was modified.
+
+**Release HOLD:** New exact-head Ruff/pytest and backend/frontend/E2E/Windows
+CI are not yet verified; scientist-reviewed calibrated observations, true
+independent-unit design authentication, representative biological acceptance,
+1.1 migration reconciliation and installed Windows MSI/GUI validation remain.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
