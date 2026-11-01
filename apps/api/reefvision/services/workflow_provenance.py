@@ -193,7 +193,6 @@ def verify_succeeded_node_artifacts(
     }
 
 
-
 def verify_completed_run_artifact_ownership(
     run: WorkflowRun,
     nodes: list[WorkflowNodeRun],
