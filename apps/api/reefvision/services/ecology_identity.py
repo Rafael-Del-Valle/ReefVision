@@ -26,6 +26,7 @@ from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import (
     classify_ecological_unit_level,
     require_unique_ecological_unit_spellings,
+    require_unique_ecological_organism_key_spellings,
 )
 from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
 from reefvision.domain.ecology_polygon_qc import validate_ecological_polygon_topology
@@ -72,14 +73,20 @@ class EcologyIdentityService:
         the highest revision would silently conceal missing earlier records.
         Both API reads and saved Workflow Builder sources use this check.
         """
-        records = self.session.scalars(
+        records = list(self.session.scalars(
             select(EcologyIdentityRevision)
             .where(EcologyIdentityRevision.project_id == project_id)
             .order_by(
                 EcologyIdentityRevision.organism_key,
                 EcologyIdentityRevision.revision,
             )
-        )
+        ))
+        try:
+            require_unique_ecological_organism_key_spellings(
+                record.organism_key for record in records
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
         latest: dict[str, EcologyIdentityRevision] = {}
         expected_revision: dict[str, int] = {}
         for record in records:
@@ -226,6 +233,12 @@ class EcologyIdentityService:
         self._assert_experimental_units(latest)
         if payload.organism_key in latest:
             raise ConflictError("Organism key already registered in this project")
+        try:
+            require_unique_ecological_organism_key_spellings(
+                [*latest, payload.organism_key]
+            )
+        except ValueError as exc:
+            raise ConflictError(str(exc)) from exc
         self._parent_valid(payload.organism_key, payload, latest)
         self._assert_experimental_units({**latest, payload.organism_key: payload})
         return self._append(project_id, payload.organism_key, 1, payload)

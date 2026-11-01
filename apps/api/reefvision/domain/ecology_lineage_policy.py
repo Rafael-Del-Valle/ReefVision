@@ -184,3 +184,16 @@ def cross_unit_shared_parent_colony_ids(
             continue
         units_by_parent.setdefault(record.parent_colony_id, set()).add(record.experimental_unit_id)
     return sorted(parent for parent, units in units_by_parent.items() if len(units) > 1)
+
+
+def require_unique_ecological_organism_key_spellings(keys: Iterable[str]) -> None:
+    """Reject case-only aliases that split a registered biological identity.
+
+    Repeated revisions of the *same* exact organism key remain valid. The
+    check does not prove that differently named organisms are distinct.
+    """
+    spellings: dict[str, str] = {}
+    for key in keys:
+        prior = spellings.setdefault(key.casefold(), key)
+        if prior != key:
+            raise ValueError("Ecological organism keys differ only by case")

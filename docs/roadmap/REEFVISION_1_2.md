@@ -5568,3 +5568,36 @@ CI are not yet verified; scientist-reviewed calibrated observations, true
 independent-unit design authentication, representative biological acceptance,
 1.1 migration reconciliation and installed Windows MSI/GUI validation remain.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Biological organism-key case-alias integrity (2026-11-01)
+
+**Pre-change audit:** Draft PR #74 on `develop/reefvision-1.2` at
+`889e50d19b66018bc5b505d308d2bd1ab9bda043` completed **19/19** PR-triggered GitHub Actions workflows
+successfully. The existing registry guarded case-only aliases of physical
+experimental-unit IDs, but different capitalization of the *organism key*
+was not checked. This could create two apparently independent identity
+histories for one differently capitalized specimen identifier.
+
+**Implementation:** The shared ecological lineage policy now rejects
+casefold-equivalent but differently spelled organism keys. The project-scoped
+registration API rejects collisions before writing; imported revision chains
+fail closed on registry reads and future writes. Persisted registry schemas
+also reject case-aliased organism keys in latest identities or revision
+history, even when a caller recomputes the reproducibility fingerprints.
+Exact repeated keys across successive revisions remain valid. Different
+projects retain independent namespaces. This is a conservative identity-QC
+check, **not** proof that separately named biological specimens are distinct.
+
+**Acceptance:** Regression tests exercise registration, imported database
+histories, standalone registry API, executed and persisted Workflow Builder
+failure without a successful registry artifact, and signed-artifact replay.
+Existing typed workflow ports, provenance, scientist-review gates and
+local-only behavior are reused. No 1.1 environmental code, migration, model
+weights, or unrelated version branch changed.
+
+**Release HOLD:** Exact new-head CI, representative scientist-reviewed
+longitudinal/calibrated biological observations, authenticated physical
+experimental-unit independence, migration reconciliation, and installed
+Windows GUI/GPU acceptance remain required. **1.2 NOT RELEASE-READY;
+1.3 not started.**

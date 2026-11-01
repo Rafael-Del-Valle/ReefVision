@@ -8,7 +8,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from reefvision.domain.ecology_lineage_policy import require_unique_ecological_unit_spellings
+from reefvision.domain.ecology_lineage_policy import (
+    require_unique_ecological_organism_key_spellings,
+    require_unique_ecological_unit_spellings,
+)
 from reefvision.domain.experimental_unit_policy import (
     require_ecological_unit_id,
     require_ecological_unit_type,
@@ -317,6 +320,12 @@ class EcologyIdentityRegistryResponse(BaseModel):
         # A re-signed saved registry cannot split one physical tank/site into
         # apparent independent units by changing only identifier capitalization.
         require_unique_ecological_unit_spellings(self.identities)
+        require_unique_ecological_organism_key_spellings(
+            row.organism_key for row in self.identities
+        )
+        require_unique_ecological_organism_key_spellings(
+            row.organism_key for row in self.identity_history
+        )
         for collection in (
             "identities",
             "identity_history",
