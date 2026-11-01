@@ -323,7 +323,7 @@ def test_single_glb_triangle() -> None:
 
 @pytest.mark.parametrize("identity_transform", ["translation", "rotation", "scale", "matrix"])
 def test_explicit_identity_glb_transform_preserves_geometry(identity_transform: str) -> None:
-    """Explicit no-op TRS must not change the measured source-frame geometry."""
+    """Explicit no-op TRS or matrix must preserve source-frame geometry."""
     assert parse_glb_triangles(make_glb(identity_transform=identity_transform)) == (
         parse_glb_triangles(make_glb())
     )
