@@ -260,6 +260,13 @@ class WorkflowExecutionService:
                 raise ConflictError("Workflow node parameters must be a JSON object")
             if node.status == "succeeded":
                 verify_succeeded_node_artifacts(self.session, run_id=run.id, node_run=node)
+            # Review approvals are scientific audit evidence. The run-detail
+            # endpoint must reject malformed saved approvals just as the
+            # provenance exporter does, instead of displaying them as valid.
+            if isinstance(node.result_json, dict):
+                approval = node.result_json.get("review_approval")
+                if approval is not None and not isinstance(approval, dict):
+                    raise ConflictError("Workflow node review approval must be a JSON object")
         return WorkflowRunDetailResponse(
             run=WorkflowRunResponse.model_validate(run),
             nodes=[WorkflowNodeRunResponse.model_validate(node) for node in nodes],
