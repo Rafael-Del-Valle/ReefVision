@@ -645,8 +645,11 @@ describe("ReviewQueueDashboard scope isolation", () => {
       });
       expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
       expect(
-        (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
-          .value,
+        (
+          screen.getByLabelText(
+            "Coordination test draft",
+          ) as HTMLTextAreaElement
+        ).value,
       ).toBe("Unsent coral colony health observation");
       expect(getReviewQueueItems).not.toHaveBeenCalledWith(
         "queue-new",
@@ -656,6 +659,68 @@ describe("ReviewQueueDashboard scope isolation", () => {
       expect(
         screen.getByRole("button", { name: "Generate queue" }),
       ).toHaveProperty("disabled", true);
+    },
+  );
+
+  it.each(["generate", "regenerate"] as const)(
+    "preserves a manually selected QC queue after pending %s completes",
+    async (operation) => {
+      let resolvePending!: (value: ReviewQueueRecord) => void;
+      const pending = new Promise<ReviewQueueRecord>((resolve) => {
+        resolvePending = resolve;
+      });
+      vi.mocked(createReviewQueue).mockReturnValueOnce(pending);
+      vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pending);
+      vi.mocked(getReviewQueues).mockResolvedValue([
+        queue("queue-a"),
+        queue("queue-other"),
+      ]);
+      const { client, onSelectedQueueChange } = mount();
+      await waitFor(() =>
+        expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+      );
+      const action = screen.getByRole("button", {
+        name: operation === "generate" ? "Generate queue" : "Regenerate",
+      });
+      fireEvent.click(action);
+      await waitFor(() => {
+        if (operation === "generate") {
+          expect(createReviewQueue).toHaveBeenCalledTimes(1);
+        } else {
+          expect(regenerateReviewQueue).toHaveBeenCalledWith("queue-a");
+        }
+      });
+      const history = document.querySelectorAll<HTMLButtonElement>(
+        ".version-list .version-card",
+      );
+      expect(history).toHaveLength(2);
+      fireEvent.click(history[1]);
+      await waitFor(() =>
+        expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-other"),
+      );
+      await waitFor(() =>
+        expect(getReviewQueueItems).toHaveBeenCalledWith(
+          "queue-other",
+          expect.any(Object),
+          expect.anything(),
+        ),
+      );
+      vi.mocked(getReviewQueueItems).mockClear();
+      await act(async () => {
+        resolvePending(queue("queue-new"));
+        await pending;
+      });
+      await waitFor(() =>
+        expect(client.getMutationCache().getAll().at(-1)?.state.status).toBe(
+          "success",
+        ),
+      );
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-other");
+      expect(getReviewQueueItems).not.toHaveBeenCalledWith(
+        "queue-new",
+        expect.anything(),
+        expect.anything(),
+      );
     },
   );
 
