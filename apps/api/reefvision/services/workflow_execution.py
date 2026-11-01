@@ -49,6 +49,7 @@ from reefvision.services.workflow_consensus import build_detection_consensus
 from reefvision.services.workflow_datasets import create_workflow_dataset_version
 from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.services.workflow_provenance import (
+    verify_completed_run_artifact_ownership,
     verify_succeeded_node_artifacts,
     verify_workflow_artifact,
 )
@@ -240,6 +241,9 @@ class WorkflowExecutionService:
         # altered persisted artifacts as if they were verified workflow output.
         for artifact in artifacts:
             verify_workflow_artifact(artifact, expected_run_id=run.id)
+        # A completed scientific run must claim every saved artifact, even
+        # when a historical node result has no output-summary declaration.
+        verify_completed_run_artifact_ownership(run, nodes, artifacts)
         # Checksums authenticate payload bytes, not which completed node made
         # them. Verify the saved producer/output lineage before exposing it.
         for node in nodes:
