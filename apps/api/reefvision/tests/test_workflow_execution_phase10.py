@@ -173,9 +173,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     with app.state.session_factory() as session:
         consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
         assert consumer is not None
-        consumer.input_artifact_ids_json = [
-            payload["nodes"][1]["output_artifact_ids_json"][0]
-        ]
+        consumer.input_artifact_ids_json = [payload["nodes"][1]["output_artifact_ids_json"][0]]
         session.commit()
 
     invalid_input = client.get(f"/api/v1/workflow-runs/{run['id']}")
