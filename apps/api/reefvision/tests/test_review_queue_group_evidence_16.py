@@ -57,8 +57,7 @@ def test_group_reassignment_changes_new_qc_evidence_not_saved_review_history(
     assert updated["score"] == original["score"]
     assert updated["input_checksum"] != original["input_checksum"]
     assert (
-        _queue_item(client, first_workflow_id)["input_checksum"]
-        == saved_original["input_checksum"]
+        _queue_item(client, first_workflow_id)["input_checksum"] == saved_original["input_checksum"]
     )
 
     second_workflow_id = _saved_workflow_queue(client, project_id, f"qc-tank-after-{uuid4()}")
@@ -135,3 +134,86 @@ def test_version_scoped_qc_keeps_frozen_group_while_project_scope_tracks_live_gr
     live_updated = _queue_item(client, project_after.json()["id"])
     assert live_updated["score"] == live_item["score"]
     assert live_updated["input_checksum"] != live_item["input_checksum"]
+
+
+def test_version_qc_freezes_annotations_while_project_and_workflow_track_live_edits(
+    client: TestClient,
+) -> None:
+    from reefvision.tests.test_dataset_versions import create_version, save_annotations
+
+    project = create_project(client, "Frozen octocoral annotation study")
+    project_id = project["id"]
+    imported = import_one(client, project_id, filename="frozen-annotation-coral.png")
+    image_id = imported["successful"][0]["image_id"]
+    annotation_id = str(uuid4())
+    class_id = project["label_classes"][0]["id"]
+    original_annotation = {
+        "id": annotation_id,
+        "label_class_id": class_id,
+        "x_min": 5,
+        "y_min": 5,
+        "x_max": 25,
+        "y_max": 25,
+    }
+    save_annotations(
+        client,
+        image_id,
+        base_revision=0,
+        annotation_status="reviewed",
+        annotations=[original_annotation],
+    )
+    version = create_version(client, project_id, name="Frozen annotation geometry")
+    version_url = f"/api/v1/dataset-versions/{version['id']}/review-queues"
+    project_url = f"/api/v1/projects/{project_id}/review-queues"
+
+    frozen_before_response = client.post(version_url, json={})
+    assert frozen_before_response.status_code == 201, frozen_before_response.text
+    frozen_before = _queue_item(client, frozen_before_response.json()["id"])
+    project_before_response = client.post(project_url, json={})
+    assert project_before_response.status_code == 201, project_before_response.text
+    project_before = _queue_item(client, project_before_response.json()["id"])
+    workflow_before_id = _saved_workflow_queue(
+        client, project_id, f"qc-frozen-annotation-before-{uuid4()}"
+    )
+    assert _queue_item(client, workflow_before_id)["input_checksum"] == project_before[
+        "input_checksum"
+    ]
+
+    # Edit the same annotation after freezing the dataset: the number of
+    # organisms and review state stay identical, but its geometry changes.
+    save_annotations(
+        client,
+        image_id,
+        base_revision=1,
+        annotation_status="reviewed",
+        annotations=[{**original_annotation, "x_min": 12, "x_max": 32}],
+    )
+
+    frozen_after_response = client.post(version_url, json={})
+    assert frozen_after_response.status_code == 201, frozen_after_response.text
+    frozen_after = _queue_item(client, frozen_after_response.json()["id"])
+    project_after_response = client.post(project_url, json={})
+    assert project_after_response.status_code == 201, project_after_response.text
+    project_after = _queue_item(client, project_after_response.json()["id"])
+    workflow_after_id = _saved_workflow_queue(
+        client, project_id, f"qc-frozen-annotation-after-{uuid4()}"
+    )
+
+    assert frozen_after["input_checksum"] == frozen_before["input_checksum"]
+    assert frozen_after["score"] == frozen_before["score"]
+    assert project_after["input_checksum"] != project_before["input_checksum"]
+    assert _queue_item(client, workflow_after_id)["input_checksum"] == project_after[
+        "input_checksum"
+    ]
+    assert _queue_item(client, workflow_before_id)["input_checksum"] == project_before[
+        "input_checksum"
+    ]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        historical_queue = session.get(ReviewQueue, workflow_before_id)
+        assert historical_queue is not None
+        historical_items = session.scalars(
+            select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == workflow_before_id)
+        ).all()
+        validate_saved_queue_snapshot(historical_queue, historical_items)
+        assert historical_items[0].review_state == "pending"
