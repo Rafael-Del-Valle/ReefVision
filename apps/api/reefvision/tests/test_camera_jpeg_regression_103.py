@@ -772,10 +772,25 @@ def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
     original = source.read_bytes()
 
     if parser_stage == "top_level":
-        def broken_getexif(_image: Image.Image) -> Image.Exif:
-            raise error_type("malformed camera EXIF")
+        # Pillow itself calls getexif() while opening JPEG headers to read
+        # DPI. Inject the failure only after the second Image.open() returns,
+        # so this regression exercises ReefVision's metadata handling rather
+        # than preventing Pillow from decoding an otherwise valid image.
+        original_open = Image.open
+        open_count = 0
 
-        monkeypatch.setattr(Image.Image, "getexif", broken_getexif)
+        def open_with_broken_exif(*args: Any, **kwargs: Any) -> Image.Image:
+            nonlocal open_count
+            opened = original_open(*args, **kwargs)
+            open_count += 1
+            if open_count == 2:
+                def broken_getexif() -> Image.Exif:
+                    raise error_type("malformed camera EXIF")
+
+                monkeypatch.setattr(opened, "getexif", broken_getexif)
+            return opened
+
+        monkeypatch.setattr(image_storage.Image, "open", open_with_broken_exif)
     else:
         def broken_get_ifd(_exif: Image.Exif, _tag: int) -> dict[int, object]:
             raise error_type("malformed nested camera EXIF IFD")
