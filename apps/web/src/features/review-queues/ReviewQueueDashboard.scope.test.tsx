@@ -596,6 +596,73 @@ describe("ReviewQueueDashboard scope isolation", () => {
       confirm.mockRestore();
     }
   });
+  it.each(["generate", "regenerate"] as const)(
+    "does not switch away from protected coral coordination when a pending %s completes",
+    async (operation) => {
+      let resolvePending!: (value: ReviewQueueRecord) => void;
+      const pending = new Promise<ReviewQueueRecord>((resolve) => {
+        resolvePending = resolve;
+      });
+      vi.mocked(createReviewQueue).mockReturnValueOnce(pending);
+      vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pending);
+      vi.mocked(getReviewQueueItems).mockResolvedValue({
+        items: [reviewItem("item-a", "image-a")],
+        total: 1,
+        page: 1,
+        page_size: 25,
+        pages: 1,
+      } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+      const { client, onSelectedQueueChange } = mount();
+      const action = await screen.findByRole("button", {
+        name: operation === "generate" ? "Generate queue" : "Regenerate",
+      });
+      fireEvent.click(action);
+      await waitFor(() => {
+        if (operation === "generate") {
+          expect(createReviewQueue).toHaveBeenCalledTimes(1);
+        } else {
+          expect(regenerateReviewQueue).toHaveBeenCalledWith("queue-a");
+        }
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Comments & assignments" }),
+      );
+      fireEvent.change(screen.getByLabelText("Coordination test draft"), {
+        target: { value: "Unsent coral colony health observation" },
+      });
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+      vi.mocked(getReviewQueues).mockResolvedValue([
+        queue("queue-a"),
+        queue("queue-new"),
+      ]);
+      await act(async () => {
+        resolvePending(queue("queue-new"));
+        await pending;
+      });
+      await waitFor(() =>
+        expect(
+          client
+            .getMutationCache()
+            .getAll()
+            .some((mutation) => mutation.state.status === "success"),
+        ).toBe(true),
+      );
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+      expect(
+        (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+          .value,
+      ).toBe("Unsent coral colony health observation");
+      expect(
+        document.querySelector<HTMLButtonElement>(
+          '.version-list .version-card.selected',
+        )?.textContent,
+      ).toContain("qc");
+      expect(
+        screen.getByRole("button", { name: "Generate queue" }),
+      ).toHaveProperty("disabled", true);
+    },
+  );
+
   it("keeps the new project's selected queue after an old project generation completes", async () => {
     let resolveOld!: (value: ReviewQueueRecord) => void;
     const pendingOld = new Promise<ReviewQueueRecord>((resolve) => {
