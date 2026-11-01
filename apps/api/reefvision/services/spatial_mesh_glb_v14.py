@@ -242,7 +242,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             if (
                 len(declared) != 1
                 or type(declared[0]) not in (int, float)
-                or not isfinite(declared[0])
+                or (type(declared[0]) is float and not isfinite(declared[0]))
                 or declared[0] != expected
             ):
                 raise ValueError("GLB index bounds conflict with decoded indices")
