@@ -651,7 +651,10 @@ function GalleryContent({
       setReport(result);
       setSortBy("newest");
       setPage(1);
-      await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
+      // An earlier gallery session may have exhausted the bounded thumbnail
+      // polling budget. A new camera import starts a fresh batch of thumbnail
+      // jobs, so reset the cached query's success count before refetching.
+      await queryClient.resetQueries({ queryKey: ["images", project.id] });
     },
     onSettled: () => {
       importInFlight.current = false;
