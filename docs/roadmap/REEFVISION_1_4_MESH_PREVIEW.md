@@ -58,7 +58,14 @@ including declared index extrema; out-of-range 32-bit indices fail standalone
 and persisted graph execution without a measurement artifact. This is a
 compatibility and integrity check, not a claim of verified reconstruction.
 Scene transforms, animations, skinning, compression,
-sparse accessors and external buffers remain unsupported. The importer now
+sparse accessors and external buffers remain unsupported. GLB root
+`extensionsUsed` and `extensionsRequired` must be arrays if present; empty
+arrays are accepted, while nonempty declarations, malformed falsey values,
+and root `extensions` payloads are rejected. Standalone and saved, executable
+typed Workflow Builder regressions confirm that invalid declarations fail
+without producing a measurement artifact, and empty declarations preserve
+geometry and provenance. These checks do not verify reconstruction accuracy.
+The importer now
 rejects top-level `animations` and `skins` declarations before measuring a
 bind-pose mesh, even if a skin is not attached to the visible node. A valid
 animated translation fixture and an unbound skin fixture must fail both
