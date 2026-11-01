@@ -5677,3 +5677,35 @@ Windows CI; independently authenticate calibrated scientist-reviewed
 longitudinal observations, actual independent experimental units, representative
 human/model comparisons, 1.1 migration reconciliation, and installed Windows
 MSI/GUI acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Historical parent-colony registration chronology (2026-11-01; development only)
+
+The append-only ecological registry now checks that a fragment's recorded
+parent colony **already existed as a colony** at the time of each fragment
+identity revision. This applies to project-owned standalone registry reads,
+subsequent identity writes, the executable persisted
+`ecology_identity_registry_source` Workflow Builder node, and typed registry
+artifact replay even when a history digest has been recomputed. Imported
+histories cannot quietly backdate a fragment to before its parent was
+registered. Timezone-aware and SQLite-naive UTC records are compared as
+instants; equal timestamps remain permitted. A parent legitimately
+reclassified from individual to colony **before** fragment registration is
+supported. The check verifies recorded ordering, not actual parentage,
+timestamp authorship, or experimental-unit independence.
+
+Focused tests cover an imported impossible parent/fragment timeline
+blocking standalone API and saved graph without a successful scientific
+artifact, a legitimate parent reclassification with exact persisted-artifact
+parity, re-fingerprinted replay rejection, and UTC-offset equivalence.
+The existing typed ports, source provenance, `registered_unverified`
+status and `scientist_review_required` gate remain unchanged. The
+predecessor `b2ea490a` completed 19 workflows: 16 succeeded and three
+backend gates stopped at two Ruff formatting differences in the new
+chronology test. Those exact two formatter changes were applied before
+this scientific integrity increment.
+
+**Release HOLD:** New-head Ruff, pytest and full CI; authenticated
+scientist-reviewed calibrated longitudinal observations, registered
+independent study designs, representative human/model comparisons,
+1.1 migration reconciliation, and installed Windows MSI/GUI/GPU
+acceptance are still required. **1.2 NOT RELEASE-READY; 1.3 not started.**
