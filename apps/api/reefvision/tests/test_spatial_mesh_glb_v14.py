@@ -23,6 +23,7 @@ def make_glb(
     position_stride: int | None = None,
     position_leading_bytes: int = 0,
     position_bounds: bool = False,
+    index_bounds: bool = False,
 ) -> str:
     if invalid_selector == "misaligned_position_view":
         position_offset = 2
@@ -114,6 +115,19 @@ def make_glb(
         doc["accessors"][0]["min"] = [0.0, float("nan"), 0.0]
     elif invalid_selector == "bounds_mismatch":
         doc["accessors"][0]["max"] = [3.0, 3.0, 0.0]
+    if index_bounds:
+        doc["accessors"][1]["min"] = [0]
+        doc["accessors"][1]["max"] = [2]
+    if invalid_selector == "index_bounds_short":
+        doc["accessors"][1]["min"] = [0, 1]
+    elif invalid_selector == "index_bounds_boolean":
+        doc["accessors"][1]["min"] = [False]
+    elif invalid_selector == "index_bounds_mismatch":
+        doc["accessors"][1]["max"] = [1]
+    elif invalid_selector == "index_bounds_negative":
+        doc["accessors"][1]["min"] = [-1]
+    elif invalid_selector == "index_bounds_nan":
+        doc["accessors"][1]["max"] = [float("nan")]
     if invalid_selector == "byte_index_oob" and unsigned_byte_indices:
         binary = binary[:-1] + b"\x03"
     if translated:
@@ -323,5 +337,25 @@ def test_valid_glb_position_bounds_match_unannotated_geometry() -> None:
 )
 def test_rejects_invalid_or_contradictory_glb_position_bounds(invalid_selector: str) -> None:
     """Untrusted min/max metadata must not contradict the decoded geometry."""
+    with pytest.raises(ValueError, match=r"bounds|nonfinite"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+def test_valid_glb_index_bounds_preserve_geometry() -> None:
+    """Optional index extrema are checked, not trusted as independent evidence."""
+    assert parse_glb_triangles(make_glb(index_bounds=True)) == parse_glb_triangles(make_glb())
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    [
+        "index_bounds_short",
+        "index_bounds_boolean",
+        "index_bounds_mismatch",
+        "index_bounds_negative",
+        "index_bounds_nan",
+    ],
+)
+def test_rejects_invalid_glb_index_bounds(invalid_selector: str) -> None:
+    """Malformed or contradictory extrema cannot enter mesh measurements."""
     with pytest.raises(ValueError, match=r"bounds|nonfinite"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
