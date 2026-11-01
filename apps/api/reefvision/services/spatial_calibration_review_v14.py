@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
+from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
@@ -35,7 +36,7 @@ class SpatialCalibrationReviewService:
         return source.sha256
 
     @staticmethod
-    def _canonical(evidence: MeshCalibrationReviewEvidence) -> tuple[dict, str]:
+    def _canonical(evidence: MeshCalibrationReviewEvidence) -> tuple[dict[str, Any], str]:
         payload = evidence.model_dump(mode="json")
         encoded = json.dumps(
             payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
