@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
@@ -101,9 +101,16 @@ def create_spatial_calibration_review(
     response_model=list[SpatialCalibrationReviewResponse],
 )
 def list_spatial_calibration_reviews(
-    project_id: str, asset_id: str, request: Request, session: DbSession
+    project_id: str,
+    asset_id: str,
+    request: Request,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SpatialCalibrationReviewResponse]:
-    return _review_service(request, session).list(project_id, asset_id)
+    return _review_service(request, session).list(
+        project_id, asset_id, limit=limit, offset=offset
+    )
 
 
 @router.get(
