@@ -250,3 +250,16 @@ geometry to agree and require standalone analysis and persisted executable
 typed Workflow Builder artifacts to agree; incomplete triplets must fail
 without publishing measurement artifacts. All reported scale and geometry
 remain provisional pending independent calibration and scientific review.
+
+## GLB buffer-view role integrity
+
+When a GLB 2.0 `bufferView` explicitly declares a `target`, the
+bounded importer requires `34962` (ARRAY_BUFFER) for a POSITION accessor
+and `34963` (ELEMENT_ARRAY_BUFFER) for an index accessor. Missing targets
+remain valid as permitted by glTF; noninteger, boolean, or contradictory
+targets fail closed rather than interpreting index data as vertices or vice
+versa. Correctly targeted exports retain the same geometry and measurement
+provenance as equivalent exports without explicit targets. Direct parser,
+standalone API, and saved executable typed Workflow Builder regressions cover
+accepted and rejected cases. These checks do not validate physical scale,
+biological specimen identity, or human reviewer authentication.
