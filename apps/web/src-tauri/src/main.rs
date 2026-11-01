@@ -181,11 +181,15 @@ function Format-SafeText {
   param([AllowNull()][object]$Value)
   if ($null -eq $Value) { return '' }
   $text = [string]$Value
+  # Bound untrusted camera/study names and worker logs before regex parsing.
+  # Never truncate the persisted scientific record; this limits display only.
+  if ($text.Length -gt 4096) { $text = $text.Substring(0, 4096) }
   $text = [regex]::Replace($text, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\|$)', '')
   $text = [regex]::Replace($text, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
   $text = [regex]::Replace($text, '(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]', '')
   $text = [regex]::Replace($text, '\x1b[ -/]*[@-_]', '')
   $text = [regex]::Replace($text, '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]', ' ')
+  if ($text.Length -gt 1024) { return $text.Substring(0, 1024) + ' [truncated]' }
   return $text
 }
 function Test-FiniteMetricValue {
