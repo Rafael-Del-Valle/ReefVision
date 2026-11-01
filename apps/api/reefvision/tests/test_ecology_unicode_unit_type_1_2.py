@@ -21,28 +21,30 @@ from reefvision.tests.test_ecology_unit_type_aliases_1_2 import _case
 @pytest.mark.parametrize(
     "technical_type",
     [
-        "\\uff49\\uff4d\\uff41\\uff47\\uff45",
-        "\\uff56\\uff49\\uff44\\uff45\\uff4f\\uff3f\\uff46\\uff52\\uff41\\uff4d\\uff45",
-        "im\\u200bage",
+        "\uff49\uff4d\uff41\uff47\uff45",
+        "\uff56\uff49\uff44\uff45\uff4f\uff3f\uff46\uff52\uff41\uff4d\uff45",
+        "im\u200bage",
     ],
     ids=["fullwidth-image", "fullwidth-video-frame", "zero-width-image"],
 )
 def test_unicode_technical_labels_rejected_without_rewriting_source(
     technical_type: str,
 ) -> None:
-    with pytest.raises(ValueError, match="technical replicates|control or invisible"):
+    assert any(ord(char) > 127 for char in technical_type), "fixture must contain Unicode"
+    with pytest.raises(ValueError, match=r"technical replicates|control or invisible"):
         require_ecological_unit_type(technical_type)
 
 
 @pytest.mark.parametrize("kind", ["longitudinal", "paired"])
 @pytest.mark.parametrize(
     "technical_type",
-    ["\\uff49\\uff4d\\uff41\\uff47\\uff45", "im\\u200bage"],
+    ["\uff49\uff4d\uff41\uff47\uff45", "im\u200bage"],
     ids=["fullwidth-image", "zero-width-image"],
 )
 def test_unicode_technical_unit_fails_standalone_and_saved_workflow(
     client: TestClient, kind: str, technical_type: str
 ) -> None:
+    assert any(ord(char) > 127 for char in technical_type), "fixture must contain Unicode"
     endpoint, payload, graph, artifact_type = _case(kind)
     rows_key = "observations" if kind == "longitudinal" else "pairs"
     rows = payload[rows_key]
@@ -90,7 +92,8 @@ def test_unicode_technical_unit_fails_standalone_and_saved_workflow(
 def test_compatibility_biological_alias_keeps_one_unverified_unit_in_saved_workflow(
     client: TestClient, kind: str
 ) -> None:
-    fullwidth_tank = "\\uff54\\uff41\\uff4e\\uff4b"
+    fullwidth_tank = "\uff54\uff41\uff4e\uff4b"
+    assert len(fullwidth_tank) == 4, "fixture must be four fullwidth Unicode letters"
     assert require_ecological_unit_type(fullwidth_tank) == fullwidth_tank
     assert classify_ecological_unit_level(fullwidth_tank) == "tank"
     assert ecological_unit_types_equivalent(fullwidth_tank, "aquarium")
