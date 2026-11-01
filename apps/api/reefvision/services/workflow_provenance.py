@@ -218,6 +218,12 @@ def verify_completed_run_artifact_ownership(
     if run.status != "succeeded":
         return
 
+    # Terminal success means every planned operation completed. A failed or
+    # pending node with no artifacts could otherwise masquerade as a fully
+    # reproducible scientific run because ownership checks only see outputs.
+    if any(node.status != "succeeded" for node in nodes):
+        raise ConflictError("Succeeded workflow run contains an incomplete node")
+
     declared_by_producer = {
         node.id: set(_artifact_ids(node.output_artifact_ids_json, field="output IDs"))
         for node in nodes
