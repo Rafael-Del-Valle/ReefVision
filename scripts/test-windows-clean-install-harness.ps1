@@ -431,6 +431,14 @@ Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $typedUtcEvidence) 
 # not be silently interpreted as UTC scientific/installation provenance.
 $completeEvidence['camera_jpeg'].timestamp_utc = [DateTimeOffset]::UtcNow.ToString('o')
 Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Canonical +00:00 UTC evidence must be accepted.'
+# A report cannot certify an installation before its observation time.
+# Tolerate minor host clock drift, but reject fabricated future PASS evidence.
+$completeEvidence['camera_jpeg'].timestamp_utc = [DateTime]::UtcNow.AddDays(1).ToString('o')
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence) -ccontains 'camera_jpeg: INVALID TIMESTAMP') 'Future-dated string acceptance evidence must fail.'
+$completeEvidence['camera_jpeg'].timestamp_utc = [DateTimeOffset]::UtcNow.AddDays(1)
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence) -ccontains 'camera_jpeg: INVALID TIMESTAMP') 'Future-dated typed UTC acceptance evidence must fail.'
+$completeEvidence['camera_jpeg'].timestamp_utc = [DateTime]::UtcNow.AddMinutes(2).ToString('o')
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Small acceptance host clock skew should be tolerated.'
 foreach ($badTimestamp in @(
     '2026-11-01T12:00:00.0000000+05:00',
     '2026-11-01T12:00:00.0000000',
