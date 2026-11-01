@@ -227,7 +227,7 @@ export function ReviewQueueBulkTriage({
         )
       ) {
         throw new Error(
-          "Bulk QC response item identities, states, immutable biological evidence, or changed count did not match the submitted batch. Retry the identical request before taking another action.",
+          "Bulk QC response item identities, states, exclusion reasons, immutable biological evidence, or changed count did not match the submitted batch. Retry the identical request before taking another action.",
         );
       }
       return result;

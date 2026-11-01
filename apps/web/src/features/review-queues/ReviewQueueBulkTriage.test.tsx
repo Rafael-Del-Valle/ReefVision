@@ -100,7 +100,7 @@ describe("ReviewQueueBulkTriage", () => {
           (item) => ({
             ...item,
             ...(payload.action === "skip"
-              ? { skip_reason: payload.reason }
+              ? { skip_reason: payload.reason ?? null }
               : {}),
           }),
         ),
@@ -457,7 +457,7 @@ describe("ReviewQueueBulkTriage", () => {
         action: payload.action,
         changed_count: 0,
         items: responseItems(queueId, payload.action, payload.item_ids).map(
-          (item) => ({ ...item, skip_reason: payload.reason }),
+          (item) => ({ ...item, skip_reason: payload.reason ?? null }),
         ),
         requires_researcher_review: true,
       }));
