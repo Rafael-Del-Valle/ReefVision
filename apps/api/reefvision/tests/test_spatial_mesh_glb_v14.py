@@ -19,21 +19,25 @@ def make_glb(
     explicit_targets: bool = False,
     nonindexed_vertices: int | None = None,
     unsigned_byte_indices: bool = False,
+    position_offset: int = 0,
 ) -> str:
+    if invalid_selector == "misaligned_position_view":
+        position_offset = 2
     positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, 0)
-    binary = positions + (
+    index_bytes = (
         struct.pack("<3B", 0, 1, 2)
         if unsigned_byte_indices
         else struct.pack("<3H", 0, 1, 2)
     )
+    binary = b"\x00" * position_offset + positions + index_bytes
     doc = {
         "asset": {"version": "2.0"},
         "buffers": [{"byteLength": len(binary)}],
         "bufferViews": [
-            {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+            {"buffer": 0, "byteOffset": position_offset, "byteLength": 36},
             {
                 "buffer": 0,
-                "byteOffset": 36,
+                "byteOffset": position_offset + 36,
                 "byteLength": 3 if unsigned_byte_indices else 6,
             },
         ],
@@ -56,9 +60,12 @@ def make_glb(
             raise ValueError("Test fixture supports three or four vertices")
         positions = (0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.0)
         values = positions[: 3 * nonindexed_vertices]
-        binary = struct.pack(f"<{len(values)}f", *values)
+        vertex_bytes = struct.pack(f"<{len(values)}f", *values)
+        binary = b"\x00" * position_offset + vertex_bytes
         doc["buffers"][0]["byteLength"] = len(binary)
-        doc["bufferViews"] = [{"buffer": 0, "byteOffset": 0, "byteLength": len(binary)}]
+        doc["bufferViews"] = [
+            {"buffer": 0, "byteOffset": position_offset, "byteLength": len(vertex_bytes)}
+        ]
         doc["accessors"] = [
             {
                 "bufferView": 0,
@@ -90,6 +97,8 @@ def make_glb(
         doc["accessors"][0]["normalized"] = 0
     elif invalid_selector == "stride_float":
         doc["bufferViews"][0]["byteStride"] = 12.0
+    elif invalid_selector == "index_stride":
+        doc["bufferViews"][1]["byteStride"] = 2
     elif invalid_selector == "json_nan":
         doc["extras"] = {"nonfinite": float("nan")}
     elif invalid_selector == "json_infinity":
@@ -215,6 +224,16 @@ def test_unsigned_byte_indices_match_unsigned_short_geometry() -> None:
 
 def test_rejects_out_of_bounds_unsigned_byte_indices() -> None:
     with pytest.raises(ValueError, match="index out of bounds"):
-        parse_glb_triangles(
-            make_glb(unsigned_byte_indices=True, invalid_selector="byte_index_oob")
-        )
+        parse_glb_triangles(make_glb(unsigned_byte_indices=True, invalid_selector="byte_index_oob"))
+
+
+def test_glb_position_buffer_view_accepts_four_byte_component_alignment() -> None:
+    """glTF float32 VEC3 positions need four-byte, not 12-byte, alignment."""
+    assert parse_glb_triangles(make_glb(position_offset=4)) == parse_glb_triangles(make_glb())
+
+
+@pytest.mark.parametrize("invalid_selector", ["misaligned_position_view", "index_stride"])
+def test_rejects_invalid_glb_buffer_alignment_or_index_stride(invalid_selector: str) -> None:
+    """Reject non-four-byte views and byteStride on index buffer views."""
+    with pytest.raises(ValueError, match=r"misaligns|strided"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
