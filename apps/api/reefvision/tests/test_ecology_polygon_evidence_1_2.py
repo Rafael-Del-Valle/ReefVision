@@ -151,7 +151,12 @@ def test_polygon_bbox_change_revokes_registry_and_saved_workflow(
     with app.state.session_factory() as session:
         mask = session.get(MaskAnnotation, mask_id)
         assert mask is not None
+        original_x_max = mask.x_max
+        original_area_pixels = mask.area_pixels
         mask.x_max = 10
+        # Keep the raster count plausible so the independent polygon/bbox
+        # check is reached rather than the earlier pixel-envelope guard.
+        mask.area_pixels = 1
         session.commit()
     registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
     assert registry.status_code == 400, registry.text
@@ -160,6 +165,25 @@ def test_polygon_bbox_change_revokes_registry_and_saved_workflow(
     assert workflow["run"]["status"] == "failed"
     assert "outside its source-pixel bounds" in workflow["run"]["error_message"]
     assert not any(row["data_type"] == "ecology_identity_registry" for row in workflow["artifacts"])
+
+    # Restoring the exact linked source revision must restore the same
+    # unverified evidence, without silently granting scientist approval.
+    with app.state.session_factory() as session:
+        mask = session.get(MaskAnnotation, mask_id)
+        assert mask is not None
+        mask.x_max = original_x_max
+        mask.area_pixels = original_area_pixels
+        session.commit()
+    restored = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["review_gate"] == "scientist_review_required"
+    recovered = _workflow(client, project_id)
+    assert recovered["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in recovered["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == restored.json()
 
 
 def test_polygon_bbox_one_pixel_rounding_keeps_saved_workflow_parity(
