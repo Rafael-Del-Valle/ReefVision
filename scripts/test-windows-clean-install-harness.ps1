@@ -413,6 +413,21 @@ Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence).
 # record must never be accepted as verified clean-install evidence.
 $persistedEvidence = $completeEvidence | ConvertTo-Json -Depth 8 | ConvertFrom-Json
 Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $persistedEvidence).Count -eq 0) 'Persisted JSON evidence should retain valid gate provenance.'
+# UTC DateTime ('Z') and UTC DateTimeOffset ('+00:00') are both legitimate
+# serialized acceptance evidence. Other offsets and offsetless strings must
+# not be silently interpreted as UTC scientific/installation provenance.
+$completeEvidence['camera_jpeg'].timestamp_utc = [DateTimeOffset]::UtcNow.ToString('o')
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Canonical +00:00 UTC evidence must be accepted.'
+foreach ($badTimestamp in @(
+    '2026-11-01T12:00:00.0000000+05:00',
+    '2026-11-01T12:00:00.0000000',
+    '2026-02-30T12:00:00.0000000Z',
+    '2026-11-01T12:00:00.0000000z'
+)) {
+    $completeEvidence['camera_jpeg'].timestamp_utc = $badTimestamp
+    Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence) -ccontains 'camera_jpeg: INVALID TIMESTAMP') "Noncanonical or invalid UTC acceptance timestamp must be rejected: $badTimestamp"
+}
+$completeEvidence['camera_jpeg'].timestamp_utc = [DateTime]::UtcNow.ToString('o')
 $completeEvidence['camera_jpeg'].detail = '  '
 Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence) -ccontains 'camera_jpeg: MISSING DETAIL') 'PASS without an observation must not count as camera acceptance.'
 $completeEvidence['camera_jpeg'].detail = 'Recorded camera import and original hash'
