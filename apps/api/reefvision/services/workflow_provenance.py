@@ -348,14 +348,12 @@ def build_workflow_run_provenance(
         [],
     )
 
-    recovery_history = (
-        list(raw_history)
-        if isinstance(
-            raw_history,
-            list,
-        )
-        else []
-    )
+    # An explicitly saved recovery history is scientific audit evidence.
+    # Never silently discard malformed entries from a persisted run.
+    if "recovery_history" in result and not isinstance(raw_history, list):
+        raise ConflictError("Workflow recovery history must be a list")
+
+    recovery_history = list(raw_history)
 
     return {
         "schema_version": (WORKFLOW_PROVENANCE_SCHEMA_VERSION),
