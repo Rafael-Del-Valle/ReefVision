@@ -11,7 +11,7 @@ from hashlib import sha256
 from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -125,16 +125,42 @@ class SpatialCalibrationReviewService:
         return self._response(project_id, asset_id, record)
 
     def list(
-        self, project_id: str, asset_id: str, *, limit: int = 100, offset: int = 0
+        self,
+        project_id: str,
+        asset_id: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        after_review_id: str | None = None,
     ) -> list[SpatialCalibrationReviewResponse]:
         self.sources.get(project_id, asset_id)
-        records = self.session.scalars(
-            select(SpatialCalibrationReviewRecord)
-            .where(
-                SpatialCalibrationReviewRecord.project_id == project_id,
-                SpatialCalibrationReviewRecord.spatial_source_asset_id == asset_id,
+        query = select(SpatialCalibrationReviewRecord).where(
+            SpatialCalibrationReviewRecord.project_id == project_id,
+            SpatialCalibrationReviewRecord.spatial_source_asset_id == asset_id,
+        )
+        if after_review_id is not None:
+            if offset:
+                raise ValidationError("Cursor pagination cannot be combined with offset")
+            anchor = self.session.get(SpatialCalibrationReviewRecord, after_review_id)
+            if (
+                anchor is None
+                or anchor.project_id != project_id
+                or anchor.spatial_source_asset_id != asset_id
+            ):
+                raise NotFoundError("Spatial calibration review cursor not found for project asset")
+            # Never trust an altered receipt as a reproducibility cursor.
+            self._response(project_id, asset_id, anchor)
+            query = query.where(
+                or_(
+                    SpatialCalibrationReviewRecord.created_at > anchor.created_at,
+                    and_(
+                        SpatialCalibrationReviewRecord.created_at == anchor.created_at,
+                        SpatialCalibrationReviewRecord.id > anchor.id,
+                    ),
+                )
             )
-            .order_by(SpatialCalibrationReviewRecord.created_at, SpatialCalibrationReviewRecord.id)
+        records = self.session.scalars(
+            query.order_by(SpatialCalibrationReviewRecord.created_at, SpatialCalibrationReviewRecord.id)
             .limit(limit)
             .offset(offset)
         )
