@@ -320,6 +320,9 @@ class EcologyIdentityRegistryResponse(BaseModel):
         # A re-signed saved registry cannot split one physical tank/site into
         # apparent independent units by changing only identifier capitalization.
         require_unique_ecological_unit_spellings(self.identities)
+        # Re-signed saved artifacts must not conceal case-only unit aliases
+        # in superseded revisions, even when their latest snapshot is clean.
+        require_unique_ecological_unit_spellings(self.identity_history)
         require_unique_ecological_organism_key_spellings(
             row.organism_key for row in self.identities
         )

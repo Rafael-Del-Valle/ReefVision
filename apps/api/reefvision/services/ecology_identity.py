@@ -89,6 +89,12 @@ class EcologyIdentityService:
             )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
+        # Historical spelling aliases can otherwise disappear from the latest
+        # snapshot and falsely suggest distinct physical sampling units.
+        try:
+            require_unique_ecological_unit_spellings(records)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
         latest: dict[str, EcologyIdentityRevision] = {}
         expected_revision: dict[str, int] = {}
         for record in records:
@@ -209,6 +215,16 @@ class EcologyIdentityService:
         revision: int,
         payload: EcologyIdentityFields,
     ) -> EcologyIdentityRow:
+        # Check the proposed revision against the *entire* append-only history,
+        # not just current identities. A case-only correction needs explicit
+        # reconciliation instead of creating two apparent physical units.
+        history = self.session.scalars(
+            select(EcologyIdentityRevision).where(EcologyIdentityRevision.project_id == project_id)
+        )
+        try:
+            require_unique_ecological_unit_spellings([*history, payload])
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
         record = EcologyIdentityRevision(
             project_id=project_id,
             organism_key=key,
@@ -236,9 +252,7 @@ class EcologyIdentityService:
         if payload.organism_key in latest:
             raise ConflictError("Organism key already registered in this project")
         try:
-            require_unique_ecological_organism_key_spellings(
-                [*latest, payload.organism_key]
-            )
+            require_unique_ecological_organism_key_spellings([*latest, payload.organism_key])
         except ValueError as exc:
             raise ConflictError(str(exc)) from exc
         self._parent_valid(payload.organism_key, payload, latest)

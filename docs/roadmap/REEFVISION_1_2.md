@@ -5601,3 +5601,29 @@ longitudinal/calibrated biological observations, authenticated physical
 experimental-unit independence, migration reconciliation, and installed
 Windows GUI/GPU acceptance remain required. **1.2 NOT RELEASE-READY;
 1.3 not started.**
+
+
+## Historical physical-unit alias integrity (2026-11-01; development only)
+
+The project-owned append-only organism registry now checks **all identity
+revisions**, not just the latest snapshot, for physical experimental-unit IDs
+that differ only by case within an equivalent biological sampling level.
+For example, historical `Tank-A` and current `tank-a` cannot be treated
+as distinct independent tank units. Registration/revision writes reject
+introducing such an alias before committing; imported historical aliases
+fail closed on standalone registry reads and executable, saved
+`ecology_identity_registry_source` Workflow Builder runs. Re-signed typed
+registry artifacts with recomputed history digests are also rejected.
+The same exact unit ID across revisions, including equivalent tank/aquarium
+type labels, remains supported. No identity history is deleted or rewritten.
+
+This closes a historical pseudoreplication/replay gap but does not establish
+actual tank independence, verify organism identity, or authorize inferred
+growth/survival. The existing typed registry artifact, project provenance,
+`registered_unverified` evidence and `scientist_review_required` gate
+remain unchanged. The preceding head `9f346feb` passed 16 of 19 Actions;
+the three backend gates stopped at a single Ruff-format violation in
+`services/ecology_identity.py`. That exact formatter correction is included.
+New-head CI, authenticated scientist-reviewed longitudinal records,
+migration reconciliation with 1.1, representative scientific datasets,
+and installed Windows GUI/installer acceptance remain outstanding.
