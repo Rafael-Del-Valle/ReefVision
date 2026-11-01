@@ -433,6 +433,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         node.result_json = {**original_node_result, "review_approval": "approved"}
         session.commit()
 
+    # The saved Workflow Builder run-detail API must reject the same
+    # corrupted approval instead of returning unauthenticated review data.
+    approval_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert approval_detail.status_code == 409, approval_detail.text
+    assert approval_detail.json() == {
+        "detail": "Workflow node review approval must be a JSON object"
+    }
+
     with (
         app.state.session_factory() as session,
         pytest.raises(ConflictError, match="review approval must be a JSON object"),
