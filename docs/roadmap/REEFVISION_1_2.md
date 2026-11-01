@@ -5812,3 +5812,35 @@ and Windows CI. Authenticated calibrated longitudinal observations, true
 independent study designs, scientist-reviewed biological acceptance, 1.1
 migration reconciliation and installed Windows MSI/GUI/GPU tests remain open.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Revision continuity precedence and non-mutating rejection (2026-11-01; development only)
+
+**Pre-change CI:** The prior Track B head `ff7e3caee5f5ff2525c30764588c7ee7f629af60`
+completed 19 PR-triggered Actions: 17 successful, including Pose Workflow
+Validation, frontend/E2E and Windows Desktop Build; two backend suites failed.
+The actual backend pytest logs report **1 failed, 2300 passed, 32 skipped**.
+The failure was the existing imported-revision-zero regression: a newly
+imported revision 0, inserted after revision 1, failed timestamp chronology
+before it could report the expected broken revision chain.
+
+**Repair:** Project-scoped registry reads now check contiguous, 1-based,
+per-organism revision numbering **before** checking UTC chronology and
+historical parent-at-link state. Both safeguards remain mandatory. This
+produces deterministic primary scientific error reporting when an imported
+row violates multiple invariants; no malformed identity is accepted.
+Existing standalone API and executable saved Workflow Builder regression
+covers revision 0 and skipped revision 2 (imported revision 3), verifies
+failure without a successful registry artifact, and now checks that rejected
+registration and revision requests do **not** mutate the append-only
+identity history. No new schema, migration, model download, environmental
+context, dataset promotion, or cross-version merge is introduced.
+
+**Validation and release HOLD:** This increment is committed on isolated
+draft PR #74; new exact-head GitHub Actions must still verify Ruff, mypy,
+pytest and frontend/Windows gates. Local checkout is blocked by GitHub DNS,
+so local repository pytest/Ruff is not claimed. Scientist-authenticated
+calibrated longitudinal observations, independent experimental-unit
+verification, representative human/model acceptance, 1.1 migration
+reconciliation, and installed Windows MSI/GUI/GPU acceptance remain
+outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
