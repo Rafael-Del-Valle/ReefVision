@@ -495,6 +495,97 @@ describe("ReviewQueueDashboard scope isolation", () => {
     expect(queueIds.every((id) => id === "dataset-queue")).toBe(true);
   });
 
+  it("reports a rejected single-item start without claiming a review-state change", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-1", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(startReviewQueueItem).mockRejectedValueOnce(
+      new Error("Reviewer state conflict"),
+    );
+    mount();
+    const start = await screen.findByRole("button", { name: "Start review" });
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "coral-reviewer" },
+    });
+    fireEvent.click(start);
+    const warning = await screen.findByRole("alert");
+    expect(warning.textContent).toContain(
+      "Start review was not confirmed for item item-1.",
+    );
+    expect(warning.textContent).toContain("Reviewer state conflict");
+    expect(warning.textContent).toContain("audit history before retrying");
+    expect(screen.getByText("pending")).toBeTruthy();
+
+    vi.mocked(startReviewQueueItem).mockResolvedValueOnce(
+      {} as Awaited<ReturnType<typeof startReviewQueueItem>>,
+    );
+    fireEvent.click(start);
+    await waitFor(() =>
+      expect(screen.queryByText(/Start review was not confirmed/)).toBeNull(),
+    );
+    expect(startReviewQueueItem).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not attribute a late failed reviewer action to another queue", async () => {
+    let rejectStart!: (reason?: unknown) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof startReviewQueueItem>>
+    >((_, reject) => {
+      rejectStart = reject;
+    });
+    vi.mocked(startReviewQueueItem).mockReturnValueOnce(pending);
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
+    vi.mocked(getReviewQueueItems).mockImplementation(async (id) => ({
+      items: [reviewItem(id === "queue-a" ? "item-a" : "item-b", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    }));
+    mount();
+    const start = await screen.findByRole("button", { name: "Start review" });
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "reef-scientist" },
+    });
+    fireEvent.click(start);
+    await waitFor(() =>
+      expect(startReviewQueueItem).toHaveBeenCalledWith(
+        "item-a",
+        "reef-scientist",
+      ),
+    );
+    const otherQueue = document.querySelectorAll<HTMLButtonElement>(
+      ".version-list .version-card",
+    )[1];
+    expect(otherQueue).toBeTruthy();
+    fireEvent.click(otherQueue);
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-other",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    await act(async () => {
+      rejectStart(new Error("Late conflict on queue-a"));
+      try {
+        await pending;
+      } catch {
+        // The mocked rejection is expected; React Query owns the mutation.
+      }
+    });
+    expect(
+      screen.queryByText(/Start review was not confirmed/),
+    ).toBeNull();
+  });
+
   it("requires a reviewer label and confirmation before single-item completion", async () => {
     vi.mocked(getReviewQueueItems).mockResolvedValue({
       items: [reviewItem("item-1", "image-1")],
