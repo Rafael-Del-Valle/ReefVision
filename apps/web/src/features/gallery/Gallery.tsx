@@ -656,6 +656,16 @@ function GalleryContent({
       // jobs, so reset the cached query's success count before refetching.
       await queryClient.resetQueries({ queryKey: ["images", project.id] });
     },
+    onError: async () => {
+      // Imports are persisted one batch at a time. If a later batch fails,
+      // earlier camera originals are already safely imported. Refresh the
+      // gallery so those successful files remain visible and reviewable,
+      // while retaining the partial import report and the failure warning.
+      setPendingNavigationEdge(null);
+      setSortBy("newest");
+      setPage(1);
+      await queryClient.resetQueries({ queryKey: ["images", project.id] });
+    },
     onSettled: () => {
       importInFlight.current = false;
       setImportProgress(null);
