@@ -413,6 +413,19 @@ Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence).
 # record must never be accepted as verified clean-install evidence.
 $persistedEvidence = $completeEvidence | ConvertTo-Json -Depth 8 | ConvertFrom-Json
 Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $persistedEvidence).Count -eq 0) 'Persisted JSON evidence should retain valid gate provenance.'
+# ConvertFrom-Json can turn ISO-8601 text into DateTime objects. Require
+# explicit UTC kind, and never infer UTC from a local or unspecified time.
+$typedUtcEvidence = $completeEvidence | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+$typedUtcEvidence.camera_jpeg.timestamp_utc = [DateTime]::UtcNow
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $typedUtcEvidence).Count -eq 0) 'Typed UTC DateTime must retain valid persisted evidence.'
+$typedUtcEvidence.camera_jpeg.timestamp_utc = [DateTimeOffset]::UtcNow
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $typedUtcEvidence).Count -eq 0) 'Typed UTC DateTimeOffset must retain valid evidence.'
+foreach ($nonUtcKind in @([DateTimeKind]::Local, [DateTimeKind]::Unspecified)) {
+    $typedUtcEvidence.camera_jpeg.timestamp_utc = [DateTime]::SpecifyKind([DateTime]::UtcNow, $nonUtcKind)
+    Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $typedUtcEvidence) -ccontains 'camera_jpeg: INVALID TIMESTAMP') "Typed $nonUtcKind DateTime cannot prove UTC evidence."
+}
+$typedUtcEvidence.camera_jpeg.timestamp_utc = [DateTimeOffset]::new(2026, 11, 1, 12, 0, 0, [TimeSpan]::FromHours(5))
+Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $typedUtcEvidence) -ccontains 'camera_jpeg: INVALID TIMESTAMP') 'Typed non-UTC DateTimeOffset must be rejected.'
 # UTC DateTime ('Z') and UTC DateTimeOffset ('+00:00') are both legitimate
 # serialized acceptance evidence. Other offsets and offsetless strings must
 # not be silently interpreted as UTC scientific/installation provenance.
