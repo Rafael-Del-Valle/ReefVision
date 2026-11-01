@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
@@ -37,7 +38,7 @@ class SpatialCalibrationReviewRecord(Base):
     )
     source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     evidence_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    evidence_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    evidence_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
