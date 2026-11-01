@@ -54,6 +54,17 @@ const statuses: { value: AnnotationStatus | ""; label: string }[] = [
 
 const IMAGE_IMPORT_BATCH_SIZE = 10;
 
+function unconfirmedCameraImportMessage(confirmed: number, total: number): string {
+  const unknown = total - confirmed;
+  const noun = unknown === 1 ? "file has" : "files have";
+  return (
+    `${confirmed} of ${total} files confirmed in completed batches; ` +
+    `${unknown} ${noun} an unconfirmed import outcome. ` +
+    "The failed batch may have reached the server. Review the gallery before " +
+    "retrying; duplicate detection preserves existing originals."
+  );
+}
+
 function ImageCard({
   image,
   selected,
@@ -988,7 +999,10 @@ function GalleryContent({
       {report && <ImportSummary report={report} />}
       {importer.isError && unconfirmedImport && (
         <p className="form-error" role="status">
-          {`${unconfirmedImport.confirmed} of ${unconfirmedImport.total} files confirmed in completed batches; ${unconfirmedImport.total - unconfirmedImport.confirmed} ${unconfirmedImport.total - unconfirmedImport.confirmed === 1 ? "file has" : "files have"} an unconfirmed import outcome. The failed batch may have reached the server. Review the gallery before retrying; duplicate detection preserves existing originals.`}
+          {unconfirmedCameraImportMessage(
+            unconfirmedImport.confirmed,
+            unconfirmedImport.total,
+          )}
         </p>
       )}
 
