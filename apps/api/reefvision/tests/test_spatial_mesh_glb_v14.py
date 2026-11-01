@@ -336,9 +336,9 @@ def test_rejects_unsupported_glb_minimum_version(invalid_selector: str) -> None:
 
 def test_empty_glb_extension_declarations_preserve_geometry() -> None:
     """Valid empty extension arrays do not change the measured geometry."""
-    assert parse_glb_triangles(make_glb(explicit_empty_extensions=True)) == parse_glb_triangles(
-        make_glb()
-    )
+    expected = parse_glb_triangles(make_glb())
+    actual = parse_glb_triangles(make_glb(explicit_empty_extensions=True))
+    assert actual == expected
 
 
 @pytest.mark.parametrize(
