@@ -472,7 +472,19 @@ function Get-ReefVisionAutomatedAcceptanceGaps {
         if ([string]::IsNullOrWhiteSpace([string]$fields.detail)) {
             "$($name): MISSING DETAIL"
         }
-        $timestamp = [string]$fields.timestamp_utc
+        # ConvertFrom-Json may materialize ISO-8601 timestamps as DateTime
+        # instead of preserving their original text. Casting that value to
+        # [string] uses the machine's locale and incorrectly rejects valid
+        # persisted UTC evidence. Accept only explicitly UTC typed values;
+        # Local/Unspecified DateTime cannot prove the original UTC offset.
+        $rawTimestamp = $fields.timestamp_utc
+        $timestamp = if ($rawTimestamp -is [DateTime]) {
+            if ($rawTimestamp.Kind -eq [DateTimeKind]::Utc) { $rawTimestamp.ToString('o') } else { '' }
+        } elseif ($rawTimestamp -is [DateTimeOffset]) {
+            $rawTimestamp.ToString('o')
+        } else {
+            [string]$rawTimestamp
+        }
         $parsedTimestamp = [DateTimeOffset]::MinValue
         # New-ReefVisionEvidenceResult writes DateTime.UtcNow.ToString('o')
         # (ending in Z). Also accept DateTimeOffset's canonical +00:00,
