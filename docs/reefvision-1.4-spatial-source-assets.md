@@ -227,8 +227,10 @@ measurement artifact. Accepted GLB geometry is still provisional and does
 not independently verify scale, biological identity, or registration.
 
 The GLB JSON parser also rejects nonstandard nonfinite constants (`NaN`,
-`Infinity`, `-Infinity`) even in ignored metadata fields, instead of relying
-on Python's permissive JSON decoder defaults. Embedded BIN padding bytes
+`Infinity`, `-Infinity`) and otherwise-valid JSON numeric exponents such as
+`1e400` or `-1e400` that overflow to infinity in Python, including in ignored
+metadata. These invalid numbers must not enter a scientific import simply
+because the affected metadata is not used for geometry. Embedded BIN padding bytes
 beyond the declared buffer length must be zero. The original imported bytes
 and their SHA-256 remain unchanged. Regression coverage includes standalone
 scientific analysis and saved executable typed Workflow Builder rejection,
