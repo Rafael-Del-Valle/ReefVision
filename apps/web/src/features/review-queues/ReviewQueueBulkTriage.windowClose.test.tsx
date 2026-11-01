@@ -72,13 +72,13 @@ function validResult() {
 describe("bulk QC browser and native window-close integrity", () => {
   let closeHandler:
     ((event: { preventDefault: () => void }) => void) | undefined;
-  let unlisten: ReturnType<typeof vi.fn>;
+  let unlisten: () => void;
   let onCloseRequested: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     closeHandler = undefined;
-    unlisten = vi.fn();
+    unlisten = vi.fn(() => {});
     onCloseRequested = vi.fn(
       async (callback: (event: { preventDefault: () => void }) => void) => {
         closeHandler = callback;
