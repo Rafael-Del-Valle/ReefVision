@@ -286,7 +286,9 @@ def make_glb(
         doc["bufferViews"][0]["byteStride"] = 12
     json_bytes = json.dumps(doc).encode()
     if invalid_selector in {"json_exponent_overflow", "json_negative_exponent_overflow"}:
-        exponent = b"-1e400" if invalid_selector == "json_negative_exponent_overflow" else b"1e400"
+        exponent = (
+            b"-1e400" if invalid_selector == "json_negative_exponent_overflow" else b"1e400"
+        )
         json_bytes = json_bytes.replace(b'"overflow_marker"', exponent)
     json_bytes += b" " * (-len(json_bytes) % 4)
     binary += b"\x00" * (-len(binary) % 4)
