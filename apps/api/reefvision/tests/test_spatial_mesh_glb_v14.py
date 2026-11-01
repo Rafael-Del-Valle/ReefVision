@@ -128,6 +128,8 @@ def make_glb(
         doc["accessors"][1]["min"] = [-1]
     elif invalid_selector == "index_bounds_nan":
         doc["accessors"][1]["max"] = [float("nan")]
+    elif invalid_selector == "index_bounds_huge":
+        doc["accessors"][1]["max"] = [10**400]
     if invalid_selector == "byte_index_oob" and unsigned_byte_indices:
         binary = binary[:-1] + b"\x03"
     if translated:
@@ -353,6 +355,7 @@ def test_valid_glb_index_bounds_preserve_geometry() -> None:
         "index_bounds_mismatch",
         "index_bounds_negative",
         "index_bounds_nan",
+        "index_bounds_huge",
     ],
 )
 def test_rejects_invalid_glb_index_bounds(invalid_selector: str) -> None:
