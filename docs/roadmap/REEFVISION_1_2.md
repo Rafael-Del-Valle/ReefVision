@@ -5447,3 +5447,30 @@ scientist-reviewed calibrated longitudinal observations, authenticated
 independent-unit design, representative human/model biological comparisons,
 1.1 migration reconciliation and installed Windows MSI/GUI acceptance.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Unicode test fixture and Ruff CI repair (2026-11-01)
+
+The previous exact head `a642f20db415f09789b0cb9bc4b17e2064bd8943`
+completed 19 GitHub Actions workflows: 16 succeeded (including Windows Desktop
+Build and frontend/E2E), while backend CI, Pose Workflow Validation and
+ReefVision 1.0 Acceptance failed at Ruff `RUF043` before pytest. The
+unescaped regex alternation in a new `pytest.raises(match=...)` was the
+immediate lint blocker.
+
+A source audit also found that 27 intended Python Unicode escape sequences in
+`test_ecology_unicode_unit_type_1_2.py` were **double-escaped**, meaning
+Python would receive literal ASCII backslash-u text rather than actual
+fullwidth or zero-width characters. Replaced the double escapes with real
+Python Unicode escapes, made the regex a raw string, and added fixture-level
+assertions proving that runtime inputs contain non-ASCII code points and
+that the fullwidth tank fixture has exactly four characters. The production
+unit-type policy, provenance, review gates, and existing standalone/saved
+Workflow Builder paths are unchanged. This repairs test validity rather than
+claiming independent biological verification.
+
+**Release HOLD:** await exact new-head Ruff/pytest/backend/frontend/E2E/Windows
+CI, scientist-reviewed calibrated longitudinal observations, authenticated
+independent experimental units, representative human/model comparisons,
+1.1 migration reconciliation, and installed Windows MSI/GUI acceptance.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
