@@ -30,6 +30,20 @@ try {
 } finally {
     if ($HadConfig) { $env:REEFVISION_CONFIG_DIR = $OldConfig } else { Remove-Item Env:REEFVISION_CONFIG_DIR -ErrorAction SilentlyContinue }
 }
+# Caller-supplied variables must not bypass offline model policy or redirect
+# disposable model caches into a researcher's real environment. Rejections
+# must happen before executing the acceptance action.
+$script:isolationOverrideActionRan = $false
+Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{ HF_HUB_OFFLINE = '0' } -Action { $script:isolationOverrideActionRan = $true } } 'Offline model policy override must be rejected.'
+Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{ hf_home = 'C:\researcher-cache' } -Action { $script:isolationOverrideActionRan = $true } } 'Case-insensitive disposable cache override must be rejected.'
+Assert-True (-not $script:isolationOverrideActionRan) 'Rejected isolation override executed its action.'
+$previousProbe = [Environment]::GetEnvironmentVariable('REEFVISION_ACCEPTANCE_PROBE', 'Process')
+Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{ REEFVISION_ACCEPTANCE_PROBE = 'disposable' } -Action {
+    Assert-True ($env:REEFVISION_ACCEPTANCE_PROBE -eq 'disposable') 'Safe additional environment variable was not applied.'
+    Assert-True ($env:HF_HUB_OFFLINE -eq '1') 'Safe additional environment variable disabled offline policy.'
+}
+Assert-True ([Environment]::GetEnvironmentVariable('REEFVISION_ACCEPTANCE_PROBE', 'Process') -ceq $previousProbe) 'Safe additional environment variable was not restored.'
+
 # The packaged MSI sidecar self-test must inherit only disposable offline
 # caches, and the verifier must restore the caller environment even if the
 # sidecar cannot start. No process or MSI is launched by these assertions.
