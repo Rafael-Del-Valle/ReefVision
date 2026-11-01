@@ -1,5 +1,6 @@
 """Training workspace API routes."""
 
+import os
 import re
 import unicodedata
 from pathlib import Path
