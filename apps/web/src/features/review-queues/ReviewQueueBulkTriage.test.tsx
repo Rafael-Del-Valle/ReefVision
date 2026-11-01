@@ -441,7 +441,7 @@ describe("ReviewQueueBulkTriage", () => {
     },
   );
 
-  it("retains the original request when a skip response changes the exclusion rationale", async () => {
+  it("retains UUID when a skip response changes the reason", async () => {
     vi.mocked(bulkTriageReviewQueueItems)
       .mockImplementationOnce(async (queueId, payload) => ({
         queue_id: queueId,
