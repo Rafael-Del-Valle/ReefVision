@@ -373,7 +373,10 @@ export function ReviewQueueDashboard({
       };
       const queue =
         request.scopeType === "dataset_version"
-          ? await createDatasetVersionReviewQueue(request.datasetVersionId, payload)
+          ? await createDatasetVersionReviewQueue(
+              request.datasetVersionId,
+              payload,
+            )
           : await createReviewQueue(request.projectId, payload);
       return assertQueueResponseScope(queue, request);
     },
