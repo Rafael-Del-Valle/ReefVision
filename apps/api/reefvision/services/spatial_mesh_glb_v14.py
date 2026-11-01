@@ -150,11 +150,11 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         else:
             if (
                 type(component) is not int
-                or component not in (5123, 5125)
+                or component not in (5121, 5123, 5125)
                 or accessor.get("type") != "SCALAR"
             ):
-                raise ValueError("GLB indices require unsigned 16/32-bit scalars")
-            fmt, width = ("<H", 2) if component == 5123 else ("<I", 4)
+                raise ValueError("GLB indices require unsigned 8/16/32-bit scalars")
+            fmt, width = {5121: ("<B", 1), 5123: ("<H", 2), 5125: ("<I", 4)}[component]
             limit = 3 * MAX_FACES
         count = _as_int(accessor.get("count"), "accessor count", 1)
         if count > limit or (position and count < 3) or (not position and count % 3):
