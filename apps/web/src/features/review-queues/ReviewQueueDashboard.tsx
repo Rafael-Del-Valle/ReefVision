@@ -135,7 +135,25 @@ export function ReviewQueueDashboard({
   const [reviewState, setReviewState] = useState("");
   const [modelId, setModelId] = useState("");
   const [singleItemActor, setSingleItemActor] = useState("");
-  const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
+  // Keep raw numeric inputs: clearing a weight must not silently become zero
+  // (Number("") === 0). Explicit zero remains a valid weight.
+  const [weightInputs, setWeightInputs] = useState<
+    Record<keyof ReviewScoreWeights, string>
+  >(() =>
+    Object.fromEntries(
+      Object.entries(defaultWeights).map(([key, value]) => [key, String(value)]),
+    ) as Record<keyof ReviewScoreWeights, string>,
+  );
+  const weights = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(weightInputs).map(([key, value]) => [
+          key,
+          value.trim() === "" ? Number.NaN : Number(value),
+        ]),
+      ) as ReviewScoreWeights,
+    [weightInputs],
+  );
   const [reviewBelowConfidence, setReviewBelowConfidence] = useState("");
   const queueConfigurationError = validateQueueConfiguration(
     weights,
@@ -557,7 +575,7 @@ export function ReviewQueueDashboard({
               accepted or human-verified.
             </p>
             <div className="dashboard-grid compact-grid">
-              {Object.entries(weights).map(([key, value]) => (
+              {Object.entries(weightInputs).map(([key, value]) => (
                 <label key={key}>
                   {key.replaceAll("_", " ")}
                   <input
@@ -566,9 +584,9 @@ export function ReviewQueueDashboard({
                     step="1"
                     value={value}
                     onChange={(event) =>
-                      setWeights((current) => ({
+                      setWeightInputs((current) => ({
                         ...current,
-                        [key]: Number(event.target.value),
+                        [key]: event.target.value,
                       }))
                     }
                   />
