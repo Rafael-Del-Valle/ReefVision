@@ -9,7 +9,8 @@ def test_mask_migrations_form_one_linear_head() -> None:
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["0038"]
+    # New versioned spatial reviews extend the existing linear migration chain.
+    assert scripts.get_heads() == ["0039"]
     editable_masks = scripts.get_revision("0015")
     mask_datasets = scripts.get_revision("0016")
     segmentation_proposals = scripts.get_revision("0017")
@@ -29,6 +30,7 @@ def test_mask_migrations_form_one_linear_head() -> None:
     pose_active_learning = scripts.get_revision("0036")
     pose_training_datasets = scripts.get_revision("0037")
     spatial_source_assets = scripts.get_revision("0038")
+    spatial_calibration_reviews = scripts.get_revision("0039")
     assert editable_masks is not None
     assert editable_masks.down_revision == "53ba400993db"
     assert mask_datasets is not None
@@ -67,3 +69,5 @@ def test_mask_migrations_form_one_linear_head() -> None:
     assert pose_training_datasets.down_revision == "0036"
     assert spatial_source_assets is not None
     assert spatial_source_assets.down_revision == "0037"
+    assert spatial_calibration_reviews is not None
+    assert spatial_calibration_reviews.down_revision == "0038"
