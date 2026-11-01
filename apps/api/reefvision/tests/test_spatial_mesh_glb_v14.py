@@ -16,6 +16,7 @@ def make_glb(
     translated: bool = False,
     invalid_selector: str | None = None,
     explicit_canonical: bool = False,
+    nonindexed_vertices: int | None = None,
 ) -> str:
     binary = struct.pack("<9f3H", 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 1, 2)
     doc = {
@@ -34,6 +35,25 @@ def make_glb(
         "scenes": [{"nodes": [0]}],
         "scene": 0,
     }
+    if nonindexed_vertices is not None:
+        if nonindexed_vertices not in (3, 4):
+            raise ValueError("Test fixture supports three or four vertices")
+        positions = (0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.0)
+        values = positions[: 3 * nonindexed_vertices]
+        binary = struct.pack(f"<{len(values)}f", *values)
+        doc["buffers"][0]["byteLength"] = len(binary)
+        doc["bufferViews"] = [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(binary)}
+        ]
+        doc["accessors"] = [
+            {
+                "bufferView": 0,
+                "componentType": 5126,
+                "count": nonindexed_vertices,
+                "type": "VEC3",
+            }
+        ]
+        del doc["meshes"][0]["primitives"][0]["indices"]
     if translated:
         doc["nodes"] = [{"mesh": 0, "translation": [1, 0, 0]}]
     if invalid_selector == "scene":
@@ -132,5 +152,17 @@ def test_explicit_canonical_glb_numeric_metadata_preserves_geometry() -> None:
 )
 def test_rejects_nonstandard_json_and_nonzero_binary_padding(invalid_selector: str) -> None:
     """Nonfinite JSON extensions and nonzero BIN padding are not valid glTF 2.0."""
-    with pytest.raises(ValueError, match="nonfinite|padding"):
+    with pytest.raises(ValueError, match=r"nonfinite|padding"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_nonindexed_triangles_match_indexed_geometry() -> None:
+    """Non-indexed glTF TRIANGLES have consecutive, independent vertex triplets."""
+    assert parse_glb_triangles(make_glb(nonindexed_vertices=3)) == parse_glb_triangles(
+        make_glb()
+    )
+
+
+def test_rejects_incomplete_nonindexed_triangle() -> None:
+    with pytest.raises(ValueError, match="complete vertex triplets"):
+        parse_glb_triangles(make_glb(nonindexed_vertices=4))
