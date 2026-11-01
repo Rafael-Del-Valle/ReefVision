@@ -12,13 +12,14 @@ from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
 
 
 @pytest.mark.parametrize(
-    "nonindexed,explicit_targets,unsigned_byte_indices",
+    "nonindexed,explicit_targets,unsigned_byte_indices,position_offset",
     [
-        (False, False, False),
-        (False, True, False),
-        (True, False, False),
-        (False, False, True),
-        (False, True, True),
+        (False, False, False, 0),
+        (False, True, False, 0),
+        (True, False, False, 0),
+        (False, False, True, 0),
+        (False, True, True, 0),
+        (False, False, False, 4),
     ],
 )
 def test_saved_glb(
@@ -26,6 +27,7 @@ def test_saved_glb(
     nonindexed: bool,
     explicit_targets: bool,
     unsigned_byte_indices: bool,
+    position_offset: int,
 ) -> None:
     pid = create_project(client, "GLB saved")["id"]
     params = {
@@ -33,6 +35,7 @@ def test_saved_glb(
             nonindexed_vertices=3 if nonindexed else None,
             explicit_targets=explicit_targets,
             unsigned_byte_indices=unsigned_byte_indices,
+            position_offset=position_offset,
         ),
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
@@ -97,6 +100,8 @@ def test_saved_glb(
         "target_float",
         "target_boolean",
         "byte_index_oob",
+        "misaligned_position_view",
+        "index_stride",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
