@@ -107,9 +107,14 @@ def list_spatial_calibration_reviews(
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
+    after_review_id: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
 ) -> list[SpatialCalibrationReviewResponse]:
     return _review_service(request, session).list(
-        project_id, asset_id, limit=limit, offset=offset
+        project_id,
+        asset_id,
+        limit=limit,
+        offset=offset,
+        after_review_id=after_review_id,
     )
 
 
