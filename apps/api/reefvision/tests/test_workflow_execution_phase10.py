@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import ModelRegistration, ProjectExchangePackage
+from reefvision.db.models import ModelRegistration, ProjectExchangePackage, WorkflowNodeRun
+from reefvision.domain.errors import ConflictError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.workflow_provenance import build_workflow_run_provenance
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -131,6 +134,38 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert set(artifacts["image_collection"]["payload_json"]["image_ids"]) == image_ids
     assert artifacts["image_collection"]["payload_json"]["count"] == 2
     assert all(len(item["payload_sha256"]) == 64 for item in payload["artifacts"])
+
+    # This executed two-node graph has a real producer -> consumer edge.
+    # Reversing both saved positions remains contiguous but must invalidate
+    # run detail and exported scientific provenance until restored.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        assert (producer.execution_order, consumer.execution_order) == (1, 2)
+        producer.execution_order = 2
+        consumer.execution_order = 1
+        session.commit()
+
+    reversed_detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert reversed_detail.status_code == 409, reversed_detail.text
+    assert reversed_detail.json() == {
+        "detail": "Workflow run node lineage does not match saved graph"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="node lineage does not match saved graph"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        producer.execution_order = 1
+        consumer.execution_order = 2
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
 
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(
