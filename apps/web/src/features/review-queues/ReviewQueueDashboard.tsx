@@ -175,7 +175,8 @@ export function ReviewQueueDashboard({
     // arbitrary string-keyed object to ReviewScoreWeights. Blank fields remain
     // invalid (NaN), while a researcher-entered zero stays a valid zero.
     const parsed: ReviewScoreWeights = { ...defaultWeights };
-    for (const key of Object.keys(defaultWeights) as (keyof ReviewScoreWeights)[]) {
+    const keys = Object.keys(defaultWeights) as (keyof ReviewScoreWeights)[];
+    for (const key of keys) {
       const value = weightInputs[key];
       parsed[key] = value.trim() === "" ? Number.NaN : Number(value);
     }
