@@ -155,9 +155,12 @@ def test_calibration_receipts_fail_closed_on_cross_project_and_tampering(
     created = client.post(reviews_url, json={"evidence": evidence})
     assert created.status_code == 201, created.text
     review_id = created.json()["id"]
-    assert client.get(
-        f"/api/v1/projects/{second}/spatial/assets/{asset['id']}/calibration-reviews/{review_id}"
-    ).status_code == 404
+    assert (
+        client.get(
+            f"/api/v1/projects/{second}/spatial/assets/{asset['id']}/calibration-reviews/{review_id}"
+        ).status_code
+        == 404
+    )
 
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
