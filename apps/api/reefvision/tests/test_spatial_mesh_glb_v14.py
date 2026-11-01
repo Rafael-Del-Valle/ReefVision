@@ -158,12 +158,7 @@ def make_glb(
             "translation": [0, 0, 0],
             "rotation": [0, 0, 0, 1],
             "scale": [1, 1, 1],
-            "matrix": [
-                1, 0, 0, 0,
-                0, 1, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1,
-            ],
+            "matrix": [int(index % 5 == 0) for index in range(16)],
         }
         doc["nodes"][0][identity_transform] = identities[identity_transform]
     if translated:
@@ -183,12 +178,7 @@ def make_glb(
         "mixed_matrix_trs",
         "huge_identity_matrix",
     }:
-        doc["nodes"][0]["matrix"] = [
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1,
-        ]
+        doc["nodes"][0]["matrix"] = [int(index % 5 == 0) for index in range(16)]
         matrix = doc["nodes"][0]["matrix"]
         if invalid_selector == "nonidentity_matrix":
             matrix[12] = 1
