@@ -154,6 +154,10 @@ def make_glb(
         doc["asset"]["minVersion"] = True
     if translated:
         doc["nodes"] = [{"mesh": 0, "translation": [1, 0, 0]}]
+    if invalid_selector == "node_morph_weights":
+        doc["nodes"][0]["weights"] = [0.5]
+    elif invalid_selector == "mesh_morph_weights":
+        doc["meshes"][0]["weights"] = [0.5]
     if invalid_selector == "scene":
         doc["scene"] = False
     elif invalid_selector == "mesh":
@@ -239,6 +243,13 @@ def test_single_glb_triangle() -> None:
 def test_rejects_scene_transforms() -> None:
     with pytest.raises(ValueError, match="transforms"):
         parse_glb_triangles(make_glb(translated=True))
+
+
+@pytest.mark.parametrize("invalid_selector", ["node_morph_weights", "mesh_morph_weights"])
+def test_rejects_unapplied_glb_morph_weights(invalid_selector: str) -> None:
+    """Do not measure base vertices while silently ignoring morph weights."""
+    with pytest.raises(ValueError, match="morph weights"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
 def test_rejects_invalid_base64() -> None:
@@ -338,9 +349,7 @@ def test_unsigned_int_index_bounds_preserve_geometry() -> None:
 def test_rejects_out_of_bounds_unsigned_int_indices() -> None:
     """A 32-bit index outside the vertex array cannot become a measurement."""
     with pytest.raises(ValueError, match="index out of bounds"):
-        parse_glb_triangles(
-            make_glb(unsigned_int_indices=True, invalid_selector="dword_index_oob")
-        )
+        parse_glb_triangles(make_glb(unsigned_int_indices=True, invalid_selector="dword_index_oob"))
 
 
 def test_glb_position_buffer_view_accepts_four_byte_component_alignment() -> None:
