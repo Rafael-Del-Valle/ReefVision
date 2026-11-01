@@ -215,9 +215,9 @@ def make_glb(
 
 def test_explicit_glb_minimum_version_preserves_geometry() -> None:
     """A valid glTF 2.0 minimum version does not change decoded geometry."""
-    assert parse_glb_triangles(
-        make_glb(explicit_min_version=True)
-    ) == parse_glb_triangles(make_glb())
+    expected = parse_glb_triangles(make_glb())
+    actual = parse_glb_triangles(make_glb(explicit_min_version=True))
+    assert actual == expected
 
 
 @pytest.mark.parametrize(
@@ -323,16 +323,16 @@ def test_rejects_out_of_bounds_unsigned_byte_indices() -> None:
 
 def test_unsigned_int_indices_match_unsigned_short_geometry() -> None:
     """32-bit glTF triangle indices must preserve geometry and winding."""
-    assert parse_glb_triangles(make_glb(unsigned_int_indices=True)) == parse_glb_triangles(
-        make_glb()
-    )
+    expected = parse_glb_triangles(make_glb())
+    actual = parse_glb_triangles(make_glb(unsigned_int_indices=True))
+    assert actual == expected
 
 
 def test_unsigned_int_index_bounds_preserve_geometry() -> None:
     """Optional extrema also bind 32-bit indices to the decoded triangles."""
-    assert parse_glb_triangles(make_glb(unsigned_int_indices=True, index_bounds=True)) == (
-        parse_glb_triangles(make_glb())
-    )
+    expected = parse_glb_triangles(make_glb())
+    actual = parse_glb_triangles(make_glb(unsigned_int_indices=True, index_bounds=True))
+    assert actual == expected
 
 
 def test_rejects_out_of_bounds_unsigned_int_indices() -> None:
