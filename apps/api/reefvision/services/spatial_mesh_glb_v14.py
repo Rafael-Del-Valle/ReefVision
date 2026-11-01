@@ -87,8 +87,11 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         )
     except (UnicodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError("Invalid GLB JSON") from exc
-    if _as_object(doc.get("asset"), "asset").get("version") != "2.0":
+    asset = _as_object(doc.get("asset"), "asset")
+    if asset.get("version") != "2.0":
         raise ValueError("GLB asset must declare version 2.0")
+    if "minVersion" in asset and asset["minVersion"] != "2.0":
+        raise ValueError("GLB asset minimum version must be 2.0")
     if doc.get("extensionsUsed") or doc.get("extensionsRequired"):
         raise ValueError("GLB extensions are unsupported")
     buffers = _as_list(doc.get("buffers"), "buffers")
@@ -241,8 +244,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             expected = reducer(indices)
             if (
                 len(declared) != 1
-                or type(declared[0]) not in (int, float)
-                or (type(declared[0]) is float and not isfinite(declared[0]))
+                or type(declared[0]) is not int
                 or declared[0] != expected
             ):
                 raise ValueError("GLB index bounds conflict with decoded indices")
