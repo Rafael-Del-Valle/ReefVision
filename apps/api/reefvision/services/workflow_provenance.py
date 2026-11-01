@@ -263,6 +263,26 @@ def verify_workflow_run_node_graph_lineage(
             raise ConflictError(error)
         seen.add(node.node_id)
 
+    # A contiguous sequence is insufficient: swapping a producer with its
+    # consumer preserves every position while falsifying execution lineage.
+    positions = {node.node_id: node.execution_order for node in nodes}
+    edges = graph.graph_json.get("edges", [])
+    if not isinstance(edges, list):
+        raise ConflictError(error)
+    for edge in edges:
+        if not isinstance(edge, dict):
+            raise ConflictError(error)
+        source_id = edge.get("source_node_id")
+        target_id = edge.get("target_node_id")
+        if (
+            not isinstance(source_id, str)
+            or not isinstance(target_id, str)
+            or source_id not in positions
+            or target_id not in positions
+            or positions[source_id] >= positions[target_id]
+        ):
+            raise ConflictError(error)
+
 
 def build_workflow_run_provenance(
     session: Session,
