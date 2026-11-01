@@ -50,7 +50,8 @@ def test_progressive_camera_jpeg_keeps_original_bytes_and_exif(
     assert metadata["metadata_json"]["exif"]["Orientation"] == 6
     assert metadata["capture_timestamp"] is None
     assert metadata["metadata_json"]["exif"]["DateTime"] == "2026:10:01 12:30:00"
-    assert "UTC offset" in metadata["metadata_json"]["capture_time_warning"]
+    assert "DateTimeOriginal" in metadata["metadata_json"]["capture_time_warning"]
+    assert "UTC capture timestamp not inferred" in metadata["metadata_json"]["capture_time_warning"]
     original = client.get(f"/api/v1/images/{image_id}/content")
     assert original.status_code == 200
     assert original.content == payload
