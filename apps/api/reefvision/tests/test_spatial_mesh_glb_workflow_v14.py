@@ -131,6 +131,10 @@ def test_saved_glb(
         "index_bounds_negative",
         "index_bounds_nan",
         "index_bounds_huge",
+        "index_bounds_float",
+        "asset_min_version_future",
+        "asset_min_version_numeric",
+        "asset_min_version_boolean",
     ],
 )
 def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
