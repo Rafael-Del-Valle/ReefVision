@@ -27,6 +27,8 @@ class PointCloudPreviewRequest(BaseModel):
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
     relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
     calibration_review: MeshCalibrationReviewEvidence | None = None
+    # Project-scoped immutable review receipt; resolved only at execution.
+    calibration_review_id: str | None = Field(default=None, min_length=1, max_length=64)
     source_label: str | None = Field(default=None, max_length=200)
     # Optional byte-exact replay guard for the submitted ASCII PLY text.
     # A matching digest does not verify calibration or specimen identity.
@@ -67,6 +69,11 @@ class PointCloudPreviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> PointCloudPreviewRequest:
+        if self.calibration_review_id is not None:
+            if self.asset_id is None:
+                raise ValueError("Saved calibration review requires a project asset ID")
+            if self.calibration_review is not None:
+                raise ValueError("Use a saved review ID or inline review, not both")
         if not self.calibration_evidence.strip():
             raise ValueError("Point-cloud calibration evidence cannot be blank")
         if self.asset_id is not None:
