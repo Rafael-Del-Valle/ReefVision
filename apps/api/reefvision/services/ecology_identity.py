@@ -26,6 +26,7 @@ from reefvision.db.models.project import Project
 from reefvision.domain.ecology_lineage_policy import (
     classify_ecological_unit_level,
     require_chronological_ecological_identity_revisions,
+    require_current_ecological_parent_registration,
     require_historical_ecological_parent_registration,
     require_unique_ecological_organism_key_spellings,
     require_unique_ecological_unit_spellings,
@@ -137,14 +138,10 @@ class EcologyIdentityService:
         Imported or externally modified revision histories may bypass the API.
         An invalid latest parent cannot become a workflow science artifact.
         """
-        for record in latest.values():
-            if record.parent_colony_key is None:
-                continue
-            parent = latest.get(record.parent_colony_key)
-            if record.kind != "fragment" or parent is None or parent.kind != "colony":
-                raise ValidationError(
-                    "Ecological identity registry contains an invalid parent-colony link"
-                )
+        try:
+            require_current_ecological_parent_registration(latest.values())
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
 
     @staticmethod
     def _assert_experimental_units(
