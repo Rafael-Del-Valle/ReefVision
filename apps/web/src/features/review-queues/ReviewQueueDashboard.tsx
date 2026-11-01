@@ -995,6 +995,15 @@ export function ReviewQueueDashboard({
             }
           }}
           markingComplete={completeItem.isPending}
+          completionError={
+            completeItem.isError &&
+            completeItem.variables?.itemId === quickReviewItem.id &&
+            completeItem.variables?.queueId === activeQueueId &&
+            completeItem.variables !== undefined &&
+            sameQueueScope(currentScope.current, completeItem.variables)
+              ? completeItem.error.message
+              : null
+          }
         />
       )}
     </section>
