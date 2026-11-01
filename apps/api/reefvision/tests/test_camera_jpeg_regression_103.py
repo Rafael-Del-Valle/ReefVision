@@ -752,3 +752,41 @@ def test_16bit_tiff_display_preserves_raw_intensity(
         actual_values = tuple(rendered.getpixel((x, y)) for y in range(2) for x in range(3))
         assert actual_values == values
     assert source.read_bytes() == original_bytes
+
+
+@pytest.mark.parametrize("parser_stage", ["top_level", "nested_ifd"])
+@pytest.mark.parametrize("error_type", [KeyError, IndexError, OverflowError])
+def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    parser_stage: str,
+    error_type: type[Exception],
+) -> None:
+    """Damaged camera EXIF must not discard valid pixels or invent capture UTC."""
+    source = tmp_path / "CAMERA_BROKEN_EXIF.JPG"
+    exif = Image.Exif()
+    exif[306] = "2026:10:01 12:30:00"
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(
+        source, format="JPEG", exif=exif
+    )
+    original = source.read_bytes()
+
+    if parser_stage == "top_level":
+        def broken_getexif(_image: Image.Image) -> Image.Exif:
+            raise error_type("malformed camera EXIF")
+
+        monkeypatch.setattr(Image.Image, "getexif", broken_getexif)
+    else:
+        def broken_get_ifd(_exif: Image.Exif, _tag: int) -> dict[int, object]:
+            raise error_type("malformed nested camera EXIF IFD")
+
+        monkeypatch.setattr(Image.Exif, "get_ifd", broken_get_ifd)
+
+    inspected = image_storage.inspect_staged_image(
+        source, "0" * 64, len(original)
+    )
+    assert (inspected.width_px, inspected.height_px) == (64, 48)
+    assert inspected.media_type == "image/jpeg"
+    assert inspected.capture_timestamp is None
+    assert "EXIF metadata could not be decoded" in inspected.metadata["exif_warning"]
+    assert source.read_bytes() == original
