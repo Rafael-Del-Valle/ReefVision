@@ -78,6 +78,31 @@ function queueLabel(queue: ReviewQueueRecord): string {
   return `${queue.status} | ${queue.item_count} ranked images`;
 }
 
+// Mirror the backend's scientific input constraints before creating a queue.
+// Invalid ranking weights or thresholds must not be silently coerced into a
+// different review policy; the backend remains the final authority.
+function validateQueueConfiguration(
+  weights: ReviewScoreWeights,
+  confidencePercent: string,
+): string | null {
+  const values = Object.values(weights);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (
+    !values.every((value) => Number.isFinite(value) && value >= 0) ||
+    !Number.isFinite(total) ||
+    total <= 0
+  ) {
+    return "Review score weights must be finite, nonnegative, and have a positive finite total.";
+  }
+  if (confidencePercent.trim() !== "") {
+    const percent = Number(confidencePercent);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      return "Review confidence threshold must be between 0 and 100%.";
+    }
+  }
+  return null;
+}
+
 export function ReviewQueueDashboard({
   project,
   onOpenImage,
@@ -112,6 +137,10 @@ export function ReviewQueueDashboard({
   const [singleItemActor, setSingleItemActor] = useState("");
   const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
   const [reviewBelowConfidence, setReviewBelowConfidence] = useState("");
+  const queueConfigurationError = validateQueueConfiguration(
+    weights,
+    reviewBelowConfidence,
+  );
   const [quickReviewItemId, setQuickReviewItemId] = useState<string | null>(
     null,
   );
@@ -285,6 +314,11 @@ export function ReviewQueueDashboard({
       ) {
         throw new Error("Review scope is not ready");
       }
+      const configurationError = validateQueueConfiguration(
+        request.weights,
+        request.reviewBelowConfidence,
+      );
+      if (configurationError) throw new Error(configurationError);
       const payload = {
         source_quality_control_run_id: request.sourceRunId || undefined,
         signal_weights: request.weights,
@@ -541,10 +575,16 @@ export function ReviewQueueDashboard({
                 </label>
               ))}
             </div>
+            {queueConfigurationError && (
+              <p className="form-error" role="alert">
+                {queueConfigurationError}
+              </p>
+            )}
             <div className="version-actions">
               <button
                 type="button"
                 disabled={
+                  Boolean(queueConfigurationError) ||
                   !scopeReady ||
                   reviewProtected ||
                   createQueue.isPending ||
