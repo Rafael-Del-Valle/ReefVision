@@ -370,6 +370,9 @@ class ReviewQueueService:
             )
             item_input = {
                 "image_id": image.image_id,
+                # The source-image digest, not its mutable filename or path,
+                # identifies the pixels that a researcher is asked to review.
+                "image_sha256": image.sha256,
                 "split": split_by_image_id.get(image.image_id),
                 "annotation_status": image.annotation_status,
                 "annotation_count": annotation_count,
@@ -396,6 +399,30 @@ class ReviewQueueService:
                     for annotation in sorted(annotations, key=lambda item: item.id)
                 ],
                 "prediction_ids": sorted(item.id for item in predictions),
+                # Prediction IDs alone cannot distinguish changed coordinates,
+                # confidence, labels, or reviewer provenance at the same count.
+                # This remains unverified model evidence, never ground truth.
+                "prediction_evidence": [
+                    {
+                        "id": prediction.id,
+                        "model_id": prediction.model_id,
+                        "label_class_id": prediction.label_class_id,
+                        "predicted_label": prediction.predicted_label,
+                        "predicted_index": prediction.predicted_index,
+                        "confidence": prediction.confidence,
+                        "bbox_xyxy": [
+                            prediction.x_min,
+                            prediction.y_min,
+                            prediction.x_max,
+                            prediction.y_max,
+                        ],
+                        "review_status": prediction.review_status,
+                        "was_edited": prediction.was_edited,
+                        "accepted_annotation_id": prediction.accepted_annotation_id,
+                        "provenance": prediction.provenance_json,
+                    }
+                    for prediction in sorted(predictions, key=lambda item: item.id)
+                ],
                 "issue_ids": sorted(issue.id for issue in image_issues),
                 "signal_values": signal_values,
                 "weights": request.signal_weights.model_dump(mode="json"),
