@@ -1,5 +1,6 @@
 """Read-only training-log tail security and API regression tests for 1.0.3."""
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,6 +33,33 @@ def test_log_tail_is_bounded_and_read_only(tmp_path: Path) -> None:
     assert result["text"].endswith("train/box_loss=0.25\n")
     assert len(result["text"].encode("utf-8")) <= 16384
     assert log.read_bytes() == original
+
+
+def test_log_tail_rejects_file_swapped_between_validation_and_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Do not expose another run's log if a local process replaces the file."""
+    log = tmp_path / "training.log"
+    log.write_bytes(b"train/box_loss=0.25\\n")
+    replacement = tmp_path / "other-run.log"
+    private_bytes = b"another run's private metrics\\n"
+    replacement.write_bytes(private_bytes)
+    original_open = Path.open
+    swapped = False
+
+    def swapped_open(path: Path, mode: str = "r", *args: object, **kwargs: object):
+        nonlocal swapped
+        if path == log and mode == "rb" and not swapped:
+            swapped = True
+            os.replace(replacement, log)
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", swapped_open)
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+    assert error.value.status_code == 403
+    assert swapped
+    assert log.read_bytes() == private_bytes
 
 
 def test_log_tail_discards_truncated_first_metric_line(tmp_path: Path) -> None:

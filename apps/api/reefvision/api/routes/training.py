@@ -262,7 +262,20 @@ def _training_log_tail(
     if not path.is_file():
         return empty
     try:
+        # Anchor the read to the validated file identity. A local process may
+        # replace the resolved log between path validation and open; without
+        # this check the read-only monitor could display another job's data.
+        expected_identity = path.stat()
         with path.open("rb") as handle:
+            opened_identity = os.fstat(handle.fileno())
+            # Recheck after opening: a substituted symlink or a replaced file
+            # must never be read, even when its name still ends in .log.
+            if (
+                path.resolve(strict=True) != path
+                or (opened_identity.st_dev, opened_identity.st_ino)
+                != (expected_identity.st_dev, expected_identity.st_ino)
+            ):
+                raise HTTPException(status_code=403, detail="Training log changed during open")
             handle.seek(0, 2)
             size = handle.tell()
             start = max(0, size - 16384)
