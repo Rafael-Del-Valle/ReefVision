@@ -1,0 +1,175 @@
+"""Historical parent-colony chronology: standalone, saved workflow, replay."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from datetime import UTC, datetime, timedelta, timezone
+from types import SimpleNamespace
+from typing import cast
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic import ValidationError as PydanticValidationError
+from sqlalchemy import select
+
+from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
+from reefvision.domain.ecology_lineage_policy import (
+    require_historical_ecological_parent_registration,
+)
+from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse
+from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_ecology_identity_registry_1_2 import _register
+from reefvision.tests.test_ecology_identity_revision_chronology_1_2 import (
+    _run_saved_registry,
+)
+
+
+def _parent_and_fragment(client: TestClient, project_id: str) -> str:
+    base = f"/api/v1/projects/{project_id}/ecology"
+    assert _register(client, project_id, "parent-A").status_code == 201
+    fragment = _register(
+        client,
+        project_id,
+        "fragment-A",
+        "fragment",
+        parent_colony_key="parent-A",
+    )
+    assert fragment.status_code == 201, fragment.text
+    return base
+
+
+def test_imported_fragment_predating_parent_fails_api_writes_and_saved_graph(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Parent registration chronology")["id"])
+    base = _parent_and_fragment(client, project_id)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        records = list(
+            session.scalars(
+                select(EcologyIdentityRevision).where(
+                    EcologyIdentityRevision.project_id == project_id
+                )
+            )
+        )
+        parent = next(row for row in records if row.organism_key == "parent-A")
+        fragment = next(row for row in records if row.organism_key == "fragment-A")
+        fragment.created_at = parent.created_at - timedelta(seconds=1)
+        session.commit()
+
+    invalid = client.get(f"{base}/identity-registry")
+    assert invalid.status_code == 400, invalid.text
+    assert "not registered before fragment" in invalid.text
+    assert _register(client, project_id, "parent-B").status_code == 400
+
+    succeeded, detail = _run_saved_registry(client, project_id)
+    assert succeeded is False
+    assert detail["run"]["status"] == "failed"
+    assert "not registered before fragment" in detail["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in detail["artifacts"]
+    )
+
+
+def test_parent_reclassified_to_colony_before_fragment_preserves_workflow(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Legitimate parent identity correction")["id"])
+    base = f"/api/v1/projects/{project_id}/ecology"
+    assert _register(client, project_id, "parent-A", "individual").status_code == 201
+    revised = client.post(
+        f"{base}/organisms/parent-A/revisions",
+        json={
+            "expected_revision": 1,
+            "kind": "colony",
+            "reason": "Reviewed correction before fragment registration",
+        },
+    )
+    assert revised.status_code == 201, revised.text
+    fragment = _register(
+        client,
+        project_id,
+        "fragment-A",
+        "fragment",
+        parent_colony_key="parent-A",
+    )
+    assert fragment.status_code == 201, fragment.text
+
+    response = client.get(f"{base}/identity-registry")
+    assert response.status_code == 200, response.text
+    succeeded, detail = _run_saved_registry(client, project_id)
+    assert succeeded is True
+    artifacts = [
+        row for row in detail["artifacts"] if row["data_type"] == "ecology_identity_registry"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == response.json()
+    assert artifacts[0]["payload_json"]["review_gate"] == "scientist_review_required"
+    assert artifacts[0]["payload_json"]["evidence_level"] == "registered_unverified"
+
+
+def test_resigned_registry_rejects_fragment_predating_parent(client: TestClient) -> None:
+    project_id = str(create_project(client, "Resigned parent chronology")["id"])
+    base = _parent_and_fragment(client, project_id)
+    response = client.get(f"{base}/identity-registry")
+    assert response.status_code == 200, response.text
+    changed = deepcopy(response.json())
+    EcologyIdentityRegistryResponse.model_validate(changed)
+
+    history = changed["identity_history"]
+    parent = next(row for row in history if row["organism_key"] == "parent-A")
+    fragment = next(row for row in history if row["organism_key"] == "fragment-A")
+    parent_time = datetime.fromisoformat(parent["created_at"].replace("Z", "+00:00"))
+    fragment["created_at"] = (parent_time - timedelta(days=1)).isoformat()
+    changed["history_sha256"] = canonical_json_sha256(
+        {
+            "algorithm_version": "ecology-identity-history-0001",
+            "project_id": project_id,
+            "revisions": [
+                {
+                    **{
+                        field: row[field]
+                        for field in (
+                            "id",
+                            "organism_key",
+                            "revision",
+                            "kind",
+                            "parent_colony_key",
+                            "experimental_unit_type",
+                            "experimental_unit_id",
+                            "reason",
+                        )
+                    },
+                    "created_at": datetime.fromisoformat(
+                        row["created_at"].replace("Z", "+00:00")
+                    ).isoformat(),
+                }
+                for row in history
+            ],
+        }
+    )
+    with pytest.raises(PydanticValidationError, match="not registered before fragment"):
+        EcologyIdentityRegistryResponse.model_validate(changed)
+
+
+def test_parent_chronology_uses_utc_instead_of_wall_clock_order() -> None:
+    parent = SimpleNamespace(
+        organism_key="parent-A",
+        revision=1,
+        kind="colony",
+        parent_colony_key=None,
+        created_at=datetime(2026, 1, 1, 5, 0, tzinfo=UTC),
+    )
+    fragment = SimpleNamespace(
+        organism_key="fragment-A",
+        revision=1,
+        kind="fragment",
+        parent_colony_key="parent-A",
+        created_at=datetime(2026, 1, 1, 0, 0, tzinfo=timezone(timedelta(hours=-5))),
+    )
+    require_historical_ecological_parent_registration([fragment, parent])
+    fragment.created_at -= timedelta(seconds=1)
+    with pytest.raises(ValueError, match="not registered before fragment"):
+        require_historical_ecological_parent_registration([parent, fragment])
