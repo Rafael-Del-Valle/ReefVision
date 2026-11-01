@@ -47,10 +47,10 @@ def _as_int(value: Any, name: str, minimum: int = 0) -> int:
 
 
 def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]]]:
-    """Decode one embedded indexed TRIANGLES primitive without applying scene transforms.
+    """Decode one embedded TRIANGLES primitive without applying scene transforms.
 
-    External buffers, compression, hierarchy, transforms, sparse accessors, and
-    interleaved vertex data are rejected rather than measured incorrectly.
+    External buffers, compression, hierarchy, transforms, and sparse accessors
+    are rejected. Bounded interleaved POSITION data are supported.
     """
     if not isinstance(encoded, str) or len(encoded) > 350_000:
         raise ValueError("GLB base64 exceeds preview bounds")
@@ -175,11 +175,19 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             type(view["target"]) is not int or view["target"] != expected_target
         ):
             raise ValueError("GLB bufferView target conflicts with accessor role")
-        if _as_int(view.get("buffer"), "buffer index") != 0 or (
-            "byteStride" in view
-            and (not position or type(view["byteStride"]) is not int or view["byteStride"] != width)
-        ):
-            raise ValueError("GLB strided or external views are unsupported")
+        if _as_int(view.get("buffer"), "buffer index") != 0:
+            raise ValueError("GLB external buffer views are unsupported")
+        stride = width
+        if "byteStride" in view:
+            candidate = view["byteStride"]
+            if (
+                not position
+                or type(candidate) is not int
+                or not 12 <= candidate <= 252
+                or candidate % 4
+            ):
+                raise ValueError("GLB vertex byteStride must be 12–252, divisible by four")
+            stride = candidate
         start = _as_int(view.get("byteOffset", 0), "view offset")
         size = _as_int(view.get("byteLength"), "view length")
         accessor_offset = _as_int(accessor.get("byteOffset", 0), "accessor offset")
@@ -190,13 +198,14 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         component_width = 4 if position else width
         if (
             start + size > buffer_length
-            or accessor_offset + count * width > size
+            or accessor_offset + (count - 1) * stride + width > size
+            or (stride > width and accessor_offset % stride + width > stride)
             or start % 4
             or accessor_offset % component_width
         ):
             raise ValueError("GLB accessor exceeds or misaligns its buffer view")
         offset = start + accessor_offset
-        return [struct.unpack_from(fmt, binary, offset + i * width) for i in range(count)]
+        return [struct.unpack_from(fmt, binary, offset + i * stride) for i in range(count)]
 
     vertices = [list(row) for row in read_accessor(attributes["POSITION"], position=True)]
     if any(not isfinite(v) or abs(v) > 1_000_000_000 for row in vertices for v in row):
@@ -218,7 +227,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         actual = [reducer(row[axis] for row in vertices) for axis in range(3)]
         if any(
             not isclose(value, expected, rel_tol=1e-6, abs_tol=1e-8)
-            for value, expected in zip(declared, actual)
+            for value, expected in zip(declared, actual, strict=True)
         ):
             raise ValueError("GLB position bounds conflict with decoded geometry")
     if "indices" in primitive:
