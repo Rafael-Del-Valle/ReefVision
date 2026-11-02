@@ -396,7 +396,10 @@ class LongitudinalAnalysisResponse(BaseModel):
         for key, effort in effort_by_key.items():
             visits = visits_by_key[key]
             dates = {visit.sampling_date for visit in visits}
-            if len(visits) != effort.planned_sampling_date_count or len(dates) != len(visits):
+            if (
+                len(visits) != effort.planned_sampling_date_count
+                or len(dates) != len(visits)
+            ):
                 raise ValueError("Planned visit dates do not reconcile with effort")
             if any(
                 visit.expected_organism_count != effort.expected_organism_count
