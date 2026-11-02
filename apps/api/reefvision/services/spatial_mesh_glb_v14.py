@@ -42,6 +42,17 @@ def _finite_json_float(value: str) -> float:
     return parsed
 
 
+def _bounded_json_int(value: str) -> int:
+    """Reject oversized JSON integers before Python's version-dependent digit limit.
+
+    glTF indices and byte offsets are bounded separately; opaque metadata must
+    not force an unbounded integer conversion or an uncaught decoder error.
+    """
+    if len(value.lstrip("-")) > 64:
+        raise ValueError("GLB JSON integer exceeds 64-digit preview bound")
+    return int(value)
+
+
 def _reject_nested_extensions(document: dict[str, Any]) -> None:
     """Reject unapplied glTF extensions without interpreting opaque extras.
 
@@ -116,6 +127,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
                 object_pairs_hook=_unique_keys,
                 parse_constant=_reject_nonfinite_json_constant,
                 parse_float=_finite_json_float,
+                parse_int=_bounded_json_int,
             ),
             "root",
         )
