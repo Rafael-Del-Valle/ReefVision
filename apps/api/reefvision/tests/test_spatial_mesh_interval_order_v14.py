@@ -145,6 +145,51 @@ def test_malformed_present_scale_bounds_fail_closed_for_replayed_artifacts(
         execute_mesh_longitudinal_comparison(None, None, "project-1", {}, artifacts)
 
 
+@pytest.mark.parametrize("missing_timepoint", ["before", "after"])
+@pytest.mark.parametrize("interval_on_missing", [False, True])
+def test_extent_intervals_fail_closed_when_one_diagonal_is_missing(
+    missing_timepoint: str, interval_on_missing: bool
+) -> None:
+    """A missing extent must not skip validation of either timepoint's bounds."""
+    before, after = _minimal_topology_pair()
+    for record in (before, after):
+        record["provenance"]["relative_scale_uncertainty"] = 0.1
+        record["axis_aligned_bounding_box_diagonal_m"] = 2.0
+    missing, present = (
+        (before, after) if missing_timepoint == "before" else (after, before)
+    )
+    missing["axis_aligned_bounding_box_diagonal_m"] = None
+    if interval_on_missing:
+        missing["axis_aligned_bounding_box_diagonal_scale_interval_m"] = [1.8, 2.2]
+        error = "Malformed bounding-box scale interval"
+    else:
+        # This apparently exact interval is narrower than the 10% scale error.
+        present["axis_aligned_bounding_box_diagonal_scale_interval_m"] = [2.0, 2.0]
+        error = "Bounding-box scale interval contradicts source uncertainty"
+
+    with pytest.raises(ValueError, match=error):
+        compare_mesh_observations(before, after)
+    artifacts = {
+        port: [SimpleNamespace(data_type="mesh_measurement_preview", payload_json=record)]
+        for port, record in (("before", before), ("after", after))
+    }
+    with pytest.raises(ValidationError, match=error):
+        execute_mesh_longitudinal_comparison(None, None, "project-1", {}, artifacts)
+
+
+def test_valid_partial_diagonal_evidence_remains_unknown_not_zero() -> None:
+    """Legacy missing geometry cannot imply zero longitudinal extent change."""
+    before, after = _minimal_topology_pair()
+    for record in (before, after):
+        record["provenance"]["relative_scale_uncertainty"] = 0.1
+    after["axis_aligned_bounding_box_diagonal_m"] = 2.0
+    after["axis_aligned_bounding_box_diagonal_scale_interval_m"] = [1.8, 2.2]
+    result = compare_mesh_observations(before, after)
+    assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
+    assert result["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
+    assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+
+
 def test_missing_early_bounds_still_withhold_combined_intervals() -> None:
     before, after = _minimal_topology_pair()
     for record in (before, after):
