@@ -166,6 +166,11 @@ def test_saved_qc_workflow_retries_after_real_sqlite_writer_lock(
             "__workflow_node_run_id": node.id,
         }
         source_id = source.id
+        # This is an interrupted-create fixture, not a corrupted completed
+        # node. Completed nodes must reject missing output/queue evidence;
+        # only an incomplete node may exercise the deterministic retry path.
+        assert node.status == "succeeded"
+        node.status = "running"
         node.output_artifact_ids_json = []
         session.delete(queue)
         session.commit()
