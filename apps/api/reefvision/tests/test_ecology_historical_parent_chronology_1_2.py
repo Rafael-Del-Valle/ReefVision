@@ -327,16 +327,44 @@ def test_equal_parent_timestamps_with_conflicting_kinds_are_ambiguous() -> None:
         created_at=recorded,
     )
     with pytest.raises(ValueError, match="ambiguous at fragment revision"):
-        require_historical_ecological_parent_registration(
-            [fragment, parent_second, parent_first]
-        )
+        require_historical_ecological_parent_registration([fragment, parent_second, parent_first])
 
     # Multiple same-instant revisions agreeing that the parent is a colony
     # are not ambiguous, preserving SQLite timestamp-precision compatibility.
     parent_first.kind = "colony"
-    require_historical_ecological_parent_registration(
-        [fragment, parent_second, parent_first]
+    require_historical_ecological_parent_registration([fragment, parent_second, parent_first])
+
+
+
+def test_same_instant_parent_state_conflict_uses_utc_not_local_wall_time() -> None:
+    """Offset-equivalent parent revisions must not invent a colony-at-link state."""
+    parent_first = SimpleNamespace(
+        organism_key="parent-A",
+        revision=1,
+        kind="individual",
+        parent_colony_key=None,
+        created_at=datetime(2026, 4, 3, 12, 0, tzinfo=UTC),
     )
+    parent_second = SimpleNamespace(
+        organism_key="parent-A",
+        revision=2,
+        kind="colony",
+        parent_colony_key=None,
+        created_at=datetime(2026, 4, 3, 8, 0, tzinfo=timezone(timedelta(hours=-4))),
+    )
+    fragment = SimpleNamespace(
+        organism_key="fragment-A",
+        revision=1,
+        kind="fragment",
+        parent_colony_key="parent-A",
+        created_at=datetime(2026, 4, 3, 14, 0, tzinfo=timezone(timedelta(hours=2))),
+    )
+    with pytest.raises(ValueError, match="ambiguous at fragment revision"):
+        require_historical_ecological_parent_registration([parent_first, parent_second, fragment])
+
+    # Identical colony states at the same actual UTC instant are acceptable.
+    parent_first.kind = "colony"
+    require_historical_ecological_parent_registration([parent_first, parent_second, fragment])
 
 
 def test_imported_ambiguous_parent_timestamp_blocks_api_and_saved_graph(
@@ -392,9 +420,7 @@ def test_imported_ambiguous_parent_timestamp_blocks_api_and_saved_graph(
     assert succeeded is False
     assert detail["run"]["status"] == "failed"
     assert "ambiguous at fragment revision" in detail["run"]["error_message"]
-    assert not any(
-        row["data_type"] == "ecology_identity_registry" for row in detail["artifacts"]
-    )
+    assert not any(row["data_type"] == "ecology_identity_registry" for row in detail["artifacts"])
     with app.state.session_factory() as session:
         unchanged = list(
             session.scalars(
