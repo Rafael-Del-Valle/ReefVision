@@ -114,6 +114,72 @@ def test_invalid_obj_source_rejected_by_api_and_saved_workflow(
     assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
 
 
+@pytest.mark.parametrize(
+    "separator",
+    [
+        "\\x00",
+        "\\x0b",
+        "\\x0c",
+        "\\x1b",
+        "\\x7f",
+        "\\x85",
+        "\\xa0",
+        "\\u2003",
+        "\\u2028",
+        "\\ufeff",
+    ],
+)
+def test_obj_control_separators_rejected_before_geometry_parsing(separator: str) -> None:
+    obj_text = OBJ.replace("v 0 0 0\\n", f"v 0{separator}0 0\\n", 1)
+    with pytest.raises(ValueError, match="unsupported control characters or separators"):
+        parse_obj_triangles(obj_text)
+
+
+@pytest.mark.parametrize("separator", ["\\x00", "\\xa0", "\\u2028", "\\ufeff"])
+def test_obj_control_separators_fail_standalone_and_saved_workflow(
+    client: TestClient, separator: str
+) -> None:
+    project_id = str(create_project(client, "OBJ separator integrity")["id"])
+    obj_text = OBJ.replace("v 0 0 0\\n", f"v 0{separator}0 0\\n", 1)
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": obj_text},
+    )
+    assert standalone.status_code in (400, 422), standalone.text
+    detail = _run_saved(client, project_id, obj_text)
+    assert detail["run"]["status"] == "failed"
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
+
+
+def test_obj_ascii_tabs_crlf_and_unicode_comment_replay_identically(
+    client: TestClient,
+) -> None:
+    valid = (
+        "# Unicode comment: caf\\u00e9\\r\\n"
+        "v\\t0\\t0\\t0\\r\\n"
+        "v\\t2\\t0\\t0\\r\\n"
+        "v\\t0\\t3\\t0\\r\\n"
+        "f\\t1\\t2\\t3\\r\\n"
+    )
+    vertices, faces = parse_obj_triangles(valid)
+    assert vertices == [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 3.0, 0.0]]
+    assert faces == [[0, 1, 2]]
+    project_id = str(create_project(client, "OBJ ASCII separator parity")["id"])
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": valid},
+    )
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["provenance"]["calibration_verified"] is False
+    detail = _run_saved(client, project_id, valid)
+    assert detail["run"]["status"] == "succeeded"
+    artifact = next(
+        item for item in detail["artifacts"] if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["payload_json"] == expected
+
+
 def test_valid_obj_decimals_and_true_zero_replay_identically(client: TestClient) -> None:
     valid = (
         "v 0e-9999 0 0 2\n"
@@ -143,6 +209,7 @@ def test_valid_obj_decimals_and_true_zero_replay_identically(client: TestClient)
     )
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
+
 
 def test_representable_weighted_coordinate_preserves_standalone_workflow_parity(
     client: TestClient,
