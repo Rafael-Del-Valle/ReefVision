@@ -372,6 +372,51 @@ test("initial image and gallery scrolling", async ({ page }) => {
   );
   await assertDecodedAndContained(1600, 1200);
 
+  // When the thumbnail strip fits, wheel input must still be consumed by the
+  // gallery rather than scrolling the document behind the first camera image.
+  // Temporarily hide surplus buttons to exercise the no-overflow branch in
+  // real Chromium, then restore the complete dataset for subsequent checks.
+  const originalFilmstripDisplays = await filmstrip.evaluate((element) => {
+    const buttons = Array.from(element.children) as HTMLElement[];
+    const displays = buttons.map((button) => button.style.display);
+    for (const button of buttons.slice(1)) button.style.display = "none";
+    element.scrollLeft = 0;
+    return displays;
+  });
+  const fittedStripGeometry = await filmstrip.evaluate((element) => ({
+    content: element.scrollWidth,
+    viewport: element.clientWidth,
+  }));
+  expect(fittedStripGeometry.content).toBeLessThanOrEqual(
+    fittedStripGeometry.viewport,
+  );
+  await filmstrip.hover();
+  const fittedScrollBefore = await scrollOffset();
+  const fittedPageBefore = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  const fittedImageBefore = await focused.boundingBox();
+  await page.mouse.wheel(0, 300);
+  await page.mouse.wheel(180, 0);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(await scrollOffset()).toBe(fittedScrollBefore);
+  expect(
+    await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+  ).toEqual(fittedPageBefore);
+  expect(await focused.boundingBox()).toEqual(fittedImageBefore);
+  await assertDecodedAndContained(1600, 1200);
+  await filmstrip.evaluate((element, displays) => {
+    Array.from(element.children).forEach((child, index) => {
+      (child as HTMLElement).style.display = displays[index] ?? "";
+    });
+  }, originalFilmstripDisplays);
+
   // A WebView2 window may be resized after its first camera image loads.
   // Refit both a standard image and a panorama without stale transforms,
   // unexpected document scrolling, or a change to the focused image.
