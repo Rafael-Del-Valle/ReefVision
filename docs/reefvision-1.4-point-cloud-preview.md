@@ -318,3 +318,19 @@ tests reject both four-digit and oversized zero-padded channels and require
 failed graph execution to publish no point-cloud measurement artifact. Valid
 colors are display metadata only; they do not imply coral condition,
 independent calibration, verified biological identity, or surface area.
+
+## Strict ASCII PLY input boundary (November 2026)
+
+The backend now rejects **any non-ASCII code point** in imported PLY 1.0
+point-cloud text, including Unicode digits that Python might otherwise parse
+as floating-point coordinates, Unicode whitespace, and non-ASCII comments.
+The local picker already requires ASCII, but direct API and saved Workflow
+Builder submissions must enforce the same rule. An invalid PLY fails without
+a provisional measurement artifact; valid ASCII comments and numeric values
+remain supported. This also avoids silently treating Unicode-normalized
+inputs as interchangeable with the exact submitted source bytes.
+
+The prior RGB-token bound remains in force: each color channel must contain
+one to three ASCII decimal digits representing an unsigned byte from 0 to 255.
+These are import-integrity checks, **not** evidence of verified calibration,
+registered coordinates, biological condition, specimen identity, or accuracy.
