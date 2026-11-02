@@ -183,6 +183,11 @@ def measure_mesh_preview(
     area_m2 = raw_area * scale * scale
     if not isfinite(area_m2):
         raise ValueError("Calibrated area overflowed")
+    # A representable positive source area can collapse to exactly zero when
+    # the caller's meter scale is extremely small. Reject that calibration
+    # rather than publishing a false zero-area scientific observation.
+    if raw_area > 0 and area_m2 == 0:
+        raise ValueError("Calibrated mesh surface area underflowed to zero")
     # These describe mesh tessellation concentration, not independent
     # biological observations or a calibrated reconstruction error model.
     area_shares = [area / raw_area for area in face_areas] if raw_area > 0 else []
