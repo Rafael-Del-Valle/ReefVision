@@ -518,3 +518,22 @@ decimal/exponent test checks exact standalone/saved-artifact parity.
 These are input-integrity protections, **not** evidence that the imported
 mesh, its scale, organism identity, surface, or anatomical branch lengths
 have been independently verified.
+
+## OBJ numeric-token integrity in provisional mesh previews
+
+The bounded OBJ triangle importer now applies the same explicit ASCII decimal
+and exponent grammar to vertex coordinates, optional homogeneous weights,
+vendor RGB values, and texture/normal declarations. It rejects Python-only
+underscores, Unicode digits, nonfinite scalars, and nonzero values that silently
+underflow to zero in floating-point conversion. True numeric zero (including
+zero with an exponent), signed decimal values, and valid homogeneous vertices
+remain supported. Comments may still contain non-ASCII text because they do
+not supply numeric geometry; their original bytes remain in source provenance.
+
+Standalone mesh preview and saved executable typed Workflow Builder graphs
+use the same parser. Regression tests require malformed sources to fail
+without a published measurement artifact, and compare the full persisted
+artifact against standalone output for a valid signed/exponent OBJ example.
+These checks establish lexical/numeric interpretation consistency, **not**
+validated photogrammetry, physical calibration, specimen identity, biological
+branch lengths, or independent human verification.
