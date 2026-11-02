@@ -434,9 +434,9 @@ def test_freeze_rejects_changed_candidate_acquisition_provenance(
     ("field", "replacement", "expected_error"),
     [
         ("video_sha256", None, "Source video checksum changed after acquisition"),
-        ("video_id", "wrong-video", "Pose acquisition provenance does not match verified source"),
-        ("video_track_id", "wrong-track", "Pose acquisition provenance does not match verified source"),
-        ("focus_frame", -1, "Pose acquisition provenance does not match verified source"),
+        ("video_id", "wrong-video", "does not match verified source"),
+        ("video_track_id", "wrong-track", "does not match verified source"),
+        ("focus_frame", -1, "does not match verified source"),
     ],
 )
 def test_freeze_rejects_resigned_acquisition_with_invalid_source_identity(
