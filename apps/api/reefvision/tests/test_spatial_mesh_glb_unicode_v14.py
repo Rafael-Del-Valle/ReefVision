@@ -47,9 +47,7 @@ def glb_with_metadata(*, key: str = "label", value: str = "fish", node: bool = F
         ("name", "\udfff", True),
     ],
 )
-def test_glb_rejects_unpaired_surrogate_in_any_metadata(
-    key: str, value: str, node: bool
-) -> None:
+def test_glb_rejects_unpaired_surrogate_in_any_metadata(key: str, value: str, node: bool) -> None:
     with pytest.raises(ValueError, match="unpaired Unicode surrogate"):
         parse_glb_triangles(glb_with_metadata(key=key, value=value, node=node))
 
