@@ -908,3 +908,52 @@ def test_noncanonical_nested_camera_exif_keeps_original_and_uncertainty(
     assert "invalid" in metadata["metadata_json"]["capture_time_warning"]
     assert metadata["metadata_json"]["exif"]["DateTimeOriginal"] == malformed_timestamp
     assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+@pytest.mark.parametrize(
+    ("exposure", "offset"),
+    [
+        ("0001:01:01 00:00:00", "+14:00"),
+        ("9999:12:31 23:59:59", "-14:00"),
+    ],
+)
+def test_exif_utc_rollover_beyond_datetime_bounds_is_uncertain(
+    exposure: str, offset: str
+) -> None:
+    """A valid camera-local time must not crash import when UTC is unrepresentable."""
+    exif = {36867: exposure, 36881: offset, 36868: "2026:10:01 12:30:00"}
+    assert _capture_timestamp(exif) is None
+
+
+@pytest.mark.parametrize(
+    ("exposure", "offset"),
+    [
+        ("0001:01:01 00:00:00", "+14:00"),
+        ("9999:12:31 23:59:59", "-14:00"),
+    ],
+)
+def test_camera_jpeg_utc_rollover_preserves_original_and_uncertainty(
+    client: TestClient, exposure: str, offset: str
+) -> None:
+    """UTC conversion overflow cannot turn a valid JPEG into a failed import."""
+    project = create_project(client, "Camera exposure outside UTC datetime range")
+    exif = Image.Exif()
+    exif[34665] = {36867: exposure, 36881: offset}
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(
+        stream, format="JPEG", exif=exif
+    )
+    payload = stream.getvalue()
+
+    report = import_one(
+        client, project["id"], filename="DSC_BOUNDARY.JPEG", content=payload
+    )
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    assert record["capture_timestamp"] is None
+    assert record["metadata_json"]["exif"]["DateTimeOriginal"] == exposure
+    assert record["metadata_json"]["exif"]["OffsetTimeOriginal"] == offset
+    assert "UTC capture timestamp not inferred" in record["metadata_json"][
+        "capture_time_warning"
+    ]
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
