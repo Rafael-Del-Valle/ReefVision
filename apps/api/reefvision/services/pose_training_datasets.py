@@ -132,6 +132,8 @@ def frozen_pose_item_fingerprints_match(
             acquisition.get("schema_version") != "pose-active-learning-provenance-0001"
             or acquisition.get("project_id") != dataset.project_id
             or acquisition.get("video_id") != row.video_id
+            or not isinstance(row.video_sha256, str)
+            or not row.video_sha256.strip()
             or acquisition.get("video_sha256") != row.video_sha256
             or acquisition.get("video_track_id") != row.video_track_id
             or acquisition.get("focus_frame") != row.frame_index
@@ -573,7 +575,11 @@ class PoseTrainingDatasetService:
         # Missing or empty source checksums are not valid frozen evidence.
         # Reject them before persisting a dataset that later fails its own
         # manifest lineage validation on the first read.
-        if source_video_sha != video.sha256:
+        if (
+            not isinstance(source_video_sha, str)
+            or not source_video_sha.strip()
+            or source_video_sha != video.sha256
+        ):
             raise ConflictError("Source video checksum changed after acquisition")
 
         keyframe = self._keyframe(
