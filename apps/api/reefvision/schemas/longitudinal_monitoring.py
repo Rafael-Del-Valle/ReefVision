@@ -371,6 +371,91 @@ class LongitudinalAnalysisResponse(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def reconcile_persisted_unit_means_with_changes(self) -> LongitudinalAnalysisResponse:
+        """Prevent re-signed unit means from contradicting organism endpoints.
+
+        Only reconcile when both optional historical sections exist. Organism
+        membership comes from the separate per-unit coverage audit, not from
+        a caller's claim that fragments are independent replicates.
+        """
+        if not self.unit_coverage or not self.unit_summaries:
+            return self
+
+        coverage_by_key = {
+            (row.experimental_unit_id, row.metric_name): row
+            for row in self.unit_coverage
+        }
+        if len(coverage_by_key) != len(self.unit_coverage):
+            raise ValueError("Unit summary duplicate coverage records")
+        changes_by_key = {(row.organism_id, row.metric_name): row for row in self.changes}
+        if len(changes_by_key) != len(self.changes):
+            raise ValueError("Unit summary duplicate organism change records")
+        summary_keys = {
+            (row.experimental_unit_id, row.metric_name) for row in self.unit_summaries
+        }
+        eligible_keys = {
+            key for key, coverage in coverage_by_key.items() if coverage.eligible_for_summary
+        }
+        if len(summary_keys) != len(self.unit_summaries) or summary_keys != eligible_keys:
+            raise ValueError("Unit summary eligibility does not reconcile with coverage")
+
+        for summary in self.unit_summaries:
+            coverage = coverage_by_key[(summary.experimental_unit_id, summary.metric_name)]
+            organism_ids = list(coverage.observed_sampling_dates_by_organism)
+            if (
+                summary.organism_count != len(organism_ids)
+                or coverage.observed_organism_count != len(organism_ids)
+                or coverage.complete_organism_count != len(organism_ids)
+                or coverage.missing_organism_ids
+                or coverage.unobserved_organism_ids
+            ):
+                raise ValueError("Unit summary organism denominator does not reconcile")
+            series = [
+                changes_by_key.get((organism_id, summary.metric_name))
+                for organism_id in organism_ids
+            ]
+            if any(change is None for change in series):
+                raise ValueError("Unit summary lacks a completed organism change")
+            completed = [change for change in series if change is not None]
+            if any(change.unit != summary.unit for change in completed):
+                raise ValueError("Unit summary measurement units disagree with organism changes")
+            windows = {
+                (change.first_observed_at.date(), change.last_observed_at.date())
+                for change in completed
+            }
+            if len(windows) != 1:
+                raise ValueError("Unit summary organism sampling windows do not reconcile")
+            if (
+                summary.baseline_at != min(change.first_observed_at for change in completed)
+                or summary.final_at != max(change.last_observed_at for change in completed)
+            ):
+                raise ValueError("Unit summary endpoint timestamps do not reconcile")
+            expected_change = finite_descriptive_mean(
+                change.absolute_change for change in completed
+            )
+            expected_rate = finite_descriptive_mean(
+                change.change_per_day for change in completed
+            )
+            if not (
+                math.isfinite(summary.mean_absolute_change)
+                and math.isfinite(summary.mean_change_per_day)
+                and math.isclose(
+                    summary.mean_absolute_change,
+                    expected_change,
+                    rel_tol=1e-9,
+                    abs_tol=1e-12,
+                )
+                and math.isclose(
+                    summary.mean_change_per_day,
+                    expected_rate,
+                    rel_tol=1e-9,
+                    abs_tol=1e-12,
+                )
+            ):
+                raise ValueError("Unit summary means disagree with organism changes")
+        return self
+
+    @model_validator(mode="after")
     def reconcile_persisted_population_units(self) -> LongitudinalAnalysisResponse:
         """A saved population stratum must give each eligible unit one vote.
 

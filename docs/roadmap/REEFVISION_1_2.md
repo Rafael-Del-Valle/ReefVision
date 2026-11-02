@@ -6170,3 +6170,31 @@ no full-suite pass is inferred until the new head completes.
 **Focused correction:** Run the existing casefold/NFKC organism and physical-unit identity guard before the existing population-stratum reconciliation, without duplicating validation logic or changing accepted results. The alias diagnostic now identifies the actual scientific identity error even when a forged population roster also contains the renamed tank. Extend standalone population read-back tests and the existing executed saved `ecology_longitudinal_analysis` Workflow Builder persisted-artifact test with a *coordinated* Unicode/case alias across unit and population rosters. Existing typed ports, immutable source provenance, review gates, and `caller_supplied_unverified` classification are unchanged. No migration, new workflow node, environmental context, model weights, or cross-version merge.
 
 **Validation required:** Exact-head Ruff, mypy, backend pytest, frontend/E2E, and Windows CI; authenticated calibrated longitudinal measurements, verified independent biological units, scientist-reviewed human/model comparison, migration reconciliation with 1.1, and installed Windows MSI/GUI/GPU acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Organism-to-unit aggregate replay integrity (2026-11-02; development only)
+
+The existing caller-supplied longitudinal API and saved executable
+`ecology_longitudinal_analysis` Workflow Builder node already persist
+organism changes, unit coverage, unit means and population means. Population
+replay checked unit-weighted means against unit summaries but did not
+independently recompute each unit mean from its constituent organism changes.
+A re-signed artifact could therefore change a unit mean *and* its population
+mean together without failing that internal check.
+
+When both historical optional sections are available, persisted result
+validation now uses the unit-coverage organism roster to require one eligible
+unit summary per eligible unit/metric, completed organism endpoints, exact
+organism denominators, consistent measurement units and UTC-date windows,
+the original timestamp envelope, and recomputed organism-weighted unit
+descriptive means/rates. The existing population validator then checks
+unit-weighted means. This does **not** verify source observations, camera
+calibration, physical unit independence or scientist review. Historical
+artifacts missing one optional section remain readable.
+
+Acceptance additions cover five coordinated/endpoint-tampering cases in
+standalone API-result replay and a persisted saved Workflow Builder artifact
+whose unit and population means are forged together. No new node, migration,
+environmental provider, pretrained weights or cross-version merge.
+Exact-head CI and representative calibrated, scientist-reviewed biological
+acceptance remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**

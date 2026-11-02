@@ -112,6 +112,43 @@ def test_population_replay_rejects_pseudoreplication_and_forged_means(
         LongitudinalAnalysisResponse.model_validate(forged)
 
 
+@pytest.mark.parametrize(
+    "tampering",
+    [
+        "coordinated_mean",
+        "coordinated_rate",
+        "coordinated_organism_count",
+        "baseline_hour",
+        "final_hour",
+    ],
+)
+def test_unit_summary_replay_rejects_forged_organism_aggregates(
+    client: TestClient, tampering: str
+) -> None:
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=_two_tank_payload())
+    assert response.status_code == 200, response.text
+    original = response.json()
+    LongitudinalAnalysisResponse.model_validate(original)
+    forged = deepcopy(original)
+    unit = forged["unit_summaries"][0]
+    population = forged["population_summaries"][0]
+    if tampering == "coordinated_mean":
+        unit["mean_absolute_change"] += 2
+        population["mean_unit_absolute_change"] += 1
+    elif tampering == "coordinated_rate":
+        unit["mean_change_per_day"] += 2
+        population["mean_unit_change_per_day"] += 1
+    elif tampering == "coordinated_organism_count":
+        unit["organism_count"] += 1
+        population["contributing_organism_count"] += 1
+    elif tampering == "baseline_hour":
+        unit["baseline_at"] = unit["baseline_at"].replace("T12:", "T13:")
+    elif tampering == "final_hour":
+        unit["final_at"] = unit["final_at"].replace("T12:", "T13:")
+    with pytest.raises(PydanticValidationError, match="Unit summary"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+
 def test_saved_workflow_population_artifact_rejects_forged_unit_weight(
     client: TestClient,
 ) -> None:
@@ -177,4 +214,11 @@ def test_saved_workflow_population_artifact_rejects_forged_unit_weight(
         PydanticValidationError,
         match="persisted experimental unit IDs differ only by case or Unicode compatibility",
     ):
+        LongitudinalAnalysisResponse.model_validate(forged)
+    # Re-signing both levels of a descriptive mean must not detach the
+    # unit result from the organism-level measurements it summarizes.
+    forged = deepcopy(persisted)
+    forged["unit_summaries"][0]["mean_absolute_change"] += 2
+    forged["population_summaries"][0]["mean_unit_absolute_change"] += 1
+    with pytest.raises(PydanticValidationError, match="Unit summary means"):
         LongitudinalAnalysisResponse.model_validate(forged)
