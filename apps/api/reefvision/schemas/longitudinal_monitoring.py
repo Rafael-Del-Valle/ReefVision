@@ -324,6 +324,53 @@ class LongitudinalAnalysisResponse(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
+    def reject_aliases_in_persisted_organism_rosters(self) -> LongitudinalAnalysisResponse:
+        """Do not replay alias-split organism denominators as biological samples."""
+        identifiers = [row.organism_id for row in self.changes]
+        identifiers.extend(
+            organism
+            for coverage in self.unit_coverage
+            for organism in coverage.observed_sampling_dates_by_organism
+        )
+        # A persisted roster also contains individuals never observed.
+        # Check all denominator-bearing identities, not only source-linked
+        # changes: a forged missing or planned-visit alias must not inflate
+        # the apparent number of biological individuals on replay.
+        for coverage in self.unit_coverage:
+            identifiers.extend(coverage.missing_organism_ids)
+            identifiers.extend(coverage.unobserved_organism_ids)
+            identifiers.extend(coverage.missing_scheduled_dates_by_organism)
+        for visit in self.planned_sampling_date_coverage:
+            identifiers.extend(visit.observed_organism_ids)
+            identifiers.extend(visit.missing_organism_ids)
+        try:
+            require_unique_ecological_organism_key_spellings(identifiers)
+        except ValueError as exc:
+            raise ValueError(
+                "Longitudinal persisted organism IDs differ only by case or Unicode compatibility"
+            ) from exc
+        # A saved result cannot inflate biological units by relabeling a
+        # tank/colony across its metric, coverage, or population records.
+        unit_ids = [row.experimental_unit_id for row in self.unit_summaries]
+        unit_ids.extend(row.experimental_unit_id for row in self.excluded_units)
+        unit_ids.extend(row.experimental_unit_id for row in self.unit_coverage)
+        unit_ids.extend(row.experimental_unit_id for row in self.planned_sampling_effort)
+        unit_ids.extend(row.experimental_unit_id for row in self.planned_sampling_date_coverage)
+        unit_ids.extend(
+            unit_id
+            for population in self.population_summaries
+            for unit_id in population.experimental_unit_ids
+        )
+        try:
+            require_unique_ecological_organism_key_spellings(unit_ids)
+        except ValueError as exc:
+            raise ValueError(
+                "Longitudinal persisted experimental unit IDs differ only by case "
+                "or Unicode compatibility"
+            ) from exc
+        return self
+
+    @model_validator(mode="after")
     def reconcile_persisted_population_units(self) -> LongitudinalAnalysisResponse:
         """A saved population stratum must give each eligible unit one vote.
 
@@ -396,53 +443,6 @@ class LongitudinalAnalysisResponse(BaseModel):
                 )
             ):
                 raise ValueError("Population summary unit-weighted means do not reconcile")
-        return self
-
-    @model_validator(mode="after")
-    def reject_aliases_in_persisted_organism_rosters(self) -> LongitudinalAnalysisResponse:
-        """Do not replay alias-split organism denominators as biological samples."""
-        identifiers = [row.organism_id for row in self.changes]
-        identifiers.extend(
-            organism
-            for coverage in self.unit_coverage
-            for organism in coverage.observed_sampling_dates_by_organism
-        )
-        # A persisted roster also contains individuals never observed.
-        # Check all denominator-bearing identities, not only source-linked
-        # changes: a forged missing or planned-visit alias must not inflate
-        # the apparent number of biological individuals on replay.
-        for coverage in self.unit_coverage:
-            identifiers.extend(coverage.missing_organism_ids)
-            identifiers.extend(coverage.unobserved_organism_ids)
-            identifiers.extend(coverage.missing_scheduled_dates_by_organism)
-        for visit in self.planned_sampling_date_coverage:
-            identifiers.extend(visit.observed_organism_ids)
-            identifiers.extend(visit.missing_organism_ids)
-        try:
-            require_unique_ecological_organism_key_spellings(identifiers)
-        except ValueError as exc:
-            raise ValueError(
-                "Longitudinal persisted organism IDs differ only by case or Unicode compatibility"
-            ) from exc
-        # A saved result cannot inflate biological units by relabeling a
-        # tank/colony across its metric, coverage, or population records.
-        unit_ids = [row.experimental_unit_id for row in self.unit_summaries]
-        unit_ids.extend(row.experimental_unit_id for row in self.excluded_units)
-        unit_ids.extend(row.experimental_unit_id for row in self.unit_coverage)
-        unit_ids.extend(row.experimental_unit_id for row in self.planned_sampling_effort)
-        unit_ids.extend(row.experimental_unit_id for row in self.planned_sampling_date_coverage)
-        unit_ids.extend(
-            unit_id
-            for population in self.population_summaries
-            for unit_id in population.experimental_unit_ids
-        )
-        try:
-            require_unique_ecological_organism_key_spellings(unit_ids)
-        except ValueError as exc:
-            raise ValueError(
-                "Longitudinal persisted experimental unit IDs differ only by case "
-                "or Unicode compatibility"
-            ) from exc
         return self
 
     @model_validator(mode="after")

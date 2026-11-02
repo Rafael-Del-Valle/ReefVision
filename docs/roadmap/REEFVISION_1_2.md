@@ -6161,3 +6161,12 @@ longitudinal response, per-date effort tests, and population replay tests).
 Applied the formatter's exact logged changes without changing the scientific
 algorithm. Other workflows were still running at the time of correction;
 no full-suite pass is inferred until the new head completes.
+
+
+## Identity-first persisted population validation (2026-11-02; development only)
+
+**Exact pre-edit evidence:** `001519e384e30f7fcdcb3265ac4e3b37c5f0a789` completed 19 PR workflows: 17 succeeded, two backend suites failed the same single assertion (2,366 passed, one failed, 32 skipped). A forged fullwidth tank ID was correctly rejected by the population-roster consistency validator, but the regression expected the later Unicode alias diagnostic. This was a validation-order problem, not acceptance of forged biological replicates.
+
+**Focused correction:** Run the existing casefold/NFKC organism and physical-unit identity guard before the existing population-stratum reconciliation, without duplicating validation logic or changing accepted results. The alias diagnostic now identifies the actual scientific identity error even when a forged population roster also contains the renamed tank. Extend standalone population read-back tests and the existing executed saved `ecology_longitudinal_analysis` Workflow Builder persisted-artifact test with a *coordinated* Unicode/case alias across unit and population rosters. Existing typed ports, immutable source provenance, review gates, and `caller_supplied_unverified` classification are unchanged. No migration, new workflow node, environmental context, model weights, or cross-version merge.
+
+**Validation required:** Exact-head Ruff, mypy, backend pytest, frontend/E2E, and Windows CI; authenticated calibrated longitudinal measurements, verified independent biological units, scientist-reviewed human/model comparison, migration reconciliation with 1.1, and installed Windows MSI/GUI/GPU acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**

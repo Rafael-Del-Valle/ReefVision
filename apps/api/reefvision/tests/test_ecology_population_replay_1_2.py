@@ -65,6 +65,7 @@ def test_population_replay_weights_two_tanks_not_four_fragments(
         "duplicate_stratum",
         "changed_stratum",
         "changed_unit_window",
+        "coordinated_unicode_unit_alias",
     ],
 )
 def test_population_replay_rejects_pseudoreplication_and_forged_means(
@@ -99,7 +100,15 @@ def test_population_replay_rejects_pseudoreplication_and_forged_means(
         population["final_date"] = "2026-04-04"
     elif tampering == "changed_unit_window":
         units[1]["final_at"] = "2026-04-04T12:00:00Z"
-    with pytest.raises(PydanticValidationError, match="Population summary"):
+    elif tampering == "coordinated_unicode_unit_alias":
+        units[1]["experimental_unit_id"] = "TANK-1"
+        population["experimental_unit_ids"] = ["TANK-1", "tank-1"]
+    expected_error = (
+        "persisted experimental unit IDs differ only by case or Unicode compatibility"
+        if tampering == "coordinated_unicode_unit_alias"
+        else "Population summary"
+    )
+    with pytest.raises(PydanticValidationError, match=expected_error):
         LongitudinalAnalysisResponse.model_validate(forged)
 
 
@@ -158,4 +167,14 @@ def test_saved_workflow_population_artifact_rejects_forged_unit_weight(
     forged = deepcopy(persisted)
     forged["population_summaries"][0]["independent_unit_count"] = 4
     with pytest.raises(PydanticValidationError, match="Population summary"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+    # A coordinated alteration of both unit and population rosters must not
+    # turn one tank into two independent biological replicates on replay.
+    forged = deepcopy(persisted)
+    forged["unit_summaries"][1]["experimental_unit_id"] = "TANK-1"
+    forged["population_summaries"][0]["experimental_unit_ids"] = ["TANK-1", "tank-1"]
+    with pytest.raises(
+        PydanticValidationError,
+        match="persisted experimental unit IDs differ only by case or Unicode compatibility",
+    ):
         LongitudinalAnalysisResponse.model_validate(forged)
