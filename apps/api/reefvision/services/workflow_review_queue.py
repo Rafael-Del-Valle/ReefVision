@@ -122,6 +122,7 @@ def create_review_queue_workflow_artifact(
     dataset_version_id: str | None = None
     dataset_version: DatasetVersion | None = None
     expected_input_ids = [source.id]
+    frozen_split_by_image_id: dict[str, str] = {}
     if dataset_inputs:
         dataset_source = dataset_inputs[0]
         dataset_payload = dataset_source.payload_json
@@ -171,6 +172,7 @@ def create_review_queue_workflow_artifact(
             .order_by(DatasetVersionItem.id)
         ).all()
         expected_image_ids = [item.image_id for item in frozen_items]
+        frozen_split_by_image_id = {item.image_id: item.split for item in frozen_items}
         expected_split_counts = dict(Counter(str(item.split) for item in frozen_items))
         if (
             dataset_source.workflow_run_id != run_id
@@ -336,6 +338,18 @@ def create_review_queue_workflow_artifact(
         ):
             raise ValidationError("QC review-queue retry parameters changed or queue incomplete")
         validate_saved_queue_snapshot(existing, existing.items)
+        # A re-signed queue digest can still relabel an image's frozen split
+        # or substitute an image absent from the original dataset version.
+        # Bind every persisted QC item to its immutable version membership;
+        # confidence-filtered queues may legitimately contain only a subset.
+        if dataset_version_id is not None and any(
+            item.image_id not in frozen_split_by_image_id
+            or item.split != frozen_split_by_image_id[item.image_id]
+            for item in existing.items
+        ):
+            raise ValidationError(
+                "QC review-queue frozen dataset item membership or split does not match"
+            )
         queue = service.get_queue(existing.id)
     else:
         try:
