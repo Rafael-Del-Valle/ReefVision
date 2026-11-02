@@ -491,6 +491,10 @@ def process_workflow_run_job(
                 job.completed_at = now
 
             session.flush()
+            # SQLite can discard timezone information when persisting a UTC
+            # datetime. Reload the stored value before freezing its ISO form,
+            # so a later provenance read hashes the same completed_at value.
+            session.refresh(run, attribute_names=["completed_at"])
 
             provenance = build_workflow_run_provenance(
                 session,
