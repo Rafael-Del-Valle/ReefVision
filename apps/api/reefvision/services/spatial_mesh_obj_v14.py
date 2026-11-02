@@ -27,6 +27,18 @@ def _parse_obj_float(token: str) -> float:
 def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
     if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_OBJ_BYTES:
         raise ValueError("OBJ preview exceeds the 256000-byte limit")
+    # splitlines() and split() accept Unicode line/space separators that are
+    # not part of the supported ASCII OBJ syntax. Such separators can silently
+    # alter record boundaries and therefore change measured mesh geometry.
+    # Unicode letters in inert comments/labels remain untouched.
+    if any(
+        (ord(character) < 32 and character not in "\t\n\r")
+        or ord(character) == 127
+        or (character.isspace() and character not in " \t\n\r")
+        or character == "\ufeff"
+        for character in text
+    ):
+        raise ValueError("OBJ preview contains unsupported control characters or separators")
     vertices: list[list[float]] = []
     faces: list[list[int]] = []
     texture_coordinate_count = 0
