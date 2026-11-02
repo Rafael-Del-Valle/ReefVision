@@ -198,6 +198,30 @@ def create_review_queue_workflow_artifact(
             or dataset_payload["annotation_count"] != dataset_version.annotation_count
             or type(dataset_payload.get("mask_annotation_count")) is not int
             or dataset_payload["mask_annotation_count"] != dataset_version.mask_annotation_count
+            # The producer metadata and version row can both be re-signed
+            # while contradicting the immutable per-image scientific records.
+            # Check the original manifest digest and independently reconcile
+            # frozen image/annotation counts before replaying researcher QC.
+            or not isinstance(dataset_version.manifest_json, dict)
+            or canonical_json_sha256(dataset_version.manifest_json)
+            != dataset_version.manifest_sha256
+            or not isinstance(dataset_version.manifest_json.get("summary"), dict)
+            or dataset_version.manifest_json["summary"].get("image_count")
+            != dataset_version.image_count
+            or dataset_version.manifest_json["summary"].get("annotation_count")
+            != dataset_version.annotation_count
+            or dataset_version.image_count != len(frozen_items)
+            or dataset_version.annotation_count
+            != sum(item.annotation_count for item in frozen_items)
+            or dataset_version.mask_annotation_count
+            != sum(item.mask_annotation_count for item in frozen_items)
+            or any(
+                not isinstance(item.annotation_snapshot_json, list)
+                or not isinstance(item.mask_annotation_snapshot_json, list)
+                or item.annotation_count != len(item.annotation_snapshot_json)
+                or item.mask_annotation_count != len(item.mask_annotation_snapshot_json)
+                for item in frozen_items
+            )
             or images_artifact is None
             or images_artifact.workflow_run_id != run_id
             or images_artifact.producer_node_run_id != dataset_producer.id
