@@ -552,7 +552,8 @@ function Get-ReefVisionReleaseAcceptanceGaps {
     $reportHash = if ($Report -is [System.Collections.IDictionary]) {
         [string]$Report['installer_sha256']
     } else {
-        [string]$Report.installer_sha256
+        $property = $Report.PSObject.Properties['installer_sha256']
+        if ($null -ne $property) { [string]$property.Value } else { '' }
     }
     if ($reportHash -cnotmatch '^[0-9a-fA-F]{64}
 
@@ -665,7 +666,8 @@ function Test-ReefVisionAdministrator {
         $observedHash = if ($entry -is [System.Collections.IDictionary]) {
             [string]$entry['installer_sha256']
         } else {
-            [string]$entry.installer_sha256
+            $property = $entry.PSObject.Properties['installer_sha256']
+            if ($null -ne $property) { [string]$property.Value } else { '' }
         }
         if ($observedHash -cnotmatch '^[0-9a-fA-F]{64}
 
