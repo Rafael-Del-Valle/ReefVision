@@ -441,7 +441,8 @@ $requiredAcceptanceFields = @(
     'project_persistence', 'restart', 'project_exchange',
     'upgrade', 'uninstall', 'data_retention'
 )
-$completeEvidence = @{}
+$installerDigest = ('A' * 64) # Synthetic digest; never represents a tested MSI.
+$completeEvidence = @{ installer_sha256 = $installerDigest }
 foreach ($name in $requiredAcceptanceFields) {
     $completeEvidence[$name] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Recorded observation for $name"
 }
@@ -453,27 +454,51 @@ $releaseGaps = @(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence)
 Assert-True ($releaseGaps.Count -eq 5) 'Automated MSI PASS alone must not certify release readiness.'
 foreach ($name in @('webview2_gui', 'training_console', 'gpu_scientific', 'canon_camera', 'sony_camera')) {
     Assert-True ($releaseGaps -ccontains "${name}: MISSING") "Release readiness must require $name evidence."
-    $completeEvidence[$name] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Physical acceptance observation for $name"
+    $completeEvidence[$name] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Physical acceptance observation for $name" -InstallerSha256 $installerDigest
 }
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Complete timestamped release evidence should satisfy all release gates.'
 # One tested camera cannot substitute for the other; each needs independent evidence.
 $completeEvidence['sony_camera'] = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Sony camera not physically available'
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'sony_camera: NOT RUN') 'Canon PASS must not certify untested Sony hardware.'
-$completeEvidence['sony_camera'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed Sony A7R JPEG orientation and unchanged original hash'
+$completeEvidence['sony_camera'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed Sony A7R JPEG orientation and unchanged original hash' -InstallerSha256 $installerDigest
 $completeEvidence['canon_camera'].timestamp_utc = '2026-11-01T12:00:00.0000000-06:00'
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'canon_camera: INVALID TIMESTAMP') 'Non-UTC Canon evidence must not certify release.'
-$completeEvidence['canon_camera'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed Canon EOS JPEG orientation and unchanged original hash'
+$completeEvidence['canon_camera'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed Canon EOS JPEG orientation and unchanged original hash' -InstallerSha256 $installerDigest
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Restored independent camera evidence should satisfy release gates.'
 $completeEvidence['training_console'].status = 'NOT RUN'
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'training_console: NOT RUN') 'Unobserved live training must block release readiness.'
-$completeEvidence['training_console'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed live box/cls/dfl losses without interruption'
+$completeEvidence['training_console'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed live box/cls/dfl losses without interruption' -InstallerSha256 $installerDigest
 $completeEvidence['webview2_gui'].detail = ' '
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'webview2_gui: MISSING DETAIL') 'WebView2 PASS without observations must not certify release readiness.'
-$completeEvidence['webview2_gui'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed installed image navigation and annotation'
+$completeEvidence['webview2_gui'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed installed image navigation and annotation' -InstallerSha256 $installerDigest
 $completeEvidence['gpu_scientific'].timestamp_utc = [DateTime]::UtcNow.AddDays(1).ToString('o')
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'gpu_scientific: INVALID TIMESTAMP') 'Future GPU/scientific acceptance evidence must be rejected.'
-$completeEvidence['gpu_scientific'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed local GPU scientific workflow'
+$completeEvidence['gpu_scientific'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed local GPU scientific workflow' -InstallerSha256 $installerDigest
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Restored release evidence should satisfy release gates.'
+
+# Physical observations from another MSI cannot certify this candidate.
+# These are synthetic report records only; no hardware is exercised.
+$completeEvidence['webview2_gui'].installer_sha256 = ('B' * 64)
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'webview2_gui: INSTALLER SHA256 MISMATCH') 'Physical WebView2 PASS from another installer must not certify this MSI.'
+$completeEvidence['webview2_gui'].Remove('installer_sha256')
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'webview2_gui: MISSING OR INVALID INSTALLER SHA256') 'Physical PASS without a candidate MSI hash must fail closed.'
+$completeEvidence['webview2_gui'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed installed image navigation and annotation' -InstallerSha256 $installerDigest
+$completeEvidence['installer_sha256'] = ('B' * 64)
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'canon_camera: INSTALLER SHA256 MISMATCH') 'Reusing physical Canon evidence against a new candidate MSI must fail.'
+$completeEvidence['installer_sha256'] = 'not-a-sha256'
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'installer_sha256: MISSING OR INVALID') 'Malformed candidate MSI hash must block release readiness.'
+$completeEvidence['installer_sha256'] = $installerDigest
+$completeEvidence['sony_camera'].installer_sha256 = $installerDigest.ToLowerInvariant()
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'SHA-256 case differences must not invalidate the same MSI.'
+$completeEvidence['sony_camera'].installer_sha256 = $installerDigest
+$persistedRelease = $completeEvidence | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $persistedRelease).Count -eq 0) 'JSON-persisted physical evidence must retain candidate MSI provenance.'
+$persistedRelease.PSObject.Properties.Remove('installer_sha256')
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $persistedRelease) -ccontains 'installer_sha256: MISSING OR INVALID') 'Missing installer hash in persisted JSON must fail closed.'
+$persistedRelease = $completeEvidence | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+$persistedRelease.canon_camera.PSObject.Properties.Remove('installer_sha256')
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $persistedRelease) -ccontains 'canon_camera: MISSING OR INVALID INSTALLER SHA256') 'Missing physical camera hash in persisted JSON must fail closed.'
+
 Assert-True ($acceptanceScript.Contains('release_acceptance_complete = $false')) 'Acceptance report must initialize release readiness as false.'
 Assert-True ($acceptanceScript.Contains('training_console = New-ReefVisionEvidenceResult')) 'Acceptance report must explicitly track live training telemetry.'
 Assert-True ($acceptanceScript.Contains('canon_camera = New-ReefVisionEvidenceResult')) 'Acceptance report must initialize unverified Canon physical-camera evidence.'
