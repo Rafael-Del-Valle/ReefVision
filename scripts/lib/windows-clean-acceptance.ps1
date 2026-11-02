@@ -11,6 +11,7 @@ function Invoke-ReefVisionIsolatedEnvironment {
     param(
         [Parameter(Mandatory = $true)][string]$DataRoot,
         [hashtable]$AdditionalEnvironment = @{},
+        [switch]$AllowLiveSam2Network,
         [Parameter(Mandatory = $true)][scriptblock]$Action
     )
     $Isolated = @{
@@ -24,10 +25,22 @@ function Invoke-ReefVisionIsolatedEnvironment {
         TRANSFORMERS_OFFLINE = '1'
         YOLO_AUTOINSTALL = 'false'
     }
-    # These values enforce offline model policy and disposable cache roots.
-    # A caller-supplied environment must not silently override the guardrails.
+    # The default remains strictly offline. Only explicitly requested
+    # disposable live-SAM acceptance may permit network model acquisition.
+    # Both offline flags must be disabled together; cache roots stay protected.
+    if ($AllowLiveSam2Network -and (
+        -not $AdditionalEnvironment.ContainsKey('HF_HUB_OFFLINE') -or
+        -not $AdditionalEnvironment.ContainsKey('TRANSFORMERS_OFFLINE') -or
+        [string]$AdditionalEnvironment['HF_HUB_OFFLINE'] -cne '0' -or
+        [string]$AdditionalEnvironment['TRANSFORMERS_OFFLINE'] -cne '0'
+    )) {
+        throw 'Live SAM network acceptance requires both offline flags explicitly set to 0.'
+    }
     foreach ($Key in $AdditionalEnvironment.Keys) {
-        if ($Isolated.ContainsKey($Key)) {
+        $liveSamOfflineFlag = $AllowLiveSam2Network -and
+            $Key -in @('HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE') -and
+            [string]$AdditionalEnvironment[$Key] -ceq '0'
+        if ($Isolated.ContainsKey($Key) -and -not $liveSamOfflineFlag) {
             throw "Acceptance isolation variable '$Key' cannot be overridden."
         }
         $Isolated[$Key] = $AdditionalEnvironment[$Key]
