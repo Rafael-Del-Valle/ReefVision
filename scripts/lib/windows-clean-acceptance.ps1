@@ -580,7 +580,7 @@ function Get-ReefVisionReleaseAcceptanceGaps {
         if ($observedHash -cnotmatch '^[0-9a-fA-F]{64}$') {
             "${name}: MISSING OR INVALID INSTALLER SHA256"
         } elseif ($reportHash -cmatch '^[0-9a-fA-F]{64}$' -and
-            -not [string]::Equals($observedHash, $reportHash, [StringComparison]::OrdinalIgnoreCase)) {
+            -not ([string]::Equals($observedHash, $reportHash, [StringComparison]::OrdinalIgnoreCase))) {
             "${name}: INSTALLER SHA256 MISMATCH"
         }
     }
