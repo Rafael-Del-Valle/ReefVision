@@ -285,6 +285,32 @@ def test_interrupted_workflow_reuses_succeeded_artifacts_and_reopens_with_proven
         assert history
         assert history[-1]["action"] == "requeued_on_startup"
 
+    # A recovered, still-pending node must not expose malformed scientific
+    # audit results through run detail or provenance export. Restore the
+    # actual saved record before continuing the same recovery execution.
+    with app.state.session_factory() as session:
+        pending_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "images",
+            )
+        )
+        assert pending_node is not None
+        pending_node_id = pending_node.id
+        original_result = pending_node.result_json
+        pending_node.result_json = cast(Any, [["phase", "pending"]])
+        session.commit()
+
+    assert client.get(f"/api/v1/workflow-runs/{run_id}").status_code == 409
+
+    with app.state.session_factory() as session:
+        with pytest.raises(ConflictError, match="Workflow node result must be a JSON object"):
+            build_workflow_run_provenance(session, run_id=run_id)
+        pending_node = session.get(WorkflowNodeRun, pending_node_id)
+        assert pending_node is not None
+        pending_node.result_json = original_result
+        session.commit()
+
     assert process_workflow_run_job(
         app.state.settings,
         app.state.session_factory,
