@@ -210,6 +210,43 @@ def test_patch_distribution_rejects_zero_full_mesh_total(timepoint: int) -> None
         compare_mesh_observations(*observations)
 
 
+@pytest.mark.parametrize("timepoint", [0, 1])
+@pytest.mark.parametrize(
+    "contradiction",
+    [
+        "all_faces_degenerate_with_positive_area",
+        "zero_faces_with_positive_area",
+        "nondegenerate_faces_with_zero_area",
+    ],
+)
+def test_longitudinal_rejects_surface_area_face_degeneracy_contradictions(
+    timepoint: int, contradiction: str
+) -> None:
+    """Replayed previews cannot fabricate area inconsistent with face topology."""
+    observations = [_preview(payload) for payload in _meshes()]
+    record = observations[timepoint]
+    if contradiction == "all_faces_degenerate_with_positive_area":
+        record["degenerate_face_count"] = record["face_count"]
+    elif contradiction == "zero_faces_with_positive_area":
+        record["face_count"] = 0
+        record["edge_connected_patch_count"] = 0
+        record["boundary_edge_count"] = 0
+        record["nonmanifold_edge_count"] = 0
+        record["degenerate_face_count"] = None
+    else:
+        record["surface_area_m2"] = 0.0
+
+    with pytest.raises(ValueError, match="Surface area contradicts"):
+        compare_mesh_observations(*observations)
+
+    inputs = {
+        port: [SimpleNamespace(data_type="mesh_measurement_preview", payload_json=observation)]
+        for port, observation in zip(("before", "after"), observations, strict=True)
+    }
+    with pytest.raises(ValidationError, match="Surface area contradicts"):
+        execute_mesh_longitudinal_comparison(None, None, "project-1", {}, inputs)
+
+
 def test_degenerate_zero_area_meshes_keep_patch_distributions_unavailable() -> None:
     """A real zero-area reconstruction is not a forged missing distribution."""
     early, late = _meshes()

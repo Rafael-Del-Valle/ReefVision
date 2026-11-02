@@ -305,6 +305,20 @@ def compare_mesh_observations(
         or a1 < 0
     ):
         raise ValueError("Both surface areas must be finite and nonnegative")
+    # Face degeneracy is reconstruction QC, not evidence of biological change.
+    # Modern previews cannot have positive area with no nondegenerate faces,
+    # or zero area when a nondegenerate face is present. Missing legacy counts
+    # remain unknown rather than being fabricated from calibrated measurements.
+    for area, counts in zip((a0, a1), topology_counts, strict=True):
+        faces = counts["face_count"]
+        degenerate = counts["degenerate_face_count"]
+        if faces == 0 and area > 0:
+            raise ValueError("Surface area contradicts zero-face mesh topology")
+        if faces is not None and degenerate is not None and (
+            (degenerate == faces and area > 0)
+            or (degenerate < faces and area == 0)
+        ):
+            raise ValueError("Surface area contradicts mesh face degeneracy counts")
     difference = a1 - a0
     # Divide before multiplying: 100 * a finite large delta can overflow even
     # when the actual percent change is representable (e.g. 1e307 / 1e307).

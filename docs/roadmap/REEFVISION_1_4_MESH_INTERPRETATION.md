@@ -955,3 +955,19 @@ Regression tests also execute a persisted two-timepoint graph and compare
 its zero-area artifacts with the standalone API. These are reconstruction
 integrity checks, not proof of coral fragmentation, anatomical branch length,
 verified growth, or biological condition.
+
+## Longitudinal face-degeneracy and surface-area binding (Track C, November 2, 2026)
+
+Replayed mesh previews must not report a positive calibrated surface area
+when the source contains no faces or all recorded faces are degenerate.
+Conversely, a reconstruction with a recorded nondegenerate triangle cannot
+silently report exactly zero calibrated area: that can indicate corrupted
+measurements or numeric underflow. The comparison rejects these contradictions
+at either timepoint before calculating apparent surface-area change. Missing
+face/degeneracy counts in legacy observations remain unknown, not invented.
+
+Regression tests exercise the direct scientific comparison and typed Workflow
+Builder runtime adapter, including both observation orders. Existing persisted
+two-timepoint graph tests continue checking standalone/saved-result parity for
+valid positive-area and truly degenerate zero-area meshes. This safeguard
+does not certify geometry, calibration, specimen identity or coral growth.
