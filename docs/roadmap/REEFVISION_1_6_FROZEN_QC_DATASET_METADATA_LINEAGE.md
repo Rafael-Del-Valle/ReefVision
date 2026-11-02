@@ -56,3 +56,24 @@ original immutable queue replay and unchanged pending researcher review.
 This is metadata integrity validation, not an inference that any annotation
 or prediction has been biologically verified. The earlier 1.1 migration
 coordination and Windows installed-GUI acceptance gates remain open.
+
+
+## Completed QC node output-binding integrity (2026-11-02)
+
+A saved QC node marked `succeeded` with an existing workflow-owned
+review queue must retain its persisted output artifact ID. Previously an
+empty `output_artifact_ids_json` list bypassed the saved output
+payload/checksum/binding checks, even though the node was complete.
+The adapter now fails closed with `ValidationError` if that output
+binding is missing. Nodes still running after an interrupted creation
+may legitimately have no output yet and can use the existing deterministic
+retry path; no historical queue or researcher decision is rewritten.
+
+The regression executes a real frozen-dataset saved graph, removes only
+the completed QC node's output binding in a transaction, verifies that
+replay fails, rolls back, and verifies exact replay of the original
+dimensionless, researcher-review-gated queue with all pending items
+unchanged. The preceding multi-image parity test also received the exact
+Ruff formatting corrections from CI run 41475202931. Full exact-head CI,
+1.1/1.6 migration reconciliation, biological acceptance and native
+Windows installer/installed-GUI checks remain release blockers.
