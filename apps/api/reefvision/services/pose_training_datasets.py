@@ -557,11 +557,10 @@ class PoseTrainingDatasetService:
         if canonical_json_sha256(provenance) != candidate.provenance_sha256:
             raise ConflictError("Pose acquisition provenance changed after selection")
         source_video_sha = provenance.get("video_sha256")
-        if (
-            isinstance(source_video_sha, str)
-            and source_video_sha
-            and source_video_sha != video.sha256
-        ):
+        # Missing or empty source checksums are not valid frozen evidence.
+        # Reject them before persisting a dataset that later fails its own
+        # manifest lineage validation on the first read.
+        if source_video_sha != video.sha256:
             raise ConflictError("Source video checksum changed after acquisition")
 
         keyframe = self._keyframe(
