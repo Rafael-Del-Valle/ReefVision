@@ -21,7 +21,10 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.domain.errors import ValidationError
-from reefvision.schemas.review_queues import ReviewQueueCreateRequest
+from reefvision.schemas.review_queues import (
+    ReviewQueueCreateRequest,
+    parse_workflow_review_weights,
+)
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue_integrity import (
     validate_saved_queue_snapshot,
@@ -177,12 +180,24 @@ def create_review_queue_workflow_artifact(
         for key, value in parameters.items()
         if key not in {"__workflow_run_id", "__workflow_node_run_id"}
     }
+    # Older saved nodes predate the optional weights parameter. Preserve their
+    # default replay contract while rejecting any non-default substitution.
+    if (
+        "signal_weights" not in saved_parameters
+        and supplied_parameters.get("signal_weights") is None
+    ):
+        supplied_parameters.pop("signal_weights", None)
     if supplied_parameters != saved_parameters:
         raise ValidationError("QC review-queue retry parameters changed from saved node")
+    try:
+        weights = parse_workflow_review_weights(parameters.get("signal_weights"))
+    except ValueError as exc:
+        raise ValidationError("QC Review Queue has invalid signal_weights") from exc
 
     request = ReviewQueueCreateRequest(
         source_quality_control_run_id=parameters.get("source_quality_control_run_id"),
         review_below_confidence=parameters.get("review_below_confidence"),
+        signal_weights=weights,
         created_by=f"workflow:{run_id}:{node_run_id}",
     )
     service = ReviewQueueService(session, settings)
@@ -225,6 +240,7 @@ def create_review_queue_workflow_artifact(
             or existing.dataset_version_id != dataset_version_id
             or existing.scope_type != expected_scope_type
             or config.get("review_below_confidence") != request.review_below_confidence
+            or config.get("weights") != weights.model_dump(mode="json")
             or (
                 request.source_quality_control_run_id is not None
                 and config.get("source_quality_control_run_id")

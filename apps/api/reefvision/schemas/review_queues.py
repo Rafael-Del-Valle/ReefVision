@@ -40,6 +40,15 @@ class ReviewScoreWeights(BaseModel):
         return self
 
 
+def parse_workflow_review_weights(raw: Any) -> ReviewScoreWeights:
+    """Validate saved-graph weights without silently ignoring unknown signals."""
+    if raw is None:
+        return ReviewScoreWeights()
+    if not isinstance(raw, dict) or set(raw) - ReviewScoreWeights.model_fields.keys():
+        raise ValueError("signal_weights must map recognized QC signal names to weights")
+    return ReviewScoreWeights.model_validate(raw)
+
+
 class ReviewQueueCreateRequest(BaseModel):
     source_quality_control_run_id: str | None = None
     signal_weights: ReviewScoreWeights = Field(default_factory=ReviewScoreWeights)

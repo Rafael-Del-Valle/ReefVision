@@ -122,3 +122,19 @@ they do not independently rehash image bytes on disk.
 Release readiness remains blocked on complete exact-head CI, independent
 cross-version migration reconciliation, representative biological datasets,
 and Windows MSI upgrade/rollback plus installed-GUI validation.
+
+
+## Saved Workflow Builder QC signal weights (1.6)
+
+The executable `qc_review_queue` node accepts optional `signal_weights`
+using the same named, nonnegative, finite, dimensionless weights as standalone
+Review Queue generation. Omit or set `null` for defaults. A partial mapping
+inherits other defaults; explicitly set unwanted signals to zero. At least one
+positive weight is required. Unknown names, negative/nonfinite values and
+nonfinite totals fail graph planning before any queue is created.
+
+The persisted queue records the fully resolved weights and scoring-provenance
+checksum. Saved-node retries cannot substitute a different weight vector.
+Historical default-weight nodes without this optional parameter remain
+replayable. Scores are review-priority heuristics, not calibrated probabilities
+or verified biological observations.

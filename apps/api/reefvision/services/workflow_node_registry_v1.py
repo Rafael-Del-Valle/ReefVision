@@ -663,12 +663,14 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         optional_parameters={
             "review_below_confidence": None,
             "source_quality_control_run_id": None,
+            "signal_weights": None,
         },
         execution_state="executable",
         executable=True,
         implementation_notes=[
             "Delegates to the existing persistent ReviewQueueService.",
             "Priority scores are dimensionless, not probabilities.",
+            "Optional signal_weights reuse standalone QC weight validation.",
             "Run/node identity prevents duplicate queues on retries.",
             "An optional unfiltered immutable dataset-version source freezes QC evidence.",
             "Scientist review is required before accepting observations.",
