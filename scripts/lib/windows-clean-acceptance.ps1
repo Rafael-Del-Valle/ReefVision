@@ -456,13 +456,16 @@ function Assert-ReefVisionMsiCabinetSet {
 # was skipped. In particular, a successful API probe does not establish real
 # camera compatibility, an upgrade, or a complete uninstall.
 function Get-ReefVisionAutomatedAcceptanceGaps {
-    param([Parameter(Mandatory = $true)]$Report)
+    param(
+        [Parameter(Mandatory = $true)]$Report,
+        [string[]]$AdditionalRequired = @()
+    )
     $required = @(
         'install', 'shortcuts', 'first_launch', 'frontend_backend_connectivity',
         'model_policy', 'external_annotation_imports', 'camera_jpeg',
         'project_persistence', 'restart', 'project_exchange',
         'upgrade', 'uninstall', 'data_retention'
-    )
+    ) + @($AdditionalRequired)
     foreach ($name in $required) {
         # Reports are written as ordered dictionaries but are commonly
         # inspected after ConvertFrom-Json, which yields PSCustomObject.
@@ -526,6 +529,17 @@ function Get-ReefVisionAutomatedAcceptanceGaps {
             "$($name): INVALID TIMESTAMP"
         }
     }
+}
+
+# Automated MSI smoke-test success is necessary but not sufficient for a
+# release. Physical installed-WebView2, live read-only training telemetry,
+# and GPU/scientific QC must have independent, timestamped PASS evidence.
+# Reuse the same strict status/detail/UTC timestamp checks for every gate.
+function Get-ReefVisionReleaseAcceptanceGaps {
+    param([Parameter(Mandatory = $true)]$Report)
+    Get-ReefVisionAutomatedAcceptanceGaps -Report $Report -AdditionalRequired @(
+        'webview2_gui', 'training_console', 'gpu_scientific'
+    )
 }
 
 function New-ReefVisionEvidenceResult {
