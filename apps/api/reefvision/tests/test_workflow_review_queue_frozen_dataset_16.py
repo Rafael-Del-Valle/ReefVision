@@ -14,6 +14,7 @@ from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
+from reefvision.services.workflow_review_queue_integrity import queue_item_evidence_sha256
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_dataset_versions import create_version, save_annotations
@@ -232,6 +233,7 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
     [
         ("wrong_queue_scope", "retry parameters changed or queue incomplete"),
         ("wrong_item_version", "snapshot failed integrity"),
+        ("resigned_wrong_item_split", "frozen dataset item membership or split"),
     ],
 )
 def test_saved_frozen_qc_replay_enforces_dataset_scope(
@@ -285,8 +287,30 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
 
         if tamper == "wrong_queue_scope":
             queue.scope_type = "project"
-        else:
+        elif tamper == "wrong_item_version":
             queue.items[0].dataset_version_id = None
+        else:
+            # A corrupt but re-signed queue can pass its own scope, ranking,
+            # score and evidence-digest checks while assigning the image to
+            # the wrong biological dataset split. The saved producer is the
+            # independent authority for this immutable version membership.
+            original_split = queue.items[0].split
+            queue.items[0].split = "train" if original_split != "train" else "test"
+            queue.summary_json = {
+                **queue.summary_json,
+                "counts_by_split": {queue.items[0].split: 1},
+            }
+            queue.input_checksums_json = {
+                **queue.input_checksums_json,
+                "item_evidence_sha256": queue_item_evidence_sha256(queue.items),
+            }
+            saved_output = session.get(WorkflowArtifact, qc_node.output_artifact_ids_json[0])
+            assert saved_output is not None
+            saved_output.payload_json = {
+                **saved_output.payload_json,
+                "input_checksums": queue.input_checksums_json,
+            }
+            saved_output.payload_sha256 = canonical_json_sha256(saved_output.payload_json)
         session.flush()
         with pytest.raises(ValidationError, match=expected_error):
             create_review_queue_workflow_artifact(
