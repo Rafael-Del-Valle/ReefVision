@@ -301,9 +301,7 @@ def require_historical_ecological_parent_registration(
             if _identity_revision_utc(parent.created_at) == latest_parent_time
         ]
         if len({parent.kind for parent in same_instant}) > 1:
-            raise ValueError(
-                "Ecological fragment parent state is ambiguous at fragment revision"
-            )
+            raise ValueError("Ecological fragment parent state is ambiguous at fragment revision")
         parent_at_link = max(same_instant, key=lambda parent: parent.revision)
         if parent_at_link.kind != "colony":
             raise ValueError("Ecological fragment parent was not a colony at fragment revision")
