@@ -54,9 +54,7 @@ def test_version_queue_ignores_later_live_import_time_and_workflow_tracks_live_c
 
     frozen_before = new_item(version_url)
     project_before = new_item(project_url)
-    workflow_before_id = _saved_workflow_queue(
-        client, project_id, f"qc-live-time-before-{uuid4()}"
-    )
+    workflow_before_id = _saved_workflow_queue(client, project_id, f"qc-live-time-before-{uuid4()}")
     workflow_before = _queue_item(client, workflow_before_id)
     assert workflow_before["input_checksum"] == project_before["input_checksum"]
     assert frozen_before["signal_values_json"]["recent_import"] == 0.0
@@ -82,21 +80,18 @@ def test_version_queue_ignores_later_live_import_time_and_workflow_tracks_live_c
     assert project_after["score"] < project_before["score"]
     assert project_after["input_checksum"] != project_before["input_checksum"]
 
-    workflow_after_id = _saved_workflow_queue(
-        client, project_id, f"qc-live-time-after-{uuid4()}"
-    )
+    workflow_after_id = _saved_workflow_queue(client, project_id, f"qc-live-time-after-{uuid4()}")
     workflow_after = _queue_item(client, workflow_after_id)
     assert workflow_after["input_checksum"] == project_after["input_checksum"]
-    assert _queue_item(client, workflow_before_id)["input_checksum"] == workflow_before[
-        "input_checksum"
-    ]
+    assert (
+        _queue_item(client, workflow_before_id)["input_checksum"]
+        == workflow_before["input_checksum"]
+    )
     with app.state.session_factory() as session:
         queue = session.get(ReviewQueue, workflow_before_id)
         assert queue is not None
         items = session.scalars(
-            select(ReviewQueueItem).where(
-                ReviewQueueItem.review_queue_id == workflow_before_id
-            )
+            select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == workflow_before_id)
         ).all()
         validate_saved_queue_snapshot(queue, items)
         assert items[0].review_state == "pending"
