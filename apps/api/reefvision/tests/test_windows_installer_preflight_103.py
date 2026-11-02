@@ -88,7 +88,7 @@ def test_release_preflight_rejects_commented_out_guards(style: str) -> None:
     disabled = (
         f"{indent}# {guard.lstrip()}"
         if style == "line"
-        else f"{indent}<#\\n{guard}\\n{indent}#>"
+        else f"{indent}<#\n{guard}\n{indent}#>"
     )
     altered = WORKFLOW.replace(guard, disabled, 1)
     assert any(
