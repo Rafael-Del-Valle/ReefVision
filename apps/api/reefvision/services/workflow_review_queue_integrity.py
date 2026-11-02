@@ -448,12 +448,15 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         # live chronology and present it as immutable biological QC evidence.
         # Project-scoped queues and historical v2 snapshots retain their
         # existing temporal scoring contracts.
-        if integrity_version == "qc-review-queue-v3" and queue.dataset_version_id is not None:
-            if (
+        if (
+            integrity_version == "qc-review-queue-v3"
+            and queue.dataset_version_id is not None
+            and (
                 item.signal_values_json["recent_import"] != 0.0
                 or item.signal_values_json["stale_review_state"] != 0.0
-            ):
-                raise invalid
+            )
+        ):
+            raise invalid
         # A confidence-filtered queue contains only images with at least one
         # pending proposal that met the original selection threshold. Since
         # low_mean_confidence = 1 - mean(selected confidences), the saved mean
