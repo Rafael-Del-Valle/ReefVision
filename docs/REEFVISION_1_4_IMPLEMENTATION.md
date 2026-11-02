@@ -879,3 +879,21 @@ measurement stays caller-supplied and unverified. Parser regressions and
 saved-workflow positive/negative tests cover the compatibility change; complete
 scientific, CI, installed Windows GUI, GPU, and MSI/CAB acceptance is still
 required before release.
+
+## Bounded GLB JSON integer metadata (Track C)
+
+The GLB 2.0 JSON decoder now rejects integer tokens exceeding 64 decimal
+digits, including otherwise opaque `extras` metadata. This prevents
+version-dependent Python integer-conversion limits or unbounded numeric parsing
+from interrupting the scientific preview request. It does **not** reinterpret
+or truncate large integers: unsupported inputs fail closed before any mesh
+measurement artifact is produced. The existing per-field glTF accessor,
+buffer, index and geometry bounds remain in force.
+
+Direct parser tests cover the 64-digit accepted boundary and rejected 65- and
+5000-digit tokens. Standalone API and persisted, executable, typed Workflow
+Builder regressions verify rejection of oversized metadata without publishing
+a `mesh_measurement_preview` artifact. This input-integrity guarantee does
+**not** verify instrument calibration, reconstructed surface completeness,
+biological specimen identity, or independent human review. Existing source
+fingerprints, provisional status, and local-only checkpoints remain unchanged.
