@@ -430,6 +430,39 @@ def test_freeze_rejects_changed_candidate_acquisition_provenance(
         assert session.query(PoseTrainingDataset).count() == 0
 
 
+
+def test_freeze_rejects_resigned_acquisition_without_video_checksum(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise a genuinely verified round, not a fabricated frozen dataset.
+    # Even when the candidate provenance is re-signed, the source-video
+    # checksum must remain present before a training dataset is persisted.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        acquisition = dict(candidate.provenance_json)
+        assert acquisition.pop("video_sha256")
+        candidate.provenance_json = acquisition
+        candidate.provenance_sha256 = canonical_json_sha256(acquisition)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Must not freeze missing source checksum"},
+    )
+    assert response.status_code == 409, response.text
+    assert "Source video checksum changed after acquisition" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
 def test_native_pose_training_package_is_deterministic_and_verified_only(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
