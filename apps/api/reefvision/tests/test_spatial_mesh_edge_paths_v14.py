@@ -287,7 +287,17 @@ def test_calibrated_mesh_edge_underflow_warns_in_standalone_and_saved_graph(
     assert standalone.status_code == 200, standalone.text
     assert standalone.json()["surface_edge_paths"] == direct["surface_edge_paths"]
     assert standalone.json()["surface_area_m2"] == direct["surface_area_m2"]
-    assert standalone.json()["provenance"] == direct["provenance"]
+    # The direct geometry engine supplies core provenance. Project-scoped API
+    # previews enrich it with source and identity QC fields; they are not
+    # evidence of verified identity, calibration, or registration.
+    api_provenance = standalone.json()["provenance"]
+    for key, value in direct["provenance"].items():
+        assert api_provenance[key] == value
+    assert api_provenance["source_format"] == "indexed_triangles"
+    assert api_provenance["source_payload_integrity_checked"] is False
+    assert api_provenance["specimen_identity_verified"] is False
+    assert api_provenance["observation_metadata_verified"] is False
+    assert api_provenance["coordinate_registration_verified"] is False
 
     graph = {
         "graph_id": "mesh-path-underflow-v14",
