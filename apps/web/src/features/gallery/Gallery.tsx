@@ -808,16 +808,40 @@ function GalleryContent({
 
   useEffect(() => {
     const filmstrip = filmstripRef.current;
+    if (!filmstrip) return;
+
+    const alignFocusedThumbnail = () => {
+      const thumbnail = activeThumbnail.current;
+      if (!thumbnail || !filmstrip.contains(thumbnail)) return;
+      // Keep the active scientific image visible in the strip without
+      // scrolling the page or changing which image is selected.
+      const strip = filmstrip.getBoundingClientRect();
+      const active = thumbnail.getBoundingClientRect();
+      if (active.left < strip.left) {
+        filmstrip.scrollLeft += active.left - strip.left;
+      } else if (active.right > strip.right) {
+        filmstrip.scrollLeft += active.right - strip.right;
+      }
+    };
+
+    alignFocusedThumbnail();
+    // Resizing the desktop window or an adjacent workspace panel can clip a
+    // previously visible thumbnail without changing focusedImage.id. Observe
+    // the strip itself so the focused image stays reachable in WebView2.
+    // Older test DOMs may not implement ResizeObserver; window resize remains
+    // a safe fallback in those environments.
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(alignFocusedThumbnail);
+    observer?.observe(filmstrip);
     const thumbnail = activeThumbnail.current;
-    if (!filmstrip || !thumbnail) return;
-    // Only move the horizontal strip, not the surrounding image viewport.
-    const strip = filmstrip.getBoundingClientRect();
-    const active = thumbnail.getBoundingClientRect();
-    if (active.left < strip.left) {
-      filmstrip.scrollLeft += active.left - strip.left;
-    } else if (active.right > strip.right) {
-      filmstrip.scrollLeft += active.right - strip.right;
-    }
+    if (thumbnail) observer?.observe(thumbnail);
+    window.addEventListener("resize", alignFocusedThumbnail);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", alignFocusedThumbnail);
+    };
   }, [focusedImage?.id]);
 
   useEffect(() => {
