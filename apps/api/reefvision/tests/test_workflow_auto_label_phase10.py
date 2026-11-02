@@ -12,6 +12,7 @@ from reefvision.db.models import (
     AnnotationEvent,
     ModelRegistration,
     ReviewQueueItem,
+    WorkflowArtifact,
     WorkflowNodeRun,
     WorkflowRun,
 )
