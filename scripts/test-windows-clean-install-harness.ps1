@@ -295,7 +295,9 @@ Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('#', 'rv1.cab
 # Windows reserves DOS device basenames even when an extension is present.
 # Reject those names from both the MSI Media table and the external payload;
 # harmless longer basenames such as CONSOLE.cab must still be accepted.
-foreach ($deviceCab in @('CON.cab', 'prn.CAB', 'AUX.cab', 'nul.cab', 'com1.cab', 'LPT9.CAB')) {
+# Windows also resolves reserved device names before *any* extension.
+# A CAB named CON.backup.cab or COM1.logs.cab is still unsafe.
+foreach ($deviceCab in @('CON.cab', 'prn.CAB', 'AUX.cab', 'nul.cab', 'com1.cab', 'LPT9.CAB', 'CON.backup.cab', 'prn.extra.CAB', 'COM1.logs.cab', 'LPT9..cab')) {
     Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @($deviceCab) -AvailableCabinets @($deviceCab) | Out-Null } "Reserved MSI cabinet basename $deviceCab must fail."
     Assert-Throws { Assert-ReefVisionMsiCabinetSet -DeclaredCabinets @('rv1.cab') -AvailableCabinets @('rv1.cab', $deviceCab) | Out-Null } "Reserved external cabinet basename $deviceCab must fail."
 }
