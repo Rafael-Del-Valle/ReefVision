@@ -150,3 +150,42 @@ def test_genuinely_degenerate_patch_remains_zero_area() -> None:
     assert result["surface_area_m2"] == pytest.approx(0.03)
     assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.03, 0.0])
     assert result["degenerate_face_count"] == 1
+
+
+def test_representable_small_patch_survives_standalone_and_saved_graph(
+    client: TestClient,
+) -> None:
+    params = {
+        **mesh_params(1e-30),
+        "vertices": [
+            [10.0, 0.0, 0.0],
+            [12.0, 0.0, 0.0],
+            [10.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [1e-50, 0.0, 0.0],
+            [0.0, 1e-50, 0.0],
+        ],
+        "faces": [[0, 1, 2], [3, 4, 5]],
+    }
+    project_id = str(create_project(client, "Representable small patch")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    areas = standalone["edge_connected_patch_surface_areas_m2"]
+    assert areas[0] == pytest.approx(3e-60)
+    assert areas[1] > 0
+    assert areas[1] == pytest.approx(5e-161)
+
+    detail = saved_mesh_result(client, base, params)
+    assert detail["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["edge_connected_patch_surface_areas_m2"] == areas
+    assert artifact["surface_area_scale_interval_m2"] == (
+        standalone["surface_area_scale_interval_m2"]
+    )
+    assert artifact["provenance"] == standalone["provenance"]
