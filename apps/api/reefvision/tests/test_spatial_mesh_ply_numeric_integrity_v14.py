@@ -76,7 +76,7 @@ def _run_saved_graph(client: TestClient, project_id: str, ply: str) -> dict:
         PLY.replace("2 0 0", "1e3_0 0 0"),
         PLY.replace("2 0 0", "1e-9999 0 0"),
         PLY.replace("2 0 0", "1e9999 0 0"),
-        PLY.replace("2 0 0", "２ 0 0"),
+        PLY.replace("2 0 0", "\uFF12 0 0"),
         PLY.replace("2 0 0", "2\x0b0 0"),
         PLY.replace("2 0 0", "2\x000 0"),
         PLY.replace("3 0 1 2", "3 0 1_0 2"),
