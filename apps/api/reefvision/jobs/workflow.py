@@ -74,8 +74,10 @@ def _set_waiting_for_review(
         node_run = session.get(WorkflowNodeRun, requested_node_id) if requested_node_id else None
         # A review adapter may supply a persisted node ID. Never let a stale
         # or incorrect ID pause another run or overwrite completed science.
-        if node_run is not None and (
-            node_run.workflow_run_id != run_id or node_run.status != "running"
+        if requested_node_id and (
+            node_run is None
+            or node_run.workflow_run_id != run_id
+            or node_run.status != "running"
         ):
             raise RuntimeError("Workflow review pause requires an active node in this run")
         if node_run is None:
