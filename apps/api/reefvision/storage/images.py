@@ -268,6 +268,32 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 "exif": named_exif,
             }
             capture_timestamp = None if exif_warning is not None else _capture_timestamp(exif)
+            # An EXIF exposure can have a trustworthy UTC second but an
+            # untrustworthy or over-precise fractional field. Never silently
+            # imply that a malformed fraction was measured as exactly zero.
+            # Keep the verified second, surface the precision limitation, and
+            # preserve the original camera file and its EXIF.
+            if capture_timestamp is not None and 37521 in exif:
+                fraction = exif[37521]
+                if isinstance(fraction, bytes):
+                    try:
+                        fraction = fraction.decode("ascii")
+                    except UnicodeDecodeError:
+                        fraction = None
+                if isinstance(fraction, str):
+                    fraction = fraction.strip(" \\t\\r\\n\\x00")
+                if not (
+                    isinstance(fraction, str) and fraction.isascii() and fraction.isdigit()
+                ):
+                    metadata["capture_time_precision_warning"] = (
+                        "EXIF SubsecTimeOriginal is malformed; UTC capture time "
+                        "has only verified whole-second precision"
+                    )
+                elif len(fraction) > 6:
+                    metadata["capture_time_precision_warning"] = (
+                        "EXIF SubsecTimeOriginal exceeds microsecond precision; "
+                        "UTC capture time retains only the first six fractional digits"
+                    )
             if exif_warning is not None:
                 metadata["exif_warning"] = exif_warning
             elif capture_timestamp is None:
