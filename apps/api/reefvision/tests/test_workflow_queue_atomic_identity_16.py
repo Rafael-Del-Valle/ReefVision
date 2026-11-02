@@ -165,11 +165,24 @@ def test_saved_workflow_queue_collision_fails_closed_then_replays(
         }
         original_outputs = list(node.output_artifact_ids_json)
         assert original_outputs == [output["id"]]
-        # Simulate interrupted creation plus an ownership-damaged original.
-        # The stable PK must prevent a replacement scientific snapshot even
-        # when the normal created_by lookup cannot find the original queue.
+        # A completed node must fail closed before any attempted replacement,
+        # even when both its output binding and queue ownership are damaged.
+        assert node.status == "succeeded"
         node.output_artifact_ids_json = []
         queue.created_by = "local_user"
+        session.commit()
+        with pytest.raises(ValidationError, match="completed node is missing saved output"):
+            create_review_queue_workflow_artifact(
+                session=session,
+                settings=app.state.settings,
+                project_id=project_id,
+                parameters=params,
+                inputs={"project": [source]},
+            )
+
+        # Model a genuinely interrupted node to exercise the separate
+        # deterministic-PK collision path; it must not overwrite the original.
+        node.status = "running"
         session.commit()
         with pytest.raises(ValidationError, match="Concurrent QC review-queue creation"):
             create_review_queue_workflow_artifact(
@@ -187,6 +200,7 @@ def test_saved_workflow_queue_collision_fails_closed_then_replays(
         assert queue.created_by == "local_user"
         queue.created_by = owner
         node.output_artifact_ids_json = original_outputs
+        node.status = "succeeded"
         session.commit()
         replay = create_review_queue_workflow_artifact(
             session=session,
