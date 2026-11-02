@@ -6153,3 +6153,11 @@ independently verified biological units, representative scientist-reviewed
 human/model comparisons, 1.1 migration reconciliation and installed Windows
 MSI/GUI/GPU acceptance remain outstanding.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+**Exact-head CI follow-up (2026-11-02):** At commit `1a906b82`, the
+Pose Workflow Validation backend failed Ruff formatting (three files:
+longitudinal response, per-date effort tests, and population replay tests).
+Applied the formatter's exact logged changes without changing the scientific
+algorithm. Other workflows were still running at the time of correction;
+no full-suite pass is inferred until the new head completes.

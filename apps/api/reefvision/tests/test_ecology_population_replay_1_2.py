@@ -36,9 +36,7 @@ def _two_tank_payload() -> dict[str, Any]:
 def test_population_replay_weights_two_tanks_not_four_fragments(
     client: TestClient,
 ) -> None:
-    response = client.post(
-        "/api/v1/ecology/longitudinal-analysis", json=_two_tank_payload()
-    )
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=_two_tank_payload())
     assert response.status_code == 200, response.text
     result = response.json()
     LongitudinalAnalysisResponse.model_validate(result)
@@ -72,9 +70,7 @@ def test_population_replay_weights_two_tanks_not_four_fragments(
 def test_population_replay_rejects_pseudoreplication_and_forged_means(
     client: TestClient, tampering: str
 ) -> None:
-    response = client.post(
-        "/api/v1/ecology/longitudinal-analysis", json=_two_tank_payload()
-    )
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=_two_tank_payload())
     assert response.status_code == 200, response.text
     original = response.json()
     LongitudinalAnalysisResponse.model_validate(original)

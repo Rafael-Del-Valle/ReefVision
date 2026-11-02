@@ -365,10 +365,7 @@ class LongitudinalAnalysisResponse(BaseModel):
             seen.add(key)
             members = strata[key]
             unit_ids = sorted(member.experimental_unit_id for member in members)
-            if (
-                len(set(unit_ids)) != len(unit_ids)
-                or population.experimental_unit_ids != unit_ids
-            ):
+            if len(set(unit_ids)) != len(unit_ids) or population.experimental_unit_ids != unit_ids:
                 raise ValueError("Population summary experimental unit roster does not reconcile")
             if population.independent_unit_count != len(unit_ids):
                 raise ValueError("Population summary independent unit count does not reconcile")

@@ -180,9 +180,7 @@ def test_persisted_visit_series_rejects_cross_record_tampering(
         "removed_scheduled_unit_coverage",
     ],
 )
-def test_persisted_visits_match_organism_level_coverage(
-    client: TestClient, tampering: str
-) -> None:
+def test_persisted_visits_match_organism_level_coverage(client: TestClient, tampering: str) -> None:
     request = _payload(missing=True)
     request["expected_organism_ids_by_unit"] = {"tank-1": ["A", "B", "C"]}
     response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
