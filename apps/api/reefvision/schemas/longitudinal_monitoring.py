@@ -777,3 +777,19 @@ class LongitudinalAnalysisResponse(BaseModel):
                 if visit.expected_roster_supplied != (coverage.expected_organism_count is not None):
                     raise ValueError("Planned visit roster flag disagrees with unit coverage")
         return self
+
+    @model_validator(mode="after")
+    def reconcile_persisted_sampling_declarations(self) -> LongitudinalAnalysisResponse:
+        """Keep caller-declared sampling metadata consistent with saved visit QC.
+
+        This is a replay-integrity check, not authentication of a study plan.
+        Historical results without both optional audit sections remain readable.
+        """
+        if not self.unit_coverage or not self.planned_sampling_date_coverage:
+            return self
+        if not self.expected_sampling_schedule_supplied:
+            raise ValueError("Planned sampling schedule declaration disagrees with dated coverage")
+        roster_flags = {row.expected_organism_count is not None for row in self.unit_coverage}
+        if roster_flags != {self.expected_roster_supplied}:
+            raise ValueError("Planned organism roster declaration disagrees with unit coverage")
+        return self

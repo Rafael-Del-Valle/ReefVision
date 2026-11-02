@@ -126,6 +126,12 @@ def test_saved_workflow_persists_identical_per_date_scientific_qc(
     with pytest.raises(PydanticValidationError, match="observed roster disagrees"):
         LongitudinalAnalysisResponse.model_validate(forged)
 
+    # A re-signed saved artifact cannot hide its caller-declared sampling plan.
+    forged = deepcopy(persisted)
+    forged["expected_sampling_schedule_supplied"] = False
+    with pytest.raises(PydanticValidationError, match="Planned sampling schedule declaration"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
 
 @pytest.mark.parametrize(
     "tampering",
@@ -204,5 +210,33 @@ def test_persisted_visits_match_organism_level_coverage(client: TestClient, tamp
         ]
     elif tampering == "removed_scheduled_unit_coverage":
         coverage["expected_sampling_dates"] = []
-    with pytest.raises(PydanticValidationError, match=r"Planned visit .*unit coverage"):
+    diagnostic = (
+        "Longitudinal coverage series dates do not reconcile"
+        if tampering == "forged_organism_observation_dates"
+        else r"Planned visit .*unit coverage"
+    )
+    with pytest.raises(PydanticValidationError, match=diagnostic):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+
+@pytest.mark.parametrize(
+    ("flag", "diagnostic"),
+    [
+        ("expected_sampling_schedule_supplied", "Planned sampling schedule declaration"),
+        ("expected_roster_supplied", "Planned organism roster declaration"),
+    ],
+)
+def test_persisted_sampling_declarations_reconcile_with_visit_qc(
+    client: TestClient, flag: str, diagnostic: str
+) -> None:
+    request = _payload(missing=True)
+    request["expected_organism_ids_by_unit"] = {"tank-1": ["A", "B", "C"]}
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert response.status_code == 200, response.text
+    original = response.json()
+    assert original[flag] is True
+    LongitudinalAnalysisResponse.model_validate(original)
+    forged = deepcopy(original)
+    forged[flag] = False
+    with pytest.raises(PydanticValidationError, match=diagnostic):
         LongitudinalAnalysisResponse.model_validate(forged)
