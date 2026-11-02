@@ -271,7 +271,8 @@ while ($true) {
       if ($tail.available -and $tail.text) {
         Write-Host ''
         Write-Host 'Training job log (last 20 lines, read-only)'
-        $logLines = @($tail.text -split '\r?\n' | Where-Object { $_ -ne '' })
+        # Training progress bars can use CR-only updates. Treat CR, LF, and CRLF as separate log lines.
+        $logLines = @($tail.text -split '\r\n|\r|\n' | Where-Object { $_ -ne '' })
         foreach ($line in ($logLines | Select-Object -Last 20)) {
           # Training logs are untrusted terminal text, just like run metadata.
           # Sanitize the displayed copy; never rewrite persisted log bytes.
