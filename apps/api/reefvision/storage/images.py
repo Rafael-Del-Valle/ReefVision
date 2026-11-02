@@ -331,7 +331,16 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             )
     except UnsupportedImageError:
         raise
-    except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as exc:
+    except (
+        Image.DecompressionBombError,
+        UnidentifiedImageError,
+        OSError,
+        SyntaxError,
+        ValueError,
+    ) as exc:
+        # Pillow rejects pathological pixel counts before decoding. Treat
+        # that refusal as an invalid camera import, not an internal failure;
+        # the importer must discard staging and never persist a partial image.
         raise InvalidImageError("File is not a readable image") from exc
 
 
