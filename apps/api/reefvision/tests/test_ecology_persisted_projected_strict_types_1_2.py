@@ -54,10 +54,7 @@ def test_projected_endpoint_rejects_epoch_and_coerced_counts(
 ) -> None:
     original = _dated_artifact(client)
     endpoint = original.projected_endpoint_changes[0].model_dump(mode="json")
-    assert (
-        EcologyProjectedEndpointChange.model_validate(endpoint).observed_timepoint_count
-        == 2
-    )
+    assert EcologyProjectedEndpointChange.model_validate(endpoint).observed_timepoint_count == 2
     for field in ("baseline_capture_timestamp_utc", "final_capture_timestamp_utc"):
         for replacement in (
             0,
@@ -68,15 +65,11 @@ def test_projected_endpoint_rejects_epoch_and_coerced_counts(
             "2026-04-03",
         ):
             tampered = {**endpoint, field: replacement}
-            with pytest.raises(
-                PydanticValidationError, match="requires an ISO calendar timestamp"
-            ):
+            with pytest.raises(PydanticValidationError, match="requires an ISO calendar timestamp"):
                 EcologyProjectedEndpointChange.model_validate(tampered)
             persisted = original.model_dump(mode="json")
             persisted["projected_endpoint_changes"][0] = tampered
-            with pytest.raises(
-                PydanticValidationError, match="requires an ISO calendar timestamp"
-            ):
+            with pytest.raises(PydanticValidationError, match="requires an ISO calendar timestamp"):
                 EcologyMeasurementCandidatesResponse.model_validate(persisted)
 
     for field in ("identity_revision", "observed_timepoint_count"):
@@ -91,9 +84,12 @@ def test_projected_endpoint_rejects_epoch_and_coerced_counts(
     offset["baseline_capture_timestamp_utc"] = "2026-04-03T04:00:00-04:00"
     offset["final_capture_timestamp_utc"] = "2026-04-05T04:00:00-04:00"
     assert EcologyProjectedEndpointChange.model_validate(offset).elapsed_days == 2
-    assert EcologyProjectedEndpointChange.model_validate(
-        original.projected_endpoint_changes[0].model_dump(mode="python")
-    ).review_gate == "scientist_review_required"
+    assert (
+        EcologyProjectedEndpointChange.model_validate(
+            original.projected_endpoint_changes[0].model_dump(mode="python")
+        ).review_gate
+        == "scientist_review_required"
+    )
 
 
 def test_executed_saved_workflow_rejects_forged_report_count(

@@ -223,9 +223,10 @@ class EcologyProjectedEndpointChange(BaseModel):
         """Do not reinterpret Unix epochs or date-only strings as image times."""
         if isinstance(value, datetime):
             return value
-        if not isinstance(value, str) or re.match(
-            r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()
-        ) is None:
+        if (
+            not isinstance(value, str)
+            or re.match(r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()) is None
+        ):
             raise ValueError("Projected endpoint requires an ISO calendar timestamp")
         return value
 
@@ -511,11 +512,21 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
             return self
         seen_metrics: set[tuple[str, str]] = set()
         source_by_calibration: dict[str, tuple[object, ...]] = {}
+        calibration_by_annotation: dict[str, str] = {}
         for row in self.candidates:
             key = (row.calibration_evidence_id, row.metric)
             if key in seen_metrics:
                 raise ValueError("Current ecological source has duplicate calibration metric")
             seen_metrics.add(key)
+            # One frozen annotation may yield box width and height, but the
+            # registry permits only one calibration link per annotation.
+            previous_calibration = calibration_by_annotation.setdefault(
+                row.annotation_evidence_id, row.calibration_evidence_id
+            )
+            if previous_calibration != row.calibration_evidence_id:
+                raise ValueError(
+                    "Current ecological source has conflicting annotation calibration lineage"
+                )
             source = (
                 row.organism_key,
                 row.identity_revision,
