@@ -9,7 +9,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import DatasetVersion, ReviewQueue, WorkflowArtifact, WorkflowNodeRun
+from reefvision.db.models import (
+    DatasetVersion,
+    DatasetVersionItem,
+    ReviewQueue,
+    WorkflowArtifact,
+    WorkflowNodeRun,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.storage.datasets import canonical_json_sha256
@@ -44,6 +50,12 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
         "metadata_boolean_image_count",
         "metadata_boolean_split_count",
         "metadata_float_split_count",
+        "version_manifest_body",
+        "version_resigned_image_count",
+        "version_resigned_annotation_count",
+        "version_resigned_mask_count",
+        "item_annotation_count",
+        "item_mask_count",
     ],
 )
 def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, tamper: str) -> None:
@@ -186,6 +198,45 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
                 metadata[field] = replacement
             dataset_artifact.payload_json = metadata
             dataset_artifact.payload_sha256 = canonical_json_sha256(metadata)
+        elif tamper == "version_manifest_body":
+            version = session.get(DatasetVersion, version_id)
+            assert version is not None
+            version.manifest_json = {
+                **version.manifest_json,
+                "summary": {**version.manifest_json["summary"], "image_count": 999},
+            }
+            # The original signed manifest hash is intentionally retained.
+        elif tamper in {
+            "version_resigned_image_count",
+            "version_resigned_annotation_count",
+            "version_resigned_mask_count",
+        }:
+            version = session.get(DatasetVersion, version_id)
+            assert version is not None
+            field = {
+                "version_resigned_image_count": "image_count",
+                "version_resigned_annotation_count": "annotation_count",
+                "version_resigned_mask_count": "mask_annotation_count",
+            }[tamper]
+            new_count = getattr(version, field) + 1
+            setattr(version, field, new_count)
+            # Re-sign the producer artifact too: simple metadata equality
+            # would otherwise reject the change without checking the frozen
+            # study's independent item records or original manifest summary.
+            dataset_artifact.payload_json = {
+                **dataset_artifact.payload_json,
+                field: new_count,
+            }
+            dataset_artifact.payload_sha256 = canonical_json_sha256(dataset_artifact.payload_json)
+        elif tamper in {"item_annotation_count", "item_mask_count"}:
+            frozen_item = session.scalar(
+                select(DatasetVersionItem).where(DatasetVersionItem.dataset_version_id == version_id)
+            )
+            assert frozen_item is not None
+            field = (
+                "annotation_count" if tamper == "item_annotation_count" else "mask_annotation_count"
+            )
+            setattr(frozen_item, field, getattr(frozen_item, field) + 1)
         elif tamper == "producer_resigned_images_artifact":
             images_artifact.payload_json = {
                 **images_artifact.payload_json,
