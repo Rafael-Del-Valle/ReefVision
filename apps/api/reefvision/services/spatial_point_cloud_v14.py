@@ -26,6 +26,14 @@ def parse_ascii_ply_points(
         raise ValueError("Point-cloud PLY exceeds the 256000-byte preview limit")
     if not text.isascii():
         raise ValueError("Point-cloud PLY must contain ASCII text only")
+    # splitlines()/split() treat vertical tabs and other control bytes as
+    # separators. Reject them before parsing to preserve the source grammar.
+    if any(
+        (ord(character) < 32 and character not in "\t\n\r")
+        or ord(character) == 127
+        for character in text
+    ):
+        raise ValueError("Point-cloud PLY contains unsupported control characters")
     lines = text.splitlines()
     if not lines or lines[0].strip() != "ply":
         raise ValueError("Point-cloud PLY must begin with ply")
