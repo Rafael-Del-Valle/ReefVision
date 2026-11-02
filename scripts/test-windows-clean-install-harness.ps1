@@ -446,6 +446,29 @@ foreach ($name in $requiredAcceptanceFields) {
     $completeEvidence[$name] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Recorded observation for $name"
 }
 Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'All required automated MSI gates should permit a complete report.'
+# Automated installer smoke evidence must never imply physical release
+# readiness. Require separately timestamped WebView2, read-only live training,
+# and GPU/scientific observations; skipped/missing gates fail closed.
+$releaseGaps = @(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence)
+Assert-True ($releaseGaps.Count -eq 3) 'Automated MSI PASS alone must not certify release readiness.'
+foreach ($name in @('webview2_gui', 'training_console', 'gpu_scientific')) {
+    Assert-True ($releaseGaps -ccontains "${name}: MISSING") "Release readiness must require $name evidence."
+    $completeEvidence[$name] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Physical acceptance observation for $name"
+}
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Complete timestamped release evidence should satisfy all release gates.'
+$completeEvidence['training_console'].status = 'NOT RUN'
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'training_console: NOT RUN') 'Unobserved live training must block release readiness.'
+$completeEvidence['training_console'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed live box/cls/dfl losses without interruption'
+$completeEvidence['webview2_gui'].detail = ' '
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'webview2_gui: MISSING DETAIL') 'WebView2 PASS without observations must not certify release readiness.'
+$completeEvidence['webview2_gui'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed installed image navigation and annotation'
+$completeEvidence['gpu_scientific'].timestamp_utc = [DateTime]::UtcNow.AddDays(1).ToString('o')
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'gpu_scientific: INVALID TIMESTAMP') 'Future GPU/scientific acceptance evidence must be rejected.'
+$completeEvidence['gpu_scientific'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed local GPU scientific workflow'
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Restored release evidence should satisfy release gates.'
+Assert-True ($acceptanceScript.Contains('release_acceptance_complete = $false')) 'Acceptance report must initialize release readiness as false.'
+Assert-True ($acceptanceScript.Contains('training_console = New-ReefVisionEvidenceResult')) 'Acceptance report must explicitly track live training telemetry.'
+Assert-True ($acceptanceScript.Contains('Get-ReefVisionReleaseAcceptanceGaps -Report $report')) 'Acceptance must calculate physical release gaps separately from automated MSI smoke checks.'
 # Evidence survives JSON persistence; a naked PASS, missing time, or malformed
 # record must never be accepted as verified clean-install evidence.
 $persistedEvidence = $completeEvidence | ConvertTo-Json -Depth 8 | ConvertFrom-Json
