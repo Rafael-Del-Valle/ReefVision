@@ -118,3 +118,65 @@ def test_cab_preflight_rejects_commented_out_artifact_guards(
     assert active in WORKFLOW, "Test fixture no longer matches the real workflow"
     altered = WORKFLOW.replace(active, disabled, 1)
     assert any(expected in error for error in CHECK_CABS(altered))
+
+
+def test_release_preflight_rejects_inline_commented_provenance_guard() -> None:
+    """A provenance comparison mentioned after # is not an active check."""
+    guard = next(
+        line
+        for line in WORKFLOW.splitlines()
+        if "$provenance.source_commit -ne $env:GITHUB_SHA" in line
+        and not line.lstrip().startswith("#")
+    )
+    indent = guard[: len(guard) - len(guard.lstrip())]
+    altered = WORKFLOW.replace(
+        guard, f"{indent}Write-Output 'guard disabled' # {guard.lstrip()}", 1
+    )
+    assert any(
+        "Installer provenance guard is missing" in error
+        for error in CHECK_WORKFLOW(altered, VERSION)
+    )
+
+
+@pytest.mark.parametrize(
+    ("active", "disabled", "expected"),
+    [
+        (
+            "          if-no-files-found: error",
+            "          if-no-files-found: ignore # if-no-files-found: error",
+            "must reject missing upload files",
+        ),
+        (
+            "          merge-multiple: true",
+            "          merge-multiple: false # merge-multiple: true",
+            "download and merge all installer parts",
+        ),
+    ],
+)
+def test_cab_preflight_rejects_inline_commented_artifact_guards(
+    active: str, disabled: str, expected: str
+) -> None:
+    """A commented-out safeguard cannot satisfy the installer contract."""
+    assert active in WORKFLOW, "Test fixture no longer matches the real workflow"
+    altered = WORKFLOW.replace(active, disabled, 1)
+    assert any(expected in error for error in CHECK_CABS(altered))
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'Write-Output "https://example.test/#fragment"',
+        "Write-Output 'QC # retained'",
+        'Write-Output "escaped `" # retained"',
+        'name: "Installer #1"',
+    ],
+)
+def test_preflight_comment_filter_preserves_quoted_hashes(line: str) -> None:
+    """Legitimate quoted hashes must survive comment normalization."""
+    assert GATE["_strip_inline_comment"](line) == line
+
+
+def test_preflight_comment_filter_removes_powershell_semicolon_comment() -> None:
+    assert GATE["_strip_inline_comment"]("Write-Output ok;# disabled guard") == (
+        "Write-Output ok;"
+    )
