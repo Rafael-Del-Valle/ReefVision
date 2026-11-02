@@ -334,12 +334,16 @@ class PopulationUnitSummary(BaseModel):
     mean_unit_absolute_change: float
     mean_unit_change_per_day: float
 
-    @field_validator("independent_unit_count", "contributing_organism_count", mode="before")
+    @field_validator(
+        "independent_unit_count", "contributing_organism_count", mode="before"
+    )
     @classmethod
     def strict_population_counts(cls, value: object) -> int:
         return _require_saved_summary_integer(value)
 
-    @field_validator("mean_unit_absolute_change", "mean_unit_change_per_day", mode="before")
+    @field_validator(
+        "mean_unit_absolute_change", "mean_unit_change_per_day", mode="before"
+    )
     @classmethod
     def strict_population_means(cls, value: object) -> float | int:
         return _require_saved_summary_mean(value)
