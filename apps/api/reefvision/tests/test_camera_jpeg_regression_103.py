@@ -823,3 +823,47 @@ def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
     assert inspected.capture_timestamp is None
     assert "EXIF metadata could not be decoded" in inspected.metadata["exif_warning"]
     assert source.read_bytes() == original
+
+@pytest.mark.parametrize(
+    "malformed_timestamp",
+    [
+        "2026:1:02 03:04:05",
+        "2026:01:2 03:04:05",
+        "2026:01:02 3:04:05",
+        "2026:01:02 03:4:05",
+        "2026:01:02 03:04:5",
+    ],
+)
+def test_noncanonical_exif_exposure_clock_never_becomes_verified_utc(
+    malformed_timestamp: str,
+) -> None:
+    """strptime's variable-width fields are not canonical EXIF exposure times."""
+    assert _capture_timestamp({36867: malformed_timestamp, 36881: "-04:00"}) is None
+
+
+def test_noncanonical_nested_camera_exif_keeps_original_and_uncertainty(
+    client: TestClient,
+) -> None:
+    """Malformed camera clocks remain raw metadata, not fabricated acquisition UTC."""
+    project = create_project(client, "Noncanonical camera exposure clock")
+    malformed_timestamp = "2026:1:02 03:04:05"
+    exif = Image.Exif()
+    exif[34665] = {36867: malformed_timestamp, 36881: "-04:00"}
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(
+        stream, format="JPEG", exif=exif
+    )
+    original = stream.getvalue()
+
+    report = import_one(
+        client, project["id"], filename="DSC_NONCANONICAL.JPEG", content=original
+    )
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    response = client.get(f"/api/v1/images/{image_id}")
+    assert response.status_code == 200
+    metadata = response.json()
+    assert metadata["capture_timestamp"] is None
+    assert "invalid" in metadata["metadata_json"]["capture_time_warning"]
+    assert metadata["metadata_json"]["exif"]["DateTimeOriginal"] == malformed_timestamp
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
