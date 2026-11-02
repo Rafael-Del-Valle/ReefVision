@@ -65,9 +65,7 @@ def _snapshot(connection: object, metric_table: str) -> tuple[object, ...]:
         ),
         tuple(connection.execute(text("SELECT id, value FROM observations")).all()),
         tuple(connection.execute(text(f"SELECT id FROM {metric_table}")).all()),
-        tuple(
-            connection.execute(text("SELECT version_num FROM alembic_version")).all()
-        )
+        tuple(connection.execute(text("SELECT version_num FROM alembic_version")).all())
         if connection.dialect.has_table(connection, "alembic_version")
         else None,
     )
