@@ -418,7 +418,9 @@ function Assert-ReefVisionMsiCabinetSet {
             throw "Unsafe MSI Media cabinet name: $name"
         }
         # Windows reserves DOS device basenames even when an extension is present.
-        if ($name -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\.cab$') {
+        # Windows treats CON.anything, COM1.anything, etc. as DOS devices,
+        # not only CON.cab/COM1.cab. Reject every reserved first component.
+        if ($name -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\.') {
             throw "Reserved Windows device name in MSI Media cabinet: $name"
         }
         if (-not $expected.Add($name)) {
@@ -433,7 +435,9 @@ function Assert-ReefVisionMsiCabinetSet {
         if ([string]::IsNullOrWhiteSpace($name) -or $name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\.cab$') {
             throw "Unsafe external cabinet filename: $name"
         }
-        if ($name -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\.cab$') {
+        # Windows treats CON.anything, COM1.anything, etc. as DOS devices,
+        # not only CON.cab/COM1.cab. Reject every reserved first component.
+        if ($name -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\.') {
             throw "Reserved Windows device name in external cabinet: $name"
         }
         if (-not $actual.Add($name)) {
