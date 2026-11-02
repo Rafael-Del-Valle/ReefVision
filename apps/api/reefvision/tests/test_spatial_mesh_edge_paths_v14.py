@@ -286,6 +286,8 @@ def test_calibrated_mesh_edge_underflow_warns_in_standalone_and_saved_graph(
     standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
     assert standalone.status_code == 200, standalone.text
     assert standalone.json()["surface_edge_paths"] == direct["surface_edge_paths"]
+    assert standalone.json()["surface_area_m2"] == direct["surface_area_m2"]
+    assert standalone.json()["provenance"] == direct["provenance"]
 
     graph = {
         "graph_id": "mesh-path-underflow-v14",
@@ -321,6 +323,8 @@ def test_calibrated_mesh_edge_underflow_warns_in_standalone_and_saved_graph(
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["surface_edge_paths"] == direct["surface_edge_paths"]
+    assert artifact["surface_area_m2"] == standalone.json()["surface_area_m2"]
+    assert artifact["provenance"] == standalone.json()["provenance"]
     assert artifact["provenance"]["calibration_verified"] is False
 
 
