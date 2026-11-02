@@ -127,6 +127,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             raise ValueError("GLB extensions are unsupported")
     if "extensions" in doc:
         raise ValueError("GLB root extensions are unsupported")
+    _reject_nested_extensions(doc)
     # An animated node can change the measured geometry after the bind pose.
     # This bounded preview has no animation timeline or skinning evaluation.
     if "animations" in doc or "skins" in doc:
