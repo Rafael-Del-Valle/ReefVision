@@ -88,6 +88,26 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     )
     revisions = set(revision_rows)
     review_revisions = revisions & {"0038", "0039", "0040", "0041"}
+    # A forged/partially restored Alembic table can contain duplicate or
+    # unrelated pre-review heads. Previously this path returned early when
+    # no 0038-0041 marker was present, allowing desktop upgrade to start
+    # against ambiguous migration provenance. Never rewrite the stamps.
+    if not review_revisions and len(revision_rows) > 1:
+        raise RuntimeError(
+            "Unsafe ReefVision Alembic concurrent or duplicate pre-review revisions: "
+            f"{sorted(str(revision) for revision in revision_rows)}. "
+            "Preserve the database and reconcile the revision table without "
+            "stamping, deleting, or rewriting scientific observations."
+        )
+    if not review_revisions and any(
+        not isinstance(revision, str) or not revision.strip()
+        for revision in revision_rows
+    ):
+        raise RuntimeError(
+            "Unsafe ReefVision Alembic empty or invalid pre-review revision marker. "
+            "Preserve the database and reconcile the revision table without "
+            "stamping, deleting, or rewriting scientific observations."
+        )
     if not review_revisions:
         unexpected_science = sorted(tables & _SCIENCE_TABLES)
         if unexpected_science:
