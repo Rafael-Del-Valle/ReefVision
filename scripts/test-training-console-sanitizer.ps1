@@ -27,6 +27,18 @@ if ((Format-SafeText $c1) -ne 'Epoch 3') {
   throw 'C1 control string was not removed.'
 }
 
+# Some workers terminate OSC/DCS strings with the 8-bit C1 ST character.
+# The monitor must remove the control payload without hiding later real losses.
+$c1St = [char]0x009C
+$oscC1St = 'train/box_loss=0.25' + [char]0x001B + ']0;spoofed title' + $c1St + ' train/cls_loss=0.30'
+if ((Format-SafeText $oscC1St) -cne 'train/box_loss=0.25 train/cls_loss=0.30') {
+  throw 'C1 ST-terminated OSC concealed a real training loss.'
+}
+$dcsC1St = 'train/cls_loss=0.30' + [char]0x001B + 'Pgraphics payload' + $c1St + ' train/dfl_loss=0.10'
+if ((Format-SafeText $dcsC1St) -cne 'train/cls_loss=0.30 train/dfl_loss=0.10') {
+  throw 'C1 ST-terminated DCS concealed a real training loss.'
+}
+
 $scientific = 'train/box_loss=0.25; scale=10 µm; temp=24 °C'
 if ((Format-SafeText $scientific) -cne $scientific) {
   throw 'Scientific units or loss values were altered.'
