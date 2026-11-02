@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Protocol
 
+from reefvision.domain.ecology_lineage_policy import require_unique_ecological_organism_key_spellings
 from reefvision.domain.errors import ValidationError
 
 
@@ -44,6 +45,7 @@ def validate_expected_roster(
 
     canonical: dict[str, list[str]] = {}
     assigned: set[str] = set()
+    all_expected_ids: list[str] = []
     total = 0
     for unit_id, organism_ids in sorted(expected_by_unit.items()):
         if not isinstance(unit_id, str) or not unit_id or unit_id.strip() != unit_id:
@@ -63,10 +65,21 @@ def validate_expected_roster(
         if assigned.intersection(organism_ids):
             raise ValidationError("An expected organism cannot belong to multiple units")
         assigned.update(organism_ids)
+        all_expected_ids.extend(organism_ids)
         total += len(organism_ids)
         if total > 10000:
             raise ValidationError("Expected organism roster exceeds 10000 organisms")
         canonical[unit_id] = sorted(organism_ids)
+
+    # Exact uniqueness is insufficient: an unobserved case/Unicode alias of
+    # another expected organism could inflate planned visits or make one
+    # biological individual appear missing in multiple units.
+    try:
+        require_unique_ecological_organism_key_spellings(all_expected_ids)
+    except ValueError as exc:
+        raise ValidationError(
+            "Expected organism roster IDs differ only by case or Unicode compatibility"
+        ) from exc
 
     for row in rows:
         observed_unit_id = row.experimental_unit_id
