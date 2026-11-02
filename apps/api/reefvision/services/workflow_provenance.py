@@ -292,6 +292,10 @@ def verify_workflow_run_node_graph_lineage(
         graph_node = expected.get(node.node_id)
         if node.node_id in seen or graph_node is None or graph_node[0] != node.node_type:
             raise ConflictError(error)
+        # A JSON array of key/value pairs can bypass the saved-parameter
+        # comparison while representing a different persisted JSON shape.
+        if node.parameters_json is not None and not isinstance(node.parameters_json, dict):
+            raise ConflictError("Workflow node parameters must be a JSON object")
         # A missing parameter object must not erase explicitly pinned
         # scientific inputs (for example, a frozen pose dataset checksum).
         if node.parameters_json is None and graph_node[1]:
