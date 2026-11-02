@@ -123,7 +123,23 @@ def frozen_pose_item_fingerprints_match(
         # not silently substitute the pose, schema, or acquisition lineage.
         before = review.get("before")
         after = review.get("after")
-        source_provenance_sha = canonical_json_sha256(row.acquisition_provenance_json)
+        # The acquisition record is independently frozen, but its original
+        # source identities must still agree with the persisted verified item.
+        # Otherwise a re-signed manifest and review digest could substitute a
+        # different video, track, frame, or schema without changing the pose.
+        acquisition = row.acquisition_provenance_json
+        if (
+            acquisition.get("schema_version") != "pose-active-learning-provenance-0001"
+            or acquisition.get("project_id") != dataset.project_id
+            or acquisition.get("video_id") != row.video_id
+            or acquisition.get("video_sha256") != row.video_sha256
+            or acquisition.get("video_track_id") != row.video_track_id
+            or acquisition.get("focus_frame") != row.frame_index
+            or acquisition.get("pose_schema_id") != row.pose_schema_id
+            or acquisition.get("pose_schema_revision") != row.pose_schema_revision
+        ):
+            return False
+        source_provenance_sha = canonical_json_sha256(acquisition)
         if (
             not isinstance(before, dict)
             or before.get("candidate_id") != row.candidate_id
