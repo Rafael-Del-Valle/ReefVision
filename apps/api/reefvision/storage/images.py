@@ -6,6 +6,7 @@ import contextlib
 import errno
 import hashlib
 import os
+import re
 import shutil
 import struct
 import tempfile
@@ -160,6 +161,13 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
     if not offset:
         # EXIF camera time without a UTC offset is not a verified instant.
         # Keep the raw local timestamp in EXIF metadata, not in UTC fields.
+        return None
+    # EXIF OffsetTimeOriginal is strictly an ASCII ±HH:MM civil offset.
+    # datetime.strptime('%z') also accepts ±HHMM and offsets with seconds,
+    # which would incorrectly promote malformed camera metadata to a
+    # verified UTC acquisition timestamp. Preserve those values only as raw
+    # EXIF and report capture-time uncertainty to the caller.
+    if re.fullmatch(r"[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00)", offset) is None:
         return None
     try:
         local_timestamp = datetime.strptime(raw + offset, "%Y:%m:%d %H:%M:%S%z")
