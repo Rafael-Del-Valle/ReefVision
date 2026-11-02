@@ -48,6 +48,18 @@ a mesh measurement artifact. This is a floating-point integrity safeguard,
 identity, anatomical branch length, or measurement uncertainty beyond
 the existing caller-supplied scale-only interval.
 
+Selected surface-edge paths have a distinct, more localized precision limit.
+When **total and per-patch calibrated surface areas remain representable**, a
+positive source-frame route or endpoint chord may still calibrate to zero
+meters. The route retains `calibrated_path_length_underflow` and/or
+`calibrated_endpoint_chord_underflow` QC, withholds a detour ratio against a
+zero calibrated chord, and must not be interpreted as a measured zero-length
+coral branch. A regression now uses a representable-area, edge-connected
+two-triangle mesh to exercise this warning in both the standalone API and a
+persisted executable Workflow Builder graph. If total or per-patch calibrated
+area instead underflows, the entire measurement fails before route QC can be
+published. Neither outcome establishes anatomical centerline validity.
+
 ## OBJ text separator integrity (provisional)
 
 The bounded OBJ mesh importer rejects NUL/ASCII control characters other
