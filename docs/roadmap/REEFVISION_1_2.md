@@ -5952,3 +5952,12 @@ observations, actual experimental-unit independence, representative
 human/model scientific acceptance, 1.1 migration reconciliation and
 installed Windows MSI/GUI/GPU testing remain outstanding.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## UTC-equivalent parent-state ambiguity regression and backend CI repair (2026-11-01; development only)
+
+**Pre-edit audit:** Isolated draft PR #74 at `d869a9b3a34ae2725a9664fc45b2456d8adb0c28` completed 19 Actions: 16 succeeded, three backend gates failed on one Ruff formatter discrepancy in `test_ecology_historical_parent_chronology_1_2.py` (the same two multi-line function calls and one `any(...)` assertion). Frontend/E2E and Windows Desktop Build succeeded, but no installed GUI/GPU or representative biological acceptance is implied.
+
+**Test and CI repair:** Apply the exact Ruff-requested one-line formatting. Extend the parent-colony chronology regression to use three differently offset timestamps representing the **same UTC instant**. Conflicting parent classifications must still fail rather than inferring an unproven colony-at-fragment-link state from wall-clock order; identical colony classifications remain valid. An imported ambiguous history must reject both new organism registration and parent revision writes without appending a record, and its executable saved Workflow Builder source must fail without a successful `ecology_identity_registry` artifact. These checks exercise the existing shared domain validator; no new scientific data are promoted or persisted differently.
+
+**Release HOLD:** Verify exact new-head Ruff, mypy, pytest, frontend/E2E and Windows CI; authenticate calibrated longitudinal observations and independent study units; perform representative scientist-reviewed human/model comparisons; reconcile 1.1 migrations; and test installed Windows MSI/GUI/GPU. Local checkout is blocked by GitHub DNS, so local repository pytest/Ruff are not claimed. **1.2 NOT RELEASE-READY; 1.3 not started.**
