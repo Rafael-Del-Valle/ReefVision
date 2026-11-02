@@ -325,7 +325,10 @@ def test_ambiguous_experimental_unit_ids_cannot_create_or_revise_registry(
     [
         ("tank-1 ", "invalid experimental unit ID"),
         ("tank-1\u200b", "invalid experimental unit ID"),
-        (\n            "\uff54\uff41\uff4e\uff4b-1",\n            "experimental unit IDs differ only by case or Unicode compatibility",\n        ),
+        (
+            "\uff54\uff41\uff4e\uff4b-1",
+            "experimental unit IDs differ only by case or Unicode compatibility",
+        ),
         ("tank-①", "experimental unit IDs differ only by case or Unicode compatibility"),
     ],
     ids=["padded", "zero-width", "fullwidth", "compatibility-digit"],
