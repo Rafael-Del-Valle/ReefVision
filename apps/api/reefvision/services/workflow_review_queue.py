@@ -13,7 +13,13 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun, WorkflowRun
+from reefvision.db.models import (
+    DatasetVersion,
+    ReviewQueue,
+    WorkflowArtifact,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.review_queues import ReviewQueueCreateRequest
 from reefvision.services.review_queues import ReviewQueueService
@@ -97,9 +103,63 @@ def create_review_queue_workflow_artifact(
         or producer.node_type != "project_source"
         or producer.status != "succeeded"
         or producer.output_artifact_ids_json != [source.id]
-        or node.input_artifact_ids_json != [source.id]
+        or source.id not in node.input_artifact_ids_json
     ):
         raise ValidationError("QC Review Queue source has invalid producer or binding provenance")
+
+    # A version-scoped queue must consume a real typed, checksummed output of
+    # the saved dataset-version source. Never infer a frozen study from a live
+    # project ID or accept a split-filtered source as a full-version queue.
+    dataset_inputs = inputs.get("dataset", [])
+    if len(dataset_inputs) > 1:
+        raise ValidationError("QC Review Queue accepts at most one frozen dataset version")
+    dataset_version_id: str | None = None
+    dataset_version: DatasetVersion | None = None
+    expected_input_ids = [source.id]
+    if dataset_inputs:
+        dataset_source = dataset_inputs[0]
+        dataset_payload = dataset_source.payload_json
+        if (
+            dataset_source.data_type != "dataset_version"
+            or not isinstance(dataset_payload, dict)
+            or dataset_source.payload_sha256 != canonical_json_sha256(dataset_payload)
+        ):
+            raise ValidationError("QC Review Queue dataset artifact failed integrity validation")
+        if (
+            dataset_payload.get("project_id") != project_id
+            or dataset_payload.get("split") is not None
+        ):
+            raise ValidationError("QC Review Queue requires an unfiltered same-project dataset")
+        candidate_id = dataset_payload.get("dataset_version_id")
+        if type(candidate_id) is not str or not candidate_id:
+            raise ValidationError("QC Review Queue requires a valid dataset version ID")
+        dataset_version = session.get(DatasetVersion, candidate_id)
+        if (
+            dataset_version is None
+            or dataset_version.project_id != project_id
+            or dataset_version.status != "complete"
+            or dataset_payload.get("manifest_sha256") != dataset_version.manifest_sha256
+        ):
+            raise ValidationError("QC Review Queue dataset version or manifest does not match")
+        dataset_producer = session.get(WorkflowNodeRun, dataset_source.producer_node_run_id)
+        if (
+            dataset_source.workflow_run_id != run_id
+            or dataset_source.producer_port_id != "dataset"
+            or dataset_producer is None
+            or dataset_producer.workflow_run_id != run_id
+            or dataset_producer.node_type != "dataset_version_source"
+            or dataset_producer.status != "succeeded"
+            or dataset_source.id not in dataset_producer.output_artifact_ids_json
+        ):
+            raise ValidationError("QC Review Queue dataset producer provenance is invalid")
+        dataset_version_id = candidate_id
+        expected_input_ids.append(dataset_source.id)
+    if (
+        not isinstance(node.input_artifact_ids_json, list)
+        or len(node.input_artifact_ids_json) != len(expected_input_ids)
+        or set(node.input_artifact_ids_json) != set(expected_input_ids)
+    ):
+        raise ValidationError("QC Review Queue saved input bindings are invalid")
 
     # The saved node is the authoritative execution contract. An interrupted
     # retry must not silently change its source QC run or review threshold,
@@ -155,6 +215,8 @@ def create_review_queue_workflow_artifact(
         config = dict(existing.configuration_json or {})
         if (
             existing.status != "complete"
+            or existing.dataset_version_id != dataset_version_id
+            or existing.scope_type != ("dataset_version" if dataset_version_id else "project")
             or config.get("review_below_confidence") != request.review_below_confidence
             or (
                 request.source_quality_control_run_id is not None
@@ -167,7 +229,11 @@ def create_review_queue_workflow_artifact(
         queue = service.get_queue(existing.id)
     else:
         try:
-            queue = service.create_queue_for_project(project_id, request)
+            queue = (
+                service.create_queue_for_dataset_version(dataset_version_id, request)
+                if dataset_version_id is not None
+                else service.create_queue_for_project(project_id, request)
+            )
         except IntegrityError as exc:
             # Only the stable review-queue primary-key collision means another
             # writer owns this workflow's identity. Unrelated constraint
@@ -208,6 +274,9 @@ def create_review_queue_workflow_artifact(
         "workflow_run_id": run_id,
         "workflow_node_run_id": node_run_id,
     }
+    if dataset_version is not None:
+        payload["dataset_version_id"] = dataset_version.id
+        payload["dataset_manifest_sha256"] = dataset_version.manifest_sha256
     if saved_outputs:
         saved_output = session.get(WorkflowArtifact, saved_outputs[0])
         if (
