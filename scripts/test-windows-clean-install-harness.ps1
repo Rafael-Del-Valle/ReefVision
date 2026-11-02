@@ -37,6 +37,22 @@ $script:isolationOverrideActionRan = $false
 Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{ HF_HUB_OFFLINE = '0' } -Action { $script:isolationOverrideActionRan = $true } } 'Offline model policy override must be rejected.'
 Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{ hf_home = 'C:\researcher-cache' } -Action { $script:isolationOverrideActionRan = $true } } 'Case-insensitive disposable cache override must be rejected.'
 Assert-True (-not $script:isolationOverrideActionRan) 'Rejected isolation override executed its action.'
+# Opt-in live SAM must not weaken the default offline policy or cache isolation.
+# This is a mocked environment test: it performs no network requests.
+$script:liveSamOptInActionRan = $false
+Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AllowLiveSam2Network -AdditionalEnvironment @{ HF_HUB_OFFLINE = '0' } -Action { $script:liveSamOptInActionRan = $true } } 'Live SAM opt-in must require both offline flags.'
+Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AllowLiveSam2Network -AdditionalEnvironment @{ HF_HUB_OFFLINE = '0'; TRANSFORMERS_OFFLINE = '1' } -Action { $script:liveSamOptInActionRan = $true } } 'Live SAM opt-in must reject partial offline-policy changes.'
+Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AllowLiveSam2Network -AdditionalEnvironment @{ HF_HUB_OFFLINE = '0'; TRANSFORMERS_OFFLINE = '0'; hf_home = 'C:\researcher-cache' } -Action { $script:liveSamOptInActionRan = $true } } 'Live SAM opt-in must never redirect protected model caches.'
+Assert-True (-not $script:liveSamOptInActionRan) 'Rejected live SAM opt-in executed its action.'
+$previousTransformersOffline = [Environment]::GetEnvironmentVariable('TRANSFORMERS_OFFLINE', 'Process')
+$previousLiveHfOffline = [Environment]::GetEnvironmentVariable('HF_HUB_OFFLINE', 'Process')
+Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AllowLiveSam2Network -AdditionalEnvironment @{ HF_HUB_OFFLINE = '0'; TRANSFORMERS_OFFLINE = '0'; HF_HUB_DISABLE_TELEMETRY = '1' } -Action {
+    Assert-True ($env:HF_HUB_OFFLINE -ceq '0' -and $env:TRANSFORMERS_OFFLINE -ceq '0') 'Explicit live SAM opt-in did not reach its isolated action.'
+    Assert-True ($env:HF_HOME -eq 'C:\isolated-acceptance\cache\huggingface') 'Live SAM opt-in escaped the disposable model cache.'
+    Assert-True ($env:HF_HUB_DISABLE_TELEMETRY -ceq '1') 'Live SAM opt-in did not disable telemetry.'
+}
+Assert-True ([Environment]::GetEnvironmentVariable('TRANSFORMERS_OFFLINE', 'Process') -ceq $previousTransformersOffline) 'Live SAM opt-in did not restore TRANSFORMERS_OFFLINE.'
+Assert-True ([Environment]::GetEnvironmentVariable('HF_HUB_OFFLINE', 'Process') -ceq $previousLiveHfOffline) 'Live SAM opt-in did not restore HF_HUB_OFFLINE.'
 $previousProbe = [Environment]::GetEnvironmentVariable('REEFVISION_ACCEPTANCE_PROBE', 'Process')
 Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{ REEFVISION_ACCEPTANCE_PROBE = 'disposable' } -Action {
     Assert-True ($env:REEFVISION_ACCEPTANCE_PROBE -eq 'disposable') 'Safe additional environment variable was not applied.'
@@ -400,6 +416,7 @@ Assert-True ($acceptanceScript.Contains('cocoResult.boxes_imported -ne 1')) 'COC
 Assert-True ($acceptanceScript.Contains('yoloResult.boxes_imported -ne 1')) 'YOLO imported box acceptance is missing.'
 Assert-True ($acceptanceScript.Contains('LiveSam2Acceptance')) 'Live SAM mode must be declared.'
 Assert-True ($acceptanceScript.Contains("HF_HUB_OFFLINE'] = '0'")) 'Opt-in live SAM must allow a real network download.'
+Assert-True ($acceptanceScript.Contains('-AllowLiveSam2Network:$LiveSam2Acceptance')) 'Live SAM network opt-in must be explicitly scoped to the requested acceptance mode.'
 Assert-True ($acceptanceScript.Contains('samAcceptedMaskId')) 'Live SAM acceptance must validate mask preservation.'
 Assert-True ($acceptanceScript.Contains("'api.log', 'api.log.1'")) 'Failed SAM2 acceptance must archive API logs, not only startup backend.log.'
 Assert-True ($acceptanceScript.Contains('api.log.tail.log') -or $acceptanceScript.Contains('$logName.tail.log')) 'SAM2 API log archive name must match the uploaded *.log evidence pattern.'
