@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
 from reefvision.services.spatial_mesh_longitudinal_v14 import compare_mesh_observations
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+from reefvision.services.workflow_mesh_v14 import execute_mesh_longitudinal_comparison
 from reefvision.tests.test_annotations import create_project
 
 
@@ -256,6 +259,44 @@ def test_zero_area_mesh_rejects_forged_patch_area_evidence(
         compare_mesh_observations(before, after)
 
 
+@pytest.mark.parametrize("timepoint", [0, 1])
+def test_zero_area_legacy_fractions_cannot_fabricate_patch_concentration(
+    timepoint: int,
+) -> None:
+    """Missing legacy patch areas must not legitimize a zero-area distribution."""
+    early, late = _meshes()
+    for source in (early, late):
+        source["vertices"] = [
+            [0, 0, 0],
+            [1, 0, 0],
+            [2, 0, 0],
+            [10, 0, 0],
+            [11, 0, 0],
+            [12, 0, 0],
+        ]
+    observations = [_preview(early), _preview(late)]
+    record = observations[timepoint]
+    record.pop("edge_connected_patch_surface_areas_m2")
+    record["edge_connected_patch_surface_area_fractions"] = [0.5, 0.5]
+    record["edge_connected_patch_area_concentration_index"] = 0.5
+    record["area_weighted_effective_patch_count"] = 2.0
+
+    with pytest.raises(ValueError, match="Zero-area mesh cannot have patch area fractions"):
+        compare_mesh_observations(*observations)
+
+    inputs = {
+        port: [
+            SimpleNamespace(
+                data_type="mesh_measurement_preview",
+                payload_json=observation,
+            )
+        ]
+        for port, observation in zip(("before", "after"), observations, strict=True)
+    }
+    with pytest.raises(ValidationError, match="Zero-area mesh cannot have patch area fractions"):
+        execute_mesh_longitudinal_comparison(None, None, "project-1", {}, inputs)
+
+
 def test_legacy_patch_fractions_without_area_breakdown_remain_readable() -> None:
     observations = [_preview(payload) for payload in _meshes()]
     for record in observations:
@@ -316,10 +357,23 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
     assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is True
 
 
-def test_patch_concentration_saved_workflow_matches_standalone(client: TestClient) -> None:
+@pytest.mark.parametrize("degenerate", [False, True])
+def test_patch_concentration_saved_workflow_matches_standalone(
+    client: TestClient, degenerate: bool
+) -> None:
     project_id = str(create_project(client, "Patch concentration timepoints")["id"])
     base = f"/api/v1/projects/{project_id}"
     before, after = _meshes()
+    if degenerate:
+        for source in (before, after):
+            source["vertices"] = [
+                [0, 0, 0],
+                [1, 0, 0],
+                [2, 0, 0],
+                [10, 0, 0],
+                [11, 0, 0],
+                [12, 0, 0],
+            ]
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after},
@@ -383,12 +437,20 @@ def test_patch_concentration_saved_workflow_matches_standalone(client: TestClien
         if item["data_type"] == "mesh_longitudinal_comparison"
     )
     assert artifact == expected
-    assert artifact["delta_patch_area_concentration_index"] == pytest.approx(-0.125)
-    assert artifact["delta_area_weighted_effective_patch_count"] == pytest.approx(0.4)
-    assert artifact["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
-    assert artifact["ranked_patch_area_jensen_shannon_divergence_bits"] == pytest.approx(
-        0.0487949406953985
-    )
+    if degenerate:
+        assert artifact["before_patch_area_concentration_index"] is None
+        assert artifact["after_patch_area_concentration_index"] is None
+        assert artifact["delta_patch_area_concentration_index"] is None
+        assert artifact["ranked_patch_area_profile_distance"] is None
+        assert artifact["ranked_patch_area_jensen_shannon_divergence_bits"] is None
+        assert "patch_area_distribution_comparison_unavailable" in artifact["qc_warnings"]
+    else:
+        assert artifact["delta_patch_area_concentration_index"] == pytest.approx(-0.125)
+        assert artifact["delta_area_weighted_effective_patch_count"] == pytest.approx(0.4)
+        assert artifact["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+        assert artifact["ranked_patch_area_jensen_shannon_divergence_bits"] == pytest.approx(
+            0.0487949406953985
+        )
 
 
 def test_ranked_patch_divergence_zero_for_identical_area_profiles() -> None:
