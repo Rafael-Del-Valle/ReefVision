@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta, tzinfo
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.domain.longitudinal_monitoring import analyze_longitudinal
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisRequest
+from pydantic import ValidationError as PydanticValidationError
+
+from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisRequest, LongitudinalChange
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_ecology_1_2 import _graph
 
@@ -33,6 +37,75 @@ def _same_date_observations() -> list[dict[str, object]]:
         _obs("frag-A", "a-last", "2026-04-03T11:00:00Z", 12),
         _obs("frag-B", "b-first", "2026-04-01T16:00:00Z", 20),
         _obs("frag-B", "b-last", "2026-04-03T18:00:00Z", 24),
+    ]
+
+
+class _SeasonalOffset(tzinfo):
+    """Portable DST-like offsets without a host timezone database."""
+
+    def utcoffset(self, dt: datetime | None) -> timedelta:
+        if dt is None:
+            return timedelta(hours=-5)
+        return timedelta(hours=-4 if (3, 8) <= (dt.month, dt.day) < (11, 1) else -5)
+
+    def dst(self, dt: datetime | None) -> timedelta:
+        return timedelta(0)
+
+    def tzname(self, dt: datetime | None) -> str:
+        return "seasonal-offset"
+
+
+@pytest.mark.parametrize(
+    ("start_date", "end_date", "expected_hours"),
+    [
+        ((3, 7), (3, 9), 47),
+        ((10, 31), (11, 2), 49),
+    ],
+)
+def test_saved_organism_endpoint_replays_actual_utc_elapsed_hours(
+    start_date: tuple[int, int],
+    end_date: tuple[int, int],
+    expected_hours: int,
+) -> None:
+    """One shared tzinfo object must not hide spring/fall offset changes."""
+    seasonal = _SeasonalOffset()
+    start = datetime(2026, *start_date, 12, tzinfo=seasonal)
+    end = datetime(2026, *end_date, 12, tzinfo=seasonal)
+    assert (end - start).total_seconds() == 48 * 3600
+    assert (end.astimezone(UTC) - start.astimezone(UTC)).total_seconds() == (
+        expected_hours * 3600
+    )
+    payload = {
+        "organism_id": "fragment-A",
+        "metric_name": "polyp_count",
+        "unit": "count",
+        "first_observed_at": start,
+        "last_observed_at": end,
+        "baseline_source_record_id": "human-start",
+        "final_source_record_id": "human-end",
+        "initial_value": 10,
+        "final_value": 12,
+        "absolute_change": 2,
+        "percent_change": 20,
+        "elapsed_days": expected_hours / 24,
+        "change_per_day": 2 / (expected_hours / 24),
+        "observation_count": 2,
+    }
+    parsed = LongitudinalChange.model_validate(payload)
+    assert parsed.elapsed_days == pytest.approx(expected_hours / 24)
+    # A forged 48-hour wall-clock denominator must fail on both transitions.
+    with pytest.raises(PydanticValidationError, match="endpoint arithmetic does not reconcile"):
+        LongitudinalChange.model_validate(
+            {**payload, "elapsed_days": 2.0, "change_per_day": 1.0}
+        )
+
+
+def _offset_transition_observations() -> list[dict[str, object]]:
+    return [
+        _obs("frag-A", "a-first", "2026-03-07T12:00:00-05:00", 10),
+        _obs("frag-A", "a-last", "2026-03-09T12:00:00-04:00", 12),
+        _obs("frag-B", "b-first", "2026-03-07T12:00:00-05:00", 20),
+        _obs("frag-B", "b-last", "2026-03-09T12:00:00-04:00", 24),
     ]
 
 
@@ -73,16 +146,26 @@ def test_different_utc_sampling_dates_still_exclude_unit() -> None:
     assert result.unit_coverage[0].eligible_for_summary is False
 
 
+@pytest.mark.parametrize("crosses_offset_transition", [False, True])
 def test_standalone_and_saved_workflow_agree_on_date_window(
-    client: TestClient,
+    client: TestClient, crosses_offset_transition: bool
 ) -> None:
-    observations = _same_date_observations()
+    observations = (
+        _offset_transition_observations()
+        if crosses_offset_transition
+        else _same_date_observations()
+    )
     standalone = client.post(
         "/api/v1/ecology/longitudinal-analysis",
         json={"observations": observations},
     )
     assert standalone.status_code == 200, standalone.text
     assert standalone.json()["unit_summaries"][0]["organism_count"] == 2
+    if crosses_offset_transition:
+        assert all(
+            row["elapsed_days"] == pytest.approx(47 / 24)
+            for row in standalone.json()["changes"]
+        )
 
     project = create_project(client, "UTC-date ecological sampling")
     project_id = str(project["id"])
@@ -117,6 +200,7 @@ def test_standalone_and_saved_workflow_agree_on_date_window(
     ]
     assert len(artifacts) == 1
     payload = artifacts[0]["payload_json"]
+    assert payload["changes"] == standalone.json()["changes"]
     assert payload["unit_summaries"] == standalone.json()["unit_summaries"]
     assert payload["unit_coverage"] == standalone.json()["unit_coverage"]
     assert payload["analysis_provenance"] == standalone.json()["analysis_provenance"]

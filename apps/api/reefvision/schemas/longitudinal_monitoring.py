@@ -211,7 +211,9 @@ class LongitudinalChange(BaseModel):
         )
         if not all(math.isfinite(value) for value in values):
             raise ValueError("Longitudinal change numeric values must be finite")
-        elapsed = (last - first).total_seconds() / 86400.0
+        # Same-zone datetime subtraction ignores seasonal UTC-offset changes.
+        # Elapsed scientific time must use UTC instants, not wall-clock hours.
+        elapsed = (last.astimezone(UTC) - first.astimezone(UTC)).total_seconds() / 86400.0
         delta = self.final_value - self.initial_value
         if elapsed <= 0 or not math.isfinite(delta):
             raise ValueError("Longitudinal change endpoint arithmetic is invalid")
