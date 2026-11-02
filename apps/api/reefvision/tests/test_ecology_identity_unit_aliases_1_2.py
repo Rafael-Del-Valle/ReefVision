@@ -385,9 +385,7 @@ def test_imported_ambiguous_unit_id_blocks_registry_and_executable_workflow(
     # Invalid imported history must also block writes without appending revisions.
     with app.state.session_factory() as session:
         revision_count = (
-            session.query(EcologyIdentityRevision)
-            .filter_by(project_id=project_id)
-            .count()
+            session.query(EcologyIdentityRevision).filter_by(project_id=project_id).count()
         )
     attempted = _register(client, project_id, "fragment-B")
     assert attempted.status_code == 400, attempted.text
@@ -406,9 +404,7 @@ def test_imported_ambiguous_unit_id_blocks_registry_and_executable_workflow(
     assert expected_diagnostic in revision.text
     with app.state.session_factory() as session:
         assert (
-            session.query(EcologyIdentityRevision)
-            .filter_by(project_id=project_id)
-            .count()
+            session.query(EcologyIdentityRevision).filter_by(project_id=project_id).count()
             == revision_count
         )
 
