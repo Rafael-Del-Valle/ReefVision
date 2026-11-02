@@ -86,6 +86,21 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     revision_rows: tuple[str, ...] = tuple(
         connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
     )
+    # An empty Alembic version table is safe only for a genuinely empty
+    # installation. A restored database may retain project/review/scientific
+    # tables after losing its revision row; treating that as base would make
+    # Alembic replay already-applied DDL and risk partial upgrades. Never
+    # infer a revision or stamp the preserved database automatically.
+    if not revision_rows:
+        preserved_tables = sorted(tables - {"alembic_version"})
+        if preserved_tables:
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic empty revision table with existing schema: "
+                f"tables={preserved_tables}. Preserve research data and reconcile "
+                "migration provenance from a reviewed backup; do not stamp, "
+                "drop, or recreate existing tables."
+            )
+        return
     revisions = set(revision_rows)
     review_revisions = revisions & {"0038", "0039", "0040", "0041"}
     # A forged/partially restored Alembic table can contain duplicate or
