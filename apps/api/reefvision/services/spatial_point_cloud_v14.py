@@ -21,6 +21,8 @@ def parse_ascii_ply_points(
     """Read XYZ and optionally retain validated raw PLY RGB bytes."""
     if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_PLY_BYTES:
         raise ValueError("Point-cloud PLY exceeds the 256000-byte preview limit")
+    if not text.isascii():
+        raise ValueError("Point-cloud PLY must contain ASCII text only")
     lines = text.splitlines()
     if not lines or lines[0].strip() != "ply":
         raise ValueError("Point-cloud PLY must begin with ply")
@@ -100,7 +102,12 @@ def parse_ascii_ply_points(
         for channel in ("red", "green", "blue"):
             if channel in properties:
                 token = values[properties.index(channel)]
-                if not token.isascii() or not token.isdecimal() or len(token) > 3 or int(token) > 255:
+                if (
+                    not token.isascii()
+                    or not token.isdecimal()
+                    or len(token) > 3
+                    or int(token) > 255
+                ):
                     raise ValueError("Point-cloud RGB channels must be 0-255 integers")
         points.append(parsed)
         if colors_out is not None and "red" in properties:
