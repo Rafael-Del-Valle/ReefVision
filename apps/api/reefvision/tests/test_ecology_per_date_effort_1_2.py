@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_ecology_sampling_schedule_1_2 import _payload
 from reefvision.tests.test_workflow_ecology_1_2 import _graph
@@ -108,3 +111,55 @@ def test_saved_workflow_persists_identical_per_date_scientific_qc(
     )
     assert persisted["analysis_provenance"] == standalone.json()["analysis_provenance"]
     assert persisted["evidence_level"] == "caller_supplied_unverified"
+
+    # Saved executable graphs must persist an internally reconciled typed result.
+    LongitudinalAnalysisResponse.model_validate(persisted)
+    forged = deepcopy(persisted)
+    forged["planned_sampling_date_coverage"][1]["missing_organism_ids"] = ["B", "D"]
+    with pytest.raises(
+        PydanticValidationError, match="Planned visit organism roster changes"
+    ):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+
+@pytest.mark.parametrize(
+    "tampering",
+    [
+        "changed_roster",
+        "duplicate_date",
+        "missing_date",
+        "forged_aggregate",
+        "inconsistent_roster_flag",
+        "inconsistent_expected_count",
+    ],
+)
+def test_persisted_visit_series_rejects_cross_record_tampering(
+    client: TestClient, tampering: str
+) -> None:
+    request = _payload(missing=True)
+    request["expected_organism_ids_by_unit"] = {"tank-1": ["A", "B", "C"]}
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert response.status_code == 200, response.text
+    original = response.json()
+    LongitudinalAnalysisResponse.model_validate(original)
+    forged = deepcopy(original)
+    visits = forged["planned_sampling_date_coverage"]
+    effort = forged["planned_sampling_effort"][0]
+    if tampering == "changed_roster":
+        visits[1]["missing_organism_ids"] = ["B", "D"]
+    elif tampering == "duplicate_date":
+        visits[1]["sampling_date"] = visits[0]["sampling_date"]
+    elif tampering == "missing_date":
+        visits.pop(1)
+    elif tampering == "forged_aggregate":
+        effort["observed_organism_visits"] = 4
+        effort["missing_organism_visits"] = 5
+        effort["observation_coverage_fraction"] = 4 / 9
+    elif tampering == "inconsistent_roster_flag":
+        visits[1]["expected_roster_supplied"] = False
+    elif tampering == "inconsistent_expected_count":
+        visits[1]["expected_organism_count"] = 4
+        visits[1]["missing_organism_ids"].append("D")
+        visits[1]["observation_coverage_fraction"] = 1 / 4
+    with pytest.raises(PydanticValidationError, match="Planned visit"):
+        LongitudinalAnalysisResponse.model_validate(forged)
