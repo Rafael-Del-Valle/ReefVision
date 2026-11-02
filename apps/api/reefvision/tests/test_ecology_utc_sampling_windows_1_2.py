@@ -8,12 +8,14 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.domain.longitudinal_monitoring import analyze_longitudinal
 from reefvision.jobs.workflow import process_workflow_run_job
-from pydantic import ValidationError as PydanticValidationError
-
-from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisRequest, LongitudinalChange
+from reefvision.schemas.longitudinal_monitoring import (
+    LongitudinalAnalysisRequest,
+    LongitudinalChange,
+)
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_ecology_1_2 import _graph
 
