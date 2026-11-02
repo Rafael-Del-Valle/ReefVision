@@ -205,9 +205,13 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
     base = f"/api/v1/projects/{pid}"
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 400, standalone.text
+    # The JSON integer guard intentionally runs before matrix/accessor QC.
+    # API and saved graphs must both reject the source, not publish geometry.
+    if invalid_selector in {"huge_identity_matrix", "index_bounds_huge"}:
+        assert "64-digit preview bound" in standalone.text
     graph = {
         "graph_id": f"glb-invalid-{invalid_selector}-v14",
-        "name": "Reject noninteger glTF mode",
+        "name": "Reject malformed GLB metadata",
         "nodes": [
             {"node_id": "p", "node_type": "project_source"},
             {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
