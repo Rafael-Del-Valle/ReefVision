@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse
 from reefvision.tests.test_annotations import create_project
 
 
@@ -107,6 +111,14 @@ def test_saved_ecology_workflow_persists_unverified_artifact(client: TestClient)
     )
     assert standalone.status_code == 200, standalone.text
     assert payload["analysis_provenance"] == standalone.json()["analysis_provenance"]
+    # Executed saved-workflow artifacts use the same typed source-denominator
+    # replay contract as standalone analysis. Replacing a source identity while
+    # retaining the input digest cannot silently relabel the biological data.
+    assert LongitudinalAnalysisResponse.model_validate(payload).observation_count == 2
+    forged = deepcopy(payload)
+    forged["analysis_provenance"]["source_record_ids"][0] = "invented-source"
+    with pytest.raises(PydanticValidationError, match="Longitudinal source endpoints"):
+        LongitudinalAnalysisResponse.model_validate(forged)
 
 
 def test_unverified_ecology_cannot_enter_verified_dataset(client: TestClient) -> None:
