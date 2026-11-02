@@ -353,29 +353,29 @@ def test_final_training_log_drops_unterminated_ansi_csi_at_eof(
     assert log.read_bytes() == original
 
 
-@pytest.mark.parametrize("terminator", [b"\\x9c", "\\u009c".encode("utf-8")])
+@pytest.mark.parametrize("terminator", [b"\x9c", "\u009c".encode("utf-8")])
 def test_log_tail_c1_string_terminators_preserve_following_real_losses(
     tmp_path: Path, terminator: bytes
 ) -> None:
     """Raw or UTF-8 C1 ST ends OSC/DCS; later genuine losses must survive."""
     log = tmp_path / "training.log"
     original = (
-        b"train/box_loss=0.25\\n"
-        + b"\\x1b]0;spoofed terminal title"
+        b"train/box_loss=0.25\n"
+        + b"\x1b]0;spoofed terminal title"
         + terminator
-        + b"train/cls_loss=0.30\\n"
-        + b"\\x1bPgraphics payload"
+        + b"train/cls_loss=0.30\n"
+        + b"\x1bPgraphics payload"
         + terminator
-        + b"train/dfl_loss=0.10\\n"
+        + b"train/dfl_loss=0.10\n"
     )
     log.write_bytes(original)
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
         "text": (
-            "train/box_loss=0.25\\n"
-            "train/cls_loss=0.30\\n"
-            "train/dfl_loss=0.10\\n"
+            "train/box_loss=0.25\n"
+            "train/cls_loss=0.30\n"
+            "train/dfl_loss=0.10\n"
         ),
     }
     assert log.read_bytes() == original
@@ -385,11 +385,11 @@ def test_log_tail_invalid_utf8_does_not_expose_surrogate_codepoints(
     tmp_path: Path,
 ) -> None:
     log = tmp_path / "training.log"
-    original = b"worker=\\xff\\ntrain/box_loss=0.25\\n"
+    original = b"worker=\xff\ntrain/box_loss=0.25\n"
     log.write_bytes(original)
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
-        "text": "worker=\\ufffd\\ntrain/box_loss=0.25\\n",
+        "text": "worker=\ufffd\ntrain/box_loss=0.25\n",
     }
     assert log.read_bytes() == original
 
