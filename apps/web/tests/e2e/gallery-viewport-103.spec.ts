@@ -449,6 +449,49 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await assertDecodedAndContained(6000, 400);
   await page.setViewportSize({ width: 1440, height: 900 });
   await assertDecodedAndContained(6000, 400);
+
+  // An image can be visible at full desktop width but become clipped when a
+  // user opens a side panel. The selected thumbnail must be re-aligned after
+  // a filmstrip-only resize, without changing the scientific image or page.
+  const ninthImage = workbench.getByRole("listitem", {
+    name: "Focus camera-09.JPEG",
+  });
+  await ninthImage.click();
+  await assertDecodedAndContained(1600, 1200);
+  await expect(ninthImage).toHaveAttribute("aria-current", "true");
+  const focusedThumbnailContained = () =>
+    filmstrip.evaluate((element) => {
+      const thumbnail = element.querySelector<HTMLElement>('[aria-current="true"]');
+      if (!thumbnail) return false;
+      const strip = element.getBoundingClientRect();
+      const active = thumbnail.getBoundingClientRect();
+      return active.left >= strip.left - 1 && active.right <= strip.right + 1;
+    });
+  const selectedSourceBeforeResize = await focused.getAttribute("src");
+  const pageScrollBeforePanelResize = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  await filmstrip.evaluate((element) => {
+    element.style.maxWidth = "420px";
+  });
+  expect(await filmstrip.evaluate((element) => element.clientWidth)).toBeLessThanOrEqual(420);
+  await expect.poll(focusedThumbnailContained).toBe(true);
+  expect(await focused.getAttribute("src")).toBe(selectedSourceBeforeResize);
+  expect(
+    await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+  ).toEqual(pageScrollBeforePanelResize);
+  await assertDecodedAndContained(1600, 1200);
+  await filmstrip.evaluate((element) => {
+    element.style.maxWidth = "";
+  });
+  await page.setViewportSize({ width: 960, height: 760 });
+  await expect.poll(focusedThumbnailContained).toBe(true);
+  await expect(ninthImage).toHaveAttribute("aria-current", "true");
+  await assertDecodedAndContained(1600, 1200);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(focusedThumbnailContained).toBe(true);
+
   await workbench.focus();
   await page.keyboard.press("Home");
   await assertDecodedAndContained(1600, 1200);
