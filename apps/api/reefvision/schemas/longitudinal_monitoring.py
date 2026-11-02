@@ -368,3 +368,53 @@ class LongitudinalAnalysisResponse(BaseModel):
                 "or Unicode compatibility"
             ) from exc
         return self
+
+    @model_validator(mode="after")
+    def reconcile_persisted_planned_visits(self) -> LongitudinalAnalysisResponse:
+        """Cross-check per-date rosters against persisted unit-level effort.
+
+        Legacy artifacts may contain only one of these optional result sections;
+        when both exist, neither can contradict the other.
+        """
+        if not self.planned_sampling_effort or not self.planned_sampling_date_coverage:
+            return self
+
+        effort_by_key: dict[tuple[str, str], PlannedSamplingEffort] = {}
+        for effort in self.planned_sampling_effort:
+            key = (effort.experimental_unit_id, effort.metric_name)
+            if key in effort_by_key:
+                raise ValueError("Planned visit duplicate experimental-unit effort")
+            effort_by_key[key] = effort
+
+        visits_by_key: dict[tuple[str, str], list[PlannedSamplingDateCoverage]] = {}
+        for visit in self.planned_sampling_date_coverage:
+            key = (visit.experimental_unit_id, visit.metric_name)
+            visits_by_key.setdefault(key, []).append(visit)
+        if set(visits_by_key) != set(effort_by_key):
+            raise ValueError("Planned visit units do not reconcile with effort")
+
+        for key, effort in effort_by_key.items():
+            visits = visits_by_key[key]
+            dates = {visit.sampling_date for visit in visits}
+            if len(visits) != effort.planned_sampling_date_count or len(dates) != len(visits):
+                raise ValueError("Planned visit dates do not reconcile with effort")
+            if any(
+                visit.expected_organism_count != effort.expected_organism_count
+                or visit.expected_roster_supplied != effort.expected_roster_supplied
+                for visit in visits
+            ):
+                raise ValueError("Planned visit roster metadata does not reconcile")
+            rosters = [
+                set(visit.observed_organism_ids) | set(visit.missing_organism_ids)
+                for visit in visits
+            ]
+            if any(roster != rosters[0] for roster in rosters[1:]):
+                raise ValueError("Planned visit organism roster changes between dates")
+            if (
+                sum(visit.observed_organism_count for visit in visits)
+                != effort.observed_organism_visits
+                or sum(len(visit.missing_organism_ids) for visit in visits)
+                != effort.missing_organism_visits
+            ):
+                raise ValueError("Planned visit totals do not reconcile with effort")
+        return self
