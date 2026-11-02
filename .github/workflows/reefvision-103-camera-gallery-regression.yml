@@ -8,6 +8,9 @@ on:
       - develop/reefvision-1.0.3-consolidated
     paths:
       - .github/workflows/reefvision-103-camera-gallery-regression.yml
+      - .github/workflows/build-desktop.yml
+      - scripts/check-windows-installer-acceptance-version.py
+      - apps/api/reefvision/tests/test_windows_installer_preflight_103.py
       - apps/api/reefvision/storage/images.py
       - apps/api/reefvision/services/images.py
       - apps/api/reefvision/tests/test_camera_jpeg_regression_103.py
@@ -69,12 +72,18 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - name: Verify MSI/CAB source-provenance and offline packaging contract
+        shell: pwsh
+        run: python scripts/check-windows-installer-acceptance-version.py
       - name: Install application and scientific test dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
           python -m pip install opencv-python-headless boto3
+      - name: Verify MSI/CAB artifact, upgrade, and offline-policy regression guards
+        shell: pwsh
+        run: python -m pytest apps/api/reefvision/tests/test_windows_installer_preflight_103.py -q
       - name: Verify JPEG camera formats and immutable original storage
         shell: pwsh
         env:
