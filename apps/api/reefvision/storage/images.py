@@ -184,7 +184,10 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
         if utc_offset is None or abs(utc_offset.total_seconds()) > 14 * 3600:
             return None
         timestamp = local_timestamp.astimezone(UTC)
-    except ValueError:
+    except (ValueError, OverflowError):
+        # A syntactically valid civil timestamp at year 1 or 9999 may
+        # overflow when its explicit UTC offset crosses Python's datetime
+        # bounds. Keep the raw EXIF and report unknown acquisition time.
         # Do not silently substitute DateTimeDigitized/DateTime when a
         # higher-priority acquisition field exists but cannot be trusted.
         return None
