@@ -173,9 +173,9 @@ def test_representable_small_patch_survives_standalone_and_saved_graph(
     assert response.status_code == 200, response.text
     standalone = response.json()
     areas = standalone["edge_connected_patch_surface_areas_m2"]
-    assert areas[0] == pytest.approx(3e-60)
+    assert areas[0] == pytest.approx(3e-60, rel=1e-12, abs=0.0)
     assert areas[1] > 0
-    assert areas[1] == pytest.approx(5e-161)
+    assert areas[1] == pytest.approx(5e-161, rel=1e-12, abs=0.0)
 
     detail = saved_mesh_result(client, base, params)
     assert detail["run"]["status"] == "succeeded"
@@ -185,7 +185,7 @@ def test_representable_small_patch_survives_standalone_and_saved_graph(
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["edge_connected_patch_surface_areas_m2"] == areas
-    assert artifact["surface_area_scale_interval_m2"] == (
-        standalone["surface_area_scale_interval_m2"]
+    assert (
+        artifact["surface_area_scale_interval_m2"] == (standalone["surface_area_scale_interval_m2"])
     )
     assert artifact["provenance"] == standalone["provenance"]
