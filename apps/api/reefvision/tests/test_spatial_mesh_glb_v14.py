@@ -702,9 +702,7 @@ def test_rejects_invalid_glb_index_bounds(invalid_selector: str) -> None:
     """Malformed or contradictory extrema cannot enter mesh measurements."""
     # Oversized integer tokens fail at JSON decode before accessor bounds QC.
     expected_error = (
-        "64-digit preview bound"
-        if invalid_selector == "index_bounds_huge"
-        else r"bounds|nonfinite"
+        "64-digit preview bound" if invalid_selector == "index_bounds_huge" else r"bounds|nonfinite"
     )
     with pytest.raises(ValueError, match=expected_error):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
