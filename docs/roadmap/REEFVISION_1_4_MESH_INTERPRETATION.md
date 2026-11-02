@@ -902,3 +902,23 @@ Regression tests require failed saved runs to emit no
 runs to preserve standalone-versus-persisted area, scale interval, and
 provenance parity. This safeguard does **not** verify the physical scale,
 mesh reconstruction, coral tissue coverage, or biological growth.
+
+## Fail-closed longitudinal calibration intervals (Track C, November 2, 2026)
+
+Persisted mesh timepoints can legitimately lack an area or bounding-diagonal
+scale interval. Such missing values remain unknown, and longitudinal
+difference/rate uncertainty is withheld. A **present but malformed** interval
+is different: wrong length, boolean or nonfinite bounds, reversed bounds,
+negative bounds, or bounds that do not contain the nominal measurement now
+cause the comparison to fail instead of silently treating corrupted evidence
+as missing. Well-formed intervals must also agree with the source's stated
+relative scale uncertainty; an independently edited narrower interval is not
+accepted.
+
+This check applies to direct longitudinal comparisons and the typed
+`mesh_longitudinal_comparison` Workflow Builder adapter when replaying
+persisted measurement artifacts. The existing standalone and executable saved
+graph tests cover valid and genuinely missing uncertainty, while new replay
+regressions exercise malformed evidence at either timepoint. It does not
+authenticate an operator, establish biological growth, certify calibration,
+or turn scale-only bounds into statistical confidence intervals.
