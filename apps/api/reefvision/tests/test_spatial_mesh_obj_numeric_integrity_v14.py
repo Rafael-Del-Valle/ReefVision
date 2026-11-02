@@ -1,0 +1,149 @@
+"""Strict OBJ scalar grammar and persisted scientific workflow parity."""
+
+from __future__ import annotations
+
+from typing import cast
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.spatial_mesh_obj_v14 import parse_obj_triangles
+from reefvision.tests.test_annotations import create_project
+
+OBJ = "v 0 0 0\nv 2 0 0\nv 0 3 0\nf 1 2 3\n"
+PARAMS = {
+    "meters_per_unit": 0.01,
+    "calibration_method": "ruler",
+    "calibration_evidence": "Unverified ruler scale",
+    "relative_scale_uncertainty": 0.05,
+}
+
+
+def _source_with_scalar(line: str) -> str:
+    if line.startswith("v "):
+        return OBJ.replace("v 0 0 0\n", line + "\n", 1)
+    return OBJ.replace("f 1 2 3\n", line + "\nf 1 2 3\n")
+
+
+def _run_saved(client: TestClient, project_id: str, obj_text: str) -> dict:
+    base = f"/api/v1/projects/{project_id}"
+    graph = {
+        "graph_id": "obj-strict-scalars-v14",
+        "name": "Provisional OBJ measurement with source integrity",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": {**PARAMS, "obj_text": obj_text},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    return detail.json()
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "v 1_0 0 0",
+        "v 1e3_0 0 0",
+        "v 1e-9999 0 0",
+        "v 1e9999 0 0",
+        "v \uFF12 0 0",
+        "v 0 0 0 1_0",
+        "v 0 0 0 1e-9999",
+        "v 0 0 0 1 0.1 1e-9999 0.2",
+        "vt 1_0 0",
+        "vt 1e-9999 0",
+        "vn 0 1e-9999 0",
+        "vn 0 1_0 0",
+    ],
+)
+def test_invalid_obj_scalars_rejected_before_measurement(line: str) -> None:
+    with pytest.raises(ValueError):
+        parse_obj_triangles(_source_with_scalar(line))
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "v 1_0 0 0",
+        "v 1e-9999 0 0",
+        "v 0 0 0 1_0",
+        "v 0 0 0 1 0.1 1e-9999 0.2",
+        "vt 1e-9999 0",
+        "vn 0 1_0 0",
+    ],
+)
+def test_invalid_obj_source_rejected_by_api_and_saved_workflow(
+    client: TestClient, line: str
+) -> None:
+    project_id = str(create_project(client, "OBJ numeric rejection")["id"])
+    obj_text = _source_with_scalar(line)
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": obj_text},
+    )
+    assert standalone.status_code in (400, 422), standalone.text
+    detail = _run_saved(client, project_id, obj_text)
+    assert detail["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "mesh_measurement_preview"
+        for item in detail["artifacts"]
+    )
+
+
+def test_valid_obj_decimals_and_true_zero_replay_identically(client: TestClient) -> None:
+    valid = (
+        "v 0e-9999 0 0 2\n"
+        "v +4.0 0 0 2\n"
+        "v 0 6e0 0 2\n"
+        "vt .5 0e-9999\n"
+        "vn 0 0 +1.0\n"
+        "f 1/1/1 2/1/1 3/1/1\n"
+    )
+    vertices, faces = parse_obj_triangles(valid)
+    assert vertices == [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 3.0, 0.0]]
+    assert faces == [[0, 1, 2]]
+    project_id = str(create_project(client, "OBJ numeric parity")["id"])
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": valid},
+    )
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["surface_area_m2"] == pytest.approx(0.0003)
+    assert expected["measurement_status"] == "caller_supplied_unverified"
+    assert expected["provenance"]["calibration_verified"] is False
+    detail = _run_saved(client, project_id, valid)
+    assert detail["run"]["status"] == "succeeded"
+    artifact = next(
+        item
+        for item in detail["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["payload_json"] == expected
+    assert len(artifact["payload_sha256"]) == 64
