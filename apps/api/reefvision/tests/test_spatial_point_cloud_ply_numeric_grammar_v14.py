@@ -80,7 +80,10 @@ def test_invalid_late_coordinate_does_not_mutate_caller_colors() -> None:
 @pytest.mark.parametrize(
     ("invalid", "expected_error"),
     [
-        (PLY.replace("element vertex 2", "element vertex 0_2"), "Invalid point-cloud vertex count"),
+        (
+            PLY.replace("element vertex 2", "element vertex 0_2"),
+            "Invalid point-cloud vertex count",
+        ),
         (PLY.replace("1 2 3", "1_0 2 3"), "Invalid point-cloud coordinate"),
         (
             PLY.replace("1 2 3", "1e-9999 2 3"),
