@@ -10,8 +10,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError as PydanticValidationError
 
-from reefvision.jobs.workflow
-from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse import process_workflow_run_job
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_ecology_1_2 import _graph
 
