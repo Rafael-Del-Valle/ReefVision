@@ -52,9 +52,7 @@ def _run_saved(client: TestClient, project_id: str, obj_text: str) -> dict:
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     process_workflow_run_job(
@@ -72,7 +70,7 @@ def _run_saved(client: TestClient, project_id: str, obj_text: str) -> dict:
         "v 1e3_0 0 0",
         "v 1e-9999 0 0",
         "v 1e9999 0 0",
-        "v \uFF12 0 0",
+        "v \uff12 0 0",
         "v 0 0 0 1_0",
         "v 0 0 0 1e-9999",
         "v 0 0 0 1 0.1 1e-9999 0.2",
@@ -110,10 +108,7 @@ def test_invalid_obj_source_rejected_by_api_and_saved_workflow(
     assert standalone.status_code in (400, 422), standalone.text
     detail = _run_saved(client, project_id, obj_text)
     assert detail["run"]["status"] == "failed"
-    assert not any(
-        item["data_type"] == "mesh_measurement_preview"
-        for item in detail["artifacts"]
-    )
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
 
 
 def test_valid_obj_decimals_and_true_zero_replay_identically(client: TestClient) -> None:
@@ -141,9 +136,7 @@ def test_valid_obj_decimals_and_true_zero_replay_identically(client: TestClient)
     detail = _run_saved(client, project_id, valid)
     assert detail["run"]["status"] == "succeeded"
     artifact = next(
-        item
-        for item in detail["artifacts"]
-        if item["data_type"] == "mesh_measurement_preview"
+        item for item in detail["artifacts"] if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
