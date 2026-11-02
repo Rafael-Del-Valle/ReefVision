@@ -207,17 +207,29 @@ def pose_temporal_review_status(
 
     expected_revisions: dict[str, int] = {}
 
-    raw_builds = payload.get("builds", [])
-    if isinstance(raw_builds, list):
-        for raw in raw_builds:
-            if not isinstance(raw, dict):
-                continue
+    # A missing or malformed build revision must not silently bypass the
+    # stale-track check when a scientist approves persisted temporal evidence.
+    raw_builds = payload.get("builds")
+    if not isinstance(raw_builds, list):
+        raise ValidationError("Pose Review source track revisions are missing")
+    for raw in raw_builds:
+        if not isinstance(raw, dict):
+            raise ValidationError("Pose Review source track revisions are invalid")
 
-            track_id = str(raw.get("parent_video_track_id") or "")
-            revision = raw.get("source_track_revision")
+        track_id = raw.get("parent_video_track_id")
+        revision = raw.get("source_track_revision")
+        if (
+            not isinstance(track_id, str)
+            or track_id not in track_ids
+            or track_id in expected_revisions
+            or type(revision) is not int
+            or revision < 1
+        ):
+            raise ValidationError("Pose Review source track revisions are invalid")
+        expected_revisions[track_id] = revision
 
-            if track_id and isinstance(revision, int) and revision >= 1:
-                expected_revisions[track_id] = revision
+    if set(expected_revisions) != set(track_ids):
+        raise ValidationError("Pose Review requires a revision for every source track")
 
     service = PoseTemporalTrackingService(session)
 
