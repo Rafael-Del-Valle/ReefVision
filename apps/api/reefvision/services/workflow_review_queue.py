@@ -157,8 +157,7 @@ def create_review_queue_workflow_artifact(
             or dataset_producer.parameters_json.get("dataset_version_id") != candidate_id
             or dataset_producer.parameters_json.get("split") is not None
             or dataset_producer.input_artifact_ids_json != [source.id]
-            or not isinstance(dataset_producer.output_artifact_ids_json, list)
-            or dataset_source.id not in dataset_producer.output_artifact_ids_json
+            or dataset_producer.output_artifact_ids_json != [dataset_source.id]
         ):
             raise ValidationError("QC Review Queue dataset producer provenance is invalid")
         dataset_version_id = candidate_id
