@@ -8,7 +8,7 @@ from re import fullmatch
 MAX_OBJ_BYTES = 256_000
 MAX_VERTICES = 2_000
 MAX_FACES = 4_000
-_OBJ_FLOAT_TOKEN = r"[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+_OBJ_FLOAT_TOKEN = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 
 
 def _parse_obj_float(token: str) -> float:
