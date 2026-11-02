@@ -764,6 +764,75 @@ class PoseTrainingDatasetService:
             item_rows.append(item)
             item_summaries.append(summary)
 
+        # The freeze API must independently verify the selection that led to
+        # scientist review. Workflow Builder review gates are not the only
+        # entry point to creating immutable training data.
+        selection_manifest = round_record.selection_manifest_json
+        if (
+            not isinstance(selection_manifest, dict)
+            or selection_manifest.get("schema_version") != "pose-active-learning-selection-0001"
+        ):
+            raise ConflictError("Pose Active Learning selection manifest is invalid")
+        selection_identity = {
+            **selection_manifest,
+            "schema_version": "pose-active-learning-selection-identity-0001",
+        }
+        if canonical_json_sha256(selection_identity) != round_record.selection_sha256:
+            raise ConflictError("Pose Active Learning selection manifest checksum changed")
+
+        selected_items = selection_manifest.get("items")
+        candidates = list(
+            self.session.scalars(
+                select(PoseActiveLearningCandidate).where(
+                    PoseActiveLearningCandidate.round_id == round_id
+                )
+            )
+        )
+        if (
+            not isinstance(selected_items, list)
+            or len(selected_items) != round_record.selected_count
+            or len(candidates) != round_record.selected_count
+            or any(not isinstance(item, dict) for item in selected_items)
+        ):
+            raise ConflictError("Pose Active Learning selected candidate count changed")
+        selected_fields = (
+            "video_track_id",
+            "focus_frame",
+            "frame_start",
+            "frame_end",
+            "acquisition_score",
+            "score_components",
+            "reason_codes",
+            "pose_schema_id",
+            "pose_schema_revision",
+            "source_track_revision",
+            "provenance_sha256",
+        )
+        selected_digests = sorted(
+            canonical_json_sha256({field: item.get(field) for field in selected_fields})
+            for item in selected_items
+        )
+        candidate_digests = sorted(
+            canonical_json_sha256(
+                {
+                    "video_track_id": candidate.video_track_id,
+                    "focus_frame": candidate.focus_frame,
+                    "frame_start": candidate.frame_start,
+                    "frame_end": candidate.frame_end,
+                    "acquisition_score": candidate.acquisition_score,
+                    "score_components": candidate.score_components_json,
+                    "reason_codes": candidate.reason_codes_json,
+                    "pose_schema_id": candidate.pose_schema_id,
+                    "pose_schema_revision": candidate.pose_schema_revision,
+                    "source_track_revision": candidate.source_track_revision,
+                    "provenance_sha256": candidate.provenance_sha256,
+                }
+            )
+            for candidate in candidates
+        )
+        if selected_digests != candidate_digests:
+            raise ConflictError("Pose Active Learning selected candidate identities changed")
+
         schema_identities = {
             (
                 item.pose_schema_id,
