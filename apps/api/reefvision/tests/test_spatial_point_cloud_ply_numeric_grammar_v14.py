@@ -78,23 +78,34 @@ def test_invalid_late_coordinate_does_not_mutate_caller_colors() -> None:
 
 
 @pytest.mark.parametrize(
-    "invalid",
+    ("invalid", "expected_error"),
     [
-        PLY.replace("element vertex 2", "element vertex 0_2"),
-        PLY.replace("1 2 3", "1_0 2 3"),
-        PLY.replace("1 2 3", "1e-9999 2 3"),
-        PLY.replace("1 2 3", "1\x002 3"),
-        PLY.replace("1 2 3", "1\x0b2 3"),
+        (PLY.replace("element vertex 2", "element vertex 0_2"), "Invalid point-cloud vertex count"),
+        (PLY.replace("1 2 3", "1_0 2 3"), "Invalid point-cloud coordinate"),
+        (
+            PLY.replace("1 2 3", "1e-9999 2 3"),
+            "Point-cloud coordinate underflows float precision",
+        ),
+        (
+            PLY.replace("1 2 3", "1\x002 3"),
+            "Point-cloud PLY contains unsupported control characters",
+        ),
+        (
+            PLY.replace("1 2 3", "1\x0b2 3"),
+            "Point-cloud PLY contains unsupported control characters",
+        ),
     ],
 )
 def test_standalone_and_saved_graph_reject_invalid_ply_without_artifact(
-    client: TestClient, invalid: str
+    client: TestClient, invalid: str, expected_error: str
 ) -> None:
     project_id = str(create_project(client, "PLY numeric integrity")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = {**PARAMS, "ply_text": invalid}
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
-    assert standalone.status_code == 422, standalone.text
+    # Pydantic accepts a string; the PLY parser rejects its contents with HTTP 400.
+    assert standalone.status_code == 400, standalone.text
+    assert standalone.json()["detail"] == expected_error
 
     graph = {
         "graph_id": "ply-numeric-integrity-v14",
