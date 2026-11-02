@@ -227,6 +227,10 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     text = re.sub(r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\|$)", "", text)
     text = re.sub(r"[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
     text = re.sub(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", "", text)
+    # A worker can flush an incomplete color/control sequence before a newline
+    # or EOF. Removing only ESC[ leaves its digits appended to real losses
+    # (for example 0.25 + ESC[31 becomes a fabricated 0.2531).
+    text = re.sub(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*(?=[\r\n]|$)", "", text)
     text = re.sub(r"\x1b[ -/]*[@-_]", "", text)
     # Progress bars use carriage returns to overwrite the current line.
     # Show each update on a new line instead of allowing terminal rewrites.
