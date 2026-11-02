@@ -48,9 +48,7 @@ def saved_mesh_result(client: TestClient, base: str, params: dict) -> dict:
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     process_workflow_run_job(
@@ -66,9 +64,7 @@ def test_positive_source_area_cannot_underflow_to_zero_in_api_or_saved_graph(
     client: TestClient, scale: float
 ) -> None:
     params = mesh_params(scale)
-    with pytest.raises(
-        ValueError, match="Calibrated mesh surface area underflowed to zero"
-    ):
+    with pytest.raises(ValueError, match="Calibrated mesh surface area underflowed to zero"):
         measure_mesh_preview(**params)
     project_id = str(create_project(client, "Mesh area underflow rejection")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -78,9 +74,7 @@ def test_positive_source_area_cannot_underflow_to_zero_in_api_or_saved_graph(
 
     detail = saved_mesh_result(client, base, params)
     assert detail["run"]["status"] == "failed"
-    assert not any(
-        item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"]
-    )
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
 
 
 def test_representable_small_calibration_preserves_standalone_workflow_parity(
@@ -104,7 +98,55 @@ def test_representable_small_calibration_preserves_standalone_workflow_parity(
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["surface_area_m2"] == standalone["surface_area_m2"]
-    assert artifact["surface_area_scale_interval_m2"] == (
-        standalone["surface_area_scale_interval_m2"]
+    assert (
+        artifact["surface_area_scale_interval_m2"] == (standalone["surface_area_scale_interval_m2"])
     )
     assert artifact["provenance"] == standalone["provenance"]
+
+
+def test_positive_small_patch_cannot_disappear_in_calibrated_area(
+    client: TestClient,
+) -> None:
+    # Total area remains representable, but the second disconnected patch
+    # would otherwise be serialized as zero despite positive source area.
+    params = {
+        **mesh_params(1e-100),
+        "vertices": [
+            [10.0, 0.0, 0.0],
+            [12.0, 0.0, 0.0],
+            [10.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [1e-100, 0.0, 0.0],
+            [0.0, 1e-100, 0.0],
+        ],
+        "faces": [[0, 1, 2], [3, 4, 5]],
+    }
+    with pytest.raises(ValueError, match="Calibrated mesh patch surface area underflowed to zero"):
+        measure_mesh_preview(**params)
+    project_id = str(create_project(client, "Mesh patch area underflow rejection")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 400, response.text
+    assert "Calibrated mesh patch surface area underflowed to zero" in response.text
+    detail = saved_mesh_result(client, base, params)
+    assert detail["run"]["status"] == "failed"
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
+
+
+def test_genuinely_degenerate_patch_remains_zero_area() -> None:
+    params = {
+        **mesh_params(0.1),
+        "vertices": [
+            [10.0, 0.0, 0.0],
+            [12.0, 0.0, 0.0],
+            [10.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+        ],
+        "faces": [[0, 1, 2], [3, 4, 5]],
+    }
+    result = measure_mesh_preview(**params)
+    assert result["surface_area_m2"] == pytest.approx(0.03)
+    assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.03, 0.0])
+    assert result["degenerate_face_count"] == 1
