@@ -8,7 +8,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Protocol
 
-from reefvision.domain.ecology_lineage_policy import require_unique_ecological_organism_key_spellings
+from reefvision.domain.ecology_lineage_policy import (
+    require_unique_ecological_organism_key_spellings,
+)
 from reefvision.domain.errors import ValidationError
 
 
