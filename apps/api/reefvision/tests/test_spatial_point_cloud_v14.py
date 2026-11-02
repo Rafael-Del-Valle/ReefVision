@@ -494,7 +494,7 @@ def test_non_ascii_ply_rejected_without_standalone_or_workflow_artifact(
     """ASCII PLY is byte-restricted even when Unicode parses as a number or whitespace."""
     with pytest.raises(ValueError, match="ASCII text only"):
         parse_ascii_ply_points(bad_ply)
-    project_id = str(create_project(client, "Non-ASCII point-cloud rejection"))
+    project_id = str(create_project(client, "Non-ASCII point-cloud rejection")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = {**PARAMS, "ply_text": bad_ply}
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
