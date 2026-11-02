@@ -120,6 +120,11 @@ def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | N
         raise ValueError("Patch area fractions must be a nonempty finite unit-range list")
     if patch_count is not None and len(fractions) != patch_count:
         raise ValueError("Patch area fractions inconsistent with topology patch count")
+    # A zero-area reconstruction has no defined area distribution. Legacy
+    # artifacts may omit per-patch areas, but cannot manufacture positive
+    # concentration or ranked-profile evidence from zero total area.
+    if record.get("surface_area_m2") == 0:
+        raise ValueError("Zero-area mesh cannot have patch area fractions")
     if not isclose(fsum(fractions), 1.0, rel_tol=1e-9, abs_tol=1e-9):
         raise ValueError("Patch area fractions must sum to one")
     # A ranked distribution must be derived from the actual full-mesh patch
