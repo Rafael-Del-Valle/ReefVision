@@ -235,9 +235,7 @@ class LongitudinalChange(BaseModel):
                 raise ValueError("Longitudinal change zero baseline cannot have percent change")
         elif self.percent_change is None or not (
             math.isfinite(self.percent_change)
-            and math.isclose(
-                self.percent_change, expected_percent, rel_tol=1e-9, abs_tol=1e-12
-            )
+            and math.isclose(self.percent_change, expected_percent, rel_tol=1e-9, abs_tol=1e-12)
         ):
             raise ValueError("Longitudinal change percent change does not reconcile")
         return self
@@ -443,6 +441,43 @@ class LongitudinalAnalysisResponse(BaseModel):
                 "Longitudinal persisted experimental unit IDs differ only by case "
                 "or Unicode compatibility"
             ) from exc
+        return self
+
+    @model_validator(mode="after")
+    def reconcile_persisted_source_denominators(self) -> LongitudinalAnalysisResponse:
+        """Reconcile saved series denominators with declared input-source IDs.
+
+        This checks internal replay consistency, not whether caller-supplied
+        observations, biological identities, or calibrations are authentic.
+        """
+        sources = self.analysis_provenance.source_record_ids
+        if (
+            self.observation_count < 2
+            or len(sources) != self.observation_count
+            or len(set(sources)) != len(sources)
+            or any(not source.strip() for source in sources)
+        ):
+            raise ValueError("Longitudinal source provenance does not reconcile with observations")
+        if self.evaluated_series_count != len(self.changes) or self.incomplete_series_count < 0:
+            raise ValueError("Longitudinal series denominator does not reconcile")
+        # Every incomplete series has exactly one observation. Completed
+        # series retain their full observation_count, including middle dates.
+        if (
+            sum(change.observation_count for change in self.changes)
+            + self.incomplete_series_count
+            != self.observation_count
+        ):
+            raise ValueError("Longitudinal series observation counts do not reconcile")
+        keys = [(change.organism_id, change.metric_name) for change in self.changes]
+        if len(set(keys)) != len(keys):
+            raise ValueError("Longitudinal series contains duplicate organism/metric changes")
+        endpoints = [
+            source
+            for change in self.changes
+            for source in (change.baseline_source_record_id, change.final_source_record_id)
+        ]
+        if len(set(endpoints)) != len(endpoints) or not set(endpoints).issubset(sources):
+            raise ValueError("Longitudinal source endpoints do not reconcile with provenance")
         return self
 
     @model_validator(mode="after")
