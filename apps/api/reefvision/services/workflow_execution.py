@@ -286,16 +286,16 @@ class WorkflowExecutionService:
         ):
             manifest = result.get("provenance_manifest")
             digest = result.get("provenance_sha256")
+            live_provenance = build_workflow_run_provenance(self.session, run_id=run.id)
             if (
                 not isinstance(manifest, dict)
                 or not isinstance(digest, str)
                 or canonical_json_sha256(manifest) != digest
-                or canonical_json_sha256(
-                    build_workflow_run_provenance(self.session, run_id=run.id)
-                )
-                != digest
+                or canonical_json_sha256(live_provenance) != digest
             ):
-                raise ConflictError("Workflow run saved provenance no longer matches persisted science")
+                raise ConflictError(
+                    "Workflow run saved provenance no longer matches persisted science"
+                )
         return WorkflowRunDetailResponse(
             run=WorkflowRunResponse.model_validate(run),
             nodes=[WorkflowNodeRunResponse.model_validate(node) for node in nodes],
