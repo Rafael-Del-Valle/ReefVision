@@ -167,6 +167,81 @@ class LongitudinalChange(BaseModel):
     change_per_day: float
     observation_count: int
 
+    @model_validator(mode="after")
+    def reconcile_persisted_endpoint_arithmetic(self) -> LongitudinalChange:
+        """A saved organism change must agree with its own UTC endpoints.
+
+        This is an internal replay check, not authentication of observations,
+        source-record IDs, measurement calibration or biological independence.
+        """
+        if any(
+            not value.strip()
+            for value in (
+                self.organism_id,
+                self.metric_name,
+                self.unit,
+                self.baseline_source_record_id,
+                self.final_source_record_id,
+            )
+        ):
+            raise ValueError("Longitudinal change identifiers cannot be blank")
+        if (
+            self.observation_count < 2
+            or self.baseline_source_record_id == self.final_source_record_id
+        ):
+            raise ValueError("Longitudinal change requires distinct source observations")
+        first, last = self.first_observed_at, self.last_observed_at
+        if (
+            first.tzinfo is None
+            or first.utcoffset() is None
+            or last.tzinfo is None
+            or last.utcoffset() is None
+        ):
+            raise ValueError("Longitudinal change endpoints must be timezone-aware")
+        if first.astimezone(UTC).date() >= last.astimezone(UTC).date():
+            raise ValueError("Longitudinal change requires distinct ordered UTC sampling dates")
+        if self.initial_value < 0 or self.final_value < 0:
+            raise ValueError("Longitudinal change endpoint measurements cannot be negative")
+        values = (
+            self.initial_value,
+            self.final_value,
+            self.absolute_change,
+            self.elapsed_days,
+            self.change_per_day,
+        )
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("Longitudinal change numeric values must be finite")
+        elapsed = (last - first).total_seconds() / 86400.0
+        delta = self.final_value - self.initial_value
+        if elapsed <= 0 or not math.isfinite(delta):
+            raise ValueError("Longitudinal change endpoint arithmetic is invalid")
+        expected_rate = delta / elapsed
+        expected_percent = delta / self.initial_value * 100 if self.initial_value > 0 else None
+        if not math.isfinite(expected_rate) or (
+            expected_percent is not None and not math.isfinite(expected_percent)
+        ):
+            raise ValueError("Longitudinal change endpoint arithmetic is not finite")
+        if not all(
+            math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-12)
+            for actual, expected in (
+                (self.elapsed_days, elapsed),
+                (self.absolute_change, delta),
+                (self.change_per_day, expected_rate),
+            )
+        ):
+            raise ValueError("Longitudinal change endpoint arithmetic does not reconcile")
+        if expected_percent is None:
+            if self.percent_change is not None:
+                raise ValueError("Longitudinal change zero baseline cannot have percent change")
+        elif self.percent_change is None or not (
+            math.isfinite(self.percent_change)
+            and math.isclose(
+                self.percent_change, expected_percent, rel_tol=1e-9, abs_tol=1e-12
+            )
+        ):
+            raise ValueError("Longitudinal change percent change does not reconcile")
+        return self
+
 
 class ExperimentalUnitSummary(BaseModel):
     """Descriptive unit-level mean; never an organism-level replication count."""
@@ -457,17 +532,14 @@ class LongitudinalAnalysisResponse(BaseModel):
             return self
 
         coverage_by_key = {
-            (row.experimental_unit_id, row.metric_name): row
-            for row in self.unit_coverage
+            (row.experimental_unit_id, row.metric_name): row for row in self.unit_coverage
         }
         if len(coverage_by_key) != len(self.unit_coverage):
             raise ValueError("Unit summary duplicate coverage records")
         changes_by_key = {(row.organism_id, row.metric_name): row for row in self.changes}
         if len(changes_by_key) != len(self.changes):
             raise ValueError("Unit summary duplicate organism change records")
-        summary_keys = {
-            (row.experimental_unit_id, row.metric_name) for row in self.unit_summaries
-        }
+        summary_keys = {(row.experimental_unit_id, row.metric_name) for row in self.unit_summaries}
         eligible_keys = {
             key for key, coverage in coverage_by_key.items() if coverage.eligible_for_summary
         }
@@ -500,17 +572,14 @@ class LongitudinalAnalysisResponse(BaseModel):
             }
             if len(windows) != 1:
                 raise ValueError("Unit summary organism sampling windows do not reconcile")
-            if (
-                summary.baseline_at != min(change.first_observed_at for change in completed)
-                or summary.final_at != max(change.last_observed_at for change in completed)
-            ):
+            if summary.baseline_at != min(
+                change.first_observed_at for change in completed
+            ) or summary.final_at != max(change.last_observed_at for change in completed):
                 raise ValueError("Unit summary endpoint timestamps do not reconcile")
             expected_change = finite_descriptive_mean(
                 change.absolute_change for change in completed
             )
-            expected_rate = finite_descriptive_mean(
-                change.change_per_day for change in completed
-            )
+            expected_rate = finite_descriptive_mean(change.change_per_day for change in completed)
             if not (
                 math.isfinite(summary.mean_absolute_change)
                 and math.isfinite(summary.mean_change_per_day)
