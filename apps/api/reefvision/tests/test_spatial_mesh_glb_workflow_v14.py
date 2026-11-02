@@ -128,6 +128,8 @@ def test_saved_glb(
         "json_translation_underflow",
         "json_negative_translation_underflow",
         "json_extras_underflow",
+        "json_extras_oversized_integer",
+        "json_extras_long_integer",
         "extensions_used_object",
         "extensions_used_false",
         "extensions_required_zero",
