@@ -31,6 +31,12 @@ def _reject_nonfinite_json_constant(value: str) -> None:
 def _finite_json_float(value: str) -> float:
     """Reject JSON exponent overflow, including in otherwise ignored metadata."""
     parsed = float(value)
+    # JSON numbers are exact decimal tokens before conversion. Reject a
+    # nonzero transform or bound that silently collapses to floating zero.
+    # Explicit zero (including 0e-9999) remains a valid no-op value.
+    mantissa = value.lower().split("e", 1)[0]
+    if parsed == 0.0 and any(digit in "123456789" for digit in mantissa):
+        raise ValueError("GLB JSON number underflows floating-point precision")
     if not isfinite(parsed):
         raise ValueError("GLB JSON contains nonfinite number")
     return parsed
