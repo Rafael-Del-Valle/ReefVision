@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from math import isfinite
+from re import fullmatch
 
 from reefvision.services.spatial_mesh_obj_v14 import MAX_FACES, MAX_VERTICES
 
 MAX_PLY_BYTES = 256_000
+_PLY_INTEGER_TOKEN = r"[+-]?[0-9]+"
+_PLY_FLOAT_TOKEN = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 _SCALAR_TYPES = {
     "char",
     "uchar",
@@ -48,8 +51,15 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
     Reject unsupported elements, binary encodings, polygonal faces, and extra
     body records rather than guessing how to interpret an unknown PLY schema.
     """
-    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_PLY_BYTES:
+    if not isinstance(text, str) or len(text) > MAX_PLY_BYTES:
         raise ValueError("PLY preview exceeds the 256000-byte limit")
+    if not text.isascii():
+        raise ValueError("PLY triangle preview must contain ASCII text only")
+    if any(
+        (ord(character) < 32 and character not in "\t\n\r") or ord(character) == 127
+        for character in text
+    ):
+        raise ValueError("PLY triangle preview contains unsupported control characters")
     lines = text.splitlines()
     if not lines or lines[0].strip() != "ply":
         raise ValueError("PLY must begin with the ply magic header")
@@ -90,10 +100,9 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                 or (name == "vertex" and counts)
             ):
                 raise ValueError("PLY requires one vertex element before one face element")
-            try:
-                count = int(parts[2])
-            except ValueError as exc:
-                raise ValueError("Invalid PLY element count") from exc
+            if len(parts[2]) > 9 or fullmatch(r"[0-9]+", parts[2]) is None:
+                raise ValueError("Invalid PLY element count")
+            count = int(parts[2])
             limit = MAX_VERTICES if name == "vertex" else MAX_FACES
             if not 1 <= count <= limit:
                 raise ValueError("PLY element count outside preview bounds")
@@ -148,12 +157,19 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             for value, scalar_type in zip(values, vertex_property_types, strict=True):
                 number: float
                 if scalar_type in _INTEGER_BOUNDS:
+                    if fullmatch(_PLY_INTEGER_TOKEN, value) is None:
+                        raise ValueError("Invalid PLY integer property token")
                     number = int(value)
                     low, high = _INTEGER_BOUNDS[scalar_type]
                     if not low <= number <= high:
                         raise ValueError("PLY integer property outside declared bounds")
                 else:
+                    if fullmatch(_PLY_FLOAT_TOKEN, value) is None:
+                        raise ValueError("Invalid PLY floating-point property token")
                     number = float(value)
+                    mantissa = value.lower().split("e", 1)[0]
+                    if number == 0.0 and any(d in "123456789" for d in mantissa):
+                        raise ValueError("PLY float underflows precision")
                 numeric.append(float(number))
         except (ValueError, OverflowError) as exc:
             raise ValueError("Invalid or out-of-range PLY vertex value") from exc
@@ -171,6 +187,8 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
         values = row.split()
         if len(values) != 4 or values[0] != "3":
             raise ValueError("PLY preview supports only triangular faces")
+        if any(fullmatch(_PLY_INTEGER_TOKEN, value) is None for value in values[1:]):
+            raise ValueError("Invalid PLY face index token")
         try:
             indices = [int(value) for value in values[1:]]
         except ValueError as exc:
