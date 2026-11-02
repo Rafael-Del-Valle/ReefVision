@@ -46,11 +46,15 @@ Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acce
 Assert-True (-not $script:liveSamOptInActionRan) 'Rejected live SAM opt-in executed its action.'
 $previousTransformersOffline = [Environment]::GetEnvironmentVariable('TRANSFORMERS_OFFLINE', 'Process')
 $previousLiveHfOffline = [Environment]::GetEnvironmentVariable('HF_HUB_OFFLINE', 'Process')
+$previousLiveTelemetry = [Environment]::GetEnvironmentVariable('HF_HUB_DISABLE_TELEMETRY', 'Process')
 Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AllowLiveSam2Network -AdditionalEnvironment @{ HF_HUB_OFFLINE = '0'; TRANSFORMERS_OFFLINE = '0'; HF_HUB_DISABLE_TELEMETRY = '1' } -Action {
+    $script:liveSamOptInActionRan = $true
     Assert-True ($env:HF_HUB_OFFLINE -ceq '0' -and $env:TRANSFORMERS_OFFLINE -ceq '0') 'Explicit live SAM opt-in did not reach its isolated action.'
     Assert-True ($env:HF_HOME -eq 'C:\isolated-acceptance\cache\huggingface') 'Live SAM opt-in escaped the disposable model cache.'
     Assert-True ($env:HF_HUB_DISABLE_TELEMETRY -ceq '1') 'Live SAM opt-in did not disable telemetry.'
 }
+Assert-True ($script:liveSamOptInActionRan) 'Valid live SAM opt-in never executed its isolated action.'
+Assert-True ([Environment]::GetEnvironmentVariable('HF_HUB_DISABLE_TELEMETRY', 'Process') -ceq $previousLiveTelemetry) 'Live SAM opt-in did not restore telemetry settings.'
 Assert-True ([Environment]::GetEnvironmentVariable('TRANSFORMERS_OFFLINE', 'Process') -ceq $previousTransformersOffline) 'Live SAM opt-in did not restore TRANSFORMERS_OFFLINE.'
 Assert-True ([Environment]::GetEnvironmentVariable('HF_HUB_OFFLINE', 'Process') -ceq $previousLiveHfOffline) 'Live SAM opt-in did not restore HF_HUB_OFFLINE.'
 $previousProbe = [Environment]::GetEnvironmentVariable('REEFVISION_ACCEPTANCE_PROBE', 'Process')
