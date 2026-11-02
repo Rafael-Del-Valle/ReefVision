@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from reefvision.domain.ecology_lineage_policy import (
     canonical_declared_unit_type,
     ecological_unit_types_equivalent,
+    require_unique_ecological_organism_key_spellings,
 )
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.scientific_provenance import ScientificInputProvenance
@@ -279,3 +280,20 @@ class LongitudinalAnalysisResponse(BaseModel):
     planned_sampling_effort: list[PlannedSamplingEffort] = Field(default_factory=list)
     planned_sampling_date_coverage: list[PlannedSamplingDateCoverage] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def reject_aliases_in_persisted_organism_rosters(self) -> LongitudinalAnalysisResponse:
+        """Do not replay alias-split organism denominators as biological samples."""
+        identifiers = [row.organism_id for row in self.changes]
+        identifiers.extend(
+            organism
+            for coverage in self.unit_coverage
+            for organism in coverage.observed_sampling_dates_by_organism
+        )
+        try:
+            require_unique_ecological_organism_key_spellings(identifiers)
+        except ValueError as exc:
+            raise ValueError(
+                "Longitudinal persisted organism IDs differ only by case or Unicode compatibility"
+            ) from exc
+        return self

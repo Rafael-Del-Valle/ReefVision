@@ -8,6 +8,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from reefvision.domain.ecology_lineage_policy import require_unique_ecological_organism_key_spellings
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.scientific_provenance import ScientificInputProvenance
@@ -292,6 +293,16 @@ class PairedCountComparisonResponse(BaseModel):
         if self.analysis_provenance.algorithm_version != "ecology-paired-count-0007":
             # Older artifacts did not persist organism votes; do not invent them.
             return self
+        # Signed saved results must not manufacture extra organism votes from
+        # case/Unicode aliases, even if their numeric totals are recomputed.
+        try:
+            require_unique_ecological_organism_key_spellings(
+                row.organism_id for row in self.paired_differences
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "Directional persisted organism IDs differ only by case or Unicode compatibility"
+            ) from exc
         if (
             self.overcount_pair_count + self.undercount_pair_count + self.exact_match_pair_count
             != self.paired_observation_count

@@ -132,6 +132,23 @@ def validate_declared_lineage(
             "Partial parent_colony_id coverage; declare lineage for every paired observation"
         )
 
+    # Caller-supplied series and human/model pairs do not use the strict
+    # registry key schema. Reject aliases before grouping: one coral or parent
+    # colony must not acquire multiple votes by changing Unicode or case.
+    try:
+        require_unique_ecological_organism_key_spellings(row.organism_id for row in rows)
+    except ValueError as exc:
+        raise ValidationError(
+            "Caller-declared organism IDs differ only by case or Unicode compatibility"
+        ) from exc
+    parents = [parent for row in rows if (parent := row.parent_colony_id) is not None]
+    try:
+        require_unique_ecological_organism_key_spellings(parents)
+    except ValueError as exc:
+        raise ValidationError(
+            "Caller-declared parent-colony IDs differ only by case or Unicode compatibility"
+        ) from exc
+
     level = classify_ecological_unit_level(experimental_unit_type)
     organism_level = level == "organism"
     colony_level = level == "colony"
