@@ -1,3 +1,10 @@
+## 2026-11-01 — Exact frozen-dataset producer output binding (Track D)
+
+- Audited draft PR #77, issue #76, 1.6 and earlier-version scope, the existing executable `project_source -> dataset_version_source -> qc_review_queue` workflow, and exact-head CI. The predecessor's frontend job passed; backend Ruff formatting stopped pytest before the newly added scoring-weight regressions could execute.
+- Corrected four CI-reported Ruff formatting differences in the scoring-weight regression. Tightened frozen dataset source provenance: the dataset producer must persist **exactly one** output artifact, the bound dataset reference, not merely include it in a potentially forged output list. The existing project-source path already enforced exact single-output binding. This is a fail-closed replay integrity check, not a new Workflow Builder node or schema migration.
+- Extended the real saved-workflow dataset-lineage regression to reject an extra forged producer output, while verifying rollback restores valid exact-binding replay and preserves the same immutable QC queue, dimensionless scoring output and human-review state. Existing standalone dataset QC and version-scoped workflow execution are unchanged.
+- **Acceptance HOLD:** exact-new-head Ruff/mypy/pytest/migrations and frontend/E2E CI, representative biological-data verification, independent 1.1/1.6 Alembic revision-0038 reconciliation, Windows MSI upgrade/rollback and installed-GUI tests. No automatic verification, unapproved weights, cross-version merges or research-data deletion.
+
 ## 2026-10-30 — Saved-project discoverability beyond twelve cards (Track D)
 
 - Audited draft PR #77, master issue #76, version branches, existing project launcher/onboarding, and exact-head backend/frontend CI. Earlier launcher implementation showed only the twelve newest/pinned projects and provided no route to older saved projects. This is a usability gap, not missing scientific analysis or Workflow Builder functionality.
