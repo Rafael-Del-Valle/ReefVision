@@ -12,13 +12,41 @@ import sys
 from pathlib import Path
 
 
+def _strip_inline_comment(line: str) -> str:
+    """Remove unquoted YAML/PowerShell comments without altering quoted hashes.
+
+    A disabled guard after `#` must not satisfy the installer preflight.
+    Keep hash characters inside quoted paths, URLs, and PowerShell messages.
+    """
+    quote: str | None = None
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if quote is not None:
+            if char == "`" and quote == '"' and index + 1 < len(line):
+                index += 2  # PowerShell escape within double quotes.
+                continue
+            if char == quote:
+                if index + 1 < len(line) and line[index + 1] == quote:
+                    index += 2  # YAML/PowerShell doubled quote.
+                    continue
+                quote = None
+        elif char in ("'", '"'):
+            quote = char
+        elif char == "#" and (index == 0 or line[index - 1].isspace() or line[index - 1] == ";"):
+            return line[:index].rstrip()
+        index += 1
+    return line
+
+
 def _active_workflow_text(workflow: str) -> str:
-    """Ignore commented-out YAML/PowerShell guards in release preflight checks."""
+    """Ignore disabled YAML/PowerShell guards in release preflight checks."""
     # A disabled guard must not count as executable merely because its
-    # literal source text survives in a YAML comment or PowerShell <# #>.
+    # literal source text survives in a YAML comment, inline comment or <# #>.
     without_blocks = re.sub(r"<#.*?(?:#>|$)", "", workflow, flags=re.DOTALL)
     return "\n".join(
-        line for line in without_blocks.splitlines() if not re.match(r"^\s*#", line)
+        active for line in without_blocks.splitlines()
+        if (active := _strip_inline_comment(line)).strip()
     )
 
 
