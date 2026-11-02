@@ -14,7 +14,6 @@ from reefvision.domain.errors import ValidationError
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_dataset_versions import create_version, import_image, update_image
-from reefvision.tests.test_review_queue_annotation_evidence_16 import _queue_item
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
     _frozen_graph,
     _run_frozen_graph,
@@ -64,6 +63,34 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
     saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     run_id, payload = _run_frozen_graph(client, project_id, saved.json()["id"])
+    queue_url = f"/api/v1/review-queues/{payload['queue_id']}/items"
+    original_response = client.get(queue_url)
+    assert original_response.status_code == 200, original_response.text
+    original_items = original_response.json()["items"]
+    expected_count = 2 if tamper == "producer_reordered_images" else 1
+    assert original_response.json()["total"] == expected_count
+    assert len(original_items) == expected_count
+    assert all(item["review_state"] == "pending" for item in original_items)
+
+    if tamper == "producer_reordered_images":
+        # The two-image frozen study must produce identical standalone and
+        # executable saved-workflow scientific QC evidence before corruption.
+        standalone = client.post(
+            f"/api/v1/dataset-versions/{version_id}/review-queues", json={}
+        )
+        assert standalone.status_code == 201, standalone.text
+        standalone_response = client.get(
+            f"/api/v1/review-queues/{standalone.json()['id']}/items"
+        )
+        assert standalone_response.status_code == 200, standalone_response.text
+        assert standalone_response.json()["total"] == expected_count
+        assert sorted(
+            (item["image_id"], item["input_checksum"], item["score"])
+            for item in standalone_response.json()["items"]
+        ) == sorted(
+            (item["image_id"], item["input_checksum"], item["score"])
+            for item in original_items
+        )
     other_id = None
     if tamper in {"resigned_other_version", "producer_other_version"}:
         other = create_version(client, project_id, name="Independent frozen coral study")
@@ -209,5 +236,9 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
         assert replay[0]["payload"] == payload
         session.rollback()
 
-    # Failed replay cannot mutate historical human-review state or scientific evidence.
-    assert _queue_item(client, payload["queue_id"])["review_state"] == "pending"
+    # Failed replay cannot mutate any historical human-review state or
+    # scientific evidence, including multi-image frozen studies.
+    final_response = client.get(queue_url)
+    assert final_response.status_code == 200, final_response.text
+    assert final_response.json()["total"] == expected_count
+    assert final_response.json()["items"] == original_items
