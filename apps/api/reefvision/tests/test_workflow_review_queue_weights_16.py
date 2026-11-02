@@ -32,9 +32,7 @@ def _weighted_graph(weights: dict[str, float] | None) -> dict[str, Any]:
 
 
 def _execute(client: TestClient, project_id: str, graph: dict[str, Any]) -> dict[str, Any]:
-    saved = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     queued = client.post(
         f"/api/v1/projects/{project_id}/workflow-runs",
@@ -81,12 +79,12 @@ def test_saved_custom_weights_match_standalone_scoring(client: TestClient) -> No
     workflow = client.get(f"/api/v1/review-queues/{payload['queue_id']}")
     assert workflow.status_code == 200, workflow.text
     assert workflow.json()["configuration_json"]["weights"] == weights
-    standalone_items = client.get(
-        f"/api/v1/review-queues/{standalone.json()['id']}/items"
-    ).json()["items"]
-    workflow_items = client.get(
-        f"/api/v1/review-queues/{payload['queue_id']}/items"
-    ).json()["items"]
+    standalone_items = client.get(f"/api/v1/review-queues/{standalone.json()['id']}/items").json()[
+        "items"
+    ]
+    workflow_items = client.get(f"/api/v1/review-queues/{payload['queue_id']}/items").json()[
+        "items"
+    ]
     assert len(standalone_items) == len(workflow_items) == 1
     assert standalone_items[0]["score"] == workflow_items[0]["score"]
     assert standalone_items[0]["input_checksum"] == workflow_items[0]["input_checksum"]
@@ -112,9 +110,7 @@ def test_invalid_weights_fail_saved_graph_planning(
     )
     assert plan.status_code == 200, plan.text
     assert not plan.json()["valid"] and not plan.json()["executable"]
-    assert any(
-        issue["code"] == "invalid_qc_signal_weights" for issue in plan.json()["issues"]
-    )
+    assert any(issue["code"] == "invalid_qc_signal_weights" for issue in plan.json()["issues"])
     queues = client.get(f"/api/v1/projects/{project_id}/review-queues")
     assert queues.status_code == 200, queues.text
     assert queues.json() == []
@@ -148,9 +144,7 @@ def test_saved_qc_retry_preserves_original_weights_and_legacy_defaults(
         assert source is not None
         if legacy:
             node.parameters_json = {
-                key: value
-                for key, value in node.parameters_json.items()
-                if key != "signal_weights"
+                key: value for key, value in node.parameters_json.items() if key != "signal_weights"
             }
         else:
             node.parameters_json = {**node.parameters_json, "signal_weights": None}
