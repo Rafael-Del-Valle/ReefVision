@@ -329,6 +329,45 @@ def test_phase10_pose_review_pauses_and_resumes_without_rerunning_pose(
         stored.payload_sha256 = canonical_json_sha256(original_payload)
         session.commit()
 
+    # Even with a recomputed artifact checksum, a saved temporal review
+    # must not silently ignore malformed or duplicated source-track IDs.
+    original_track_ids = list(original_payload["track_ids"])
+    assert original_track_ids
+    for corrupt_ids, expected_detail in (
+        ([*original_track_ids, None], "Pose Review artifact track_ids are invalid"),
+        (
+            [*original_track_ids, original_track_ids[0]],
+            "Pose Review artifact track_ids contain duplicates",
+        ),
+    ):
+        with app.state.session_factory() as session:
+            stored = session.get(WorkflowArtifact, str(temporal_artifact["id"]))
+            assert stored is not None
+            corrupted_payload = {**original_payload, "track_ids": corrupt_ids}
+            stored.payload_json = corrupted_payload
+            stored.payload_sha256 = canonical_json_sha256(corrupted_payload)
+            session.commit()
+
+        rejected = client.post(
+            f"/api/v1/workflow-node-runs/{nodes_before['review']['id']}/resume-review",
+            json={"reviewed_by": "scientist", "note": "Reject malformed source tracks"},
+        )
+        assert rejected.status_code == 400, rejected.text
+        assert rejected.json()["detail"] == expected_detail
+
+        with app.state.session_factory() as session:
+            paused_node = session.get(WorkflowNodeRun, str(nodes_before["review"]["id"]))
+            paused_run = session.get(WorkflowRun, run_id)
+            paused_job = session.get(Job, job_id)
+            assert paused_node is not None and paused_node.status == "waiting_for_review"
+            assert paused_run is not None and paused_run.status == "waiting_for_review"
+            assert paused_job is not None and paused_job.status == "waiting_for_review"
+            stored = session.get(WorkflowArtifact, str(temporal_artifact["id"]))
+            assert stored is not None
+            stored.payload_json = original_payload
+            stored.payload_sha256 = canonical_json_sha256(original_payload)
+            session.commit()
+
     resumed = client.post(
         (f"/api/v1/workflow-node-runs/{nodes_before['review']['id']}/resume-review"),
         json={
