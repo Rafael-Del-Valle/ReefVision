@@ -149,6 +149,34 @@ def test_unit_summary_replay_rejects_forged_organism_aggregates(
         LongitudinalAnalysisResponse.model_validate(forged)
 
 
+@pytest.mark.parametrize(
+    ("section", "field", "invalid"),
+    [
+        ("unit_summaries", "organism_count", True),
+        ("unit_summaries", "organism_count", "2"),
+        ("unit_summaries", "mean_absolute_change", "4"),
+        ("unit_summaries", "mean_change_per_day", False),
+        ("unit_summaries", "mean_change_per_day", float("inf")),
+        ("population_summaries", "independent_unit_count", "2"),
+        ("population_summaries", "contributing_organism_count", True),
+        ("population_summaries", "mean_unit_absolute_change", "4"),
+        ("population_summaries", "mean_unit_change_per_day", False),
+        ("population_summaries", "mean_unit_change_per_day", float("nan")),
+    ],
+)
+def test_persisted_population_summaries_reject_coerced_json_scalars(
+    client: TestClient, section: str, field: str, invalid: object
+) -> None:
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=_two_tank_payload())
+    assert response.status_code == 200, response.text
+    original = response.json()
+    LongitudinalAnalysisResponse.model_validate(original)
+    forged = deepcopy(original)
+    forged[section][0][field] = invalid
+    with pytest.raises(PydanticValidationError, match="Saved ecological summary"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+
 def test_saved_workflow_population_artifact_rejects_forged_unit_weight(
     client: TestClient,
 ) -> None:
@@ -222,6 +250,19 @@ def test_saved_workflow_population_artifact_rejects_forged_unit_weight(
     forged["population_summaries"][0]["mean_unit_absolute_change"] += 1
     with pytest.raises(PydanticValidationError, match="Unit summary means"):
         LongitudinalAnalysisResponse.model_validate(forged)
+
+    # A saved, executed Workflow Builder artifact must reject implicit JSON
+    # coercion of tank denominators and means on typed replay.
+    for section, field, invalid in (
+        ("unit_summaries", "organism_count", "2"),
+        ("unit_summaries", "mean_change_per_day", True),
+        ("population_summaries", "independent_unit_count", False),
+        ("population_summaries", "mean_unit_absolute_change", "4"),
+    ):
+        forged = deepcopy(persisted)
+        forged[section][0][field] = invalid
+        with pytest.raises(PydanticValidationError, match="Saved ecological summary"):
+            LongitudinalAnalysisResponse.model_validate(forged)
 
     # The executable saved Workflow Builder result must enforce the same
     # endpoint arithmetic contract as the standalone API result.

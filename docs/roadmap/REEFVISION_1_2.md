@@ -6236,3 +6236,15 @@ weight is introduced. Focused regressions cover valid incomplete series,
 coordinated source-count edits, missing/duplicated sampling dates and persisted
 saved-workflow tampering. Full CI, migration reconciliation, real scientist
 review and installed Windows GUI/GPU acceptance remain release blockers.
+
+## Strict persisted ecological summary scalars (2026-11-02)
+
+Unit and population summary replay now requires actual JSON integers for
+organism and independent-unit counts, and finite JSON numbers for descriptive
+means. Boolean, numeric-string and fractional count coercion is rejected
+before population and organism-level reconciliation, including when the result
+was produced by an executable saved Workflow Builder graph. This protects
+replication denominators from type-confused persisted artifacts; it does not
+authenticate the original caller-declared biological units, calibrations or
+review status. Existing source fingerprints, typed ports, review boundaries
+and `caller_supplied_unverified` evidence classification remain unchanged.

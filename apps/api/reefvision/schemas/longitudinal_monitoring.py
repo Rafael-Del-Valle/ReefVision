@@ -173,9 +173,7 @@ class LongitudinalChange(BaseModel):
         """Reject implicit Unix-time coercion in replayed scientific results."""
         if isinstance(value, datetime):
             return value
-        if not isinstance(value, str) or not re.match(
-            r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()
-        ):
+        if not isinstance(value, str) or not re.match(r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()):
             raise ValueError("Saved longitudinal endpoints require ISO calendar timestamps")
         return value
 
@@ -280,6 +278,26 @@ class LongitudinalChange(BaseModel):
         return self
 
 
+def _require_saved_summary_integer(value: object) -> int:
+    """Do not coerce JSON strings, floats or Booleans into replicate counts."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("Saved ecological summary counts require JSON integers")
+    return value
+
+
+def _require_saved_summary_mean(value: object) -> float | int:
+    """A replayed ecological mean must be a finite JSON number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Saved ecological summary means require JSON numbers")
+    try:
+        finite = math.isfinite(value)
+    except OverflowError:
+        finite = False
+    if not finite:
+        raise ValueError("Saved ecological summary means must be finite")
+    return value
+
+
 class ExperimentalUnitSummary(BaseModel):
     """Descriptive unit-level mean; never an organism-level replication count."""
 
@@ -291,6 +309,16 @@ class ExperimentalUnitSummary(BaseModel):
     final_at: datetime
     mean_absolute_change: float
     mean_change_per_day: float
+
+    @field_validator("organism_count", mode="before")
+    @classmethod
+    def strict_organism_count(cls, value: object) -> int:
+        return _require_saved_summary_integer(value)
+
+    @field_validator("mean_absolute_change", "mean_change_per_day", mode="before")
+    @classmethod
+    def strict_unit_means(cls, value: object) -> float | int:
+        return _require_saved_summary_mean(value)
 
 
 class PopulationUnitSummary(BaseModel):
@@ -305,6 +333,16 @@ class PopulationUnitSummary(BaseModel):
     experimental_unit_ids: list[str]
     mean_unit_absolute_change: float
     mean_unit_change_per_day: float
+
+    @field_validator("independent_unit_count", "contributing_organism_count", mode="before")
+    @classmethod
+    def strict_population_counts(cls, value: object) -> int:
+        return _require_saved_summary_integer(value)
+
+    @field_validator("mean_unit_absolute_change", "mean_unit_change_per_day", mode="before")
+    @classmethod
+    def strict_population_means(cls, value: object) -> float | int:
+        return _require_saved_summary_mean(value)
 
 
 class ExperimentalUnitCoverage(BaseModel):
