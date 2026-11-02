@@ -240,3 +240,71 @@ def test_rgb_2000_vertices_atomic_on_invalid_last_channel() -> None:
     assert len(colors) == 2001
     assert colors[0] == [42, 43, 44]
     assert colors[-1] == [10, 20, 30]
+
+
+@pytest.mark.parametrize(
+    "channel",
+    ["0000", "0" * 5000],
+    ids=["four_digit_channel", "oversized_zero_channel"],
+)
+def test_noncanonical_rgb_token_fails_standalone_and_saved_graph(
+    client: TestClient, channel: str
+) -> None:
+    """Reject oversized RGB tokens without publishing scientific point-cloud artifacts."""
+    invalid = RGB_PLY.replace("7 0 11 0 22 3", f"7 0 11 0 {channel} 3")
+    colors = [[10, 20, 30]]
+    with pytest.raises(ValueError, match="0-255 integers"):
+        parse_ascii_ply_points(invalid, colors_out=colors)
+    assert colors == [[10, 20, 30]]
+
+    pid = str(create_project(client, "Bounded RGB token import")["id"])
+    base = f"/api/v1/projects/{pid}"
+    params = {
+        "ply_text": invalid,
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Provisional field ruler",
+    }
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 400, standalone.text
+
+    graph = {
+        "graph_id": "bounded-rgb-token-v14",
+        "name": "Reject noncanonical RGB PLY",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "c", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "c",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "point_cloud_measurement_preview"
+        for artifact in detail.json()["artifacts"]
+    )
+
+
+def test_three_digit_zero_rgb_token_remains_valid() -> None:
+    """A bounded decimal representation is still a valid unsigned-byte color."""
+    valid = RGB_PLY.replace("7 0 11 0 22 3", "7 0 11 0 000 3")
+    colors: list[list[int]] = []
+    assert parse_ascii_ply_points(valid, colors_out=colors) == parse_ascii_ply_points(RGB_PLY)
+    assert colors[-1] == [11, 0, 7]
