@@ -851,3 +851,16 @@ checks establish **consistency of caller-supplied fingerprints only**; they do
 not independently authenticate the original files, prove two acquisitions are
 independent, verify calibration, or establish biological identity. In particular,
 reusing the same original bytes at two timepoints still withholds growth estimates.
+
+## GLB JSON floating-point integrity
+
+The bounded GLB 2.0 importer rejects nonzero JSON decimal or exponent tokens
+that round all the way to zero when converted to Python floating point. This
+includes unapplied near-zero node translations and numeric metadata in `extras`:
+silently treating a nonzero transform as identity would change the scientific
+interpretation of the mesh. Genuine zero tokens such as `0e-9999` remain valid.
+This is a parser-integrity safeguard, **not** a bound on reconstruction error,
+physical scale verification, or evidence of organism identity. Direct mesh
+preview requests and executable persisted `mesh_surface_preview` Workflow
+Builder graphs share the same rejection path and must not emit a measurement
+artifact for invalid GLB input.
