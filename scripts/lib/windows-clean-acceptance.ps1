@@ -534,11 +534,14 @@ function Get-ReefVisionAutomatedAcceptanceGaps {
 # Automated MSI smoke-test success is necessary but not sufficient for a
 # release. Physical installed-WebView2, live read-only training telemetry,
 # and GPU/scientific QC must have independent, timestamped PASS evidence.
+# Canon EOS and Sony A7R camera files need separate physical device evidence:
+# a synthetic JPEG or a single supplied fixture cannot certify both cameras.
 # Reuse the same strict status/detail/UTC timestamp checks for every gate.
 function Get-ReefVisionReleaseAcceptanceGaps {
     param([Parameter(Mandatory = $true)]$Report)
     Get-ReefVisionAutomatedAcceptanceGaps -Report $Report -AdditionalRequired @(
-        'webview2_gui', 'training_console', 'gpu_scientific'
+        'webview2_gui', 'training_console', 'gpu_scientific',
+        'canon_camera', 'sony_camera'
     )
 }
 
