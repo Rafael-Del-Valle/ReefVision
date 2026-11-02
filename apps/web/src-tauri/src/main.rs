@@ -187,6 +187,10 @@ function Format-SafeText {
   $text = [regex]::Replace($text, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\|$)', '')
   $text = [regex]::Replace($text, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
   $text = [regex]::Replace($text, '(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]', '')
+  # Incomplete ANSI CSI color sequences must not append their digits to
+  # scientific loss values (0.25 + ESC[31 must never render as 0.25[31).
+  # This also covers sequences split by the bounded display-field limit.
+  $text = [regex]::Replace($text, '(?:\x1b\[|\x9b)[0-?]*[ -/]*(?=[\r\n]|$)', '')
   $text = [regex]::Replace($text, '\x1b[ -/]*[@-_]', '')
   $text = [regex]::Replace($text, '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]', ' ')
   if ($text.Length -gt 1024) { return $text.Substring(0, 1024) + ' [truncated]' }
