@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta, tzinfo
+from copy import deepcopy
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from typing import cast
 
 import pytest
@@ -14,6 +15,7 @@ from reefvision.domain.longitudinal_monitoring import analyze_longitudinal
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.longitudinal_monitoring import (
     LongitudinalAnalysisRequest,
+    LongitudinalAnalysisResponse,
     LongitudinalChange,
 )
 from reefvision.tests.test_annotations import create_project
@@ -74,9 +76,7 @@ def test_saved_organism_endpoint_replays_actual_utc_elapsed_hours(
     start = datetime(2026, *start_date, 12, tzinfo=seasonal)
     end = datetime(2026, *end_date, 12, tzinfo=seasonal)
     assert (end - start).total_seconds() == 48 * 3600
-    assert (end.astimezone(UTC) - start.astimezone(UTC)).total_seconds() == (
-        expected_hours * 3600
-    )
+    assert (end.astimezone(UTC) - start.astimezone(UTC)).total_seconds() == (expected_hours * 3600)
     payload = {
         "organism_id": "fragment-A",
         "metric_name": "polyp_count",
@@ -97,9 +97,7 @@ def test_saved_organism_endpoint_replays_actual_utc_elapsed_hours(
     assert parsed.elapsed_days == pytest.approx(expected_hours / 24)
     # A forged 48-hour wall-clock denominator must fail on both transitions.
     with pytest.raises(PydanticValidationError, match="endpoint arithmetic does not reconcile"):
-        LongitudinalChange.model_validate(
-            {**payload, "elapsed_days": 2.0, "change_per_day": 1.0}
-        )
+        LongitudinalChange.model_validate({**payload, "elapsed_days": 2.0, "change_per_day": 1.0})
 
 
 def _offset_transition_observations() -> list[dict[str, object]]:
@@ -109,6 +107,39 @@ def _offset_transition_observations() -> list[dict[str, object]]:
         _obs("frag-B", "b-first", "2026-03-07T12:00:00-05:00", 20),
         _obs("frag-B", "b-last", "2026-03-09T12:00:00-04:00", 24),
     ]
+
+
+
+def test_population_replay_groups_equivalent_offset_endpoints_by_utc_date() -> None:
+    """An offset-rendered date must not create a different biological stratum."""
+    result = analyze_longitudinal(
+        LongitudinalAnalysisRequest(observations=_same_date_observations())
+    )
+    payload = result.model_dump(mode="json")
+    assert payload["population_summaries"][0]["baseline_date"] == "2026-04-01"
+    baseline = datetime.fromisoformat(payload["unit_summaries"][0]["baseline_at"])
+    offset_baseline = baseline.astimezone(timezone(timedelta(hours=-10)))
+    assert offset_baseline.date().isoformat() == "2026-03-31"
+    payload["unit_summaries"][0]["baseline_at"] = offset_baseline.isoformat()
+
+    # An equivalent offset rendering is valid with the unchanged UTC date.
+    parsed = LongitudinalAnalysisResponse.model_validate(payload)
+    assert parsed.population_summaries[0].baseline_date.isoformat() == "2026-04-01"
+
+    # Changing both the rendered timestamp and the population stratum must
+    # not allow a tank to move into a different UTC sampling-date cohort.
+    forged = deepcopy(payload)
+    forged["population_summaries"][0]["baseline_date"] = "2026-03-31"
+    with pytest.raises(PydanticValidationError, match="Population summary strata do not reconcile"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+    # A naive saved unit timestamp must never acquire the host timezone.
+    naive = deepcopy(payload)
+    naive["unit_summaries"][0]["baseline_at"] = "2026-04-01T08:00:00"
+    with pytest.raises(
+        PydanticValidationError, match="Population summary unit endpoints must be timezone-aware"
+    ):
+        LongitudinalAnalysisResponse.model_validate(naive)
 
 
 def test_same_utc_dates_different_hours_are_eligible() -> None:
@@ -165,8 +196,7 @@ def test_standalone_and_saved_workflow_agree_on_date_window(
     assert standalone.json()["unit_summaries"][0]["organism_count"] == 2
     if crosses_offset_transition:
         assert all(
-            row["elapsed_days"] == pytest.approx(47 / 24)
-            for row in standalone.json()["changes"]
+            row["elapsed_days"] == pytest.approx(47 / 24) for row in standalone.json()["changes"]
         )
 
     project = create_project(client, "UTC-date ecological sampling")
@@ -207,3 +237,17 @@ def test_standalone_and_saved_workflow_agree_on_date_window(
     assert payload["unit_coverage"] == standalone.json()["unit_coverage"]
     assert payload["analysis_provenance"] == standalone.json()["analysis_provenance"]
     assert payload["evidence_level"] == "caller_supplied_unverified"
+    if not crosses_offset_transition:
+        # Re-validate the *executed and persisted* typed Workflow Builder output.
+        offset_payload = deepcopy(payload)
+        offset_payload["unit_summaries"][0]["baseline_at"] = "2026-03-31T22:00:00-10:00"
+        assert (
+            LongitudinalAnalysisResponse.model_validate(offset_payload).evidence_level
+            == "caller_supplied_unverified"
+        )
+        forged = deepcopy(offset_payload)
+        forged["population_summaries"][0]["baseline_date"] = "2026-03-31"
+        with pytest.raises(
+            PydanticValidationError, match="Population summary strata do not reconcile"
+        ):
+            LongitudinalAnalysisResponse.model_validate(forged)
