@@ -54,9 +54,7 @@ def _run_saved_graph(client: TestClient, project_id: str, ply: str) -> dict:
     base = f"/api/v1/projects/{project_id}"
     saved = client.post(f"{base}/workflow-graphs", json={"graph": _graph(ply)})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     process_workflow_run_job(
@@ -76,7 +74,7 @@ def _run_saved_graph(client: TestClient, project_id: str, ply: str) -> dict:
         PLY.replace("2 0 0", "1e3_0 0 0"),
         PLY.replace("2 0 0", "1e-9999 0 0"),
         PLY.replace("2 0 0", "1e9999 0 0"),
-        PLY.replace("2 0 0", "\uFF12 0 0"),
+        PLY.replace("2 0 0", "\uff12 0 0"),
         PLY.replace("2 0 0", "2\x0b0 0"),
         PLY.replace("2 0 0", "2\x000 0"),
         PLY.replace("3 0 1 2", "3 0 1_0 2"),
@@ -109,8 +107,7 @@ def test_invalid_mesh_rejected_by_api_and_persisted_workflow(
     detail = _run_saved_graph(client, project_id, invalid)
     assert detail["run"]["status"] == "failed"
     assert not any(
-        artifact["data_type"] == "mesh_measurement_preview"
-        for artifact in detail["artifacts"]
+        artifact["data_type"] == "mesh_measurement_preview" for artifact in detail["artifacts"]
     )
 
 
