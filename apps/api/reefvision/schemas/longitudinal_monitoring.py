@@ -334,16 +334,12 @@ class PopulationUnitSummary(BaseModel):
     mean_unit_absolute_change: float
     mean_unit_change_per_day: float
 
-    @field_validator(
-        "independent_unit_count", "contributing_organism_count", mode="before"
-    )
+    @field_validator("independent_unit_count", "contributing_organism_count", mode="before")
     @classmethod
     def strict_population_counts(cls, value: object) -> int:
         return _require_saved_summary_integer(value)
 
-    @field_validator(
-        "mean_unit_absolute_change", "mean_unit_change_per_day", mode="before"
-    )
+    @field_validator("mean_unit_absolute_change", "mean_unit_change_per_day", mode="before")
     @classmethod
     def strict_population_means(cls, value: object) -> float | int:
         return _require_saved_summary_mean(value)
@@ -375,6 +371,19 @@ class ExperimentalUnitCoverage(BaseModel):
         | None
     ) = None
 
+    @field_validator(
+        "observed_organism_count",
+        "complete_organism_count",
+        "missing_followup_organism_count",
+        "expected_organism_count",
+        mode="before",
+    )
+    @classmethod
+    def strict_coverage_counts(cls, value: object) -> int | None:
+        if value is None:
+            return None
+        return _require_saved_summary_integer(value)
+
 
 class PlannedSamplingEffort(BaseModel):
     """Scheduled organism-visits per declared unit/metric, not a survival estimate."""
@@ -388,6 +397,23 @@ class PlannedSamplingEffort(BaseModel):
     missing_organism_visits: int = Field(ge=0)
     observation_coverage_fraction: float = Field(ge=0, le=1)
     expected_roster_supplied: bool = False
+
+    @field_validator(
+        "planned_sampling_date_count",
+        "expected_organism_count",
+        "expected_organism_visits",
+        "observed_organism_visits",
+        "missing_organism_visits",
+        mode="before",
+    )
+    @classmethod
+    def strict_effort_counts(cls, value: object) -> int:
+        return _require_saved_summary_integer(value)
+
+    @field_validator("observation_coverage_fraction", mode="before")
+    @classmethod
+    def strict_effort_fraction(cls, value: object) -> float | int:
+        return _require_saved_summary_mean(value)
 
     @model_validator(mode="after")
     def reconcile_visit_denominator(self) -> PlannedSamplingEffort:
@@ -419,6 +445,16 @@ class PlannedSamplingDateCoverage(BaseModel):
     missing_organism_ids: list[str] = Field(default_factory=list)
     observation_coverage_fraction: float = Field(ge=0, le=1)
     expected_roster_supplied: bool = False
+
+    @field_validator("expected_organism_count", "observed_organism_count", mode="before")
+    @classmethod
+    def strict_visit_counts(cls, value: object) -> int:
+        return _require_saved_summary_integer(value)
+
+    @field_validator("observation_coverage_fraction", mode="before")
+    @classmethod
+    def strict_visit_fraction(cls, value: object) -> float | int:
+        return _require_saved_summary_mean(value)
 
     @model_validator(mode="after")
     def reconcile_visit_roster(self) -> PlannedSamplingDateCoverage:
@@ -476,6 +512,19 @@ class LongitudinalAnalysisResponse(BaseModel):
     planned_sampling_effort: list[PlannedSamplingEffort] = Field(default_factory=list)
     planned_sampling_date_coverage: list[PlannedSamplingDateCoverage] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+
+    @field_validator(
+        "observation_count",
+        "evaluated_series_count",
+        "incomplete_series_count",
+        "independent_unit_count",
+        mode="before",
+    )
+    @classmethod
+    def strict_analysis_counts(cls, value: object) -> int | None:
+        if value is None:
+            return None
+        return _require_saved_summary_integer(value)
 
     @model_validator(mode="after")
     def reject_aliases_in_persisted_organism_rosters(self) -> LongitudinalAnalysisResponse:

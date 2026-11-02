@@ -196,6 +196,18 @@ def test_saved_workflow_persists_schedule_qc(client: TestClient) -> None:
     with pytest.raises(PydanticValidationError, match="denominator does not reconcile"):
         LongitudinalAnalysisResponse.model_validate(tampered)
 
+    # Replay of a real executed saved graph rejects coerced biological counts.
+    for section, field, value in (
+        ("unit_coverage", "observed_organism_count", True),
+        ("planned_sampling_effort", "observed_organism_visits", "5"),
+        ("planned_sampling_date_coverage", "observed_organism_count", 2.0),
+        ("planned_sampling_effort", "observation_coverage_fraction", "0.8333333333"),
+    ):
+        forged = deepcopy(persisted)
+        forged[section][0][field] = value
+        with pytest.raises(PydanticValidationError, match="Saved ecological summary"):
+            LongitudinalAnalysisResponse.model_validate(forged)
+
 
 def test_invalid_saved_calendar_does_not_produce_successful_analysis(
     client: TestClient,
@@ -334,3 +346,43 @@ def test_persisted_sampling_denominators_reject_recomputed_tampering(
     result[collection][0][field] = replacement
     with pytest.raises(PydanticValidationError, match=diagnostic):
         LongitudinalAnalysisResponse.model_validate(result)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("root", "observation_count", "6"),
+        ("root", "evaluated_series_count", True),
+        ("root", "incomplete_series_count", 0.0),
+        ("root", "independent_unit_count", "1"),
+        ("unit_coverage", "observed_organism_count", True),
+        ("unit_coverage", "complete_organism_count", "2"),
+        ("unit_coverage", "missing_followup_organism_count", 0.0),
+        ("unit_coverage", "expected_organism_count", "2"),
+        ("planned_sampling_effort", "planned_sampling_date_count", "3"),
+        ("planned_sampling_effort", "expected_organism_count", True),
+        ("planned_sampling_effort", "expected_organism_visits", 6.0),
+        ("planned_sampling_effort", "observed_organism_visits", "6"),
+        ("planned_sampling_effort", "missing_organism_visits", False),
+        ("planned_sampling_effort", "observation_coverage_fraction", "1.0"),
+        ("planned_sampling_date_coverage", "expected_organism_count", "2"),
+        ("planned_sampling_date_coverage", "observed_organism_count", 2.0),
+        ("planned_sampling_date_coverage", "observation_coverage_fraction", True),
+    ],
+)
+def test_saved_sampling_counts_reject_json_type_coercion(
+    client: TestClient, section: str, field: str, value: object
+) -> None:
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=_payload())
+    assert response.status_code == 200, response.text
+    original = response.json()
+    assert LongitudinalAnalysisResponse.model_validate(original).evidence_level == (
+        "caller_supplied_unverified"
+    )
+    forged = deepcopy(original)
+    if section == "root":
+        forged[field] = value
+    else:
+        forged[section][0][field] = value
+    with pytest.raises(PydanticValidationError, match="Saved ecological summary"):
+        LongitudinalAnalysisResponse.model_validate(forged)

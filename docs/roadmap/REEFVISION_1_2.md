@@ -6248,3 +6248,19 @@ replication denominators from type-confused persisted artifacts; it does not
 authenticate the original caller-declared biological units, calibrations or
 review status. Existing source fingerprints, typed ports, review boundaries
 and `caller_supplied_unverified` evidence classification remain unchanged.
+
+
+## Persisted planned-visit JSON type integrity (2026-11-02)
+
+The shared standalone and executable saved Workflow Builder longitudinal result
+contract now requires real JSON integer denominators for organism coverage,
+planned unit effort, per-date visit rosters, and top-level series counts.
+Coverage fractions must be finite JSON numbers. Boolean, numeric-string and
+floating-point count coercion is rejected on scientific artifact replay, even
+when a tampered value would otherwise equal the expected count. Existing
+nonnegative bounds, denominator/roster reconciliation, UTC sampling dates,
+typed ports and provenance remain intact. Regression cases cover valid API
+output and tampered persisted artifacts from an executed saved workflow.
+This guards **internal replay integrity only**: caller-supplied biological
+identities, source observations, calibration and independent units are still
+unverified. It does not establish survival or statistical significance.
