@@ -95,6 +95,56 @@ def test_legacy_interval_without_source_uncertainty_is_rejected(
         execute_mesh_longitudinal_comparison(None, None, "project-1", {}, artifacts)
 
 
+@pytest.mark.parametrize(
+    ("field", "invalid", "error"),
+    [
+        ("surface_area_scale_interval_m2", [1.0], "Malformed surface-area scale interval"),
+        ("surface_area_scale_interval_m2", [True, 1.0], "Malformed surface-area scale interval"),
+        (
+            "surface_area_scale_interval_m2",
+            [float("nan"), 1.0],
+            "Malformed surface-area scale interval",
+        ),
+        (
+            "axis_aligned_bounding_box_diagonal_scale_interval_m",
+            [2.0],
+            "Malformed bounding-box scale interval",
+        ),
+        (
+            "axis_aligned_bounding_box_diagonal_scale_interval_m",
+            [False, 2.0],
+            "Malformed bounding-box scale interval",
+        ),
+        (
+            "axis_aligned_bounding_box_diagonal_scale_interval_m",
+            [float("inf"), 2.0],
+            "Malformed bounding-box scale interval",
+        ),
+    ],
+)
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+def test_malformed_present_scale_bounds_fail_closed_for_replayed_artifacts(
+    field: str, invalid: list[object], error: str, timepoint: str
+) -> None:
+    before, after = _minimal_topology_pair()
+    for record in (before, after):
+        record["provenance"]["relative_scale_uncertainty"] = 0.1
+        record["axis_aligned_bounding_box_diagonal_m"] = 2.0
+    # An omitted interval is legitimate legacy uncertainty. A present,
+    # malformed interval is not: it must not erase an uncertainty estimate.
+    target = before if timepoint == "before" else after
+    target[field] = invalid
+    with pytest.raises(ValueError, match=error):
+        compare_mesh_observations(before, after)
+
+    artifacts = {
+        port: [SimpleNamespace(data_type="mesh_measurement_preview", payload_json=record)]
+        for port, record in (("before", before), ("after", after))
+    }
+    with pytest.raises(ValidationError, match=error):
+        execute_mesh_longitudinal_comparison(None, None, "project-1", {}, artifacts)
+
+
 def test_missing_early_bounds_still_withhold_combined_intervals() -> None:
     before, after = _minimal_topology_pair()
     for record in (before, after):
