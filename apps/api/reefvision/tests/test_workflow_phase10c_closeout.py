@@ -1105,6 +1105,37 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
             str(track_id),
         )
 
+    # The scientist must not approve a saved temporal-pose artifact whose
+    # payload changed after the workflow paused, even when review is ready.
+    review_input_ids = first_nodes["pose_review"]["input_artifact_ids_json"]
+    assert len(review_input_ids) == 1
+    review_input_id = review_input_ids[0]
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, review_input_id)
+        assert artifact is not None
+        original_review_input = dict(artifact.payload_json)
+        artifact.payload_json = {**original_review_input, "unverified_edit": True}
+        session.commit()
+
+    tampered_resume = client.post(
+        f"/api/v1/workflow-node-runs/{first_nodes['pose_review']['id']}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Do not approve tampered science."},
+    )
+    assert tampered_resume.status_code == 409, tampered_resume.text
+    assert "Workflow artifact checksum failed" in tampered_resume.json()["detail"]
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        job = session.get(Job, job_id)
+        review_node = session.get(WorkflowNodeRun, first_nodes["pose_review"]["id"])
+        artifact = session.get(WorkflowArtifact, review_input_id)
+        assert run is not None and run.status == "waiting_for_review"
+        assert job is not None and job.status == "waiting_for_review"
+        assert review_node is not None and review_node.status == "waiting_for_review"
+        assert artifact is not None
+        artifact.payload_json = original_review_input
+        session.commit()
+
     resumed = client.post(
         (f"/api/v1/workflow-node-runs/{first_nodes['pose_review']['id']}/resume-review"),
         json={
