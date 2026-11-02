@@ -103,6 +103,7 @@ def create_review_queue_workflow_artifact(
         or producer.node_type != "project_source"
         or producer.status != "succeeded"
         or producer.output_artifact_ids_json != [source.id]
+        or not isinstance(node.input_artifact_ids_json, list)
         or source.id not in node.input_artifact_ids_json
     ):
         raise ValidationError("QC Review Queue source has invalid producer or binding provenance")
@@ -213,13 +214,13 @@ def create_review_queue_workflow_artifact(
         or existing is None
     ):
         raise ValidationError("QC review-queue saved output binding is invalid")
+    expected_scope_type = "dataset_version" if dataset_version_id else "project"
     if existing is not None:
         config = dict(existing.configuration_json or {})
         if (
             existing.status != "complete"
             or existing.dataset_version_id != dataset_version_id
-            or existing.scope_type
-            != ("dataset_version" if dataset_version_id else "project")
+            or existing.scope_type != expected_scope_type
             or config.get("review_below_confidence") != request.review_below_confidence
             or (
                 request.source_quality_control_run_id is not None
