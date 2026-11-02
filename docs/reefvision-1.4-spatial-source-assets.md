@@ -537,3 +537,17 @@ artifact against standalone output for a valid signed/exponent OBJ example.
 These checks establish lexical/numeric interpretation consistency, **not**
 validated photogrammetry, physical calibration, specimen identity, biological
 branch lengths, or independent human verification.
+
+### GLB JSON integer bounds and validation order
+
+The bounded GLB 2.0 preview rejects JSON integer tokens longer than 64
+base-10 digits **during decoding**, including tokens inside opaque `extras`.
+This check runs before matrix identity and accessor bounds validation, so
+oversized matrix/accessor integers produce the decoder's explicit
+`64-digit preview bound` error instead of a later semantic error. Exactly
+64-digit metadata integers remain accepted when they do not change geometry.
+Direct parser and project-scoped standalone API regressions check the error
+precedence; persisted, typed, executable Workflow Builder tests require the
+same malformed imports to fail without publishing a mesh measurement artifact.
+These bounds protect numeric interpretation and resource use, but do not
+verify physical scale, specimen identity, or biological measurements.
