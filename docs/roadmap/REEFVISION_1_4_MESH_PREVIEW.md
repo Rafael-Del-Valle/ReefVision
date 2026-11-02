@@ -227,3 +227,25 @@ validated against separate `vt`/`vn` declarations or used for geometry,
 calibration, tissue segmentation, or biological identity. A syntactically
 accepted OBJ is not a verified reconstruction. The full original source
 bytes remain distinct from geometry fingerprints for provenance.
+
+## ASCII PLY numeric token integrity (Track C, 2026-11-01)
+
+The bounded point-cloud PLY importer now accepts standard ASCII decimal
+coordinates (including signs, decimal points, and scientific notation) and
+unsigned decimal vertex counts. It rejects Python-specific numeric spellings
+such as `1_0` or `1e3_0`, which `float()` and `int()` may otherwise
+interpret as valid numbers despite not being PLY numeric tokens.
+
+Nonzero decimal coordinates that underflow to binary floating-point zero are
+rejected rather than silently collapsing source geometry. True zero
+mantissas, including signed zero and zero with exponents, remain supported.
+Overflowing or out-of-bounds coordinates are still rejected. Color buffers
+remain unchanged when a later coordinate fails validation.
+
+Regression coverage in
+`test_spatial_point_cloud_ply_numeric_grammar_v14.py` exercises direct
+parsing, standalone API rejection, saved typed Workflow Builder failure
+without a measurement artifact, and successful replay parity for valid
+decimal/exponent input. The original PLY bytes remain the source-provenance
+record; numeric normalization does not establish verified calibration,
+specimen identity, biological surface area, or branch length.
