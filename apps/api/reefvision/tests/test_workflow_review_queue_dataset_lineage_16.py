@@ -13,7 +13,7 @@ from reefvision.db.models import DatasetVersion, WorkflowArtifact, WorkflowNodeR
 from reefvision.domain.errors import ValidationError
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.storage.datasets import canonical_json_sha256
-from reefvision.tests.test_dataset_versions import create_version
+from reefvision.tests.test_dataset_versions import create_version, import_image, update_image
 from reefvision.tests.test_review_queue_annotation_evidence_16 import _queue_item
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
     _frozen_graph,
@@ -34,6 +34,7 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
         "producer_wrong_images_binding",
         "producer_resigned_images_artifact",
         "producer_resigned_image_ids",
+        "producer_reordered_images",
         "metadata_version_number",
         "metadata_split_method",
         "metadata_split_counts",
@@ -42,10 +43,23 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
         "metadata_mask_annotation_count",
         "metadata_missing_split_counts",
         "metadata_boolean_image_count",
+        "metadata_boolean_split_count",
+        "metadata_float_split_count",
     ],
 )
 def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, tamper: str) -> None:
     project_id, _, version_id, _ = _study(client)
+    if tamper == "producer_reordered_images":
+        imported = import_image(
+            client,
+            project_id,
+            filename="second-coral.png",
+            relative_path="frozen/second-coral.png",
+            color=(80, 20, 190),
+        )
+        second_id = imported["successful"][0]["image_id"]
+        update_image(client, second_id, group_key=None, annotation_status="reviewed")
+        version_id = create_version(client, project_id, name="Two-image frozen study")["id"]
     graph = _frozen_graph(version_id)
     saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
@@ -116,6 +130,14 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
             producer.output_artifact_ids_json = [dataset_artifact.id]
         elif tamper == "producer_wrong_images_binding":
             producer.output_artifact_ids_json = [images_artifact.id, dataset_artifact.id]
+        elif tamper == "producer_reordered_images":
+            original_ids = images_artifact.payload_json["image_ids"]
+            assert len(original_ids) == 2 and original_ids[0] != original_ids[1]
+            images_artifact.payload_json = {
+                **images_artifact.payload_json,
+                "image_ids": list(reversed(original_ids)),
+            }
+            images_artifact.payload_sha256 = canonical_json_sha256(images_artifact.payload_json)
         elif tamper.startswith("metadata_"):
             field, replacement = {
                 "metadata_version_number": ("version_number", -1),
@@ -127,7 +149,16 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
                 "metadata_boolean_image_count": ("image_count", True),
             }.get(tamper, ("split_counts", None))
             metadata = dict(dataset_artifact.payload_json)
-            if tamper == "metadata_missing_split_counts":
+            if tamper in {"metadata_boolean_split_count", "metadata_float_split_count"}:
+                counts = dict(metadata["split_counts"])
+                first_split = next(iter(counts))
+                assert counts[first_split] == 1
+                if tamper == "metadata_boolean_split_count":
+                    counts[first_split] = True
+                else:
+                    counts[first_split] = 1.0
+                metadata["split_counts"] = counts
+            elif tamper == "metadata_missing_split_counts":
                 metadata.pop(field)
             else:
                 metadata[field] = replacement

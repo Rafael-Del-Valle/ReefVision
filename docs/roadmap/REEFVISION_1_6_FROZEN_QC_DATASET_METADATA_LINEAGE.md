@@ -40,3 +40,19 @@ The independent 1.1/1.6 Alembic revision-0038 collision still requires
 coordination; do not merge version branches or silently rewrite migrations.
 Representative real biological datasets and Windows upgrade/rollback
 acceptance are separate outstanding gates.
+
+## Ordered image provenance and strict count types (2026-11-02)
+
+A valid saved `dataset_version_source` image collection is ordered by
+`DatasetVersionItem.id`. Re-signing the collection with the same image IDs
+in a different order is not an exact replay of its persisted producer output.
+The QC adapter now verifies this canonical order, not only set equality.
+The per-split counts must also be genuine nonnegative Python integers:
+`True` and `1.0` must not silently pass as the integer `1`.
+
+The executable saved-workflow regression includes a two-image permutation
+and re-signed boolean/float split-count substitutions, then checks rollback,
+original immutable queue replay and unchanged pending researcher review.
+This is metadata integrity validation, not an inference that any annotation
+or prediction has been biologically verified. The earlier 1.1 migration
+coordination and Windows installed-GUI acceptance gates remain open.

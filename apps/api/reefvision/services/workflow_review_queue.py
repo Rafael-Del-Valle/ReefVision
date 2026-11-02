@@ -166,9 +166,9 @@ def create_review_queue_workflow_artifact(
         # checksummed/re-signed dataset reference is not authoritative for
         # scientific counts, split allocation or version metadata.
         frozen_items = session.scalars(
-            select(DatasetVersionItem).where(
-                DatasetVersionItem.dataset_version_id == candidate_id
-            )
+            select(DatasetVersionItem)
+            .where(DatasetVersionItem.dataset_version_id == candidate_id)
+            .order_by(DatasetVersionItem.id)
         ).all()
         expected_image_ids = [item.image_id for item in frozen_items]
         expected_split_counts = dict(Counter(str(item.split) for item in frozen_items))
@@ -186,7 +186,12 @@ def create_review_queue_workflow_artifact(
             or type(dataset_payload.get("version_number")) is not int
             or dataset_payload["version_number"] != dataset_version.version_number
             or dataset_payload.get("split_method") != dataset_version.resolved_split_method
-            or dataset_payload.get("split_counts") != expected_split_counts
+            or not isinstance(dataset_payload.get("split_counts"), dict)
+            or any(
+                type(count) is not int or count < 0
+                for count in dataset_payload["split_counts"].values()
+            )
+            or dataset_payload["split_counts"] != expected_split_counts
             or type(dataset_payload.get("image_count")) is not int
             or dataset_payload["image_count"] != dataset_version.image_count
             or type(dataset_payload.get("annotation_count")) is not int
@@ -206,7 +211,7 @@ def create_review_queue_workflow_artifact(
             or images_payload.get("split") is not None
             or not isinstance(images_payload.get("image_ids"), list)
             or any(type(image_id) is not str for image_id in images_payload["image_ids"])
-            or sorted(images_payload["image_ids"]) != sorted(expected_image_ids)
+            or images_payload["image_ids"] != expected_image_ids
             or type(images_payload.get("count")) is not int
             or images_payload["count"] != len(expected_image_ids)
         ):
