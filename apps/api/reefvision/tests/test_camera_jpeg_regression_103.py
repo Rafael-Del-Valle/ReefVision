@@ -464,6 +464,9 @@ def test_real_camera_nested_exif_ifd_capture_time_and_provenance(
         ("123", ".123000"),
         ("000045", ".000045"),
         ("123456789", ".123456"),
+        # Trailing zeroes are recorded precision, not ignorable padding.
+        ("1234560", ".123456"),
+        ("123456000", ".123456"),
         ("not-a-fraction", ""),
     ],
 )
@@ -630,6 +633,8 @@ def test_padded_nested_camera_exif_survives_jpeg_import_without_reencoding(
     assert metadata["metadata_json"]["exif"]["DateTimeOriginal"] == original_date
     assert metadata["metadata_json"]["exif"]["OffsetTimeOriginal"] == original_offset
     assert "capture_time_warning" not in metadata["metadata_json"]
+    # A NUL-padded valid fraction must not be labeled malformed.
+    assert "capture_time_precision_warning" not in metadata["metadata_json"]
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
 
 
