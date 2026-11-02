@@ -6264,3 +6264,17 @@ output and tampered persisted artifacts from an executed saved workflow.
 This guards **internal replay integrity only**: caller-supplied biological
 identities, source observations, calibration and independent units are still
 unverified. It does not establish survival or statistical significance.
+
+## Persisted report and projected endpoint type integrity (2026-11-02)
+
+Source-linked candidate reports now require literal JSON integer sampling,
+organism and independent-unit denominators; Boolean, string, float and null
+values cannot be silently coerced even if the report is re-signed. Projected
+endpoint identity revisions and timepoint counts likewise require integers;
+endpoint capture times must be explicit ISO calendar timestamps or Python
+datetime objects, never Unix epochs or date-only strings. Existing UTC
+arithmetic, offset-aware timestamps and historical optional slopes remain.
+Standalone source-linked APIs and executable saved Workflow Builder artifacts
+share this typed validation and remain `linked_unverified`, with
+`scientist_review_required`. This does not authenticate biological identity,
+calibration, source ownership or true experimental independence.

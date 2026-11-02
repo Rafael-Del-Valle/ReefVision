@@ -205,6 +205,30 @@ class EcologyProjectedEndpointChange(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
+    @field_validator("identity_revision", "observed_timepoint_count", mode="before")
+    @classmethod
+    def require_explicit_endpoint_counts(cls, value: object) -> int:
+        """Saved endpoint denominators must not coerce technical replicates."""
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("Projected endpoint count/revision must be a JSON integer")
+        return value
+
+    @field_validator(
+        "baseline_capture_timestamp_utc",
+        "final_capture_timestamp_utc",
+        mode="before",
+    )
+    @classmethod
+    def require_explicit_endpoint_timestamps(cls, value: object) -> object:
+        """Do not reinterpret Unix epochs or date-only strings as image times."""
+        if isinstance(value, datetime):
+            return value
+        if not isinstance(value, str) or re.match(
+            r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()
+        ) is None:
+            raise ValueError("Projected endpoint requires an ISO calendar timestamp")
+        return value
+
     @field_validator(
         "baseline_image_id",
         "final_image_id",
@@ -341,6 +365,23 @@ class EcologyCandidateReport(BaseModel):
     report_sha256: str
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+    @field_validator(
+        "candidate_count",
+        "source_image_count",
+        "source_organism_count",
+        "declared_experimental_unit_count",
+        "date_qc_pass_series_count",
+        "excluded_series_count",
+        "excluded_source_count",
+        mode="before",
+    )
+    @classmethod
+    def require_explicit_report_counts(cls, value: object) -> int:
+        """A re-signed ecological report cannot coerce its denominators."""
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("Ecological report denominator must be a JSON integer")
+        return value
 
     @field_validator("qc_status_counts", mode="before")
     @classmethod
