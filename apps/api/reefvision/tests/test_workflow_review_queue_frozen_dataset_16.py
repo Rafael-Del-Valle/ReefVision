@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import WorkflowArtifact, WorkflowNodeRun
+from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
@@ -224,4 +224,81 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
             )
         session.rollback()
     # A failed replay cannot rewrite a researcher's historical review queue.
+    assert _queue_item(client, payload["queue_id"])["review_state"] == "pending"
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected_error"),
+    [
+        ("wrong_queue_scope", "retry parameters changed or queue incomplete"),
+        ("wrong_item_version", "snapshot failed integrity"),
+    ],
+)
+def test_saved_frozen_qc_replay_enforces_dataset_scope(
+    client: TestClient, tamper: str, expected_error: str
+) -> None:
+    """A completed frozen queue must be replayable, but never as live evidence."""
+    project_id, _, version_id, _ = _study(client)
+    graph = _frozen_graph(version_id)
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run_id, payload = _run_frozen_graph(client, project_id, saved.json()["id"])
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        nodes = session.scalars(
+            select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
+        ).all()
+        by_type = {node.node_type: node for node in nodes}
+        project_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.producer_node_run_id == by_type["project_source"].id,
+                WorkflowArtifact.producer_port_id == "project",
+            )
+        )
+        dataset_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.producer_node_run_id == by_type["dataset_version_source"].id,
+                WorkflowArtifact.producer_port_id == "dataset",
+            )
+        )
+        queue = session.get(ReviewQueue, payload["queue_id"])
+        assert project_artifact is not None and dataset_artifact is not None
+        assert queue is not None
+        assert queue.scope_type == "dataset_version"
+        assert queue.dataset_version_id == version_id
+        assert len(queue.items) == 1
+        assert queue.items[0].dataset_version_id == version_id
+        qc_node = by_type["qc_review_queue"]
+        parameters = {
+            **dict(qc_node.parameters_json or {}),
+            "__workflow_run_id": run_id,
+            "__workflow_node_run_id": qc_node.id,
+        }
+        inputs = {"project": [project_artifact], "dataset": [dataset_artifact]}
+
+        # The original frozen queue is a valid idempotent saved-node replay.
+        original = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, parameters, inputs
+        )
+        assert original[0]["payload"] == payload
+
+        if tamper == "wrong_queue_scope":
+            queue.scope_type = "project"
+        else:
+            queue.items[0].dataset_version_id = None
+        session.flush()
+        with pytest.raises(ValidationError, match=expected_error):
+            create_review_queue_workflow_artifact(
+                session, app.state.settings, project_id, parameters, inputs
+            )
+        session.rollback()
+
+        # A failed attempt cannot rewrite the original queue or reviewer state.
+        restored = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, parameters, inputs
+        )
+        assert restored[0]["payload"] == payload
+        session.rollback()
+
     assert _queue_item(client, payload["queue_id"])["review_state"] == "pending"
