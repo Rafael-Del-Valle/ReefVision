@@ -442,6 +442,20 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             or not _valid_v3_scientific_references(item)
         ):
             raise invalid
+        # A confidence-filtered queue contains only images with at least one
+        # pending proposal that met the original selection threshold. Since
+        # low_mean_confidence = 1 - mean(selected confidences), the saved mean
+        # must also respect that threshold. Validate frozen evidence only:
+        # never query mutable live predictions on a workflow retry.
+        if integrity_version == "qc-review-queue-v3":
+            threshold = configuration["review_below_confidence"]
+            if threshold is not None:
+                raw_signals = item.signal_values_json
+                if (
+                    raw_signals["pending_proposals"] <= 0
+                    or raw_signals["low_mean_confidence"] + 1e-12 < 1.0 - threshold
+                ):
+                    raise invalid
         scores[item.image_id] = item.score
         ranks.add(item.rank_position)
     if ranks != set(range(1, saved_count + 1)):
