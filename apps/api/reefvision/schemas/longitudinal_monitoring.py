@@ -234,6 +234,23 @@ class PlannedSamplingEffort(BaseModel):
     observation_coverage_fraction: float = Field(ge=0, le=1)
     expected_roster_supplied: bool = False
 
+    @model_validator(mode="after")
+    def reconcile_visit_denominator(self) -> PlannedSamplingEffort:
+        """Prevent persisted effort totals from inventing biological visits."""
+        expected = self.planned_sampling_date_count * self.expected_organism_count
+        if self.expected_organism_visits != expected:
+            raise ValueError("Planned organism-visit denominator does not reconcile")
+        if self.observed_organism_visits + self.missing_organism_visits != expected:
+            raise ValueError("Planned organism-visit counts do not reconcile")
+        if not math.isclose(
+            self.observation_coverage_fraction,
+            self.observed_organism_visits / expected,
+            rel_tol=1e-9,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("Planned organism-visit coverage fraction does not reconcile")
+        return self
+
 
 class PlannedSamplingDateCoverage(BaseModel):
     """Per-UTC-visit organism coverage, not a mortality or abundance estimate."""
@@ -247,6 +264,30 @@ class PlannedSamplingDateCoverage(BaseModel):
     missing_organism_ids: list[str] = Field(default_factory=list)
     observation_coverage_fraction: float = Field(ge=0, le=1)
     expected_roster_supplied: bool = False
+
+    @model_validator(mode="after")
+    def reconcile_visit_roster(self) -> PlannedSamplingDateCoverage:
+        """Each planned organism has exactly one observed or missing status."""
+        observed = self.observed_organism_ids
+        missing = self.missing_organism_ids
+        if (
+            len(observed) != len(set(observed))
+            or len(missing) != len(set(missing))
+            or set(observed).intersection(missing)
+        ):
+            raise ValueError("Planned visit organism IDs must be unique and disjoint")
+        if self.observed_organism_count != len(observed):
+            raise ValueError("Planned visit observed organism count does not reconcile")
+        if len(observed) + len(missing) != self.expected_organism_count:
+            raise ValueError("Planned visit expected organism count does not reconcile")
+        if not math.isclose(
+            self.observation_coverage_fraction,
+            len(observed) / self.expected_organism_count,
+            rel_tol=1e-9,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("Planned visit coverage fraction does not reconcile")
+        return self
 
 
 class ExcludedExperimentalUnit(BaseModel):
