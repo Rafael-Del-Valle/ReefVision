@@ -15,6 +15,7 @@ import reefvision.jobs.video_tracking as tracking_job_module
 import reefvision.services.workflow_execution as workflow_execution_module
 import reefvision.services.workflow_runtime_adapters as runtime_adapters
 from reefvision.config import Settings
+from reefvision.domain.errors import ConflictError
 from reefvision.db.models import (
     Job,
     ModelRegistration,
@@ -44,6 +45,7 @@ from reefvision.services.workflow_pose import (
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
 )
+from reefvision.services.workflow_provenance import build_workflow_run_provenance
 from reefvision.services.workflow_training import (
     register_workflow_trained_model,
 )
@@ -1220,3 +1222,39 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
         reopened.json()["run"]["result_json"]["provenance_sha256"]
         == run_result["provenance_sha256"]
     )
+
+    # The executed pose-training node consumes both a frozen verified dataset
+    # and a registered seed checkpoint. Swapping their saved input positions
+    # must not silently rebind them to the graph's different target ports.
+    train_node = next(item for item in payload["nodes"] if item["node_id"] == "train")
+    original_inputs = list(train_node["input_artifact_ids_json"])
+    assert len(original_inputs) == len(set(original_inputs)) == 2
+
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, train_node["id"])
+        assert persisted is not None
+        persisted.input_artifact_ids_json = list(reversed(original_inputs))
+        session.commit()
+
+    swapped = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert swapped.status_code == 409, swapped.text
+    assert swapped.json() == {
+        "detail": "Succeeded workflow node inputs do not match saved graph edges"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="inputs do not match saved graph edges"),
+    ):
+        build_workflow_run_provenance(session, run_id=run_id)
+
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, train_node["id"])
+        assert persisted is not None
+        persisted.input_artifact_ids_json = original_inputs
+        session.commit()
+
+    restored = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["run"]["result_json"]["provenance_sha256"] == run_result[
+        "provenance_sha256"
+    ]
