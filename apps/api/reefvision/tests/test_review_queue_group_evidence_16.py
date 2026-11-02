@@ -210,9 +210,7 @@ def test_version_qc_freezes_annotations_while_project_and_workflow_track_live_ed
         historical_queue = session.get(ReviewQueue, workflow_before_id)
         assert historical_queue is not None
         historical_items = session.scalars(
-            select(ReviewQueueItem).where(
-                ReviewQueueItem.review_queue_id == workflow_before_id
-            )
+            select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == workflow_before_id)
         ).all()
         validate_saved_queue_snapshot(historical_queue, historical_items)
         assert historical_items[0].review_state == "pending"
