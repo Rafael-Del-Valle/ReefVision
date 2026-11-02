@@ -141,7 +141,6 @@ def test_population_replay_groups_equivalent_offset_endpoints_by_utc_date() -> N
         LongitudinalAnalysisResponse.model_validate(naive)
 
 
-
 @pytest.mark.parametrize(
     ("field", "replacement", "message"),
     [
