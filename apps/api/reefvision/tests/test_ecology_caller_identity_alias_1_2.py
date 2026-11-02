@@ -118,9 +118,7 @@ def test_aliases_fail_standalone_and_saved_workflow(
         in rejected.json()["detail"]
     )
 
-    run, artifacts = _run_saved(
-        client, graph, artifact_type, f"Caller alias {analysis} {identity}"
-    )
+    run, artifacts = _run_saved(client, graph, artifact_type, f"Caller alias {analysis} {identity}")
     assert run["status"] == "failed"
     assert "differ only by case or Unicode compatibility" in run["error_message"]
     assert artifacts == []
@@ -130,9 +128,7 @@ def test_aliases_fail_standalone_and_saved_workflow(
 def test_exact_shared_parent_and_saved_result_remain_unverified(
     client: TestClient, analysis: str
 ) -> None:
-    endpoint, payload, graph, artifact_type, _ = _case(
-        analysis, "parent", compatible_unicode=False
-    )
+    endpoint, payload, graph, artifact_type, _ = _case(analysis, "parent", compatible_unicode=False)
     rows = payload["observations"] if analysis == "longitudinal" else payload["pairs"]
     for row in rows:
         row["parent_colony_id"] = "colony-A"
