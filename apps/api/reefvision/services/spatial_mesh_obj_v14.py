@@ -38,9 +38,7 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
         or character == "\ufeff"
         for character in text
     ):
-        raise ValueError(
-            "OBJ preview contains unsupported control characters or separators"
-        )
+        raise ValueError("OBJ preview contains unsupported control characters or separators")
     vertices: list[list[float]] = []
     faces: list[list[int]] = []
     texture_coordinate_count = 0
