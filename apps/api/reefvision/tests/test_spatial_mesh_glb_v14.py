@@ -371,6 +371,30 @@ def test_rejects_unsupported_glb_extension_metadata(invalid_selector: str) -> No
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
+@pytest.mark.parametrize(
+    "invalid_selector",
+    [
+        "node_nested_extension",
+        "mesh_nested_extension",
+        "scene_nested_extension",
+        "buffer_nested_extension",
+        "buffer_view_nested_extension",
+        "accessor_nested_extension",
+    ],
+)
+def test_rejects_undeclared_nested_glb_extensions(invalid_selector: str) -> None:
+    """Unsupported per-object extensions cannot silently change measurements."""
+    with pytest.raises(ValueError, match="nested extensions"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_glb_extras_extension_label_is_not_a_gltf_extension() -> None:
+    """An arbitrary metadata key inside extras is not a glTF extension."""
+    assert parse_glb_triangles(make_glb(invalid_selector="extras_nested_extension_label")) == (
+        parse_glb_triangles(make_glb())
+    )
+
+
 def test_single_glb_triangle() -> None:
     vertices, faces = parse_glb_triangles(make_glb())
     assert vertices == [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 3.0, 0.0]]
