@@ -222,7 +222,8 @@ def pose_temporal_review_status(
             not isinstance(track_id, str)
             or track_id not in track_ids
             or track_id in expected_revisions
-            or type(revision) is not int
+            or not isinstance(revision, int)
+            or isinstance(revision, bool)
             or revision < 1
         ):
             raise ValidationError("Pose Review source track revisions are invalid")
