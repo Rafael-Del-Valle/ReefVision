@@ -12,7 +12,6 @@ from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse
 from reefvision.schemas.model_agreement import PairedCountComparisonResponse
-
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_ecology_longitudinal_lineage_1_2 import _rows
