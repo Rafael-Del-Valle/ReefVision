@@ -6198,3 +6198,14 @@ whose unit and population means are forged together. No new node, migration,
 environmental provider, pretrained weights or cross-version merge.
 Exact-head CI and representative calibrated, scientist-reviewed biological
 acceptance remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Organism endpoint replay integrity (2026-11-02; development only)
+
+**Pre-edit baseline:** Draft PR #74 head `ab20de828c1cd967251a440a488e3425658f70cb` completed 19 PR-triggered Actions: 16 successful, three backend gates failed at the same Ruff formatter diagnostic in `schemas/longitudinal_monitoring.py` (four formatting locations). Applied the exact logged corrections. The existing exploratory API and executable saved `ecology_longitudinal_analysis` Workflow Builder node already share the typed `LongitudinalAnalysisResponse` contract, immutable source-provenance metadata and `caller_supplied_unverified` classification; no parallel node or 1.1 environmental store was added.
+
+**Scientific gap addressed:** Previously a persisted organism `LongitudinalChange` could be altered to report a different delta, rate, elapsed duration, percent change or endpoint while retaining plausible population and unit summaries. The organism-level typed result now checks finite nonnegative endpoint values, distinct source IDs and at least two observations, aware and ordered distinct UTC sampling dates, and recomputes elapsed days, absolute change, daily rate and baseline-relative percentage. Zero baseline explicitly requires a null percent change. This is *internal replay integrity*, not source authentication, calibration verification, verified independent experimental units, inference or scientist approval.
+
+**Acceptance added:** Eleven parameterized standalone API-result tampering cases, a valid zero-baseline control plus forged-percentage rejection, and executable saved Workflow Builder persisted-artifact rejection of altered organism arithmetic. Existing typed output, provenance, persistence and review boundaries remain intact. The repository's full pytest/Ruff suite cannot run locally while GitHub DNS resolution is unavailable; exact new-head Actions must validate these changes before any pass claim.
+
+**Release HOLD:** Exact-head backend pytest/Ruff/mypy, frontend/E2E, migration compatibility with 1.1 and Windows Actions remain required, along with source-authenticated calibrated observations, independently verified experimental units, scientist-reviewed human/model comparison, and physical installed MSI/GUI/GPU acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
