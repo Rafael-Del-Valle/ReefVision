@@ -36,6 +36,25 @@ def _finite_json_float(value: str) -> float:
     return parsed
 
 
+def _reject_nested_extensions(document: dict[str, Any]) -> None:
+    """Reject unapplied glTF extensions without interpreting opaque extras.
+
+    A malformed file may carry an extension payload on a node, accessor,
+    buffer view, or mesh without declaring it in extensionsUsed. Ignoring it
+    could silently change the geometry or calibration interpretation.
+    glTF extras are application metadata, not extension declarations.
+    """
+    pending: list[Any] = [document]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            if "extensions" in value:
+                raise ValueError("GLB nested extensions are unsupported")
+            pending.extend(item for key, item in value.items() if key != "extras")
+        elif isinstance(value, list):
+            pending.extend(value)
+
+
 def _as_object(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"GLB {name} must be an object")
