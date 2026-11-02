@@ -142,7 +142,9 @@ def test_frozen_dataset_qc_standalone_and_saved_graph_preserve_review_evidence(
         f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
     )
     assert saved.status_code == 201, saved.text
-    first_run_id, first_payload = _run_frozen_graph(client, project_id, saved.json()["id"])
+    first_run_id, first_payload = _run_frozen_graph(
+        client, project_id, saved.json()["id"]
+    )
     assert first_payload["dataset_version_id"] == version_id
     assert first_payload["dataset_manifest_sha256"]
     first_item = _queue_item(client, first_payload["queue_id"])
@@ -165,7 +167,10 @@ def test_frozen_dataset_qc_standalone_and_saved_graph_preserve_review_evidence(
     )
     assert second_run_id != first_run_id
     assert second_payload["queue_id"] != first_payload["queue_id"]
-    assert second_payload["dataset_manifest_sha256"] == first_payload["dataset_manifest_sha256"]
+    assert (
+        second_payload["dataset_manifest_sha256"]
+        == first_payload["dataset_manifest_sha256"]
+    )
     assert frozen_after["input_checksum"] == frozen_before["input_checksum"]
     assert _queue_item(client, second_payload["queue_id"])["input_checksum"] == (
         first_item["input_checksum"]
@@ -202,7 +207,8 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
         )
         dataset_artifact = session.scalar(
             select(WorkflowArtifact).where(
-                WorkflowArtifact.producer_node_run_id == by_type["dataset_version_source"].id,
+                WorkflowArtifact.producer_node_run_id
+                == by_type["dataset_version_source"].id,
                 WorkflowArtifact.producer_port_id == "dataset",
             )
         )
@@ -213,7 +219,9 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
             **dataset_artifact.payload_json,
             "manifest_sha256": "0" * 64,
         }
-        dataset_artifact.payload_sha256 = canonical_json_sha256(dataset_artifact.payload_json)
+        dataset_artifact.payload_sha256 = canonical_json_sha256(
+            dataset_artifact.payload_json
+        )
         session.flush()
         qc_run = by_type["qc_review_queue"]
         with pytest.raises(ValidationError, match="manifest"):
