@@ -268,6 +268,14 @@ def make_glb(
         doc["extras"] = {"nonfinite": float("-inf")}
     elif invalid_selector in {"json_exponent_overflow", "json_negative_exponent_overflow"}:
         doc["extras"] = {"nonfinite": "overflow_marker"}
+    elif invalid_selector in {
+        "json_translation_underflow",
+        "json_negative_translation_underflow",
+        "json_identity_zero_exponent",
+    }:
+        doc["nodes"][0]["translation"] = ["numeric_marker", 0, 0]
+    elif invalid_selector == "json_extras_underflow":
+        doc["extras"] = {"source_number": "numeric_marker"}
     if explicit_empty_extensions:
         doc["extensionsUsed"] = []
         doc["extensionsRequired"] = []
@@ -316,6 +324,14 @@ def make_glb(
     if invalid_selector in {"json_exponent_overflow", "json_negative_exponent_overflow"}:
         exponent = b"-1e400" if invalid_selector == "json_negative_exponent_overflow" else b"1e400"
         json_bytes = json_bytes.replace(b'"overflow_marker"', exponent)
+    numeric_tokens = {
+        "json_translation_underflow": b"1e-9999",
+        "json_negative_translation_underflow": b"-1e-9999",
+        "json_extras_underflow": b"1e-9999",
+        "json_identity_zero_exponent": b"0e-9999",
+    }
+    if invalid_selector in numeric_tokens:
+        json_bytes = json_bytes.replace(b'"numeric_marker"', numeric_tokens[invalid_selector])
     json_bytes += b" " * (-len(json_bytes) % 4)
     binary += b"\x00" * (-len(binary) % 4)
     if invalid_selector == "nonzero_bin_padding":
@@ -500,13 +516,23 @@ def test_explicit_canonical_glb_numeric_metadata_preserves_geometry() -> None:
         "json_negative_infinity",
         "json_exponent_overflow",
         "json_negative_exponent_overflow",
+        "json_translation_underflow",
+        "json_negative_translation_underflow",
+        "json_extras_underflow",
         "nonzero_bin_padding",
     ],
 )
 def test_rejects_nonstandard_json_and_nonzero_binary_padding(invalid_selector: str) -> None:
     """Nonfinite JSON extensions and nonzero BIN padding are not valid glTF 2.0."""
-    with pytest.raises(ValueError, match=r"nonfinite|padding"):
+    with pytest.raises(ValueError, match=r"nonfinite|padding|underflows"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_genuine_zero_json_exponent_remains_an_identity_transform() -> None:
+    """Exact zero must not be confused with an underflowed nonzero transform."""
+    expected = parse_glb_triangles(make_glb())
+    actual = parse_glb_triangles(make_glb(invalid_selector="json_identity_zero_exponent"))
+    assert actual == expected
 
 
 def test_nonindexed_triangles_match_indexed_geometry() -> None:
