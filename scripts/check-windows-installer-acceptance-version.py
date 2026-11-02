@@ -33,7 +33,9 @@ def _strip_inline_comment(line: str) -> str:
                 quote = None
         elif char in ("'", '"'):
             quote = char
-        elif char == "#" and (index == 0 or line[index - 1].isspace() or line[index - 1] == ";"):
+        elif char == "#" and (
+            index == 0 or line[index - 1].isspace() or line[index - 1] == ";"
+        ):
             return line[:index].rstrip()
         index += 1
     return line
@@ -45,7 +47,8 @@ def _active_workflow_text(workflow: str) -> str:
     # literal source text survives in a YAML comment, inline comment or <# #>.
     without_blocks = re.sub(r"<#.*?(?:#>|$)", "", workflow, flags=re.DOTALL)
     return "\n".join(
-        active for line in without_blocks.splitlines()
+        active
+        for line in without_blocks.splitlines()
         if (active := _strip_inline_comment(line)).strip()
     )
 
