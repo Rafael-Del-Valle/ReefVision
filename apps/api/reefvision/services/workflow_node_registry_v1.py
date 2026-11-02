@@ -644,7 +644,13 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 port_id="project",
                 display_name="Project",
                 accepted_types=["project_reference"],
-            )
+            ),
+            WorkflowPortDefinition(
+                port_id="dataset",
+                display_name="Frozen dataset version (optional)",
+                accepted_types=["dataset_version"],
+                required=False,
+            ),
         ],
         output_ports=[
             WorkflowPortDefinition(
@@ -664,6 +670,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             "Delegates to the existing persistent ReviewQueueService.",
             "Priority scores are dimensionless, not probabilities.",
             "Run/node identity prevents duplicate queues on retries.",
+            "An optional unfiltered immutable dataset-version source freezes QC evidence.",
             "Scientist review is required before accepting observations.",
         ],
     )
