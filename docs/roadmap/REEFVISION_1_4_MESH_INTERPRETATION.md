@@ -864,3 +864,23 @@ physical scale verification, or evidence of organism identity. Direct mesh
 preview requests and executable persisted `mesh_surface_preview` Workflow
 Builder graphs share the same rejection path and must not emit a measurement
 artifact for invalid GLB input.
+
+
+## GLB Unicode-scalar integrity (Track C, November 2, 2026)
+
+GLB 2.0 JSON is decoded as UTF-8, but escaped lone UTF-16 surrogate
+sequences can be accepted by Python's JSON decoder even though they are
+not Unicode scalar values. The bounded GLB importer now rejects unpaired
+surrogates in **all decoded keys and string values**, including otherwise
+opaque `extras` metadata and node labels, before interpreting geometry.
+A valid escaped surrogate pair representing a Unicode character remains
+accepted and does not change the imported triangles.
+
+Regression coverage checks direct parsing, standalone mesh-preview API
+rejection, and execution of a saved typed Workflow Builder graph. Invalid
+source metadata must fail without producing a mesh measurement artifact;
+valid Unicode metadata retains standalone/saved-workflow measurement and
+provenance parity. This is input and provenance integrity, **not** proof
+of physical calibration, coral identity, anatomical branch length,
+registration, or biological condition. User-trained checkpoints remain
+local and untouched.
