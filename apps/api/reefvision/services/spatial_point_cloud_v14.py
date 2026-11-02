@@ -29,8 +29,7 @@ def parse_ascii_ply_points(
     # splitlines()/split() treat vertical tabs and other control bytes as
     # separators. Reject them before parsing to preserve the source grammar.
     if any(
-        (ord(character) < 32 and character not in "\t\n\r")
-        or ord(character) == 127
+        (ord(character) < 32 and character not in "\t\n\r") or ord(character) == 127
         for character in text
     ):
         raise ValueError("Point-cloud PLY contains unsupported control characters")
