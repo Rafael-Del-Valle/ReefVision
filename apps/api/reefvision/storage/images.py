@@ -148,6 +148,12 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
     if not isinstance(raw, str):
         return None
     raw = raw.strip(" \t\r\n\x00")
+    # strptime accepts variable-width month/day/hour/minute/second fields.
+    # EXIF DateTimeOriginal is fixed-width YYYY:MM:DD HH:MM:SS; malformed
+    # camera clocks must not become verified UTC acquisition timestamps.
+    # ASCII padding is removed above, with the original EXIF retained.
+    if re.fullmatch(r"[0-9]{4}:[0-9]{2}:[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}", raw) is None:
+        return None
     offset = exif.get(offset_key)
     if isinstance(offset, bytes):
         try:
