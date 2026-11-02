@@ -478,11 +478,12 @@ def test_point_cloud_observation_metadata_does_not_change_geometry_identity(
     assert second["provenance"]["observation_metadata_verified"] is False
     assert second["measurement_status"] == "caller_supplied_unverified"
 
+
 @pytest.mark.parametrize(
     "bad_ply",
     [
         PLY.replace("0 2 0", "0 ٢ 0"),
-        PLY.replace("end_header", "comment temperature °C\\nend_header"),
+        PLY.replace("end_header", "comment temperature °C\nend_header"),
         PLY.replace("0 2 0", "0 2 0\u00a0"),
     ],
     ids=["unicode_digit", "unicode_comment", "unicode_whitespace"],
@@ -534,5 +535,5 @@ def test_non_ascii_ply_rejected_without_standalone_or_workflow_artifact(
 
 
 def test_ascii_ply_comment_remains_supported() -> None:
-    with_comment = PLY.replace("end_header", "comment temperature C\\nend_header")
+    with_comment = PLY.replace("end_header", "comment temperature C\nend_header")
     assert parse_ascii_ply_points(with_comment) == parse_ascii_ply_points(PLY)
