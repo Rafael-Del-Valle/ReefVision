@@ -352,3 +352,23 @@ This is source-format integrity only: it does not authenticate calibration,
 coordinate registration, coral identity, anatomical branch length or
 biological condition. Source-file review and scientific verification remain
 necessary.
+
+## PLY error-contract and saved-workflow parity (November 2, 2026)
+
+A syntactically valid point-cloud request whose submitted ASCII PLY text fails
+the bounded scientific parser returns **HTTP 400** with a specific validation
+detail (for example, invalid vertex count, numeric token, precision underflow,
+or unsupported control byte). **HTTP 422** instead describes request-schema
+validation failures before the PLY parser runs. These statuses must not be
+interchanged in regression tests: parser rejection is an intentional,
+fail-closed outcome, not a failed schema validator.
+
+The same malformed source must fail a persisted, executable, typed
+`point_cloud_preview` Workflow Builder run without publishing a
+`point_cloud_measurement_preview` artifact. Regression tests now assert the
+standalone status and exact parser reason before exercising saved-graph
+execution. Atomic RGB rejection tests also track the strict numeric grammar:
+nonfinite `nan` is rejected as an invalid coordinate token before numeric
+conversion, and existing color buffers remain unchanged. Successful source
+parsing remains provisional and does not verify scale, reconstruction,
+registration, coral identity, biological condition, or anatomical branch length.
