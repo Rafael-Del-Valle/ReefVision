@@ -155,11 +155,7 @@ def test_obj_ascii_tabs_crlf_and_unicode_comment_replay_identically(
     client: TestClient,
 ) -> None:
     valid = (
-        "# Unicode comment: caf\u00e9\r\n"
-        "v\t0\t0\t0\r\n"
-        "v\t2\t0\t0\r\n"
-        "v\t0\t3\t0\r\n"
-        "f\t1\t2\t3\r\n"
+        "# Unicode comment: caf\u00e9\r\nv\t0\t0\t0\r\nv\t2\t0\t0\r\nv\t0\t3\t0\r\nf\t1\t2\t3\r\n"
     )
     vertices, faces = parse_obj_triangles(valid)
     assert vertices == [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 3.0, 0.0]]
