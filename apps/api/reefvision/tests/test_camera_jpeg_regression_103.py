@@ -499,6 +499,14 @@ def test_camera_exif_subseconds_preserve_acquisition_precision_and_original(
     assert metadata["capture_timestamp"].startswith(f"2026-10-01T16:30:00{expected_fraction}")
     assert metadata["capture_timestamp"].endswith(("Z", "+00:00"))
     assert metadata["metadata_json"]["exif"][subsec_name] == subseconds
+    precision_warning = metadata["metadata_json"].get("capture_time_precision_warning")
+    if subseconds == "not-a-fraction":
+        assert precision_warning is not None and "malformed" in precision_warning
+        assert metadata["capture_timestamp"].startswith("2026-10-01T16:30:00")
+    elif len(subseconds) > 6:
+        assert precision_warning is not None and "six fractional digits" in precision_warning
+    else:
+        assert precision_warning is None
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
 
 
