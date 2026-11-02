@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 from sqlalchemy import select
@@ -128,9 +129,9 @@ def verify_succeeded_node_artifacts(
         for artifact_id in output_ids
     ]
 
-    # An input checksum proves payload integrity, not that the consumer
-    # received it from an earlier completed workflow operation. Reject
-    # self-produced, future, or unfinished producers on persisted reads.
+    # A checksum and an earlier succeeded producer are insufficient if an
+    # input was substituted from a different graph edge or output port.
+    actual_bindings: Counter[tuple[str, str]] = Counter()
     for artifact in inputs:
         producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
         if (
@@ -140,6 +141,22 @@ def verify_succeeded_node_artifacts(
             or producer.execution_order >= node_run.execution_order
         ):
             raise ConflictError("Succeeded workflow node input lacks an earlier succeeded producer")
+        actual_bindings[(producer.node_id, artifact.producer_port_id)] += 1
+
+    run = session.get(WorkflowRun, run_id)
+    graph = session.get(WorkflowGraphRecord, run.workflow_graph_record_id) if run else None
+    if graph is None or not isinstance(graph.graph_json, dict):
+        raise ConflictError("Succeeded workflow node graph lineage is unavailable")
+    raw_edges = graph.graph_json.get("edges", [])
+    if not isinstance(raw_edges, list) or any(not isinstance(edge, dict) for edge in raw_edges):
+        raise ConflictError("Succeeded workflow node graph edges are invalid")
+    expected_bindings = Counter(
+        (edge.get("source_node_id"), edge.get("source_port_id"))
+        for edge in raw_edges
+        if edge.get("target_node_id") == node_run.node_id
+    )
+    if actual_bindings != expected_bindings:
+        raise ConflictError("Succeeded workflow node inputs do not match saved graph edges")
 
     for artifact in outputs:
         if artifact.producer_node_run_id != node_run.id:
