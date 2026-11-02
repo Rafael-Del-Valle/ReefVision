@@ -463,8 +463,7 @@ class LongitudinalAnalysisResponse(BaseModel):
         # Every incomplete series has exactly one observation. Completed
         # series retain their full observation_count, including middle dates.
         if (
-            sum(change.observation_count for change in self.changes)
-            + self.incomplete_series_count
+            sum(change.observation_count for change in self.changes) + self.incomplete_series_count
             != self.observation_count
         ):
             raise ValueError("Longitudinal series observation counts do not reconcile")
@@ -478,6 +477,44 @@ class LongitudinalAnalysisResponse(BaseModel):
         ]
         if len(set(endpoints)) != len(endpoints) or not set(endpoints).issubset(sources):
             raise ValueError("Longitudinal source endpoints do not reconcile with provenance")
+        return self
+
+    @model_validator(mode="after")
+    def reconcile_persisted_organism_date_counts(self) -> LongitudinalAnalysisResponse:
+        """Reconcile biological timepoints with the per-organism sampling audit.
+
+        Historical artifacts without dated organism coverage remain readable.
+        This only checks internally consistent caller-supplied observations;
+        it does not authenticate records or establish experimental independence.
+        """
+        if not self.unit_coverage or any(
+            not row.observed_sampling_dates_by_organism for row in self.unit_coverage
+        ):
+            return self
+
+        observed: dict[tuple[str, str], list[date]] = {}
+        for coverage in self.unit_coverage:
+            for organism_id, dates in coverage.observed_sampling_dates_by_organism.items():
+                key = (organism_id, coverage.metric_name)
+                if key in observed:
+                    raise ValueError("Longitudinal coverage repeats an organism/metric across units")
+                if not dates or len(dates) != len(set(dates)):
+                    raise ValueError("Longitudinal coverage series dates are missing or duplicated")
+                observed[key] = dates
+
+        completed = {(change.organism_id, change.metric_name): change for change in self.changes}
+        if set(completed) != {key for key, dates in observed.items() if len(dates) >= 2}:
+            raise ValueError("Longitudinal coverage completed series do not reconcile")
+        if sum(len(dates) == 1 for dates in observed.values()) != self.incomplete_series_count:
+            raise ValueError("Longitudinal coverage incomplete series do not reconcile")
+        for key, change in completed.items():
+            dates = observed[key]
+            if (
+                change.observation_count != len(dates)
+                or change.first_observed_at.astimezone(UTC).date() != min(dates)
+                or change.last_observed_at.astimezone(UTC).date() != max(dates)
+            ):
+                raise ValueError("Longitudinal coverage series dates do not reconcile")
         return self
 
     @model_validator(mode="after")
