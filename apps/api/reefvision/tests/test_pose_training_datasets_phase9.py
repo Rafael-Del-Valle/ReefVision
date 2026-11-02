@@ -430,13 +430,25 @@ def test_freeze_rejects_changed_candidate_acquisition_provenance(
         assert session.query(PoseTrainingDataset).count() == 0
 
 
-def test_freeze_rejects_resigned_acquisition_without_video_checksum(
+@pytest.mark.parametrize(
+    ("field", "replacement", "expected_error"),
+    [
+        ("video_sha256", None, "Source video checksum changed after acquisition"),
+        ("video_id", "wrong-video", "Pose acquisition provenance does not match verified source"),
+        ("video_track_id", "wrong-track", "Pose acquisition provenance does not match verified source"),
+        ("focus_frame", -1, "Pose acquisition provenance does not match verified source"),
+    ],
+)
+def test_freeze_rejects_resigned_acquisition_with_invalid_source_identity(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    replacement: object,
+    expected_error: str,
 ) -> None:
-    # Exercise a genuinely verified round, not a fabricated frozen dataset.
-    # Even when the candidate provenance is re-signed, the source-video
-    # checksum must remain present before a training dataset is persisted.
+    # Use a real verified round and re-sign the candidate's acquisition
+    # evidence. A frozen dataset must be valid on its first read, even when
+    # the candidate digest has been updated to match corrupted source IDs.
     _, _, _, round_payload = _verified_round(client, monkeypatch)
     app = cast(FastAPI, client.app)
 
@@ -447,17 +459,21 @@ def test_freeze_rejects_resigned_acquisition_without_video_checksum(
             .one()
         )
         acquisition = dict(candidate.provenance_json)
-        assert acquisition.pop("video_sha256")
+        assert field in acquisition
+        if replacement is None:
+            acquisition.pop(field)
+        else:
+            acquisition[field] = replacement
         candidate.provenance_json = acquisition
         candidate.provenance_sha256 = canonical_json_sha256(acquisition)
         session.commit()
 
     response = client.post(
         f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
-        json={"name": "Must not freeze missing source checksum"},
+        json={"name": "Must not freeze invalid source identity"},
     )
     assert response.status_code == 409, response.text
-    assert "Source video checksum changed after acquisition" in response.text
+    assert expected_error in response.text
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
 
