@@ -12,7 +12,18 @@ import sys
 from pathlib import Path
 
 
+def _active_workflow_text(workflow: str) -> str:
+    """Ignore commented-out YAML/PowerShell guards in release preflight checks."""
+    # A disabled guard must not count as executable merely because its
+    # literal source text survives in a YAML comment or PowerShell <# #>.
+    without_blocks = re.sub(r"<#.*?(?:#>|$)", "", workflow, flags=re.DOTALL)
+    return "\n".join(
+        line for line in without_blocks.splitlines() if not re.match(r"^\s*#", line)
+    )
+
+
 def check_workflow(workflow: str, version: str) -> list[str]:
+    workflow = _active_workflow_text(workflow)
     errors: list[str] = []
     if re.fullmatch(r"\d+\.\d+\.\d+", version) is None:
         return [f"Invalid Tauri version: {version!r}"]
@@ -131,6 +142,7 @@ def check_cab_artifact_partition(workflow: str) -> list[str]:
     Verify the three artifact manifests explicitly, require the build-time size
     check to use the actual final CAB set, and reject missing/duplicated parts.
     """
+    workflow = _active_workflow_text(workflow)
     errors: list[str] = []
     build_marker = "  build-windows-installer:"
     acceptance_marker = "  windows-clean-install-acceptance:"
