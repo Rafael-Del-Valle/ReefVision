@@ -290,6 +290,17 @@ class LongitudinalAnalysisResponse(BaseModel):
             for coverage in self.unit_coverage
             for organism in coverage.observed_sampling_dates_by_organism
         )
+        # A persisted roster also contains individuals never observed.
+        # Check all denominator-bearing identities, not only source-linked
+        # changes: a forged missing or planned-visit alias must not inflate
+        # the apparent number of biological individuals on replay.
+        for coverage in self.unit_coverage:
+            identifiers.extend(coverage.missing_organism_ids)
+            identifiers.extend(coverage.unobserved_organism_ids)
+            identifiers.extend(coverage.missing_scheduled_dates_by_organism)
+        for visit in self.planned_sampling_date_coverage:
+            identifiers.extend(visit.observed_organism_ids)
+            identifiers.extend(visit.missing_organism_ids)
         try:
             require_unique_ecological_organism_key_spellings(identifiers)
         except ValueError as exc:

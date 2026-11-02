@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as PydanticValidationError
 
-from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.jobs.workflow
+from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_ecology_1_2 import _graph
 
@@ -183,8 +186,9 @@ def test_expected_roster_aliases_cannot_inflate_planned_organisms(
         },
     )
     assert response.status_code == 400, response.text
-    assert "Expected organism roster IDs differ only by case or Unicode compatibility" in (
-        response.json()["detail"]
+    assert (
+        "Expected organism roster IDs differ only by case or Unicode compatibility"
+        in (response.json()["detail"])
     )
 
 
@@ -236,9 +240,118 @@ def test_saved_workflow_rejects_aliased_expected_roster_without_scientific_artif
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
-    assert "Expected organism roster IDs differ only by case" in (
-        detail.json()["run"]["error_message"]
+    assert (
+        "Expected organism roster IDs differ only by case"
+        in (detail.json()["run"]["error_message"])
     )
     assert not any(
         row["data_type"] == "longitudinal_analysis" for row in detail.json()["artifacts"]
     )
+
+
+def _scheduled_roster_request() -> dict[str, Any]:
+    return {
+        "observations": _observations(),
+        "experimental_unit_type": "tank",
+        "expected_organism_ids_by_unit": _roster(),
+        "expected_sampling_dates_by_unit": {
+            "tank-1": ["2026-04-01", "2026-04-02"],
+            "tank-2": ["2026-04-01", "2026-04-02"],
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "tampered_field",
+    [
+        "unobserved_roster",
+        "missing_followup",
+        "missing_scheduled_map",
+        "planned_observed",
+        "planned_missing",
+    ],
+)
+def test_persisted_planned_roster_aliases_cannot_inflate_organism_denominators(
+    client: TestClient, tampered_field: str
+) -> None:
+    accepted = client.post(
+        "/api/v1/ecology/longitudinal-analysis", json=_scheduled_roster_request()
+    )
+    assert accepted.status_code == 200, accepted.text
+    original = accepted.json()
+    assert original["evidence_level"] == "caller_supplied_unverified"
+    assert original["planned_sampling_date_coverage"]
+    LongitudinalAnalysisResponse.model_validate(original)
+    forged = deepcopy(original)
+    coverage = forged["unit_coverage"][0]
+    visit = forged["planned_sampling_date_coverage"][0]
+    if tampered_field == "unobserved_roster":
+        coverage["unobserved_organism_ids"][0] = "FRAG-C"
+    elif tampered_field == "missing_followup":
+        coverage["missing_organism_ids"] = ["FRAG-A"]
+    elif tampered_field == "missing_scheduled_map":
+        coverage["missing_scheduled_dates_by_organism"] = {
+            "FRAG-A": ["2026-04-02"]
+        }
+    elif tampered_field == "planned_observed":
+        visit["observed_organism_ids"][0] = "FRAG-A"
+    else:
+        visit["missing_organism_ids"][0] = "FRAG-C"
+    with pytest.raises(
+        PydanticValidationError,
+        match="Longitudinal persisted organism IDs differ only by case or Unicode compatibility",
+    ):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+
+def test_saved_workflow_planned_roster_replay_rejects_alias_tampering(
+    client: TestClient,
+) -> None:
+    payload = _scheduled_roster_request()
+    project_id = str(create_project(client, "Persisted planned roster identity QC")["id"])
+    graph = _graph(payload["observations"])
+    graph["nodes"][1]["parameters"].update(
+        {
+            "experimental_unit_type": "tank",
+            "expected_organism_ids_by_unit": payload["expected_organism_ids_by_unit"],
+            "expected_sampling_dates_by_unit": payload["expected_sampling_dates_by_unit"],
+        }
+    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        row for row in detail.json()["artifacts"] if row["data_type"] == "longitudinal_analysis"
+    ]
+    assert len(artifacts) == 1
+    stored = artifacts[0]["payload_json"]
+    assert stored["evidence_level"] == "caller_supplied_unverified"
+    assert stored["analysis_provenance"]["source_record_ids"]
+    LongitudinalAnalysisResponse.model_validate(stored)
+    forged = deepcopy(stored)
+    forged["planned_sampling_date_coverage"][0]["missing_organism_ids"][0] = "FRAG-C"
+    with pytest.raises(
+        PydanticValidationError,
+        match="Longitudinal persisted organism IDs differ only by case or Unicode compatibility",
+    ):
+        LongitudinalAnalysisResponse.model_validate(forged)

@@ -226,17 +226,13 @@ def test_persisted_unit_alias_cannot_inflate_declared_sample_size(
     original = accepted.json()
     assert original["evidence_level"] == "caller_supplied_unverified"
     count_field = (
-        "independent_unit_count"
-        if kind == "longitudinal"
-        else "declared_independent_unit_count"
+        "independent_unit_count" if kind == "longitudinal" else "declared_independent_unit_count"
     )
     assert original[count_field] == 2
     assert len(original["unit_summaries"]) == 2
 
     schema = (
-        LongitudinalAnalysisResponse
-        if kind == "longitudinal"
-        else PairedCountComparisonResponse
+        LongitudinalAnalysisResponse if kind == "longitudinal" else PairedCountComparisonResponse
     )
     schema.model_validate(original)
     forged = deepcopy(original)
