@@ -12,8 +12,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from reefvision import desktop
-from reefvision.db import session
-from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
+from reefvision.db import migration_lineage_guard, session
 
 
 _BAD_STAMPS = [
@@ -23,6 +22,7 @@ _BAD_STAMPS = [
     (None,),
     ("",),
     ("   ",),
+    (),  # An empty revision table with existing research tables is unsafe.
 ]
 
 
@@ -68,12 +68,12 @@ def test_pre_review_ambiguous_stamps_fail_closed_without_rewriting_science(
     for _ in range(2):
         with engine.connect() as connection:
             with pytest.raises(RuntimeError, match="Unsafe ReefVision Alembic"):
-                assert_compatible_revision_0038(connection)
+                migration_lineage_guard.assert_compatible_revision_0038(connection)
             assert _snapshot(connection) == before
     engine.dispose()
 
 
-@pytest.mark.parametrize("stamps", [("0037", "0037"), ("0036", "0037"), (None,)])
+@pytest.mark.parametrize("stamps", [("0037", "0037"), ("0036", "0037"), (None,), ()])
 def test_desktop_refuses_ambiguous_stamps_before_alembic_upgrade(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -110,6 +110,25 @@ def test_single_pre_review_stamp_remains_compatible(tmp_path: Path) -> None:
     _seed_database(engine, ("0037",))
     with engine.connect() as connection:
         before = _snapshot(connection)
-        assert_compatible_revision_0038(connection)
+        migration_lineage_guard.assert_compatible_revision_0038(connection)
         assert _snapshot(connection) == before
+    engine.dispose()
+
+
+def test_empty_revision_table_on_empty_database_remains_compatible(tmp_path: Path) -> None:
+    """A genuinely new database with an empty Alembic table may initialize."""
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'empty.sqlite'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT)"))
+        before = tuple(
+            connection.execute(
+                text("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
+            ).all()
+        )
+        migration_lineage_guard.assert_compatible_revision_0038(connection)
+        assert tuple(
+            connection.execute(
+                text("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
+            ).all()
+        ) == before
     engine.dispose()
