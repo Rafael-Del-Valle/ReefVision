@@ -155,9 +155,7 @@ def test_extent_intervals_fail_closed_when_one_diagonal_is_missing(
     for record in (before, after):
         record["provenance"]["relative_scale_uncertainty"] = 0.1
         record["axis_aligned_bounding_box_diagonal_m"] = 2.0
-    missing, present = (
-        (before, after) if missing_timepoint == "before" else (after, before)
-    )
+    missing, present = (before, after) if missing_timepoint == "before" else (after, before)
     missing["axis_aligned_bounding_box_diagonal_m"] = None
     if interval_on_missing:
         missing["axis_aligned_bounding_box_diagonal_scale_interval_m"] = [1.8, 2.2]
@@ -203,13 +201,37 @@ def test_missing_early_bounds_still_withhold_combined_intervals() -> None:
     assert result["measurement_status"] == ("provisional_unverified_longitudinal_comparison")
 
 
+@pytest.mark.parametrize(
+    ("early_timestamp", "late_timestamp", "early_utc", "late_utc", "days"),
+    [
+        (
+            "2026-10-01T12:00:00Z",
+            "2026-10-02T12:00:00Z",
+            "2026-10-01T12:00:00Z",
+            "2026-10-02T12:00:00Z",
+            1.0,
+        ),
+        (
+            "2026-10-01T23:00:00-05:00",
+            "2026-10-02T05:00:00Z",
+            "2026-10-02T04:00:00Z",
+            "2026-10-02T05:00:00Z",
+            1.0 / 24,
+        ),
+    ],
+)
 def test_incomplete_scale_bounds_standalone_and_saved_graph_parity(
     client: TestClient,
+    early_timestamp: str,
+    late_timestamp: str,
+    early_utc: str,
+    late_utc: str,
+    days: float,
 ) -> None:
     project_id = str(create_project(client, "Incomplete 3D calibration bounds")["id"])
     base = f"/api/v1/projects/{project_id}"
-    early = _mesh("early", "2026-10-01T12:00:00Z", 1.0)
-    late = _mesh("late", "2026-10-02T12:00:00Z", 2.0)
+    early = _mesh("early", early_timestamp, 1.0)
+    late = _mesh("late", late_timestamp, 2.0)
     early.pop("relative_scale_uncertainty")
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
@@ -220,6 +242,12 @@ def test_incomplete_scale_bounds_standalone_and_saved_graph_parity(
     assert expected["delta_surface_area_scale_interval_m2"] is None
     assert expected["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
     assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["provenance"]["elapsed_days"] == pytest.approx(days)
+    assert expected["provenance"]["before_observed_at_utc_normalized"] == early_utc
+    assert expected["provenance"]["after_observed_at_utc_normalized"] == late_utc
+    assert expected["average_surface_area_change_m2_per_day"] == pytest.approx(
+        expected["delta_surface_area_m2"] / days
+    )
 
     graph = {
         "graph_id": "incomplete-scale-bounds-v14",

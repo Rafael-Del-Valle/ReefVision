@@ -440,9 +440,7 @@ def compare_mesh_observations(
     extent_intervals: list[list[float]] = []
     # Validate every present interval independently, even if one legacy
     # preview lacks a diagonal and no longitudinal extent delta is possible.
-    for record, nominal, metadata in zip(
-        (before, after), extents, (first, second), strict=True
-    ):
+    for record, nominal, metadata in zip((before, after), extents, (first, second), strict=True):
         pair = record.get("axis_aligned_bounding_box_diagonal_scale_interval_m")
         # A legacy preview lacking scale uncertainty cannot substantiate
         # a claimed diagonal interval, even if it encloses the nominal value.
@@ -468,9 +466,7 @@ def compare_mesh_observations(
                     isclose(value, bound, rel_tol=1e-9, abs_tol=0.0)
                     for value, bound in zip(pair, expected, strict=True)
                 ):
-                    raise ValueError(
-                        "Bounding-box scale interval contradicts source uncertainty"
-                    )
+                    raise ValueError("Bounding-box scale interval contradicts source uncertainty")
         if pair is None:
             extent_intervals = []
             continue

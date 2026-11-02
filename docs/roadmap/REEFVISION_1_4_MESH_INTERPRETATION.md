@@ -128,7 +128,12 @@ the same conservative comparison engine.
 
 Both observations must have matching nonempty **provisional** specimen IDs,
 different nonempty observation IDs, strictly increasing timezone-aware UTC
-timestamps, and matching project scope. The output reports elapsed days,
+timestamps, and matching project scope. Explicit nonzero timezone offsets are
+normalized to UTC instants before chronology and elapsed-day calculations;
+source timestamp strings remain in provenance alongside normalized UTC forms.
+A saved typed Workflow Builder graph must agree with standalone execution even
+when the displayed local clock dates differ from their actual UTC ordering.
+The output reports elapsed days,
 surface-area difference (later minus earlier), and percent difference when
 the earlier area is positive. When both observations include scale-only area
 intervals, the difference interval uses the conservative endpoints
