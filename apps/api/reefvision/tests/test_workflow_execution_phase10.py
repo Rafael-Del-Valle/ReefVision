@@ -6,7 +6,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import ModelRegistration, ProjectExchangePackage, WorkflowNodeRun
+from reefvision.db.models import (
+    ModelRegistration,
+    ProjectExchangePackage,
+    WorkflowArtifact,
+    WorkflowNodeRun,
+)
 from reefvision.domain.errors import ConflictError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_provenance import build_workflow_run_provenance
@@ -217,6 +222,45 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
         assert consumer is not None
         consumer.input_artifact_ids_json = payload["nodes"][1]["input_artifact_ids_json"]
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # A saved input can still reference an earlier succeeded producer while
+    # consuming the wrong output port. Change the producer's declared port
+    # consistently so its output summary and artifact checksums remain valid.
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert artifact is not None and producer is not None
+        original_port = artifact.producer_port_id
+        original_result = dict(producer.result_json or {})
+        assert original_port == "project"
+        declared_outputs = original_result["outputs"]
+        assert declared_outputs[0]["port_id"] == original_port
+        artifact.producer_port_id = "substituted-port"
+        producer.result_json = {
+            **original_result,
+            "outputs": [{**item, "port_id": "substituted-port"} for item in declared_outputs],
+        }
+        session.commit()
+
+    wrong_port = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert wrong_port.status_code == 409, wrong_port.text
+    assert wrong_port.json() == {
+        "detail": "Succeeded workflow node inputs do not match saved graph edges"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="inputs do not match saved graph edges"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert artifact is not None and producer is not None
+        artifact.producer_port_id = original_port
+        producer.result_json = original_result
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
