@@ -29,6 +29,7 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
         "producer_other_version",
         "producer_filtered_split",
         "producer_project_binding",
+        "producer_extra_output",
     ],
 )
 def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, tamper: str) -> None:
@@ -80,8 +81,12 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
             producer.parameters_json = {**producer.parameters_json, "dataset_version_id": other_id}
         elif tamper == "producer_filtered_split":
             producer.parameters_json = {**producer.parameters_json, "split": "train"}
-        else:
+        elif tamper == "producer_project_binding":
             producer.input_artifact_ids_json = []
+        else:
+            # The producer has one typed dataset output. A re-signed extra
+            # artifact must not be silently accepted as a valid saved binding.
+            producer.output_artifact_ids_json = [dataset_artifact.id, project_artifact.id]
 
         session.flush()
         qc_node = by_type["qc_review_queue"]
@@ -97,6 +102,22 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
                 },
                 {"project": [project_artifact], "dataset": [dataset_artifact]},
             )
+        session.rollback()
+
+        # Restoring the exact saved producer binding must replay the original
+        # immutable queue, not regenerate evidence or alter reviewer state.
+        replay = create_review_queue_workflow_artifact(
+            session,
+            app.state.settings,
+            project_id,
+            {
+                **dict(qc_node.parameters_json or {}),
+                "__workflow_run_id": run_id,
+                "__workflow_node_run_id": qc_node.id,
+            },
+            {"project": [project_artifact], "dataset": [dataset_artifact]},
+        )
+        assert replay[0]["payload"] == payload
         session.rollback()
 
     # Failed replay cannot mutate historical human-review state or scientific evidence.
