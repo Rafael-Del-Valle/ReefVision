@@ -241,9 +241,7 @@ def test_persisted_unit_alias_cannot_inflate_declared_sample_size(
     )
     schema.model_validate(original)
     forged = deepcopy(original)
-    forged["unit_summaries"][1]["experimental_unit_id"] = (
-        "\uff34\uff41\uff4e\uff4b-A"
-    )
+    forged["unit_summaries"][1]["experimental_unit_id"] = "\uff34\uff41\uff4e\uff4b-A"
     with pytest.raises(
         PydanticValidationError,
         match="persisted experimental unit IDs differ only by case or Unicode compatibility",
