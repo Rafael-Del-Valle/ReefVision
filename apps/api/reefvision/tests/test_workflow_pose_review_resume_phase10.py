@@ -302,7 +302,7 @@ def test_phase10_pose_review_pauses_and_resumes_without_rerunning_pose(
         unpinned_payload = {
             **original_payload,
             "builds": [
-                {key: value for key, value in build.items() if key != "source_track_revision"}
+                {k: v for k, v in build.items() if k != "source_track_revision"}
                 for build in original_payload["builds"]
             ],
         }
