@@ -250,6 +250,21 @@ def _valid_v3_scientific_references(item: Any) -> bool:
         or (not item.label_class_ids_json and raw_signals.get("rare_class_presence") != 0.0)
     ):
         return False
+    # Confidence, pending proposals and review outcomes are model-derived.
+    # A re-signed queue with no source model IDs cannot invent prediction
+    # evidence. Count disagreement may still be nonzero for human-only images,
+    # so it is intentionally excluded from this consistency check.
+    if not item.model_ids_json and any(
+        raw_signals.get(signal_id) != 0.0
+        for signal_id in (
+            "low_mean_confidence",
+            "low_min_confidence",
+            "pending_proposals",
+            "rejection_rate",
+            "edited_acceptance_rate",
+        )
+    ):
+        return False
     checksum = getattr(item, "input_checksum", None)
     return (
         type(checksum) is str
