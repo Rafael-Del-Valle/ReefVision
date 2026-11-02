@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from typing import Any
 
 from sqlalchemy import select
@@ -129,9 +128,10 @@ def verify_succeeded_node_artifacts(
         for artifact_id in output_ids
     ]
 
-    # A checksum and an earlier succeeded producer are insufficient if an
-    # input was substituted from a different graph edge or output port.
-    actual_bindings: Counter[tuple[str, str]] = Counter()
+    # The planner saves input artifact IDs in edge-ID order. Comparing only
+    # counts allows two valid inputs to be swapped between different target
+    # ports without changing any artifact checksum or producer identity.
+    actual_bindings: list[tuple[str, str]] = []
     for artifact in inputs:
         producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
         if (
@@ -141,20 +141,23 @@ def verify_succeeded_node_artifacts(
             or producer.execution_order >= node_run.execution_order
         ):
             raise ConflictError("Succeeded workflow node input lacks an earlier succeeded producer")
-        actual_bindings[(producer.node_id, artifact.producer_port_id)] += 1
+        actual_bindings.append((producer.node_id, artifact.producer_port_id))
 
     run = session.get(WorkflowRun, run_id)
     graph = session.get(WorkflowGraphRecord, run.workflow_graph_record_id) if run else None
     if graph is None or not isinstance(graph.graph_json, dict):
         raise ConflictError("Succeeded workflow node graph lineage is unavailable")
     raw_edges = graph.graph_json.get("edges", [])
-    if not isinstance(raw_edges, list) or any(not isinstance(edge, dict) for edge in raw_edges):
-        raise ConflictError("Succeeded workflow node graph edges are invalid")
-    expected_bindings = Counter(
-        (edge.get("source_node_id"), edge.get("source_port_id"))
+    if not isinstance(raw_edges, list) or any(
+        not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str)
         for edge in raw_edges
+    ):
+        raise ConflictError("Succeeded workflow node graph edges are invalid")
+    expected_bindings = [
+        (edge.get("source_node_id"), edge.get("source_port_id"))
+        for edge in sorted(raw_edges, key=lambda edge: edge["edge_id"])
         if edge.get("target_node_id") == node_run.node_id
-    )
+    ]
     if actual_bindings != expected_bindings:
         raise ConflictError("Succeeded workflow node inputs do not match saved graph edges")
 
