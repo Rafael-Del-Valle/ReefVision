@@ -899,6 +899,80 @@ def _set_v3_unweighted_signal(item: SimpleNamespace, signal_id: str, value: floa
     part["normalized_value"] = normalized
 
 
+def _v3_human_only_snapshot():
+    """A coherent human-annotation-only QC queue has no model-derived signals."""
+    queue, items = _v3_snapshot()
+    weights = {signal: 0.0 for signal in V3_SUPPORTED_SIGNALS}
+    weights["count_disagreement"] = 1.0
+    queue.configuration_json["weights"] = weights
+    for item in items:
+        item.model_ids_json = []
+        item.weights_json = dict(weights)
+        item.score = 100.0
+        for signal in (
+            "low_mean_confidence",
+            "low_min_confidence",
+            "pending_proposals",
+            "rejection_rate",
+            "edited_acceptance_rate",
+        ):
+            item.signal_values_json[signal] = 0.0
+            item.normalized_signals_json[signal] = 0.0
+        item.signal_values_json["count_disagreement"] = 1.0
+        item.normalized_signals_json["count_disagreement"] = 1.0
+        for part in item.score_breakdown_json:
+            signal = part["signal_id"]
+            part["raw_value"] = item.signal_values_json[signal]
+            part["normalized_value"] = item.normalized_signals_json[signal]
+            part["weight"] = weights[signal]
+            part["contribution"] = 100.0 if signal == "count_disagreement" else 0.0
+        item.score_breakdown_json.sort(
+            key=lambda part: (-part["contribution"], part["signal_id"])
+        )
+        item.reason_summary = "Model-versus-human count gap: +100.00"
+    queue.summary_json["average_score"] = 100.0
+    queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+        {
+            "image_ids": ["img-a", "img-b"],
+            "scores": {"img-a": 100.0, "img-b": 100.0},
+            "source_quality_control_run_id": None,
+        }
+    )
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+            "integrity_schema_version": "qc-review-queue-v3",
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    return queue, items
+
+
+@pytest.mark.parametrize(
+    "signal_id",
+    [
+        "low_mean_confidence",
+        "low_min_confidence",
+        "pending_proposals",
+        "rejection_rate",
+        "edited_acceptance_rate",
+    ],
+)
+def test_v3_rejects_resigned_model_signals_without_model_references(signal_id: str) -> None:
+    """A valid re-sign cannot fabricate predictions in a human-only QC snapshot."""
+    queue, items = _v3_human_only_snapshot()
+    validate_saved_queue_snapshot(queue, items)
+    item = items[0]
+    item.review_state = "in_progress"
+    _set_v3_unweighted_signal(item, signal_id, 1.0 if signal_id == "pending_proposals" else 0.5)
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+    assert item.review_state == "in_progress"
+
+
 @pytest.mark.parametrize(
     "changes",
     [
