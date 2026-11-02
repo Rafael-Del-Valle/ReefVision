@@ -477,6 +477,16 @@ class PoseTrainingDatasetService:
             or correction.target_id != candidate.id
         ):
             raise ConflictError("Verified pose correction does not match the candidate")
+        # The review correction and candidate are independent audit records.
+        # Freeze must reject mismatched attribution before creating a dataset
+        # that would fail its own scientist-verification checks on first read.
+        if (
+            not isinstance(correction.actor, str)
+            or not correction.actor.strip()
+            or correction.actor != candidate.reviewed_by
+            or candidate.reviewed_at is None
+        ):
+            raise ConflictError("Verified pose scientist review attribution changed")
 
         return {
             "correction_id": correction.id,

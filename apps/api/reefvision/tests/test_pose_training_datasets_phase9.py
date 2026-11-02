@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from reefvision.db.models import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
+    PoseLandmarkCorrection,
     PoseLandmarkObservation,
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
@@ -396,6 +397,43 @@ def test_training_dataset_blocks_pose_changed_after_verification(
 
     assert response.status_code == 409
     assert "changed after scientist verification" in (response.text)
+
+
+@pytest.mark.parametrize("changed_record", ["correction", "candidate", "timestamp"])
+def test_freeze_rejects_changed_scientist_review_attribution(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    changed_record: str,
+) -> None:
+    # Exercise the actual scientist-review API path, then corrupt one of its
+    # independently persisted audit records before freezing any training data.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        correction = session.get(PoseLandmarkCorrection, candidate.correction_id)
+        assert correction is not None
+        assert correction.actor == candidate.reviewed_by == "scientist"
+        if changed_record == "correction":
+            correction.actor = "different-reviewer"
+        elif changed_record == "candidate":
+            candidate.reviewed_by = "different-reviewer"
+        else:
+            candidate.reviewed_at = None
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "scientist review attribution changed" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
 
 
 def test_freeze_rejects_changed_candidate_acquisition_provenance(
