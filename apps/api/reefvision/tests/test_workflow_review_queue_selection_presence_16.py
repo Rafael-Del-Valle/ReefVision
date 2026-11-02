@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -23,7 +23,7 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
 from reefvision.tests.test_workflow_review_queue_integrity_16 import _v3_snapshot, snapshot
 
 
-def _resign_scoring(queue: object) -> None:
+def _resign_scoring(queue: Any) -> None:
     """Model an attacker recomputing the digest after changing persisted metadata."""
     checksums = queue.input_checksums_json
     provenance = {
