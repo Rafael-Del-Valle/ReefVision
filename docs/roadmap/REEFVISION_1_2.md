@@ -6209,3 +6209,30 @@ acceptance remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
 **Acceptance added:** Eleven parameterized standalone API-result tampering cases, a valid zero-baseline control plus forged-percentage rejection, and executable saved Workflow Builder persisted-artifact rejection of altered organism arithmetic. Existing typed output, provenance, persistence and review boundaries remain intact. The repository's full pytest/Ruff suite cannot run locally while GitHub DNS resolution is unavailable; exact new-head Actions must validate these changes before any pass claim.
 
 **Release HOLD:** Exact-head backend pytest/Ruff/mypy, frontend/E2E, migration compatibility with 1.1 and Windows Actions remain required, along with source-authenticated calibrated observations, independently verified experimental units, scientist-reviewed human/model comparison, and physical installed MSI/GUI/GPU acceptance. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## Persisted organism-visit replay integrity (2026-11-02)
+
+The existing `LongitudinalAnalysisResponse` replay contract now reconciles each
+completed organism/metric series with the UTC sampling-date roster in the
+experimental-unit coverage audit. The reported `observation_count` for a
+completed organism must equal the number of distinct audited sampling dates;
+its baseline/final UTC dates must match the earliest/latest audited dates.
+The complete-series roster and singleton-series denominator must also match
+the coverage audit. Repeated organism/metric identities across declared units
+and duplicated audited dates fail closed.
+
+This closes a coordinated tampering case in which the top-level source count,
+source-ID roster and completed-series count could all be reduced together to
+erase a middle observation while retaining an apparently valid population
+summary. The same Pydantic replay contract applies to standalone ecological
+results and executable saved Workflow Builder `longitudinal_analysis`
+artifacts. Historical artifacts without populated per-organism date coverage
+remain readable, but do not receive this additional replay guarantee.
+
+The result remains `caller_supplied_unverified`: the internal consistency
+check does **not** verify source ownership, image calibration, experimental-unit
+independence or human review. No database migration, cloud service or model
+weight is introduced. Focused regressions cover valid incomplete series,
+coordinated source-count edits, missing/duplicated sampling dates and persisted
+saved-workflow tampering. Full CI, migration reconciliation, real scientist
+review and installed Windows GUI/GPU acceptance remain release blockers.
