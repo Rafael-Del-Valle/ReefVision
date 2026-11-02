@@ -100,7 +100,7 @@ def parse_ascii_ply_points(
         for channel in ("red", "green", "blue"):
             if channel in properties:
                 token = values[properties.index(channel)]
-                if not token.isascii() or not token.isdecimal() or int(token) > 255:
+                if not token.isascii() or not token.isdecimal() or len(token) > 3 or int(token) > 255:
                     raise ValueError("Point-cloud RGB channels must be 0-255 integers")
         points.append(parsed)
         if colors_out is not None and "red" in properties:
