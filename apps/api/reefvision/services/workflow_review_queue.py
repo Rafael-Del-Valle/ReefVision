@@ -142,9 +142,7 @@ def create_review_queue_workflow_artifact(
             or dataset_payload.get("manifest_sha256") != dataset_version.manifest_sha256
         ):
             raise ValidationError("QC Review Queue dataset version or manifest does not match")
-        dataset_producer = session.get(
-            WorkflowNodeRun, dataset_source.producer_node_run_id
-        )
+        dataset_producer = session.get(WorkflowNodeRun, dataset_source.producer_node_run_id)
         if (
             dataset_source.workflow_run_id != run_id
             or dataset_source.producer_port_id != "dataset"
@@ -152,6 +150,11 @@ def create_review_queue_workflow_artifact(
             or dataset_producer.workflow_run_id != run_id
             or dataset_producer.node_type != "dataset_version_source"
             or dataset_producer.status != "succeeded"
+            or not isinstance(dataset_producer.parameters_json, dict)
+            or dataset_producer.parameters_json.get("dataset_version_id") != candidate_id
+            or dataset_producer.parameters_json.get("split") is not None
+            or dataset_producer.input_artifact_ids_json != [source.id]
+            or not isinstance(dataset_producer.output_artifact_ids_json, list)
             or dataset_source.id not in dataset_producer.output_artifact_ids_json
         ):
             raise ValidationError("QC Review Queue dataset producer provenance is invalid")
