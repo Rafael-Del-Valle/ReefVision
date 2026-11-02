@@ -322,18 +322,18 @@ def test_log_tail_drops_incomplete_ansi_csi_without_fabricating_losses(
     """Partial terminal formatting must never append CSI digits to metrics."""
     log = tmp_path / "training.log"
     original = (
-        b"train/box_loss=0.25\\x1b[31\\n"
-        b"train/cls_loss=0.30\\x1b[1;\\r\\n"
-        b"train/dfl_loss=0.10\\n"
+        b"train/box_loss=0.25\x1b[31\n"
+        b"train/cls_loss=0.30\x1b[1;\r\n"
+        b"train/dfl_loss=0.10\n"
     )
     log.write_bytes(original)
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
         "text": (
-            "train/box_loss=0.25\\n"
-            "train/cls_loss=0.30\\n"
-            "train/dfl_loss=0.10\\n"
+            "train/box_loss=0.25\n"
+            "train/cls_loss=0.30\n"
+            "train/dfl_loss=0.10\n"
         ),
     }
     assert log.read_bytes() == original
@@ -344,12 +344,12 @@ def test_final_training_log_drops_unterminated_ansi_csi_at_eof(
 ) -> None:
     """A completed job's final real loss must not absorb partial ANSI codes."""
     log = tmp_path / "training.log"
-    original = b"epoch=6\\ntrain/dfl_loss=0.10\\x1b[31"
+    original = b"epoch=6\ntrain/dfl_loss=0.10\x1b[31"
     log.write_bytes(original)
 
     assert training_routes._training_log_tail(
         "training.log", tmp_path, finalized=True
-    ) == {"available": True, "text": "epoch=6\\ntrain/dfl_loss=0.10"}
+    ) == {"available": True, "text": "epoch=6\ntrain/dfl_loss=0.10"}
     assert log.read_bytes() == original
 
 
