@@ -230,6 +230,16 @@ def test_saved_workflow_population_artifact_rejects_forged_unit_weight(
     with pytest.raises(PydanticValidationError, match="Longitudinal change"):
         LongitudinalAnalysisResponse.model_validate(forged)
 
+    # An executable saved graph must also reject coordinated edits to the
+    # source count and a completed organism's intermediate observation count.
+    # The per-organism UTC-date audit remains an independent consistency gate.
+    forged = deepcopy(persisted)
+    forged["changes"][0]["observation_count"] -= 1
+    forged["observation_count"] -= 1
+    forged["analysis_provenance"]["source_record_ids"].remove("A-2")
+    with pytest.raises(PydanticValidationError, match="Longitudinal coverage series dates"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
 
 @pytest.mark.parametrize(
     "tampering",
