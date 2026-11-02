@@ -116,9 +116,14 @@ def test_saved_workflow_persists_identical_per_date_scientific_qc(
     LongitudinalAnalysisResponse.model_validate(persisted)
     forged = deepcopy(persisted)
     forged["planned_sampling_date_coverage"][1]["missing_organism_ids"] = ["B", "D"]
-    with pytest.raises(
-        PydanticValidationError, match="Planned visit organism roster changes"
-    ):
+    with pytest.raises(PydanticValidationError, match="Planned visit organism roster changes"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+    # Same counts and cross-date roster, but the wrong organism observed.
+    forged = deepcopy(persisted)
+    forged["planned_sampling_date_coverage"][1]["observed_organism_ids"] = ["B"]
+    forged["planned_sampling_date_coverage"][1]["missing_organism_ids"] = ["A", "C"]
+    with pytest.raises(PydanticValidationError, match="observed roster disagrees"):
         LongitudinalAnalysisResponse.model_validate(forged)
 
 
@@ -162,4 +167,44 @@ def test_persisted_visit_series_rejects_cross_record_tampering(
         visits[1]["missing_organism_ids"].append("D")
         visits[1]["observation_coverage_fraction"] = 1 / 4
     with pytest.raises(PydanticValidationError, match="Planned visit"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+
+@pytest.mark.parametrize(
+    "tampering",
+    [
+        "swapped_observed_organism",
+        "forged_visit_date",
+        "forged_unobserved_roster",
+        "forged_organism_observation_dates",
+        "removed_scheduled_unit_coverage",
+    ],
+)
+def test_persisted_visits_match_organism_level_coverage(
+    client: TestClient, tampering: str
+) -> None:
+    request = _payload(missing=True)
+    request["expected_organism_ids_by_unit"] = {"tank-1": ["A", "B", "C"]}
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert response.status_code == 200, response.text
+    original = response.json()
+    LongitudinalAnalysisResponse.model_validate(original)
+    forged = deepcopy(original)
+    visits = forged["planned_sampling_date_coverage"]
+    coverage = forged["unit_coverage"][0]
+    if tampering == "swapped_observed_organism":
+        visits[1]["observed_organism_ids"] = ["B"]
+        visits[1]["missing_organism_ids"] = ["A", "C"]
+    elif tampering == "forged_visit_date":
+        visits[1]["sampling_date"] = "2026-04-04"
+    elif tampering == "forged_unobserved_roster":
+        coverage["unobserved_organism_ids"] = ["D"]
+    elif tampering == "forged_organism_observation_dates":
+        coverage["observed_sampling_dates_by_organism"]["B"] = [
+            "2026-04-01",
+            "2026-04-02",
+        ]
+    elif tampering == "removed_scheduled_unit_coverage":
+        coverage["expected_sampling_dates"] = []
+    with pytest.raises(PydanticValidationError, match="Planned visit .*unit coverage"):
         LongitudinalAnalysisResponse.model_validate(forged)

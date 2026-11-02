@@ -6088,3 +6088,29 @@ MSI/GUI/GPU acceptance remain outstanding.
 **Acceptance:** Six parameterized standalone API result-readback tampering cases (roster swap, duplicate date, dropped date, forged aggregate, roster flag, roster size) plus a successful unmodified control. The existing saved executable Workflow Builder parity test now validates the persisted typed result and rejects a tampered cross-date roster while preserving source provenance and `caller_supplied_unverified` status. No new node, migration, model download, or 1.1 environmental provider.
 
 **Release HOLD:** Verify exact-head Ruff, mypy, pytest, frontend/E2E and Windows Actions. Source-authenticated calibrated measurements, independently verified biological units, representative scientist-reviewed human/model comparisons, 1.1 migration reconciliation, and installed Windows MSI/GUI/GPU acceptance remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Persisted per-date visit-to-organism audit reconciliation (2026-11-02; development only)
+
+**Baseline:** Draft PR #74 head `7a58080e19440bbfd56753228853d4ba084e617a`
+completed 19 PR workflows: 16 succeeded, three backend gates failed at two Ruff
+formatting discrepancies in the longitudinal schema and per-date tests. Applied
+the exact formatter corrections without changing prior scientific rules.
+
+**Scientific safeguard:** Persisted planned-visit artifacts could swap the
+*observed* organism on one date with a *missing* organism while keeping all
+denominators, fractions, aggregate totals, and cross-date rosters intact.
+The response validator now also reconciles every scheduled date and observed/
+missing organism roster with the separate organism-level `unit_coverage`
+sampling audit. It rejects missing scheduled coverage, changed observation
+dates, substituted organism identities, and altered unobserved roster entries.
+Legacy artifacts with only one optional section remain readable. This remains
+unverified caller-provided science, not source authentication or mortality.
+The existing typed executable saved Workflow Builder results share this
+validator; no new node, migration, model weights, or environmental store.
+
+**Acceptance:** Five standalone API-result tampering cases, a valid unchanged
+control, and saved executable Workflow Builder persisted-result tampering.
+Full exact-head CI, representative verified biology, 1.1 migration
+reconciliation, and installed Windows MSI/GUI/GPU acceptance remain mandatory.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

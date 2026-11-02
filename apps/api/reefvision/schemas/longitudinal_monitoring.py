@@ -396,10 +396,7 @@ class LongitudinalAnalysisResponse(BaseModel):
         for key, effort in effort_by_key.items():
             visits = visits_by_key[key]
             dates = {visit.sampling_date for visit in visits}
-            if (
-                len(visits) != effort.planned_sampling_date_count
-                or len(dates) != len(visits)
-            ):
+            if len(visits) != effort.planned_sampling_date_count or len(dates) != len(visits):
                 raise ValueError("Planned visit dates do not reconcile with effort")
             if any(
                 visit.expected_organism_count != effort.expected_organism_count
@@ -420,4 +417,59 @@ class LongitudinalAnalysisResponse(BaseModel):
                 != effort.missing_organism_visits
             ):
                 raise ValueError("Planned visit totals do not reconcile with effort")
+        return self
+
+    @model_validator(mode="after")
+    def reconcile_persisted_visits_with_unit_coverage(self) -> LongitudinalAnalysisResponse:
+        """Reconcile per-date identities with the organism-level sampling audit.
+
+        Legacy artifacts containing only one optional section remain readable.
+        """
+        if not self.unit_coverage or not self.planned_sampling_date_coverage:
+            return self
+
+        coverage_by_key: dict[tuple[str, str], ExperimentalUnitCoverage] = {}
+        for coverage in self.unit_coverage:
+            key = (coverage.experimental_unit_id, coverage.metric_name)
+            if key in coverage_by_key:
+                raise ValueError("Planned visit duplicate unit coverage")
+            coverage_by_key[key] = coverage
+
+        visits_by_key: dict[tuple[str, str], list[PlannedSamplingDateCoverage]] = {}
+        for visit in self.planned_sampling_date_coverage:
+            key = (visit.experimental_unit_id, visit.metric_name)
+            visits_by_key.setdefault(key, []).append(visit)
+        scheduled_keys = {
+            key for key, coverage in coverage_by_key.items() if coverage.expected_sampling_dates
+        }
+        if set(visits_by_key) != scheduled_keys:
+            raise ValueError("Planned visit units disagree with unit coverage")
+
+        for key, visits in visits_by_key.items():
+            coverage = coverage_by_key[key]
+            scheduled_dates = set(coverage.expected_sampling_dates)
+            if (
+                len(visits) != len(scheduled_dates)
+                or {visit.sampling_date for visit in visits} != scheduled_dates
+            ):
+                raise ValueError("Planned visit dates disagree with unit coverage")
+            observed_dates = coverage.observed_sampling_dates_by_organism
+            expected_ids = set(observed_dates) | set(coverage.unobserved_organism_ids)
+            expected_count = coverage.expected_organism_count or coverage.observed_organism_count
+            if len(expected_ids) != expected_count:
+                raise ValueError("Planned visit roster disagrees with unit coverage")
+            if any(set(dates) - scheduled_dates for dates in observed_dates.values()):
+                raise ValueError("Planned visit observation dates exceed unit coverage schedule")
+            for visit in visits:
+                observed_ids = {
+                    organism
+                    for organism, dates in observed_dates.items()
+                    if visit.sampling_date in dates
+                }
+                if set(visit.observed_organism_ids) != observed_ids:
+                    raise ValueError("Planned visit observed roster disagrees with unit coverage")
+                if set(visit.missing_organism_ids) != expected_ids - observed_ids:
+                    raise ValueError("Planned visit missing roster disagrees with unit coverage")
+                if visit.expected_roster_supplied != (coverage.expected_organism_count is not None):
+                    raise ValueError("Planned visit roster flag disagrees with unit coverage")
         return self
