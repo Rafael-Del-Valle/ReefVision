@@ -1285,3 +1285,38 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
         restored.json()["run"]["result_json"]["provenance_sha256"]
         == run_result["provenance_sha256"]
     )
+
+    # Preserve the actual frozen pose-training parameters' JSON shape.
+    # A list of key/value pairs must not bypass the checksum-pinned graph
+    # comparison simply because dict(list_of_pairs) would look equivalent.
+    original_parameters = dict(train_node["parameters_json"])
+    assert original_parameters
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, train_node["id"])
+        assert persisted is not None
+        persisted.parameters_json = [[key, value] for key, value in original_parameters.items()]
+        session.commit()
+
+    malformed = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert malformed.status_code == 409, malformed.text
+    assert malformed.json() == {
+        "detail": "Workflow node parameters must be a JSON object"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="parameters must be a JSON object"),
+    ):
+        build_workflow_run_provenance(session, run_id=run_id)
+
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, train_node["id"])
+        assert persisted is not None
+        persisted.parameters_json = original_parameters
+        session.commit()
+
+    restored_parameters = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert restored_parameters.status_code == 200, restored_parameters.text
+    assert (
+        restored_parameters.json()["run"]["result_json"]["provenance_sha256"]
+        == run_result["provenance_sha256"]
+    )
