@@ -1255,6 +1255,7 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
 
     restored = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert restored.status_code == 200, restored.text
-    assert restored.json()["run"]["result_json"]["provenance_sha256"] == run_result[
-        "provenance_sha256"
-    ]
+    assert (
+        restored.json()["run"]["result_json"]["provenance_sha256"]
+        == run_result["provenance_sha256"]
+    )
