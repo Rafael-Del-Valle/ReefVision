@@ -281,7 +281,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                     except UnicodeDecodeError:
                         fraction = None
                 if isinstance(fraction, str):
-                    fraction = fraction.strip(" \\t\\r\\n\\x00")
+                    fraction = fraction.strip(" \t\r\n\x00")
                 if not (
                     isinstance(fraction, str) and fraction.isascii() and fraction.isdigit()
                 ):
