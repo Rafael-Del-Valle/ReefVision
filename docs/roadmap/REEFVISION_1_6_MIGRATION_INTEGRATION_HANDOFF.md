@@ -150,3 +150,25 @@ Windows GUI/MSI upgrade/rollback remain unverified. The 1.1/1.6 revision-ID
 collision is still unresolved. Existing standalone and saved executable
 Workflow Builder QC review, provenance, typed units and human gates are
 preserved, not replaced. **HOLD; no release, merge or approval automation.**
+
+## 2026-11-02 — partial 1.1 computed-metric revision 0039 preflight (Track D)
+
+The earlier collision audit covered 1.1 revision 0038 scientific-record/cache
+DDL, but 1.1 revision 0039 independently creates
+`computed_metric_definitions` and `computed_metric_results`. SQLite can
+preserve either table after an interrupted migration, including when no 1.1
+0038 table remains and the Alembic marker is absent or still 0037. The 1.6
+preflight previously recognized neither metric table as a foreign scientific
+lineage. It now rejects either table at unversioned, pre-review, and 0038–0040
+review markers before desktop migration writes. No data, stamp, or applied
+migration file is changed.
+
+`test_migration_partial_computed_metrics_16.py` exercises each independently
+present metric table, all five marker states, repeatable read-only rejection,
+full SQLite schema and biological-sentinel preservation, and desktop startup
+refusal before Alembic upgrade for unversioned/0037 databases. These tests
+validate a **defensive isolation guard**, not reconciliation of the 1.1/1.6
+0038/0039 collision. Existing saved Workflow Builder QC execution, typed
+priority output, researcher review gates and retries remain unchanged. A
+reviewed data-preserving migration DAG, integrated CI, real biological-data
+acceptance and native Windows installed-GUI/MSI validation remain required.

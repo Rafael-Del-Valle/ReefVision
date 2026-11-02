@@ -25,7 +25,18 @@ _REVIEW_COLUMNS = frozenset(
         "created_at",
     }
 )
-_SCIENCE_TABLES = frozenset({"scientific_records", "environmental_cache_entries"})
+# The independent 1.1 revision 0039 adds computed-metric definitions/results.
+# Either table can survive a partial SQLite migration even when its 0038
+# scientific tables or Alembic version marker are absent. Never mistake that
+# incomplete research schema for a safe 1.6 QC upgrade starting point.
+_SCIENCE_TABLES = frozenset(
+    {
+        "scientific_records",
+        "environmental_cache_entries",
+        "computed_metric_definitions",
+        "computed_metric_results",
+    }
+)
 _BULK_TABLE = "review_queue_bulk_requests"
 _BULK_COLUMNS = frozenset(
     {
