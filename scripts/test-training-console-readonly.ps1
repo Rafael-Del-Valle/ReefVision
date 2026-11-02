@@ -74,8 +74,13 @@ $script:terminalFailures = @{
     error_message = $null
   }
 }
-$script:logText = ('epoch=2', 'train/box_loss=0.25', 'train/cls_loss=0.30') -join [char]10
-$script:logText += ([string][char]10) + ([string][char]0x001B) + ']0;spoofed log title' + ([string][char]0x0007) + 'train/dfl_loss=0.10'
+# Real training workers often render progress bars with CR-only updates.
+# Preserve the latest 20 logical log lines instead of truncating one huge line.
+$script:logText = ((1..24 | ForEach-Object { "worker-progress-$($_)" }) -join [char]13)
+$script:logText += ([string][char]13) + 'epoch=2'
+$script:logText += ([string][char]10) + 'train/box_loss=0.25'
+$script:logText += ([string][char]13) + 'train/cls_loss=0.30'
+$script:logText += ([string][char]13) + ([string][char]0x001B) + ']0;spoofed log title' + ([string][char]0x0007) + 'train/dfl_loss=0.10'
 
 function Invoke-RestMethod {
   param([string]$Uri, [string]$Method, [int]$TimeoutSec, [int]$MaximumRedirection = -1)
@@ -169,6 +174,11 @@ if ($output -match 'train/box_loss\s+0\.99') {
 }
 if ($output.Contains('spoofed console title') -or $output.Contains('spoofed log title')) {
   throw 'Untrusted run metadata or persisted logs escaped display sanitization.'
+}
+if (-not $output.Contains('worker-progress-24') -or
+    $output.Contains('worker-progress-8') -or
+    -not $output.Contains('train/dfl_loss=0.10')) {
+  throw 'CR-only training progress updates were not split, tailed, and displayed correctly.'
 }
 # Both terminal error states must stop polling immediately. A missing log tail
 # must not hide the failure status or the sanitized diagnostic message.
