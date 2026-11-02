@@ -374,7 +374,7 @@ def test_review_pause_rejects_foreign_and_completed_nodes_without_mutating_scien
         )
         assert foreign_node is not None and foreign_node.status == "running"
         assert completed_node is not None and completed_node.status == "succeeded"
-        invalid_ids = (foreign_node.id, completed_node.id)
+        invalid_ids = (foreign_node.id, completed_node.id, "missing-node-run-id")
 
     for invalid_id in invalid_ids:
         with pytest.raises(RuntimeError, match="requires an active node in this run"):
