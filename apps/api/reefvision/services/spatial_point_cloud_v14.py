@@ -6,6 +6,7 @@ import hashlib
 import json
 from datetime import UTC
 from math import dist, isfinite
+from re import fullmatch
 from typing import Any
 
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
@@ -13,6 +14,8 @@ from reefvision.services.spatial_mesh_obj_v14 import MAX_VERTICES
 
 MAX_PLY_BYTES = 256_000
 MAX_PREVIEW_POINTS = 512
+# ASCII PLY numeric grammar: Python float() also accepts non-PLY underscores.
+_PLY_FLOAT_TOKEN = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 
 
 def parse_ascii_ply_points(
@@ -50,10 +53,11 @@ def parse_ascii_ply_points(
         elif parts[0] == "element":
             if vertex_count is not None or len(parts) != 3 or parts[1] != "vertex":
                 raise ValueError("Point-cloud PLY must have one vertex-only element")
-            try:
-                vertex_count = int(parts[2])
-            except ValueError as exc:
-                raise ValueError("Invalid point-cloud vertex count") from exc
+            # int() accepts Python-specific underscores; PLY counts do not.
+            count_token = parts[2]
+            if not count_token.isdecimal() or len(count_token) > 9:
+                raise ValueError("Invalid point-cloud vertex count")
+            vertex_count = int(count_token)
             if not 1 <= vertex_count <= MAX_VERTICES:
                 raise ValueError("Point-cloud vertex count outside preview bounds")
         elif parts[0] == "property":
@@ -93,10 +97,19 @@ def parse_ascii_ply_points(
         values = row.split()
         if len(values) != len(properties):
             raise ValueError("Point-cloud PLY vertex does not match header properties")
+        tokens = [values[index] for index in xyz]
+        if any(fullmatch(_PLY_FLOAT_TOKEN, token) is None for token in tokens):
+            raise ValueError("Invalid point-cloud coordinate")
         try:
-            parsed = [float(values[index]) for index in xyz]
-        except ValueError as exc:
+            parsed = [float(token) for token in tokens]
+        except (ValueError, OverflowError) as exc:
             raise ValueError("Invalid point-cloud coordinate") from exc
+        # A nonzero decimal that rounds to zero would silently collapse
+        # reconstructed geometry. Reject it rather than claim a measured zero.
+        for token, value in zip(tokens, parsed, strict=True):
+            mantissa = token.lower().split("e", 1)[0]
+            if value == 0.0 and any(digit in "123456789" for digit in mantissa):
+                raise ValueError("Point-cloud coordinate underflows float precision")
         if any(not isfinite(value) or abs(value) > 1_000_000_000 for value in parsed):
             raise ValueError("Point-cloud coordinates must be finite and bounded")
         for channel in ("red", "green", "blue"):
