@@ -368,6 +368,23 @@ def pose_active_learning_review_status(
     if manifest.project_id != project_id:
         raise ValidationError("Pose Active Learning round belongs to another project")
 
+    if payload.get("selection_sha256") != manifest.selection_sha256:
+        raise ValidationError(
+            "Pose Active Learning Review selection differs from saved workflow evidence"
+        )
+
+    candidate_ids = payload.get("candidate_ids")
+    if (
+        not isinstance(candidate_ids, list)
+        or any(not isinstance(value, str) or not value for value in candidate_ids)
+        or len(candidate_ids) != len(set(candidate_ids))
+        or set(candidate_ids) != {candidate["candidate_id"] for candidate in manifest.candidates}
+        or payload.get("candidate_count") != len(candidate_ids)
+    ):
+        raise ValidationError(
+            "Pose Active Learning Review candidates differ from saved workflow evidence"
+        )
+
     ready = manifest.status == "complete" and manifest.retraining_ready
 
     return {
