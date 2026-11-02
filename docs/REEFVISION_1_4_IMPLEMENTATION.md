@@ -29,6 +29,24 @@ installed desktop/GPU/scientific acceptance. A separate bounded ASCII PLY
 point-cloud preview and interactive viewer already exist, but their transient
 visualization and chord measurements do not establish verified anatomy.
 
+## OBJ text separator integrity (provisional)
+
+The bounded OBJ mesh importer rejects NUL/ASCII control characters other
+than tab, CR, and LF, DEL, Unicode whitespace/line separators, and a Unicode
+byte-order mark. Python's `splitlines()` and `split()` otherwise treat some
+of these as structural separators and could silently change source records
+before calibrated area or dimensions are computed. Valid ASCII tabs and CRLF
+remain supported; nonstructural Unicode text in comments is not rejected by
+this specific guard. OBJ numeric grammar and homogeneous-weight integrity
+checks remain separately enforced.
+
+Regression cases cover direct parsing, the project-scoped standalone mesh
+preview API, and executable persisted typed `mesh_surface_preview` workflows.
+Malformed source must fail without publishing a measurement artifact; valid
+tab/CRLF input must replay to the same provisional result through both paths.
+This validates parsing consistency, **not** physical scale, independent
+calibration, biological identity, or anatomical branch-length accuracy.
+
 ## Selected triangle geometric area inspection (provisional)
 
 The saved-workflow mesh viewer now computes a read-only area for the **selected
