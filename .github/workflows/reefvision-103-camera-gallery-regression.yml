@@ -43,9 +43,12 @@ on:
 permissions:
   contents: read
 
+# Windows scientific dependencies and Rust checks can take substantial time.
+# Preserve a running exact-SHA acceptance run when the next Track A commit lands;
+# GitHub may replace a pending run, but must not cancel tests already executing.
 concurrency:
   group: reefvision-103-camera-gallery-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   windows-camera-import:
