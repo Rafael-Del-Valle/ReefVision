@@ -195,12 +195,14 @@ def pose_temporal_review_status(
 
     raw_track_ids = payload.get("track_ids", [])
 
-    if not isinstance(raw_track_ids, list):
+    if not isinstance(raw_track_ids, list) or any(
+        not isinstance(value, str) or not value for value in raw_track_ids
+    ):
         raise ValidationError("Pose Review artifact track_ids are invalid")
+    if len(set(raw_track_ids)) != len(raw_track_ids):
+        raise ValidationError("Pose Review artifact track_ids contain duplicates")
 
-    track_ids = list(
-        dict.fromkeys(str(value) for value in raw_track_ids if isinstance(value, str) and value)
-    )
+    track_ids = raw_track_ids
 
     if not track_ids:
         raise ValidationError("Pose Review requires at least one temporal pose track")
