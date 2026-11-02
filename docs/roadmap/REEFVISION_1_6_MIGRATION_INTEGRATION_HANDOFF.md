@@ -195,3 +195,29 @@ This is **not** a reconciliation of the independent 1.1 and 1.6 revision
 unified DAG and real upgrade fixtures are available. Full CI, Windows MSI/CAB
 upgrade/rollback, installed GUI and representative scientific acceptance remain
 release blockers.
+
+
+## 2026-11-02 — Empty Alembic revision table with retained observations
+
+A populated SQLite database can lose every `alembic_version` row during a
+partial restore or interrupted upgrade while retaining its biological/project
+schema. Previously the 1.6 desktop preflight treated an existing but empty
+revision table as an unversioned installation and allowed Alembic to attempt
+replaying DDL over preserved data. It now **refuses read-only** when an empty
+revision table coexists with any non-Alembic table, without guessing a version,
+rewriting observations, or invoking the upgrade. An empty revision table in an
+otherwise empty database remains a valid initialization state.
+
+Parameterized regressions exercise direct preflight and two consecutive
+desktop startup refusals on a disposable coral observation database with zero
+revision rows; the entire SQLite table schema, observation values and revision
+rows must remain unchanged. A fresh empty-database control verifies the
+compatible path. This increment also resolves the preceding exact-head Ruff
+import-order failure in the migration regression file. Existing typed,
+researcher-gated, executable saved Workflow Builder QC workflows are unchanged;
+no new node or migration is required.
+
+**Release HOLD:** passing exact-head CI, independently reconciled 1.1/1.6
+revision-0038 histories, representative scientific datasets, Windows MSI/CAB
+upgrade and rollback, and installed-GUI acceptance are still required. Do not
+stamp an affected database or automatically repair it.
