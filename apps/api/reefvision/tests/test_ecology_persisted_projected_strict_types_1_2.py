@@ -36,23 +36,37 @@ def test_report_denominators_reject_coerced_json_types(client: TestClient) -> No
         for replacement in (True, "2", 2.0, None):
             tampered = {**report, field: replacement}
             with pytest.raises(
-                PydanticValidationError, match="report denominator must be a JSON integer"
+                PydanticValidationError,
+                match="report denominator must be a JSON integer",
             ):
                 EcologyCandidateReport.model_validate(tampered)
             persisted = original.model_dump(mode="json")
             persisted["candidate_report"] = tampered
             with pytest.raises(
-                PydanticValidationError, match="report denominator must be a JSON integer"
+                PydanticValidationError,
+                match="report denominator must be a JSON integer",
             ):
                 EcologyMeasurementCandidatesResponse.model_validate(persisted)
 
 
-def test_projected_endpoint_rejects_epoch_and_coerced_counts(client: TestClient) -> None:
+def test_projected_endpoint_rejects_epoch_and_coerced_counts(
+    client: TestClient,
+) -> None:
     original = _dated_artifact(client)
     endpoint = original.projected_endpoint_changes[0].model_dump(mode="json")
-    assert EcologyProjectedEndpointChange.model_validate(endpoint).observed_timepoint_count == 2
+    assert (
+        EcologyProjectedEndpointChange.model_validate(endpoint).observed_timepoint_count
+        == 2
+    )
     for field in ("baseline_capture_timestamp_utc", "final_capture_timestamp_utc"):
-        for replacement in (0, 1775217600, 1775217600.0, True, "1775217600", "2026-04-03"):
+        for replacement in (
+            0,
+            1775217600,
+            1775217600.0,
+            True,
+            "1775217600",
+            "2026-04-03",
+        ):
             tampered = {**endpoint, field: replacement}
             with pytest.raises(
                 PydanticValidationError, match="requires an ISO calendar timestamp"
@@ -82,7 +96,9 @@ def test_projected_endpoint_rejects_epoch_and_coerced_counts(client: TestClient)
     ).review_gate == "scientist_review_required"
 
 
-def test_executed_saved_workflow_rejects_forged_report_count(client: TestClient) -> None:
+def test_executed_saved_workflow_rejects_forged_report_count(
+    client: TestClient,
+) -> None:
     project_id, _ = _source(client)
     standalone = client.get(
         f"/api/v1/projects/{project_id}/ecology/calibrated-measurement-candidates"
