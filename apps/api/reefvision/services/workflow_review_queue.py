@@ -6,6 +6,7 @@ Queues rank review effort; they never establish verified biological truth.
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter
 from typing import Any
 
 from sqlalchemy import select
@@ -161,11 +162,16 @@ def create_review_queue_workflow_artifact(
             else None
         )
         images_payload = images_artifact.payload_json if images_artifact is not None else None
-        expected_image_ids = session.scalars(
-            select(DatasetVersionItem.image_id).where(
+        # Both typed outputs must describe the same frozen dataset. A
+        # checksummed/re-signed dataset reference is not authoritative for
+        # scientific counts, split allocation or version metadata.
+        frozen_items = session.scalars(
+            select(DatasetVersionItem).where(
                 DatasetVersionItem.dataset_version_id == candidate_id
             )
         ).all()
+        expected_image_ids = [item.image_id for item in frozen_items]
+        expected_split_counts = dict(Counter(str(item.split) for item in frozen_items))
         if (
             dataset_source.workflow_run_id != run_id
             or dataset_source.producer_port_id != "dataset"
@@ -177,6 +183,16 @@ def create_review_queue_workflow_artifact(
             or dataset_producer.parameters_json.get("dataset_version_id") != candidate_id
             or dataset_producer.parameters_json.get("split") is not None
             or dataset_producer.input_artifact_ids_json != [source.id]
+            or type(dataset_payload.get("version_number")) is not int
+            or dataset_payload["version_number"] != dataset_version.version_number
+            or dataset_payload.get("split_method") != dataset_version.resolved_split_method
+            or dataset_payload.get("split_counts") != expected_split_counts
+            or type(dataset_payload.get("image_count")) is not int
+            or dataset_payload["image_count"] != dataset_version.image_count
+            or type(dataset_payload.get("annotation_count")) is not int
+            or dataset_payload["annotation_count"] != dataset_version.annotation_count
+            or type(dataset_payload.get("mask_annotation_count")) is not int
+            or dataset_payload["mask_annotation_count"] != dataset_version.mask_annotation_count
             or images_artifact is None
             or images_artifact.workflow_run_id != run_id
             or images_artifact.producer_node_run_id != dataset_producer.id
