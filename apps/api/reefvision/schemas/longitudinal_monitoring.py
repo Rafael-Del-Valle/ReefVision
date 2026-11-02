@@ -371,6 +371,81 @@ class LongitudinalAnalysisResponse(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def reconcile_persisted_population_units(self) -> LongitudinalAnalysisResponse:
+        """A saved population stratum must give each eligible unit one vote.
+
+        Legacy artifacts with only one optional summary section remain readable.
+        This is internal consistency checking, not source-data authentication.
+        """
+        if not self.unit_summaries or not self.population_summaries:
+            return self
+
+        strata: dict[tuple[str, str, date, date], list[ExperimentalUnitSummary]] = {}
+        unit_keys: set[tuple[str, str]] = set()
+        for unit in self.unit_summaries:
+            unit_key = (unit.experimental_unit_id, unit.metric_name)
+            if unit_key in unit_keys:
+                raise ValueError("Population summary duplicate experimental unit/metric")
+            unit_keys.add(unit_key)
+            if unit.organism_count < 1:
+                raise ValueError("Population summary unit must contain an organism")
+            stratum = (
+                unit.metric_name,
+                unit.unit,
+                unit.baseline_at.date(),
+                unit.final_at.date(),
+            )
+            strata.setdefault(stratum, []).append(unit)
+
+        if len(self.population_summaries) != len(strata):
+            raise ValueError("Population summary strata do not reconcile")
+        seen: set[tuple[str, str, date, date]] = set()
+        for population in self.population_summaries:
+            key = (
+                population.metric_name,
+                population.unit,
+                population.baseline_date,
+                population.final_date,
+            )
+            if key in seen or key not in strata:
+                raise ValueError("Population summary strata do not reconcile")
+            seen.add(key)
+            members = strata[key]
+            unit_ids = sorted(member.experimental_unit_id for member in members)
+            if len(set(unit_ids)) != len(unit_ids) or population.experimental_unit_ids != unit_ids:
+                raise ValueError("Population summary experimental unit roster does not reconcile")
+            if population.independent_unit_count != len(unit_ids):
+                raise ValueError("Population summary independent unit count does not reconcile")
+            if population.contributing_organism_count != sum(
+                member.organism_count for member in members
+            ):
+                raise ValueError("Population summary contributing organisms do not reconcile")
+            expected_change = finite_descriptive_mean(
+                member.mean_absolute_change for member in members
+            )
+            expected_rate = finite_descriptive_mean(
+                member.mean_change_per_day for member in members
+            )
+            if not (
+                math.isfinite(population.mean_unit_absolute_change)
+                and math.isfinite(population.mean_unit_change_per_day)
+                and math.isclose(
+                    population.mean_unit_absolute_change,
+                    expected_change,
+                    rel_tol=1e-9,
+                    abs_tol=1e-12,
+                )
+                and math.isclose(
+                    population.mean_unit_change_per_day,
+                    expected_rate,
+                    rel_tol=1e-9,
+                    abs_tol=1e-12,
+                )
+            ):
+                raise ValueError("Population summary unit-weighted means do not reconcile")
+        return self
+
+    @model_validator(mode="after")
     def reconcile_persisted_unit_means_with_changes(self) -> LongitudinalAnalysisResponse:
         """Prevent re-signed unit means from contradicting organism endpoints.
 
@@ -453,81 +528,6 @@ class LongitudinalAnalysisResponse(BaseModel):
                 )
             ):
                 raise ValueError("Unit summary means disagree with organism changes")
-        return self
-
-    @model_validator(mode="after")
-    def reconcile_persisted_population_units(self) -> LongitudinalAnalysisResponse:
-        """A saved population stratum must give each eligible unit one vote.
-
-        Legacy artifacts with only one optional summary section remain readable.
-        This is internal consistency checking, not source-data authentication.
-        """
-        if not self.unit_summaries or not self.population_summaries:
-            return self
-
-        strata: dict[tuple[str, str, date, date], list[ExperimentalUnitSummary]] = {}
-        unit_keys: set[tuple[str, str]] = set()
-        for unit in self.unit_summaries:
-            unit_key = (unit.experimental_unit_id, unit.metric_name)
-            if unit_key in unit_keys:
-                raise ValueError("Population summary duplicate experimental unit/metric")
-            unit_keys.add(unit_key)
-            if unit.organism_count < 1:
-                raise ValueError("Population summary unit must contain an organism")
-            stratum = (
-                unit.metric_name,
-                unit.unit,
-                unit.baseline_at.date(),
-                unit.final_at.date(),
-            )
-            strata.setdefault(stratum, []).append(unit)
-
-        if len(self.population_summaries) != len(strata):
-            raise ValueError("Population summary strata do not reconcile")
-        seen: set[tuple[str, str, date, date]] = set()
-        for population in self.population_summaries:
-            key = (
-                population.metric_name,
-                population.unit,
-                population.baseline_date,
-                population.final_date,
-            )
-            if key in seen or key not in strata:
-                raise ValueError("Population summary strata do not reconcile")
-            seen.add(key)
-            members = strata[key]
-            unit_ids = sorted(member.experimental_unit_id for member in members)
-            if len(set(unit_ids)) != len(unit_ids) or population.experimental_unit_ids != unit_ids:
-                raise ValueError("Population summary experimental unit roster does not reconcile")
-            if population.independent_unit_count != len(unit_ids):
-                raise ValueError("Population summary independent unit count does not reconcile")
-            if population.contributing_organism_count != sum(
-                member.organism_count for member in members
-            ):
-                raise ValueError("Population summary contributing organisms do not reconcile")
-            expected_change = finite_descriptive_mean(
-                member.mean_absolute_change for member in members
-            )
-            expected_rate = finite_descriptive_mean(
-                member.mean_change_per_day for member in members
-            )
-            if not (
-                math.isfinite(population.mean_unit_absolute_change)
-                and math.isfinite(population.mean_unit_change_per_day)
-                and math.isclose(
-                    population.mean_unit_absolute_change,
-                    expected_change,
-                    rel_tol=1e-9,
-                    abs_tol=1e-12,
-                )
-                and math.isclose(
-                    population.mean_unit_change_per_day,
-                    expected_rate,
-                    rel_tol=1e-9,
-                    abs_tol=1e-12,
-                )
-            ):
-                raise ValueError("Population summary unit-weighted means do not reconcile")
         return self
 
     @model_validator(mode="after")
