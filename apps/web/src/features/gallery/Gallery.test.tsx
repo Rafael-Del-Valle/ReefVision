@@ -655,6 +655,76 @@ describe("Gallery", () => {
     await waitFor(() => expect(importCalls).toHaveBeenCalledTimes(2));
   });
 
+  it("reveals newly imported camera JPEGs hidden by an old filename filter", async () => {
+    const cameraImage: ProjectImage = {
+      ...image,
+      id: "camera-2",
+      original_filename: "DSC_0001.JPEG",
+      managed_path: "projects/project-1/images/originals/camera-2.jpg",
+      sha256: "b".repeat(64),
+    };
+    const persisted: ProjectImage[] = [image];
+    const requestedFilters: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith(`/projects/${project.id}/imports/images`)) {
+        expect(init?.method).toBe("POST");
+        persisted.push(cameraImage);
+        return jsonResponse({
+          project_id: project.id,
+          successful: [{
+            filename: cameraImage.original_filename,
+            relative_path: cameraImage.original_filename,
+            status: "successful",
+            detail: null,
+            image_id: cameraImage.id,
+            duplicate_image_id: null,
+            thumbnail_job_id: null,
+          }],
+          duplicates: [],
+          unsupported: [],
+          failed: [],
+        });
+      }
+      if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
+        const filename = url.searchParams.get("filename") ?? "";
+        requestedFilters.push(filename);
+        const items = persisted.filter((item) =>
+          item.original_filename.toLowerCase().includes(filename.toLowerCase()),
+        );
+        return jsonResponse({
+          items,
+          total: items.length,
+          page: 1,
+          page_size: 24,
+          pages: items.length ? 1 : 0,
+        });
+      }
+      throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderGallery();
+    await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    await userEvent.type(
+      screen.getByPlaceholderText("Search filenames"),
+      "swiftia",
+    );
+    await waitFor(() => expect(requestedFilters).toContain("swiftia"));
+    expect(screen.queryByRole("article", { name: /DSC_0001\\.JPEG/ })).toBeNull();
+
+    await userEvent.upload(
+      screen.getByLabelText("Import files"),
+      new File(["camera bytes"], "DSC_0001.JPEG", { type: "image/jpeg" }),
+    );
+
+    expect(
+      await screen.findByRole("article", { name: /DSC_0001\\.JPEG/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search filenames")).toHaveValue("");
+    expect(requestedFilters.at(-1)).toBe("");
+    expect(screen.getByText("1 imported")).toBeInTheDocument();
+  });
+
   it("serializes camera imports across file and folder pickers", async () => {
     let resolveFirstImport!: (response: Response) => void;
     const firstImport = new Promise<Response>((resolve) => {
