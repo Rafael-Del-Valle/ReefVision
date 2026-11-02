@@ -334,3 +334,21 @@ The prior RGB-token bound remains in force: each color channel must contain
 one to three ASCII decimal digits representing an unsigned byte from 0 to 255.
 These are import-integrity checks, **not** evidence of verified calibration,
 registered coordinates, biological condition, specimen identity, or accuracy.
+
+## ASCII PLY control-character integrity (November 2026)
+
+Imported ASCII PLY 1.0 point clouds now reject embedded ASCII control bytes
+other than tab, carriage return and line feed, including NUL, vertical tab,
+form feed, escape and DEL. Python's text splitting routines otherwise treat
+some control bytes as whitespace or line separators, potentially interpreting
+malformed source rows differently from the submitted file. Ordinary CRLF line
+endings and tab-delimited vertex coordinates remain accepted.
+
+The direct parser, standalone project point-cloud endpoint and executable,
+persisted, typed Workflow Builder node share this fail-closed validation.
+Regression tests require invalid imports to fail without publishing a
+point-cloud measurement artifact and preserve valid ASCII whitespace support.
+This is source-format integrity only: it does not authenticate calibration,
+coordinate registration, coral identity, anatomical branch length or
+biological condition. Source-file review and scientific verification remain
+necessary.
