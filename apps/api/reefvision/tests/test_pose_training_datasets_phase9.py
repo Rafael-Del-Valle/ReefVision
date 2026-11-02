@@ -20,6 +20,7 @@ from reefvision.db.models import (
     PoseLandmarkTrack,
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
+    VideoAsset,
     VideoTrack,
 )
 from reefvision.services.pose_training_datasets import frozen_pose_item_evidence_sha256
@@ -518,6 +519,76 @@ def test_freeze_rejects_changed_saved_selection_lineage(
     assert expected in response.text
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
+
+
+def test_freeze_rejects_blank_video_digest_even_when_acquisition_agrees(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A re-signed acquisition and a damaged source video can both carry an
+    # empty checksum. Equality alone does not establish scientific lineage.
+    _, video, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        source = session.get(VideoAsset, str(video["id"]))
+        assert source is not None and source.sha256
+        source.sha256 = ""
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        acquisition = {**candidate.provenance_json, "video_sha256": ""}
+        candidate.provenance_json = acquisition
+        candidate.provenance_sha256 = canonical_json_sha256(acquisition)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "Source video checksum changed after acquisition" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+def test_frozen_dataset_rejects_resigned_blank_video_digest(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise an actual scientist-verified frozen dataset, then re-sign its
+    # persisted manifest and review evidence around a missing video digest.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 201, response.text
+    dataset_id = response.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
+        item.video_sha256 = ""
+        acquisition = {**item.acquisition_provenance_json, "video_sha256": ""}
+        item.acquisition_provenance_json = acquisition
+        review = copy.deepcopy(item.review_provenance_json)
+        review["before"]["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
+        item.review_provenance_json = review
+        manifest = copy.deepcopy(dataset.manifest_json)
+        summary = manifest["items"][0]
+        summary["video_sha256"] = ""
+        summary["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
+        summary["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        dataset.manifest_json = manifest
+        dataset.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
+    assert response.status_code == 409, response.text
+    assert "item lineage" in response.text
 
 
 def test_native_pose_training_package_is_deterministic_and_verified_only(
