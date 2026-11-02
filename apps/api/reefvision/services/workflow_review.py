@@ -33,6 +33,7 @@ from reefvision.services.workflow_auto_label import (
     ensure_disagreement_active_learning_round,
     materialize_consensus_annotations,
 )
+from reefvision.services.workflow_provenance import verify_workflow_artifact
 
 REVIEW_GATE_NODE_TYPES = {
     "detection_review_gate",
@@ -56,14 +57,24 @@ def _now() -> datetime:
 
 
 def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[WorkflowArtifact]:
-    artifact_ids = [str(value) for value in node_run.input_artifact_ids_json or []]
-    if not artifact_ids:
+    raw_ids = node_run.input_artifact_ids_json
+    if raw_ids is None:
+        raw_ids = []
+    if not isinstance(raw_ids, list) or any(
+        not isinstance(value, str) or not value for value in raw_ids
+    ):
+        raise ConflictError("Workflow review input artifact IDs are invalid")
+    if not raw_ids:
         return []
     artifacts = list(
-        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(artifact_ids)))
+        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(raw_ids)))
     )
     by_id = {artifact.id: artifact for artifact in artifacts}
-    return [by_id[artifact_id] for artifact_id in artifact_ids if artifact_id in by_id]
+    if len(by_id) != len(set(raw_ids)):
+        raise ConflictError("Workflow review input artifact is missing")
+    for artifact in artifacts:
+        verify_workflow_artifact(artifact, expected_run_id=node_run.workflow_run_id)
+    return [by_id[artifact_id] for artifact_id in raw_ids]
 
 
 def _pending_review_count(session: Session, artifacts: list[WorkflowArtifact]) -> int:
