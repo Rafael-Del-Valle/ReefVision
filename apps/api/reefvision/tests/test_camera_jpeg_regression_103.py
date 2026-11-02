@@ -526,7 +526,12 @@ def test_malformed_exposure_exif_does_not_fall_back_to_digitization_or_file_time
 
 
 
-@pytest.mark.parametrize("offset", ["+14:30", "-14:30", "+23:00", "-23:59"])
+# strptime('%z') accepts non-EXIF variants such as +0530 and +05:30:15.
+# Never turn these malformed camera fields into verified UTC exposure times.
+@pytest.mark.parametrize(
+    "offset",
+    ["+14:30", "-14:30", "+23:00", "-23:59", "+0530", "+05:30:15", "+5:30", "+00:60"],
+)
 def test_exif_rejects_impossible_civil_utc_offsets(offset: str) -> None:
     """A parseable but implausible camera offset must not invent capture time."""
     exif = {
@@ -545,7 +550,7 @@ def test_exif_accepts_boundary_utc_plus_fourteen() -> None:
     )
 
 
-@pytest.mark.parametrize("offset", ["+14:30", "-23:00"])
+@pytest.mark.parametrize("offset", ["+14:30", "-23:00", "+0530", "+05:30:15"])
 def test_impossible_camera_offset_keeps_original_and_reports_uncertainty(
     client: TestClient, offset: str
 ) -> None:
