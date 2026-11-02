@@ -321,9 +321,7 @@ def test_frozen_unannotated_study_has_no_invented_rare_class_priority(
     )
     version_id = create_version(client, project_id, name="Unannotated frozen study")["id"]
 
-    standalone = client.post(
-        f"/api/v1/dataset-versions/{version_id}/review-queues", json={}
-    )
+    standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
     assert standalone.status_code == 201, standalone.text
     standalone_item = _queue_item(client, standalone.json()["id"])
     graph = _frozen_graph(version_id)
@@ -337,6 +335,15 @@ def test_frozen_unannotated_study_has_no_invented_rare_class_priority(
 
     for item in (standalone_item, workflow_item):
         assert item["label_class_ids_json"] == []
+        assert item["model_ids_json"] == []
+        for signal in (
+            "low_mean_confidence",
+            "low_min_confidence",
+            "pending_proposals",
+            "rejection_rate",
+            "edited_acceptance_rate",
+        ):
+            assert item["signal_values_json"][signal] == 0.0
         assert item["signal_values_json"]["rare_class_presence"] == 0.0
         assert item["normalized_signals_json"]["rare_class_presence"] == 0.0
         assert item["review_state"] == "pending"
