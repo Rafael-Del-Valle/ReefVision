@@ -296,6 +296,10 @@ def verify_workflow_run_node_graph_lineage(
         # scientific inputs (for example, a frozen pose dataset checksum).
         if node.parameters_json is None and graph_node[1]:
             raise ConflictError(error)
+        # Pending and review-paused nodes also carry scientific audit data.
+        # A JSON array of pairs must not be coerced into a result object.
+        if node.result_json is not None and not isinstance(node.result_json, dict):
+            raise ConflictError("Workflow node result must be a JSON object")
         # The planner may add optional defaults, but it must preserve every
         # explicitly saved scientific parameter from the checksum-pinned graph.
         if isinstance(node.parameters_json, dict) and any(
