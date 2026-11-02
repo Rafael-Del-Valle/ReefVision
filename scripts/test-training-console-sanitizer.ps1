@@ -31,6 +31,20 @@ $scientific = 'train/box_loss=0.25; scale=10 µm; temp=24 °C'
 if ((Format-SafeText $scientific) -cne $scientific) {
   throw 'Scientific units or loss values were altered.'
 }
+# Worker output may end mid-ANSI sequence. Its numeric parameters must never
+# be appended to genuine box/cls/dfl losses in the external console.
+$incompleteEscCsi = 'train/box_loss=0.25' + [char]0x001B + '[31'
+if ((Format-SafeText $incompleteEscCsi) -cne 'train/box_loss=0.25') {
+  throw 'Incomplete ESC CSI fabricated or contaminated a training loss.'
+}
+$incompleteC1Csi = 'train/cls_loss=0.30' + [char]0x009B + '31'
+if ((Format-SafeText $incompleteC1Csi) -cne 'train/cls_loss=0.30') {
+  throw 'Incomplete C1 CSI fabricated or contaminated a training loss.'
+}
+$incompleteBeforeNewline = 'train/dfl_loss=0.10' + [char]0x001B + '[31' + [char]10 + 'epoch=4'
+if ((Format-SafeText $incompleteBeforeNewline) -cne 'train/dfl_loss=0.10 epoch=4') {
+  throw 'Incomplete CSI before a newline altered scientific loss or epoch text.'
+}
 if ((Format-SafeText $null) -ne '') {
   throw 'Null metadata must render as empty text.'
 }
