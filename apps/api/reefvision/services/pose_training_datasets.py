@@ -556,6 +556,19 @@ class PoseTrainingDatasetService:
         # after selection while its original candidate fingerprint remains.
         if canonical_json_sha256(provenance) != candidate.provenance_sha256:
             raise ConflictError("Pose acquisition provenance changed after selection")
+        # The candidate fingerprint can be re-signed after a metadata edit.
+        # Validate acquisition identities before freezing, rather than
+        # persisting a dataset that fails its own manifest on first read.
+        if (
+            provenance.get("schema_version") != "pose-active-learning-provenance-0001"
+            or provenance.get("project_id") != project_id
+            or provenance.get("video_id") != video.id
+            or provenance.get("video_track_id") != track.id
+            or provenance.get("focus_frame") != candidate.focus_frame
+            or provenance.get("pose_schema_id") != candidate.pose_schema_id
+            or provenance.get("pose_schema_revision") != candidate.pose_schema_revision
+        ):
+            raise ConflictError("Pose acquisition provenance does not match verified source")
         source_video_sha = provenance.get("video_sha256")
         # Missing or empty source checksums are not valid frozen evidence.
         # Reject them before persisting a dataset that later fails its own
