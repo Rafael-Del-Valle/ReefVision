@@ -43,20 +43,33 @@ def test_non_ply_numbers_never_enter_geometry(invalid: str) -> None:
 
 
 def test_standard_decimal_exponent_and_exact_zero_remain_supported() -> None:
-    valid = PLY.replace("element vertex 2", "element vertex 002").replace(
-        "1 2 3", "+1. .25 1e-2"
-    ).replace("0 0 0", "-0.0 0.00e-9999 0")
+    valid = (
+        PLY.replace("element vertex 2", "element vertex 002")
+        .replace("1 2 3", "+1. .25 1e-2")
+        .replace("0 0 0", "-0.0 0.00e-9999 0")
+    )
     assert parse_ascii_ply_points(valid) == [
         [-0.0, 0.0, 0.0],
         [1.0, 0.25, 0.01],
     ]
 
 
+@pytest.mark.parametrize("control", ["\x00", "\x0b", "\x0c", "\x1b", "\x1c", "\x7f"])
+def test_hidden_ascii_control_characters_rejected(control: str) -> None:
+    invalid = PLY.replace("1 2 3", f"1{control}2 3")
+    with pytest.raises(ValueError, match="unsupported control"):
+        parse_ascii_ply_points(invalid)
+
+
+def test_crlf_and_tabs_remain_valid_ply_whitespace() -> None:
+    valid = PLY.replace("1 2 3", "1\t2\t3").replace("\n", "\r\n")
+    assert parse_ascii_ply_points(valid) == [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]]
+
+
 def test_invalid_late_coordinate_does_not_mutate_caller_colors() -> None:
     colored = PLY.replace(
         "property float z\n",
-        "property float z\n"
-        "property uchar red\nproperty uchar green\nproperty uchar blue\n",
+        "property float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\n",
     ).replace("0 0 0\n1 2 3\n", "0 0 0 1 2 3\n1e-9999 2 3 4 5 6\n")
     existing = [[7, 8, 9]]
     with pytest.raises(ValueError, match="underflows"):
@@ -70,6 +83,8 @@ def test_invalid_late_coordinate_does_not_mutate_caller_colors() -> None:
         PLY.replace("element vertex 2", "element vertex 0_2"),
         PLY.replace("1 2 3", "1_0 2 3"),
         PLY.replace("1 2 3", "1e-9999 2 3"),
+        PLY.replace("1 2 3", "1\x002 3"),
+        PLY.replace("1 2 3", "1\x0b2 3"),
     ],
 )
 def test_standalone_and_saved_graph_reject_invalid_ply_without_artifact(
