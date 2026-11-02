@@ -1318,3 +1318,38 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
         restored_parameters.json()["run"]["result_json"]["provenance_sha256"]
         == run_result["provenance_sha256"]
     )
+
+    # This completed saved Workflow Builder run contains a scientist review
+    # approval. Changing its reviewer without altering artifact hashes must
+    # invalidate the terminal provenance snapshot on reopen.
+    pose_review_node = next(item for item in payload["nodes"] if item["node_id"] == "pose_review")
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, pose_review_node["id"])
+        assert persisted is not None
+        original_review_result = dict(persisted.result_json or {})
+        approval = original_review_result.get("review_approval")
+        assert isinstance(approval, dict)
+        persisted.result_json = {
+            **original_review_result,
+            "review_approval": {**approval, "reviewed_by": "unverified-replacement"},
+        }
+        session.commit()
+
+    tampered_review = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert tampered_review.status_code == 409, tampered_review.text
+    assert tampered_review.json() == {
+        "detail": "Workflow run saved provenance no longer matches persisted science"
+    }
+
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, pose_review_node["id"])
+        assert persisted is not None
+        persisted.result_json = original_review_result
+        session.commit()
+
+    restored_review = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert restored_review.status_code == 200, restored_review.text
+    assert (
+        restored_review.json()["run"]["result_json"]["provenance_sha256"]
+        == run_result["provenance_sha256"]
+    )
