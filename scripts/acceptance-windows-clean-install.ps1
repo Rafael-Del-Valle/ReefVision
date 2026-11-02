@@ -170,7 +170,7 @@ function Start-AcceptanceDesktop {
         $isolatedOverrides['OPENBLAS_NUM_THREADS'] = '1'
         $isolatedOverrides['TOKENIZERS_PARALLELISM'] = 'false'
     }
-    return Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment $isolatedOverrides -Action {
+    return Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment $isolatedOverrides -AllowLiveSam2Network:$LiveSam2Acceptance -Action {
         Start-Process -FilePath (Join-Path $InstallRoot 'ReefVision.exe') -WorkingDirectory $InstallRoot -PassThru -WindowStyle Hidden
     }
 }
