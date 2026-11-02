@@ -497,7 +497,9 @@ class LongitudinalAnalysisResponse(BaseModel):
             for organism_id, dates in coverage.observed_sampling_dates_by_organism.items():
                 key = (organism_id, coverage.metric_name)
                 if key in observed:
-                    raise ValueError("Longitudinal coverage repeats an organism/metric across units")
+                    raise ValueError(
+                        "Longitudinal coverage repeats an organism/metric across units"
+                    )
                 if not dates or len(dates) != len(set(dates)):
                     raise ValueError("Longitudinal coverage series dates are missing or duplicated")
                 observed[key] = dates
