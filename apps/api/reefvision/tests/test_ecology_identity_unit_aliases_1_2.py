@@ -321,13 +321,19 @@ def test_ambiguous_experimental_unit_ids_cannot_create_or_revise_registry(
 
 
 @pytest.mark.parametrize(
-    "invalid",
-    ["tank-1 ", "tank-1\u200b", "\uff54\uff41\uff4e\uff4b-1", "tank-①"],
+    ("invalid", "expected_diagnostic"),
+    [
+        ("tank-1 ", "invalid experimental unit ID"),
+        ("tank-1\u200b", "invalid experimental unit ID"),
+        ("\uff54\uff41\uff4e\uff4b-1", "experimental unit IDs differ only by case or Unicode compatibility"),
+        ("tank-①", "experimental unit IDs differ only by case or Unicode compatibility"),
+    ],
     ids=["padded", "zero-width", "fullwidth", "compatibility-digit"],
 )
 def test_imported_ambiguous_unit_id_blocks_registry_and_executable_workflow(
     client: TestClient,
     invalid: str,
+    expected_diagnostic: str,
 ) -> None:
     project_id = str(create_project(client, "Imported physical-unit ambiguity")["id"])
     assert (
@@ -371,7 +377,37 @@ def test_imported_ambiguous_unit_id_blocks_registry_and_executable_workflow(
         session.commit()
     registry = client.get(f"/api/v1/projects/{project_id}/ecology/identity-registry")
     assert registry.status_code == 400, registry.text
-    assert "invalid experimental unit ID" in registry.text
+    assert expected_diagnostic in registry.text
+
+    # Invalid imported history must also block writes without appending revisions.
+    with app.state.session_factory() as session:
+        revision_count = (
+            session.query(EcologyIdentityRevision)
+            .filter_by(project_id=project_id)
+            .count()
+        )
+    attempted = _register(client, project_id, "fragment-B")
+    assert attempted.status_code == 400, attempted.text
+    assert expected_diagnostic in attempted.text
+    revision = client.post(
+        f"/api/v1/projects/{project_id}/ecology/organisms/fragment-A/revisions",
+        json={
+            "expected_revision": 3,
+            "kind": "fragment",
+            "experimental_unit_type": "tank",
+            "experimental_unit_id": "tank-1",
+            "reason": "Attempt to revise after an unreviewed imported unit alias",
+        },
+    )
+    assert revision.status_code == 400, revision.text
+    assert expected_diagnostic in revision.text
+    with app.state.session_factory() as session:
+        assert (
+            session.query(EcologyIdentityRevision)
+            .filter_by(project_id=project_id)
+            .count()
+            == revision_count
+        )
 
     graph: dict[str, Any] = {
         "graph_id": "ecology-unit-id-integrity-1-2",
@@ -411,7 +447,7 @@ def test_imported_ambiguous_unit_id_blocks_registry_and_executable_workflow(
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
-    assert "invalid experimental unit ID" in detail.json()["run"]["error_message"]
+    assert expected_diagnostic in detail.json()["run"]["error_message"]
     assert not any(
         row["data_type"] == "ecology_identity_registry" for row in detail.json()["artifacts"]
     )
