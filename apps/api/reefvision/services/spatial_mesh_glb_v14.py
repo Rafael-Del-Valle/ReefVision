@@ -72,6 +72,27 @@ def _reject_nested_extensions(document: dict[str, Any]) -> None:
             pending.extend(value)
 
 
+def _reject_unpaired_unicode_surrogates(document: dict[str, Any]) -> None:
+    """Reject non-scalar Unicode in GLB JSON keys and metadata values.
+
+    Python's JSON decoder accepts escaped lone UTF-16 surrogates, but they
+    are not Unicode scalar values and cannot be safely re-encoded as UTF-8.
+    Traverse even opaque extras so malformed source provenance fails closed.
+    """
+    pending: list[Any] = [document]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            pending.extend(value.keys())
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+        elif isinstance(value, str) and any(
+            0xD800 <= ord(character) <= 0xDFFF for character in value
+        ):
+            raise ValueError("GLB JSON contains unpaired Unicode surrogate")
+
+
 def _as_object(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"GLB {name} must be an object")
@@ -133,6 +154,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         )
     except (UnicodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError("Invalid GLB JSON") from exc
+    _reject_unpaired_unicode_surrogates(doc)
     asset = _as_object(doc.get("asset"), "asset")
     if asset.get("version") != "2.0":
         raise ValueError("GLB asset must declare version 2.0")
