@@ -31,9 +31,7 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
         "producer_project_binding",
     ],
 )
-def test_saved_frozen_qc_rejects_dataset_producer_mismatch(
-    client: TestClient, tamper: str
-) -> None:
+def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, tamper: str) -> None:
     project_id, _, version_id, _ = _study(client)
     graph = _frozen_graph(version_id)
     saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
