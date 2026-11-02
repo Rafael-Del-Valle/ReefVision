@@ -196,7 +196,8 @@ def test_rgb_decimation_retains_source_index_alignment(client: TestClient) -> No
 def test_rejected_late_ply_vertex_does_not_modify_existing_colors() -> None:
     colors = [[12, 34, 56]]
     malformed = RGB_PLY.replace("7 0 11 0 22 3", "7 nan 11 0 22 3")
-    with pytest.raises(ValueError, match="finite and bounded"):
+    # Nonfinite PLY tokens now fail strict numeric grammar before float conversion.
+    with pytest.raises(ValueError, match="Invalid point-cloud coordinate"):
         parse_ascii_ply_points(malformed, colors_out=colors)
     assert colors == [[12, 34, 56]]
     assert len(parse_ascii_ply_points(RGB_PLY, colors_out=colors)) == 3
