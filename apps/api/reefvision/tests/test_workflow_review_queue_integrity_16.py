@@ -926,9 +926,7 @@ def _v3_human_only_snapshot():
             part["normalized_value"] = item.normalized_signals_json[signal]
             part["weight"] = weights[signal]
             part["contribution"] = 100.0 if signal == "count_disagreement" else 0.0
-        item.score_breakdown_json.sort(
-            key=lambda part: (-part["contribution"], part["signal_id"])
-        )
+        item.score_breakdown_json.sort(key=lambda part: (-part["contribution"], part["signal_id"]))
         item.reason_summary = "Model-versus-human count gap: +100.00"
     queue.summary_json["average_score"] = 100.0
     queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
@@ -1131,3 +1129,45 @@ def test_v3_rejects_resigned_rare_class_without_annotation_evidence() -> None:
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
     assert item.review_state == "in_progress"
+
+
+@pytest.mark.parametrize(
+    ("threshold", "pending_count", "should_accept"),
+    [
+        (0.8, 1.0, True),
+        (0.8, 0.0, False),
+        (0.5, 1.0, False),
+    ],
+)
+def test_v3_resigned_confidence_filter_preserves_selection_evidence(
+    threshold: float, pending_count: float, should_accept: bool
+) -> None:
+    """Saved QC selection must match its frozen threshold, not a re-signed claim."""
+    queue, items = _v3_snapshot()
+    validate_saved_queue_snapshot(queue, items)
+    queue.configuration_json["review_below_confidence"] = threshold
+    for item in items:
+        item.review_state = "in_progress"
+        _set_v3_unweighted_signal(item, "pending_proposals", pending_count)
+        if pending_count:
+            _set_v3_unweighted_signal(
+                item, "low_min_confidence", item.signal_values_json["low_mean_confidence"]
+            )
+    # A checksum-only validator would accept all three re-signed artifacts.
+    # The final case includes a selected proposal whose saved mean confidence
+    # exceeds the filter threshold on the second image.
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+            "integrity_schema_version": "qc-review-queue-v3",
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    if should_accept:
+        validate_saved_queue_snapshot(queue, items)
+    else:
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            validate_saved_queue_snapshot(queue, items)
+    assert all(item.review_state == "in_progress" for item in items)
