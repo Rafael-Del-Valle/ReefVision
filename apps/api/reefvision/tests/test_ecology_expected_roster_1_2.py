@@ -154,3 +154,91 @@ def test_saved_workflow_roster_coverage_matches_standalone(client: TestClient) -
         == standalone.json()["analysis_provenance"]
     )
     assert artifacts[0]["payload_json"]["evidence_level"] == "caller_supplied_unverified"
+
+
+@pytest.mark.parametrize(
+    ("first_alias", "second_alias"),
+    [
+        ("frag-C", "FRAG-C"),
+        ("frag-C", "frag-\\uff23"),
+        ("Caf\\u00e9", "Cafe\\u0301"),
+    ],
+    ids=["casefold", "fullwidth-nfkc", "combining-nfkc"],
+)
+def test_expected_roster_aliases_cannot_inflate_planned_organisms(
+    client: TestClient, first_alias: str, second_alias: str
+) -> None:
+    # Both unobserved roster entries would otherwise be counted as distinct
+    # biological individuals and inflate planned visits across two tanks.
+    roster = {
+        "tank-1": ["frag-A", first_alias],
+        "tank-2": ["frag-B", second_alias],
+    }
+    response = client.post(
+        "/api/v1/ecology/longitudinal-analysis",
+        json={
+            "observations": _observations(),
+            "experimental_unit_type": "tank",
+            "expected_organism_ids_by_unit": roster,
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert "Expected organism roster IDs differ only by case or Unicode compatibility" in (
+        response.json()["detail"]
+    )
+
+
+def test_expected_roster_alias_within_one_tank_is_not_an_extra_organism(
+    client: TestClient,
+) -> None:
+    roster = {"tank-1": ["frag-A", "frag-C", "FRAG-C"], "tank-2": ["frag-B"]}
+    response = client.post(
+        "/api/v1/ecology/longitudinal-analysis",
+        json={
+            "observations": _observations(),
+            "experimental_unit_type": "tank",
+            "expected_organism_ids_by_unit": roster,
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert "differ only by case or Unicode compatibility" in response.json()["detail"]
+
+
+def test_saved_workflow_rejects_aliased_expected_roster_without_scientific_artifact(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Expected organism aliases")["id"])
+    roster = {"tank-1": ["frag-A", "frag-C"], "tank-2": ["frag-B", "FRAG-C"]}
+    graph = _graph(_observations())
+    graph["nodes"][1]["parameters"].update(
+        {"experimental_unit_type": "tank", "expected_organism_ids_by_unit": roster}
+    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert "Expected organism roster IDs differ only by case" in (
+        detail.json()["run"]["error_message"]
+    )
+    assert not any(
+        row["data_type"] == "longitudinal_analysis" for row in detail.json()["artifacts"]
+    )
