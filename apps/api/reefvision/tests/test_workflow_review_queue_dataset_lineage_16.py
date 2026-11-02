@@ -230,12 +230,14 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
             dataset_artifact.payload_sha256 = canonical_json_sha256(dataset_artifact.payload_json)
         elif tamper in {"item_annotation_count", "item_mask_count"}:
             frozen_item = session.scalar(
-                select(DatasetVersionItem).where(DatasetVersionItem.dataset_version_id == version_id)
+                select(DatasetVersionItem).where(
+                    DatasetVersionItem.dataset_version_id == version_id
+                )
             )
             assert frozen_item is not None
-            field = (
-                "annotation_count" if tamper == "item_annotation_count" else "mask_annotation_count"
-            )
+            field = "annotation_count"
+            if tamper == "item_mask_count":
+                field = "mask_annotation_count"
             setattr(frozen_item, field, getattr(frozen_item, field) + 1)
         elif tamper == "producer_resigned_images_artifact":
             images_artifact.payload_json = {
