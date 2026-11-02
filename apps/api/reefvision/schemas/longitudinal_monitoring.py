@@ -173,8 +173,10 @@ class LongitudinalChange(BaseModel):
         """Reject implicit Unix-time coercion in replayed scientific results."""
         if isinstance(value, datetime):
             return value
-        if not isinstance(value, str) or not re.match(r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()):
-            raise ValueError("Saved longitudinal endpoints require explicit ISO calendar timestamps")
+        if not isinstance(value, str) or not re.match(
+            r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()
+        ):
+            raise ValueError("Saved longitudinal endpoints require ISO calendar timestamps")
         return value
 
     @field_validator(
