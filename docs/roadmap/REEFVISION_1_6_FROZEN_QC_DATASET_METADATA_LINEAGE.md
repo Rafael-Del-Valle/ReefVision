@@ -77,3 +77,20 @@ unchanged. The preceding multi-image parity test also received the exact
 Ruff formatting corrections from CI run 41475202931. Full exact-head CI,
 1.1/1.6 migration reconciliation, biological acceptance and native
 Windows installer/installed-GUI checks remain release blockers.
+
+## Completed QC orphaned-queue replay guard (2026-11-02)
+
+The completed-node guard also rejects the case where **both** the saved
+output binding and its workflow-owned review queue disappear. Previously the
+missing queue prevented the binding-only guard from running, and the adapter
+could create replacement QC evidence for an already-succeeded workflow node.
+A completed node now fails closed before queue creation when either record is
+missing. Only unfinished nodes retain their deterministic recovery path.
+
+The saved frozen-dataset Workflow Builder regression runs both corruption
+cases inside rollback-only transactions, then replays the original typed,
+dimensionless, researcher-review-gated output and compares the original
+pending review items. It does not modify historical researcher decisions or
+live study assets. This is a provenance/retry safety check, not evidence of
+biological correctness or installed Windows acceptance. CI and migration
+lineage reconciliation remain required before release.
