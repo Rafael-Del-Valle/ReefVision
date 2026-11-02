@@ -6005,3 +6005,16 @@ and Windows CI; authenticate calibrated observations and study design; review
 representative human/model comparisons; reconcile 1.1 migrations; and perform
 installed Windows MSI/GUI/GPU acceptance.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Expected-organism roster alias safeguard and CI import repair (2026-11-01; development only)
+
+**Pre-edit evidence:** Draft PR #74 head `ba3a693b912c779021b2e73500276c2a3591550d` completed 19 GitHub Actions: 16 succeeded and three backend gates failed on Ruff I001 import ordering in `test_ecology_analysis_unit_case_alias_1_2.py`. The logged import-order diagnostic was applied; no scientific validator was weakened.
+
+**Scientific gap:** The caller-declared expected organism roster previously checked exact duplicates and exact cross-unit membership only. A missing individual listed as `frag-C` and `FRAG-C` (or NFKC-equivalent Unicode variants) could be counted as two planned organisms, inflating expected sampling visits and missing-organism denominators even when actual observations had valid identities.
+
+**Implementation:** Reuse the existing NFKC/casefold ecological organism identity spelling validator across **all** expected roster entries, including unobserved organisms and entries assigned to different tanks. Preserve exact-duplicate diagnostics and original labels. Reject ambiguous roster aliases before producing longitudinal coverage and population summaries. Both the standalone ecology API and executable saved `ecology_longitudinal_analysis` node use the same validator; no new store, migration, weight download or 1.1 environmental service was introduced.
+
+**Regression:** Parameterized casefold, fullwidth and decomposed Unicode aliases must fail the standalone API. Within-tank aliases must also fail. The saved graph must plan and persist, but execution with an ambiguous roster must fail without a successful `longitudinal_analysis` artifact. Existing valid-roster tests continue to verify one vote per declared unit, provenance, coverage and `caller_supplied_unverified` status.
+
+**Validation limitation:** Local repository pytest/Ruff remain unavailable because the container cannot resolve GitHub for a checkout. Exact-head CI and Windows installer build must be checked after these commits; no new pass is inferred. Physical Windows GUI/GPU, independently verified study units, source-authenticated calibrated measurements, scientist-reviewed human/model comparisons and 1.1 Alembic reconciliation remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
