@@ -391,7 +391,15 @@ def measure_mesh_preview(
     if enclosed_volume_m3 is not None and not isfinite(enclosed_volume_m3):
         enclosed_volume_m3 = None
         volume_qc_warnings.add("enclosed_volume_numeric_overflow")
-    patch_areas_m2 = [patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches]
+    patch_areas_m2: list[float] = []
+    for patch in ordered_patches:
+        source_patch_area = patch_area_mesh_units[patch]
+        calibrated_patch_area = source_patch_area * scale * scale
+        # A positive small patch can underflow even when the aggregate mesh
+        # area is representable. Never label a real patch as zero-area tissue.
+        if source_patch_area > 0 and calibrated_patch_area == 0:
+            raise ValueError("Calibrated mesh patch surface area underflowed to zero")
+        patch_areas_m2.append(calibrated_patch_area)
     # Fractions are dimensionless, independent of common calibration scale,
     # and use the complete reconstruction rather than sampled display faces.
     # Patch order is the first source-face index; ties retain that order.
