@@ -280,12 +280,14 @@ def create_review_queue_workflow_artifact(
     # reuse another queue with the same owner. This protects researcher audit
     # history even if an attacker re-signs a substituted artifact payload.
     saved_outputs = node.output_artifact_ids_json
-    # A successfully persisted QC node cannot lose its output-artifact
-    # binding while retaining its workflow-owned queue. Without this guard,
-    # an empty list bypasses output integrity checks during saved replay.
-    # An interrupted, not-yet-succeeded node may legitimately have no output.
-    if existing is not None and node.status == "succeeded" and not saved_outputs:
-        raise ValidationError("QC review-queue completed node is missing saved output binding")
+    # A completed node cannot lose either its output binding OR its owned
+    # queue. If both disappear, an empty output list otherwise bypasses
+    # validation and silently creates replacement scientific evidence.
+    # Incomplete nodes still use the existing deterministic retry path.
+    if node.status == "succeeded" and (existing is None or not saved_outputs):
+        raise ValidationError(
+            "QC review-queue completed node is missing saved output binding or queue"
+        )
     if saved_outputs and (
         not isinstance(saved_outputs, list)
         or len(saved_outputs) != 1
