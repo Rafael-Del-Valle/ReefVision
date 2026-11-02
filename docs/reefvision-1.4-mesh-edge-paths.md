@@ -68,3 +68,19 @@ biological identities, or registration between scans. Scale evidence remains
 caller-supplied and unverified. Scale uncertainty is not a confidence interval
 and does not include reconstruction, endpoint, or registration uncertainty.
 Review is required before interpreting these provisional measurements.
+
+## Provenance parity for direct, API, and saved-workflow previews
+
+The pure geometry measurement function returns core calibration and geometry
+provenance. The project-scoped standalone API additionally records source
+format, imported-payload integrity status, observation metadata, specimen
+identity and coordinate-frame verification flags. These additional fields
+must not be silently dropped or interpreted as verified scientific evidence.
+
+For route-underflow regression coverage, the core provenance keys must agree
+between the direct engine and the standalone API. The **entire** enriched
+standalone provenance record, including explicit false verification flags,
+must then match the persisted typed Workflow Builder measurement artifact.
+The same checks also preserve the route-level numerical QC warnings and
+representable calibrated area; this is reproducibility of provisional
+measurements, **not** independent calibration or anatomical validation.
