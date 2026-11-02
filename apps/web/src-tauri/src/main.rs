@@ -184,7 +184,7 @@ function Format-SafeText {
   # Bound untrusted camera/study names and worker logs before regex parsing.
   # Never truncate the persisted scientific record; this limits display only.
   if ($text.Length -gt 4096) { $text = $text.Substring(0, 4096) }
-  $text = [regex]::Replace($text, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\|$)', '')
+  $text = [regex]::Replace($text, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
   $text = [regex]::Replace($text, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
   $text = [regex]::Replace($text, '(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]', '')
   # Incomplete ANSI CSI color sequences must not append their digits to
