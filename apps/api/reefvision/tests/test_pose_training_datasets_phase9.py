@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.db.models import (
     PoseActiveLearningCandidate,
+    PoseActiveLearningRound,
     PoseLandmarkObservation,
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
@@ -474,6 +475,47 @@ def test_freeze_rejects_resigned_acquisition_with_invalid_source_identity(
     )
     assert response.status_code == 409, response.text
     assert expected_error in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize("resign_selection", [False, True])
+def test_freeze_rejects_changed_saved_selection_lineage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    resign_selection: bool,
+) -> None:
+    # Reuse a real completed scientist-review round, not a fabricated dataset.
+    # Both an unsigned selection edit and a re-signed selection with identities
+    # that disagree with its persisted candidates must fail before freezing.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        round_record = session.get(PoseActiveLearningRound, str(round_payload["id"]))
+        assert round_record is not None
+        selection = copy.deepcopy(round_record.selection_manifest_json)
+        selection["items"][0]["focus_frame"] = -1
+        round_record.selection_manifest_json = selection
+        if resign_selection:
+            identity = {
+                **selection,
+                "schema_version": "pose-active-learning-selection-identity-0001",
+            }
+            round_record.selection_sha256 = canonical_json_sha256(identity)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject changed saved selection"},
+    )
+    assert response.status_code == 409, response.text
+    expected = (
+        "selected candidate identities changed"
+        if resign_selection
+        else "selection manifest checksum changed"
+    )
+    assert expected in response.text
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
 
