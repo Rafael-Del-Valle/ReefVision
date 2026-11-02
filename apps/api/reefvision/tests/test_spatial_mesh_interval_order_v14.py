@@ -218,6 +218,13 @@ def test_missing_early_bounds_still_withhold_combined_intervals() -> None:
             "2026-10-02T05:00:00Z",
             1.0 / 24,
         ),
+        (
+            "2026-10-02T00:30:00+09:00",
+            "2026-10-01T16:00:00Z",
+            "2026-10-01T15:30:00Z",
+            "2026-10-01T16:00:00Z",
+            1.0 / 48,
+        ),
     ],
 )
 def test_incomplete_scale_bounds_standalone_and_saved_graph_parity(
@@ -242,9 +249,9 @@ def test_incomplete_scale_bounds_standalone_and_saved_graph_parity(
     assert expected["delta_surface_area_scale_interval_m2"] is None
     assert expected["delta_axis_aligned_bounding_box_diagonal_scale_interval_m"] is None
     assert expected["provenance"]["specimen_identity_verified"] is False
-    assert expected["provenance"]["elapsed_days"] == pytest.approx(days)
-    assert expected["provenance"]["before_observed_at_utc_normalized"] == early_utc
-    assert expected["provenance"]["after_observed_at_utc_normalized"] == late_utc
+    assert expected["elapsed_days"] == pytest.approx(days)
+    assert expected["before_observed_at_utc_normalized"] == early_utc
+    assert expected["after_observed_at_utc_normalized"] == late_utc
     assert expected["average_surface_area_change_m2_per_day"] == pytest.approx(
         expected["delta_surface_area_m2"] / days
     )
