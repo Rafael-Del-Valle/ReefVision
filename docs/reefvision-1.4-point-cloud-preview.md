@@ -301,3 +301,20 @@ must still be assessed independently. It does not change standalone mesh
 measurements or saved Workflow Builder execution and does not create
 persistent project-scoped 3D assets. Regression tests cover invalid claims,
 the fail-closed display, and legacy compatibility.
+
+
+## Bounded RGB decimal tokens (November 1, 2026)
+
+ASCII PLY unsigned-byte RGB channels are validated as at most three ASCII
+decimal digits representing 0–255 before integer conversion. A long string of
+leading zeroes must not trigger Python's integer-string conversion limit or
+bypass a consistent scientific import error. Ordinary bounded representations,
+including `000`, remain supported. Invalid source rows fail atomically:
+a supplied color output buffer is not partially modified.
+
+The standalone point-cloud endpoint and executable, persisted, typed
+`point_cloud_preview` Workflow Builder node use the same parser. Regression
+tests reject both four-digit and oversized zero-padded channels and require
+failed graph execution to publish no point-cloud measurement artifact. Valid
+colors are display metadata only; they do not imply coral condition,
+independent calibration, verified biological identity, or surface area.
