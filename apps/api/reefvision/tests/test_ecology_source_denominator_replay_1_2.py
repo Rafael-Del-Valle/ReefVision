@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse
+from reefvision.tests.test_ecology_sampling_schedule_1_2 import _payload
 from reefvision.tests.test_longitudinal_monitoring import observation
 
 
@@ -118,3 +119,66 @@ def test_saved_series_denominators_reject_reused_endpoint_across_organisms(
     forged["changes"][1]["baseline_source_record_id"] = "a0"
     with pytest.raises(PydanticValidationError, match="source endpoints"):
         LongitudinalAnalysisResponse.model_validate(forged)
+
+
+def _dated_coverage_result(client: TestClient) -> dict[str, object]:
+    request = _payload()
+    request.pop("expected_sampling_dates_by_unit")
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert LongitudinalAnalysisResponse.model_validate(result).observation_count == 6
+    assert len(result["unit_coverage"][0]["observed_sampling_dates_by_organism"]["A"]) == 3
+    return result
+
+
+@pytest.mark.parametrize(
+    ("tampering", "error"),
+    [
+        ("resigned_middle_observation", "coverage series dates"),
+        ("removed_coverage_date", "coverage series dates"),
+        ("duplicated_coverage_date", "coverage series dates"),
+        ("reclassified_complete_series", "coverage completed series"),
+    ],
+)
+def test_persisted_sampling_dates_reject_forged_series_denominators(
+    client: TestClient, tampering: str, error: str
+) -> None:
+    forged = deepcopy(_dated_coverage_result(client))
+    if tampering == "resigned_middle_observation":
+        # Both top-level source and series totals are rebalanced. The
+        # organism's three audited UTC visits must still prevent relabeling
+        # its middle photograph as if it never existed.
+        forged["changes"][0]["observation_count"] = 2
+        forged["observation_count"] -= 1
+        forged["analysis_provenance"]["source_record_ids"].remove("A-2")
+    elif tampering == "removed_coverage_date":
+        forged["unit_coverage"][0]["observed_sampling_dates_by_organism"]["A"].pop(1)
+    elif tampering == "duplicated_coverage_date":
+        dates = forged["unit_coverage"][0]["observed_sampling_dates_by_organism"]["A"]
+        dates.append(dates[1])
+    elif tampering == "reclassified_complete_series":
+        forged["changes"].pop()
+        forged["evaluated_series_count"] = 1
+        forged["incomplete_series_count"] = 3
+    with pytest.raises(PydanticValidationError, match=error):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+
+def test_persisted_sampling_dates_preserve_valid_incomplete_series(
+    client: TestClient,
+) -> None:
+    request = _payload()
+    request.pop("expected_sampling_dates_by_unit")
+    request["observations"] = [
+        row
+        for row in request["observations"]
+        if not (row["organism_id"] == "B" and row["observed_at"] != "2026-04-01T12:00:00Z")
+    ]
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert response.status_code == 200, response.text
+    parsed = LongitudinalAnalysisResponse.model_validate(response.json())
+    assert parsed.evaluated_series_count == 1
+    assert parsed.incomplete_series_count == 1
+    assert parsed.unit_coverage[0].eligible_for_summary is False
+    assert parsed.evidence_level == "caller_supplied_unverified"
