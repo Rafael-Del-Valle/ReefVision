@@ -320,20 +320,26 @@ class ReviewQueueService:
             incomplete_provenance = (
                 provenance_missing / provenance_total if provenance_total else 0.0
             )
+            # Dataset-version items do not snapshot per-image import/edit
+            # timestamps. Reading current ImageAsset timestamps would make
+            # frozen study priorities drift after unrelated live edits.
+            # Mark temporal recency signals unavailable (zero contribution)
+            # rather than attributing today's mutable metadata to the version.
             recent_import = 0.0
-            if image.created_at is not None:
-                age_days = max(
-                    (reference_time - _as_utc(image.created_at)).total_seconds() / 86_400.0,
-                    0.0,
-                )
-                recent_import = max(0.0, 1.0 - (age_days / 7.0))
             stale_review_state = 0.0
-            if image.updated_at is not None and image.annotation_status != "reviewed":
-                age_days = max(
-                    (reference_time - _as_utc(image.updated_at)).total_seconds() / 86_400.0,
-                    0.0,
-                )
-                stale_review_state = min(age_days / 30.0, 1.0)
+            if dataset_version is None:
+                if image.created_at is not None:
+                    age_days = max(
+                        (reference_time - _as_utc(image.created_at)).total_seconds() / 86_400.0,
+                        0.0,
+                    )
+                    recent_import = max(0.0, 1.0 - (age_days / 7.0))
+                if image.updated_at is not None and image.annotation_status != "reviewed":
+                    age_days = max(
+                        (reference_time - _as_utc(image.updated_at)).total_seconds() / 86_400.0,
+                        0.0,
+                    )
+                    stale_review_state = min(age_days / 30.0, 1.0)
             signal_values = {
                 "low_mean_confidence": low_mean_confidence,
                 "low_min_confidence": low_min_confidence,
