@@ -123,7 +123,7 @@ def test_positive_small_patch_cannot_disappear_in_calibrated_area(
     }
     with pytest.raises(ValueError, match="Calibrated mesh patch surface area underflowed to zero"):
         measure_mesh_preview(**params)
-    project_id = str(create_project(client, "Mesh patch area underflow rejection")["id"])
+    project_id = str(create_project(client, "Patch area underflow")["id"])
     base = f"/api/v1/projects/{project_id}"
     response = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert response.status_code == 400, response.text
