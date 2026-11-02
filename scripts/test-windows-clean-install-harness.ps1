@@ -54,6 +54,56 @@ foreach ($unsafeOverrides in @(
     } "Unsafe environment override $(@($unsafeOverrides.Keys) -join ',') must be rejected."
 }
 Assert-True (-not $script:isolationOverrideActionRan) 'Rejected isolation override executed its action.'
+# Existing Hugging Face and remote experiment-tracking credentials must
+# never reach a disposable installer/sidecar process, including opt-in SAM.
+# Synthetic sentinels only: no real credentials, network or MSI are used.
+$credentialNames = @(
+    'HF_TOKEN', 'HUGGING_FACE_HUB_TOKEN', 'HF_ENDPOINT',
+    'WANDB_API_KEY', 'COMET_API_KEY', 'MLFLOW_TRACKING_URI'
+)
+$previousCredentials = @{}
+$credentialSentinel = 'SYNTHETIC_ACCEPTANCE_CREDENTIAL_DO_NOT_USE'
+try {
+    foreach ($name in $credentialNames) {
+        $previousCredentials[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        [Environment]::SetEnvironmentVariable($name, $credentialSentinel, 'Process')
+    }
+    foreach ($name in $credentialNames) {
+        $injected = @{}
+        $injected[$name] = $credentialSentinel
+        Assert-Throws {
+            Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment $injected -Action {
+                $script:isolationOverrideActionRan = $true
+            }
+        } "Credential or tracking override $name must be rejected before execution."
+    }
+    Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -Action {
+        foreach ($name in $credentialNames) {
+            Assert-True ($null -eq [Environment]::GetEnvironmentVariable($name, 'Process')) "Inherited $name leaked into offline acceptance."
+        }
+    }
+    Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AllowLiveSam2Network -AdditionalEnvironment @{
+        HF_HUB_OFFLINE = '0'; TRANSFORMERS_OFFLINE = '0'
+    } -Action {
+        foreach ($name in $credentialNames) {
+            Assert-True ($null -eq [Environment]::GetEnvironmentVariable($name, 'Process')) "Inherited $name leaked into live SAM acceptance."
+        }
+    }
+    Assert-Throws {
+        Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -Action {
+            throw 'Synthetic sidecar startup failure for credential restoration'
+        }
+    } 'Synthetic sidecar failure must propagate without leaking credentials.'
+    foreach ($name in $credentialNames) {
+        Assert-True ([Environment]::GetEnvironmentVariable($name, 'Process') -ceq $credentialSentinel) "Caller $name was not restored after success and failure."
+    }
+} finally {
+    foreach ($name in $credentialNames) {
+        [Environment]::SetEnvironmentVariable($name, $previousCredentials[$name], 'Process')
+    }
+}
+Assert-True (-not $script:isolationOverrideActionRan) 'Rejected credential override executed its action.'
+
 # Opt-in live SAM must not weaken the default offline policy or cache isolation.
 # This is a mocked environment test: it performs no network requests.
 $script:liveSamOptInActionRan = $false
