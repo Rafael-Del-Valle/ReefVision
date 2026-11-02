@@ -16,7 +16,6 @@ from reefvision.services.workflow_review_queue_integrity import (
     queue_item_evidence_sha256,
     validate_saved_queue_snapshot,
 )
-from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_review_queue_annotation_evidence_16 import _queue_item
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
     _frozen_graph,
@@ -65,9 +64,8 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
     standalone_item = _queue_item(client, standalone.json()["id"])
 
     graph = _frozen_graph(version_id)
-    next(node for node in graph["nodes"] if node["node_type"] == "qc_review_queue")[
-        "parameters"
-    ] = {"signal_weights": weights}
+    qc_graph_node = next(node for node in graph["nodes"] if node["node_type"] == "qc_review_queue")
+    qc_graph_node["parameters"] = {"signal_weights": weights}
     plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] and plan.json()["executable"]
