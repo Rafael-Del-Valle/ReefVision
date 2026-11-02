@@ -540,11 +540,20 @@ class LongitudinalAnalysisResponse(BaseModel):
             unit_keys.add(unit_key)
             if unit.organism_count < 1:
                 raise ValueError("Population summary unit must contain an organism")
+            if (
+                unit.baseline_at.tzinfo is None
+                or unit.baseline_at.utcoffset() is None
+                or unit.final_at.tzinfo is None
+                or unit.final_at.utcoffset() is None
+            ):
+                raise ValueError("Population summary unit endpoints must be timezone-aware")
+            # Population sampling strata use UTC dates, not the displayed
+            # local calendar dates of equivalent offset timestamps.
             stratum = (
                 unit.metric_name,
                 unit.unit,
-                unit.baseline_at.date(),
-                unit.final_at.date(),
+                unit.baseline_at.astimezone(UTC).date(),
+                unit.final_at.astimezone(UTC).date(),
             )
             strata.setdefault(stratum, []).append(unit)
 
@@ -643,7 +652,10 @@ class LongitudinalAnalysisResponse(BaseModel):
             if any(change.unit != summary.unit for change in completed):
                 raise ValueError("Unit summary measurement units disagree with organism changes")
             windows = {
-                (change.first_observed_at.date(), change.last_observed_at.date())
+                (
+                    change.first_observed_at.astimezone(UTC).date(),
+                    change.last_observed_at.astimezone(UTC).date(),
+                )
                 for change in completed
             }
             if len(windows) != 1:
