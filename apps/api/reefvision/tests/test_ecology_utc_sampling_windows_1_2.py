@@ -109,7 +109,6 @@ def _offset_transition_observations() -> list[dict[str, object]]:
     ]
 
 
-
 def test_population_replay_groups_equivalent_offset_endpoints_by_utc_date() -> None:
     """An offset-rendered date must not create a different biological stratum."""
     result = analyze_longitudinal(
@@ -140,6 +139,36 @@ def test_population_replay_groups_equivalent_offset_endpoints_by_utc_date() -> N
         PydanticValidationError, match="Population summary unit endpoints must be timezone-aware"
     ):
         LongitudinalAnalysisResponse.model_validate(naive)
+
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement", "message"),
+    [
+        ("first_observed_at", 1775000000, "Saved longitudinal endpoints"),
+        ("last_observed_at", "1775000000", "Saved longitudinal endpoints"),
+        ("initial_value", "10", "Saved longitudinal change requires"),
+        ("final_value", True, "Saved longitudinal change requires"),
+        ("absolute_change", "2", "Saved longitudinal change requires"),
+        ("percent_change", "20", "Saved longitudinal change requires"),
+        ("elapsed_days", "2", "Saved longitudinal change requires"),
+        ("change_per_day", True, "Saved longitudinal change requires"),
+        ("observation_count", True, "Saved longitudinal observation count"),
+        ("observation_count", 2.0, "Saved longitudinal observation count"),
+    ],
+)
+def test_persisted_longitudinal_endpoints_reject_json_coercion(
+    field: str, replacement: object, message: str
+) -> None:
+    """A stored analysis must not turn booleans, strings or epochs into measurements."""
+    valid = analyze_longitudinal(
+        LongitudinalAnalysisRequest(observations=_same_date_observations())
+    ).model_dump(mode="json")
+    assert LongitudinalAnalysisResponse.model_validate(valid).evaluated_series_count == 2
+    tampered = deepcopy(valid)
+    tampered["changes"][0][field] = replacement
+    with pytest.raises(PydanticValidationError, match=message):
+        LongitudinalAnalysisResponse.model_validate(tampered)
 
 
 def test_same_utc_dates_different_hours_are_eligible() -> None:
@@ -251,3 +280,14 @@ def test_standalone_and_saved_workflow_agree_on_date_window(
             PydanticValidationError, match="Population summary strata do not reconcile"
         ):
             LongitudinalAnalysisResponse.model_validate(forged)
+        # Validate the actual executed/persisted Workflow Builder payload,
+        # not only a hand-constructed standalone response.
+        for field, replacement in (
+            ("first_observed_at", 1775000000),
+            ("initial_value", "10"),
+            ("observation_count", True),
+        ):
+            coerced = deepcopy(payload)
+            coerced["changes"][0][field] = replacement
+            with pytest.raises(PydanticValidationError, match="Saved longitudinal"):
+                LongitudinalAnalysisResponse.model_validate(coerced)
