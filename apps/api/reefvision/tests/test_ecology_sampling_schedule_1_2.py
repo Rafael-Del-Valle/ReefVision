@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_ecology_1_2 import _graph
 
@@ -184,6 +187,14 @@ def test_saved_workflow_persists_schedule_qc(client: TestClient) -> None:
         == standalone.json()["analysis_provenance"]
     )
     assert artifacts[0]["payload_json"]["evidence_level"] == "caller_supplied_unverified"
+    # Executed, typed saved-workflow artifacts must also reject forged
+    # denominators on scientific read-back, not only at initial execution.
+    persisted = artifacts[0]["payload_json"]
+    assert LongitudinalAnalysisResponse.model_validate(persisted).planned_sampling_effort
+    tampered = deepcopy(persisted)
+    tampered["planned_sampling_effort"][0]["expected_organism_visits"] += 1
+    with pytest.raises(PydanticValidationError, match="denominator does not reconcile"):
+        LongitudinalAnalysisResponse.model_validate(tampered)
 
 
 def test_invalid_saved_calendar_does_not_produce_successful_analysis(
@@ -283,3 +294,43 @@ def test_missing_scheduled_unit_id_fails_saved_workflow_without_analysis_artifac
     assert not any(
         item["data_type"] == "longitudinal_analysis" for item in detail.json()["artifacts"]
     )
+
+
+@pytest.mark.parametrize(
+    ("collection", "field", "replacement", "diagnostic"),
+    [
+        ("planned_sampling_effort", "expected_organism_visits", 7, "denominator"),
+        ("planned_sampling_effort", "observed_organism_visits", 5, "counts"),
+        ("planned_sampling_effort", "missing_organism_visits", 1, "counts"),
+        ("planned_sampling_effort", "observation_coverage_fraction", 0.5, "coverage fraction"),
+        ("planned_sampling_date_coverage", "observed_organism_count", 1, "observed organism count"),
+        (
+            "planned_sampling_date_coverage",
+            "observed_organism_ids",
+            ["A", "A"],
+            "unique and disjoint",
+        ),
+        ("planned_sampling_date_coverage", "missing_organism_ids", ["A"], "unique and disjoint"),
+        ("planned_sampling_date_coverage", "expected_organism_count", 3, "expected organism count"),
+        (
+            "planned_sampling_date_coverage",
+            "observation_coverage_fraction",
+            0.5,
+            "coverage fraction",
+        ),
+    ],
+)
+def test_persisted_sampling_denominators_reject_recomputed_tampering(
+    client: TestClient,
+    collection: str,
+    field: str,
+    replacement: object,
+    diagnostic: str,
+) -> None:
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=_payload())
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert LongitudinalAnalysisResponse.model_validate(result).planned_sampling_effort
+    result[collection][0][field] = replacement
+    with pytest.raises(PydanticValidationError, match=diagnostic):
+        LongitudinalAnalysisResponse.model_validate(result)
