@@ -252,20 +252,25 @@ def test_overflowing_detour_ratio_is_qc_flagged_and_persists_as_null(
 def test_calibrated_mesh_edge_underflow_warns_in_standalone_and_saved_graph(
     client: TestClient,
 ) -> None:
-    # Source geometry is nonzero, but subnormal physical distances round to zero.
-    # Such a route must not silently appear as a measured zero-length branch.
+    # Keep the total calibrated surface area representable while a short
+    # source-frame edge underflows after calibration. An isolated tiny triangle
+    # would now correctly fail the independent zero-area scientific safeguard,
+    # so it cannot exercise the route-level QC contract.
     parameters = {
-        "vertices": [[0, 0, 0], [1e-20, 0, 0], [0, 1, 0]],
-        "faces": [[0, 1, 2]],
-        "meters_per_unit": 1e-310,
+        "vertices": [[0, 0, 0], [1e-170, 0, 0], [0, 1, 0], [-1, 0, 0]],
+        "faces": [[0, 1, 2], [0, 2, 3]],
+        "meters_per_unit": 1e-160,
         "calibration_method": "ruler",
         "calibration_evidence": "Unverified subnormal scale",
         "relative_scale_uncertainty": 0.1,
         "surface_path_vertex_pairs": [[0, 1]],
     }
     direct = measure_mesh_preview(**parameters)
+    assert direct["surface_area_m2"] > 0
+    assert direct["edge_connected_patch_surface_areas_m2"][0] > 0
     route = direct["surface_edge_paths"][0]
     assert route["status"] == "connected"
+    assert route["path_vertex_indices"] == [0, 1]
     assert route["length_m"] == 0
     assert route["endpoint_chord_length_m"] == 0
     assert route["geometric_detour_ratio"] is None
