@@ -260,9 +260,7 @@ def test_zero_area_mesh_rejects_forged_patch_area_evidence(
 
 
 @pytest.mark.parametrize("timepoint", [0, 1])
-def test_zero_area_legacy_fractions_cannot_fabricate_patch_concentration(
-    timepoint: int,
-) -> None:
+def test_zero_area_legacy_fractions_cannot_fabricate_patch_concentration(timepoint: int) -> None:
     """Missing legacy patch areas must not legitimize a zero-area distribution."""
     early, late = _meshes()
     for source in (early, late):
@@ -285,12 +283,7 @@ def test_zero_area_legacy_fractions_cannot_fabricate_patch_concentration(
         compare_mesh_observations(*observations)
 
     inputs = {
-        port: [
-            SimpleNamespace(
-                data_type="mesh_measurement_preview",
-                payload_json=observation,
-            )
-        ]
+        port: [SimpleNamespace(data_type="mesh_measurement_preview", payload_json=observation)]
         for port, observation in zip(("before", "after"), observations, strict=True)
     }
     with pytest.raises(ValidationError, match="Zero-area mesh cannot have patch area fractions"):
