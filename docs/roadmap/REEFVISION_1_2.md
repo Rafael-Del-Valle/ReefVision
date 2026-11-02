@@ -6075,3 +6075,16 @@ authenticated calibrated longitudinal observations, independent experimental
 units, scientist-reviewed human/model comparisons, and installed Windows
 MSI/GUI/GPU acceptance remain outstanding.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Persisted cross-date sampling-roster reconciliation (2026-11-02; development only)
+
+**Pre-edit CI:** Previous isolated draft PR #74 HEAD `dd116ec88f8cd83ca8f3e77bacfe9f080f4c8642` completed 19 GitHub Actions runs: 16 successful and three backend gates failed. CI, Pose Workflow Validation, and ReefVision 1.0 Acceptance all stopped at the same Ruff 0.17.3 formatter diagnostic in `test_ecology_identity_unit_aliases_1_2.py` (two multiline SQLAlchemy query chains). Applied the exact logged formatting corrections without changing validation logic.
+
+**Scientific gap:** Individual persisted planned-visit records already reconciled their own observed/missing organism counts and fractions; aggregate effort rows already reconciled their own totals. However, an altered, re-signed result could swap an organism's identity between scheduled dates, duplicate a date, drop a visit, or change aggregate observed/missing counts while keeping each individual row internally consistent. Such a result would misrepresent longitudinal sampling effort.
+
+**Implementation:** When both optional persisted sections are present, `LongitudinalAnalysisResponse` now requires unique experimental-unit/metric effort rows, identical effort and per-date unit/metric keys, unique scheduled dates, the declared number of visits, consistent expected roster size and supplied-roster status, an unchanged organism roster across dates, and agreement between summed per-date observations/missing visits and unit-level totals. Legacy artifacts containing only one optional section remain readable; no source authentication or experimental-unit independence is inferred.
+
+**Acceptance:** Six parameterized standalone API result-readback tampering cases (roster swap, duplicate date, dropped date, forged aggregate, roster flag, roster size) plus a successful unmodified control. The existing saved executable Workflow Builder parity test now validates the persisted typed result and rejects a tampered cross-date roster while preserving source provenance and `caller_supplied_unverified` status. No new node, migration, model download, or 1.1 environmental provider.
+
+**Release HOLD:** Verify exact-head Ruff, mypy, pytest, frontend/E2E and Windows Actions. Source-authenticated calibrated measurements, independently verified biological units, representative scientist-reviewed human/model comparisons, 1.1 migration reconciliation, and installed Windows MSI/GUI/GPU acceptance remain required. **1.2 NOT RELEASE-READY; 1.3 not started.**
