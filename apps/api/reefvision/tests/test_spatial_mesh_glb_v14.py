@@ -281,6 +281,20 @@ def make_glb(
         doc["extensionsUsed"] = ["KHR_mesh_quantization"]
     elif invalid_selector == "extensions_root_object":
         doc["extensions"] = {}
+    # Nested extension payloads are not safe to ignore, even if the root
+    # does not declare extensionsUsed. Extras are opaque user metadata.
+    nested_extension_targets = {
+        "node_nested_extension": doc["nodes"][0],
+        "mesh_nested_extension": doc["meshes"][0],
+        "scene_nested_extension": doc["scenes"][0],
+        "buffer_nested_extension": doc["buffers"][0],
+        "buffer_view_nested_extension": doc["bufferViews"][0],
+        "accessor_nested_extension": doc["accessors"][0],
+    }
+    if invalid_selector in nested_extension_targets:
+        nested_extension_targets[invalid_selector]["extensions"] = {"EXT_unhandled": {}}
+    elif invalid_selector == "extras_nested_extension_label":
+        doc["extras"] = {"extensions": {"arbitrary_note": "not a glTF extension"}}
     if explicit_targets:
         doc["bufferViews"][0]["target"] = 34962
         doc["bufferViews"][1]["target"] = 34963
