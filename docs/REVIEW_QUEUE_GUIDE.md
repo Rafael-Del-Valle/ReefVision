@@ -99,3 +99,26 @@ uncertain. This UI safeguard does not replace server-side idempotency,
 authenticated researcher identity, or durable crash recovery. Saved executable
 `qc_review_queue` Workflow Builder nodes continue to require explicit human
 review and preserve scientific provenance.
+
+## Saved Workflow Builder dataset-version provenance (1.6)
+
+An executable saved `project_source → dataset_version_source → qc_review_queue`
+graph can generate a version-scoped queue using the frozen study rather than
+later live annotation edits. The dataset source must be an unfiltered, completed
+version from the same project, with a matching stored manifest checksum.
+On saved-node replay, the queue also checks that the dataset source's persisted
+selection is the **same dataset-version ID**, that its saved split selection
+remains unfiltered, and that its upstream project input is bound to the same
+project-source artifact consumed by QC. Re-signing an artifact payload to point
+at a different legitimate version cannot silently redirect historical review.
+
+A failed provenance check stops queue creation/reuse and does not approve
+annotations, alter saved QC evidence, or modify reviewer decisions. Regression
+coverage exercises standalone frozen QC and saved executable graphs, plus
+re-signed version substitutions, upstream selection drift, split-filter drift
+and severed source bindings. Dataset checksums represent persisted metadata;
+they do not independently rehash image bytes on disk.
+
+Release readiness remains blocked on complete exact-head CI, independent
+cross-version migration reconciliation, representative biological datasets,
+and Windows MSI upgrade/rollback plus installed-GUI validation.
