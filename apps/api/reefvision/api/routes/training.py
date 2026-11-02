@@ -220,11 +220,20 @@ def get_training_run(
 
 def _safe_terminal_log_text(payload: bytes) -> str:
     """Render training logs without terminal escape/control side effects."""
-    text = payload.decode("utf-8", errors="replace")
+    # UTF-8 training logs can also contain raw 8-bit C1 terminal controls.
+    # Keep those controls recognizable to the sanitizer; render other invalid
+    # bytes as replacement characters rather than exposing surrogate codepoints.
+    text = payload.decode("utf-8", errors="surrogateescape")
+
+    def normalize_invalid_byte(match: re.Match[str]) -> str:
+        byte = ord(match.group()) - 0xDC00
+        return chr(byte) if 0x80 <= byte <= 0x9F else "\ufffd"
+
+    text = re.sub(r"[\udc80-\udcff]", normalize_invalid_byte, text)
     # Strip entire OSC (title/hyperlink), DCS, SOS, PM, and APC strings.
     # Removing just ESC would expose their printable payload as fake log data.
     # A truncated terminal string is discarded through the end of the tail.
-    text = re.sub(r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\|$)", "", text)
+    text = re.sub(r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
     text = re.sub(r"[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
     text = re.sub(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", "", text)
     # A worker can flush an incomplete color/control sequence before a newline
