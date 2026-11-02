@@ -68,9 +68,12 @@ def _run_frozen_graph(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is True
+    )
     run_id = queued.json()["id"]
     detail = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert detail.status_code == 200, detail.text
@@ -118,9 +121,7 @@ def test_frozen_dataset_qc_standalone_and_saved_graph_preserve_review_evidence(
     project_id, image_id, version_id, annotation = _study(client)
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200, registry.text
-    qc_node = next(
-        node for node in registry.json() if node["node_type"] == "qc_review_queue"
-    )
+    qc_node = next(node for node in registry.json() if node["node_type"] == "qc_review_queue")
     assert any(
         port["port_id"] == "dataset"
         and port["accepted_types"] == ["dataset_version"]
@@ -133,18 +134,12 @@ def test_frozen_dataset_qc_standalone_and_saved_graph_preserve_review_evidence(
     assert standalone_before.status_code == 201, standalone_before.text
     frozen_before = _queue_item(client, standalone_before.json()["id"])
     graph = _frozen_graph(version_id)
-    plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] and plan.json()["executable"]
-    saved = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    first_run_id, first_payload = _run_frozen_graph(
-        client, project_id, saved.json()["id"]
-    )
+    first_run_id, first_payload = _run_frozen_graph(client, project_id, saved.json()["id"])
     assert first_payload["dataset_version_id"] == version_id
     assert first_payload["dataset_manifest_sha256"]
     first_item = _queue_item(client, first_payload["queue_id"])
@@ -162,24 +157,20 @@ def test_frozen_dataset_qc_standalone_and_saved_graph_preserve_review_evidence(
     standalone_after = client.post(version_url, json={})
     assert standalone_after.status_code == 201, standalone_after.text
     frozen_after = _queue_item(client, standalone_after.json()["id"])
-    second_run_id, second_payload = _run_frozen_graph(
-        client, project_id, saved.json()["id"]
-    )
+    second_run_id, second_payload = _run_frozen_graph(client, project_id, saved.json()["id"])
     assert second_run_id != first_run_id
     assert second_payload["queue_id"] != first_payload["queue_id"]
-    assert (
-        second_payload["dataset_manifest_sha256"]
-        == first_payload["dataset_manifest_sha256"]
-    )
+    assert second_payload["dataset_manifest_sha256"] == first_payload["dataset_manifest_sha256"]
     assert frozen_after["input_checksum"] == frozen_before["input_checksum"]
-    assert _queue_item(client, second_payload["queue_id"])["input_checksum"] == (
-        first_item["input_checksum"]
+    assert (
+        _queue_item(client, second_payload["queue_id"])["input_checksum"]
+        == (first_item["input_checksum"])
     )
     assert _queue_item(client, first_payload["queue_id"])["review_state"] == "pending"
     live = client.post(f"/api/v1/projects/{project_id}/review-queues", json={})
     assert live.status_code == 201, live.text
-    assert _queue_item(client, live.json()["id"])["input_checksum"] != (
-        first_item["input_checksum"]
+    assert (
+        _queue_item(client, live.json()["id"])["input_checksum"] != (first_item["input_checksum"])
     )
 
 
@@ -188,9 +179,7 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
 ) -> None:
     project_id, _, version_id, _ = _study(client)
     graph = _frozen_graph(version_id)
-    saved = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     run_id, payload = _run_frozen_graph(client, project_id, saved.json()["id"])
     app = cast(FastAPI, client.app)
@@ -207,8 +196,7 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
         )
         dataset_artifact = session.scalar(
             select(WorkflowArtifact).where(
-                WorkflowArtifact.producer_node_run_id
-                == by_type["dataset_version_source"].id,
+                WorkflowArtifact.producer_node_run_id == by_type["dataset_version_source"].id,
                 WorkflowArtifact.producer_port_id == "dataset",
             )
         )
@@ -219,9 +207,7 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
             **dataset_artifact.payload_json,
             "manifest_sha256": "0" * 64,
         }
-        dataset_artifact.payload_sha256 = canonical_json_sha256(
-            dataset_artifact.payload_json
-        )
+        dataset_artifact.payload_sha256 = canonical_json_sha256(dataset_artifact.payload_json)
         session.flush()
         qc_run = by_type["qc_review_queue"]
         with pytest.raises(ValidationError, match="manifest"):
