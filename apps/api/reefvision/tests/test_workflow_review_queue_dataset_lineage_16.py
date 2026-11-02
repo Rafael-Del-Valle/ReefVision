@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import DatasetVersion, WorkflowArtifact, WorkflowNodeRun
+from reefvision.db.models import DatasetVersion, ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.storage.datasets import canonical_json_sha256
@@ -239,8 +239,10 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
     assert final_response.json()["items"] == original_items
 
 
-
-def test_completed_frozen_qc_replay_rejects_erased_output_binding(client: TestClient) -> None:
+@pytest.mark.parametrize("orphan_queue", [False, True])
+def test_completed_frozen_qc_replay_rejects_erased_output_binding(
+    client: TestClient, orphan_queue: bool
+) -> None:
     """A finished node cannot replay a queue after its saved output is erased."""
     project_id, _, version_id, _ = _study(client)
     saved = client.post(
@@ -285,8 +287,13 @@ def test_completed_frozen_qc_replay_rejects_erased_output_binding(client: TestCl
         }
         inputs = {"project": [project_artifact], "dataset": [dataset_artifact]}
 
-        # Re-signed payloads are irrelevant when a completed node has no
-        # persisted output binding; reject before any evidence regeneration.
+        # A completed node cannot regenerate scientific evidence when its
+        # output binding disappears, even if the owned queue is also orphaned.
+        # Both mutations are rolled back after the rejected replay.
+        if orphan_queue:
+            owned_queue = session.get(ReviewQueue, payload["queue_id"])
+            assert owned_queue is not None
+            owned_queue.created_by = "test:orphaned-review-queue"
         qc_node.output_artifact_ids_json = []
         session.flush()
         with pytest.raises(ValidationError, match="missing saved output binding"):
