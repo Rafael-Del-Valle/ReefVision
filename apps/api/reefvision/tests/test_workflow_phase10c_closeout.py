@@ -15,7 +15,6 @@ import reefvision.jobs.video_tracking as tracking_job_module
 import reefvision.services.workflow_execution as workflow_execution_module
 import reefvision.services.workflow_runtime_adapters as runtime_adapters
 from reefvision.config import Settings
-from reefvision.domain.errors import ConflictError
 from reefvision.db.models import (
     Job,
     ModelRegistration,
@@ -25,6 +24,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.domain.errors import ConflictError
 from reefvision.jobs import worker
 from reefvision.jobs.workflow import (
     process_workflow_run_job,
