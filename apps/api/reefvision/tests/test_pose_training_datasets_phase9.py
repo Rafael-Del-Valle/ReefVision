@@ -21,6 +21,8 @@ from reefvision.db.models import (
     PoseTrainingDatasetItem,
     VideoTrack,
 )
+from reefvision.services.pose_training_datasets import frozen_pose_item_evidence_sha256
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_active_learning_phase8 import (
     _build_temporal,
@@ -476,6 +478,34 @@ def test_native_pose_training_package_is_deterministic_and_verified_only(
     assert manifest["skipped_candidates_included"] is False
     assert len(rows) == 1
     assert rows[0]["review_provenance"]["actor"] == "scientist"
+
+    # Exercise the *persisted* scientist-verified dataset, not an artificial
+    # item fixture. Even if both the review fingerprint and manifest are
+    # re-signed, source video identity must remain bound to the frozen row.
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset_row = session.get(PoseTrainingDataset, dataset["id"])
+        assert dataset_row is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset["id"]).one()
+        source = copy.deepcopy(item.acquisition_provenance_json)
+        assert source["video_sha256"] == item.video_sha256
+        source["video_sha256"] = "0" * 64 if item.video_sha256 != "0" * 64 else "1" * 64
+        item.acquisition_provenance_json = source
+
+        review = copy.deepcopy(item.review_provenance_json)
+        review["before"]["candidate_provenance_sha256"] = canonical_json_sha256(source)
+        item.review_provenance_json = review
+
+        manifest = copy.deepcopy(dataset_row.manifest_json)
+        manifest["items"][0]["candidate_provenance_sha256"] = canonical_json_sha256(source)
+        manifest["items"][0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        dataset_row.manifest_json = manifest
+        dataset_row.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    tampered_export = client.get(f"/api/v1/pose-training-datasets/{dataset['id']}/native-package")
+    assert tampered_export.status_code == 409, tampered_export.text
+    assert "item lineage" in tampered_export.text
 
 
 def test_pose_training_dataset_rows_are_persisted(
