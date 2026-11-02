@@ -30,7 +30,11 @@ def saved_mesh_result(client: TestClient, base: str, params: dict) -> dict:
         "name": "Calibrated surface area precision",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": params,
+            },
         ],
         "edges": [
             {
@@ -44,7 +48,9 @@ def saved_mesh_result(client: TestClient, base: str, params: dict) -> dict:
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     process_workflow_run_job(
@@ -60,7 +66,9 @@ def test_positive_source_area_cannot_underflow_to_zero_in_api_or_saved_graph(
     client: TestClient, scale: float
 ) -> None:
     params = mesh_params(scale)
-    with pytest.raises(ValueError, match="Calibrated mesh surface area underflowed to zero"):
+    with pytest.raises(
+        ValueError, match="Calibrated mesh surface area underflowed to zero"
+    ):
         measure_mesh_preview(**params)
     project_id = str(create_project(client, "Mesh area underflow rejection")["id"])
     base = f"/api/v1/projects/{project_id}"
