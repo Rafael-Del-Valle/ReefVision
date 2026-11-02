@@ -167,6 +167,41 @@ class LongitudinalChange(BaseModel):
     change_per_day: float
     observation_count: int
 
+    @field_validator("first_observed_at", "last_observed_at", mode="before")
+    @classmethod
+    def require_explicit_saved_endpoint_timestamp(cls, value: object) -> object:
+        """Reject implicit Unix-time coercion in replayed scientific results."""
+        if isinstance(value, datetime):
+            return value
+        if not isinstance(value, str) or not re.match(r"^\d{4}-\d{2}-\d{2}[Tt ]", value.strip()):
+            raise ValueError("Saved longitudinal endpoints require explicit ISO calendar timestamps")
+        return value
+
+    @field_validator(
+        "initial_value",
+        "final_value",
+        "absolute_change",
+        "percent_change",
+        "elapsed_days",
+        "change_per_day",
+        mode="before",
+    )
+    @classmethod
+    def require_numeric_saved_change(cls, value: object) -> object:
+        """A persisted count/rate must not become numeric by JSON coercion."""
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("Saved longitudinal change requires JSON numeric values")
+        return value
+
+    @field_validator("observation_count", mode="before")
+    @classmethod
+    def require_integer_saved_observation_count(cls, value: object) -> object:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("Saved longitudinal observation count requires a JSON integer")
+        return value
+
     @model_validator(mode="after")
     def reconcile_persisted_endpoint_arithmetic(self) -> LongitudinalChange:
         """A saved organism change must agree with its own UTC endpoints.
