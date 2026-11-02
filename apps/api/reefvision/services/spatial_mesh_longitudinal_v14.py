@@ -347,6 +347,10 @@ def compare_mesh_observations(
                         raise ValueError(
                             "Surface-area scale interval contradicts source uncertainty"
                         )
+        if pair is None:
+            # Missing legacy bounds remain unknown, not zero uncertainty.
+            bounds = []
+            continue
         if (
             not isinstance(pair, list)
             or len(pair) != 2
@@ -355,8 +359,9 @@ def compare_mesh_observations(
             or pair[0] > record["surface_area_m2"]
             or pair[1] < record["surface_area_m2"]
         ):
-            bounds = []
-            continue
+            # Present-but-invalid saved evidence must not silently suppress
+            # the reported longitudinal uncertainty interval.
+            raise ValueError("Malformed surface-area scale interval")
         bounds.append(pair)
     difference_bounds = (
         [bounds[1][0] - bounds[0][1], bounds[1][1] - bounds[0][0]] if len(bounds) == 2 else None
@@ -465,6 +470,9 @@ def compare_mesh_observations(
                         raise ValueError(
                             "Bounding-box scale interval contradicts source uncertainty"
                         )
+            if pair is None:
+                extent_intervals = []
+                continue
             if (
                 nominal is None
                 or not isinstance(pair, list)
@@ -473,8 +481,8 @@ def compare_mesh_observations(
                 or pair[0] > nominal
                 or pair[1] < nominal
             ):
-                extent_intervals = []
-                continue
+                # Invalid stored bounds are not equivalent to missing evidence.
+                raise ValueError("Malformed bounding-box scale interval")
             extent_intervals.append(pair)
     extent_delta_bounds = (
         [
