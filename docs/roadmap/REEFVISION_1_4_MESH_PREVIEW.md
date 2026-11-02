@@ -249,3 +249,20 @@ without a measurement artifact, and successful replay parity for valid
 decimal/exponent input. The original PLY bytes remain the source-provenance
 record; numeric normalization does not establish verified calibration,
 specimen identity, biological surface area, or branch length.
+
+### OBJ homogeneous-coordinate numerical integrity (Track C, 2026-11-02)
+
+OBJ vertices may supply a homogeneous `w` coordinate. The bounded importer
+normalizes XYZ by this value **before** computing any geometry, calibration,
+preview, or saved Workflow Builder artifact. A nonzero XYZ value can be
+representable as an input float yet underflow to zero after division by a
+large nonzero `w`. The importer now rejects that case instead of silently
+collapsing source geometry. Genuine zero coordinates remain valid, and tiny
+but representable normalized coordinates are retained.
+
+Direct parser, standalone API, and persisted executable typed Workflow Builder
+regressions cover rejected normalization and successful replay parity. Failed
+imports produce no `mesh_measurement_preview` artifact. This is numerical
+source-integrity protection only: the original OBJ, calibration scale, mesh
+reconstruction, anatomical branch lengths, and biological identity remain
+unverified; a valid parse is not scientific acceptance.
