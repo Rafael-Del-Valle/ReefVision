@@ -48,7 +48,17 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                     weight = _parse_obj_float(fields[4])
                     if not isfinite(weight) or weight == 0:
                         raise ValueError("homogeneous weight must be finite and nonzero")
-                    point = [value / weight for value in point]
+                    normalized = [value / weight for value in point]
+                    # Division by a large homogeneous W can collapse a real
+                    # source coordinate to zero even when each OBJ scalar
+                    # was individually representable. Never measure that
+                    # silently altered geometry as if it were exact.
+                    if any(
+                        value != 0.0 and coordinate == 0.0
+                        for value, coordinate in zip(point, normalized, strict=True)
+                    ):
+                        raise ValueError("homogeneous normalization underflows a coordinate")
+                    point = normalized
                 if len(fields) in {7, 8}:
                     colors = [_parse_obj_float(value) for value in fields[-3:]]
                     if not all(isfinite(value) for value in colors):
