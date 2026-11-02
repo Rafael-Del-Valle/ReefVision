@@ -25,6 +25,13 @@ function Invoke-ReefVisionIsolatedEnvironment {
         TRANSFORMERS_OFFLINE = '1'
         YOLO_AUTOINSTALL = 'false'
     }
+    # Disposable acceptance must not inherit researcher/cloud credentials or
+    # redirect Hugging Face and experiment tracking to an external endpoint.
+    # Clear these only inside the action and restore the caller's exact values.
+    $SensitiveInherited = @(
+        'HF_TOKEN', 'HUGGING_FACE_HUB_TOKEN', 'HF_ENDPOINT',
+        'WANDB_API_KEY', 'COMET_API_KEY', 'MLFLOW_TRACKING_URI'
+    )
     # The default remains strictly offline. Only explicitly requested
     # disposable live-SAM acceptance may permit network model acquisition.
     # Both offline flags must be disabled together; cache roots stay protected.
@@ -42,6 +49,9 @@ function Invoke-ReefVisionIsolatedEnvironment {
         # ReefVision at an existing scientific project/configuration. Only
         # the two explicit disposable acceptance markers may use REEFVISION_.
         $environmentName = [string]$Key
+        if ($environmentName -in $SensitiveInherited) {
+            throw "Acceptance isolation variable '$environmentName' cannot inject credentials or remote tracking endpoints."
+        }
         if ($environmentName -in @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) {
             throw "Acceptance isolation variable '$environmentName' cannot be injected."
         }
@@ -78,6 +88,7 @@ function Invoke-ReefVisionIsolatedEnvironment {
     foreach ($Name in @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) {
         [void]$Names.Add($Name)
     }
+    foreach ($Name in $SensitiveInherited) { [void]$Names.Add($Name) }
 
     # Change variables through the PowerShell Env: provider, the same view
     # used by the acceptance tests and spawned PowerShell commands.
