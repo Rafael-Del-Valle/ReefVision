@@ -672,15 +672,17 @@ describe("Gallery", () => {
         persisted.push(cameraImage);
         return jsonResponse({
           project_id: project.id,
-          successful: [{
-            filename: cameraImage.original_filename,
-            relative_path: cameraImage.original_filename,
-            status: "successful",
-            detail: null,
-            image_id: cameraImage.id,
-            duplicate_image_id: null,
-            thumbnail_job_id: null,
-          }],
+          successful: [
+            {
+              filename: cameraImage.original_filename,
+              relative_path: cameraImage.original_filename,
+              status: "successful",
+              detail: null,
+              image_id: cameraImage.id,
+              duplicate_image_id: null,
+              thumbnail_job_id: null,
+            },
+          ],
           duplicates: [],
           unsupported: [],
           failed: [],
@@ -704,13 +706,13 @@ describe("Gallery", () => {
     });
 
     renderGallery();
-    await screen.findByRole("article", { name: /swiftia-01\\.png/ });
+    await screen.findByRole("article", { name: /swiftia-01\.png/ });
     await userEvent.type(
       screen.getByPlaceholderText("Search filenames"),
       "swiftia",
     );
     await waitFor(() => expect(requestedFilters).toContain("swiftia"));
-    expect(screen.queryByRole("article", { name: /DSC_0001\\.JPEG/ })).toBeNull();
+    expect(screen.queryByRole("article", { name: /DSC_0001\.JPEG/ })).toBeNull();
 
     await userEvent.upload(
       screen.getByLabelText("Import files"),
@@ -718,7 +720,7 @@ describe("Gallery", () => {
     );
 
     expect(
-      await screen.findByRole("article", { name: /DSC_0001\\.JPEG/ }),
+      await screen.findByRole("article", { name: /DSC_0001\.JPEG/ }),
     ).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search filenames")).toHaveValue("");
     expect(requestedFilters.at(-1)).toBe("");
