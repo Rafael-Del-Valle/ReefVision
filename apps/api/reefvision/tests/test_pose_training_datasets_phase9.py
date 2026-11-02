@@ -430,7 +430,6 @@ def test_freeze_rejects_changed_candidate_acquisition_provenance(
         assert session.query(PoseTrainingDataset).count() == 0
 
 
-
 def test_freeze_rejects_resigned_acquisition_without_video_checksum(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
