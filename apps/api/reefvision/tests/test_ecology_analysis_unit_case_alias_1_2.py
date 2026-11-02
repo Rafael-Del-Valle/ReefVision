@@ -10,9 +10,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError as PydanticValidationError
 
+from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse
 from reefvision.schemas.model_agreement import PairedCountComparisonResponse
-from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_ecology_longitudinal_lineage_1_2 import _rows
 from reefvision.tests.test_workflow_ecology_1_2 import _graph as longitudinal_graph
