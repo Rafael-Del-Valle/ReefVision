@@ -6114,3 +6114,42 @@ control, and saved executable Workflow Builder persisted-result tampering.
 Full exact-head CI, representative verified biology, 1.1 migration
 reconciliation, and installed Windows MSI/GUI/GPU acceptance remain mandatory.
 **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Persisted population-stratum pseudoreplication guard (2026-11-02; development only)
+
+**Pre-edit audit:** Draft PR #74 head `01ba7ce0b73c1f72f568c057c22bc18632f30d6a`
+completed 19 PR-triggered GitHub Actions workflows: 16 succeeded, three
+backend gates failed at the same Ruff RUF043 diagnostic in
+`test_ecology_per_date_effort_1_2.py:209` (unmarked regex in `pytest.raises`).
+Applied the exact raw-string correction. Inspected existing
+`summarize_population_units`, longitudinal API schema, unit coverage,
+standalone analysis, saved executable workflow and existing scientific tests;
+did not introduce another calculator, environmental store or workflow node.
+
+**Scientific integrity:** A re-signed persisted population artifact could
+inflate independent unit counts, duplicate an experimental unit, change
+contributing-organism denominators or forge unit-weighted means even when
+its source `unit_summaries` remained unchanged. On typed result read-back,
+when both optional sections exist, validate unique unit/metric rows, exact
+metric/unit/UTC-date strata, deterministic sorted independent-unit rosters,
+one vote per declared experimental unit, contributing organism totals and
+both unit-weighted descriptive means using the existing overflow-safe
+`finite_descriptive_mean`. Preserve legacy artifacts with only one optional
+section. These are **internal consistency checks only**: declared units,
+calibration and source measurements remain `caller_supplied_unverified`.
+
+**Acceptance added:** Two-tank/four-organism positive control with a
+unit-weighted mean; eleven parameterized standalone tampering cases;
+saved executable `project_source → ecology_longitudinal_analysis`
+Workflow Builder acceptance covering typed output, provenance,
+persisted-result parity and rejection of forged independent-unit counts.
+No migration, model download, verified dataset mutation, 1.1 environmental
+provider or cross-version merge.
+
+**Release HOLD:** Verify exact-head Ruff, mypy, backend pytest, frontend/E2E
+and Windows Actions. Authenticated calibrated longitudinal measurements,
+independently verified biological units, representative scientist-reviewed
+human/model comparisons, 1.1 migration reconciliation and installed Windows
+MSI/GUI/GPU acceptance remain outstanding.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

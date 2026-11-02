@@ -206,5 +206,5 @@ def test_persisted_visits_match_organism_level_coverage(
         ]
     elif tampering == "removed_scheduled_unit_coverage":
         coverage["expected_sampling_dates"] = []
-    with pytest.raises(PydanticValidationError, match="Planned visit .*unit coverage"):
+    with pytest.raises(PydanticValidationError, match=r"Planned visit .*unit coverage"):
         LongitudinalAnalysisResponse.model_validate(forged)
