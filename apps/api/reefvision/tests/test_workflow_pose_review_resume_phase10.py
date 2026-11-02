@@ -314,7 +314,8 @@ def test_phase10_pose_review_pauses_and_resumes_without_rerunning_pose(
         (f"/api/v1/workflow-node-runs/{nodes_before['review']['id']}/resume-review"),
         json={"reviewed_by": "scientist", "note": "Review without revision pins"},
     )
-    assert rejected.status_code == 422, rejected.text
+    assert rejected.status_code == 400, rejected.text
+    assert rejected.json()["detail"] == "Pose Review source track revisions are invalid"
     with app.state.session_factory() as session:
         paused_node = session.get(WorkflowNodeRun, str(nodes_before["review"]["id"]))
         paused_run = session.get(WorkflowRun, run_id)
