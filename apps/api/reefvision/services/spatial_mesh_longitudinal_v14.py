@@ -438,52 +438,53 @@ def compare_mesh_observations(
     )
     extent_rate = extent_delta / elapsed_days if extent_delta is not None else None
     extent_intervals: list[list[float]] = []
-    if extent_delta is not None:
-        for record, nominal, metadata in zip(
-            (before, after), extents, (first, second), strict=True
-        ):
-            pair = record.get("axis_aligned_bounding_box_diagonal_scale_interval_m")
-            # A legacy preview lacking scale uncertainty cannot substantiate
-            # a claimed diagonal interval, even if it encloses the nominal value.
-            if pair is not None and "relative_scale_uncertainty" not in metadata:
+    # Validate every present interval independently, even if one legacy
+    # preview lacks a diagonal and no longitudinal extent delta is possible.
+    for record, nominal, metadata in zip(
+        (before, after), extents, (first, second), strict=True
+    ):
+        pair = record.get("axis_aligned_bounding_box_diagonal_scale_interval_m")
+        # A legacy preview lacking scale uncertainty cannot substantiate
+        # a claimed diagonal interval, even if it encloses the nominal value.
+        if pair is not None and "relative_scale_uncertainty" not in metadata:
+            raise ValueError("Bounding-box scale interval requires source uncertainty")
+        # A caller cannot substitute narrower scale-only extent bounds
+        # than those implied by the source preview's uncertainty.
+        if "relative_scale_uncertainty" in metadata and pair is not None:
+            uncertainty = metadata["relative_scale_uncertainty"]
+            if uncertainty is None:
                 raise ValueError("Bounding-box scale interval requires source uncertainty")
-            # A caller cannot substitute narrower scale-only extent bounds
-            # than those implied by the source preview's uncertainty.
-            if "relative_scale_uncertainty" in metadata and pair is not None:
-                uncertainty = metadata["relative_scale_uncertainty"]
-                if uncertainty is None:
-                    raise ValueError("Bounding-box scale interval requires source uncertainty")
-                if (
-                    nominal is not None
-                    and isinstance(pair, list)
-                    and len(pair) == 2
-                    and all(type(value) in (int, float) and isfinite(value) for value in pair)
-                ):
-                    expected = (
-                        nominal * (1 - uncertainty),
-                        nominal * (1 + uncertainty),
-                    )
-                    if not all(
-                        isclose(value, bound, rel_tol=1e-9, abs_tol=0.0)
-                        for value, bound in zip(pair, expected, strict=True)
-                    ):
-                        raise ValueError(
-                            "Bounding-box scale interval contradicts source uncertainty"
-                        )
-            if pair is None:
-                extent_intervals = []
-                continue
             if (
-                nominal is None
-                or not isinstance(pair, list)
-                or len(pair) != 2
-                or any(type(v) not in (int, float) or not isfinite(v) or v < 0 for v in pair)
-                or pair[0] > nominal
-                or pair[1] < nominal
+                nominal is not None
+                and isinstance(pair, list)
+                and len(pair) == 2
+                and all(type(value) in (int, float) and isfinite(value) for value in pair)
             ):
-                # Invalid stored bounds are not equivalent to missing evidence.
-                raise ValueError("Malformed bounding-box scale interval")
-            extent_intervals.append(pair)
+                expected = (
+                    nominal * (1 - uncertainty),
+                    nominal * (1 + uncertainty),
+                )
+                if not all(
+                    isclose(value, bound, rel_tol=1e-9, abs_tol=0.0)
+                    for value, bound in zip(pair, expected, strict=True)
+                ):
+                    raise ValueError(
+                        "Bounding-box scale interval contradicts source uncertainty"
+                    )
+        if pair is None:
+            extent_intervals = []
+            continue
+        if (
+            nominal is None
+            or not isinstance(pair, list)
+            or len(pair) != 2
+            or any(type(v) not in (int, float) or not isfinite(v) or v < 0 for v in pair)
+            or pair[0] > nominal
+            or pair[1] < nominal
+        ):
+            # Invalid stored bounds are not equivalent to missing evidence.
+            raise ValueError("Malformed bounding-box scale interval")
+        extent_intervals.append(pair)
     extent_delta_bounds = (
         [
             extent_intervals[1][0] - extent_intervals[0][1],
