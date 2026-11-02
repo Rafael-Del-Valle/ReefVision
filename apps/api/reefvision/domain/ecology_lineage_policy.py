@@ -67,7 +67,7 @@ def require_unique_ecological_unit_spellings(
     *,
     default_unit_type: str | None = None,
 ) -> None:
-    """Reject case-only aliases of one registered physical sampling unit.
+    """Reject case and Unicode-compatibility aliases of one physical sampling unit.
 
     The same exact ID may be shared by organisms in one unit. Known sampling
     labels such as tank/aquarium are equivalent, but different sampling levels
@@ -81,11 +81,15 @@ def require_unique_ecological_unit_spellings(
         if unit_type is None or unit_id is None:
             continue
         level = classify_ecological_unit_level(unit_type) or unit_type.casefold()
-        key = (level, unit_id.casefold())
+        # The registry requires NFKC IDs, but caller-supplied observations
+        # can contain compatible spellings. Do not count those as new units.
+        canonical_id = unicodedata.normalize("NFKC", unit_id).casefold()
+        key = (level, canonical_id)
         prior = spellings.setdefault(key, unit_id)
         if prior != unit_id:
             raise ValueError(
-                "Ecological experimental unit IDs differ only by case at the same sampling level"
+                "Ecological experimental unit IDs differ only by case or Unicode compatibility "
+                "at the same sampling level"
             )
 
 

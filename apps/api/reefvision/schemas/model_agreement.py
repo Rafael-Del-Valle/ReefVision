@@ -437,6 +437,13 @@ class PairedCountComparisonResponse(BaseModel):
             unit_ids = [unit.experimental_unit_id for unit in self.unit_summaries]
             if len(set(unit_ids)) != len(unit_ids):
                 raise ValueError("Directional experimental unit IDs must be unique")
+            try:
+                require_unique_ecological_organism_key_spellings(unit_ids)
+            except ValueError as exc:
+                raise ValueError(
+                    "Directional persisted experimental unit IDs differ only by case "
+                    "or Unicode compatibility"
+                ) from exc
             if self.declared_independent_unit_count != len(unit_ids):
                 raise ValueError("Directional independent-unit denominator must match units")
             unit_organism_counts: Counter[str] = Counter()

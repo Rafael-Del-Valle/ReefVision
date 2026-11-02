@@ -5974,3 +5974,34 @@ installed Windows MSI/GUI/GPU testing remain outstanding.
 **Acceptance:** Parameterized case-only and Unicode-compatibility organism/parent alias fixtures must fail both standalone APIs and executed saved workflows without successful scientific result artifacts. Exact shared parentage and repeated exact organism labels remain permitted. Successful saved artifacts must preserve source provenance and mandatory review gates; tampered read-back with aliased organism keys must fail. Verify exact-head Ruff/mypy/pytest and all relevant frontend/E2E/Windows Actions before claiming integrated validation.
 
 **Release HOLD:** Authenticated calibrated longitudinal observations, independently confirmed study units, scientist-reviewed human/model comparison, 1.1 migration reconciliation, installed Windows MSI/GUI/GPU acceptance and full version scope remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+## NFKC physical-unit alias safeguards for caller-supplied analyses (2026-11-01; development only)
+
+**Audit:** The registered identity schema rejects non-NFKC physical-unit IDs,
+and the caller-supplied longitudinal and paired-count calculators already reject
+case-only aliases. However, the shared unit spelling check only casefolded
+caller-provided IDs. Fullwidth and decomposed Unicode spellings could still
+produce two declared physical-unit denominators in unverified calculations.
+Persisted longitudinal and paired-count result schemas also lacked a direct
+unit-alias read-back check.
+
+**Repair:** Compare NFKC/casefold physical-unit IDs within the same canonical
+sampling level, without rewriting original identifiers or provenance. Reject
+incompatible spellings in standalone analyses and executable saved Workflow
+Builder graphs; failed runs must not publish successful scientific artifacts.
+Reject alias-split physical units in persisted longitudinal coverage/population
+and paired-count unit summaries. Exact shared IDs remain valid; distinct
+physical units remain separate but unverified. Registered identity schema's
+existing NFKC input rule is unchanged.
+
+**Regression contract:** Fullwidth and decomposed Unicode physical-unit aliases
+are exercised through standalone APIs and saved executable workflow failure
+paths; two-unit results are checked for persisted-schema alias rejection.
+Existing casefold and exact-shared-unit tests remain applicable. No new node,
+migration, pretrained weight, or 1.1 environmental provider is introduced.
+
+**Release HOLD:** Verify exact-head Ruff, mypy, backend pytest, frontend/E2E
+and Windows CI; authenticate calibrated observations and study design; review
+representative human/model comparisons; reconcile 1.1 migrations; and perform
+installed Windows MSI/GUI/GPU acceptance.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

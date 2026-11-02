@@ -296,4 +296,23 @@ class LongitudinalAnalysisResponse(BaseModel):
             raise ValueError(
                 "Longitudinal persisted organism IDs differ only by case or Unicode compatibility"
             ) from exc
+        # A saved result cannot inflate biological units by relabeling a
+        # tank/colony across its metric, coverage, or population records.
+        unit_ids = [row.experimental_unit_id for row in self.unit_summaries]
+        unit_ids.extend(row.experimental_unit_id for row in self.excluded_units)
+        unit_ids.extend(row.experimental_unit_id for row in self.unit_coverage)
+        unit_ids.extend(row.experimental_unit_id for row in self.planned_sampling_effort)
+        unit_ids.extend(row.experimental_unit_id for row in self.planned_sampling_date_coverage)
+        unit_ids.extend(
+            unit_id
+            for population in self.population_summaries
+            for unit_id in population.experimental_unit_ids
+        )
+        try:
+            require_unique_ecological_organism_key_spellings(unit_ids)
+        except ValueError as exc:
+            raise ValueError(
+                "Longitudinal persisted experimental unit IDs differ only by case "
+                "or Unicode compatibility"
+            ) from exc
         return self

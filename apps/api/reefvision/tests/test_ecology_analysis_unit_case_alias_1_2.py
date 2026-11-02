@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError as PydanticValidationError
+
+from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisResponse
+from reefvision.schemas.model_agreement import PairedCountComparisonResponse
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
@@ -165,3 +170,82 @@ def test_shared_tank_alias_saved_workflow_preserves_one_unit_and_review(
     assert result[count_field] == standalone.json()[count_field] == 1
     assert result["evidence_level"] == "caller_supplied_unverified"
     assert result["analysis_provenance"] == standalone.json()["analysis_provenance"]
+
+
+@pytest.mark.parametrize("kind", ["longitudinal", "paired"])
+@pytest.mark.parametrize(
+    ("first_id", "second_id"),
+    [
+        ("Tank-A", "\\uff34\\uff41\\uff4e\\uff4b-A"),
+        ("Caf\\u00e9-A", "Cafe\\u0301-A"),
+    ],
+    ids=["fullwidth-nfkc", "combining-nfkc"],
+)
+def test_unicode_unit_alias_rejected_by_api_and_saved_workflow(
+    client: TestClient, kind: str, first_id: str, second_id: str
+) -> None:
+    endpoint, payload, graph, artifact_type = _case(kind, first_id, second_id)
+    rejected = client.post(endpoint, json=payload)
+    assert rejected.status_code == 400, rejected.text
+    assert "differ only by case or Unicode compatibility" in rejected.json()["detail"]
+
+    project_id = str(create_project(client, f"Unicode unit alias {kind}")["id"])
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert "Unicode compatibility" in detail.json()["run"]["error_message"]
+    assert all(row["data_type"] != artifact_type for row in detail.json()["artifacts"])
+
+
+@pytest.mark.parametrize("kind", ["longitudinal", "paired"])
+def test_persisted_unit_alias_cannot_inflate_declared_sample_size(
+    client: TestClient, kind: str
+) -> None:
+    endpoint, payload, _, _ = _case(kind, "Tank-A", "Tank-B")
+    accepted = client.post(endpoint, json=payload)
+    assert accepted.status_code == 200, accepted.text
+    original = accepted.json()
+    assert original["evidence_level"] == "caller_supplied_unverified"
+    count_field = (
+        "independent_unit_count"
+        if kind == "longitudinal"
+        else "declared_independent_unit_count"
+    )
+    assert original[count_field] == 2
+    assert len(original["unit_summaries"]) == 2
+
+    schema = (
+        LongitudinalAnalysisResponse
+        if kind == "longitudinal"
+        else PairedCountComparisonResponse
+    )
+    schema.model_validate(original)
+    forged = deepcopy(original)
+    forged["unit_summaries"][1]["experimental_unit_id"] = (
+        "\\uff34\\uff41\\uff4e\\uff4b-A"
+    )
+    with pytest.raises(
+        PydanticValidationError,
+        match="persisted experimental unit IDs differ only by case or Unicode compatibility",
+    ):
+        schema.model_validate(forged)
