@@ -160,8 +160,8 @@ def test_saved_workflow_roster_coverage_matches_standalone(client: TestClient) -
     ("first_alias", "second_alias"),
     [
         ("frag-C", "FRAG-C"),
-        ("frag-C", "frag-\\uff23"),
-        ("Caf\\u00e9", "Cafe\\u0301"),
+        ("frag-C", "frag-\uff23"),
+        ("Caf\u00e9", "Cafe\u0301"),
     ],
     ids=["casefold", "fullwidth-nfkc", "combining-nfkc"],
 )
