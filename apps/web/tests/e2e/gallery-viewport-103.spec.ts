@@ -461,7 +461,9 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await expect(ninthImage).toHaveAttribute("aria-current", "true");
   const focusedThumbnailContained = () =>
     filmstrip.evaluate((element) => {
-      const thumbnail = element.querySelector<HTMLElement>('[aria-current="true"]');
+      const thumbnail = element.querySelector<HTMLElement>(
+        '[aria-current="true"]',
+      );
       if (!thumbnail) return false;
       const strip = element.getBoundingClientRect();
       const active = thumbnail.getBoundingClientRect();
@@ -475,7 +477,9 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await filmstrip.evaluate((element) => {
     element.style.maxWidth = "420px";
   });
-  expect(await filmstrip.evaluate((element) => element.clientWidth)).toBeLessThanOrEqual(420);
+  expect(
+    await filmstrip.evaluate((element) => element.clientWidth),
+  ).toBeLessThanOrEqual(420);
   await expect.poll(focusedThumbnailContained).toBe(true);
   expect(await focused.getAttribute("src")).toBe(selectedSourceBeforeResize);
   expect(
