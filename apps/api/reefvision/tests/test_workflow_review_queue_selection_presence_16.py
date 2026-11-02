@@ -12,7 +12,10 @@ from sqlalchemy import select
 from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
-from reefvision.services.workflow_review_queue_integrity import validate_saved_queue_snapshot
+from reefvision.services.workflow_review_queue_integrity import (
+    queue_item_evidence_sha256,
+    validate_saved_queue_snapshot,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_review_queue_annotation_evidence_16 import _queue_item
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
@@ -48,6 +51,28 @@ def test_v3_missing_confidence_selection_key_fails_closed_even_when_resigned() -
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
     assert items[0].review_state == "in_progress"
+
+
+def test_v3_empty_queue_rejects_resigned_missing_selection_key() -> None:
+    """An empty confidence-filtered queue must not bypass configuration checks."""
+    queue, _ = _v3_snapshot()
+    queue.item_count = 0
+    queue.input_checksums_json["item_count"] = 0
+    queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+        {"image_ids": [], "scores": {}, "source_quality_control_run_id": None}
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256([])
+    queue.summary_json = {
+        "average_score": 0.0,
+        "counts_by_severity": {},
+        "counts_by_split": {},
+        "top_image_ids": [],
+    }
+    validate_saved_queue_snapshot(queue, [])
+    queue.configuration_json.pop("review_below_confidence")
+    _resign_scoring(queue)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, [])
 
 
 def test_v2_historical_missing_confidence_selection_key_remains_readable() -> None:
