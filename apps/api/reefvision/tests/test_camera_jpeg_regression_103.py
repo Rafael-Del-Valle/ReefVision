@@ -118,6 +118,46 @@ def test_jpeg_camera_filename_aliases_preserve_original_content(
     assert response.content == payload
 
 
+def test_camera_jpeg_decompression_bomb_is_failed_import_not_unexpected_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject pathological pixel counts without persisting a partial camera image."""
+    project = create_project(client, "Camera pixel-count safety")
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG")
+    payload = stream.getvalue()
+
+    # Exercise Pillow's real guard on a small synthetic JPEG. Do not allocate
+    # a huge image or lower the application's production pixel threshold.
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100)
+    report = import_one(client, project["id"], filename="DSC_OVERSIZED.JPG", content=payload)
+
+    assert not report["successful"], report
+    assert len(report["failed"]) == 1, report
+    assert report["failed"][0]["detail"] == "File is not a readable image"
+    assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 0
+
+
+def test_large_camera_jpeg_below_pillow_hard_limit_still_imports(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A warning alone must not reject valid high-resolution scientific images."""
+    project = create_project(client, "Large camera warning")
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG")
+    payload = stream.getvalue()
+
+    # Pillow warns above MAX_IMAGE_PIXELS and rejects above twice that limit.
+    # Scale the thresholds down so this test stays fast and deterministic.
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 2000)
+    with pytest.warns(Image.DecompressionBombWarning):
+        report = import_one(client, project["id"], filename="DSC_LARGE.JPEG", content=payload)
+
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
 @pytest.mark.parametrize("progressive", [False, True])
 def test_truncated_camera_jpeg_rejected_before_import_commit(
     client: TestClient, progressive: bool
