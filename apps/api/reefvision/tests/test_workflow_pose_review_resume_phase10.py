@@ -643,6 +643,48 @@ def test_phase10_active_learning_review_resume_freezes_verified_truth(
 
         assert verified.json()["review_status"] == "verified"
 
+    # A saved AL round must not approve different selection evidence even if
+    # its artifact checksum is recomputed after the payload was altered.
+    round_artifact_id = artifacts["pose_active_learning_round"]["id"]
+    for changed_fields, expected_error in (
+        (
+            {"selection_sha256": "0" * 64},
+            "Pose Active Learning Review selection differs from saved workflow evidence",
+        ),
+        (
+            {"candidate_ids": ["not-in-round"]},
+            "Pose Active Learning Review candidates differ from saved workflow evidence",
+        ),
+    ):
+        with app.state.session_factory() as session:
+            artifact = session.get(WorkflowArtifact, round_artifact_id)
+            assert artifact is not None
+            original_payload = dict(artifact.payload_json)
+            changed_payload = {**original_payload, **changed_fields}
+            artifact.payload_json = changed_payload
+            artifact.payload_sha256 = canonical_json_sha256(changed_payload)
+            session.commit()
+
+        rejected = client.post(
+            f"/api/v1/workflow-node-runs/{nodes_before['al_review']['id']}/resume-review",
+            json={"reviewed_by": "scientist", "note": "Approve saved selection."},
+        )
+        assert rejected.status_code == 400, rejected.text
+        assert expected_error in rejected.text
+
+        with app.state.session_factory() as session:
+            paused_run = session.get(WorkflowRun, run_id)
+            paused_job = session.get(Job, job_id)
+            paused_node = session.get(WorkflowNodeRun, nodes_before["al_review"]["id"])
+            assert paused_run is not None and paused_run.status == "waiting_for_review"
+            assert paused_job is not None and paused_job.status == "waiting_for_review"
+            assert paused_node is not None and paused_node.status == "waiting_for_review"
+            artifact = session.get(WorkflowArtifact, round_artifact_id)
+            assert artifact is not None
+            artifact.payload_json = original_payload
+            artifact.payload_sha256 = canonical_json_sha256(original_payload)
+            session.commit()
+
     resumed = client.post(
         (f"/api/v1/workflow-node-runs/{nodes_before['al_review']['id']}/resume-review"),
         json={
