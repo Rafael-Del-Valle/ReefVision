@@ -922,3 +922,14 @@ graph tests cover valid and genuinely missing uncertainty, while new replay
 regressions exercise malformed evidence at either timepoint. It does not
 authenticate an operator, establish biological growth, certify calibration,
 or turn scale-only bounds into statistical confidence intervals.
+
+A legacy timepoint can also lack the bounding-box diagonal entirely. This
+does **not** excuse validation of a present diagonal interval on either
+observation: forged intervals are rejected even when no pairwise extent
+difference can be calculated. An interval attached to a missing nominal
+diagonal is likewise rejected. Valid one-sided extent evidence remains
+readable, but longitudinal extent change and its scale-only interval stay
+unknown. Direct artifact replay and the executable typed Workflow Builder
+adapter use the same fail-closed comparison engine; saved-workflow parity for
+valid partial calibration evidence remains covered. Neither the diagonal nor
+its change is an anatomical coral branch-length estimate.
