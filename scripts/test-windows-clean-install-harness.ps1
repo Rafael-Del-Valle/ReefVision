@@ -36,6 +36,23 @@ try {
 $script:isolationOverrideActionRan = $false
 Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{ HF_HUB_OFFLINE = '0' } -Action { $script:isolationOverrideActionRan = $true } } 'Offline model policy override must be rejected.'
 Assert-Throws { Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{ hf_home = 'C:\researcher-cache' } -Action { $script:isolationOverrideActionRan = $true } } 'Case-insensitive disposable cache override must be rejected.'
+# Neither Python startup injection nor legacy cache/configuration redirection
+# may bypass the disposable acceptance environment (including mixed-case keys).
+foreach ($unsafeOverrides in @(
+    @{ pythonpath = 'C:\developer-python' },
+    @{ PYTHONHOME = 'C:\developer-python' },
+    @{ transformers_cache = 'C:\researcher-models' },
+    @{ reefvision_config_dir = 'C:\researcher-config' },
+    @{ REEFVISION_DATA_DIR = 'C:\researcher-data' },
+    @{ REEFVISION_ACCEPTANCE_DATA_DIR = 'C:\researcher-data' },
+    @{ REEFVISION_WINDOWS_ACCEPTANCE = '0' }
+)) {
+    Assert-Throws {
+        Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment $unsafeOverrides -Action {
+            $script:isolationOverrideActionRan = $true
+        }
+    } "Unsafe environment override $(@($unsafeOverrides.Keys) -join ',') must be rejected."
+}
 Assert-True (-not $script:isolationOverrideActionRan) 'Rejected isolation override executed its action.'
 # Opt-in live SAM must not weaken the default offline policy or cache isolation.
 # This is a mocked environment test: it performs no network requests.
@@ -57,12 +74,22 @@ Assert-True ($script:liveSamOptInActionRan) 'Valid live SAM opt-in never execute
 Assert-True ([Environment]::GetEnvironmentVariable('HF_HUB_DISABLE_TELEMETRY', 'Process') -ceq $previousLiveTelemetry) 'Live SAM opt-in did not restore telemetry settings.'
 Assert-True ([Environment]::GetEnvironmentVariable('TRANSFORMERS_OFFLINE', 'Process') -ceq $previousTransformersOffline) 'Live SAM opt-in did not restore TRANSFORMERS_OFFLINE.'
 Assert-True ([Environment]::GetEnvironmentVariable('HF_HUB_OFFLINE', 'Process') -ceq $previousLiveHfOffline) 'Live SAM opt-in did not restore HF_HUB_OFFLINE.'
-$previousProbe = [Environment]::GetEnvironmentVariable('REEFVISION_ACCEPTANCE_PROBE', 'Process')
-Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{ REEFVISION_ACCEPTANCE_PROBE = 'disposable' } -Action {
-    Assert-True ($env:REEFVISION_ACCEPTANCE_PROBE -eq 'disposable') 'Safe additional environment variable was not applied.'
+$previousAcceptanceMarker = [Environment]::GetEnvironmentVariable('REEFVISION_WINDOWS_ACCEPTANCE', 'Process')
+$previousAcceptanceData = [Environment]::GetEnvironmentVariable('REEFVISION_ACCEPTANCE_DATA_DIR', 'Process')
+$previousThreads = [Environment]::GetEnvironmentVariable('OMP_NUM_THREADS', 'Process')
+Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -AdditionalEnvironment @{
+    REEFVISION_WINDOWS_ACCEPTANCE = '1'
+    REEFVISION_ACCEPTANCE_DATA_DIR = 'C:\isolated-acceptance'
+    OMP_NUM_THREADS = '2'
+} -Action {
+    Assert-True ($env:REEFVISION_WINDOWS_ACCEPTANCE -ceq '1') 'Windows acceptance marker was not applied.'
+    Assert-True ($env:REEFVISION_ACCEPTANCE_DATA_DIR -eq 'C:\isolated-acceptance') 'Disposable acceptance data root was not applied.'
+    Assert-True ($env:OMP_NUM_THREADS -ceq '2') 'Safe thread limit was not applied.'
     Assert-True ($env:HF_HUB_OFFLINE -eq '1') 'Safe additional environment variable disabled offline policy.'
 }
-Assert-True ([Environment]::GetEnvironmentVariable('REEFVISION_ACCEPTANCE_PROBE', 'Process') -ceq $previousProbe) 'Safe additional environment variable was not restored.'
+Assert-True ([Environment]::GetEnvironmentVariable('REEFVISION_WINDOWS_ACCEPTANCE', 'Process') -ceq $previousAcceptanceMarker) 'Windows acceptance marker was not restored.'
+Assert-True ([Environment]::GetEnvironmentVariable('REEFVISION_ACCEPTANCE_DATA_DIR', 'Process') -ceq $previousAcceptanceData) 'Disposable acceptance data root was not restored.'
+Assert-True ([Environment]::GetEnvironmentVariable('OMP_NUM_THREADS', 'Process') -ceq $previousThreads) 'Safe thread limit was not restored.'
 
 # The packaged MSI sidecar self-test must inherit only disposable offline
 # caches, and the verifier must restore the caller environment even if the
