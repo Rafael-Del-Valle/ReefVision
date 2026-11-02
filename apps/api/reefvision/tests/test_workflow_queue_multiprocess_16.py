@@ -167,6 +167,11 @@ def test_two_processes_cannot_duplicate_saved_workflow_qc_queue(
         expected_id = str(uuid5(NAMESPACE_URL, f"reefvision:qc-queue:v1:{project_id}:{owner}"))
         assert queue.id == expected_id
         node_id, source_id = node.id, source.id
+        # This is an interrupted-create fixture, not a corrupted completed
+        # node. Completed nodes must reject missing output/queue evidence;
+        # only an incomplete node may exercise the deterministic retry path.
+        assert node.status == "succeeded"
+        node.status = "running"
         node.output_artifact_ids_json = []
         session.delete(queue)
         session.commit()
