@@ -149,8 +149,7 @@ def verify_succeeded_node_artifacts(
         raise ConflictError("Succeeded workflow node graph lineage is unavailable")
     raw_edges = graph.graph_json.get("edges", [])
     if not isinstance(raw_edges, list) or any(
-        not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str)
-        for edge in raw_edges
+        not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str) for edge in raw_edges
     ):
         raise ConflictError("Succeeded workflow node graph edges are invalid")
     expected_bindings = [
