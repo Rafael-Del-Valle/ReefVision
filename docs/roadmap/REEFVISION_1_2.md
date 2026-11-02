@@ -6038,3 +6038,40 @@ installed Windows MSI/GUI/GPU acceptance.
 **Focused correction:** Keep the production validator unchanged. Parameterize the expected diagnostic per malformed-versus-alias fixture and assert the same scientific rejection at registry read-back, attempted registration, attempted revision and executed saved Workflow Builder failure. Strengthen the existing imported-history regression with a database revision-count check before and after rejected writes, ensuring a later valid-looking revision cannot sanitize the imported history and no append-only scientific records are mutated by failed API operations. The saved graph must still fail without a successful identity-registry artifact. No new workflow node, migration, model download, environmental provider or cross-version merge.
 
 **Validation limitation:** The test change was committed on `develop/reefvision-1.2` as `d8a610c062fd1668f4bf1234da3cec7dd2201af0`. Local repository pytest/Ruff remain blocked by DNS resolution of GitHub; exact-new-head CI must be checked before claiming passes. Full 1.2 acceptance additionally requires authenticated calibrated longitudinal observations, verified independent experimental units, scientist-reviewed human/model comparisons, 1.1 migration reconciliation and physical installed Windows MSI/GUI/GPU tests. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Persisted organism-visit denominator and roster reconciliation (2026-11-02; development only)
+
+**Pre-edit audit:** Draft PR #74 head `2057223314d9f8efa39df6269208cf7a0137b41c`
+completed 19 PR-triggered Actions: 16 succeeded and three backend gates failed
+at Ruff E501 in the imported physical-unit alias test (line 328, 109 columns).
+The exact reported line was wrapped without weakening identity validation.
+Existing standalone scheduled longitudinal analysis and executable saved
+`ecology_longitudinal_analysis` already produce typed, source-linked,
+`caller_supplied_unverified` results; no new node or 1.1 context is needed.
+
+**Scientific integrity:** On persisted scientific result validation, require
+planned organism-visits to equal planned UTC dates times expected organisms;
+require observed plus missing visits to reconcile to that denominator; and
+require the stored coverage fraction to equal the observed/expected ratio.
+Each planned UTC visit must have unique, disjoint observed/missing organism
+IDs, exact observed and expected counts, and a reconciled coverage fraction.
+These checks prevent forged denominators from being replayed as valid
+sampling effort even if an artifact is otherwise structurally parseable.
+They do **not** authenticate source observations, calibration, actual
+organism identities, or experimental-unit independence.
+
+**Acceptance added:** Nine parameterized standalone scientific-result
+tampering cases check denominator, count, roster, and fraction rejection.
+The existing executed saved Workflow Builder test additionally parses its
+persisted typed artifact and rejects a forged organism-visit denominator.
+Existing successful workflow/standalone parity, provenance, review boundary,
+and immutable input behavior remain required. No migration, model weight,
+environmental provider, or cross-version merge was introduced.
+
+**Release HOLD:** Check exact-head Ruff, mypy, backend pytest, frontend/E2E,
+Windows Actions, and scientific migration compatibility. Representative
+authenticated calibrated longitudinal observations, independent experimental
+units, scientist-reviewed human/model comparisons, and installed Windows
+MSI/GUI/GPU acceptance remain outstanding.
+**1.2 NOT RELEASE-READY; 1.3 not started.**
