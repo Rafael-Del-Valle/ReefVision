@@ -1299,9 +1299,7 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
 
     malformed = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert malformed.status_code == 409, malformed.text
-    assert malformed.json() == {
-        "detail": "Workflow node parameters must be a JSON object"
-    }
+    assert malformed.json() == {"detail": "Workflow node parameters must be a JSON object"}
     with (
         app.state.session_factory() as session,
         pytest.raises(ConflictError, match="parameters must be a JSON object"),
