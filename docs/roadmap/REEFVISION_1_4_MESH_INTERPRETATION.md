@@ -938,3 +938,20 @@ unknown. Direct artifact replay and the executable typed Workflow Builder
 adapter use the same fail-closed comparison engine; saved-workflow parity for
 valid partial calibration evidence remains covered. Neither the diagonal nor
 its change is an anatomical coral branch-length estimate.
+
+## Zero-area patch distribution integrity (Track C, November 2, 2026)
+
+A reconstruction with exactly zero total triangle surface area cannot define
+positive relative patch areas, a concentration index, or a ranked patch-area
+divergence. Legacy saved previews may omit the per-patch area breakdown, but
+that omission must not permit a caller to fabricate positive area fractions
+for a zero-area mesh. The longitudinal comparison service now rejects those
+contradictory fractions rather than publishing misleading morphology QC.
+
+Genuine collinear/degenerate zero-area meshes remain readable with patch
+concentration and ranked comparisons unavailable (`null`), not zero. Direct
+comparison and the typed Workflow Builder adapter share this validation.
+Regression tests also execute a persisted two-timepoint graph and compare
+its zero-area artifacts with the standalone API. These are reconstruction
+integrity checks, not proof of coral fragmentation, anatomical branch length,
+verified growth, or biological condition.
