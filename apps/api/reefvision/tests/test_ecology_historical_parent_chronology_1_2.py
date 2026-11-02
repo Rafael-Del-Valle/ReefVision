@@ -335,7 +335,6 @@ def test_equal_parent_timestamps_with_conflicting_kinds_are_ambiguous() -> None:
     require_historical_ecological_parent_registration([fragment, parent_second, parent_first])
 
 
-
 def test_same_instant_parent_state_conflict_uses_utc_not_local_wall_time() -> None:
     """Offset-equivalent parent revisions must not invent a colony-at-link state."""
     parent_first = SimpleNamespace(
