@@ -49,6 +49,7 @@ from reefvision.services.workflow_consensus import build_detection_consensus
 from reefvision.services.workflow_datasets import create_workflow_dataset_version
 from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.services.workflow_provenance import (
+    build_workflow_run_provenance,
     verify_completed_run_artifact_ownership,
     verify_succeeded_node_artifacts,
     verify_workflow_artifact,
@@ -277,6 +278,24 @@ class WorkflowExecutionService:
                 approval = node.result_json.get("review_approval")
                 if approval is not None and not isinstance(approval, dict):
                     raise ConflictError("Workflow node review approval must be a JSON object")
+        # A terminal run's saved provenance must still describe the persisted
+        # scientist approvals, graph, and artifact lineage. Valid JSON and
+        # artifact hashes alone cannot detect edits to review evidence.
+        if run.status == "succeeded" and (
+            "provenance_manifest" in result or "provenance_sha256" in result
+        ):
+            manifest = result.get("provenance_manifest")
+            digest = result.get("provenance_sha256")
+            if (
+                not isinstance(manifest, dict)
+                or not isinstance(digest, str)
+                or canonical_json_sha256(manifest) != digest
+                or canonical_json_sha256(
+                    build_workflow_run_provenance(self.session, run_id=run.id)
+                )
+                != digest
+            ):
+                raise ConflictError("Workflow run saved provenance no longer matches persisted science")
         return WorkflowRunDetailResponse(
             run=WorkflowRunResponse.model_validate(run),
             nodes=[WorkflowNodeRunResponse.model_validate(node) for node in nodes],
