@@ -34,6 +34,14 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
         "producer_wrong_images_binding",
         "producer_resigned_images_artifact",
         "producer_resigned_image_ids",
+        "metadata_version_number",
+        "metadata_split_method",
+        "metadata_split_counts",
+        "metadata_image_count",
+        "metadata_annotation_count",
+        "metadata_mask_annotation_count",
+        "metadata_missing_split_counts",
+        "metadata_boolean_image_count",
     ],
 )
 def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, tamper: str) -> None:
@@ -108,6 +116,23 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
             producer.output_artifact_ids_json = [dataset_artifact.id]
         elif tamper == "producer_wrong_images_binding":
             producer.output_artifact_ids_json = [images_artifact.id, dataset_artifact.id]
+        elif tamper.startswith("metadata_"):
+            field, replacement = {
+                "metadata_version_number": ("version_number", -1),
+                "metadata_split_method": ("split_method", "forged-split-method"),
+                "metadata_split_counts": ("split_counts", {"train": 999}),
+                "metadata_image_count": ("image_count", -1),
+                "metadata_annotation_count": ("annotation_count", -1),
+                "metadata_mask_annotation_count": ("mask_annotation_count", -1),
+                "metadata_boolean_image_count": ("image_count", True),
+            }.get(tamper, ("split_counts", None))
+            metadata = dict(dataset_artifact.payload_json)
+            if tamper == "metadata_missing_split_counts":
+                metadata.pop(field)
+            else:
+                metadata[field] = replacement
+            dataset_artifact.payload_json = metadata
+            dataset_artifact.payload_sha256 = canonical_json_sha256(metadata)
         elif tamper == "producer_resigned_images_artifact":
             images_artifact.payload_json = {
                 **images_artifact.payload_json,
