@@ -448,14 +448,22 @@ foreach ($name in $requiredAcceptanceFields) {
 Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'All required automated MSI gates should permit a complete report.'
 # Automated installer smoke evidence must never imply physical release
 # readiness. Require separately timestamped WebView2, read-only live training,
-# and GPU/scientific observations; skipped/missing gates fail closed.
+# GPU/scientific, Canon EOS and Sony A7R observations; skipped/missing gates fail closed.
 $releaseGaps = @(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence)
-Assert-True ($releaseGaps.Count -eq 3) 'Automated MSI PASS alone must not certify release readiness.'
-foreach ($name in @('webview2_gui', 'training_console', 'gpu_scientific')) {
+Assert-True ($releaseGaps.Count -eq 5) 'Automated MSI PASS alone must not certify release readiness.'
+foreach ($name in @('webview2_gui', 'training_console', 'gpu_scientific', 'canon_camera', 'sony_camera')) {
     Assert-True ($releaseGaps -ccontains "${name}: MISSING") "Release readiness must require $name evidence."
     $completeEvidence[$name] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Physical acceptance observation for $name"
 }
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Complete timestamped release evidence should satisfy all release gates.'
+# One tested camera cannot substitute for the other; each needs independent evidence.
+$completeEvidence['sony_camera'] = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Sony camera not physically available'
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'sony_camera: NOT RUN') 'Canon PASS must not certify untested Sony hardware.'
+$completeEvidence['sony_camera'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed Sony A7R JPEG orientation and unchanged original hash'
+$completeEvidence['canon_camera'].timestamp_utc = '2026-11-01T12:00:00.0000000-06:00'
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'canon_camera: INVALID TIMESTAMP') 'Non-UTC Canon evidence must not certify release.'
+$completeEvidence['canon_camera'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed Canon EOS JPEG orientation and unchanged original hash'
+Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Restored independent camera evidence should satisfy release gates.'
 $completeEvidence['training_console'].status = 'NOT RUN'
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence) -ccontains 'training_console: NOT RUN') 'Unobserved live training must block release readiness.'
 $completeEvidence['training_console'] = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Observed live box/cls/dfl losses without interruption'
@@ -468,6 +476,8 @@ $completeEvidence['gpu_scientific'] = New-ReefVisionEvidenceResult -Status 'PASS
 Assert-True (@(Get-ReefVisionReleaseAcceptanceGaps -Report $completeEvidence).Count -eq 0) 'Restored release evidence should satisfy release gates.'
 Assert-True ($acceptanceScript.Contains('release_acceptance_complete = $false')) 'Acceptance report must initialize release readiness as false.'
 Assert-True ($acceptanceScript.Contains('training_console = New-ReefVisionEvidenceResult')) 'Acceptance report must explicitly track live training telemetry.'
+Assert-True ($acceptanceScript.Contains('canon_camera = New-ReefVisionEvidenceResult')) 'Acceptance report must initialize unverified Canon physical-camera evidence.'
+Assert-True ($acceptanceScript.Contains('sony_camera = New-ReefVisionEvidenceResult')) 'Acceptance report must initialize unverified Sony physical-camera evidence.'
 Assert-True ($acceptanceScript.Contains('Get-ReefVisionReleaseAcceptanceGaps -Report $report')) 'Acceptance must calculate physical release gaps separately from automated MSI smoke checks.'
 # Evidence survives JSON persistence; a naked PASS, missing time, or malformed
 # record must never be accepted as verified clean-install evidence.
