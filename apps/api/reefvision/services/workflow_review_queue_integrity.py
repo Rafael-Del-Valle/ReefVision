@@ -379,6 +379,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             or scoring_digest != expected_scoring_digest
         ):
             raise invalid
+    expected_scope_type = "dataset_version" if queue.dataset_version_id is not None else "project"
     saved_count = checksums.get("item_count")
     digest = checksums.get("queue_scope_sha256")
     if (
@@ -390,8 +391,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         or not isinstance(digest, str)
         or len(digest) != 64
         or any(char not in "0123456789abcdef" for char in digest)
-        or queue.scope_type != "project"
-        or queue.dataset_version_id is not None
+        or queue.scope_type != expected_scope_type
     ):
         raise invalid
 
@@ -404,7 +404,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             or item.image_id in scores
             or item.project_id != queue.project_id
             or item.review_queue_id != queue.id
-            or item.dataset_version_id is not None
+            or item.dataset_version_id != queue.dataset_version_id
             or item.weights_json != weights
             or type(item.rank_position) is not int
             or item.rank_position in ranks
