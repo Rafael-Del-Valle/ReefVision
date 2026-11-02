@@ -129,9 +129,9 @@ def test_invalid_obj_source_rejected_by_api_and_saved_workflow(
         "\ufeff",
     ],
 )
-def test_obj_control_separators_rejected_before_geometry_parsing(separator: str) -> None:
+def test_obj_bad_separators_rejected_before_parsing(separator: str) -> None:
     obj_text = OBJ.replace("v 0 0 0\n", f"v 0{separator}0 0\n", 1)
-    with pytest.raises(ValueError, match="unsupported control characters or separators"):
+    with pytest.raises(ValueError, match="unsupported control"):
         parse_obj_triangles(obj_text)
 
 
