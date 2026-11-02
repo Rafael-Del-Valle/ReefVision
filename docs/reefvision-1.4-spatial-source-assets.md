@@ -497,3 +497,24 @@ declaration. Parser regressions cover both cases; standalone analysis and
 persisted executable typed Workflow Builder tests require rejected files to
 produce no mesh measurement artifact. Accepted geometry, source integrity,
 and scale remain provisional and subject to human verification.
+
+### Strict ASCII PLY triangular mesh numeric provenance
+
+The bounded 1.4 **triangle-mesh** PLY parser now applies the same ASCII
+source-grammar safeguards as the point-cloud parser. It rejects non-ASCII
+characters and hidden control separators before parsing; accepts ordinary
+tabs and CRLF line endings; and requires canonical decimal integer tokens
+for element counts, integer vertex properties, and triangle indices.
+Python-only underscores and Unicode digits are not valid PLY numbers.
+Floating vertex properties accept signed decimal and exponent notation,
+but reject nonstandard tokens and nonzero decimals that would silently
+underflow to zero in the preview's floating-point representation. A genuine
+zero such as `0.0e-9999` remains valid.
+
+Direct parser, standalone mesh-preview API, and persisted executable typed
+Workflow Builder regression tests cover malformed sources and require
+failed workflows to publish no mesh measurement artifact. A positive
+decimal/exponent test checks exact standalone/saved-artifact parity.
+These are input-integrity protections, **not** evidence that the imported
+mesh, its scale, organism identity, surface, or anatomical branch lengths
+have been independently verified.
