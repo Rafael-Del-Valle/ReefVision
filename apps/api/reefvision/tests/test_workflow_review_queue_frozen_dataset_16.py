@@ -302,3 +302,43 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
         session.rollback()
 
     assert _queue_item(client, payload["queue_id"])["review_state"] == "pending"
+
+
+def test_frozen_unannotated_study_has_no_invented_rare_class_priority(
+    client: TestClient,
+) -> None:
+    """Standalone and executable saved graphs agree when no taxa were annotated."""
+    project = create_project(client, "Unannotated octocoral study")
+    project_id = project["id"]
+    imported = import_one(client, project_id, filename="unannotated-coral.png")
+    image_id = imported["successful"][0]["image_id"]
+    save_annotations(
+        client,
+        image_id,
+        base_revision=0,
+        annotation_status="reviewed",
+        annotations=[],
+    )
+    version_id = create_version(client, project_id, name="Unannotated frozen study")["id"]
+
+    standalone = client.post(
+        f"/api/v1/dataset-versions/{version_id}/review-queues", json={}
+    )
+    assert standalone.status_code == 201, standalone.text
+    standalone_item = _queue_item(client, standalone.json()["id"])
+    graph = _frozen_graph(version_id)
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] and plan.json()["executable"]
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    _, payload = _run_frozen_graph(client, project_id, saved.json()["id"])
+    workflow_item = _queue_item(client, payload["queue_id"])
+
+    for item in (standalone_item, workflow_item):
+        assert item["label_class_ids_json"] == []
+        assert item["signal_values_json"]["rare_class_presence"] == 0.0
+        assert item["normalized_signals_json"]["rare_class_presence"] == 0.0
+        assert item["review_state"] == "pending"
+    assert workflow_item["input_checksum"] == standalone_item["input_checksum"]
+    assert workflow_item["score"] == standalone_item["score"]

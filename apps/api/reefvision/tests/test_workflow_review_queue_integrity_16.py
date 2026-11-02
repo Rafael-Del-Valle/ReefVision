@@ -1040,3 +1040,20 @@ def test_v3_saved_aggregate_integer_weights_reject_overflow_without_exception() 
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
+
+
+def test_v3_rejects_resigned_rare_class_without_annotation_evidence() -> None:
+    """No annotated classes means no rare-class observation, even with a new digest."""
+    queue, items = _v3_snapshot()
+    item = items[0]
+    item.label_class_ids_json = []
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    # An empty class set is a legitimate frozen observation.
+    validate_saved_queue_snapshot(queue, items)
+
+    item.review_state = "in_progress"
+    _set_v3_unweighted_signal(item, "rare_class_presence", 0.5)
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+    assert item.review_state == "in_progress"

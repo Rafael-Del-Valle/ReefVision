@@ -245,6 +245,9 @@ def _valid_v3_scientific_references(item: Any) -> bool:
         or severity not in (None, *V3_QC_SEVERITY_SCORES)
         or not isinstance(raw_signals, dict)
         or raw_signals.get("unresolved_qc_severity") != V3_QC_SEVERITY_SCORES.get(severity, 0.0)
+        # Rare-class presence is computed only from annotated class IDs.
+        # A re-signed queue with no class references cannot invent rare taxa.
+        or (not item.label_class_ids_json and raw_signals.get("rare_class_presence") != 0.0)
     ):
         return False
     checksum = getattr(item, "input_checksum", None)
