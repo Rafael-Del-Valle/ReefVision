@@ -884,3 +884,21 @@ provenance parity. This is input and provenance integrity, **not** proof
 of physical calibration, coral identity, anatomical branch length,
 registration, or biological condition. User-trained checkpoints remain
 local and untouched.
+
+## Calibrated surface-area numerical underflow (Track C, November 2, 2026)
+
+A triangle mesh can have positive, finite source-frame surface area while an
+extremely small caller-supplied `meters_per_unit` collapses the calibrated
+square-meter result to floating-point zero. The bounded mesh preview now
+rejects this case with an explicit calibration-underflow error rather than
+publishing a misleading zero-area observation. Truly degenerate zero-area
+triangles retain their existing topology and QC behavior; small but
+representable positive calibrated areas remain valid.
+
+Direct measurement, the standalone mesh-preview API, and an executable saved
+`mesh_surface_preview` Workflow Builder graph share the rejection path.
+Regression tests require failed saved runs to emit no
+`mesh_measurement_preview` artifact and require successful small-scale
+runs to preserve standalone-versus-persisted area, scale interval, and
+provenance parity. This safeguard does **not** verify the physical scale,
+mesh reconstruction, coral tissue coverage, or biological growth.
