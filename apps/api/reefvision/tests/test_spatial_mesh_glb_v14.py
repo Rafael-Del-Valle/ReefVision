@@ -274,7 +274,12 @@ def make_glb(
         "json_identity_zero_exponent",
     }:
         doc["nodes"][0]["translation"] = ["numeric_marker", 0, 0]
-    elif invalid_selector == "json_extras_underflow":
+    elif invalid_selector in {
+        "json_extras_underflow",
+        "json_extras_long_integer",
+        "json_extras_oversized_integer",
+        "json_extras_bounded_integer",
+    }:
         doc["extras"] = {"source_number": "numeric_marker"}
     if explicit_empty_extensions:
         doc["extensionsUsed"] = []
@@ -329,6 +334,9 @@ def make_glb(
         "json_negative_translation_underflow": b"-1e-9999",
         "json_extras_underflow": b"1e-9999",
         "json_identity_zero_exponent": b"0e-9999",
+        "json_extras_long_integer": b"9" * 5000,
+        "json_extras_oversized_integer": b"9" * 65,
+        "json_extras_bounded_integer": b"9" * 64,
     }
     if invalid_selector in numeric_tokens:
         json_bytes = json_bytes.replace(b'"numeric_marker"', numeric_tokens[invalid_selector])
@@ -345,6 +353,22 @@ def make_glb(
         + binary
     )
     return base64.b64encode(glb).decode()
+
+
+def test_bounded_glb_json_integer_metadata_preserves_geometry() -> None:
+    """Opaque bounded JSON integers must not alter decoded scientific geometry."""
+    assert parse_glb_triangles(make_glb(invalid_selector="json_extras_bounded_integer")) == (
+        parse_glb_triangles(make_glb())
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_selector", ["json_extras_oversized_integer", "json_extras_long_integer"]
+)
+def test_rejects_oversized_glb_json_integer_tokens(invalid_selector: str) -> None:
+    """Reject excessive metadata integers before Python's digit-limit exception."""
+    with pytest.raises(ValueError, match="GLB JSON integer exceeds 64-digit preview bound"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
 def test_explicit_glb_minimum_version_preserves_geometry() -> None:
