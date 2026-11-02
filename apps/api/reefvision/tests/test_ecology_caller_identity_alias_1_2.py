@@ -33,19 +33,11 @@ def _case(
             unit_b="tank-A",
         )
         if identity == "organism":
-            alias = (
-                "\uff46\uff52\uff41\uff47-A"
-                if compatible_unicode
-                else "FRAG-A"
-            )
+            alias = "\uff46\uff52\uff41\uff47-A" if compatible_unicode else "FRAG-A"
             for row in rows[2:]:
                 row["organism_id"] = alias
         else:
-            alias = (
-                "\uff43\uff4f\uff4c\uff4f\uff4e\uff59-A"
-                if compatible_unicode
-                else "COLONY-A"
-            )
+            alias = "\uff43\uff4f\uff4c\uff4f\uff4e\uff59-A" if compatible_unicode else "COLONY-A"
             for row in rows[2:]:
                 row["parent_colony_id"] = alias
         return (
@@ -67,11 +59,7 @@ def _case(
         )
         pairs[1]["organism_id"] = alias
     else:
-        alias = (
-            "\uff43\uff4f\uff4c\uff4f\uff4e\uff59-A"
-            if compatible_unicode
-            else "COLONY-A"
-        )
+        alias = "\uff43\uff4f\uff4c\uff4f\uff4e\uff59-A" if compatible_unicode else "COLONY-A"
         pairs[1]["parent_colony_id"] = alias
     graph = cast(dict[str, Any], paired_graph())
     graph["nodes"][1]["parameters"]["pairs"] = pairs
@@ -109,9 +97,7 @@ def _run_saved(
     assert detail.status_code == 200, detail.text
     body = detail.json()
     assert (body["run"]["status"] == "succeeded") is completed
-    artifacts = [
-        item for item in body["artifacts"] if item["data_type"] == artifact_type
-    ]
+    artifacts = [item for item in body["artifacts"] if item["data_type"] == artifact_type]
     return body["run"], artifacts
 
 
@@ -126,7 +112,11 @@ def test_aliases_fail_standalone_and_saved_workflow(
     )
     rejected = client.post(endpoint, json=payload)
     assert rejected.status_code == 400, rejected.text
-    assert f"Caller-declared {identity if identity == 'organism' else 'parent-colony'} IDs differ only by case or Unicode compatibility" in rejected.json()["detail"]
+    label = "organism" if identity == "organism" else "parent-colony"
+    assert (
+        f"Caller-declared {label} IDs differ only by case or Unicode compatibility"
+        in rejected.json()["detail"]
+    )
 
     run, artifacts = _run_saved(
         client, graph, artifact_type, f"Caller alias {analysis} {identity}"

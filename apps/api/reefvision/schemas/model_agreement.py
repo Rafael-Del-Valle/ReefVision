@@ -8,7 +8,9 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from reefvision.domain.ecology_lineage_policy import require_unique_ecological_organism_key_spellings
+from reefvision.domain.ecology_lineage_policy import (
+    require_unique_ecological_organism_key_spellings,
+)
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.scientific_provenance import ScientificInputProvenance
