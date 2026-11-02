@@ -482,3 +482,18 @@ remains unchanged.
 This is an auditability and resource-bounding safeguard, **not** evidence
 of authenticated reviewers, independently verified calibration, registered
 survey coordinates, or confirmed biological identity.
+
+
+### Undeclared nested GLB extension safeguards
+
+GLB 2.0 geometry imports reject unsupported `extensions` payloads even
+when an exporter omits the required root `extensionsUsed` declaration.
+This includes nested node, mesh, scene, buffer, buffer-view and accessor
+extensions. The bounded preview cannot evaluate vendor-specific transforms
+or alternative geometry semantics, so silently ignoring them could create
+misleading calibrated surface measurements. Ordinary application metadata
+inside glTF `extras` remains opaque and is not treated as an extension
+declaration. Parser regressions cover both cases; standalone analysis and
+persisted executable typed Workflow Builder tests require rejected files to
+produce no mesh measurement artifact. Accepted geometry, source integrity,
+and scale remain provisional and subject to human verification.
