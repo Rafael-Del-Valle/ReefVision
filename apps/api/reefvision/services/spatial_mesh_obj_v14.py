@@ -8,6 +8,20 @@ from re import fullmatch
 MAX_OBJ_BYTES = 256_000
 MAX_VERTICES = 2_000
 MAX_FACES = 4_000
+_OBJ_FLOAT_TOKEN = r"[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+
+
+def _parse_obj_float(token: str) -> float:
+    """Read an ASCII OBJ scalar without Python-only syntax or silent underflow."""
+    if fullmatch(_OBJ_FLOAT_TOKEN, token) is None:
+        raise ValueError("Invalid OBJ floating-point token")
+    number = float(token)
+    mantissa = token.lower().split("e", 1)[0]
+    if number == 0.0 and any(digit in "123456789" for digit in mantissa):
+        raise ValueError("Nonzero OBJ scalar underflows floating-point precision")
+    if not isfinite(number):
+        raise ValueError("OBJ scalar must be finite")
+    return number
 
 
 def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
@@ -29,14 +43,14 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             if len(fields) not in {4, 5, 7, 8}:
                 raise ValueError(f"OBJ line {line_number}: unsupported vertex layout")
             try:
-                point = [float(value) for value in fields[1:4]]
+                point = [_parse_obj_float(value) for value in fields[1:4]]
                 if len(fields) in {5, 8}:
-                    weight = float(fields[4])
+                    weight = _parse_obj_float(fields[4])
                     if not isfinite(weight) or weight == 0:
                         raise ValueError("homogeneous weight must be finite and nonzero")
                     point = [value / weight for value in point]
                 if len(fields) in {7, 8}:
-                    colors = [float(value) for value in fields[-3:]]
+                    colors = [_parse_obj_float(value) for value in fields[-3:]]
                     if not all(isfinite(value) for value in colors):
                         raise ValueError("vertex colors must be finite")
             except (ValueError, OverflowError) as exc:
@@ -54,7 +68,7 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             if (kind == "vt" and count not in {1, 2, 3}) or (kind == "vn" and count != 3):
                 raise ValueError(f"OBJ line {line_number}: invalid {kind} declaration")
             try:
-                attributes = [float(value) for value in fields[1:]]
+                attributes = [_parse_obj_float(value) for value in fields[1:]]
             except (ValueError, OverflowError) as exc:
                 raise ValueError(f"OBJ line {line_number}: invalid {kind} declaration") from exc
             if not all(isfinite(value) for value in attributes):
