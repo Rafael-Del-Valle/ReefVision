@@ -290,9 +290,7 @@ def test_persisted_planned_roster_aliases_cannot_inflate_organism_denominators(
     elif tampered_field == "missing_followup":
         coverage["missing_organism_ids"] = ["FRAG-A"]
     elif tampered_field == "missing_scheduled_map":
-        coverage["missing_scheduled_dates_by_organism"] = {
-            "FRAG-A": ["2026-04-02"]
-        }
+        coverage["missing_scheduled_dates_by_organism"] = {"FRAG-A": ["2026-04-02"]}
     elif tampered_field == "planned_observed":
         visit["observed_organism_ids"][0] = "FRAG-A"
     else:
