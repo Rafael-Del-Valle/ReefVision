@@ -461,7 +461,13 @@ def test_explicit_identity_glb_transform_preserves_geometry(identity_transform: 
 )
 def test_rejects_nonidentity_or_malformed_glb_matrix(invalid_selector: str) -> None:
     """Unapplied, ambiguous or unbounded matrices cannot define coral dimensions."""
-    with pytest.raises(ValueError, match=r"matrix|transforms"):
+    # JSON token limits run before scene semantics for oversized integers.
+    expected_error = (
+        "64-digit preview bound"
+        if invalid_selector == "huge_identity_matrix"
+        else r"matrix|transforms"
+    )
+    with pytest.raises(ValueError, match=expected_error):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
@@ -694,5 +700,11 @@ def test_valid_glb_index_bounds_preserve_geometry() -> None:
 )
 def test_rejects_invalid_glb_index_bounds(invalid_selector: str) -> None:
     """Malformed or contradictory extrema cannot enter mesh measurements."""
-    with pytest.raises(ValueError, match=r"bounds|nonfinite"):
+    # Oversized integer tokens fail at JSON decode before accessor bounds QC.
+    expected_error = (
+        "64-digit preview bound"
+        if invalid_selector == "index_bounds_huge"
+        else r"bounds|nonfinite"
+    )
+    with pytest.raises(ValueError, match=expected_error):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
