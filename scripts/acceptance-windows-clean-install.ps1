@@ -99,6 +99,9 @@ $report = [ordered]@{
     # A loopback API probe or synthetic CI fixture cannot satisfy them.
     webview2_gui = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Interactive installed WebView2 image, scrolling and annotation acceptance required'
     gpu_scientific = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Physical GPU training/inference and scientific QC acceptance required'
+    training_console = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Read-only PowerShell console must show actual job logs and box/cls/dfl losses without interrupting live training'
+    release_acceptance_complete = $false
+    release_acceptance_gaps = @()
     automated_acceptance_complete = $false
     automated_acceptance_gaps = @()
     failure_reason = $null
@@ -110,6 +113,11 @@ function Save-Report {
         -not $report.plan_only -and
         $null -eq $report.failure_reason -and
         $report.automated_acceptance_gaps.Count -eq 0
+    )
+    $report.release_acceptance_gaps = @(Get-ReefVisionReleaseAcceptanceGaps -Report $report)
+    $report.release_acceptance_complete = (
+        $report.automated_acceptance_complete -and
+        $report.release_acceptance_gaps.Count -eq 0
     )
     Write-ReefVisionEvidenceReport -Report $report -Path $ReportPath
 }
@@ -664,8 +672,11 @@ try {
     }
 }
 
-if ($report.automated_acceptance_complete) {
-    Write-Host 'Automated Windows MSI acceptance passed; interactive WebView2 and physical GPU/scientific acceptance remain NOT RUN.' -ForegroundColor Green
+if ($report.release_acceptance_complete) {
+    Write-Host 'Windows MSI release acceptance evidence is complete; owner review and remaining release gates are still required.' -ForegroundColor Green
+} elseif ($report.automated_acceptance_complete) {
+    Write-Host 'Automated Windows MSI acceptance passed; physical WebView2, live training console and GPU/scientific release gates remain separate.' -ForegroundColor Green
+    Write-Warning ("Release acceptance is incomplete: " + ($report.release_acceptance_gaps -join '; '))
 } else {
     Write-Warning ("Automated Windows MSI acceptance is incomplete: " + ($report.automated_acceptance_gaps -join '; '))
 }
