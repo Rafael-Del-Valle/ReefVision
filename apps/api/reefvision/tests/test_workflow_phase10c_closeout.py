@@ -27,6 +27,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ConflictError
 from reefvision.jobs import worker
 from reefvision.jobs.workflow import (
+    _set_waiting_for_review,
     process_workflow_run_job,
 )
 from reefvision.ml.providers import DetectionModelMetadata
@@ -46,6 +47,7 @@ from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
 )
 from reefvision.services.workflow_provenance import build_workflow_run_provenance
+from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.services.workflow_training import (
     register_workflow_trained_model,
 )
@@ -346,6 +348,51 @@ def test_interrupted_workflow_reuses_succeeded_artifacts_and_reopens_with_proven
     reopened_result = reopened.json()["run"]["result_json"]
 
     assert reopened_result["provenance_sha256"] == result["provenance_sha256"]
+
+
+def test_review_pause_rejects_foreign_and_completed_nodes_without_mutating_science(
+    client: TestClient,
+) -> None:
+    first_project = create_project(client, "Phase 10C review owner")
+    other_project = create_project(client, "Phase 10C foreign review owner")
+    run_id, job_id, _ = _prime_interrupted_run(client, str(first_project["id"]))
+    foreign_run_id, _, _ = _prime_interrupted_run(client, str(other_project["id"]))
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        foreign_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == foreign_run_id,
+                WorkflowNodeRun.node_id == "images",
+            )
+        )
+        completed_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "project",
+            )
+        )
+        assert foreign_node is not None and foreign_node.status == "running"
+        assert completed_node is not None and completed_node.status == "succeeded"
+        invalid_ids = (foreign_node.id, completed_node.id)
+
+    for invalid_id in invalid_ids:
+        with pytest.raises(RuntimeError, match="requires an active node in this run"):
+            _set_waiting_for_review(
+                app.state.session_factory,
+                job_id,
+                run_id,
+                completed_nodes=1,
+                review=WorkflowReviewRequired(
+                    "Review required", details={"node_run_id": invalid_id}
+                ),
+            )
+
+    with app.state.session_factory() as session:
+        assert session.get(WorkflowRun, run_id).status == "running"
+        assert session.get(Job, job_id).status == "running"
+        assert session.get(WorkflowNodeRun, invalid_ids[0]).status == "running"
+        assert session.get(WorkflowNodeRun, invalid_ids[1]).status == "succeeded"
 
 
 @pytest.mark.parametrize("payload_corruption", ["changed_values", "equivalent_pairs"])

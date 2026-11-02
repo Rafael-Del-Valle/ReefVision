@@ -72,6 +72,12 @@ def _set_waiting_for_review(
         details = dict(review.details)
         requested_node_id = str(details.get("node_run_id") or "")
         node_run = session.get(WorkflowNodeRun, requested_node_id) if requested_node_id else None
+        # A review adapter may supply a persisted node ID. Never let a stale
+        # or incorrect ID pause another run or overwrite completed science.
+        if node_run is not None and (
+            node_run.workflow_run_id != run_id or node_run.status != "running"
+        ):
+            raise RuntimeError("Workflow review pause requires an active node in this run")
         if node_run is None:
             node_run = session.scalar(
                 select(WorkflowNodeRun)
