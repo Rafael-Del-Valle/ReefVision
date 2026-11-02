@@ -141,7 +141,9 @@ def create_review_queue_workflow_artifact(
             or dataset_payload.get("manifest_sha256") != dataset_version.manifest_sha256
         ):
             raise ValidationError("QC Review Queue dataset version or manifest does not match")
-        dataset_producer = session.get(WorkflowNodeRun, dataset_source.producer_node_run_id)
+        dataset_producer = session.get(
+            WorkflowNodeRun, dataset_source.producer_node_run_id
+        )
         if (
             dataset_source.workflow_run_id != run_id
             or dataset_source.producer_port_id != "dataset"
@@ -216,7 +218,8 @@ def create_review_queue_workflow_artifact(
         if (
             existing.status != "complete"
             or existing.dataset_version_id != dataset_version_id
-            or existing.scope_type != ("dataset_version" if dataset_version_id else "project")
+            or existing.scope_type
+            != ("dataset_version" if dataset_version_id else "project")
             or config.get("review_below_confidence") != request.review_below_confidence
             or (
                 request.source_quality_control_run_id is not None
