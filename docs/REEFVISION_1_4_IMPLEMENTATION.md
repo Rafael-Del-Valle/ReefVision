@@ -29,6 +29,25 @@ installed desktop/GPU/scientific acceptance. A separate bounded ASCII PLY
 point-cloud preview and interactive viewer already exist, but their transient
 visualization and chord measurements do not establish verified anatomy.
 
+## Calibrated per-patch surface-area underflow guard (provisional)
+
+A positive edge-connected source-frame mesh patch can be many orders of
+magnitude smaller than another patch. The aggregate calibrated surface area
+may remain representable even when the smaller patch would silently round
+to exactly zero square meters. The measurement service now rejects that
+case before returning any measurement artifact. This complements the
+existing full-mesh calibrated-area underflow check. A genuinely degenerate
+zero-area patch is still reported as zero, with the existing degenerate
+geometry QC; it is not reclassified as a positive patch.
+
+Regression coverage exercises direct measurement, the project-scoped
+standalone API, and a saved executable typed `mesh_surface_preview`
+Workflow Builder graph. On rejection the graph fails without publishing
+a mesh measurement artifact. This is a floating-point integrity safeguard,
+**not** evidence of verified scale, tissue completeness, biological
+identity, anatomical branch length, or measurement uncertainty beyond
+the existing caller-supplied scale-only interval.
+
 ## OBJ text separator integrity (provisional)
 
 The bounded OBJ mesh importer rejects NUL/ASCII control characters other
