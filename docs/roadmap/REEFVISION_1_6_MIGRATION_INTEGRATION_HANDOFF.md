@@ -172,3 +172,26 @@ validate a **defensive isolation guard**, not reconciliation of the 1.1/1.6
 priority output, researcher review gates and retries remain unchanged. A
 reviewed data-preserving migration DAG, integrated CI, real biological-data
 acceptance and native Windows installed-GUI/MSI validation remain required.
+
+## 2026-11-02 — ambiguous pre-review Alembic marker refusal (Track D)
+
+The 1.6 desktop preflight already rejects multiple Alembic heads containing a
+review-lineage revision (0038–0041), but a damaged or partially restored
+`alembic_version` table containing **only** pre-review markers could pass
+through the early-return path. Duplicate 0037 rows, 0036/0037 mixed heads, or
+an unrelated foreign head alongside 0037 are not an unambiguous migration
+starting point. A single NULL, empty or whitespace-only marker is also invalid.
+
+The read-only guard now rejects those states **before** Alembic upgrade,
+without altering the stamp, scientific observations, reviewer records, or
+SQLite schema. `test_migration_pre_review_revision_markers_16.py` checks
+six malformed/multiple-stamp scenarios, repeated rejection with exact schema
+and coral-observation preservation, three desktop startup paths that must
+never invoke upgrade, and a valid single-0037 control. Existing review-lineage
+multi-head behavior and unversioned fresh-database handling are unchanged.
+
+This is **not** a reconciliation of the independent 1.1 and 1.6 revision
+0038/0039 migrations. Preserve both lineages until a reviewed, data-preserving
+unified DAG and real upgrade fixtures are available. Full CI, Windows MSI/CAB
+upgrade/rollback, installed GUI and representative scientific acceptance remain
+release blockers.
