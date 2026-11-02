@@ -627,6 +627,20 @@ function GalleryContent({
     }
   }, [images.data, page]);
 
+  // An import is an explicit request to review newly ingested camera files.
+  // Old filename/status/group filters can silently hide those files even after
+  // the gallery refetches. Reset the filter drafts and applied query together
+  // so both completed and uncertain partial imports are inspectable.
+  function showLatestImports() {
+    setPendingNavigationEdge(null);
+    setFilenameDraft("");
+    setStatusDraft("");
+    setGroupDraft("");
+    setFilters({ filename: "", annotationStatus: "", groupKey: "" });
+    setSortBy("newest");
+    setPage(1);
+  }
+
   const importer = useMutation({
     mutationFn: async (files: File[]) => {
       const combined: ImageImportReport = {
@@ -669,10 +683,8 @@ function GalleryContent({
     },
     onSuccess: async (result) => {
       setUnconfirmedImport(null);
-      setPendingNavigationEdge(null);
       setReport(result);
-      setSortBy("newest");
-      setPage(1);
+      showLatestImports();
       // An earlier gallery session may have exhausted the bounded thumbnail
       // polling budget. A new camera import starts a fresh batch of thumbnail
       // jobs, so reset the cached query's success count before refetching.
@@ -687,9 +699,7 @@ function GalleryContent({
       // earlier camera originals are already safely imported. Refresh the
       // gallery so those successful files remain visible and reviewable,
       // while retaining the partial import report and the failure warning.
-      setPendingNavigationEdge(null);
-      setSortBy("newest");
-      setPage(1);
+      showLatestImports();
       await queryClient.resetQueries({ queryKey: ["images", project.id] });
     },
     onSettled: () => {
