@@ -414,6 +414,16 @@ def test_imported_ambiguous_parent_timestamp_blocks_api_and_saved_graph(
     assert response.status_code == 400, response.text
     assert "ambiguous at fragment revision" in response.text
     assert _register(client, project_id, "another-colony").status_code == 400
+    rejected_revision = client.post(
+        f"{base}/organisms/parent-A/revisions",
+        json={
+            "expected_revision": 2,
+            "kind": "colony",
+            "reason": "Must not append to an ambiguous historical parent state",
+        },
+    )
+    assert rejected_revision.status_code == 400, rejected_revision.text
+    assert "ambiguous at fragment revision" in rejected_revision.text
 
     succeeded, detail = _run_saved_registry(client, project_id)
     assert succeeded is False
