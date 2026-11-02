@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import (
     DatasetVersion,
+    DatasetVersionItem,
     ReviewQueue,
     WorkflowArtifact,
     WorkflowNodeRun,
@@ -146,6 +147,25 @@ def create_review_queue_workflow_artifact(
         ):
             raise ValidationError("QC Review Queue dataset version or manifest does not match")
         dataset_producer = session.get(WorkflowNodeRun, dataset_source.producer_node_run_id)
+        # The source emits dataset metadata AND its typed image collection.
+        # Validate both persisted outputs, not an impossible one-output subset.
+        producer_outputs = (
+            dataset_producer.output_artifact_ids_json if dataset_producer is not None else None
+        )
+        images_artifact = (
+            session.get(WorkflowArtifact, producer_outputs[1])
+            if isinstance(producer_outputs, list)
+            and len(producer_outputs) == 2
+            and producer_outputs[0] == dataset_source.id
+            and type(producer_outputs[1]) is str
+            else None
+        )
+        images_payload = images_artifact.payload_json if images_artifact is not None else None
+        expected_image_ids = session.scalars(
+            select(DatasetVersionItem.image_id).where(
+                DatasetVersionItem.dataset_version_id == candidate_id
+            )
+        ).all()
         if (
             dataset_source.workflow_run_id != run_id
             or dataset_source.producer_port_id != "dataset"
@@ -157,7 +177,22 @@ def create_review_queue_workflow_artifact(
             or dataset_producer.parameters_json.get("dataset_version_id") != candidate_id
             or dataset_producer.parameters_json.get("split") is not None
             or dataset_producer.input_artifact_ids_json != [source.id]
-            or dataset_producer.output_artifact_ids_json != [dataset_source.id]
+            or images_artifact is None
+            or images_artifact.workflow_run_id != run_id
+            or images_artifact.producer_node_run_id != dataset_producer.id
+            or images_artifact.producer_port_id != "images"
+            or images_artifact.data_type != "image_collection"
+            or not isinstance(images_payload, dict)
+            or images_artifact.payload_sha256 != canonical_json_sha256(images_payload)
+            or images_payload.get("project_id") != project_id
+            or images_payload.get("dataset_version_id") != candidate_id
+            or images_payload.get("dataset_manifest_sha256") != dataset_version.manifest_sha256
+            or images_payload.get("split") is not None
+            or not isinstance(images_payload.get("image_ids"), list)
+            or any(type(image_id) is not str for image_id in images_payload["image_ids"])
+            or sorted(images_payload["image_ids"]) != sorted(expected_image_ids)
+            or type(images_payload.get("count")) is not int
+            or images_payload["count"] != len(expected_image_ids)
         ):
             raise ValidationError("QC Review Queue dataset producer provenance is invalid")
         dataset_version_id = candidate_id

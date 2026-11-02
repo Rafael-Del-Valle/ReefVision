@@ -687,6 +687,9 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
         }
         session.flush()
         with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            validate_saved_queue_snapshot(saved_queue, [saved_item])
+        # Replay rejects changed weights before reaching snapshot validation.
+        with pytest.raises(ValidationError, match="retry parameters changed"):
             execute_runtime_adapter(
                 "qc_review_queue",
                 session=session,

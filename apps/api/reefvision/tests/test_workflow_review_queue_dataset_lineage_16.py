@@ -30,6 +30,10 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
         "producer_filtered_split",
         "producer_project_binding",
         "producer_extra_output",
+        "producer_missing_images_output",
+        "producer_wrong_images_binding",
+        "producer_resigned_images_artifact",
+        "producer_resigned_image_ids",
     ],
 )
 def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, tamper: str) -> None:
@@ -62,9 +66,20 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
                 WorkflowArtifact.producer_port_id == "dataset",
             )
         )
+        images_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.producer_node_run_id == by_type["dataset_version_source"].id,
+                WorkflowArtifact.producer_port_id == "images",
+            )
+        )
         assert project_artifact is not None and dataset_artifact is not None
+        assert images_artifact is not None
         producer = by_type["dataset_version_source"]
         assert producer.input_artifact_ids_json == [project_artifact.id]
+        assert producer.output_artifact_ids_json == [
+            dataset_artifact.id,
+            images_artifact.id,
+        ]
 
         if tamper == "resigned_other_version":
             assert other_id is not None
@@ -83,10 +98,28 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
             producer.parameters_json = {**producer.parameters_json, "split": "train"}
         elif tamper == "producer_project_binding":
             producer.input_artifact_ids_json = []
+        elif tamper == "producer_extra_output":
+            producer.output_artifact_ids_json = [
+                dataset_artifact.id,
+                images_artifact.id,
+                project_artifact.id,
+            ]
+        elif tamper == "producer_missing_images_output":
+            producer.output_artifact_ids_json = [dataset_artifact.id]
+        elif tamper == "producer_wrong_images_binding":
+            producer.output_artifact_ids_json = [images_artifact.id, dataset_artifact.id]
+        elif tamper == "producer_resigned_images_artifact":
+            images_artifact.payload_json = {
+                **images_artifact.payload_json,
+                "dataset_manifest_sha256": "0" * 64,
+            }
+            images_artifact.payload_sha256 = canonical_json_sha256(images_artifact.payload_json)
         else:
-            # The producer has one typed dataset output. A re-signed extra
-            # artifact must not be silently accepted as a valid saved binding.
-            producer.output_artifact_ids_json = [dataset_artifact.id, project_artifact.id]
+            images_artifact.payload_json = {
+                **images_artifact.payload_json,
+                "image_ids": ["forged-image-id"],
+            }
+            images_artifact.payload_sha256 = canonical_json_sha256(images_artifact.payload_json)
 
         session.flush()
         qc_node = by_type["qc_review_queue"]
