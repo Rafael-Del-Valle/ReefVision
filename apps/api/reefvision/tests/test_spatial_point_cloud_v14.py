@@ -477,3 +477,62 @@ def test_point_cloud_observation_metadata_does_not_change_geometry_identity(
     assert second["provenance"]["specimen_identity_verified"] is False
     assert second["provenance"]["observation_metadata_verified"] is False
     assert second["measurement_status"] == "caller_supplied_unverified"
+
+@pytest.mark.parametrize(
+    "bad_ply",
+    [
+        PLY.replace("0 2 0", "0 ٢ 0"),
+        PLY.replace("end_header", "comment temperature °C\\nend_header"),
+        PLY.replace("0 2 0", "0 2 0\u00a0"),
+    ],
+    ids=["unicode_digit", "unicode_comment", "unicode_whitespace"],
+)
+def test_non_ascii_ply_rejected_without_standalone_or_workflow_artifact(
+    client: TestClient, bad_ply: str
+) -> None:
+    """ASCII PLY is byte-restricted even when Unicode parses as a number or whitespace."""
+    with pytest.raises(ValueError, match="ASCII text only"):
+        parse_ascii_ply_points(bad_ply)
+    project_id = str(create_project(client, "Non-ASCII point-cloud rejection"))
+    base = f"/api/v1/projects/{project_id}"
+    params = {**PARAMS, "ply_text": bad_ply}
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 400, standalone.text
+
+    graph = {
+        "graph_id": "reject-unicode-ply-v14",
+        "name": "Fail closed on non-ASCII PLY",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "point_cloud_measurement_preview"
+        for artifact in detail.json()["artifacts"]
+    )
+
+
+def test_ascii_ply_comment_remains_supported() -> None:
+    with_comment = PLY.replace("end_header", "comment temperature C\\nend_header")
+    assert parse_ascii_ply_points(with_comment) == parse_ascii_ply_points(PLY)
