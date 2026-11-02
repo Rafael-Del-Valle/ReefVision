@@ -75,21 +75,16 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
     if tamper == "producer_reordered_images":
         # The two-image frozen study must produce identical standalone and
         # executable saved-workflow scientific QC evidence before corruption.
-        standalone = client.post(
-            f"/api/v1/dataset-versions/{version_id}/review-queues", json={}
-        )
+        standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
         assert standalone.status_code == 201, standalone.text
-        standalone_response = client.get(
-            f"/api/v1/review-queues/{standalone.json()['id']}/items"
-        )
+        standalone_response = client.get(f"/api/v1/review-queues/{standalone.json()['id']}/items")
         assert standalone_response.status_code == 200, standalone_response.text
         assert standalone_response.json()["total"] == expected_count
         assert sorted(
             (item["image_id"], item["input_checksum"], item["score"])
             for item in standalone_response.json()["items"]
         ) == sorted(
-            (item["image_id"], item["input_checksum"], item["score"])
-            for item in original_items
+            (item["image_id"], item["input_checksum"], item["score"]) for item in original_items
         )
     other_id = None
     if tamper in {"resigned_other_version", "producer_other_version"}:
@@ -242,3 +237,72 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
     assert final_response.status_code == 200, final_response.text
     assert final_response.json()["total"] == expected_count
     assert final_response.json()["items"] == original_items
+
+
+
+def test_completed_frozen_qc_replay_rejects_erased_output_binding(client: TestClient) -> None:
+    """A finished node cannot replay a queue after its saved output is erased."""
+    project_id, _, version_id, _ = _study(client)
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": _frozen_graph(version_id)},
+    )
+    assert saved.status_code == 201, saved.text
+    run_id, payload = _run_frozen_graph(client, project_id, saved.json()["id"])
+    queue_url = f"/api/v1/review-queues/{payload['queue_id']}/items"
+    before = client.get(queue_url)
+    assert before.status_code == 200, before.text
+    assert all(item["review_state"] == "pending" for item in before.json()["items"])
+    assert payload["review_status"] == "requires_researcher_review"
+    assert payload["priority_score_unit"] == "dimensionless"
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        node_runs = session.scalars(
+            select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
+        ).all()
+        by_type = {node.node_type: node for node in node_runs}
+        qc_node = by_type["qc_review_queue"]
+        assert qc_node.status == "succeeded"
+        assert len(qc_node.output_artifact_ids_json) == 1
+        project_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.producer_node_run_id == by_type["project_source"].id,
+                WorkflowArtifact.producer_port_id == "project",
+            )
+        )
+        dataset_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.producer_node_run_id == by_type["dataset_version_source"].id,
+                WorkflowArtifact.producer_port_id == "dataset",
+            )
+        )
+        assert project_artifact is not None and dataset_artifact is not None
+        params = {
+            **dict(qc_node.parameters_json or {}),
+            "__workflow_run_id": run_id,
+            "__workflow_node_run_id": qc_node.id,
+        }
+        inputs = {"project": [project_artifact], "dataset": [dataset_artifact]}
+
+        # Re-signed payloads are irrelevant when a completed node has no
+        # persisted output binding; reject before any evidence regeneration.
+        qc_node.output_artifact_ids_json = []
+        session.flush()
+        with pytest.raises(ValidationError, match="missing saved output binding"):
+            create_review_queue_workflow_artifact(
+                session, app.state.settings, project_id, params, inputs
+            )
+        session.rollback()
+
+        # Rollback restores the original binding, and the exact original
+        # scientific queue can still be replayed without researcher approval.
+        replay = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, params, inputs
+        )
+        assert replay[0]["payload"] == payload
+        session.rollback()
+
+    after = client.get(queue_url)
+    assert after.status_code == 200, after.text
+    assert after.json() == before.json()
