@@ -222,3 +222,96 @@ def test_saved_workflow_population_artifact_rejects_forged_unit_weight(
     forged["population_summaries"][0]["mean_unit_absolute_change"] += 1
     with pytest.raises(PydanticValidationError, match="Unit summary means"):
         LongitudinalAnalysisResponse.model_validate(forged)
+
+    # The executable saved Workflow Builder result must enforce the same
+    # endpoint arithmetic contract as the standalone API result.
+    forged = deepcopy(persisted)
+    forged["changes"][0]["absolute_change"] += 1
+    with pytest.raises(PydanticValidationError, match="Longitudinal change"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+
+@pytest.mark.parametrize(
+    "tampering",
+    [
+        "absolute_change",
+        "change_per_day",
+        "elapsed_days",
+        "percent_change",
+        "initial_value",
+        "final_value",
+        "naive_baseline",
+        "same_utc_date",
+        "duplicate_source",
+        "singleton",
+        "nonfinite",
+    ],
+)
+def test_organism_endpoint_replay_rejects_forged_scientific_arithmetic(
+    client: TestClient, tampering: str
+) -> None:
+    """A saved result cannot change endpoint arithmetic while keeping unit means."""
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=_two_tank_payload())
+    assert response.status_code == 200, response.text
+    original = response.json()
+    LongitudinalAnalysisResponse.model_validate(original)
+    forged = deepcopy(original)
+    change = forged["changes"][0]
+    if tampering == "absolute_change":
+        change["absolute_change"] += 1
+    elif tampering == "change_per_day":
+        change["change_per_day"] += 1
+    elif tampering == "elapsed_days":
+        change["elapsed_days"] += 1
+    elif tampering == "percent_change":
+        change["percent_change"] += 1
+    elif tampering == "initial_value":
+        change["initial_value"] += 1
+    elif tampering == "final_value":
+        change["final_value"] += 1
+    elif tampering == "naive_baseline":
+        change["first_observed_at"] = change["first_observed_at"].replace("Z", "")
+    elif tampering == "same_utc_date":
+        change["last_observed_at"] = change["first_observed_at"]
+    elif tampering == "duplicate_source":
+        change["final_source_record_id"] = change["baseline_source_record_id"]
+    elif tampering == "singleton":
+        change["observation_count"] = 1
+    elif tampering == "nonfinite":
+        change["absolute_change"] = float("inf")
+    with pytest.raises(PydanticValidationError, match="Longitudinal change"):
+        LongitudinalAnalysisResponse.model_validate(forged)
+
+
+def test_zero_baseline_saved_change_cannot_claim_percent_growth(
+    client: TestClient,
+) -> None:
+    request = {
+        "observations": [
+            {
+                "organism_id": "coral-zero",
+                "metric_name": "polyp_count",
+                "source_record_id": "zero-start",
+                "observed_at": "2026-04-01T12:00:00Z",
+                "value": 0,
+                "unit": "count",
+            },
+            {
+                "organism_id": "coral-zero",
+                "metric_name": "polyp_count",
+                "source_record_id": "zero-end",
+                "observed_at": "2026-04-03T12:00:00Z",
+                "value": 2,
+                "unit": "count",
+            },
+        ]
+    }
+    response = client.post("/api/v1/ecology/longitudinal-analysis", json=request)
+    assert response.status_code == 200, response.text
+    original = response.json()
+    assert original["changes"][0]["percent_change"] is None
+    LongitudinalAnalysisResponse.model_validate(original)
+    forged = deepcopy(original)
+    forged["changes"][0]["percent_change"] = 200.0
+    with pytest.raises(PydanticValidationError, match="zero baseline"):
+        LongitudinalAnalysisResponse.model_validate(forged)
