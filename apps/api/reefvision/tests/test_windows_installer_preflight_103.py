@@ -73,3 +73,48 @@ def test_cab_preflight_rejects_missing_or_unmerged_payloads(
     assert original in WORKFLOW, "Test fixture no longer matches the real workflow"
     altered = WORKFLOW.replace(original, replacement, 1)
     assert any(expected in error for error in CHECK_CABS(altered))
+
+
+@pytest.mark.parametrize("style", ["line", "block"])
+def test_release_preflight_rejects_commented_out_guards(style: str) -> None:
+    """A PowerShell comment containing the guard is not executable provenance."""
+    guard = next(
+        line
+        for line in WORKFLOW.splitlines()
+        if "$provenance.source_commit -ne $env:GITHUB_SHA" in line
+        and not line.lstrip().startswith("#")
+    )
+    indent = guard[: len(guard) - len(guard.lstrip())]
+    disabled = (
+        f"{indent}# {guard.lstrip()}"
+        if style == "line"
+        else f"{indent}<#\\n{guard}\\n{indent}#>"
+    )
+    altered = WORKFLOW.replace(guard, disabled, 1)
+    assert any(
+        "Installer provenance guard is missing" in error
+        for error in CHECK_WORKFLOW(altered, VERSION)
+    )
+
+
+@pytest.mark.parametrize(
+    ("active", "disabled", "expected"),
+    [
+        (
+            "          if-no-files-found: error",
+            "          # if-no-files-found: error",
+            "must reject missing upload files",
+        ),
+        (
+            "          merge-multiple: true",
+            "          # merge-multiple: true",
+            "download and merge all installer parts",
+        ),
+    ],
+)
+def test_cab_preflight_rejects_commented_out_artifact_guards(
+    active: str, disabled: str, expected: str
+) -> None:
+    assert active in WORKFLOW, "Test fixture no longer matches the real workflow"
+    altered = WORKFLOW.replace(active, disabled, 1)
+    assert any(expected in error for error in CHECK_CABS(altered))
