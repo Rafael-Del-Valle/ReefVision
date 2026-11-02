@@ -824,6 +824,7 @@ def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
     assert "EXIF metadata could not be decoded" in inspected.metadata["exif_warning"]
     assert source.read_bytes() == original
 
+
 @pytest.mark.parametrize(
     "malformed_timestamp",
     [
