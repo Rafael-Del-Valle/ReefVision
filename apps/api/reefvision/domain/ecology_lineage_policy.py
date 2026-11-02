@@ -291,10 +291,20 @@ def require_historical_ecological_parent_registration(
             raise ValueError(
                 "Ecological fragment parent colony was not registered before fragment revision"
             )
-        parent_at_link = max(
-            eligible,
-            key=lambda parent: (_identity_revision_utc(parent.created_at), parent.revision),
-        )
+        # Imported timestamps can lose subsecond ordering. If conflicting
+        # parent kinds share the latest eligible instant, revision numbers
+        # cannot establish whether the parent was a colony when linked.
+        latest_parent_time = max(_identity_revision_utc(parent.created_at) for parent in eligible)
+        same_instant = [
+            parent
+            for parent in eligible
+            if _identity_revision_utc(parent.created_at) == latest_parent_time
+        ]
+        if len({parent.kind for parent in same_instant}) > 1:
+            raise ValueError(
+                "Ecological fragment parent state is ambiguous at fragment revision"
+            )
+        parent_at_link = max(same_instant, key=lambda parent: parent.revision)
         if parent_at_link.kind != "colony":
             raise ValueError("Ecological fragment parent was not a colony at fragment revision")
 

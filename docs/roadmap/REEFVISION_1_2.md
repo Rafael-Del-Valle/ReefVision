@@ -5918,3 +5918,37 @@ must pass. Authenticated scientist-reviewed calibrated longitudinal data,
 independent experimental units, representative human/model comparison,
 1.1 migration reconciliation, and physical installed Windows MSI/GUI/GPU
 acceptance remain outstanding. **1.2 NOT RELEASE-READY; 1.3 not started.**
+
+
+## Ambiguous same-instant parent-state provenance (2026-11-01; development only)
+
+**Baseline:** Isolated draft PR #74 at `a83506d8ae8ac6c16624d791f0ed5aee5e22b2ad` passed all **19/19**
+PR-triggered GitHub Actions workflows, including backend, frontend/E2E,
+Pose Workflow Validation and Windows Desktop Build. These CI results do not
+constitute installed-GUI or biological-science acceptance.
+
+**Scientific integrity:** The append-only identity registry previously
+selected the highest parent revision number when conflicting parent kinds
+shared an identical recorded timestamp. With imported or precision-truncated
+timestamps, a fragment could appear to have a colony parent at linkage even
+though the recorded order of an individual-to-colony correction was
+indeterminate. Historical parent validation now rejects conflicting parent
+kinds at the latest eligible instant instead of inferring order from revision
+numbers across two organisms. Same-instant parent revisions that agree on
+colony status remain valid. Recorded timestamps are still not authenticated.
+
+**Acceptance:** Shared lineage validation applies to standalone registry
+reads/writes, the executable saved `ecology_identity_registry_source`
+Workflow Builder node and revalidated registry artifacts. Focused tests
+cover the ambiguous chronology, the legitimate same-kind control, failed
+API writes without mutation and saved-workflow failure without a successful
+scientific artifact. Typed ports, local-only operation, deterministic
+provenance, `registered_unverified` evidence and
+`scientist_review_required` remain unchanged. No migration, model
+weights, 1.1 environmental features, or cross-branch changes were made.
+
+**Release HOLD:** New-head CI, authenticated reviewed calibrated longitudinal
+observations, actual experimental-unit independence, representative
+human/model scientific acceptance, 1.1 migration reconciliation and
+installed Windows MSI/GUI/GPU testing remain outstanding.
+**1.2 NOT RELEASE-READY; 1.3 not started.**

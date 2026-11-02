@@ -300,3 +300,107 @@ def test_pydantic_identity_rows_share_current_and_historical_parent_policy() -> 
         require_current_ecological_parent_registration([invalid_parent, fragment])
     with pytest.raises(ValueError, match="not a colony at fragment revision"):
         require_historical_ecological_parent_registration([invalid_parent, fragment])
+
+
+def test_equal_parent_timestamps_with_conflicting_kinds_are_ambiguous() -> None:
+    """Timestamp ties cannot prove parent-colony state at fragment linkage."""
+    recorded = datetime(2026, 4, 3, 12, 0, tzinfo=UTC)
+    parent_first = SimpleNamespace(
+        organism_key="parent-A",
+        revision=1,
+        kind="individual",
+        parent_colony_key=None,
+        created_at=recorded,
+    )
+    parent_second = SimpleNamespace(
+        organism_key="parent-A",
+        revision=2,
+        kind="colony",
+        parent_colony_key=None,
+        created_at=recorded,
+    )
+    fragment = SimpleNamespace(
+        organism_key="fragment-A",
+        revision=1,
+        kind="fragment",
+        parent_colony_key="parent-A",
+        created_at=recorded,
+    )
+    with pytest.raises(ValueError, match="ambiguous at fragment revision"):
+        require_historical_ecological_parent_registration(
+            [fragment, parent_second, parent_first]
+        )
+
+    # Multiple same-instant revisions agreeing that the parent is a colony
+    # are not ambiguous, preserving SQLite timestamp-precision compatibility.
+    parent_first.kind = "colony"
+    require_historical_ecological_parent_registration(
+        [fragment, parent_second, parent_first]
+    )
+
+
+def test_imported_ambiguous_parent_timestamp_blocks_api_and_saved_graph(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Ambiguous historical colony state")["id"])
+    base = f"/api/v1/projects/{project_id}/ecology"
+    assert _register(client, project_id, "parent-A", "individual").status_code == 201
+    revised = client.post(
+        f"{base}/organisms/parent-A/revisions",
+        json={
+            "expected_revision": 1,
+            "kind": "colony",
+            "reason": "Reviewed parent colony correction",
+        },
+    )
+    assert revised.status_code == 201, revised.text
+    assert (
+        _register(
+            client,
+            project_id,
+            "fragment-A",
+            "fragment",
+            parent_colony_key="parent-A",
+        ).status_code
+        == 201
+    )
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        rows = list(
+            session.scalars(
+                select(EcologyIdentityRevision).where(
+                    EcologyIdentityRevision.project_id == project_id
+                )
+            )
+        )
+        assert len(rows) == 3
+        parent_rows = sorted(
+            (row for row in rows if row.organism_key == "parent-A"),
+            key=lambda row: row.revision,
+        )
+        fragment = next(row for row in rows if row.organism_key == "fragment-A")
+        parent_rows[0].created_at = parent_rows[1].created_at
+        fragment.created_at = parent_rows[1].created_at
+        session.commit()
+
+    response = client.get(f"{base}/identity-registry")
+    assert response.status_code == 400, response.text
+    assert "ambiguous at fragment revision" in response.text
+    assert _register(client, project_id, "another-colony").status_code == 400
+
+    succeeded, detail = _run_saved_registry(client, project_id)
+    assert succeeded is False
+    assert detail["run"]["status"] == "failed"
+    assert "ambiguous at fragment revision" in detail["run"]["error_message"]
+    assert not any(
+        row["data_type"] == "ecology_identity_registry" for row in detail["artifacts"]
+    )
+    with app.state.session_factory() as session:
+        unchanged = list(
+            session.scalars(
+                select(EcologyIdentityRevision).where(
+                    EcologyIdentityRevision.project_id == project_id
+                )
+            )
+        )
+        assert len(unchanged) == 3
