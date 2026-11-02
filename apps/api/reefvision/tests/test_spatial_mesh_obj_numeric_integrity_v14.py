@@ -73,6 +73,8 @@ def _run_saved(client: TestClient, project_id: str, obj_text: str) -> dict:
         "v \uff12 0 0",
         "v 0 0 0 1_0",
         "v 0 0 0 1e-9999",
+        "v 1e-200 0 0 1e200",
+        "v -1e-200 0 0 1e200",
         "v 0 0 0 1 0.1 1e-9999 0.2",
         "vt 1_0 0",
         "vt 1e-9999 0",
@@ -91,6 +93,7 @@ def test_invalid_obj_scalars_rejected_before_measurement(line: str) -> None:
         "v 1_0 0 0",
         "v 1e-9999 0 0",
         "v 0 0 0 1_0",
+        "v 1e-200 0 0 1e200",
         "v 0 0 0 1 0.1 1e-9999 0.2",
         "vt 1e-9999 0",
         "vn 0 1_0 0",
@@ -131,6 +134,30 @@ def test_valid_obj_decimals_and_true_zero_replay_identically(client: TestClient)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["surface_area_m2"] == pytest.approx(0.0003)
+    assert expected["measurement_status"] == "caller_supplied_unverified"
+    assert expected["provenance"]["calibration_verified"] is False
+    detail = _run_saved(client, project_id, valid)
+    assert detail["run"]["status"] == "succeeded"
+    artifact = next(
+        item for item in detail["artifacts"] if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["payload_json"] == expected
+    assert len(artifact["payload_sha256"]) == 64
+
+def test_representable_weighted_coordinate_preserves_standalone_workflow_parity(
+    client: TestClient,
+) -> None:
+    valid = "v 1e-200 0 0 1e100\nv 2 0 0\nv 0 3 0\nf 1 2 3\n"
+    vertices, faces = parse_obj_triangles(valid)
+    assert vertices[0][0] == pytest.approx(1e-300, rel=1e-12, abs=0)
+    assert faces == [[0, 1, 2]]
+    project_id = str(create_project(client, "OBJ weighted coordinate parity")["id"])
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": valid},
+    )
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
     assert expected["measurement_status"] == "caller_supplied_unverified"
     assert expected["provenance"]["calibration_verified"] is False
     detail = _run_saved(client, project_id, valid)
