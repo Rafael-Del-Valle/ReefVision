@@ -117,30 +117,30 @@ def test_invalid_obj_source_rejected_by_api_and_saved_workflow(
 @pytest.mark.parametrize(
     "separator",
     [
-        "\\x00",
-        "\\x0b",
-        "\\x0c",
-        "\\x1b",
-        "\\x7f",
-        "\\x85",
-        "\\xa0",
-        "\\u2003",
-        "\\u2028",
-        "\\ufeff",
+        "\x00",
+        "\x0b",
+        "\x0c",
+        "\x1b",
+        "\x7f",
+        "\x85",
+        "\xa0",
+        "\u2003",
+        "\u2028",
+        "\ufeff",
     ],
 )
 def test_obj_control_separators_rejected_before_geometry_parsing(separator: str) -> None:
-    obj_text = OBJ.replace("v 0 0 0\\n", f"v 0{separator}0 0\\n", 1)
+    obj_text = OBJ.replace("v 0 0 0\n", f"v 0{separator}0 0\n", 1)
     with pytest.raises(ValueError, match="unsupported control characters or separators"):
         parse_obj_triangles(obj_text)
 
 
-@pytest.mark.parametrize("separator", ["\\x00", "\\xa0", "\\u2028", "\\ufeff"])
+@pytest.mark.parametrize("separator", ["\x00", "\xa0", "\u2028", "\ufeff"])
 def test_obj_control_separators_fail_standalone_and_saved_workflow(
     client: TestClient, separator: str
 ) -> None:
     project_id = str(create_project(client, "OBJ separator integrity")["id"])
-    obj_text = OBJ.replace("v 0 0 0\\n", f"v 0{separator}0 0\\n", 1)
+    obj_text = OBJ.replace("v 0 0 0\n", f"v 0{separator}0 0\n", 1)
     standalone = client.post(
         f"/api/v1/projects/{project_id}/spatial/mesh-preview",
         json={**PARAMS, "obj_text": obj_text},
@@ -155,11 +155,11 @@ def test_obj_ascii_tabs_crlf_and_unicode_comment_replay_identically(
     client: TestClient,
 ) -> None:
     valid = (
-        "# Unicode comment: caf\\u00e9\\r\\n"
-        "v\\t0\\t0\\t0\\r\\n"
-        "v\\t2\\t0\\t0\\r\\n"
-        "v\\t0\\t3\\t0\\r\\n"
-        "f\\t1\\t2\\t3\\r\\n"
+        "# Unicode comment: caf\u00e9\r\n"
+        "v\t0\t0\t0\r\n"
+        "v\t2\t0\t0\r\n"
+        "v\t0\t3\t0\r\n"
+        "f\t1\t2\t3\r\n"
     )
     vertices, faces = parse_obj_triangles(valid)
     assert vertices == [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 3.0, 0.0]]
