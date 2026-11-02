@@ -180,3 +180,64 @@ def test_preflight_comment_filter_removes_powershell_semicolon_comment() -> None
     assert GATE["_strip_inline_comment"]("Write-Output ok;# disabled guard") == (
         "Write-Output ok;"
     )
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        (
+            "if ($actual -ne $env:GITHUB_SHA)",
+            "# if ($actual -ne $env:GITHUB_SHA)",
+        ),
+        (
+            "if ($LASTEXITCODE -ne 0 -or $dirty.Count -gt 0)",
+            "# if ($LASTEXITCODE -ne 0 -or $dirty.Count -gt 0)",
+        ),
+        (
+            'throw "Installer source checkout must be clean before packaging."',
+            '# throw "Installer source checkout must be clean before packaging."',
+        ),
+    ],
+)
+def test_installer_preflight_rejects_disabled_source_checkout_guards(
+    original: str, replacement: str
+) -> None:
+    """Commented-out SHA/clean-tree guards must never pass release preflight."""
+    assert original in WORKFLOW
+    altered = WORKFLOW.replace(original, replacement, 1)
+    assert any(
+        "Installer exact-head clean checkout guard is disabled or incomplete" in error
+        for error in CHECK_WORKFLOW(altered, VERSION)
+    )
+
+
+@pytest.mark.parametrize(
+    "disable_line",
+    ["        if: false", "        continue-on-error: true"],
+)
+def test_installer_preflight_rejects_skipped_or_ignored_checkout_assertion(
+    disable_line: str,
+) -> None:
+    """A skipped/ignored step is not source-provenance verification."""
+    marker = "      - name: Verify installer build uses exact clean source revision"
+    assert marker in WORKFLOW
+    altered = WORKFLOW.replace(marker, marker + "\n" + disable_line, 1)
+    assert any(
+        "Installer exact-head clean checkout guard is disabled or incomplete" in error
+        for error in CHECK_WORKFLOW(altered, VERSION)
+    )
+
+
+def test_installer_preflight_requires_source_assertion_before_bootstrap() -> None:
+    """Never allow dependency staging before verifying source identity."""
+    marker = "      - name: Verify installer build uses exact clean source revision"
+    after_bootstrap = "      - name: Run focused backend tests"
+    start = WORKFLOW.index(marker)
+    end = WORKFLOW.index("\n      - ", start + len(marker))
+    step = WORKFLOW[start:end]
+    assert after_bootstrap in WORKFLOW
+    altered = WORKFLOW.replace(step + "\n", "", 1)
+    altered = altered.replace(after_bootstrap, step + "\n\n" + after_bootstrap, 1)
+    assert any(
+        "Installer exact-head clean checkout must run before bootstrap" in error
+        for error in CHECK_WORKFLOW(altered, VERSION)
+    )

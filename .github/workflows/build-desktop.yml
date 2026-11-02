@@ -29,6 +29,19 @@ jobs:
       release-slug: ${{ steps.package-version.outputs.release-slug }}
     steps:
       - uses: actions/checkout@v4
+      - name: Verify installer build uses exact clean source revision
+        shell: pwsh
+        run: |
+          # Verify before bootstrap, model staging or packaging mutates files.
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) {
+            throw "Installer checkout SHA $actual does not match workflow SHA $env:GITHUB_SHA"
+          }
+          $dirty = @(git status --porcelain --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $dirty.Count -gt 0) {
+            throw "Installer source checkout must be clean before packaging."
+          }
+          Write-Host "Installer source commit: $actual"
 
       # Exercise the actual embedded monitor formatter on Windows before
       # spending time packaging the multi-GB MSI/CAB payload.

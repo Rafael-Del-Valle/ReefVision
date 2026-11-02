@@ -100,6 +100,35 @@ def check_workflow(workflow: str, version: str) -> list[str]:
         if fragment not in build_job:
             errors.append(f"Dynamic package version output is missing: {fragment}")
 
+    # Fail before packaging if checkout drift or a dirty source tree could
+    # invalidate the source_commit claim in the installer provenance.
+    source_step_marker = "      - name: Verify installer build uses exact clean source revision"
+    if build_job.count(source_step_marker) != 1:
+        errors.append("Installer exact-head clean checkout assertion is missing")
+    else:
+        source_start = build_job.index(source_step_marker)
+        next_step = build_job.find("\n      - ", source_start + len(source_step_marker))
+        source_step = build_job[source_start : next_step if next_step >= 0 else None]
+        required_source_checks = (
+            "$actual = (git rev-parse HEAD).Trim()",
+            "if ($actual -ne $env:GITHUB_SHA)",
+            'throw "Installer checkout SHA $actual does not match workflow SHA $env:GITHUB_SHA"',
+            "$dirty = @(git status --porcelain --untracked-files=all)",
+            "if ($LASTEXITCODE -ne 0 -or $dirty.Count -gt 0)",
+            'throw "Installer source checkout must be clean before packaging."',
+        )
+        guard_missing = any(fragment not in source_step for fragment in required_source_checks)
+        step_disabled = re.search(r"(?m)^        (?:if|continue-on-error):", source_step)
+        if guard_missing or step_disabled:
+            errors.append("Installer exact-head clean checkout guard is disabled or incomplete")
+        bootstrap = build_job.find("      - name: Bootstrap build environment")
+        if (
+            "actions/checkout@v4" not in build_job[:source_start]
+            or bootstrap < 0
+            or source_start >= bootstrap
+        ):
+            errors.append("Installer exact-head clean checkout must run before bootstrap")
+
     required_clean_fragments = (
         "Fresh install, upgrade, launch, persist and uninstall "
         "${{ needs.build-windows-installer.outputs.release-version }} on disposable Windows",
