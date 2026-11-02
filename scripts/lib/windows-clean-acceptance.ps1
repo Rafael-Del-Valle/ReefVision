@@ -37,6 +37,25 @@ function Invoke-ReefVisionIsolatedEnvironment {
         throw 'Live SAM network acceptance requires both offline flags explicitly set to 0.'
     }
     foreach ($Key in $AdditionalEnvironment.Keys) {
+        # AdditionalEnvironment is caller-controlled. Never let a test opt-in
+        # inject Python code, redirect legacy Transformers caches, or point
+        # ReefVision at an existing scientific project/configuration. Only
+        # the two explicit disposable acceptance markers may use REEFVISION_.
+        $environmentName = [string]$Key
+        if ($environmentName -in @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) {
+            throw "Acceptance isolation variable '$environmentName' cannot be injected."
+        }
+        if ($environmentName.StartsWith('REEFVISION_', [StringComparison]::OrdinalIgnoreCase)) {
+            $validAcceptanceMarker = (
+                ($environmentName -ieq 'REEFVISION_WINDOWS_ACCEPTANCE' -and
+                    [string]$AdditionalEnvironment[$Key] -ceq '1') -or
+                ($environmentName -ieq 'REEFVISION_ACCEPTANCE_DATA_DIR' -and
+                    [string]$AdditionalEnvironment[$Key] -ceq $DataRoot)
+            )
+            if (-not $validAcceptanceMarker) {
+                throw "Acceptance isolation variable '$environmentName' is not a permitted disposable acceptance marker."
+            }
+        }
         $liveSamOfflineFlag = $AllowLiveSam2Network -and
             $Key -in @('HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE') -and
             [string]$AdditionalEnvironment[$Key] -ceq '0'
