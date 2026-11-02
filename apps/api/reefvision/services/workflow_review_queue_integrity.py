@@ -347,6 +347,15 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # Re-signing a digest must not authorize a nonphysical confidence gate
     # or an absent QC ruleset. Historical unversioned queues are untouched.
     if integrity_version in SUPPORTED_INTEGRITY_VERSIONS:
+        # The v3 generator always records an explicit selection threshold,
+        # including None for no confidence filter. A re-signed snapshot that
+        # omits the key is not equivalent to an explicit unrestricted choice.
+        # Historical v2 records retain their earlier optional-key contract.
+        if (
+            integrity_version == "qc-review-queue-v3"
+            and "review_below_confidence" not in configuration
+        ):
+            raise invalid
         threshold = configuration.get("review_below_confidence")
         ruleset = configuration.get("ruleset_version")
         if (
