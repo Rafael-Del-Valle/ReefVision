@@ -206,7 +206,8 @@ def test_patch_distribution_rejects_tampered_full_mesh_total() -> None:
 def test_patch_distribution_rejects_zero_full_mesh_total(timepoint: int) -> None:
     observations = [_preview(payload) for payload in _meshes()]
     observations[timepoint]["surface_area_m2"] = 0.0
-    with pytest.raises(ValueError, match="Surface-area scale interval"):
+    # Topology inconsistency is detected before scale-interval consistency.
+    with pytest.raises(ValueError, match="Surface area contradicts mesh face degeneracy counts"):
         compare_mesh_observations(*observations)
 
 
