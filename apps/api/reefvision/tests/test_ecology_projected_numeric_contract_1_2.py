@@ -88,9 +88,8 @@ def test_projected_scientific_artifact_rejects_coerced_json_evidence(
     message: str,
 ) -> None:
     original = _dated_artifact(client).model_dump(mode="json")
-    assert EcologyMeasurementCandidatesResponse.model_validate(original).review_gate == (
-        "scientist_review_required"
-    )
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(original)
+    assert parsed.review_gate == "scientist_review_required"
     assert original[section]
     tampered = deepcopy(original)
     tampered[section][0][field] = replacement
