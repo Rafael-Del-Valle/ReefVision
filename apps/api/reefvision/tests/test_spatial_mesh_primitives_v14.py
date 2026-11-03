@@ -273,3 +273,22 @@ def test_reversing_single_open_triangle_winding_preserves_surface_measurement() 
     )
     assert reversed_face["enclosed_volume_m3"] is None
     assert reversed_face["provenance"]["calibration_verified"] is False
+
+
+def test_duplicate_geometry_with_distinct_vertex_indices_is_rejected() -> None:
+    """Importers may duplicate vertices; repeated physical facets cannot count twice."""
+    from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+    from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+
+    request = MeshPreviewRequest(
+        vertices=[
+            [0, 0, 0], [3, 0, 0], [0, 4, 0],
+            [0, 0, 0], [3, 0, 0], [0, 4, 0],
+        ],
+        faces=[[0, 1, 2], [5, 4, 3]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic duplicated-vertex import reference",
+    )
+    with pytest.raises(ValueError, match="Duplicate triangle geometry"):
+        preview_from_request(request)
