@@ -291,10 +291,13 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                     exif_warning = (
                         "Nested EXIF metadata could not be decoded; capture time is unavailable"
                     )
+            # Convert each untrusted EXIF value exactly once. Some vendor
+            # wrappers are stateful or expensive to decode; evaluating them
+            # twice can produce inconsistent provenance or fail an import.
             named_exif = {
-                ExifTags.TAGS.get(key, str(key)): _json_safe(value)
+                ExifTags.TAGS.get(key, str(key)): converted
                 for key, value in exif.items()
-                if _json_safe(value) is not None
+                if (converted := _json_safe(value)) is not None
             }
             safe_info = {
                 str(key): converted
