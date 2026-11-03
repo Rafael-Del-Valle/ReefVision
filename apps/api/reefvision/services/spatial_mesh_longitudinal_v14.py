@@ -314,9 +314,14 @@ def compare_mesh_observations(
         degenerate = counts["degenerate_face_count"]
         if faces == 0 and area > 0:
             raise ValueError("Surface area contradicts zero-face mesh topology")
-        if faces is not None and degenerate is not None and (
-            (degenerate == faces and area > 0)
-            or (degenerate < faces and area == 0)
+        # Some historical previews omit face counts but retain patch counts.
+        # A positive-area surface still requires at least one recorded patch.
+        if counts["edge_connected_patch_count"] == 0 and area > 0:
+            raise ValueError("Surface area contradicts zero-patch mesh topology")
+        if (
+            faces is not None
+            and degenerate is not None
+            and ((degenerate == faces and area > 0) or (degenerate < faces and area == 0))
         ):
             raise ValueError("Surface area contradicts mesh face degeneracy counts")
     difference = a1 - a0
