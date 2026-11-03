@@ -22,6 +22,7 @@ _BAD_STAMPS = [
     ("0037", "foreign_head"),
     ("0037", None),  # A mixed valid/NULL stamp must not bypass validation.
     ("0037", ""),  # An empty concurrent head is also ambiguous.
+    ("0037", 37),  # SQLite can store an integer in a damaged TEXT-affinity table.
     (None,),
     ("",),
     ("   ",),
@@ -29,7 +30,7 @@ _BAD_STAMPS = [
 ]
 
 
-def _seed_database(engine: object, stamps: tuple[str | None, ...]) -> None:
+def _seed_database(engine: object, stamps: tuple[str | int | None, ...]) -> None:
     with engine.begin() as connection:
         connection.execute(
             text("CREATE TABLE observations (id TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -62,7 +63,7 @@ def _snapshot(connection: object) -> tuple[object, ...]:
 
 @pytest.mark.parametrize("stamps", _BAD_STAMPS)
 def test_pre_review_ambiguous_stamps_fail_closed_without_rewriting_science(
-    tmp_path: Path, stamps: tuple[str | None, ...]
+    tmp_path: Path, stamps: tuple[str | int | None, ...]
 ) -> None:
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'ambiguous.sqlite'}")
     _seed_database(engine, stamps)
@@ -77,12 +78,12 @@ def test_pre_review_ambiguous_stamps_fail_closed_without_rewriting_science(
 
 
 @pytest.mark.parametrize(
-    "stamps", [("0037", "0037"), ("0036", "0037"), ("0037", None), (None,), ()]
+    "stamps", [("0037", "0037"), ("0036", "0037"), ("0037", None), ("0037", 37), (None,), ()]
 )
 def test_desktop_refuses_ambiguous_stamps_before_alembic_upgrade(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    stamps: tuple[str | None, ...],
+    stamps: tuple[str | int | None, ...],
 ) -> None:
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'desktop-ambiguous.sqlite'}")
     _seed_database(engine, stamps)
