@@ -166,6 +166,11 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
                     name = _safe_metadata_key(key)
                     if name is None:
                         continue
+                    # Different vendor key objects may stringify to the same
+                    # name (for example 1 and "1"). Never silently overwrite
+                    # the first recorded provenance value with a later alias.
+                    if name in sanitized:
+                        continue
                     sanitized[name] = _json_safe(item, _active=_active, _depth=_depth + 1)
                 return sanitized
             return [
