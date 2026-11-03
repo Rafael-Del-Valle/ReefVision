@@ -170,9 +170,7 @@ def test_rigid_translation_preserves_calibrated_surface_geometry() -> None:
     baseline = preview_from_request(request)
     translated = preview_from_request(
         request.model_copy(
-            update={
-                "vertices": [[x + 1000, y - 2000, z + 3000] for x, y, z in vertices]
-            }
+            update={"vertices": [[x + 1000, y - 2000, z + 3000] for x, y, z in vertices]}
         )
     )
     for key in (
