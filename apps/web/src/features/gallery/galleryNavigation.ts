@@ -82,6 +82,17 @@ export function writeGalleryPreference(
   projectId: string,
   preference: GalleryPreference,
 ): void {
+  // Never persist invalid pagination state that could hide the initial image
+  // on the next project open. Ignore stale UI writes rather than poisoning
+  // an otherwise valid preference from an earlier gallery selection.
+  if (
+    !Number.isSafeInteger(preference.page) ||
+    preference.page < 1 ||
+    (preference.imageId !== null && typeof preference.imageId !== "string") ||
+    typeof preference.wrap !== "boolean"
+  ) {
+    return;
+  }
   try {
     storage.setItem(preferenceKey(projectId), JSON.stringify(preference));
   } catch {
