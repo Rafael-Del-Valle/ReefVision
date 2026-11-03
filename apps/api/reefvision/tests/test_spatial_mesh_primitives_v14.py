@@ -59,7 +59,8 @@ def test_independent_calibrated_cube_reference_area_and_extent() -> None:
     )
     assert measurement["surface_area_m2"] == pytest.approx(6 * (2 * 0.01) ** 2)
     assert measurement["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(sqrt(3) * 0.02)
-    assert measurement["area_scale_uncertainty_m2"] == pytest.approx(
+    assert measurement["area_scale_uncertainty_m2"] == pytest.approx(2 * 0.1 * 0.0024)
+    assert measurement["surface_area_scale_interval_m2"] == pytest.approx(
         [0.0024 * 0.9**2, 0.0024 * 1.1**2]
     )
     assert measurement["provenance"]["calibration_verified"] is False
