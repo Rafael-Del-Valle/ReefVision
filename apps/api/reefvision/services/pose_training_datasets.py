@@ -344,6 +344,8 @@ class PoseTrainingDatasetService:
         pose_schema = manifest.get("pose_schema")
         if (
             dataset.status != "complete"
+            or dataset.schema_version != DATASET_SCHEMA_VERSION
+            or manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION
             or manifest.get("dataset_id") != dataset.id
             or manifest.get("project_id") != dataset.project_id
             or manifest.get("source_round_id") != dataset.source_round_id
