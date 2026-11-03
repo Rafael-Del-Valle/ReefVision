@@ -6278,3 +6278,23 @@ Standalone source-linked APIs and executable saved Workflow Builder artifacts
 share this typed validation and remain `linked_unverified`, with
 `scientist_review_required`. This does not authenticate biological identity,
 calibration, source ownership or true experimental independence.
+
+## Explicit projected-ecology JSON numeric contract (2026-11-02)
+
+Current source-linked `ecology_measurement_candidates` results now require
+literal JSON integer counts for source candidates, sampling-date QC, linked
+visits and projected population denominators. Projected endpoint values,
+elapsed durations, daily slopes, unit means, population means and optional
+standard deviations require JSON numbers rather than coerced strings or
+Booleans. Optional historical statistics can still be null; finite-value and
+arithmetic/source-replay checks remain in force. The standalone typed result
+and the existing executable, persisted Workflow Builder source node share
+these guards. Regression cases cover source-linked dated endpoint artifacts,
+projected unit/population summaries and a real executed saved-workflow result.
+
+This is **internal artifact type integrity**, not proof of accurate calibration,
+verified organism identity, experimental-unit independence or scientist review.
+All outputs remain `linked_unverified` with
+`scientist_review_required`. Exact-head CI, source-authenticated scientific
+acceptance, 1.1 migration reconciliation and installed Windows GUI/GPU tests
+remain required before release.
