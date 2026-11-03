@@ -61,6 +61,9 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     """
     inspector = inspect(connection)
     tables = set(inspector.get_table_names())
+    # A restored database may retain research views after losing its tables
+    # and migration marker. Views are user schema too, not a fresh install.
+    views = set(inspector.get_view_names())
     # Interrupted 1.1 migrations can leave scientific tables even when their
     # Alembic marker is still 0037 or missing. Refuse 1.6 writes in that case.
     if not inspector.has_table("alembic_version"):
@@ -84,10 +87,10 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         # biological tables after losing the Alembic table entirely. No
         # revision can be inferred safely from those tables. Do not let
         # Alembic replay base DDL against preserved user data.
-        if tables:
+        if tables or views:
             raise RuntimeError(
                 "Unsafe ReefVision unversioned populated database: "
-                f"tables={sorted(tables)}. Preserve research data and "
+                f"tables={sorted(tables)}; views={sorted(views)}. Preserve research data and "
                 "reconcile migration provenance from a reviewed backup; "
                 "do not stamp, drop, or recreate existing tables."
             )
@@ -104,10 +107,10 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     # infer a revision or stamp the preserved database automatically.
     if not revision_rows:
         preserved_tables = sorted(tables - {"alembic_version"})
-        if preserved_tables:
+        if preserved_tables or views:
             raise RuntimeError(
                 "Unsafe ReefVision Alembic empty revision table with existing schema: "
-                f"tables={preserved_tables}. Preserve research data and reconcile "
+                f"tables={preserved_tables}; views={sorted(views)}. Preserve research data and reconcile "
                 "migration provenance from a reviewed backup; do not stamp, "
                 "drop, or recreate existing tables."
             )
