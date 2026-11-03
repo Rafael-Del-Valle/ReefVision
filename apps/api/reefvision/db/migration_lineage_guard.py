@@ -97,6 +97,13 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         return
     # Preserve row multiplicity: two identical stamps are still an invalid
     # Alembic state and must not be hidden by set deduplication.
+    version_columns = {column["name"] for column in inspector.get_columns("alembic_version")}
+    if "version_num" not in version_columns:
+        raise RuntimeError(
+            "Unsafe ReefVision Alembic version table without version_num column. "
+            "Preserve the database and reconcile migration provenance without "
+            "stamping, dropping, or rewriting scientific observations."
+        )
     revision_rows: tuple[str, ...] = tuple(
         connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
     )
