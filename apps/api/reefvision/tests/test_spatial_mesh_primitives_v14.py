@@ -24,13 +24,28 @@ def test_independent_calibrated_cube_reference_area_and_extent() -> None:
     from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 
     vertices = [
-        [0, 0, 0], [2, 0, 0], [2, 2, 0], [0, 2, 0],
-        [0, 0, 2], [2, 0, 2], [2, 2, 2], [0, 2, 2],
+        [0, 0, 0]
+        [2, 0, 0]
+        [2, 2, 0]
+        [0, 2, 0],
+        [0, 0, 2]
+        [2, 0, 2]
+        [2, 2, 2]
+        [0, 2, 2],
     ]
     faces = [
-        [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
-        [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
-        [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+        [0, 2, 1]
+        [0, 3, 2]
+        [4, 5, 6]
+        [4, 6, 7],
+        [0, 1, 5]
+        [0, 5, 4]
+        [1, 2, 6]
+        [1, 6, 5],
+        [2, 3, 7]
+        [2, 7, 6]
+        [3, 0, 4]
+        [3, 4, 7],
     ]
     measurement = preview_from_request(
         MeshPreviewRequest(
@@ -43,9 +58,7 @@ def test_independent_calibrated_cube_reference_area_and_extent() -> None:
         )
     )
     assert measurement["surface_area_m2"] == pytest.approx(6 * (2 * 0.01) ** 2)
-    assert measurement["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
-        sqrt(3) * 0.02
-    )
+    assert measurement["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(sqrt(3) * 0.02)
     assert measurement["area_scale_uncertainty_m2"] == pytest.approx(
         [0.0024 * 0.9**2, 0.0024 * 1.1**2]
     )
