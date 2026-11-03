@@ -124,7 +124,6 @@ def test_independent_disconnected_triangles_are_edge_separate(
     assert measurement["provenance"]["calibration_verified"] is False
 
 
-
 def test_unreferenced_vertices_do_not_inflate_calibrated_mesh_extent() -> None:
     """Orphan import vertices must not change measured coral dimensions or camera fit."""
     from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
@@ -146,8 +145,8 @@ def test_unreferenced_vertices_do_not_inflate_calibrated_mesh_extent() -> None:
     assert orphan["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
         baseline["axis_aligned_bounding_box_diagonal_m"]
     )
-    assert orphan["preview_camera_target_m"] == pytest.approx(
-        baseline["preview_camera_target_m"]
+    assert orphan["preview_camera_target_in_source_frame_m"] == pytest.approx(
+        baseline["preview_camera_target_in_source_frame_m"]
     )
     assert orphan["preview_camera_radius_m"] == pytest.approx(
         baseline["preview_camera_radius_m"]
