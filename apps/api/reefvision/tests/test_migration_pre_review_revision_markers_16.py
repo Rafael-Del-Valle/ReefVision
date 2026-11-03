@@ -12,8 +12,8 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from reefvision import desktop
-from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 from reefvision.db import session
+from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 
 
 _BAD_STAMPS = [
