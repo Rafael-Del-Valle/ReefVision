@@ -4,8 +4,8 @@ These tests inspect source workflow contracts only. They do not build,
 install, publish, download models, or alter scientific data.
 """
 
-from pathlib import Path
 import runpy
+from pathlib import Path
 
 import pytest
 
