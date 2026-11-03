@@ -38,3 +38,30 @@ def test_planar_square_retriangulation_preserves_calibrated_area_and_extent() ->
         assert measurement["provenance"]["calibration_verified"] is False
     assert coarse["preview_face_count"] == 2
     assert refined["preview_face_count"] == 4
+
+
+def test_disconnected_planar_patches_have_additive_area_without_false_volume() -> None:
+    """Separate open coral patches must not be mistaken for one closed solid."""
+    request = MeshPreviewRequest(
+        vertices=[
+            [0, 0, 0],
+            [2, 0, 0],
+            [0, 2, 0],
+            [10, 0, 0],
+            [12, 0, 0],
+            [10, 2, 0],
+        ],
+        faces=[[0, 1, 2], [3, 4, 5]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic separated triangles; not independently verified",
+        relative_scale_uncertainty=0.1,
+    )
+    result = preview_from_request(request)
+    assert result["surface_area_m2"] == pytest.approx(1.0)
+    assert result["area_scale_uncertainty_m2"] == pytest.approx(0.2)
+    assert result["surface_area_scale_interval_m2"] == pytest.approx([0.81, 1.21])
+    assert result["edge_connected_patch_count"] == 2
+    assert result["preview_face_count"] == 2
+    assert result["enclosed_volume_m3"] is None
+    assert result["provenance"]["calibration_verified"] is False
