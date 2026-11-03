@@ -158,6 +158,10 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
                         name = str(key)
                     except Exception:
                         continue
+                    # Untrusted vendor keys may stringify into enormous text.
+                    # Apply the same metadata bound as ordinary string values.
+                    if len(name) > 65_536:
+                        continue
                     sanitized[name] = _json_safe(item, _active=_active, _depth=_depth + 1)
                 return sanitized
             return [
@@ -171,9 +175,11 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
     # Third-party EXIF value wrappers may raise while formatting. Metadata
     # is advisory; an undecodable wrapper must not reject valid image pixels.
     try:
-        return str(value)
-    except (Exception,):
+        text = str(value)
+    except Exception:
         return None
+    # Vendor wrappers are no more trustworthy than native EXIF strings.
+    return text if len(text) <= 65_536 else None
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
     """Return verified UTC exposure time, never digitization or file-modification time."""
