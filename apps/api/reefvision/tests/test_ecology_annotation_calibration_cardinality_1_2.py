@@ -58,9 +58,7 @@ def test_rehashed_annotation_link_cannot_claim_two_calibrations(
     forged = _resign_derived_evidence(
         original.model_copy(update={"candidates": [original.candidates[0], forged_second]})
     )
-    with pytest.raises(
-        PydanticValidationError, match="conflicting annotation calibration lineage"
-    ):
+    with pytest.raises(PydanticValidationError, match="conflicting annotation calibration lineage"):
         EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
 
 
@@ -69,9 +67,7 @@ def test_rehashed_two_date_series_cannot_reuse_one_annotation_link(
 ) -> None:
     original = _dated_artifact(client)
     assert len(original.candidates) == 2
-    parsed = EcologyMeasurementCandidatesResponse.model_validate(
-        original.model_dump(mode="json")
-    )
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(original.model_dump(mode="json"))
     assert parsed.review_gate == "scientist_review_required"
     baseline, final = original.candidates
     assert baseline.calibration_evidence_id != final.calibration_evidence_id
@@ -81,7 +77,5 @@ def test_rehashed_two_date_series_cannot_reuse_one_annotation_link(
     forged = _resign_derived_evidence(
         original.model_copy(update={"candidates": [baseline, forged_final]})
     )
-    with pytest.raises(
-        PydanticValidationError, match="conflicting annotation calibration lineage"
-    ):
+    with pytest.raises(PydanticValidationError, match="conflicting annotation calibration lineage"):
         EcologyMeasurementCandidatesResponse.model_validate(forged.model_dump(mode="json"))
