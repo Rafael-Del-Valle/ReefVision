@@ -217,3 +217,34 @@ def test_rigid_axis_rotation_preserves_surface_area_and_scale_uncertainty() -> N
     )
     assert rotated["edge_connected_patch_count"] == 1
     assert rotated["provenance"]["calibration_verified"] is False
+
+
+def test_calibration_scale_change_obeys_area_and_length_units() -> None:
+    """A changed scale must affect area quadratically, not linearly."""
+    from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+    from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+
+    request = MeshPreviewRequest(
+        vertices=[[0, 0, 0], [3, 0, 0], [0, 4, 0]],
+        faces=[[0, 1, 2]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic scale sensitivity reference",
+        relative_scale_uncertainty=0.1,
+    )
+    baseline = preview_from_request(request)
+    doubled = preview_from_request(request.model_copy(update={"meters_per_unit": 1.0}))
+    assert baseline["surface_area_m2"] == pytest.approx(1.5)
+    assert doubled["surface_area_m2"] == pytest.approx(6.0)
+    assert doubled["surface_area_m2"] == pytest.approx(4 * baseline["surface_area_m2"])
+    assert doubled["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
+        2 * baseline["axis_aligned_bounding_box_diagonal_m"]
+    )
+    assert doubled["area_scale_uncertainty_m2"] == pytest.approx(
+        4 * baseline["area_scale_uncertainty_m2"]
+    )
+    assert doubled["surface_area_scale_interval_m2"] == pytest.approx(
+        [4 * bound for bound in baseline["surface_area_scale_interval_m2"]]
+    )
+    assert baseline["provenance"]["calibration_verified"] is False
+    assert doubled["provenance"]["calibration_verified"] is False
