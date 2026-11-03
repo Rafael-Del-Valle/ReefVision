@@ -231,9 +231,7 @@ class EcologyProjectedEndpointChange(BaseModel):
     )
     @classmethod
     def require_explicit_endpoint_numbers(cls, value: object) -> object:
-        if value is not None and (
-            isinstance(value, bool) or not isinstance(value, (int, float))
-        ):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
             raise ValueError("Projected endpoint numeric evidence must be a JSON number")
         return value
 
@@ -351,9 +349,7 @@ class EcologyProjectedUnitSummary(BaseModel):
     @field_validator("mean_absolute_change", "mean_percent_change", mode="before")
     @classmethod
     def require_explicit_unit_means(cls, value: object) -> object:
-        if value is not None and (
-            isinstance(value, bool) or not isinstance(value, (int, float))
-        ):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
             raise ValueError("Ecological unit mean must be a JSON number")
         return value
 
@@ -403,9 +399,7 @@ class EcologyProjectedPopulationSummary(BaseModel):
     )
     @classmethod
     def require_explicit_population_numbers(cls, value: object) -> object:
-        if value is not None and (
-            isinstance(value, bool) or not isinstance(value, (int, float))
-        ):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
             raise ValueError("Ecological population statistic must be a JSON number")
         return value
 
