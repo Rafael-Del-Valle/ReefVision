@@ -110,7 +110,8 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         if preserved_tables or views:
             raise RuntimeError(
                 "Unsafe ReefVision Alembic empty revision table with existing schema: "
-                f"tables={preserved_tables}; views={sorted(views)}. Preserve research data and reconcile "
+                f"tables={preserved_tables}; views={sorted(views)}. "
+                "Preserve research data and reconcile "
                 "migration provenance from a reviewed backup; do not stamp, "
                 "drop, or recreate existing tables."
             )
