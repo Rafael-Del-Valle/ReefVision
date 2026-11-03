@@ -127,9 +127,7 @@ def test_executed_saved_workflow_source_count_rejects_coerced_json(
     executed = _workflow(client, project_id)
     assert executed["run"]["status"] == "succeeded"
     artifacts = [
-        row
-        for row in executed["artifacts"]
-        if row["data_type"] == "ecology_measurement_candidates"
+        row for row in executed["artifacts"] if row["data_type"] == "ecology_measurement_candidates"
     ]
     assert len(artifacts) == 1
     payload = artifacts[0]["payload_json"]
