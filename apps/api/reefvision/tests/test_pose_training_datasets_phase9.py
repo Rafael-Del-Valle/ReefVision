@@ -325,6 +325,14 @@ def test_training_dataset_creation_is_idempotent_per_round(
     assert second.status_code == 201
     assert second.json()["id"] == first.json()["id"]
     assert second.json()["manifest_sha256"] == first.json()["manifest_sha256"]
+    # Repeating a freeze must not create duplicate immutable item rows.
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        datasets = session.query(PoseTrainingDataset).all()
+        assert len(datasets) == 1
+        items = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=first.json()["id"]).all()
+        assert len(items) == first.json()["item_count"]
+        assert len(items) > 0
 
 
 def test_unreviewed_pose_round_cannot_become_training_truth(
