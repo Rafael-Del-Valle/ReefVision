@@ -64,3 +64,29 @@ def test_independent_calibrated_cube_reference_area_and_extent() -> None:
         [0.0024 * 0.9**2, 0.0024 * 1.1**2]
     )
     assert measurement["provenance"]["calibration_verified"] is False
+
+
+def test_independent_three_four_five_triangle_reference_and_duplicate_rejection() -> None:
+    """A 3-4-5 right triangle has independently known area 6 m²."""
+    from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+    from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+
+    vertices = [[0, 0, 0], [3, 0, 0], [0, 4, 0]]
+    request = MeshPreviewRequest(
+        vertices=vertices,
+        faces=[[0, 1, 2]],
+        meters_per_unit=1,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic 3-4-5 triangle reference",
+        relative_scale_uncertainty=0.1,
+    )
+    measurement = preview_from_request(request)
+    assert measurement["surface_area_m2"] == pytest.approx(6.0)
+    assert measurement["area_scale_uncertainty_m2"] == pytest.approx(1.2)
+    assert measurement["surface_area_scale_interval_m2"] == pytest.approx([4.86, 7.26])
+    assert measurement["provenance"]["calibration_verified"] is False
+
+    with pytest.raises(ValueError, match="Duplicate triangle"):
+        preview_from_request(
+            request.model_copy(update={"faces": [[0, 1, 2], [2, 1, 0]]})
+        )
