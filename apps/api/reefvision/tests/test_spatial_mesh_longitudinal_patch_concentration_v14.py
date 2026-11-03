@@ -247,6 +247,47 @@ def test_longitudinal_rejects_surface_area_face_degeneracy_contradictions(
         execute_mesh_longitudinal_comparison(None, None, "project-1", {}, inputs)
 
 
+
+@pytest.mark.parametrize("timepoint", [0, 1])
+def test_positive_area_cannot_claim_zero_patches_when_face_count_unknown(
+    timepoint: int,
+) -> None:
+    """Legacy missing face counts do not justify impossible patch topology."""
+    observations = [_preview(payload) for payload in _meshes()]
+    record = observations[timepoint]
+    record.pop("face_count")
+    record.pop("degenerate_face_count")
+    record["edge_connected_patch_count"] = 0
+
+    with pytest.raises(ValueError, match="zero-patch mesh topology"):
+        compare_mesh_observations(*observations)
+
+    inputs = {
+        port: [SimpleNamespace(data_type="mesh_measurement_preview", payload_json=observation)]
+        for port, observation in zip(("before", "after"), observations, strict=True)
+    }
+    with pytest.raises(ValidationError, match="zero-patch mesh topology"):
+        execute_mesh_longitudinal_comparison(None, None, "project-1", {}, inputs)
+
+
+def test_legacy_missing_face_counts_keep_valid_patch_evidence() -> None:
+    """Unknown face counts must not erase independently valid patch evidence."""
+    observations = [_preview(payload) for payload in _meshes()]
+    for record in observations:
+        record.pop("face_count")
+        record.pop("degenerate_face_count")
+    expected = compare_mesh_observations(*observations)
+    assert expected["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+
+    inputs = {
+        port: [SimpleNamespace(data_type="mesh_measurement_preview", payload_json=observation)]
+        for port, observation in zip(("before", "after"), observations, strict=True)
+    }
+    actual = execute_mesh_longitudinal_comparison(None, None, "project-1", {}, inputs)
+    assert actual[0]["payload"] == expected
+    assert expected["provenance"]["specimen_identity_verified"] is False
+
+
 def test_degenerate_zero_area_meshes_keep_patch_distributions_unavailable() -> None:
     """A real zero-area reconstruction is not a forged missing distribution."""
     early, late = _meshes()
