@@ -151,3 +151,38 @@ def test_unreferenced_vertices_do_not_inflate_calibrated_mesh_extent() -> None:
     assert orphan["preview_camera_radius_m"] == pytest.approx(baseline["preview_camera_radius_m"])
     assert orphan["unreferenced_vertex_count"] == 1
     assert orphan["provenance"]["calibration_verified"] is False
+
+
+def test_rigid_translation_preserves_calibrated_surface_geometry() -> None:
+    """A coordinate-origin change cannot alter physical area or dimensions."""
+    from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+    from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+
+    vertices = [[0, 0, 0], [3, 0, 0], [0, 4, 0]]
+    request = MeshPreviewRequest(
+        vertices=vertices,
+        faces=[[0, 1, 2]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic translation-invariance reference",
+        relative_scale_uncertainty=0.1,
+    )
+    baseline = preview_from_request(request)
+    translated = preview_from_request(
+        request.model_copy(
+            update={
+                "vertices": [[x + 1000, y - 2000, z + 3000] for x, y, z in vertices]
+            }
+        )
+    )
+    for key in (
+        "surface_area_m2",
+        "axis_aligned_bounding_box_diagonal_m",
+        "area_scale_uncertainty_m2",
+    ):
+        assert translated[key] == pytest.approx(baseline[key])
+    assert translated["surface_area_scale_interval_m2"] == pytest.approx(
+        baseline["surface_area_scale_interval_m2"]
+    )
+    assert translated["edge_connected_patch_count"] == 1
+    assert translated["provenance"]["calibration_verified"] is False
