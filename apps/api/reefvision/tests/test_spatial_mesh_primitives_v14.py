@@ -107,7 +107,7 @@ def test_independent_disconnected_triangles_are_edge_separate(
         [10, 4, 0],
     ]
     if share_one_vertex:
-        vertices[3] = vertices[0]
+        vertices[3:] = [[0, 0, 0], [-3, 0, 0], [0, -4, 0]]
     measurement = preview_from_request(
         MeshPreviewRequest(
             vertices=vertices,
