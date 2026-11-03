@@ -12,8 +12,8 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from reefvision import desktop
-from reefvision.db import session
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
+from reefvision.db import session
 
 
 _BAD_STAMPS = [
@@ -350,7 +350,7 @@ def test_malformed_alembic_table_refuses_upgrade_without_mutating_science(
         connection.execute(text("CREATE TABLE observations (id TEXT PRIMARY KEY, value TEXT)"))
         connection.execute(text("INSERT INTO observations VALUES ('coral-1', 'original')"))
         connection.execute(text(f"CREATE TABLE alembic_version ({column_name} TEXT)"))
-        connection.execute(text(f"INSERT INTO alembic_version VALUES ('0037')"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0037')"))
 
     def snapshot() -> tuple[object, ...]:
         with engine.connect() as connection:
