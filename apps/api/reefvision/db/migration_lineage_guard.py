@@ -157,6 +157,15 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "reviewer history and reconcile the interrupted migration "
                 "without stamping or deleting audit records."
             )
+        # A damaged restore can retain a research view while losing its
+        # underlying scientific tables. A valid-looking old stamp does not
+        # prove that replaying later migrations is safe in this case.
+        if views:
+            raise RuntimeError(
+                "Unsafe ReefVision pre-review schema with preserved views: "
+                f"views={sorted(views)}. Preserve research views and reconcile "
+                "migration provenance before upgrading; do not stamp or drop data."
+            )
         return
     # Alembic can record unrelated branch heads in the same version table.
     # A review lineage combined with any other head is not an accepted
