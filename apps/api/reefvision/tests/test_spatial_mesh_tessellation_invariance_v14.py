@@ -72,3 +72,35 @@ def test_disconnected_planar_patches_have_additive_area_without_false_volume() -
     assert result["preview_face_count"] == 2
     assert result["enclosed_volume_m3"] is None
     assert result["provenance"]["calibration_verified"] is False
+
+
+def test_planar_boundary_perimeter_is_translation_invariant() -> None:
+    """Changing a reconstruction origin must not imply coral boundary growth."""
+    vertices = [[0, 0, 0], [2, 0, 0], [2, 2, 0], [0, 2, 0]]
+    request = MeshPreviewRequest(
+        vertices=vertices,
+        faces=[[0, 1, 2], [0, 2, 3]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic translated planar surface; not independently verified",
+        relative_scale_uncertainty=0.1,
+    )
+    original = preview_from_request(request)
+    translated = preview_from_request(
+        request.model_copy(
+            update={
+                "vertices": [[x + 1000, y - 2000, z + 3000] for x, y, z in vertices]
+            }
+        )
+    )
+    for key in (
+        "surface_area_m2",
+        "boundary_edge_length_m",
+        "boundary_loop_count",
+        "boundary_loop_perimeters_m",
+        "boundary_loop_perimeter_scale_intervals_m",
+        "edge_connected_patch_count",
+    ):
+        assert translated[key] == pytest.approx(original[key])
+    assert translated["boundary_edge_length_m"] == pytest.approx(4.0)
+    assert translated["provenance"]["calibration_verified"] is False
