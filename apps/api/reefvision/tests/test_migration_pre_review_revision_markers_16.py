@@ -285,3 +285,51 @@ def test_orphaned_research_view_blocks_migration_without_mutation(
             desktop.run_pending_migrations(settings)
         assert snapshot() == before
     engine.dispose()
+
+
+@pytest.mark.parametrize("revision", ["0037", "0036"])
+def test_pre_review_stamp_with_orphaned_view_refuses_upgrade_without_mutation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, revision: str
+) -> None:
+    """A plausible old stamp cannot license overwriting a restored research view."""
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'old-view.sqlite'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT)"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"),
+            {"revision": revision},
+        )
+        connection.execute(
+            text("CREATE VIEW coral_observations AS SELECT id FROM missing_observations")
+        )
+
+    def snapshot() -> tuple[object, ...]:
+        with engine.connect() as connection:
+            return tuple(
+                connection.execute(
+                    text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+                ).all()
+            )
+
+    before = snapshot()
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail("Orphaned views must not reach Alembic"),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    for _ in range(2):
+        with engine.connect() as connection, pytest.raises(
+            RuntimeError, match="pre-review schema with preserved views"
+        ):
+            assert_compatible_revision_0038(connection)
+        with pytest.raises(RuntimeError, match="pre-review schema with preserved views"):
+            desktop.run_pending_migrations(settings)
+        assert snapshot() == before
+    engine.dispose()
