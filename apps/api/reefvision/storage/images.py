@@ -301,16 +301,26 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             # Convert each untrusted EXIF value exactly once. Some vendor
             # wrappers are stateful or expensive to decode; evaluating them
             # twice can produce inconsistent provenance or fail an import.
-            named_exif = {
-                ExifTags.TAGS.get(key, str(key)): converted
-                for key, value in exif.items()
-                if (converted := _json_safe(value)) is not None
-            }
-            safe_info = {
-                str(key): converted
-                for key, value in image.info.items()
-                if (converted := _json_safe(value)) is not None
-            }
+            named_exif: dict[str, object] = {}
+            for key, value in exif.items():
+                # Untrusted vendor tag identifiers can have a broken __str__.
+                # Preserve decodable tags without failing the pixel import.
+                try:
+                    name = str(ExifTags.TAGS.get(key, key))
+                except Exception:
+                    continue
+                converted = _json_safe(value)
+                if converted is not None:
+                    named_exif[name] = converted
+            safe_info: dict[str, object] = {}
+            for key, value in image.info.items():
+                try:
+                    name = str(key)
+                except Exception:
+                    continue
+                converted = _json_safe(value)
+                if converted is not None:
+                    safe_info[name] = converted
             metadata: dict[str, Any] = {
                 "format": decoded_format,
                 "mode": image.mode,
