@@ -88,3 +88,37 @@ def test_independent_three_four_five_triangle_reference_and_duplicate_rejection(
 
     with pytest.raises(ValueError, match="Duplicate triangle"):
         preview_from_request(request.model_copy(update={"faces": [[0, 1, 2], [2, 1, 0]]}))
+
+
+@pytest.mark.parametrize("share_one_vertex", [False, True])
+def test_independent_disconnected_triangles_are_edge_separate(
+    share_one_vertex: bool,
+) -> None:
+    """Vertex contact alone cannot merge two 6 m² surface patches."""
+    from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+    from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+
+    vertices = [
+        [0, 0, 0],
+        [3, 0, 0],
+        [0, 4, 0],
+        [10, 0, 0],
+        [13, 0, 0],
+        [10, 4, 0],
+    ]
+    if share_one_vertex:
+        vertices[3] = vertices[0]
+    measurement = preview_from_request(
+        MeshPreviewRequest(
+            vertices=vertices,
+            faces=[[0, 1, 2], [3, 4, 5]],
+            meters_per_unit=1,
+            calibration_method="ruler",
+            calibration_evidence="Two independent synthetic 3-4-5 triangles",
+        )
+    )
+    assert measurement["surface_area_m2"] == pytest.approx(12.0)
+    assert measurement["edge_connected_patch_count"] == 2
+    assert measurement["edge_connected_patch_face_counts"] == [1, 1]
+    assert measurement["enclosed_volume_m3"] is None
+    assert measurement["provenance"]["calibration_verified"] is False
