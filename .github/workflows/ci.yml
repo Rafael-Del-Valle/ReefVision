@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+      # PR #73 was merged while this release branch remains in development.
+      # Test its exact HEAD on each push, not only the historical PR SHA.
+      - develop/reefvision-1.0.3-consolidated
   pull_request:
   workflow_dispatch:
 
