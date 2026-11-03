@@ -61,6 +61,31 @@ describe("gallery preferences", () => {
     }
   });
 
+  it("does not overwrite the last valid image with invalid asynchronous pagination", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: false,
+    });
+    const key = "reefvision.gallery.project-a.v1";
+    const saved = storage.getItem(key);
+
+    for (const page of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53]) {
+      writeGalleryPreference(storage, "project-a", {
+        imageId: "stale-image",
+        page,
+        wrap: true,
+      });
+      expect(storage.getItem(key)).toBe(saved);
+    }
+    expect(readGalleryPreference(storage, "project-a")).toEqual({
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: false,
+    });
+  });
+
   it("falls back safely when stored data is corrupt", () => {
     const storage = memoryStorage({
       "reefvision.gallery.project-a.v1": '{"imageId":7,"page":-3}',
