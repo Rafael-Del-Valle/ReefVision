@@ -114,7 +114,21 @@ export function resolveGalleryNavigation({
   pages: number;
   wrap: boolean;
 }): GalleryNavigationDestination | null {
-  if (itemCount < 1 || pages < 1 || (pages === 1 && itemCount === 1)) {
+  // A stale selection can outlive a paginated gallery refresh. Never emit an
+  // out-of-range image index or page while the new selection is being resolved.
+  if (
+    !Number.isSafeInteger(itemCount) ||
+    !Number.isSafeInteger(pages) ||
+    !Number.isSafeInteger(page) ||
+    !Number.isSafeInteger(index) ||
+    itemCount < 1 ||
+    pages < 1 ||
+    page < 1 ||
+    page > pages ||
+    index < 0 ||
+    index >= itemCount ||
+    (pages === 1 && itemCount === 1)
+  ) {
     return null;
   }
   if (action === "first") {
