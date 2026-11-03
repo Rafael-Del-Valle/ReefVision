@@ -122,3 +122,35 @@ def test_independent_disconnected_triangles_are_edge_separate(
     assert measurement["edge_connected_patch_face_counts"] == [1, 1]
     assert measurement["enclosed_volume_m3"] is None
     assert measurement["provenance"]["calibration_verified"] is False
+
+
+
+def test_unreferenced_vertices_do_not_inflate_calibrated_mesh_extent() -> None:
+    """Orphan import vertices must not change measured coral dimensions or camera fit."""
+    from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+    from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+
+    request = MeshPreviewRequest(
+        vertices=[[0, 0, 0], [3, 0, 0], [0, 4, 0]],
+        faces=[[0, 1, 2]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic reference; calibration not independently verified",
+    )
+    baseline = preview_from_request(request)
+    orphan = preview_from_request(
+        request.model_copy(update={"vertices": [*request.vertices, [100000, -100000, 99999]]})
+    )
+    assert baseline["surface_area_m2"] == pytest.approx(1.5)
+    assert orphan["surface_area_m2"] == pytest.approx(baseline["surface_area_m2"])
+    assert orphan["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
+        baseline["axis_aligned_bounding_box_diagonal_m"]
+    )
+    assert orphan["preview_camera_target_m"] == pytest.approx(
+        baseline["preview_camera_target_m"]
+    )
+    assert orphan["preview_camera_radius_m"] == pytest.approx(
+        baseline["preview_camera_radius_m"]
+    )
+    assert orphan["unreferenced_vertex_count"] == 1
+    assert orphan["provenance"]["calibration_verified"] is False
