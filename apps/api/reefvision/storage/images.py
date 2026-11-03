@@ -117,6 +117,15 @@ def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
     return digest.hexdigest(), total
 
 
+def _safe_metadata_key(value: object) -> str | None:
+    """Reject malformed or oversized advisory camera metadata keys."""
+    try:
+        name = str(value)
+    except Exception:
+        return None
+    return name if len(name) <= 65_536 else None
+
+
 def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 0) -> object | None:
     """Convert untrusted camera metadata into bounded, strictly JSON-safe values.
 
@@ -154,13 +163,8 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
                     # Vendor metadata keys can be custom objects whose string
                     # conversion raises. Discard that advisory entry rather
                     # than rejecting otherwise readable scientific pixels.
-                    try:
-                        name = str(key)
-                    except Exception:
-                        continue
-                    # Untrusted vendor keys may stringify into enormous text.
-                    # Apply the same metadata bound as ordinary string values.
-                    if len(name) > 65_536:
+                    name = _safe_metadata_key(key)
+                    if name is None:
                         continue
                     sanitized[name] = _json_safe(item, _active=_active, _depth=_depth + 1)
                 return sanitized
@@ -322,18 +326,16 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             for key, value in exif.items():
                 # Untrusted vendor tag identifiers can have a broken __str__.
                 # Preserve decodable tags without failing the pixel import.
-                try:
-                    name = str(ExifTags.TAGS.get(key, key))
-                except Exception:
+                name = _safe_metadata_key(ExifTags.TAGS.get(key, key))
+                if name is None:
                     continue
                 converted = _json_safe(value)
                 if converted is not None:
                     named_exif[name] = converted
             safe_info: dict[str, object] = {}
             for key, value in image.info.items():
-                try:
-                    name = str(key)
-                except Exception:
+                name = _safe_metadata_key(key)
+                if name is None:
                     continue
                 converted = _json_safe(value)
                 if converted is not None:
