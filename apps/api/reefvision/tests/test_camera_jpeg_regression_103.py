@@ -957,3 +957,43 @@ def test_camera_jpeg_utc_rollover_preserves_original_and_uncertainty(
         "capture_time_warning"
     ]
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
+
+
+def test_nonfinite_camera_metadata_remains_json_safe_and_original_immutable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Untrustworthy camera metadata must not crash a valid JPEG import."""
+    project = create_project(client, "Nonfinite camera metadata")
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG")
+    original = stream.getvalue()
+
+    # A malformed camera/plugin metadata field can contain non-JSON numeric
+    # values even when the JPEG raster is fully decodable. Inject those into
+    # Pillow's in-memory metadata only; do not modify the original JPEG.
+    real_open = Image.open
+
+    def open_with_nonfinite_metadata(*args: Any, **kwargs: Any) -> Image.Image:
+        image = real_open(*args, **kwargs)
+        if image.format == "JPEG":
+            image.info["camera_float_metadata"] = {
+                "gain": float("nan"),
+                "limits": (float("inf"), float("-inf")),
+                "exposure": 0.125,
+            }
+        return image
+
+    monkeypatch.setattr(Image, "open", open_with_nonfinite_metadata)
+    report = import_one(
+        client, project["id"], filename="DSC_NONFINITE.JPEG", content=original
+    )
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    response = client.get(f"/api/v1/images/{image_id}")
+    assert response.status_code == 200
+    assert response.json()["metadata_json"]["info"]["camera_float_metadata"] == {
+        "gain": None,
+        "limits": [None, None],
+        "exposure": 0.125,
+    }
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original

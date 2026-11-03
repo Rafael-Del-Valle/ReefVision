@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import hashlib
+import math
 import os
 import re
 import shutil
@@ -117,7 +118,14 @@ def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
 
 
 def _json_safe(value: object) -> object | None:
-    if value is None or isinstance(value, (str, int, float, bool)):
+    # Malformed camera metadata can contain NaN or infinity. Starlette's
+    # strict JSON encoder rejects those floats, which must not turn a valid
+    # scientific image into an HTTP 500 or invent a numeric observation.
+    # Preserve finite measurements and represent unverified values as null;
+    # the immutable original still retains its untouched metadata bytes.
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if value is None or isinstance(value, (str, int, bool)):
         return value
     if isinstance(value, (tuple, list)):
         return [_json_safe(item) for item in value]
