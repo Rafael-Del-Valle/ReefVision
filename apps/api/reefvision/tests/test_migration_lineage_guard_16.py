@@ -24,7 +24,13 @@ def test_fresh_and_noncolliding_revisions_are_not_modified(revision: str | None)
             connection.execute(
                 text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
             )
-        assert_compatible_revision_0038(connection)
+        if revision is None:
+            # A populated research database with no Alembic provenance is
+            # not a fresh install and must fail closed before migrations.
+            with pytest.raises(RuntimeError, match="unversioned populated database"):
+                assert_compatible_revision_0038(connection)
+        else:
+            assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT value FROM preserved")) == "scientific observation"
 
 
