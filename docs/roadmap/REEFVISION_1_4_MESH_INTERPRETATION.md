@@ -971,3 +971,17 @@ Builder runtime adapter, including both observation orders. Existing persisted
 two-timepoint graph tests continue checking standalone/saved-result parity for
 valid positive-area and truly degenerate zero-area meshes. This safeguard
 does not certify geometry, calibration, specimen identity or coral growth.
+
+## Positive-area patch topology with incomplete legacy counts (Track C, November 2, 2026)
+
+A positive calibrated mesh surface area cannot have zero edge-connected
+patches, even if a historical preview omitted the face and degenerate-face
+counts. Such contradictory replayed evidence now fails closed at either
+timepoint before a longitudinal change is calculated. A genuinely missing
+patch count or missing face counts with a positive recorded patch count
+remain unknown/usable, respectively; missing evidence is never filled with
+invented zeros. Tests cover the direct scientific comparison and the typed
+Workflow Builder adapter, including positive parity for incomplete but
+consistent legacy counts. Persisted graph parity for complete source
+previews remains separately covered. This is reconstruction-integrity QC,
+not proof of verified specimen identity or biological growth.
