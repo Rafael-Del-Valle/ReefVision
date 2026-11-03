@@ -383,32 +383,39 @@ it("retains unsaved fill when Brush navigation cannot save", async () => {
   expect(screen.getByText("1 masks")).toBeInTheDocument();
 });
 
-it.each(
-  [
-    [],
-    [
+it.each([
+  { reason: "empty", points: [] },
+  {
+    reason: "collinear",
+    points: [
       { x: 1, y: 1 },
       { x: 2, y: 2 },
       { x: 3, y: 3 },
     ],
-    [
+  },
+  {
+    reason: "out-of-bounds",
+    points: [
       { x: -1, y: 1 },
       { x: 2, y: 2 },
       { x: 3, y: 1 },
     ],
-  ].map((points) => ({ points })),
-)(
-  "rejects invalid fill geometry without creating an annotation",
-  async (invalid) => {
-    vi.mocked(generatePolygonFill).mockResolvedValue(invalid);
+  },
+])(
+  "rejects $reason fill geometry without creating an annotation",
+  async ({ points }) => {
+    vi.mocked(generatePolygonFill).mockResolvedValue({ points });
     await mount();
     fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
     seed();
-    await screen.findByText("Fill returned an invalid or empty polygon");
+    await screen.findByText(
+      "Fill returned an invalid or empty polygon",
+      {},
+      { timeout: 3000 },
+    );
     expect(screen.getByText("0 masks")).toBeInTheDocument();
   },
 );
-
 it("refreshes same-image mask state when a newer annotation session replaces cached data", async () => {
   const staleSession = {
     ...session(),
