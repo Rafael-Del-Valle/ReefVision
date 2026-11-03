@@ -221,3 +221,33 @@ no new node or migration is required.
 revision-0038 histories, representative scientific datasets, Windows MSI/CAB
 upgrade and rollback, and installed-GUI acceptance are still required. Do not
 stamp an affected database or automatically repair it.
+
+
+## 2026-11-02 — missing Alembic table with retained research schema
+
+The prior read-only guard refused an **empty** Alembic revision table with
+retained data, but when the `alembic_version` table itself was absent it
+only checked four known scientific and two QC audit tables. A restored
+project, review queue, workflow run or older research table could therefore
+survive without any migration provenance, and desktop startup would attempt
+to replay initial Alembic DDL over that database.
+
+The 1.6 preflight now refuses **any populated database without an
+`alembic_version` table**, after retaining the existing specific diagnostic
+paths for interrupted 1.1 science and 1.6 QC migrations. It never infers a
+revision, stamps, deletes, or rewrites data. A genuinely empty database with
+no tables remains supported. Existing single-revision databases and the
+saved executable, typed, researcher-gated QC Workflow Builder are unchanged.
+
+Parameterized regressions cover biological observations, project tables,
+review queues, workflow runs and an unrecognized legacy table; each requires
+two identical read-only refusals with exact SQLite schema/data preservation.
+Desktop startup tests require that Alembic upgrade is never called for three
+representative preserved schemas, and a fresh-database positive control
+protects clean installation. This is a **fail-closed compatibility guard**,
+not a unified 1.1/1.6 migration DAG or permission to upgrade old databases
+without reviewed provenance.
+
+**Release HOLD:** integrated exact-head CI, 1.1/1.6 revision collision
+reconciliation, representative biological-data validation, native Windows
+MSI/CAB upgrade/rollback and installed GUI acceptance remain mandatory.
