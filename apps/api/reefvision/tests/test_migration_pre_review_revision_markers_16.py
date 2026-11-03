@@ -234,3 +234,52 @@ def test_genuinely_empty_unversioned_database_remains_compatible(tmp_path: Path)
             text("SELECT name FROM sqlite_master WHERE type='table'")
         ).all() == []
     engine.dispose()
+
+
+@pytest.mark.parametrize("with_version_table", [False, True])
+def test_orphaned_research_view_blocks_migration_without_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    with_version_table: bool,
+) -> None:
+    """A preserved view alone is not a fresh database after table loss."""
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'orphan-view.sqlite'}")
+    with engine.begin() as connection:
+        if with_version_table:
+            connection.execute(text("CREATE TABLE alembic_version (version_num TEXT)"))
+        # SQLite permits views referencing tables that no longer exist.
+        connection.execute(
+            text("CREATE VIEW coral_observations AS SELECT id FROM missing_observations")
+        )
+
+    def snapshot() -> tuple[object, ...]:
+        with engine.connect() as connection:
+            return tuple(
+                connection.execute(
+                    text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+                ).all()
+            )
+
+    before = snapshot()
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail(
+            "Preserved research views must not reach Alembic upgrade"
+        ),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    for _ in range(2):
+        with engine.connect() as connection:
+            with pytest.raises(RuntimeError, match="Unsafe ReefVision"):
+                assert_compatible_revision_0038(connection)
+        with pytest.raises(RuntimeError, match="Unsafe ReefVision"):
+            desktop.run_pending_migrations(settings)
+        assert snapshot() == before
+    engine.dispose()
