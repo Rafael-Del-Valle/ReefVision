@@ -35,6 +35,13 @@ def test_planar_square_retriangulation_preserves_calibrated_area_and_extent() ->
         assert measurement["surface_area_scale_interval_m2"] == pytest.approx([0.81, 1.21])
         assert measurement["edge_connected_patch_count"] == 1
         assert measurement["enclosed_volume_m3"] is None
+        # A tessellation change cannot create biological boundary growth.
+        assert measurement["boundary_edge_length_m"] == pytest.approx(4.0)
+        assert measurement["boundary_loop_count"] == 1
+        assert measurement["boundary_loop_perimeters_m"] == pytest.approx([4.0])
+        assert measurement["boundary_loop_perimeter_scale_intervals_m"][0] == pytest.approx(
+            [3.6, 4.4]
+        )
         assert measurement["provenance"]["calibration_verified"] is False
     assert coarse["preview_face_count"] == 2
     assert refined["preview_face_count"] == 4
