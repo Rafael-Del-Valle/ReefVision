@@ -132,3 +132,104 @@ def test_empty_revision_table_on_empty_database_remains_compatible(tmp_path: Pat
             ).all()
         ) == before
     engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    ["observations", "projects", "review_queues", "workflow_runs", "legacy_table"],
+)
+def test_unversioned_populated_database_preserves_all_existing_data(
+    tmp_path: Path, table_name: str
+) -> None:
+    """A missing Alembic table never licenses replay of initial migrations."""
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'unversioned.sqlite'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(f"CREATE TABLE {table_name} (id TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        )
+        connection.execute(
+            text(f"INSERT INTO {table_name} VALUES ('coral-1', 'preserved research')")
+        )
+
+    def snapshot() -> tuple[object, ...]:
+        with engine.connect() as connection:
+            return (
+                tuple(
+                    connection.execute(
+                        text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+                    ).all()
+                ),
+                tuple(connection.execute(text(f"SELECT id, value FROM {table_name}")).all()),
+            )
+
+    before = snapshot()
+    for _ in range(2):
+        with engine.connect() as connection:
+            with pytest.raises(RuntimeError, match="unversioned populated database"):
+                migration_lineage_guard.assert_compatible_revision_0038(connection)
+        assert snapshot() == before
+    engine.dispose()
+
+
+@pytest.mark.parametrize("table_name", ["observations", "projects", "workflow_runs"])
+def test_desktop_refuses_unversioned_populated_database_before_upgrade(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, table_name: str
+) -> None:
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'desktop-unversioned.sqlite'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(f"CREATE TABLE {table_name} (id TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        )
+        connection.execute(
+            text(f"INSERT INTO {table_name} VALUES ('coral-1', 'original record')")
+        )
+    with engine.connect() as connection:
+        before = (
+            tuple(
+                connection.execute(
+                    text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+                ).all()
+            ),
+            tuple(connection.execute(text(f"SELECT id, value FROM {table_name}")).all()),
+        )
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail(
+            "A populated database without Alembic provenance must never be upgraded"
+        ),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="unversioned populated database"):
+            desktop.run_pending_migrations(settings)
+        with engine.connect() as connection:
+            assert (
+                tuple(
+                    connection.execute(
+                        text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+                    ).all()
+                ),
+                tuple(connection.execute(text(f"SELECT id, value FROM {table_name}")).all()),
+            ) == before
+    engine.dispose()
+
+
+def test_genuinely_empty_unversioned_database_remains_compatible(tmp_path: Path) -> None:
+    """Fresh databases without any tables must still initialize normally."""
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'fresh.sqlite'}")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table'")
+        ).all() == []
+        migration_lineage_guard.assert_compatible_revision_0038(connection)
+        assert connection.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table'")
+        ).all() == []
+    engine.dispose()
