@@ -138,10 +138,17 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
         _active.add(identity)
         try:
             if isinstance(value, dict):
-                return {
-                    str(key): _json_safe(item, _active=_active, _depth=_depth + 1)
-                    for key, item in value.items()
-                }
+                sanitized: dict[str, object | None] = {}
+                for key, item in value.items():
+                    # Vendor metadata keys can be custom objects whose string
+                    # conversion raises. Discard that advisory entry rather
+                    # than rejecting otherwise readable scientific pixels.
+                    try:
+                        name = str(key)
+                    except Exception:
+                        continue
+                    sanitized[name] = _json_safe(item, _active=_active, _depth=_depth + 1)
+                return sanitized
             return [
                 _json_safe(item, _active=_active, _depth=_depth + 1)
                 for item in value
