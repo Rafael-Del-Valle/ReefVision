@@ -80,6 +80,17 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "reviewer history and reconcile the interrupted migration "
                 "without stamping or deleting audit records."
             )
+        # A restored or legacy database can retain project, workflow, or
+        # biological tables after losing the Alembic table entirely. No
+        # revision can be inferred safely from those tables. Do not let
+        # Alembic replay base DDL against preserved user data.
+        if tables:
+            raise RuntimeError(
+                "Unsafe ReefVision unversioned populated database: "
+                f"tables={sorted(tables)}. Preserve research data and "
+                "reconcile migration provenance from a reviewed backup; "
+                "do not stamp, drop, or recreate existing tables."
+            )
         return
     # Preserve row multiplicity: two identical stamps are still an invalid
     # Alembic state and must not be hidden by set deduplication.
