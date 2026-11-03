@@ -12,8 +12,8 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from reefvision import desktop
-from reefvision.db import session
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
+from reefvision.db import session
 
 
 _BAD_STAMPS = [
@@ -165,8 +165,9 @@ def test_unversioned_populated_database_preserves_all_existing_data(
 
     before = snapshot()
     for _ in range(2):
-        with engine.connect() as connection:
-            with pytest.raises(RuntimeError, match="unversioned populated database"):
+        with engine.connect() as connection, pytest.raises(
+            RuntimeError, match="unversioned populated database"
+        ):
                 assert_compatible_revision_0038(connection)
         assert snapshot() == before
     engine.dispose()
@@ -276,8 +277,9 @@ def test_orphaned_research_view_blocks_migration_without_mutation(
     )
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
     for _ in range(2):
-        with engine.connect() as connection:
-            with pytest.raises(RuntimeError, match="Unsafe ReefVision"):
+        with engine.connect() as connection, pytest.raises(
+            RuntimeError, match="Unsafe ReefVision"
+        ):
                 assert_compatible_revision_0038(connection)
         with pytest.raises(RuntimeError, match="Unsafe ReefVision"):
             desktop.run_pending_migrations(settings)
