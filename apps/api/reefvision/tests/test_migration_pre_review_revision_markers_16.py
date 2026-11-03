@@ -12,7 +12,8 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from reefvision import desktop
-from reefvision.db import migration_lineage_guard, session
+from reefvision.db import session
+from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 
 
 _BAD_STAMPS = [
@@ -68,7 +69,7 @@ def test_pre_review_ambiguous_stamps_fail_closed_without_rewriting_science(
     for _ in range(2):
         with engine.connect() as connection:
             with pytest.raises(RuntimeError, match="Unsafe ReefVision Alembic"):
-                migration_lineage_guard.assert_compatible_revision_0038(connection)
+                assert_compatible_revision_0038(connection)
             assert _snapshot(connection) == before
     engine.dispose()
 
@@ -110,7 +111,7 @@ def test_single_pre_review_stamp_remains_compatible(tmp_path: Path) -> None:
     _seed_database(engine, ("0037",))
     with engine.connect() as connection:
         before = _snapshot(connection)
-        migration_lineage_guard.assert_compatible_revision_0038(connection)
+        assert_compatible_revision_0038(connection)
         assert _snapshot(connection) == before
     engine.dispose()
 
@@ -125,7 +126,7 @@ def test_empty_revision_table_on_empty_database_remains_compatible(tmp_path: Pat
                 text("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
             ).all()
         )
-        migration_lineage_guard.assert_compatible_revision_0038(connection)
+        assert_compatible_revision_0038(connection)
         assert tuple(
             connection.execute(
                 text("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
@@ -166,7 +167,7 @@ def test_unversioned_populated_database_preserves_all_existing_data(
     for _ in range(2):
         with engine.connect() as connection:
             with pytest.raises(RuntimeError, match="unversioned populated database"):
-                migration_lineage_guard.assert_compatible_revision_0038(connection)
+                assert_compatible_revision_0038(connection)
         assert snapshot() == before
     engine.dispose()
 
@@ -228,7 +229,7 @@ def test_genuinely_empty_unversioned_database_remains_compatible(tmp_path: Path)
         assert connection.execute(
             text("SELECT name FROM sqlite_master WHERE type='table'")
         ).all() == []
-        migration_lineage_guard.assert_compatible_revision_0038(connection)
+        assert_compatible_revision_0038(connection)
         assert connection.execute(
             text("SELECT name FROM sqlite_master WHERE type='table'")
         ).all() == []
