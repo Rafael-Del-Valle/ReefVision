@@ -692,6 +692,10 @@ def test_native_pose_training_package_is_deterministic_and_verified_only(
     assert first.content == second.content
     assert (
         first.headers["x-reefvision-pose-dataset-package-sha256"]
+        == hashlib.sha256(first.content).hexdigest()
+    )
+    assert (
+        first.headers["x-reefvision-pose-dataset-package-sha256"]
         == second.headers["x-reefvision-pose-dataset-package-sha256"]
     )
 
