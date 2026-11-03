@@ -338,3 +338,47 @@ def test_pre_review_stamp_with_orphaned_view_refuses_upgrade_without_mutation(
             desktop.run_pending_migrations(settings)
         assert snapshot() == before
     engine.dispose()
+
+
+@pytest.mark.parametrize("column_name", ["revision", "version"])
+def test_malformed_alembic_table_refuses_upgrade_without_mutating_science(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, column_name: str
+) -> None:
+    """A restored version table without version_num cannot prove lineage."""
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'malformed-version.sqlite'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE observations (id TEXT PRIMARY KEY, value TEXT)"))
+        connection.execute(text("INSERT INTO observations VALUES ('coral-1', 'original')"))
+        connection.execute(text(f"CREATE TABLE alembic_version ({column_name} TEXT)"))
+        connection.execute(text(f"INSERT INTO alembic_version VALUES ('0037')"))
+
+    def snapshot() -> tuple[object, ...]:
+        with engine.connect() as connection:
+            return (
+                tuple(connection.execute(text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")).all()),
+                tuple(connection.execute(text("SELECT * FROM observations")).all()),
+                tuple(connection.execute(text("SELECT * FROM alembic_version")).all()),
+            )
+
+    before = snapshot()
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail("Malformed version table must not reach upgrade"),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    for _ in range(2):
+        with engine.connect() as connection, pytest.raises(
+            RuntimeError, match="without version_num column"
+        ):
+            assert_compatible_revision_0038(connection)
+        with pytest.raises(RuntimeError, match="without version_num column"):
+            desktop.run_pending_migrations(settings)
+        assert snapshot() == before
+    engine.dispose()
