@@ -90,10 +90,7 @@ export function writeGalleryPreference(
 }
 
 /** Parse an explicit gallery page without accepting exponent or partial-number input. */
-export function parseGalleryPageDraft(
-  draft: string,
-  totalPages: number,
-): number | null {
+export function parseGalleryPageDraft(draft: string, totalPages: number): number | null {
   if (!Number.isSafeInteger(totalPages) || totalPages < 1) return null;
   const value = draft.trim();
   if (!/^\d+$/.test(value)) return null;
@@ -139,8 +136,6 @@ export function resolveGalleryNavigation({
   return wrap ? { page: 1, edge: "first" } : null;
 }
 
-export function shouldIgnoreGalleryShortcut(
-  target: EventTarget | null,
-): boolean {
+export function shouldIgnoreGalleryShortcut(target: EventTarget | null): boolean {
   return shouldIgnoreShortcutTarget(target);
 }
