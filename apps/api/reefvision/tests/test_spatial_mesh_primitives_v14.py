@@ -248,3 +248,28 @@ def test_calibration_scale_change_obeys_area_and_length_units() -> None:
     )
     assert baseline["provenance"]["calibration_verified"] is False
     assert doubled["provenance"]["calibration_verified"] is False
+
+
+def test_reversing_single_open_triangle_winding_preserves_surface_measurement() -> None:
+    """Open-surface area is orientation independent; winding is not biological identity."""
+    from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+    from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+
+    request = MeshPreviewRequest(
+        vertices=[[0, 0, 0], [3, 0, 0], [0, 4, 0]],
+        faces=[[0, 1, 2]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic winding invariance reference",
+        relative_scale_uncertainty=0.1,
+    )
+    forward = preview_from_request(request)
+    reversed_face = preview_from_request(request.model_copy(update={"faces": [[2, 1, 0]]}))
+    assert forward["surface_area_m2"] == pytest.approx(1.5)
+    for key in ("surface_area_m2", "area_scale_uncertainty_m2"):
+        assert reversed_face[key] == pytest.approx(forward[key])
+    assert reversed_face["surface_area_scale_interval_m2"] == pytest.approx(
+        forward["surface_area_scale_interval_m2"]
+    )
+    assert reversed_face["enclosed_volume_m3"] is None
+    assert reversed_face["provenance"]["calibration_verified"] is False
