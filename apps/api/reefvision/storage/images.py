@@ -117,22 +117,38 @@ def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
     return digest.hexdigest(), total
 
 
-def _json_safe(value: object) -> object | None:
-    # Malformed camera metadata can contain NaN or infinity. Starlette's
-    # strict JSON encoder rejects those floats, which must not turn a valid
-    # scientific image into an HTTP 500 or invent a numeric observation.
-    # Preserve finite measurements and represent unverified values as null;
-    # the immutable original still retains its untouched metadata bytes.
+def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 0) -> object | None:
+    """Convert untrusted camera metadata into bounded, strictly JSON-safe values.
+
+    Recursive or extremely deep metadata is represented as unknown rather than
+    causing an import-time RecursionError. The source image bytes are unchanged.
+    """
     if isinstance(value, float):
         return value if math.isfinite(value) else None
     if value is None or isinstance(value, (str, int, bool)):
         return value
-    if isinstance(value, (tuple, list)):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list, dict)):
+        if _depth >= 32:
+            return None
+        if _active is None:
+            _active = set()
+        identity = id(value)
+        if identity in _active:
+            return None
+        _active.add(identity)
+        try:
+            if isinstance(value, dict):
+                return {
+                    str(key): _json_safe(item, _active=_active, _depth=_depth + 1)
+                    for key, item in value.items()
+                }
+            return [
+                _json_safe(item, _active=_active, _depth=_depth + 1)
+                for item in value
+            ]
+        finally:
+            _active.remove(identity)
     return str(value) if not isinstance(value, bytes) else None
-
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
     """Return verified UTC exposure time, never digitization or file-modification time."""
