@@ -355,7 +355,11 @@ def test_malformed_alembic_table_refuses_upgrade_without_mutating_science(
     def snapshot() -> tuple[object, ...]:
         with engine.connect() as connection:
             return (
-                tuple(connection.execute(text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")).all()),
+                tuple(
+                    connection.execute(
+                        text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+                    ).all()
+                ),
                 tuple(connection.execute(text("SELECT * FROM observations")).all()),
                 tuple(connection.execute(text("SELECT * FROM alembic_version")).all()),
             )
