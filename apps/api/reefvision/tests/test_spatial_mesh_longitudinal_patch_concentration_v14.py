@@ -247,7 +247,6 @@ def test_longitudinal_rejects_surface_area_face_degeneracy_contradictions(
         execute_mesh_longitudinal_comparison(None, None, "project-1", {}, inputs)
 
 
-
 @pytest.mark.parametrize("timepoint", [0, 1])
 def test_positive_area_cannot_claim_zero_patches_when_face_count_unknown(
     timepoint: int,
