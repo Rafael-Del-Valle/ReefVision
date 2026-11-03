@@ -330,11 +330,8 @@ def test_training_dataset_creation_is_idempotent_per_round(
     with app.state.session_factory() as session:
         datasets = session.query(PoseTrainingDataset).all()
         assert len(datasets) == 1
-        items = (
-            session.query(PoseTrainingDatasetItem)
-            .filter_by(dataset_id=first.json()["id"])
-            .all()
-        )
+        dataset_id = first.json()["id"]
+        items = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).all()
         assert len(items) == first.json()["item_count"]
         assert len(items) > 0
 
