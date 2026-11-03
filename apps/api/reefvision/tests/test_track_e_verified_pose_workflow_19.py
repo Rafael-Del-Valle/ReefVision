@@ -915,7 +915,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
 
         with (
             app.state.session_factory() as session,
-            pytest.raises(ConflictError, match="item lineage no longer matches"),
+            pytest.raises(ConflictError, match="manifest lineage no longer matches"),
         ):
             PoseTrainingDatasetService(session).native_package(dataset_id)
 
