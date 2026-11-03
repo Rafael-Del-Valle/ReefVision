@@ -87,6 +87,7 @@ def test_zero_triangle_reconstructions_have_unavailable_rates() -> None:
     before, after = _observations()
     for observation in (before, after):
         observation.update(
+            surface_area_m2=0.0,
             face_count=0,
             edge_connected_patch_count=0,
             boundary_edge_count=0,
@@ -103,6 +104,7 @@ def test_zero_triangle_reconstructions_have_unavailable_rates() -> None:
 def test_zero_face_baseline_preserves_missing_rates_against_valid_followup() -> None:
     before, after = _observations()
     before.update(
+        surface_area_m2=0.0,
         face_count=0,
         edge_connected_patch_count=0,
         boundary_edge_count=0,
@@ -130,6 +132,7 @@ def test_zero_face_baseline_preserves_missing_rates_against_valid_followup() -> 
 def test_zero_face_followup_is_an_observed_zero_ratio() -> None:
     before, after = _observations()
     after.update(
+        surface_area_m2=0.0,
         face_count=0,
         edge_connected_patch_count=0,
         boundary_edge_count=0,
