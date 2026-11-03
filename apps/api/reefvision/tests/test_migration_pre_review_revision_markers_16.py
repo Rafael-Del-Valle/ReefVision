@@ -20,6 +20,8 @@ _BAD_STAMPS = [
     ("0037", "0037"),
     ("0036", "0037"),
     ("0037", "foreign_head"),
+    ("0037", None),  # A mixed valid/NULL stamp must not bypass validation.
+    ("0037", ""),  # An empty concurrent head is also ambiguous.
     (None,),
     ("",),
     ("   ",),
@@ -74,7 +76,9 @@ def test_pre_review_ambiguous_stamps_fail_closed_without_rewriting_science(
     engine.dispose()
 
 
-@pytest.mark.parametrize("stamps", [("0037", "0037"), ("0036", "0037"), (None,), ()])
+@pytest.mark.parametrize(
+    "stamps", [("0037", "0037"), ("0036", "0037"), ("0037", None), (None,), ()]
+)
 def test_desktop_refuses_ambiguous_stamps_before_alembic_upgrade(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
