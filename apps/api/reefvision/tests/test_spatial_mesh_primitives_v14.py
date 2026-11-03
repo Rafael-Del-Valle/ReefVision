@@ -87,6 +87,4 @@ def test_independent_three_four_five_triangle_reference_and_duplicate_rejection(
     assert measurement["provenance"]["calibration_verified"] is False
 
     with pytest.raises(ValueError, match="Duplicate triangle"):
-        preview_from_request(
-            request.model_copy(update={"faces": [[0, 1, 2], [2, 1, 0]]})
-        )
+        preview_from_request(request.model_copy(update={"faces": [[0, 1, 2], [2, 1, 0]]}))
