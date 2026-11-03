@@ -125,7 +125,12 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
     """
     if isinstance(value, float):
         return value if math.isfinite(value) else None
-    if isinstance(value, bool) or value is None or isinstance(value, str):
+    if isinstance(value, str):
+        # Camera/vendor text is advisory. Bound decoded metadata to prevent
+        # enormous EXIF strings from overwhelming API responses and project
+        # records; unknown is safer than silently truncating provenance.
+        return value if len(value) <= 65_536 else None
+    if isinstance(value, bool) or value is None:
         return value
     if isinstance(value, int):
         # Python 3.11+ JSON serialization refuses decimal integers beyond
