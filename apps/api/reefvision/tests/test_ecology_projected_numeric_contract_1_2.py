@@ -47,7 +47,12 @@ from reefvision.tests.test_ecology_projected_visit_coverage_1_2 import _source
         ),
         ("projected_unit_summaries", "mean_absolute_change", "2", "unit mean"),
         ("projected_unit_summaries", "mean_percent_change", True, "unit mean"),
-        ("projected_population_summaries", "declared_unit_count", 1.0, "population count"),
+        (
+            "projected_population_summaries",
+            "declared_unit_count",
+            1.0,
+            "population count",
+        ),
         (
             "projected_population_summaries",
             "contributing_organism_count",
@@ -97,7 +102,9 @@ def test_projected_scientific_artifact_rejects_coerced_json_evidence(
         EcologyMeasurementCandidatesResponse.model_validate(tampered)
 
 
-def test_standalone_endpoint_numbers_preserve_real_numeric_types(client: TestClient) -> None:
+def test_standalone_endpoint_numbers_preserve_real_numeric_types(
+    client: TestClient,
+) -> None:
     original = _dated_artifact(client)
     endpoint = original.projected_endpoint_changes[0].model_dump(mode="json")
     parsed = EcologyProjectedEndpointChange.model_validate(endpoint)
