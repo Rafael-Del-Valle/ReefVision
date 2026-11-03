@@ -488,6 +488,27 @@ class PoseTrainingDatasetService:
         ):
             raise ConflictError("Verified pose scientist review attribution changed")
 
+        # The correction is an independent scientist-review audit record.
+        # Check its saved before/after evidence *before* freezing, otherwise
+        # an altered correction can produce an unreadable "complete" dataset.
+        before = correction.before_json
+        after = correction.after_json
+        if (
+            not isinstance(before, dict)
+            or before.get("candidate_id") != candidate.id
+            or before.get("source_track_revision") != candidate.source_track_revision
+            or before.get("candidate_provenance_sha256") != candidate.provenance_sha256
+            or before.get("acquisition_score") != candidate.acquisition_score
+            or before.get("score_components") != candidate.score_components_json
+            or before.get("reason_codes") != candidate.reason_codes_json
+            or not isinstance(after, dict)
+            or after.get("verified_track_revision") != candidate.verified_track_revision
+            or after.get("verified_pose_sha256") != candidate.verified_pose_sha256
+            or after.get("pose_schema_id") != candidate.pose_schema_id
+            or after.get("pose_schema_revision") != candidate.pose_schema_revision
+        ):
+            raise ConflictError("Verified pose scientist correction evidence changed")
+
         return {
             "correction_id": correction.id,
             "action": correction.action,
