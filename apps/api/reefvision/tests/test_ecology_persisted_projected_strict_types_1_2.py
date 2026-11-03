@@ -73,10 +73,9 @@ def test_projected_endpoint_rejects_epoch_and_coerced_counts(
                 EcologyMeasurementCandidatesResponse.model_validate(persisted)
             # Immutable source fingerprints may reject a forged artifact before
             # the nested timestamp validator. Both paths must fail closed.
-            assert (
-                "requires an ISO calendar timestamp" in str(exc.value)
-                or "source fingerprint mismatch" in str(exc.value)
-            )
+            assert "requires an ISO calendar timestamp" in str(
+                exc.value
+            ) or "source fingerprint mismatch" in str(exc.value)
 
     for field in ("identity_revision", "observed_timepoint_count"):
         for replacement in (True, "2", 2.0, None):
