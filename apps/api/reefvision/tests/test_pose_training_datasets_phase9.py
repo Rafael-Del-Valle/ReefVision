@@ -641,6 +641,37 @@ def test_freeze_rejects_blank_video_digest_even_when_acquisition_agrees(
         assert session.query(PoseTrainingDataset).count() == 0
 
 
+@pytest.mark.parametrize("schema_location", ["dataset", "manifest"])
+def test_frozen_dataset_rejects_resigned_incompatible_schema_version(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    schema_location: str,
+) -> None:
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 201, response.text
+    dataset_id = response.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        if schema_location == "dataset":
+            dataset.schema_version = "pose-training-dataset-unsupported"
+        else:
+            manifest = copy.deepcopy(dataset.manifest_json)
+            manifest["schema_version"] = "pose-training-dataset-manifest-unsupported"
+            dataset.manifest_json = manifest
+            dataset.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
+    assert response.status_code == 409, response.text
+    assert "manifest lineage" in response.text
+
+
 def test_frozen_dataset_rejects_resigned_blank_video_digest(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
