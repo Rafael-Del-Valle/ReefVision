@@ -1,4 +1,4 @@
-"""ReefVision 1.0 workflow-node registry extensions."""
+"""ReefVision workflow-node registry extensions."""
 
 from __future__ import annotations
 
@@ -628,6 +628,285 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "The generated package is immediately verified before "
                 "a workflow artifact is emitted."
             ),
+        ],
+    )
+
+    registry["ecology_connected_branch_preview"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_connected_branch_preview",
+        display_name="Preview Connected Coral Branch",
+        category="Scientific analysis",
+        description=(
+            "Preview a connected centerline segment from a saved skeleton revision. "
+            "No physical measurement, accepted edit, or dataset verification is created."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="preview",
+                display_name="Unverified connected branch proposal",
+                accepted_types=["connected_branch_preview"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=["analysis_id", "edit_id", "points"],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Uses the same persisted, checksum-checked skeleton as the standalone API.",
+            "Requires exact pixel attachment; no bridge, snap, or accepted edit is created.",
+            "Rejects a source image from another project.",
+            "Persists source revision SHA-256, pixel geometry, and scientist review gate.",
+            "Cannot enter verified-dataset ports without independent review.",
+        ],
+    )
+
+    registry["ecology_identity_registry_source"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_identity_registry_source",
+        display_name="Project Ecological Identity Registry",
+        category="Scientific analysis",
+        description=(
+            "Read project-owned versioned organism/colony registrations; "
+            "scientist verification of biological identity remains required."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="registry",
+                display_name="Unverified identity registry snapshot",
+                accepted_types=["ecology_identity_registry"],
+                required=False,
+                multiple=True,
+            ),
+            WorkflowPortDefinition(
+                port_id="measurement_candidates",
+                display_name="Source-linked projected measurement candidates (unverified)",
+                accepted_types=["ecology_measurement_candidates"],
+                required=False,
+                multiple=True,
+            ),
+            WorkflowPortDefinition(
+                port_id="candidate_report",
+                display_name="Unverified ecological QC and effort report",
+                accepted_types=["ecology_candidate_report"],
+                required=False,
+                multiple=True,
+            ),
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Persists typed identity, annotation and frozen calibration source evidence.",
+            "Calibration changes invalidate unverified saved-workflow registry artifacts.",
+            "Registry metadata is not evidence of verified annotation or organism identity.",
+            "Projected box/mask candidates remain unverified and require biological review.",
+            "Review gate prevents direct promotion into verified-dataset ports.",
+        ],
+    )
+
+    registry["ecology_population_csv_export"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_population_csv_export",
+        display_name="Export Ecological Population Summary CSV",
+        category="Scientific analysis",
+        description=(
+            "Export QC-eligible declared-unit means and excluded-unit reasons "
+            "without claiming biological independence or verified growth."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="candidates",
+                display_name="Unverified ecological measurement candidates",
+                accepted_types=["ecology_measurement_candidates"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="csv",
+                display_name="Unverified unit and population summary CSV",
+                accepted_types=["ecology_population_csv"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Rechecks source fingerprints and all derived QC, endpoints and unit means.",
+            "Exports excluded units with blank means and zero contributing replicates.",
+            "Never asserts independent samples, verified growth or statistical inference.",
+            "Persists the same CSV and provenance as the standalone endpoint.",
+            "Cannot feed verified-dataset ports without an independent review gate.",
+        ],
+    )
+
+    registry["ecology_measurement_csv_export"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_measurement_csv_export",
+        display_name="Export Ecological Source Measurements CSV",
+        category="Scientific analysis",
+        description=(
+            "Export each source-linked projected measurement with QC and provenance; "
+            "never promote unverified geometry to biological growth."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="candidates",
+                display_name="Unverified calibrated measurement candidates",
+                accepted_types=["ecology_measurement_candidates"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="csv",
+                display_name="Unverified source-level CSV with fingerprint and QC",
+                accepted_types=["ecology_measurement_csv"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Rechecks the same candidate fingerprint, QC and derived summaries as the API.",
+            "Persists CSV text and its source fingerprint in the workflow artifact.",
+            "Source-linked geometry is unverified; scientist review remains required.",
+            "Cannot connect to verified-dataset ports or promote biological growth.",
+        ],
+    )
+
+    registry["ecology_longitudinal_analysis"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_longitudinal_analysis",
+        display_name="Exploratory Longitudinal Ecology",
+        category="Scientific analysis",
+        description=(
+            "Compare first and final organism-level observations without treating "
+            "unverified caller-supplied measurements as research truth."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="analysis",
+                display_name="Unverified longitudinal analysis",
+                accepted_types=["longitudinal_analysis"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=["observations"],
+        optional_parameters={
+            "experimental_unit_type": None,
+            "expected_organism_ids_by_unit": None,
+            "expected_sampling_dates_by_unit": None,
+        },
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Reuses the standalone ecological longitudinal calculation service.",
+            "Observations are caller-supplied and are not verified against project records.",
+            "Workflow artifacts persist source IDs and an explicit unverified evidence level.",
+            "Do not treat this output as verified or use it to infer significance or survival.",
+            "Optional caller-declared organism rosters expose completely unobserved specimens; "
+            "they do not establish mortality or authenticated study membership.",
+            "Caller-declared sampling calendars exclude incomplete planned visits; "
+            "missing visits are not evidence of mortality or biological absence.",
+            "Verified ecological reporting requires a future review and lineage gate.",
+        ],
+    )
+
+    registry["ecology_paired_count_comparison"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_paired_count_comparison",
+        display_name="Exploratory Human-Model Count Comparison",
+        category="Scientific analysis",
+        description=(
+            "Compare paired human-model counts with explicit unverified source "
+            "provenance and descriptive experimental-unit summaries."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="comparison",
+                display_name="Unverified paired count comparison",
+                accepted_types=["paired_count_comparison"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=["pairs", "reference_kind"],
+        optional_parameters={"experimental_unit_type": None},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Reuses the standalone comparison domain service.",
+            "Neither the human nor model source is authenticated to project records.",
+            "No ICC, limits of agreement or statistical significance are inferred.",
+            "Experimental-unit summaries are descriptive, not independent hypothesis tests.",
+            "This unverified output cannot feed verified dataset creation directly.",
+        ],
+    )
+
+    registry["ecology_paired_count_csv_export"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_paired_count_csv_export",
+        display_name="Export Unverified Human-Model Count CSV",
+        category="Scientific analysis",
+        description=(
+            "Export paired image rows, declared biological-unit summaries and "
+            "source provenance without asserting independent replication."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="comparison",
+                display_name="Unverified paired human-model comparison",
+                accepted_types=["paired_count_comparison"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="csv",
+                display_name="Unverified paired-count CSV",
+                accepted_types=["paired_count_comparison_csv"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Revalidates the current typed comparison result before export.",
+            "Persists CSV, source IDs, SHA-256 and unverified review restrictions.",
+            "No ICC, limits of agreement, significance or verified replication.",
+            "Cannot feed verified-dataset ports without separate source review.",
         ],
     )
 
