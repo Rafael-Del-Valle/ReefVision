@@ -312,7 +312,10 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             try:
                 image_exif = image.getexif()
                 exif = dict(image_exif)
-            except (OSError, SyntaxError, ValueError, TypeError, struct.error, OverflowError, IndexError, KeyError):
+            except (
+                    OSError, SyntaxError, ValueError, TypeError,
+                    struct.error, OverflowError, IndexError, KeyError,
+                ):
                 exif = {}
                 exif_warning = "EXIF metadata could not be decoded; capture time is unavailable"
             else:
@@ -320,7 +323,10 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                     # DateTimeOriginal and OffsetTimeOriginal are typically
                     # nested, rather than exposed in the top-level EXIF dict.
                     exif.update(image_exif.get_ifd(ExifTags.IFD.Exif))
-                except (OSError, SyntaxError, ValueError, TypeError, struct.error, OverflowError, IndexError, KeyError):
+                except (
+                    OSError, SyntaxError, ValueError, TypeError,
+                    struct.error, OverflowError, IndexError, KeyError,
+                ):
                     exif_warning = (
                         "Nested EXIF metadata could not be decoded; capture time is unavailable"
                     )
