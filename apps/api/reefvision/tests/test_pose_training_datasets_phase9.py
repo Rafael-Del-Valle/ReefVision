@@ -463,9 +463,7 @@ def test_freeze_rejects_modified_scientist_correction_evidence(
             correction.after_json = after
         else:
             before = dict(correction.before_json)
-            before[changed_field] = (
-                -1 if changed_field == "source_track_revision" else "0" * 64
-            )
+            before[changed_field] = -1 if changed_field == "source_track_revision" else "0" * 64
             correction.before_json = before
         session.commit()
 
