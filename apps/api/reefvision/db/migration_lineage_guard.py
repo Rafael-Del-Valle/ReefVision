@@ -104,6 +104,16 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "Preserve the database and reconcile migration provenance without "
             "stamping, dropping, or rewriting scientific observations."
         )
+    # Alembic uses exactly one version_num column. Additional columns can
+    # conceal foreign lineage metadata in a partially restored database;
+    # do not silently treat that schema as a verified ReefVision revision.
+    unexpected_version_columns = sorted(version_columns - {"version_num"})
+    if unexpected_version_columns:
+        raise RuntimeError(
+            "Unsafe ReefVision Alembic version table with unexpected columns: "
+            f"{unexpected_version_columns}. Preserve the database and reconcile "
+            "migration provenance without stamping or rewriting research data."
+        )
     revision_rows: tuple[str, ...] = tuple(
         connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
     )
