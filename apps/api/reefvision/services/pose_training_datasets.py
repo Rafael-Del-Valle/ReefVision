@@ -82,7 +82,12 @@ def frozen_pose_item_fingerprints_match(
     # A re-signed, emptied dataset is not scientist-verified training truth.
     # Freezing requires at least one verified item, even if the row count,
     # manifest, and checksum have all been changed to agree on zero.
-    if (\n        not isinstance(dataset.item_count, int)\n        or isinstance(dataset.item_count, bool)\n        or dataset.item_count < 1\n        or len(rows) != dataset.item_count\n    ):
+    if (
+        not isinstance(dataset.item_count, int)
+        or isinstance(dataset.item_count, bool)
+        or dataset.item_count < 1
+        or len(rows) != dataset.item_count
+    ):
         return False
 
     # A matching manifest and item_sha256 column cannot prove that the
