@@ -713,6 +713,19 @@ def test_native_pose_training_package_is_deterministic_and_verified_only(
             if line.strip()
         ]
 
+        # Validate the exported checksum index against the actual package bytes,
+        # rather than only comparing two ZIP downloads from the same code path.
+        checksum_lines = archive.read("SHA256SUMS").decode("ascii").splitlines()
+        indexed_files = {}
+        for line in checksum_lines:
+            digest, separator, filename = line.partition("  ")
+            assert separator and len(digest) == 64
+            assert filename in names and filename != "SHA256SUMS"
+            assert filename not in indexed_files
+            assert hashlib.sha256(archive.read(filename)).hexdigest() == digest
+            indexed_files[filename] = digest
+        assert set(indexed_files) == names - {"SHA256SUMS"}
+
     assert manifest["truth_policy"] == "scientist_verified_only"
     assert manifest["pending_candidates_included"] is False
     assert manifest["skipped_candidates_included"] is False
