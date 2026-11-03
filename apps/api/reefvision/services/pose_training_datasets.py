@@ -375,6 +375,7 @@ class PoseTrainingDatasetService:
             )
         if (
             not isinstance(manifest.get("items"), list)
+            or type(manifest.get("item_count")) is not int
             or manifest.get("item_count") != dataset.item_count
             or len(manifest["items"]) != dataset.item_count
         ):
