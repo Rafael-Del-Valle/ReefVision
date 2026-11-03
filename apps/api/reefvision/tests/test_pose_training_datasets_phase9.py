@@ -436,6 +436,49 @@ def test_freeze_rejects_changed_scientist_review_attribution(
         assert session.query(PoseTrainingDataset).count() == 0
 
 
+@pytest.mark.parametrize(
+    "changed_field",
+    ["source_track_revision", "candidate_provenance_sha256", "verified_pose_sha256"],
+)
+def test_freeze_rejects_modified_scientist_correction_evidence(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    changed_field: str,
+) -> None:
+    # Reuse a real saved scientist-verification round, not a synthetic
+    # correction: independently altered audit evidence must block freezing.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        correction = session.get(PoseLandmarkCorrection, candidate.correction_id)
+        assert correction is not None
+        if changed_field == "verified_pose_sha256":
+            after = dict(correction.after_json)
+            after[changed_field] = "0" * 64
+            correction.after_json = after
+        else:
+            before = dict(correction.before_json)
+            before[changed_field] = (
+                -1 if changed_field == "source_track_revision" else "0" * 64
+            )
+            correction.before_json = before
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "scientist correction evidence changed" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
 def test_freeze_rejects_changed_candidate_acquisition_provenance(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
