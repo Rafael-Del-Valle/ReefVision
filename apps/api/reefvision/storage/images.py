@@ -125,8 +125,14 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
     """
     if isinstance(value, float):
         return value if math.isfinite(value) else None
-    if value is None or isinstance(value, (str, int, bool)):
+    if isinstance(value, bool) or value is None or isinstance(value, str):
         return value
+    if isinstance(value, int):
+        # Python 3.11+ JSON serialization refuses decimal integers beyond
+        # the interpreter digit limit. Vendor EXIF values are advisory: an
+        # absurdly large integer must not turn a valid image into a 500.
+        # 13,000 binary bits are below the default 4,300 decimal-digit limit.
+        return value if value.bit_length() <= 13_000 else None
     if isinstance(value, (tuple, list, dict)):
         if _depth >= 32:
             return None
