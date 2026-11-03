@@ -69,12 +69,10 @@ def test_rehashed_two_date_series_cannot_reuse_one_annotation_link(
 ) -> None:
     original = _dated_artifact(client)
     assert len(original.candidates) == 2
-    assert (
-        EcologyMeasurementCandidatesResponse.model_validate(
-            original.model_dump(mode="json")
-        ).review_gate
-        == "scientist_review_required"
+    parsed = EcologyMeasurementCandidatesResponse.model_validate(
+        original.model_dump(mode="json")
     )
+    assert parsed.review_gate == "scientist_review_required"
     baseline, final = original.candidates
     assert baseline.calibration_evidence_id != final.calibration_evidence_id
     forged_final = final.model_copy(
