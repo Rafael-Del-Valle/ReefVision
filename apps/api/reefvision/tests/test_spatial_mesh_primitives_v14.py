@@ -282,8 +282,12 @@ def test_duplicate_geometry_with_distinct_vertex_indices_is_rejected() -> None:
 
     request = MeshPreviewRequest(
         vertices=[
-            [0, 0, 0], [3, 0, 0], [0, 4, 0],
-            [0, 0, 0], [3, 0, 0], [0, 4, 0],
+            [0, 0, 0],
+            [3, 0, 0],
+            [0, 4, 0],
+            [0, 0, 0],
+            [3, 0, 0],
+            [0, 4, 0],
         ],
         faces=[[0, 1, 2], [5, 4, 3]],
         meters_per_unit=0.5,
