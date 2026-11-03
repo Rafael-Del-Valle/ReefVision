@@ -148,7 +148,14 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
             ]
         finally:
             _active.remove(identity)
-    return str(value) if not isinstance(value, bytes) else None
+    if isinstance(value, bytes):
+        return None
+    # Third-party EXIF value wrappers may raise while formatting. Metadata
+    # is advisory; an undecodable wrapper must not reject valid image pixels.
+    try:
+        return str(value)
+    except (Exception,):
+        return None
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
     """Return verified UTC exposure time, never digitization or file-modification time."""
