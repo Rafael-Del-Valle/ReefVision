@@ -98,8 +98,11 @@ def test_projected_scientific_artifact_rejects_coerced_json_evidence(
     assert original[section]
     tampered = deepcopy(original)
     tampered[section][0][field] = replacement
-    with pytest.raises(PydanticValidationError, match=message):
+    with pytest.raises(PydanticValidationError) as exc:
         EcologyMeasurementCandidatesResponse.model_validate(tampered)
+    # The source fingerprint is an earlier fail-closed guard; either it or
+    # the field-level numeric validator must reject a forged saved result.
+    assert message in str(exc.value) or "source fingerprint mismatch" in str(exc.value)
 
 
 def test_standalone_endpoint_numbers_preserve_real_numeric_types(
