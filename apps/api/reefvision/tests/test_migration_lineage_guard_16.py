@@ -689,3 +689,24 @@ def test_revision_0041_rejects_nullable_bulk_identity_without_writes(
         assert connection.scalar(text("SELECT value FROM preserved")) == "original research data"
         assert connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
     engine.dispose()
+
+
+@pytest.mark.parametrize("foreign_head", [None, 7])
+def test_review_lineage_mixed_type_concurrent_head_fails_closed(
+    foreign_head: str | int | None,
+) -> None:
+    """Corrupt multi-head stamps must raise a controlled error without writes."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0038')"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:head)"), {"head": foreign_head}
+        )
+        connection.execute(text("CREATE TABLE preserved (value TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO preserved VALUES ('biological evidence')"))
+        with pytest.raises(RuntimeError, match="concurrent review revisions"):
+            assert_compatible_revision_0038(connection)
+        assert connection.scalar(text("SELECT value FROM preserved")) == "biological evidence"
+        assert connection.scalar(text("SELECT COUNT(*) FROM alembic_version")) == 2
+    engine.dispose()
