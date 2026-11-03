@@ -386,3 +386,55 @@ def test_malformed_alembic_table_refuses_upgrade_without_mutating_science(
             desktop.run_pending_migrations(settings)
         assert snapshot() == before
     engine.dispose()
+
+
+@pytest.mark.parametrize("extra_column", ["foreign_lineage", "restored_revision"])
+def test_extra_alembic_version_column_refuses_desktop_upgrade_without_mutation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, extra_column: str
+) -> None:
+    """An augmented revision table cannot establish trusted migration provenance."""
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'extra-version-column.sqlite'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE observations (id TEXT PRIMARY KEY, value TEXT)"))
+        connection.execute(text("INSERT INTO observations VALUES ('coral-1', 'original')"))
+        connection.execute(
+            text(f"CREATE TABLE alembic_version (version_num TEXT, {extra_column} TEXT)")
+        )
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES ('0037', 'unreviewed lineage')")
+        )
+
+    def snapshot() -> tuple[object, ...]:
+        with engine.connect() as connection:
+            return (
+                tuple(
+                    connection.execute(
+                        text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+                    ).all()
+                ),
+                tuple(connection.execute(text("SELECT * FROM observations")).all()),
+                tuple(connection.execute(text("SELECT * FROM alembic_version")).all()),
+            )
+
+    before = snapshot()
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail("Untrusted revision schema reached Alembic"),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    for _ in range(2):
+        with engine.connect() as connection, pytest.raises(
+            RuntimeError, match="unexpected columns"
+        ):
+            assert_compatible_revision_0038(connection)
+        with pytest.raises(RuntimeError, match="unexpected columns"):
+            desktop.run_pending_migrations(settings)
+        assert snapshot() == before
+    engine.dispose()
