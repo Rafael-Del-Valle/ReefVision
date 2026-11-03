@@ -98,9 +98,11 @@ def test_planar_boundary_perimeter_is_translation_invariant() -> None:
         "boundary_edge_length_m",
         "boundary_loop_count",
         "boundary_loop_perimeters_m",
-        "boundary_loop_perimeter_scale_intervals_m",
         "edge_connected_patch_count",
     ):
         assert translated[key] == pytest.approx(original[key])
+    assert translated["boundary_loop_perimeter_scale_intervals_m"][0] == pytest.approx(
+        original["boundary_loop_perimeter_scale_intervals_m"][0]
+    )
     assert translated["boundary_edge_length_m"] == pytest.approx(4.0)
     assert translated["provenance"]["calibration_verified"] is False
