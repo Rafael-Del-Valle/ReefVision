@@ -153,6 +153,13 @@ class EcologySamplingDateQC(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
+    @field_validator("candidate_count", mode="before")
+    @classmethod
+    def require_explicit_qc_count(cls, value: object) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("Ecological QC count must be a JSON integer")
+        return value
+
 
 class EcologyProjectedVisitCoverage(BaseModel):
     """Observed linked measurements by UTC date; not a registered visit roster."""
@@ -170,6 +177,13 @@ class EcologyProjectedVisitCoverage(BaseModel):
     linked_measurement_count: int = Field(ge=1)
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+    @field_validator("linked_measurement_count", mode="before")
+    @classmethod
+    def require_explicit_visit_count(cls, value: object) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("Ecological visit count must be a JSON integer")
+        return value
 
 
 class EcologyProjectedEndpointChange(BaseModel):
@@ -204,6 +218,24 @@ class EcologyProjectedEndpointChange(BaseModel):
     observed_timepoint_count: int = Field(ge=2)
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+    @field_validator(
+        "baseline_value",
+        "final_value",
+        "absolute_change",
+        "percent_change",
+        "elapsed_days",
+        "projected_absolute_change_per_day",
+        "projected_baseline_percent_change_per_day",
+        mode="before",
+    )
+    @classmethod
+    def require_explicit_endpoint_numbers(cls, value: object) -> object:
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, (int, float))
+        ):
+            raise ValueError("Projected endpoint numeric evidence must be a JSON number")
+        return value
 
     @field_validator("identity_revision", "observed_timepoint_count", mode="before")
     @classmethod
@@ -316,6 +348,15 @@ class EcologyProjectedUnitSummary(BaseModel):
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
 
+    @field_validator("mean_absolute_change", "mean_percent_change", mode="before")
+    @classmethod
+    def require_explicit_unit_means(cls, value: object) -> object:
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, (int, float))
+        ):
+            raise ValueError("Ecological unit mean must be a JSON number")
+        return value
+
 
 class EcologyProjectedPopulationSummary(BaseModel):
     """Equal-weight declared-unit summary, not independent-unit verification."""
@@ -345,6 +386,28 @@ class EcologyProjectedPopulationSummary(BaseModel):
     independent_unit_inference_allowed: Literal[False] = False
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+    @field_validator("declared_unit_count", "contributing_organism_count", mode="before")
+    @classmethod
+    def require_explicit_population_counts(cls, value: object) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("Ecological population count must be a JSON integer")
+        return value
+
+    @field_validator(
+        "mean_unit_absolute_change",
+        "mean_unit_percent_change",
+        "sample_sd_unit_absolute_change",
+        "sample_sd_unit_percent_change",
+        mode="before",
+    )
+    @classmethod
+    def require_explicit_population_numbers(cls, value: object) -> object:
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, (int, float))
+        ):
+            raise ValueError("Ecological population statistic must be a JSON number")
+        return value
 
 
 class EcologyCandidateReport(BaseModel):
@@ -480,6 +543,13 @@ class EcologyMeasurementCandidatesResponse(BaseModel):
     input_sha256: str
     evidence_level: Literal["linked_unverified"] = "linked_unverified"
     review_gate: Literal["scientist_review_required"] = "scientist_review_required"
+
+    @field_validator("candidate_count", mode="before")
+    @classmethod
+    def require_explicit_source_count(cls, value: object) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("Ecological candidate count must be a JSON integer")
+        return value
 
     @model_validator(mode="after")
     def require_current_lineage_digests(self) -> EcologyMeasurementCandidatesResponse:
