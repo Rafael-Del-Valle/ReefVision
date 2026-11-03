@@ -32,9 +32,7 @@ def test_planar_square_retriangulation_preserves_calibrated_area_and_extent() ->
         assert measurement["surface_area_m2"] == pytest.approx(1.0)
         assert measurement["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(sqrt(2))
         assert measurement["area_scale_uncertainty_m2"] == pytest.approx(0.2)
-        assert measurement["surface_area_scale_interval_m2"] == pytest.approx(
-            [0.81, 1.21]
-        )
+        assert measurement["surface_area_scale_interval_m2"] == pytest.approx([0.81, 1.21])
         assert measurement["edge_connected_patch_count"] == 1
         assert measurement["enclosed_volume_m3"] is None
         assert measurement["provenance"]["calibration_verified"] is False
