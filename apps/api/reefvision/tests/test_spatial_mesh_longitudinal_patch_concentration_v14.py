@@ -386,6 +386,23 @@ def test_legacy_missing_topology_count_remains_readable() -> None:
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
 
 
+@pytest.mark.parametrize("timepoint", [0, 1])
+def test_missing_legacy_patch_count_preserves_workflow_parity(timepoint: int) -> None:
+    """Absent historical patch counts are unknown, not a fabricated zero."""
+    observations = [_preview(payload) for payload in _meshes()]
+    observations[timepoint].pop("edge_connected_patch_count")
+    expected = compare_mesh_observations(*observations)
+    assert expected["ranked_patch_area_profile_distance"] == pytest.approx(0.25)
+    assert expected["provenance"]["specimen_identity_verified"] is False
+
+    inputs = {
+        port: [SimpleNamespace(data_type="mesh_measurement_preview", payload_json=observation)]
+        for port, observation in zip(("before", "after"), observations, strict=True)
+    }
+    actual = execute_mesh_longitudinal_comparison(None, None, "project-1", {}, inputs)
+    assert actual[0]["payload"] == expected
+
+
 def test_missing_legacy_distribution_does_not_invent_zero_change() -> None:
     before, after = (_preview(payload) for payload in _meshes())
     for record in (before, after):
