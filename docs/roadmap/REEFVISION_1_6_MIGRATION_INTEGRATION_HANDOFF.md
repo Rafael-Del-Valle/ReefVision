@@ -251,3 +251,8 @@ without reviewed provenance.
 **Release HOLD:** integrated exact-head CI, 1.1/1.6 revision collision
 reconciliation, representative biological-data validation, native Windows
 MSI/CAB upgrade/rollback and installed GUI acceptance remain mandatory.
+
+
+### Preserved SQLite views without Alembic provenance (2026-11-02)
+
+A SQLite backup can retain a view referring to a missing biological table while the `alembic_version` table is absent or empty. Table-only inspection incorrectly classifies this schema as a fresh database. The 1.6 desktop preflight now inspects views as well as tables and refuses migrations without revision provenance. Two parameterized read-only regressions check both absent and empty version tables, repeated desktop startup rejection, and byte-for-byte SQL schema snapshots. This is a safety hold, **not** a migration reconciliation or permission to stamp damaged databases. Existing saved Workflow Builder graphs and reviewer records must remain untouched. Full CI and native Windows validation are still required.
