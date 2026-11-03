@@ -101,6 +101,29 @@ describe("parseGalleryPageDraft", () => {
 });
 
 describe("resolveGalleryNavigation", () => {
+  it("does not navigate using stale or malformed pagination state", () => {
+    const valid = {
+      action: "next" as const,
+      index: 2,
+      itemCount: 3,
+      page: 1,
+      pages: 2,
+      wrap: true,
+    };
+    for (const index of [-1, 3, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
+      expect(resolveGalleryNavigation({ ...valid, index })).toBeNull();
+    }
+    for (const page of [0, 3, Number.NaN, 1.5]) {
+      expect(resolveGalleryNavigation({ ...valid, page })).toBeNull();
+    }
+    for (const pages of [0, Number.POSITIVE_INFINITY, 1.5]) {
+      expect(resolveGalleryNavigation({ ...valid, pages })).toBeNull();
+    }
+    for (const itemCount of [0, Number.NaN, 1.5]) {
+      expect(resolveGalleryNavigation({ ...valid, itemCount })).toBeNull();
+    }
+  });
+
   it("moves within a page without requesting another page", () => {
     expect(
       resolveGalleryNavigation({
