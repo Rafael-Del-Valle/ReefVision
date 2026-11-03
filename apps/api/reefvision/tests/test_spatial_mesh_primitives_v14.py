@@ -184,3 +184,36 @@ def test_rigid_translation_preserves_calibrated_surface_geometry() -> None:
     )
     assert translated["edge_connected_patch_count"] == 1
     assert translated["provenance"]["calibration_verified"] is False
+
+
+def test_rigid_axis_rotation_preserves_surface_area_and_scale_uncertainty() -> None:
+    """A quarter-turn changes imported axes but not calibrated physical surface area."""
+    from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+    from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
+
+    vertices = [[0, 0, 0], [3, 0, 0], [0, 4, 0]]
+    request = MeshPreviewRequest(
+        vertices=vertices,
+        faces=[[0, 1, 2]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic 90-degree rigid rotation reference",
+        relative_scale_uncertainty=0.1,
+    )
+    baseline = preview_from_request(request)
+    rotated = preview_from_request(
+        request.model_copy(update={"vertices": [[-y, x, z] for x, y, z in vertices]})
+    )
+    assert baseline["surface_area_m2"] == pytest.approx(1.5)
+    assert rotated["surface_area_m2"] == pytest.approx(baseline["surface_area_m2"])
+    assert rotated["area_scale_uncertainty_m2"] == pytest.approx(
+        baseline["area_scale_uncertainty_m2"]
+    )
+    assert rotated["surface_area_scale_interval_m2"] == pytest.approx(
+        baseline["surface_area_scale_interval_m2"]
+    )
+    assert rotated["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
+        baseline["axis_aligned_bounding_box_diagonal_m"]
+    )
+    assert rotated["edge_connected_patch_count"] == 1
+    assert rotated["provenance"]["calibration_verified"] is False
