@@ -148,8 +148,6 @@ def test_unreferenced_vertices_do_not_inflate_calibrated_mesh_extent() -> None:
     assert orphan["preview_camera_target_in_source_frame_m"] == pytest.approx(
         baseline["preview_camera_target_in_source_frame_m"]
     )
-    assert orphan["preview_camera_radius_m"] == pytest.approx(
-        baseline["preview_camera_radius_m"]
-    )
+    assert orphan["preview_camera_radius_m"] == pytest.approx(baseline["preview_camera_radius_m"])
     assert orphan["unreferenced_vertex_count"] == 1
     assert orphan["provenance"]["calibration_verified"] is False
