@@ -71,7 +71,14 @@ describe("gallery preferences", () => {
     const key = "reefvision.gallery.project-a.v1";
     const saved = storage.getItem(key);
 
-    for (const page of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53]) {
+    for (const page of [
+      0,
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      2 ** 53,
+    ]) {
       writeGalleryPreference(storage, "project-a", {
         imageId: "stale-image",
         page,
