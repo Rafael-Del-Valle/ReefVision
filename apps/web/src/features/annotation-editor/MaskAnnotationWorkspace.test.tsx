@@ -364,6 +364,29 @@ it("ignores an in-flight fill after switching images", async () => {
   expect(screen.getByText("0 masks")).toBeInTheDocument();
 });
 
+it("ignores an in-flight Smart Close after switching images", async () => {
+  let resolve!: (value: { points: typeof points }) => void;
+  vi.mocked(generateSmartClosePolygon).mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const { rerender, queryClient } = await mount();
+  fireEvent.click(screen.getByTestId("activate-smart-close-tool"));
+  seed();
+  expect(generateSmartClosePolygon).toHaveBeenCalledTimes(1);
+  rerender(
+    <QueryClientProvider client={queryClient}>
+      {workspace("image-2")}
+    </QueryClientProvider>,
+  );
+  await screen.findByText("image-2.png");
+  await act(async () => resolve({ points }));
+  expect(screen.getByText("0 masks")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+  expect(saveAnnotations).not.toHaveBeenCalled();
+});
+
 it("requires an active class before filling", async () => {
   vi.mocked(getAnnotationSession).mockResolvedValue(session("image-1", false));
   await mount();
