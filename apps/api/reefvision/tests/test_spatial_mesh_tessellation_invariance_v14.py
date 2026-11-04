@@ -131,6 +131,7 @@ def test_closed_tetrahedron_volume_scales_cubically_without_verified_calibration
         )
         assert measurement["provenance"]["calibration_verified"] is False
 
+
 def test_closed_tetrahedron_translation_preserves_volume_and_scale_interval() -> None:
     """Moving a watertight reconstruction cannot create apparent volume growth."""
     vertices = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]
