@@ -83,7 +83,8 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
             )
         with pytest.raises(RuntimeError, match="revision .* collision"):
             assert_compatible_revision_0038(connection)
-        actual_revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+        version_query = text("SELECT version_num FROM alembic_version")
+        actual_revision = connection.scalar(version_query)
         assert actual_revision == revision
         assert connection.scalar(
             text("SELECT payload_json FROM scientific_records")
