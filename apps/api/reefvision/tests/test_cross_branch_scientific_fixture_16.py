@@ -5,15 +5,20 @@ This fixture intentionally mirrors 1.1's 0038_scientific_data.py and
 The 1.6 desktop must reject these populated databases before any DDL.
 """
 
+from types import SimpleNamespace
+
 import pytest
 from sqlalchemy import create_engine, text
 
+from reefvision import desktop
+from reefvision.db import session
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 
 
 @pytest.mark.parametrize("revision", ["0038", "0039"])
 def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
     revision: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
@@ -95,4 +100,32 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
                 connection.scalar(text("SELECT definition_sha256 FROM computed_metric_definitions"))
                 == "definition-sha"
             )
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail(
+            "Scientific lineage collision must not reach Alembic DDL"
+        ),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    with pytest.raises(RuntimeError, match=r"revision .* collision"):
+        desktop.run_pending_migrations(settings)
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        assert connection.scalar(text("SELECT payload_json FROM scientific_records")) == (
+            '{"count": 12}'
+        )
+        assert connection.scalar(text("SELECT payload_json FROM environmental_cache_entries")) == (
+            '{"celsius": 22.2}'
+        )
+        if revision == "0039":
+            assert connection.scalar(
+                text("SELECT definition_sha256 FROM computed_metric_definitions")
+            ) == "definition-sha"
     engine.dispose()
