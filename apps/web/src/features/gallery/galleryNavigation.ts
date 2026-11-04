@@ -32,7 +32,7 @@ export function readGalleryPreference(
     const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== "object") return { ...DEFAULT_PREFERENCE };
     const candidate = parsed as Record<string, unknown>;
-    if (candidate.imageId !== null && typeof candidate.imageId !== "string") {
+    if (candidate.imageId !== null && (typeof candidate.imageId !== "string" || candidate.imageId.trim().length === 0)) {
       return { ...DEFAULT_PREFERENCE };
     }
     // Corrupted persisted pages such as 1e100 are integers in JavaScript but
@@ -88,7 +88,7 @@ export function writeGalleryPreference(
   if (
     !Number.isSafeInteger(preference.page) ||
     preference.page < 1 ||
-    (preference.imageId !== null && typeof preference.imageId !== "string") ||
+    (preference.imageId !== null &&\n      (typeof preference.imageId !== "string" || preference.imageId.trim().length === 0)) ||
     typeof preference.wrap !== "boolean"
   ) {
     return;
