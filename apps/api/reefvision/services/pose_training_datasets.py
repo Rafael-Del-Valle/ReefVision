@@ -141,7 +141,8 @@ def frozen_pose_item_fingerprints_match(
             or not row.video_sha256.strip()
             or acquisition.get("video_sha256") != row.video_sha256
             or acquisition.get("video_track_id") != row.video_track_id
-            or acquisition.get("focus_frame") != row.frame_index
+            or type(acquisition.get("focus_frame")) is not int
+            or acquisition["focus_frame"] != row.frame_index
             or acquisition.get("pose_schema_id") != row.pose_schema_id
             or acquisition.get("pose_schema_revision") != row.pose_schema_revision
         ):
@@ -177,7 +178,8 @@ def frozen_pose_item_fingerprints_match(
         if (
             not isinstance(canonical_pose, dict)
             or canonical_pose.get("schema_version") != "reefvision-canonical-pose-frame-0001"
-            or canonical_pose.get("frame_index") != row.frame_index
+            or type(canonical_pose.get("frame_index")) is not int
+            or canonical_pose["frame_index"] != row.frame_index
         ):
             return False
         # A matching recomputed hash cannot make an empty, re-signed pose
