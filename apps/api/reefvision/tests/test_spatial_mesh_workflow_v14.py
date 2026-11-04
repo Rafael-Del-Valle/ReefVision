@@ -513,6 +513,15 @@ def test_saved_mesh_workflow_closed_volume_reference(client: TestClient) -> None
     )
     expected = standalone.json()
     assert artifact["enclosed_volume_m3"] == pytest.approx(4 / 3)
+    # Volume scales cubically with linear calibration, not linearly or quadratically.
+    # These independently derived bounds must survive standalone and saved execution.
+    expected_volume_interval = [(4 / 3) * 0.9**3, (4 / 3) * 1.1**3]
+    assert expected["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        expected_volume_interval
+    )
+    assert artifact["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        expected_volume_interval
+    )
     assert artifact["boundary_edge_length_m"] == pytest.approx(0.0)
     for key in (
         "enclosed_volume_m3",
