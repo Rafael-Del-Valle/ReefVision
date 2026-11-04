@@ -159,6 +159,29 @@ describe("TrainingRunDetail", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders long finite training histories without overflowing function argument limits", () => {
+    const values = Array.from({ length: 150_000 }, (_, index) => index / 150_000);
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          metrics_history: {
+            "train/box_loss": values,
+          },
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    const chart = screen.getByRole("img", {
+      name: /train box loss across 150000 epochs/i,
+    });
+    expect(chart.querySelector("polyline")?.getAttribute("points")).not.toMatch(
+      /NaN|Infinity/,
+    );
+  });
+
   it("shows every available detection, segmentation, and validation metric", () => {
     render(
       <TrainingRunDetail
