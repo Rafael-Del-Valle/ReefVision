@@ -541,19 +541,23 @@ class PoseTrainingDatasetService:
         track: VideoTrack,
         frame_index: int,
     ) -> dict[str, Any]:
-        keyframe = next(
-            (
-                item
-                for item in track.keyframes_json
-                if isinstance(item, dict)
-                and type(item.get("frame")) is int
-                and item["frame"] == frame_index
-            ),
-            None,
-        )
-        if keyframe is None:
-            raise ConflictError("Verified pose frame no longer exists on the canonical track")
-        return dict(keyframe)
+        # Multiple entries for the same frame make the verified pose ambiguous:
+        # choosing the first silently depends on JSON ordering.
+        keyframes = track.keyframes_json
+        if not isinstance(keyframes, list):
+            raise ConflictError("Canonical pose track keyframes must be a list")
+        matches = [
+            item
+            for item in keyframes
+            if isinstance(item, dict)
+            and type(item.get("frame")) is int
+            and item["frame"] == frame_index
+        ]
+        if len(matches) != 1:
+            raise ConflictError(
+                "Verified pose frame must occur exactly once on the canonical track"
+            )
+        return dict(matches[0])
 
     def _item_snapshot(
         self,
