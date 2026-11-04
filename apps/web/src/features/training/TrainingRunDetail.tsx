@@ -61,8 +61,14 @@ function bestEpoch(
 
 function MetricChart({ label, values }: { label: string; values: number[] }) {
   if (values.length < 2) return null;
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
+  // Avoid spreading a long training history into function arguments: large
+  // runs can exceed the JavaScript engine's argument limit and crash the view.
+  let minimum = Number.POSITIVE_INFINITY;
+  let maximum = Number.NEGATIVE_INFINITY;
+  for (const value of values) {
+    if (value < minimum) minimum = value;
+    if (value > maximum) maximum = value;
+  }
   const range = maximum - minimum || 1;
   const points = values
     .map(
