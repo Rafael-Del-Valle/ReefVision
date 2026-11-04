@@ -1014,3 +1014,33 @@ def test_freeze_rejects_malformed_source_model_ids_without_dataset(
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
         assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+@pytest.mark.parametrize("bad_ids", [{"unexpected": "mapping"}, [None], [""]])
+def test_freeze_rejects_malformed_source_job_ids_without_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    bad_ids: object,
+) -> None:
+    # Persisted source training-job lineage must not be silently coerced into
+    # dictionary keys or invalid identifiers during scientist-verified freeze.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        candidate.source_job_ids_json = bad_ids
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject malformed source job provenance"},
+    )
+    assert response.status_code == 409, response.text
+    assert "source job IDs must be a list" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
