@@ -414,9 +414,12 @@ it.each([
       { timeout: 3000 },
     );
     expect(screen.getByText("0 masks")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+    expect(generatePolygonFill).toHaveBeenCalledTimes(1);
     expect(saveAnnotations).not.toHaveBeenCalled();
   },
 );
+
 it("refreshes same-image mask state when a newer annotation session replaces cached data", async () => {
   const staleSession = {
     ...session(),
