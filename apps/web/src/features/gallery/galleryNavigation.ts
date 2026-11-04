@@ -52,7 +52,7 @@ export function readGalleryPreference(
     // A saved page without a selected image is not a meaningful restore target.
     // Start from the first page so the initial camera image remains visible.
     return {
-      imageId: candidate.imageId,
+      imageId: typeof candidate.imageId === "string" ? candidate.imageId.trim() : null,
       page: candidate.imageId === null ? 1 : candidate.page,
       wrap: candidate.wrap === true,
     };
@@ -102,7 +102,11 @@ export function writeGalleryPreference(
   try {
     storage.setItem(
       preferenceKey(projectId),
-      JSON.stringify({ ...preference, page: preference.imageId === null ? 1 : preference.page }),
+      JSON.stringify({
+        ...preference,
+        imageId: typeof preference.imageId === "string" ? preference.imageId.trim() : null,
+        page: preference.imageId === null ? 1 : preference.page,
+      }),
     );
   } catch {
     // A blocked or full preference store must not prevent annotation work.
