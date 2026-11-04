@@ -54,8 +54,11 @@ function bestEpoch(
   const epochs = history(run).epoch;
   // A truncated or malformed epoch column must not produce a fabricated best
   // epoch. Without an epoch column, the metric index is explicitly 1-based.
-  if (epochs && (epochs.length !== metric[1].length ||
-    !epochs.every((epoch) => Number.isSafeInteger(epoch) && epoch > 0))) {
+  if (
+    epochs &&
+    (epochs.length !== metric[1].length ||
+      !epochs.every((epoch) => Number.isSafeInteger(epoch) && epoch > 0))
+  ) {
     return null;
   }
   return {
