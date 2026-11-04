@@ -414,6 +414,7 @@ it.each([
       { timeout: 3000 },
     );
     expect(screen.getByText("0 masks")).toBeInTheDocument();
+    expect(saveAnnotations).not.toHaveBeenCalled();
   },
 );
 it("refreshes same-image mask state when a newer annotation session replaces cached data", async () => {
