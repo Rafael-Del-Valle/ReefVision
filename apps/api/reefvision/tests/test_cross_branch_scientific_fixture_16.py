@@ -116,9 +116,13 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
     # Snapshot every persisted row as well as DDL: rejecting a foreign lineage
     # must not silently mutate fields omitted by the targeted assertions above.
     with engine.connect() as connection:
-        tables = connection.execute(
-            text("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-        ).scalars().all()
+        tables = (
+            connection.execute(
+                text("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+            )
+            .scalars()
+            .all()
+        )
         rows_before = {
             table: connection.execute(text(f'SELECT * FROM "{table}" ORDER BY rowid')).all()
             for table in tables
@@ -148,9 +152,10 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
             '{"celsius": 22.2}'
         )
         if revision == "0039":
-            assert connection.scalar(
-                text("SELECT definition_sha256 FROM computed_metric_definitions")
-            ) == "definition-sha"
+            assert (
+                connection.scalar(text("SELECT definition_sha256 FROM computed_metric_definitions"))
+                == "definition-sha"
+            )
     with engine.connect() as connection:
         schema_after = connection.execute(
             text(
@@ -171,24 +176,35 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
     reopened = create_engine(f"sqlite+pysqlite:///{database_path}")
     try:
         with reopened.connect() as connection:
-            assert connection.execute(
-                text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == revision
-            assert connection.execute(
-                text("SELECT payload_json FROM scientific_records")
-            ).scalar_one() == '{"count": 12}'
-            assert connection.execute(
-                text("SELECT payload_json FROM environmental_cache_entries")
-            ).scalar_one() == '{"celsius": 22.2}'
+            assert (
+                connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == revision
+            )
+            assert (
+                connection.execute(text("SELECT payload_json FROM scientific_records")).scalar_one()
+                == '{"count": 12}'
+            )
+            assert (
+                connection.execute(
+                    text("SELECT payload_json FROM environmental_cache_entries")
+                ).scalar_one()
+                == '{"celsius": 22.2}'
+            )
             if revision == "0039":
-                assert connection.execute(
-                    text("SELECT definition_sha256 FROM computed_metric_definitions")
-                ).scalar_one() == "definition-sha"
-            assert connection.execute(
-                text(
-                    "SELECT type, name, sql FROM sqlite_master "
-                    "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+                assert (
+                    connection.execute(
+                        text("SELECT definition_sha256 FROM computed_metric_definitions")
+                    ).scalar_one()
+                    == "definition-sha"
                 )
-            ).all() == schema_before
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT type, name, sql FROM sqlite_master "
+                        "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+                    )
+                ).all()
+                == schema_before
+            )
     finally:
         reopened.dispose()
