@@ -362,6 +362,9 @@ it("ignores an in-flight fill after switching images", async () => {
   await screen.findByText("image-2.png");
   await act(async () => resolve({ points }));
   expect(screen.getByText("0 masks")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+  expect(generatePolygonFill).toHaveBeenCalledTimes(1);
+  expect(saveAnnotations).not.toHaveBeenCalled();
 });
 
 it("ignores an in-flight Smart Close after switching images", async () => {
