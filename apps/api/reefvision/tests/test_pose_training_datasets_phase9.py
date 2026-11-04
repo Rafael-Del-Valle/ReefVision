@@ -1044,3 +1044,34 @@ def test_freeze_rejects_malformed_source_job_ids_without_dataset(
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
         assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+@pytest.mark.parametrize("bad_provenance", [{"unexpected": "mapping"}, [["project_id", "fake"]], ["invalid"]])
+def test_freeze_rejects_nonobject_acquisition_provenance_without_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    bad_provenance: object,
+) -> None:
+    # Exercise an actual persisted scientist-verified round. Re-signing the
+    # candidate checksum must not make a malformed acquisition record valid.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        candidate.provenance_json = bad_provenance
+        candidate.provenance_sha256 = canonical_json_sha256(bad_provenance)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject malformed acquisition provenance"},
+    )
+    assert response.status_code == 409, response.text
+    assert "acquisition provenance must be a JSON object" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
