@@ -634,7 +634,8 @@ class PoseTrainingDatasetService:
             or provenance.get("project_id") != project_id
             or provenance.get("video_id") != video.id
             or provenance.get("video_track_id") != track.id
-            or provenance.get("focus_frame") != candidate.focus_frame
+            or type(provenance.get("focus_frame")) is not int
+            or provenance["focus_frame"] != candidate.focus_frame
             or provenance.get("pose_schema_id") != candidate.pose_schema_id
             or provenance.get("pose_schema_revision") != candidate.pose_schema_revision
         ):
