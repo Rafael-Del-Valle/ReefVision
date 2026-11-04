@@ -420,6 +420,13 @@ class PoseTrainingDatasetService:
         if revision is None:
             raise ConflictError("Verified pose schema revision no longer exists")
 
+        # A damaged persisted schema must not be silently converted from a
+        # mapping into a list of keys when freezing verified training truth.
+        if not isinstance(revision.groups_json, list) or not isinstance(
+            revision.expanded_labels_json, list
+        ):
+            raise ConflictError("Verified pose schema revision has malformed label collections")
+
         return {
             "schema_version": revision.schema_version,
             "schema_id": revision.schema_id,
