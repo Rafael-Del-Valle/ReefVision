@@ -138,6 +138,8 @@ export function resolveGalleryNavigation({
     page > pages ||
     index < 0 ||
     index >= itemCount ||
+    typeof wrap !== "boolean" ||
+    !(["previous", "next", "first", "last"] as string[]).includes(action) ||
     (pages === 1 && itemCount === 1)
   ) {
     return null;
