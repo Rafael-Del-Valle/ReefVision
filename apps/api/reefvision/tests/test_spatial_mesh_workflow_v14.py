@@ -650,3 +650,71 @@ def test_mesh_vertex_reindexing_preserves_scientific_measurements(
         ] == pytest.approx(expected_diagonal_squared_m2)
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize("scale", [0.01, 0.02], ids=["centimeter", "two-centimeters"])
+def test_saved_obj_workflow_calibration_scaling_reference(
+    client: TestClient, scale: float
+) -> None:
+    """A changed caller scale changes dimensional metrics, not dimensionless shape."""
+    project = create_project(client, "Calibration scaling reference")
+    base = f"/api/v1/projects/{project['id']}"
+    params = {
+        **MESH,
+        "obj_text": "v 0 0 0\\nv 2 0 0\\nv 0 3 0\\nf 1 2 3\\n",
+        "meters_per_unit": scale,
+    }
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    graph = {
+        "graph_id": "calibration-scaling-reference-v14",
+        "name": "Calibrated OBJ scaling reference",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is True
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    expected_area = 3 * scale**2
+    expected_perimeter = (5 + 13**0.5) * scale
+    for measured in (standalone.json(), artifact):
+        assert measured["surface_area_m2"] == pytest.approx(expected_area)
+        assert measured["boundary_edge_length_m"] == pytest.approx(expected_perimeter)
+        assert measured["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
+            3 / 13
+        )
+        assert measured["provenance"]["calibration_verified"] is False
+        assert measured["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["geometry_sha256"] == standalone.json()["provenance"][
+        "geometry_sha256"
+    ]
