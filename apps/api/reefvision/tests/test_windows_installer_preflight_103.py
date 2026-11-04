@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[4]
 GATE = runpy.run_path(str(ROOT / "scripts/check-windows-installer-acceptance-version.py"))
 CHECK_WORKFLOW = GATE["check_workflow"]
@@ -180,6 +179,7 @@ def test_preflight_comment_filter_removes_powershell_semicolon_comment() -> None
     assert GATE["_strip_inline_comment"]("Write-Output ok;# disabled guard") == (
         "Write-Output ok;"
     )
+
 
 @pytest.mark.parametrize(
     ("original", "replacement"),
