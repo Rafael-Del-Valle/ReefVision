@@ -479,13 +479,15 @@ def test_saved_mesh_workflow_closed_volume_reference(client: TestClient) -> None
             {"node_id": "p", "node_type": "project_source"},
             {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
         ],
-        "edges": [{
-            "edge_id": "e",
-            "source_node_id": "p",
-            "source_port_id": "project",
-            "target_node_id": "m",
-            "target_port_id": "project",
-        }],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
     }
     plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
@@ -495,9 +497,12 @@ def test_saved_mesh_workflow_closed_volume_reference(client: TestClient) -> None
     run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
