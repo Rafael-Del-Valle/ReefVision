@@ -613,6 +613,11 @@ def test_mesh_vertex_reindexing_preserves_scientific_measurements(
         for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
+    # Linear scale uncertainty propagates quadratically to measured area.
+    # Check an independent reference, not merely parity with the API.
+    expected_area_interval = [0.0003 * 0.95**2, 0.0003 * 1.05**2]
+    assert result["surface_area_scale_interval_m2"] == pytest.approx(expected_area_interval)
+    assert artifact["surface_area_scale_interval_m2"] == pytest.approx(expected_area_interval)
     assert artifact["surface_area_m2"] == pytest.approx(result["surface_area_m2"])
     assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
         result["surface_area_to_bounding_diagonal_squared_ratio"]
