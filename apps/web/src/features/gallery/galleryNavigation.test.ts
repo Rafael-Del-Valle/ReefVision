@@ -72,6 +72,20 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("restores a saved camera image from preferences written before wrap existed", () => {
+    const storage = memoryStorage({
+      "reefvision.gallery.project-a.v1": JSON.stringify({
+        imageId: "camera-original-1",
+        page: 4,
+      }),
+    });
+    expect(readGalleryPreference(storage, "project-a")).toEqual({
+      imageId: "camera-original-1",
+      page: 4,
+      wrap: false,
+    });
+  });
+
   it("rejects unsafe saved pages before loading the first camera image", () => {
     for (const page of [2 ** 53, 1e100, Number.MAX_VALUE]) {
       const storage = memoryStorage({
