@@ -209,6 +209,29 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("rejects control-character camera IDs from persisted preferences and UI writes", () => {
+    const key = "reefvision.gallery.project-a.v1";
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: false,
+    });
+    const saved = storage.getItem(key);
+    for (const imageId of ["camera\\noriginal", "camera\\u0000original", "camera\\u007foriginal"]) {
+      const corrupted = memoryStorage({
+        [key]: JSON.stringify({ imageId, page: 7, wrap: true }),
+      });
+      expect(readGalleryPreference(corrupted, "project-a")).toEqual({
+        imageId: null,
+        page: 1,
+        wrap: false,
+      });
+      writeGalleryPreference(storage, "project-a", { imageId, page: 7, wrap: true });
+      expect(storage.getItem(key)).toBe(saved);
+    }
+  });
+
   it("rejects blank image IDs without hiding the initial viewport", () => {
     for (const imageId of ["", "   "]) {
       const storage = memoryStorage({
