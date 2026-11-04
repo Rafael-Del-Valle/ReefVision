@@ -173,10 +173,7 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
                         continue
                     sanitized[name] = _json_safe(item, _active=_active, _depth=_depth + 1)
                 return sanitized
-            return [
-                _json_safe(item, _active=_active, _depth=_depth + 1)
-                for item in value
-            ]
+            return [_json_safe(item, _active=_active, _depth=_depth + 1) for item in value]
         finally:
             _active.remove(identity)
     if isinstance(value, bytes):
@@ -189,6 +186,7 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
         return None
     # Vendor wrappers are no more trustworthy than native EXIF strings.
     return text if len(text) <= 65_536 else None
+
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
     """Return verified UTC exposure time, never digitization or file-modification time."""
@@ -313,8 +311,14 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 image_exif = image.getexif()
                 exif = dict(image_exif)
             except (
-                    OSError, SyntaxError, ValueError, TypeError,
-                    struct.error, OverflowError, IndexError, KeyError,
+                    OSError,
+                SyntaxError,
+                ValueError,
+                TypeError,
+                struct.error,
+                OverflowError,
+                IndexError,
+                KeyError,
                 ):
                 exif = {}
                 exif_warning = "EXIF metadata could not be decoded; capture time is unavailable"
@@ -324,8 +328,14 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                     # nested, rather than exposed in the top-level EXIF dict.
                     exif.update(image_exif.get_ifd(ExifTags.IFD.Exif))
                 except (
-                    OSError, SyntaxError, ValueError, TypeError,
-                    struct.error, OverflowError, IndexError, KeyError,
+                    OSError,
+                    SyntaxError,
+                    ValueError,
+                    TypeError,
+                    struct.error,
+                    OverflowError,
+                    IndexError,
+                    KeyError,
                 ):
                     exif_warning = (
                         "Nested EXIF metadata could not be decoded; capture time is unavailable"
@@ -372,9 +382,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                         fraction = None
                 if isinstance(fraction, str):
                     fraction = fraction.strip(" \t\r\n\x00")
-                if not (
-                    isinstance(fraction, str) and fraction.isascii() and fraction.isdigit()
-                ):
+                if not (isinstance(fraction, str) and fraction.isascii() and fraction.isdigit()):
                     metadata["capture_time_precision_warning"] = (
                         "EXIF SubsecTimeOriginal is malformed; UTC capture time "
                         "has only verified whole-second precision"
