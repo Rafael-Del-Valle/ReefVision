@@ -72,6 +72,20 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("normalizes an unselected image to page one before persisting", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "project-a", {
+      imageId: null,
+      page: 9,
+      wrap: true,
+    });
+    expect(JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: true,
+    });
+  });
+
   it("restores a saved camera image from preferences written before wrap existed", () => {
     const storage = memoryStorage({
       "reefvision.gallery.project-a.v1": JSON.stringify({
