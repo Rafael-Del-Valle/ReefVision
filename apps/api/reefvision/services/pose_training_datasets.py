@@ -680,10 +680,14 @@ class PoseTrainingDatasetService:
         )
         review = self._review_snapshot(candidate)
 
+        raw_bbox = keyframe.get("bbox")
+        if raw_bbox is not None and not isinstance(raw_bbox, list):
+            raise ConflictError("Verified canonical pose bbox must be a list")
+
         canonical_pose = {
             "schema_version": ("reefvision-canonical-pose-frame-0001"),
             "frame_index": candidate.focus_frame,
-            "bbox": list(keyframe.get("bbox") or []),
+            "bbox": list(raw_bbox or []),
             "confidence": keyframe.get("confidence"),
             "pose_observations": pose_observations,
             "keypoints": keypoints,
