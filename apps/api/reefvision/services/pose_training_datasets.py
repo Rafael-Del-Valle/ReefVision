@@ -540,7 +540,7 @@ class PoseTrainingDatasetService:
         frame_index: int,
     ) -> dict[str, Any]:
         keyframe = next(
-            (item for item in track.keyframes_json if int(item.get("frame", -1)) == frame_index),
+            (item for item in track.keyframes_json if isinstance(item, dict) and type(item.get("frame")) is int and item["frame"] == frame_index),
             None,
         )
         if keyframe is None:
