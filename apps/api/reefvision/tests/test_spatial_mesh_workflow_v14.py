@@ -567,3 +567,57 @@ def test_mesh_vertex_reindexing_preserves_scientific_measurements(
     assert result["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(3 / 13)
     assert result["provenance"]["calibration_verified"] is False
     assert result["measurement_status"] == "caller_supplied_unverified"
+    # Persist and execute the same representation through the typed graph engine.
+    project_id = str(project["id"])
+    base = f"/api/v1/projects/{project_id}"
+    graph = {
+        "graph_id": "obj-indexing-parity-v14",
+        "name": "Equivalent OBJ indexing scientific parity",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": {**MESH, "obj_text": obj_text},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is True
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_area_m2"] == pytest.approx(result["surface_area_m2"])
+    assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
+        result["surface_area_to_bounding_diagonal_squared_ratio"]
+    )
+    assert artifact["provenance"]["geometry_sha256"] == result["provenance"]["geometry_sha256"]
+    assert artifact["provenance"]["source_payload_sha256"] == result["provenance"]["source_payload_sha256"]
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
