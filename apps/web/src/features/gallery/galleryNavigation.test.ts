@@ -367,6 +367,31 @@ describe("resolveGalleryNavigation", () => {
     ).toBeNull();
   });
 
+  it("wraps between a partial last page and the first camera image", () => {
+    const lastImage = {
+      index: 2,
+      itemCount: 3,
+      page: 5,
+      pages: 5,
+      wrap: true,
+    };
+    expect(resolveGalleryNavigation({ ...lastImage, action: "next" })).toEqual({
+      page: 1,
+      edge: "first",
+    });
+    expect(resolveGalleryNavigation({ ...lastImage, action: "next", wrap: false })).toBeNull();
+    expect(
+      resolveGalleryNavigation({
+        action: "previous",
+        index: 0,
+        itemCount: 24,
+        page: 1,
+        pages: 5,
+        wrap: true,
+      }),
+    ).toEqual({ page: 5, edge: "last" });
+  });
+
   it("moves within a page without requesting another page", () => {
     expect(
       resolveGalleryNavigation({
