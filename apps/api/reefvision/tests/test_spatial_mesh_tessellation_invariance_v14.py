@@ -104,3 +104,29 @@ def test_planar_boundary_perimeter_is_translation_invariant() -> None:
     )
     assert translated["boundary_edge_length_m"] == pytest.approx(4.0)
     assert translated["provenance"]["calibration_verified"] is False
+
+
+def test_closed_tetrahedron_volume_scales_cubically_without_verified_calibration() -> None:
+    """Closed synthetic geometry must obey cubic volume and quadratic area scaling."""
+    request = MeshPreviewRequest(
+        vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        faces=[[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]],
+        meters_per_unit=1.0,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic tetrahedron; scale has no independent review",
+        relative_scale_uncertainty=0.1,
+    )
+    original = preview_from_request(request)
+    doubled = preview_from_request(request.model_copy(update={"meters_per_unit": 2.0}))
+    assert original["surface_area_m2"] == pytest.approx((3 + sqrt(3)) / 2)
+    assert original["enclosed_volume_m3"] == pytest.approx(1 / 6)
+    assert doubled["surface_area_m2"] == pytest.approx(4 * original["surface_area_m2"])
+    assert doubled["enclosed_volume_m3"] == pytest.approx(8 * original["enclosed_volume_m3"])
+    for measurement in (original, doubled):
+        volume = measurement["enclosed_volume_m3"]
+        assert measurement["boundary_edge_length_m"] == pytest.approx(0)
+        assert measurement["edge_connected_patch_count"] == 1
+        assert measurement["enclosed_volume_scale_interval_m3"] == pytest.approx(
+            [volume * 0.9**3, volume * 1.1**3]
+        )
+        assert measurement["provenance"]["calibration_verified"] is False
