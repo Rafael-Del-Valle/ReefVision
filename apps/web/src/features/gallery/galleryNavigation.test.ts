@@ -93,6 +93,37 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("rejects blank image IDs without hiding the initial viewport", () => {
+    for (const imageId of ["", "   "]) {
+      const storage = memoryStorage({
+        "reefvision.gallery.project-a.v1": JSON.stringify({
+          imageId,
+          page: 7,
+          wrap: true,
+        }),
+      });
+      expect(readGalleryPreference(storage, "project-a")).toEqual({
+        imageId: null,
+        page: 1,
+        wrap: false,
+      });
+    }
+
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: false,
+    });
+    const saved = storage.getItem("reefvision.gallery.project-a.v1");
+    writeGalleryPreference(storage, "project-a", {
+      imageId: " ",
+      page: 99,
+      wrap: true,
+    });
+    expect(storage.getItem("reefvision.gallery.project-a.v1")).toBe(saved);
+  });
+
   it("falls back safely when stored data is corrupt", () => {
     const storage = memoryStorage({
       "reefvision.gallery.project-a.v1": '{"imageId":7,"page":-3}',
