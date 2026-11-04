@@ -218,7 +218,7 @@ describe("gallery preferences", () => {
       wrap: false,
     });
     const saved = storage.getItem(key);
-    for (const imageId of ["camera\\noriginal", "camera\\u0000original", "camera\\u007foriginal"]) {
+    for (const imageId of ["camera\noriginal", "camera\u0000original", "camera\u007foriginal"]) {
       const corrupted = memoryStorage({
         [key]: JSON.stringify({ imageId, page: 7, wrap: true }),
       });
