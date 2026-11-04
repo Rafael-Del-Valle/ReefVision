@@ -183,7 +183,7 @@ def test_desktop_rejects_missing_packaged_migration_head(
     assert not (tmp_path / "untouched.sqlite").exists()
 
 
-def test_desktop_rejects_noop_migration_without_touching_records(
+def test_desktop_rejects_unversioned_populated_database_before_upgrade(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -199,10 +199,10 @@ def test_desktop_rejects_noop_migration_without_touching_records(
     _prepare_fresh_desktop_migration(monkeypatch, engine, upgrade=no_op_upgrade)
 
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
-    with pytest.raises(RuntimeError, match="did not reach the expected Alembic"):
+    with pytest.raises(RuntimeError, match="Unsafe ReefVision unversioned populated database"):
         desktop.run_pending_migrations(settings)
 
-    assert observed_urls == [str(engine.url)]
+    assert observed_urls == []
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT id FROM preserved")) == "retain-me"
         assert not connection.dialect.has_table(connection, "alembic_version")
