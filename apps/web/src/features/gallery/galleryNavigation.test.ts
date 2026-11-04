@@ -156,6 +156,25 @@ describe("resolveGalleryNavigation", () => {
     }
   });
 
+  it("rejects malformed runtime navigation payloads instead of advancing an image", () => {
+    const valid = {
+      action: "next" as const,
+      index: 0,
+      itemCount: 2,
+      page: 1,
+      pages: 2,
+      wrap: false,
+    };
+    expect(resolveGalleryNavigation({ ...valid, wrap: "false" as unknown as boolean })).toBeNull();
+    expect(resolveGalleryNavigation({ ...valid, wrap: null as unknown as boolean })).toBeNull();
+    expect(
+      resolveGalleryNavigation({
+        ...valid,
+        action: "delete" as unknown as typeof valid.action,
+      }),
+    ).toBeNull();
+  });
+
   it("moves within a page without requesting another page", () => {
     expect(
       resolveGalleryNavigation({
