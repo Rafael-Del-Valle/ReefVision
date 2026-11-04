@@ -18,6 +18,12 @@ const DEFAULT_PREFERENCE: GalleryPreference = {
   wrap: false,
 };
 
+// Gallery IDs are opaque database identifiers, never multiline/control-character text.
+// Reject corrupted WebView2 preferences rather than restoring a phantom image.
+function validGalleryImageId(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && !/[\x00-\x1f\x7f]/.test(value);
+}
+
 function preferenceKey(projectId: string): string {
   return `reefvision.gallery.${projectId}.v1`;
 }
@@ -34,7 +40,7 @@ export function readGalleryPreference(
     const candidate = parsed as Record<string, unknown>;
     if (
       candidate.imageId !== null &&
-      (typeof candidate.imageId !== "string" || candidate.imageId.trim().length === 0)
+      !validGalleryImageId(candidate.imageId)
     ) {
       return { ...DEFAULT_PREFERENCE };
     }
@@ -94,7 +100,7 @@ export function writeGalleryPreference(
     !Number.isSafeInteger(preference.page) ||
     preference.page < 1 ||
     (preference.imageId !== null &&
-      (typeof preference.imageId !== "string" || preference.imageId.trim().length === 0)) ||
+      !validGalleryImageId(preference.imageId)) ||
     typeof preference.wrap !== "boolean"
   ) {
     return;
