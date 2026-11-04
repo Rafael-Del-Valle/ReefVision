@@ -686,9 +686,15 @@ class PoseTrainingDatasetService:
             project_id=project_id,
             candidate=candidate,
         )
+        source_model_ids = candidate.source_model_ids_json
+        if not isinstance(source_model_ids, list) or any(
+            not isinstance(model_id, str) or not model_id.strip()
+            for model_id in source_model_ids
+        ):
+            raise ConflictError("Verified pose source model IDs must be a list of nonempty strings")
         source_models = self._model_snapshots(
             project_id=project_id,
-            model_ids=list(candidate.source_model_ids_json or []),
+            model_ids=source_model_ids,
         )
         review = self._review_snapshot(candidate)
 
