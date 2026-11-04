@@ -109,6 +109,16 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
                 "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
             )
         ).all()
+    # Snapshot every persisted row as well as DDL: rejecting a foreign lineage
+    # must not silently mutate fields omitted by the targeted assertions above.
+    with engine.connect() as connection:
+        tables = connection.execute(
+            text("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+        ).scalars().all()
+        rows_before = {
+            table: connection.execute(text(f'SELECT * FROM "{table}" ORDER BY rowid')).all()
+            for table in tables
+        }
     monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
     monkeypatch.setattr(
         desktop.ScriptDirectory,
@@ -145,4 +155,10 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
             )
         ).all()
     assert schema_after == schema_before
+    with engine.connect() as connection:
+        rows_after = {
+            table: connection.execute(text(f'SELECT * FROM "{table}" ORDER BY rowid')).all()
+            for table in tables
+        }
+    assert rows_after == rows_before
     engine.dispose()
