@@ -131,11 +131,14 @@ def test_empty_revision_table_on_empty_database_remains_compatible(tmp_path: Pat
             ).all()
         )
         assert_compatible_revision_0038(connection)
-        assert tuple(
-            connection.execute(
-                text("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
-            ).all()
-        ) == before
+        assert (
+            tuple(
+                connection.execute(
+                    text("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
+                ).all()
+            )
+            == before
+        )
     engine.dispose()
 
 
@@ -169,8 +172,9 @@ def test_unversioned_populated_database_preserves_all_existing_data(
 
     before = snapshot()
     for _ in range(2):
-        with engine.connect() as connection, pytest.raises(
-            RuntimeError, match="unversioned populated database"
+        with (
+            engine.connect() as connection,
+            pytest.raises(RuntimeError, match="unversioned populated database"),
         ):
             assert_compatible_revision_0038(connection)
         assert snapshot() == before
@@ -186,9 +190,7 @@ def test_desktop_refuses_unversioned_populated_database_before_upgrade(
         connection.execute(
             text(f"CREATE TABLE {table_name} (id TEXT PRIMARY KEY, value TEXT NOT NULL)")
         )
-        connection.execute(
-            text(f"INSERT INTO {table_name} VALUES ('coral-1', 'original record')")
-        )
+        connection.execute(text(f"INSERT INTO {table_name} VALUES ('coral-1', 'original record')"))
     with engine.connect() as connection:
         before = (
             tuple(
@@ -231,13 +233,15 @@ def test_genuinely_empty_unversioned_database_remains_compatible(tmp_path: Path)
     """Fresh databases without any tables must still initialize normally."""
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'fresh.sqlite'}")
     with engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table'")
-        ).all() == []
+        assert (
+            connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).all()
+            == []
+        )
         assert_compatible_revision_0038(connection)
-        assert connection.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table'")
-        ).all() == []
+        assert (
+            connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).all()
+            == []
+        )
     engine.dispose()
 
 
@@ -281,9 +285,7 @@ def test_orphaned_research_view_blocks_migration_without_mutation(
     )
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
     for _ in range(2):
-        with engine.connect() as connection, pytest.raises(
-            RuntimeError, match="Unsafe ReefVision"
-        ):
+        with engine.connect() as connection, pytest.raises(RuntimeError, match="Unsafe ReefVision"):
             assert_compatible_revision_0038(connection)
         with pytest.raises(RuntimeError, match="Unsafe ReefVision"):
             desktop.run_pending_migrations(settings)
@@ -329,8 +331,9 @@ def test_pre_review_stamp_with_orphaned_view_refuses_upgrade_without_mutation(
     )
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
     for _ in range(2):
-        with engine.connect() as connection, pytest.raises(
-            RuntimeError, match="pre-review schema with preserved views"
+        with (
+            engine.connect() as connection,
+            pytest.raises(RuntimeError, match="pre-review schema with preserved views"),
         ):
             assert_compatible_revision_0038(connection)
         with pytest.raises(RuntimeError, match="pre-review schema with preserved views"):
@@ -377,8 +380,9 @@ def test_malformed_alembic_table_refuses_upgrade_without_mutating_science(
     )
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
     for _ in range(2):
-        with engine.connect() as connection, pytest.raises(
-            RuntimeError, match="without version_num column"
+        with (
+            engine.connect() as connection,
+            pytest.raises(RuntimeError, match="without version_num column"),
         ):
             assert_compatible_revision_0038(connection)
         with pytest.raises(RuntimeError, match="without version_num column"):
@@ -429,8 +433,9 @@ def test_extra_alembic_version_column_refuses_desktop_upgrade_without_mutation(
     )
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
     for _ in range(2):
-        with engine.connect() as connection, pytest.raises(
-            RuntimeError, match="unexpected columns"
+        with (
+            engine.connect() as connection,
+            pytest.raises(RuntimeError, match="unexpected columns"),
         ):
             assert_compatible_revision_0038(connection)
         with pytest.raises(RuntimeError, match="unexpected columns"):
