@@ -456,6 +456,11 @@ class PoseTrainingDatasetService:
                 raise ConflictError("A source pose model registration no longer exists")
             if model.project_id != project_id:
                 raise ConflictError("A source pose model belongs to another project")
+            # Model metadata is persisted JSON and may have been damaged by a
+            # legacy import. Never silently coerce a list (or raise a 500)
+            # while freezing immutable source-model provenance.
+            if not isinstance(model.metadata_json, dict):
+                raise ConflictError("Source pose model metadata must be a JSON object")
 
             snapshots.append(
                 {
