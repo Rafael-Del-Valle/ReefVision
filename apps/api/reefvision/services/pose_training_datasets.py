@@ -638,8 +638,16 @@ class PoseTrainingDatasetService:
             candidate.focus_frame,
         )
 
-        pose_observations = list(keyframe.get("pose_observations") or [])
-        keypoints = list(keyframe.get("keypoints") or [])
+        # Malformed persisted landmark collections must fail as a controlled
+        # scientific conflict, not coerce dictionary keys or raise TypeError.
+        raw_observations = keyframe.get("pose_observations")
+        raw_keypoints = keyframe.get("keypoints")
+        if (raw_observations is not None and not isinstance(raw_observations, list)) or (
+            raw_keypoints is not None and not isinstance(raw_keypoints, list)
+        ):
+            raise ConflictError("Verified canonical pose landmarks must be lists")
+        pose_observations = list(raw_observations or [])
+        keypoints = list(raw_keypoints or [])
 
         if not pose_observations and not keypoints:
             raise ConflictError("Verified canonical pose contains no landmarks")
