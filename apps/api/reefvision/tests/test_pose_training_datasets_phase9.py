@@ -837,6 +837,31 @@ def test_pose_training_dataset_rows_are_persisted(
     )
 
 
+def test_freeze_rejects_nonlist_canonical_keyframes_without_persisting_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The persisted scientist review remains valid, but corrupted source
+    # keyframes cannot be treated as a training-ready canonical pose.
+    _, _, track, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        source = session.get(VideoTrack, str(track["id"]))
+        assert source is not None
+        assert isinstance(source.keyframes_json, list)
+        source.keyframes_json = {"frame": 0}
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Must reject malformed canonical keyframes"},
+    )
+    assert response.status_code == 409, response.text
+    assert "keyframes must be a list" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
 def test_freeze_rejects_duplicate_canonical_frame_without_persisting_dataset(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
