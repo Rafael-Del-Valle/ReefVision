@@ -516,12 +516,15 @@ def test_saved_mesh_workflow_closed_volume_reference(client: TestClient) -> None
     # Volume scales cubically with linear calibration, not linearly or quadratically.
     # These independently derived bounds must survive standalone and saved execution.
     expected_volume_interval = [(4 / 3) * 0.9**3, (4 / 3) * 1.1**3]
-    assert expected["enclosed_volume_scale_interval_m3"] == pytest.approx(
-        expected_volume_interval
-    )
-    assert artifact["enclosed_volume_scale_interval_m3"] == pytest.approx(
-        expected_volume_interval
-    )
+    assert expected["enclosed_volume_scale_interval_m3"] == pytest.approx(expected_volume_interval)
+    assert artifact["enclosed_volume_scale_interval_m3"] == pytest.approx(expected_volume_interval)
+    # Three right-triangle faces and one equilateral face, scaled by 2 m/unit.
+    expected_surface_area = 6 + 2 * 3**0.5
+    expected_surface_interval = [expected_surface_area * 0.9**2, expected_surface_area * 1.1**2]
+    assert expected["surface_area_m2"] == pytest.approx(expected_surface_area)
+    assert artifact["surface_area_m2"] == pytest.approx(expected_surface_area)
+    assert expected["surface_area_scale_interval_m2"] == pytest.approx(expected_surface_interval)
+    assert artifact["surface_area_scale_interval_m2"] == pytest.approx(expected_surface_interval)
     assert artifact["boundary_edge_length_m"] == pytest.approx(0.0)
     for key in (
         "enclosed_volume_m3",
