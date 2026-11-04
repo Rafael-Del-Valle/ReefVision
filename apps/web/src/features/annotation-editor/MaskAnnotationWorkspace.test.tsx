@@ -420,6 +420,44 @@ it.each([
   },
 );
 
+it.each([
+  { reason: "empty", points: [] },
+  {
+    reason: "collinear",
+    points: [
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+      { x: 3, y: 3 },
+    ],
+  },
+  {
+    reason: "out-of-bounds",
+    points: [
+      { x: -1, y: 1 },
+      { x: 2, y: 2 },
+      { x: 3, y: 1 },
+    ],
+  },
+])(
+  "rejects $reason Smart Close geometry without changing annotations",
+  async ({ points }) => {
+    vi.mocked(generateSmartClosePolygon).mockResolvedValue({ points });
+    await mount();
+    fireEvent.click(screen.getByTestId("activate-smart-close-tool"));
+    seed();
+    await screen.findByText(
+      "Smart Close returned an invalid or empty polygon",
+      {},
+      { timeout: 3000 },
+    );
+    expect(screen.getByText("0 masks")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+    expect(generateSmartClosePolygon).toHaveBeenCalledTimes(1);
+    expect(generatePolygonFill).not.toHaveBeenCalled();
+    expect(saveAnnotations).not.toHaveBeenCalled();
+  },
+);
+
 it("refreshes same-image mask state when a newer annotation session replaces cached data", async () => {
   const staleSession = {
     ...session(),
