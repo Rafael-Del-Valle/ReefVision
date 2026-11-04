@@ -224,3 +224,36 @@ def test_rigid_rotation_preserves_open_surface_geometry_and_scale_uncertainty() 
     assert original["boundary_edge_length_m"] == pytest.approx(5.0)
     assert rotated["enclosed_volume_m3"] is None
     assert rotated["provenance"]["calibration_verified"] is False
+
+
+def test_closed_tetrahedron_rigid_rotation_preserves_volume_and_uncertainty() -> None:
+    """A rigid rotation must not create apparent volumetric coral growth."""
+    vertices = [[0, 0, 0], [2, 0, 0], [0, 3, 0], [0, 0, 4]]
+    request = MeshPreviewRequest(
+        vertices=vertices,
+        faces=[[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic rigid rotation; no independent scale review",
+        relative_scale_uncertainty=0.1,
+    )
+    original = preview_from_request(request)
+    rotated = preview_from_request(
+        request.model_copy(update={"vertices": [[-y, x, z] for x, y, z in vertices]})
+    )
+    assert original["enclosed_volume_m3"] == pytest.approx(0.5)
+    for key in (
+        "surface_area_m2",
+        "enclosed_volume_m3",
+        "axis_aligned_bounding_box_diagonal_m",
+        "edge_connected_patch_count",
+        "boundary_edge_length_m",
+    ):
+        assert rotated[key] == pytest.approx(original[key])
+    assert rotated["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        original["enclosed_volume_scale_interval_m3"]
+    )
+    assert rotated["surface_area_scale_interval_m2"] == pytest.approx(
+        original["surface_area_scale_interval_m2"]
+    )
+    assert rotated["provenance"]["calibration_verified"] is False
