@@ -1046,7 +1046,7 @@ def test_freeze_rejects_malformed_source_job_ids_without_dataset(
         assert session.query(PoseTrainingDatasetItem).count() == 0
 
 
-@pytest.mark.parametrize("bad_provenance", [{"unexpected": "mapping"}, [["project_id", "fake"]], ["invalid"]])
+@pytest.mark.parametrize("bad_provenance", [[["project_id", "fake"]], ["invalid"], "invalid"])
 def test_freeze_rejects_nonobject_acquisition_provenance_without_dataset(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
