@@ -159,6 +159,24 @@ describe("TrainingRunDetail", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not invent best epochs from mismatched or fractional epoch history", () => {
+    for (const epoch of [[1, 2], [1, 2.5, 3], [1, 2, 0]]) {
+      const { unmount } = render(
+        <TrainingRunDetail
+          run={{ ...run, metrics_history: {
+            epoch,
+            "metrics/mAP50-95(B)": [0.31, 0.52, 0.41],
+          } }}
+          registering={false}
+          onCancel={vi.fn()}
+          onRegister={vi.fn()}
+        />,
+      );
+      expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
   it("renders long finite training histories without overflowing function argument limits", () => {
     const values = Array.from({ length: 150_000 }, (_, index) => index / 150_000);
     render(
