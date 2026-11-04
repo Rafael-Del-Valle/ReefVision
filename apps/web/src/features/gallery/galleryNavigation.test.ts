@@ -86,6 +86,21 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("starts on the first page when no camera image was saved", () => {
+    const storage = memoryStorage({
+      "reefvision.gallery.project-a.v1": JSON.stringify({
+        imageId: null,
+        page: 9,
+        wrap: true,
+      }),
+    });
+    expect(readGalleryPreference(storage, "project-a")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: true,
+    });
+  });
+
   it("rejects malformed legacy image identifiers and wrapping flags", () => {
     for (const preference of [
       { page: 2, wrap: false },
