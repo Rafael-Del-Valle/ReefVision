@@ -641,5 +641,12 @@ def test_mesh_vertex_reindexing_preserves_scientific_measurements(
         artifact["provenance"]["source_payload_sha256"]
         == result["provenance"]["source_payload_sha256"]
     )
+    # Independently recover the diagonal from calibrated area and shape ratio.
+    # This guards against a dimensionless ratio accidentally using unscaled units.
+    expected_diagonal_squared_m2 = 13 * 0.01**2
+    for measured in (result, artifact):
+        assert measured["surface_area_m2"] / measured[
+            "surface_area_to_bounding_diagonal_squared_ratio"
+        ] == pytest.approx(expected_diagonal_squared_m2)
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
