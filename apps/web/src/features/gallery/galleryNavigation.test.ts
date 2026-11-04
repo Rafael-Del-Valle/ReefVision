@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   parseGalleryPageDraft,
+  readBrowserGalleryPreference,
   readGalleryPreference,
   resolveGalleryNavigation,
   writeGalleryPreference,
+  writeBrowserGalleryPreference,
 } from "./galleryNavigation";
 
 function memoryStorage(initial: Record<string, string> = {}): Storage {
@@ -20,6 +22,33 @@ function memoryStorage(initial: Record<string, string> = {}): Storage {
     setItem: (key, value) => values.set(key, value),
   };
 }
+
+describe("browser gallery storage access", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("recovers when WebView2 denies access to the localStorage property itself", () => {
+    vi.stubGlobal("window", {
+      get localStorage(): Storage {
+        throw new DOMException("Access denied", "SecurityError");
+      },
+    });
+
+    expect(readBrowserGalleryPreference("project-a")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+    expect(() =>
+      writeBrowserGalleryPreference("project-a", {
+        imageId: "camera-original-1",
+        page: 1,
+        wrap: false,
+      }),
+    ).not.toThrow();
+  });
+});
 
 describe("gallery preferences", () => {
   it("persists the recent image and page per project", () => {
