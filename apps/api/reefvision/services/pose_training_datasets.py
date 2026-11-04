@@ -697,6 +697,13 @@ class PoseTrainingDatasetService:
             project_id=project_id,
             model_ids=source_model_ids,
         )
+        source_job_ids = candidate.source_job_ids_json
+        if source_job_ids is None:
+            source_job_ids = []
+        if not isinstance(source_job_ids, list) or any(
+            not isinstance(job_id, str) or not job_id.strip() for job_id in source_job_ids
+        ):
+            raise ConflictError("Verified pose source job IDs must be a list of nonempty strings")
         review = self._review_snapshot(candidate)
 
         raw_bbox = keyframe.get("bbox")
@@ -735,7 +742,7 @@ class PoseTrainingDatasetService:
             "verified_pose_sha256": (candidate.verified_pose_sha256),
             "canonical_pose": canonical_pose,
             "source_models": source_models,
-            "source_job_ids": list(candidate.source_job_ids_json or []),
+            "source_job_ids": list(source_job_ids),
             "acquisition_provenance": provenance,
             "candidate_provenance_sha256": (candidate.provenance_sha256),
             "review_provenance": review,
@@ -762,7 +769,7 @@ class PoseTrainingDatasetService:
             verified_pose_sha256=(candidate.verified_pose_sha256),
             canonical_pose_json=canonical_pose,
             source_models_json=source_models,
-            source_job_ids_json=list(candidate.source_job_ids_json or []),
+            source_job_ids_json=list(source_job_ids),
             acquisition_provenance_json=provenance,
             review_provenance_json=review,
             item_sha256=item_sha256,
