@@ -124,6 +124,34 @@ describe("gallery preferences", () => {
     expect(storage.getItem("reefvision.gallery.project-a.v1")).toBe(saved);
   });
 
+  it("keeps gallery navigation usable when WebView2 storage reads are denied", () => {
+    const deniedStorage = {
+      getItem: (_key: string): string | null => {
+        throw new DOMException("Access denied", "SecurityError");
+      },
+    };
+    expect(readGalleryPreference(deniedStorage, "project-a")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+  });
+
+  it("does not interrupt image selection when WebView2 storage writes are denied", () => {
+    const deniedStorage = {
+      setItem: (_key: string, _value: string): void => {
+        throw new DOMException("Quota exceeded", "QuotaExceededError");
+      },
+    };
+    expect(() =>
+      writeGalleryPreference(deniedStorage, "project-a", {
+        imageId: "camera-original-1",
+        page: 1,
+        wrap: false,
+      }),
+    ).not.toThrow();
+  });
+
   it("falls back safely when stored data is corrupt", () => {
     const storage = memoryStorage({
       "reefvision.gallery.project-a.v1": '{"imageId":7,"page":-3}',
