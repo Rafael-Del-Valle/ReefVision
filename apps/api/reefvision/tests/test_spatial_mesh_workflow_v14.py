@@ -456,3 +456,65 @@ def test_saved_mesh_workflow_preserves_rigid_translation_measurement_parity(
     assert artifact["provenance"]["geometry_sha256"] == expected["provenance"]["geometry_sha256"]
     assert artifact["provenance"]["calibration_verified"] is False
     assert artifact["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_saved_mesh_workflow_closed_volume_reference(client: TestClient) -> None:
+    """Saved execution retains a closed tetrahedron's volume and uncertainty."""
+    project_id = str(create_project(client, "Closed mesh workflow")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "faces": [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]],
+        "meters_per_unit": 2.0,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified synthetic reference",
+        "relative_scale_uncertainty": 0.1,
+    }
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    graph = {
+        "graph_id": "closed-mesh-volume-v14",
+        "name": "Closed mesh volume",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [{
+            "edge_id": "e",
+            "source_node_id": "p",
+            "source_port_id": "project",
+            "target_node_id": "m",
+            "target_port_id": "project",
+        }],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    ) is True
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    expected = standalone.json()
+    assert artifact["enclosed_volume_m3"] == pytest.approx(4 / 3)
+    assert artifact["boundary_edge_length_m"] == pytest.approx(0.0)
+    for key in (
+        "enclosed_volume_m3",
+        "enclosed_volume_scale_interval_m3",
+        "surface_area_m2",
+        "surface_area_scale_interval_m2",
+    ):
+        assert artifact[key] == pytest.approx(expected[key])
+    assert artifact["provenance"]["geometry_sha256"] == expected["provenance"]["geometry_sha256"]
+    assert artifact["provenance"]["calibration_verified"] is False
