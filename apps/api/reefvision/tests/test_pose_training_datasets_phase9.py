@@ -835,3 +835,41 @@ def test_pose_training_dataset_rows_are_persisted(
         item_rows[0].verified_pose_sha256
         == dataset_row.manifest_json["items"][0]["verified_pose_sha256"]
     )
+
+
+def test_freeze_rejects_duplicate_canonical_frame_without_persisting_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Start with an actually persisted, scientist-verified Active Learning round.
+    # A duplicated canonical frame must not be chosen by JSON list order.
+    _, _, track, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        source = session.get(VideoTrack, str(track["id"]))
+        assert source is not None
+        frames = copy.deepcopy(source.keyframes_json)
+        assert isinstance(frames, list) and frames
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        matching = [
+            frame
+            for frame in frames
+            if isinstance(frame, dict) and frame.get("frame") == candidate.focus_frame
+        ]
+        assert len(matching) == 1
+        frames.append(copy.deepcopy(matching[0]))
+        source.keyframes_json = frames
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Must reject ambiguous canonical frame"},
+    )
+    assert response.status_code == 409, response.text
+    assert "exactly once" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
