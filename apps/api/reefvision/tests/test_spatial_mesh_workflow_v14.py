@@ -458,13 +458,19 @@ def test_saved_mesh_workflow_preserves_rigid_translation_measurement_parity(
     assert artifact["measurement_status"] == "caller_supplied_unverified"
 
 
-def test_saved_mesh_workflow_closed_volume_reference(client: TestClient) -> None:
-    """Saved execution retains a closed tetrahedron's volume and uncertainty."""
+@pytest.mark.parametrize("reverse_winding", [False, True], ids=["outward", "inward"])
+def test_saved_mesh_workflow_closed_volume_reference(
+    client: TestClient, reverse_winding: bool
+) -> None:
+    """Saved execution preserves unsigned volume under globally reversed face winding."""
     project_id = str(create_project(client, "Closed mesh workflow")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = {
         "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-        "faces": [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]],
+        "faces": [
+            list(reversed(face)) if reverse_winding else face
+            for face in [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]]
+        ],
         "meters_per_unit": 2.0,
         "calibration_method": "ruler",
         "calibration_evidence": "Unverified synthetic reference",
