@@ -541,3 +541,29 @@ def test_saved_mesh_workflow_closed_volume_reference(
         assert artifact[key] == pytest.approx(expected[key])
     assert artifact["provenance"]["geometry_sha256"] == expected["provenance"]["geometry_sha256"]
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "obj_text",
+    [
+        "v 0 0 0\nv 2 0 0\nv 0 3 0\nf 1 2 3\n",
+        "v 0 3 0\nv 0 0 0\nv 2 0 0\nf 2 3 1\n",
+        "v 0 0 0\nv 2 0 0\nv 0 3 0\nf -3 -2 -1\n",
+    ],
+    ids=["canonical", "reindexed-vertices", "relative-face-indices"],
+)
+def test_mesh_vertex_reindexing_preserves_scientific_measurements(
+    client: TestClient, obj_text: str
+) -> None:
+    """Equivalent OBJ indexing must not alter measured coral geometry."""
+    project = create_project(client, "Equivalent OBJ indexing")
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/spatial/mesh-preview",
+        json={**MESH, "obj_text": obj_text},
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["surface_area_m2"] == pytest.approx(0.0003)
+    assert result["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(3 / 13)
+    assert result["provenance"]["calibration_verified"] is False
+    assert result["measurement_status"] == "caller_supplied_unverified"
