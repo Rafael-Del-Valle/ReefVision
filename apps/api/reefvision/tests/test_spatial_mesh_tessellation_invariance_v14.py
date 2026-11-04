@@ -130,3 +130,29 @@ def test_closed_tetrahedron_volume_scales_cubically_without_verified_calibration
             [volume * 0.9**3, volume * 1.1**3]
         )
         assert measurement["provenance"]["calibration_verified"] is False
+
+def test_closed_tetrahedron_translation_preserves_volume_and_scale_interval() -> None:
+    """Moving a watertight reconstruction cannot create apparent volume growth."""
+    vertices = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    request = MeshPreviewRequest(
+        vertices=vertices,
+        faces=[[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic translated tetrahedron; not independently verified",
+        relative_scale_uncertainty=0.1,
+    )
+    original = preview_from_request(request)
+    translated = preview_from_request(
+        request.model_copy(
+            update={"vertices": [[x + 100, y - 200, z + 300] for x, y, z in vertices]}
+        )
+    )
+    assert original["enclosed_volume_m3"] == pytest.approx(1 / 48)
+    assert translated["enclosed_volume_m3"] == pytest.approx(original["enclosed_volume_m3"])
+    assert translated["surface_area_m2"] == pytest.approx(original["surface_area_m2"])
+    assert translated["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        original["enclosed_volume_scale_interval_m3"]
+    )
+    assert translated["boundary_edge_length_m"] == pytest.approx(0)
+    assert translated["provenance"]["calibration_verified"] is False
