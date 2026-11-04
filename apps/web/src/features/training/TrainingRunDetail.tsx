@@ -52,8 +52,14 @@ function bestEpoch(
     if (value > metric[1][bestIndex]) bestIndex = index;
   });
   const epochs = history(run).epoch;
+  // A truncated or malformed epoch column must not produce a fabricated best
+  // epoch. Without an epoch column, the metric index is explicitly 1-based.
+  if (epochs && (epochs.length !== metric[1].length ||
+    !epochs.every((epoch) => Number.isSafeInteger(epoch) && epoch > 0))) {
+    return null;
+  }
   return {
-    epoch: Math.round(epochs?.[bestIndex] ?? bestIndex + 1),
+    epoch: epochs ? epochs[bestIndex] : bestIndex + 1,
     key: metric[0],
     value: metric[1][bestIndex],
   };
