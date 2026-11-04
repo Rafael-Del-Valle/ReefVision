@@ -16,7 +16,7 @@ function history(run: TrainingRun): Record<string, number[]> {
     Object.entries(run.metrics_history).filter(
       (entry): entry is [string, number[]] =>
         Array.isArray(entry[1]) &&
-        entry[1].every((value) => typeof value === "number"),
+        entry[1].every((value) => typeof value === "number" && Number.isFinite(value)),
     ),
   );
 }
