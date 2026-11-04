@@ -506,7 +506,7 @@ class PoseTrainingDatasetService:
             not isinstance(correction.actor, str)
             or not correction.actor.strip()
             or correction.actor != candidate.reviewed_by
-            or candidate.reviewed_at is None
+            or not isinstance(candidate.reviewed_at, datetime)
             or not isinstance(correction.created_at, datetime)
         ):
             raise ConflictError("Verified pose scientist review attribution changed")
