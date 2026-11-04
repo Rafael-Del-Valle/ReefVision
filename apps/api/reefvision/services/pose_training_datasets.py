@@ -616,7 +616,12 @@ class PoseTrainingDatasetService:
                 "Verified pose source video does not match the Active Learning round"
             )
 
-        provenance = dict(candidate.provenance_json or {})
+        # Persisted acquisition provenance must be an object. Coercing a
+        # malformed JSON list can either raise an uncontrolled exception or
+        # silently reinterpret key/value pairs as verified source evidence.
+        if not isinstance(candidate.provenance_json, dict):
+            raise ConflictError("Pose acquisition provenance must be a JSON object")
+        provenance = dict(candidate.provenance_json)
         # A verified pose must not freeze with acquisition metadata changed
         # after selection while its original candidate fingerprint remains.
         if canonical_json_sha256(provenance) != candidate.provenance_sha256:
