@@ -86,6 +86,24 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("rejects malformed legacy image identifiers and wrapping flags", () => {
+    for (const preference of [
+      { page: 2, wrap: false },
+      { imageId: 7, page: 2, wrap: false },
+      { imageId: "camera-original-1", page: 2, wrap: "false" },
+      { imageId: "camera-original-1", page: 2, wrap: null },
+    ]) {
+      const storage = memoryStorage({
+        "reefvision.gallery.project-a.v1": JSON.stringify(preference),
+      });
+      expect(readGalleryPreference(storage, "project-a")).toEqual({
+        imageId: null,
+        page: 1,
+        wrap: false,
+      });
+    }
+  });
+
   it("rejects unsafe saved pages before loading the first camera image", () => {
     for (const page of [2 ** 53, 1e100, Number.MAX_VALUE]) {
       const storage = memoryStorage({
