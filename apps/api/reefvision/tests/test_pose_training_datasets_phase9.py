@@ -898,3 +898,45 @@ def test_freeze_rejects_duplicate_canonical_frame_without_persisting_dataset(
     assert "exactly once" in response.text
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize("field", ["pose_observations", "keypoints"])
+def test_freeze_rejects_nonlist_canonical_landmarks_without_persisting_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    # A completed scientist review must not make a subsequently corrupted
+    # canonical landmark collection eligible for frozen training.
+    _, _, track, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        source = session.get(VideoTrack, str(track["id"]))
+        assert source is not None
+        frames = copy.deepcopy(source.keyframes_json)
+        assert isinstance(frames, list)
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        matching = [
+            frame
+            for frame in frames
+            if isinstance(frame, dict)
+            and type(frame.get("frame")) is int
+            and frame["frame"] == candidate.focus_frame
+        ]
+        assert len(matching) == 1
+        matching[0][field] = {"unexpected": "mapping"}
+        source.keyframes_json = frames
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject malformed canonical landmarks"},
+    )
+    assert response.status_code == 409, response.text
+    assert "canonical pose landmarks must be lists" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
