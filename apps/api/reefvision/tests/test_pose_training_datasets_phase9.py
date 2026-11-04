@@ -408,7 +408,9 @@ def test_training_dataset_blocks_pose_changed_after_verification(
     assert "changed after scientist verification" in (response.text)
 
 
-@pytest.mark.parametrize("changed_record", ["correction", "candidate", "timestamp"])
+@pytest.mark.parametrize(
+    "changed_record", ["correction", "candidate", "timestamp", "correction_timestamp"]
+)
 def test_freeze_rejects_changed_scientist_review_attribution(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -431,8 +433,10 @@ def test_freeze_rejects_changed_scientist_review_attribution(
             correction.actor = "different-reviewer"
         elif changed_record == "candidate":
             candidate.reviewed_by = "different-reviewer"
-        else:
+        elif changed_record == "timestamp":
             candidate.reviewed_at = None
+        else:
+            correction.created_at = None
         session.commit()
 
     response = client.post(
