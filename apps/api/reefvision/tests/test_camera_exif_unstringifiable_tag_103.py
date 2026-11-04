@@ -30,9 +30,7 @@ def test_unstringifiable_exif_tag_does_not_reject_jpeg(tmp_path, monkeypatch):
     exif = _CameraExif({_BrokenTag(): "untrusted", 271: "Camera vendor"})
     monkeypatch.setattr(Image.Image, "getexif", lambda self: exif)
 
-    inspected = inspect_staged_image(
-        path, hashlib.sha256(original).hexdigest(), len(original)
-    )
+    inspected = inspect_staged_image(path, hashlib.sha256(original).hexdigest(), len(original))
 
     assert inspected.width_px == 8
     assert inspected.height_px == 6
