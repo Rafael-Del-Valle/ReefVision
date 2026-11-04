@@ -131,6 +131,32 @@ describe("TrainingRunDetail", () => {
     ).toBeEnabled();
   });
 
+  it("does not plot non-finite training metrics or report a fictitious best epoch", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          metrics_history: {
+            epoch: [1, 2, 3],
+            "metrics/mAP50-95(B)": [0.31, Number.NaN, 0.41],
+            "train/box_loss": [1.2, 0.9, 0.8],
+            "train/cls_loss": [0.6, Number.POSITIVE_INFINITY, 0.4],
+          },
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /mAP50-95\\(B\\)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /train cls loss/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train box loss across 3 epochs/i }),
+    ).toBeInTheDocument();
+  });
+
   it("shows every available detection, segmentation, and validation metric", () => {
     render(
       <TrainingRunDetail
