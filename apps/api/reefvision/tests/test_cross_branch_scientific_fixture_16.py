@@ -17,7 +17,9 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
 ) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(
+            text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        )
         connection.execute(
             text("INSERT INTO alembic_version VALUES (:revision)"),
             {"revision": revision},
@@ -81,11 +83,17 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
             )
         with pytest.raises(RuntimeError, match="revision .* collision"):
             assert_compatible_revision_0038(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
-        assert connection.scalar(text("SELECT payload_json FROM scientific_records")) == (
+        assert (
+            connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        )
+        assert connection.scalar(
+            text("SELECT payload_json FROM scientific_records")
+        ) == (
             '{"count": 12}'
         )
-        assert connection.scalar(text("SELECT payload_json FROM environmental_cache_entries")) == (
+        assert connection.scalar(
+            text("SELECT payload_json FROM environmental_cache_entries")
+        ) == (
             '{"celsius": 22.2}'
         )
         if revision == "0039":
