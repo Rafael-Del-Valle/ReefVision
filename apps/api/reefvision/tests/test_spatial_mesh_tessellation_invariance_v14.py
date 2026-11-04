@@ -164,3 +164,27 @@ def test_closed_tetrahedron_translation_preserves_volume_and_scale_interval() ->
     )
     assert translated["boundary_edge_length_m"] == pytest.approx(0)
     assert translated["provenance"]["calibration_verified"] is False
+
+
+def test_open_surface_reversed_winding_preserves_area_but_not_false_volume() -> None:
+    """Reversing triangle winding must not change an open coral patch's area."""
+    request = MeshPreviewRequest(
+        vertices=[[0, 0, 0], [2, 0, 0], [2, 2, 0], [0, 2, 0]],
+        faces=[[0, 1, 2], [0, 2, 3]],
+        meters_per_unit=0.5,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic open surface; no independent calibration review",
+        relative_scale_uncertainty=0.1,
+    )
+    forward = preview_from_request(request)
+    reversed_faces = preview_from_request(
+        request.model_copy(update={"faces": [[2, 1, 0], [3, 2, 0]]})
+    )
+    for result in (forward, reversed_faces):
+        assert result["surface_area_m2"] == pytest.approx(1.0)
+        assert result["boundary_edge_length_m"] == pytest.approx(4.0)
+        assert result["enclosed_volume_m3"] is None
+        assert result["provenance"]["calibration_verified"] is False
+    assert reversed_faces["surface_area_scale_interval_m2"] == pytest.approx(
+        forward["surface_area_scale_interval_m2"]
+    )
