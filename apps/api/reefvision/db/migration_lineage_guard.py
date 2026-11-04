@@ -147,8 +147,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "stamping, deleting, or rewriting scientific observations."
         )
     if not review_revisions and any(
-        not isinstance(revision, str) or not revision.strip()
-        for revision in revision_rows
+        not isinstance(revision, str) or not revision.strip() for revision in revision_rows
     ):
         raise RuntimeError(
             "Unsafe ReefVision Alembic empty or invalid pre-review revision marker. "
