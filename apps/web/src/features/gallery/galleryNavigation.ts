@@ -49,9 +49,11 @@ export function readGalleryPreference(
     ) {
       return { ...DEFAULT_PREFERENCE };
     }
+    // A saved page without a selected image is not a meaningful restore target.
+    // Start from the first page so the initial camera image remains visible.
     return {
       imageId: candidate.imageId,
-      page: candidate.page,
+      page: candidate.imageId === null ? 1 : candidate.page,
       wrap: candidate.wrap === true,
     };
   } catch {
