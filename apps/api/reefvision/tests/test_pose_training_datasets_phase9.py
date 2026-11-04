@@ -900,7 +900,7 @@ def test_freeze_rejects_duplicate_canonical_frame_without_persisting_dataset(
         assert session.query(PoseTrainingDataset).count() == 0
 
 
-@pytest.mark.parametrize("field", ["pose_observations", "keypoints"])
+@pytest.mark.parametrize("field", ["pose_observations", "keypoints", "bbox"])
 def test_freeze_rejects_nonlist_canonical_landmarks_without_persisting_dataset(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -937,6 +937,7 @@ def test_freeze_rejects_nonlist_canonical_landmarks_without_persisting_dataset(
         json={"name": "Reject malformed canonical landmarks"},
     )
     assert response.status_code == 409, response.text
-    assert "canonical pose landmarks must be lists" in response.text
+    expected = "canonical pose bbox must be a list" if field == "bbox" else "canonical pose landmarks must be lists"
+    assert expected in response.text
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
