@@ -185,8 +185,10 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
                     text("SELECT definition_sha256 FROM computed_metric_definitions")
                 ).scalar_one() == "definition-sha"
             assert connection.execute(
-                text("SELECT type, name, sql FROM sqlite_master "
-                     "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name")
+                text(
+                    "SELECT type, name, sql FROM sqlite_master "
+                    "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+                )
             ).all() == schema_before
     finally:
         reopened.dispose()
