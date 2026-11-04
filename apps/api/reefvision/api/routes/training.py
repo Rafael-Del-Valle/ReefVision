@@ -284,11 +284,10 @@ def _training_log_tail(
             opened_identity = os.fstat(handle.fileno())
             # Recheck after opening: a substituted symlink or a replaced file
             # must never be read, even when its name still ends in .log.
-            if (
-                path.resolve(strict=True) != path
-                or (opened_identity.st_dev, opened_identity.st_ino)
-                != (expected_identity.st_dev, expected_identity.st_ino)
-            ):
+            if path.resolve(strict=True) != path or (
+                opened_identity.st_dev,
+                opened_identity.st_ino,
+            ) != (expected_identity.st_dev, expected_identity.st_ino):
                 raise HTTPException(status_code=403, detail="Training log changed during open")
             handle.seek(0, 2)
             size = handle.tell()
