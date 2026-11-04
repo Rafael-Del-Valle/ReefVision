@@ -653,9 +653,7 @@ def test_mesh_vertex_reindexing_preserves_scientific_measurements(
 
 
 @pytest.mark.parametrize("scale", [0.01, 0.02], ids=["centimeter", "two-centimeters"])
-def test_saved_obj_workflow_calibration_scaling_reference(
-    client: TestClient, scale: float
-) -> None:
+def test_saved_obj_workflow_calibration_scaling_reference(client: TestClient, scale: float) -> None:
     """A changed caller scale changes dimensional metrics, not dimensionless shape."""
     project = create_project(client, "Calibration scaling reference")
     base = f"/api/v1/projects/{project['id']}"
@@ -710,11 +708,17 @@ def test_saved_obj_workflow_calibration_scaling_reference(
     for measured in (standalone.json(), artifact):
         assert measured["surface_area_m2"] == pytest.approx(expected_area)
         assert measured["boundary_edge_length_m"] == pytest.approx(expected_perimeter)
-        assert measured["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
-            3 / 13
+        # Calibration uncertainty follows squared area and linear perimeter scaling.
+        assert measured["surface_area_scale_interval_m2"] == pytest.approx(
+            [expected_area * 0.95**2, expected_area * 1.05**2]
         )
+        assert measured["boundary_loop_perimeter_scale_intervals_m"][0] == pytest.approx(
+            [expected_perimeter * 0.95, expected_perimeter * 1.05]
+        )
+        assert measured["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(3 / 13)
         assert measured["provenance"]["calibration_verified"] is False
         assert measured["measurement_status"] == "caller_supplied_unverified"
-    assert artifact["provenance"]["geometry_sha256"] == standalone.json()["provenance"][
-        "geometry_sha256"
-    ]
+    assert (
+        artifact["provenance"]["geometry_sha256"]
+        == standalone.json()["provenance"]["geometry_sha256"]
+    )
