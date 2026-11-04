@@ -5,8 +5,8 @@ import {
   readBrowserGalleryPreference,
   readGalleryPreference,
   resolveGalleryNavigation,
-  writeGalleryPreference,
   writeBrowserGalleryPreference,
+  writeGalleryPreference,
 } from "./galleryNavigation";
 
 function memoryStorage(initial: Record<string, string> = {}): Storage {
@@ -320,6 +320,49 @@ describe("resolveGalleryNavigation", () => {
       resolveGalleryNavigation({
         ...valid,
         action: "delete" as unknown as typeof valid.action,
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps non-wrapping gallery edges stable across paginated camera images", () => {
+    expect(
+      resolveGalleryNavigation({
+        action: "previous",
+        index: 0,
+        itemCount: 24,
+        page: 1,
+        pages: 10,
+        wrap: false,
+      }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({
+        action: "next",
+        index: 7,
+        itemCount: 8,
+        page: 10,
+        pages: 10,
+        wrap: false,
+      }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({
+        action: "first",
+        index: 0,
+        itemCount: 24,
+        page: 1,
+        pages: 10,
+        wrap: true,
+      }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({
+        action: "last",
+        index: 7,
+        itemCount: 8,
+        page: 10,
+        pages: 10,
+        wrap: true,
       }),
     ).toBeNull();
   });
