@@ -618,6 +618,9 @@ def test_mesh_vertex_reindexing_preserves_scientific_measurements(
         result["surface_area_to_bounding_diagonal_squared_ratio"]
     )
     assert artifact["provenance"]["geometry_sha256"] == result["provenance"]["geometry_sha256"]
-    assert artifact["provenance"]["source_payload_sha256"] == result["provenance"]["source_payload_sha256"]
+    assert (
+        artifact["provenance"]["source_payload_sha256"]
+        == result["provenance"]["source_payload_sha256"]
+    )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
