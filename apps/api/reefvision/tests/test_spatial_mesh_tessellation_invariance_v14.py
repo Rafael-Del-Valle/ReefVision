@@ -88,9 +88,7 @@ def test_planar_boundary_perimeter_is_translation_invariant() -> None:
     original = preview_from_request(request)
     translated = preview_from_request(
         request.model_copy(
-            update={
-                "vertices": [[x + 1000, y - 2000, z + 3000] for x, y, z in vertices]
-            }
+            update={"vertices": [[x + 1000, y - 2000, z + 3000] for x, y, z in vertices]}
         )
     )
     for key in (
