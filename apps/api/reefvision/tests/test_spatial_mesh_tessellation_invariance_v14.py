@@ -43,6 +43,15 @@ def test_planar_square_retriangulation_preserves_calibrated_area_and_extent() ->
             [3.6, 4.4]
         )
         assert measurement["provenance"]["calibration_verified"] is False
+    # Linear boundary metrics must scale linearly, unlike quadratic area.
+    doubled = preview_from_request(request.model_copy(update={"meters_per_unit": 1.0}))
+    assert doubled["boundary_edge_length_m"] == pytest.approx(8.0)
+    assert doubled["boundary_loop_perimeters_m"] == pytest.approx([8.0])
+    assert doubled["boundary_loop_perimeter_scale_intervals_m"][0] == pytest.approx(
+        [7.2, 8.8]
+    )
+    assert doubled["surface_area_m2"] == pytest.approx(4.0)
+    assert doubled["provenance"]["calibration_verified"] is False
     assert coarse["preview_face_count"] == 2
     assert refined["preview_face_count"] == 4
 
