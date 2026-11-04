@@ -150,7 +150,9 @@ describe("TrainingRunDetail", () => {
     );
 
     expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /mAP50-95\\(B\\)/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: /mAP50-95\(B\)/i }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /train cls loss/i })).not.toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: /train box loss across 3 epochs/i }),
