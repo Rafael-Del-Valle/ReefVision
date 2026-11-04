@@ -33,6 +33,4 @@ def test_extremely_deep_camera_metadata_is_bounded() -> None:
 
 
 def test_nonfinite_nested_camera_measurements_are_unknown() -> None:
-    assert _json_safe({"samples": (1.0, math.nan, -math.inf)}) == {
-        "samples": [1.0, None, None]
-    }
+    assert _json_safe({"samples": (1.0, math.nan, -math.inf)}) == {"samples": [1.0, None, None]}
