@@ -565,6 +565,15 @@ def test_mesh_vertex_reindexing_preserves_scientific_measurements(
     result = response.json()
     assert result["surface_area_m2"] == pytest.approx(0.0003)
     assert result["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(3 / 13)
+    # A 2-by-3 right triangle has perimeter 5 + sqrt(13) mesh units.
+    # Length, unlike area, must propagate scale uncertainty linearly.
+    expected_perimeter = (5 + 13**0.5) * 0.01
+    expected_perimeter_interval = [expected_perimeter * 0.95, expected_perimeter * 1.05]
+    assert result["boundary_edge_length_m"] == pytest.approx(expected_perimeter)
+    assert result["boundary_loop_perimeters_m"] == pytest.approx([expected_perimeter])
+    assert result["boundary_loop_perimeter_scale_intervals_m"][0] == pytest.approx(
+        expected_perimeter_interval
+    )
     assert result["provenance"]["calibration_verified"] is False
     assert result["measurement_status"] == "caller_supplied_unverified"
     # Persist and execute the same representation through the typed graph engine.
@@ -619,6 +628,11 @@ def test_mesh_vertex_reindexing_preserves_scientific_measurements(
     assert result["surface_area_scale_interval_m2"] == pytest.approx(expected_area_interval)
     assert artifact["surface_area_scale_interval_m2"] == pytest.approx(expected_area_interval)
     assert artifact["surface_area_m2"] == pytest.approx(result["surface_area_m2"])
+    assert artifact["boundary_edge_length_m"] == pytest.approx(expected_perimeter)
+    assert artifact["boundary_loop_perimeters_m"] == pytest.approx([expected_perimeter])
+    assert artifact["boundary_loop_perimeter_scale_intervals_m"][0] == pytest.approx(
+        expected_perimeter_interval
+    )
     assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
         result["surface_area_to_bounding_diagonal_squared_ratio"]
     )
