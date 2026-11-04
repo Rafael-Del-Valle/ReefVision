@@ -88,7 +88,8 @@ export function writeGalleryPreference(
   if (
     !Number.isSafeInteger(preference.page) ||
     preference.page < 1 ||
-    (preference.imageId !== null &&\n      (typeof preference.imageId !== "string" || preference.imageId.trim().length === 0)) ||
+    (preference.imageId !== null &&
+      (typeof preference.imageId !== "string" || preference.imageId.trim().length === 0)) ||
     typeof preference.wrap !== "boolean"
   ) {
     return;
