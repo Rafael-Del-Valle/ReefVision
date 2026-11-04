@@ -100,7 +100,10 @@ export function writeGalleryPreference(
     return;
   }
   try {
-    storage.setItem(preferenceKey(projectId), JSON.stringify(preference));
+    storage.setItem(
+      preferenceKey(projectId),
+      JSON.stringify({ ...preference, page: preference.imageId === null ? 1 : preference.page }),
+    );
   } catch {
     // A blocked or full preference store must not prevent annotation work.
   }
