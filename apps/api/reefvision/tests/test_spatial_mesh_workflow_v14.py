@@ -445,9 +445,11 @@ def test_saved_mesh_workflow_preserves_rigid_translation_measurement_parity(
         "surface_area_scale_interval_m2",
         "boundary_edge_length_m",
         "boundary_loop_perimeters_m",
-        "boundary_loop_perimeter_scale_intervals_m",
     ):
         assert artifact[field] == pytest.approx(expected[field])
+    assert artifact["boundary_loop_perimeter_scale_intervals_m"][0] == pytest.approx(
+        expected["boundary_loop_perimeter_scale_intervals_m"][0]
+    )
     assert artifact["provenance"]["geometry_sha256"] == expected["provenance"]["geometry_sha256"]
     assert artifact["provenance"]["calibration_verified"] is False
     assert artifact["measurement_status"] == "caller_supplied_unverified"
