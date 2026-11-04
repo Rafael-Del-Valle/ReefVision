@@ -176,6 +176,13 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
     reopened = create_engine(f"sqlite+pysqlite:///{database_path}")
     try:
         with reopened.connect() as connection:
+            # Verify every research row survived the close/reopen boundary,
+            # including fields not explicitly asserted above.
+            rows_reopened = {
+                table: connection.execute(text(f'SELECT * FROM "{table}" ORDER BY rowid')).all()
+                for table in tables
+            }
+            assert rows_reopened == rows_before
             assert (
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
                 == revision
