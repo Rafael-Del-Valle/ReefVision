@@ -85,9 +85,7 @@ def test_release_preflight_rejects_commented_out_guards(style: str) -> None:
     )
     indent = guard[: len(guard) - len(guard.lstrip())]
     disabled = (
-        f"{indent}# {guard.lstrip()}"
-        if style == "line"
-        else f"{indent}<#\n{guard}\n{indent}#>"
+        f"{indent}# {guard.lstrip()}" if style == "line" else f"{indent}<#\n{guard}\n{indent}#>"
     )
     altered = WORKFLOW.replace(guard, disabled, 1)
     assert any(
@@ -176,9 +174,7 @@ def test_preflight_comment_filter_preserves_quoted_hashes(line: str) -> None:
 
 
 def test_preflight_comment_filter_removes_powershell_semicolon_comment() -> None:
-    assert GATE["_strip_inline_comment"]("Write-Output ok;# disabled guard") == (
-        "Write-Output ok;"
-    )
+    assert GATE["_strip_inline_comment"]("Write-Output ok;# disabled guard") == ("Write-Output ok;")
 
 
 @pytest.mark.parametrize(
