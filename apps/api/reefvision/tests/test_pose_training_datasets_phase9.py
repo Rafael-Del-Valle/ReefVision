@@ -436,7 +436,10 @@ def test_freeze_rejects_changed_scientist_review_attribution(
         elif changed_record == "timestamp":
             candidate.reviewed_at = None
         else:
-            correction.created_at = None
+            # Preserve the NOT NULL database constraint while changing the
+            # independently persisted scientist-review audit timestamp.
+            assert correction.created_at is not None
+            correction.created_at = correction.created_at.replace(year=2000)
         session.commit()
 
     response = client.post(
