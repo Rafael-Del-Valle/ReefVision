@@ -45,14 +45,14 @@ export function readGalleryPreference(
       typeof candidate.page !== "number" ||
       !Number.isSafeInteger(candidate.page) ||
       candidate.page < 1 ||
-      typeof candidate.wrap !== "boolean"
+      (candidate.wrap !== undefined && typeof candidate.wrap !== "boolean")
     ) {
       return { ...DEFAULT_PREFERENCE };
     }
     return {
       imageId: candidate.imageId,
       page: candidate.page,
-      wrap: candidate.wrap,
+      wrap: candidate.wrap === true,
     };
   } catch {
     return { ...DEFAULT_PREFERENCE };
