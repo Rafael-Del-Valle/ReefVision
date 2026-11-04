@@ -937,7 +937,11 @@ def test_freeze_rejects_nonlist_canonical_landmarks_without_persisting_dataset(
         json={"name": "Reject malformed canonical landmarks"},
     )
     assert response.status_code == 409, response.text
-    expected = "canonical pose bbox must be a list" if field == "bbox" else "canonical pose landmarks must be lists"
+    expected = (
+        "canonical pose bbox must be a list"
+        if field == "bbox"
+        else "canonical pose landmarks must be lists"
+    )
     assert expected in response.text
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
