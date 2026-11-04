@@ -5,6 +5,7 @@ This fixture intentionally mirrors 1.1's 0038_scientific_data.py and
 The 1.6 desktop must reject these populated databases before any DDL.
 """
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -19,8 +20,11 @@ from reefvision.db.migration_lineage_guard import assert_compatible_revision_003
 def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
     revision: str,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    # Exercise a persistent desktop database, not only an in-memory connection.
+    database_path = tmp_path / f"scientific-{revision}.sqlite"
+    engine = create_engine(f"sqlite+pysqlite:///{database_path}")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
         connection.execute(
@@ -162,3 +166,27 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
         }
     assert rows_after == rows_before
     engine.dispose()
+    # Reopen the physical file to ensure the failed startup did not merely
+    # leave uncommitted changes hidden by the original connection pool.
+    reopened = create_engine(f"sqlite+pysqlite:///{database_path}")
+    try:
+        with reopened.connect() as connection:
+            assert connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one() == revision
+            assert connection.execute(
+                text("SELECT payload_json FROM scientific_records")
+            ).scalar_one() == '{"count": 12}'
+            assert connection.execute(
+                text("SELECT payload_json FROM environmental_cache_entries")
+            ).scalar_one() == '{"celsius": 22.2}'
+            if revision == "0039":
+                assert connection.execute(
+                    text("SELECT definition_sha256 FROM computed_metric_definitions")
+                ).scalar_one() == "definition-sha"
+            assert connection.execute(
+                text("SELECT type, name, sql FROM sqlite_master "
+                     "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name")
+            ).all() == schema_before
+    finally:
+        reopened.dispose()
