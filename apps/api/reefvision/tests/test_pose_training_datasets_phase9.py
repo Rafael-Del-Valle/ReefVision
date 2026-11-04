@@ -945,3 +945,42 @@ def test_freeze_rejects_nonlist_canonical_landmarks_without_persisting_dataset(
     assert expected in response.text
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize("field", ["groups_json", "expanded_labels_json"])
+def test_freeze_rejects_nonlist_persisted_schema_labels_without_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    # Review through the real API, then damage the persisted immutable schema.
+    # Neither a mapping's keys nor a partial dataset may become training truth.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        revision = (
+            session.query(PoseLandmarkSchemaRevision)
+            .filter_by(
+                schema_id=candidate.pose_schema_id,
+                revision=candidate.pose_schema_revision,
+            )
+            .one()
+        )
+        assert isinstance(getattr(revision, field), list)
+        setattr(revision, field, {"unexpected": "mapping"})
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject damaged persisted schema"},
+    )
+    assert response.status_code == 409, response.text
+    assert "malformed label collections" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
