@@ -1075,3 +1075,35 @@ def test_freeze_rejects_nonobject_acquisition_provenance_without_dataset(
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
         assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+def test_freeze_rejects_boolean_acquisition_frame_even_with_resigned_checksum(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # JSON booleans compare equal to Python integers (True == 1). A saved
+    # acquisition frame must retain its integer type before becoming truth.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        provenance = copy.deepcopy(candidate.provenance_json)
+        assert type(provenance["focus_frame"]) is int
+        provenance["focus_frame"] = bool(provenance["focus_frame"])
+        candidate.provenance_json = provenance
+        candidate.provenance_sha256 = canonical_json_sha256(provenance)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject boolean acquisition frame"},
+    )
+    assert response.status_code == 409, response.text
+    assert "acquisition provenance does not match verified source" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
