@@ -100,6 +100,12 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
                 connection.scalar(text("SELECT definition_sha256 FROM computed_metric_definitions"))
                 == "definition-sha"
             )
+    # Capture the full SQLite schema, not only the preserved research rows.
+    # A rejected startup must not add, remove or rewrite scientific tables.
+    with engine.connect() as connection:
+        schema_before = connection.execute(
+            text("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name")
+        ).all()
     monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
     monkeypatch.setattr(
         desktop.ScriptDirectory,
@@ -128,4 +134,9 @@ def test_scientific_lineage_with_observations_cannot_be_mistaken_for_qc(
             assert connection.scalar(
                 text("SELECT definition_sha256 FROM computed_metric_definitions")
             ) == "definition-sha"
+    with engine.connect() as connection:
+        schema_after = connection.execute(
+            text("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name")
+        ).all()
+    assert schema_after == schema_before
     engine.dispose()
