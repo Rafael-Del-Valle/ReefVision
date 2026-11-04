@@ -72,6 +72,32 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("normalizes padded camera IDs without losing their selected gallery page", () => {
+    const storage = memoryStorage({
+      "reefvision.gallery.project-a.v1": JSON.stringify({
+        imageId: "  camera-original-1  ",
+        page: 4,
+        wrap: false,
+      }),
+    });
+    expect(readGalleryPreference(storage, "project-a")).toEqual({
+      imageId: "camera-original-1",
+      page: 4,
+      wrap: false,
+    });
+
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "  camera-original-2  ",
+      page: 5,
+      wrap: true,
+    });
+    expect(JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null")).toEqual({
+      imageId: "camera-original-2",
+      page: 5,
+      wrap: true,
+    });
+  });
+
   it("normalizes an unselected image to page one before persisting", () => {
     const storage = memoryStorage();
     writeGalleryPreference(storage, "project-a", {
