@@ -16,6 +16,7 @@ from reefvision.tests.test_workflow_computed_metrics import save_and_queue
 from reefvision.tests.test_workflow_environmental_threshold import threshold_query
 
 NODE_TYPES = {
+    "current_streamline_analysis",
     "lunar_context_analysis",
     "tidal_context_analysis",
     "event_window_analysis",

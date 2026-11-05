@@ -8,6 +8,7 @@ import {
 describe("workflowTemplates", () => {
   it("includes executable templates for every environmental-analysis node", () => {
     const expected = new Set([
+      "current_streamline_analysis",
       "lunar_context_analysis",
       "tidal_context_analysis",
       "event_window_analysis",

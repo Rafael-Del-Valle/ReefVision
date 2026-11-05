@@ -32,6 +32,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
 from reefvision.schemas.annotation_comparison import AnnotationComparisonCalculateRequest
+from reefvision.schemas.current_field import CurrentFieldAnalysisRequest
 from reefvision.schemas.environmental_analysis import (
     EventWindowAnalysisRequest,
     LaggedComparisonAnalysisRequest,
@@ -90,6 +91,7 @@ EXECUTABLE_NODE_TYPES = {
     "annotation_comparison",
     "geographic_pairwise",
     "environmental_threshold",
+    "current_streamline_analysis",
     "lunar_context_analysis",
     "tidal_context_analysis",
     "event_window_analysis",
@@ -825,6 +827,29 @@ class WorkflowExecutionService:
         )
         single = SimpleNamespace(definition=response.definition, result=response.results[0])
         return self._environmental_analysis_artifact(single)
+
+    def _execute_current_streamline_analysis(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = CurrentFieldAnalysisRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid current-streamline analysis parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_current_streamline(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
 
     def _execute_tidal_context_analysis(
         self,

@@ -75,6 +75,9 @@ _ACTIONS: dict[str, str] = {
     "environmental_threshold": (
         "Find bounded QC-eligible threshold samples with provenance, without event inference."
     ),
+    "current_streamline_analysis": (
+        "Persist deterministic streamlines through one frozen QC-compatible current field."
+    ),
     "lunar_context_analysis": "Persist deterministic offline lunar context.",
     "tidal_context_analysis": "Persist bounded observed and predicted NOAA tidal context.",
     "event_window_analysis": "Create explicit windows around saved threshold samples.",

@@ -76,6 +76,26 @@ function environmentalAnalysisGraph(
 
 const environmentalAnalysisTemplates: WorkflowTemplate[] = [
   {
+    id: "environmental-current-streamlines",
+    name: "Persisted current streamlines",
+    description:
+      "Explicit paired current records and seeds → deterministic frozen-field streamlines with immutable provenance.",
+    graph: environmentalAnalysisGraph(
+      "persisted-current-streamlines",
+      "Persisted current streamlines",
+      "current_streamline_analysis",
+      {
+        name: "Current streamlines",
+        scientific_record_ids: ["replace-with-current-record-id"],
+        seeds: [{ latitude: 32.7808, longitude: -79.9236 }],
+        step_seconds: 60,
+        max_steps: 1000,
+        max_length_m: 100000,
+        stagnation_m_s: 1e-9,
+      },
+    ),
+  },
+  {
     id: "environmental-lunar-context",
     name: "Persisted lunar context",
     description:

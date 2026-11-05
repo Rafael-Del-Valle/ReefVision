@@ -51,6 +51,10 @@ class CurrentFieldService:
             if row is None or row.project_id != project_id:
                 raise NotFoundError("Project scientific record not found")
             records.append(data_service.response(row))
+        if any(record.environmental_snapshot_current is False for record in records):
+            raise ValidationError("Current fields cannot use an obsolete environmental snapshot")
+        if any(record.calibration_current is False for record in records):
+            raise ValidationError("Current fields cannot use an obsolete spatial calibration")
         if len({self._identity(record) for record in records}) != 1:
             raise ValidationError(
                 "Current components must share UTC, depth, source, dataset, "

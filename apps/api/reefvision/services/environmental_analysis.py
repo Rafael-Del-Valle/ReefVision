@@ -106,12 +106,36 @@ class EnvironmentalAnalysisService:
         workflow_run_id: str | None = None,
         workflow_node_run_id: str | None = None,
     ) -> EnvironmentalAnalysisSingleResponse:
+        self.science.require_project(project_id)
+        configuration = request.model_dump(mode="json", exclude={"name"})
+        if workflow_node_run_id is not None:
+            existing = self.session.scalar(
+                select(EnvironmentalAnalysisResult).where(
+                    EnvironmentalAnalysisResult.workflow_node_run_id == workflow_node_run_id
+                )
+            )
+            if existing is not None:
+                definition = self.get_definition(project_id, existing.definition_id)
+                if (
+                    existing.project_id != project_id
+                    or existing.analysis_kind != "current_streamline"
+                    or existing.workflow_run_id != workflow_run_id
+                    or definition.analysis_kind != "current_streamline"
+                    or definition.name != request.name
+                    or definition.configuration_json != configuration
+                ):
+                    raise ConflictError(
+                        "Current streamline workflow node replay conflicts with its saved result"
+                    )
+                return EnvironmentalAnalysisSingleResponse(
+                    definition=self.definition_response(definition),
+                    result=self.result_response(existing),
+                )
         preview_request = request.model_dump(exclude={"name"})
         preview = CurrentFieldService(self.session).preview(
             project_id,
             CurrentFieldStreamlineRequest.model_validate(preview_request),
         )
-        configuration = request.model_dump(mode="json", exclude={"name"})
         definition = self.create_definition(
             project_id,
             analysis_kind="current_streamline",

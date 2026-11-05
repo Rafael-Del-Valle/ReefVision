@@ -200,6 +200,34 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="current_streamline_analysis",
+            display_name="Persisted Current Streamlines",
+            category="analysis",
+            description=(
+                "Integrate and persist deterministic streamlines through one frozen, "
+                "QC-compatible current field."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[
+                _output("result", "Current Streamlines", "environmental_analysis_result")
+            ],
+            required_parameters=["name", "scientific_record_ids", "seeds"],
+            optional_parameters={
+                "step_seconds": 60,
+                "max_steps": 1000,
+                "max_length_m": 100000,
+                "stagnation_m_s": 1e-9,
+            },
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Requires a complete paired eastward/northward component grid.",
+                "All inputs share one UTC, depth, source, dataset/model, and cache identity.",
+                "Streamlines describe a frozen Eulerian field and are not organism trajectories.",
+                "Obsolete environmental snapshots and spatial calibrations fail closed.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="lunar_context_analysis",
             display_name="Persisted Lunar Context",
             category="analysis",
