@@ -189,15 +189,15 @@ export function TrainingRunDetail({
   }
   const metricHistory = history(run);
   const best = bestEpoch(run);
-  const artifacts = Array.isArray(run.artifact_manifest.artifacts)
-    ? (run.artifact_manifest.artifacts as TrainingArtifact[])
+  // Interrupted or older jobs may have no artifact manifest yet. Do not
+  // hide the training console, loss history, or immutable run provenance.
+  const manifest = run.artifact_manifest ?? {};
+  const artifacts = Array.isArray(manifest.artifacts)
+    ? (manifest.artifacts as TrainingArtifact[])
     : [];
-  const tuningResults = run.artifact_manifest.tuning_results as
-    TuningResults | null | undefined;
-  const nativeRows = Array.isArray(run.artifact_manifest.native_results_rows)
-    ? (run.artifact_manifest.native_results_rows as Array<
-        Record<string, unknown>
-      >)
+  const tuningResults = manifest.tuning_results as TuningResults | null | undefined;
+  const nativeRows = Array.isArray(manifest.native_results_rows)
+    ? (manifest.native_results_rows as Array<Record<string, unknown>>)
     : [];
   const bestCheckpoint = artifacts.find((item) => item.name === "best.pt");
   const lastCheckpoint = artifacts.find((item) => item.name === "last.pt");
