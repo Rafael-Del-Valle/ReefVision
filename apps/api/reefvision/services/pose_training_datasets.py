@@ -148,6 +148,7 @@ def frozen_pose_item_fingerprints_match(
             # review into scientist-verified training truth.
             or not isinstance(review.get("actor"), str)
             or not review["actor"].strip()
+            or review["actor"] != review["actor"].strip()
             or review.get("reviewed_by") != review["actor"]
             or not isinstance(review.get("reviewed_at"), str)
             or not review["reviewed_at"].strip()
