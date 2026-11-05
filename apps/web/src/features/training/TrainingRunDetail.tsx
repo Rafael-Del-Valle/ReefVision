@@ -191,7 +191,7 @@ export function TrainingRunDetail({
   const best = bestEpoch(run);
   // Interrupted or older jobs may have no artifact manifest yet. Do not
   // hide the training console, loss history, or immutable run provenance.
-  const manifest = run.artifact_manifest ?? {};
+  const manifest = (run.artifact_manifest ?? {}) as NonNullable<TrainingRun["artifact_manifest"]>;
   const artifacts = Array.isArray(manifest.artifacts)
     ? (manifest.artifacts as TrainingArtifact[])
     : [];
