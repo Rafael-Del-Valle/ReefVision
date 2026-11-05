@@ -204,6 +204,9 @@ def test_earlier_review_revision_rejects_nullable_reviewer_attribution(
                 assert connection.scalar(text("SELECT value FROM observations")) == (
                     "preserved"
                 )
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version"))
+                    == revision
+                )
     finally:
         engine.dispose()
