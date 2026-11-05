@@ -125,11 +125,9 @@ def frozen_pose_item_fingerprints_match(
             return False
         # Duplicate source identifiers make lineage ambiguous for downstream
         # training and scientific audit, even when the manifest is re-signed.
-        if (
-            len({model["model_id"] for model in row.source_models_json})
-            != len(row.source_models_json)
-            or len(set(row.source_job_ids_json)) != len(row.source_job_ids_json)
-        ):
+        if len({model["model_id"] for model in row.source_models_json}) != len(
+            row.source_models_json
+        ) or len(set(row.source_job_ids_json)) != len(row.source_job_ids_json):
             return False
         if (
             not isinstance(row.acquisition_provenance_json, dict)
