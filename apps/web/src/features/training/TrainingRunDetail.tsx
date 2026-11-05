@@ -151,6 +151,7 @@ function MetricChart({ label, values }: { label: string; values: number[] }) {
       </svg>
       <small>
         Latest {values.at(-1)?.toFixed(4)} · {values.length} epochs
+        {values.length > 1002 && " · overview downsampled (raw metrics preserved)"}
       </small>
     </figure>
   );
