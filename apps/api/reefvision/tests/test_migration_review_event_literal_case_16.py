@@ -50,12 +50,17 @@ def test_review_event_check_literals_are_case_sensitive(
                         assert_compatible_revision_0038(connection)
                 else:
                     assert_compatible_revision_0038(connection)
-                assert tuple(
-                    connection.execute(
-                        text("SELECT name, sql FROM sqlite_master ORDER BY name")
-                    ).all()
-                ) == before
-                assert connection.scalar(text("SELECT value FROM observations")) == "coral observation"
+                assert (
+                    tuple(
+                        connection.execute(
+                            text("SELECT name, sql FROM sqlite_master ORDER BY name")
+                        ).all()
+                    )
+                    == before
+                )
+                assert (
+                    connection.scalar(text("SELECT value FROM observations")) == "coral observation"
+                )
                 assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0038"
     finally:
         engine.dispose()
