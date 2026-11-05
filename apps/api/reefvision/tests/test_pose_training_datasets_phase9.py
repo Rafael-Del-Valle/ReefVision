@@ -1057,7 +1057,7 @@ def test_freeze_rejects_malformed_source_model_ids_without_dataset(
         json={"name": "Reject malformed source model provenance"},
     )
     assert response.status_code == 409, response.text
-    assert "source model IDs must be a list" in response.text
+    assert "source model IDs must be nonempty, trimmed strings" in response.text
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
         assert session.query(PoseTrainingDatasetItem).count() == 0
