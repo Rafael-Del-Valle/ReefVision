@@ -253,6 +253,7 @@ describe("TrainingRunDetail", () => {
     });
     const points = chart.querySelector("polyline")?.getAttribute("points") ?? "";
     expect(points).not.toMatch(/NaN|Infinity/);
+    expect(screen.getByText(/overview downsampled \(raw metrics preserved\)/i)).toBeInTheDocument();
     // Long histories must not create 150,000 SVG vertices.
     expect(points.split(" ").length).toBeLessThanOrEqual(1002);
     expect(points.split(" ")[0]).toMatch(/^0,/);
