@@ -96,6 +96,39 @@ function setup(datasetRows = rows) {
           }),
         ),
       );
+    if (
+      path ===
+      "/api/v1/projects/project/environment/analyses/current-streamline"
+    )
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            result: {
+              id: "streamline-result",
+              payload: {
+                algorithm_version: "wgs84-stationary-bilinear-rk4-v1",
+                source_record_ids: datasetRows.map((row) => row.id),
+                observed_at: "2026-04-03T00:00:00Z",
+                source_kind: "modeled",
+                depth_m: 5,
+                depth_reference: "sea_surface",
+                input_sha256: "a".repeat(64),
+                streamlines: [
+                  {
+                    points: [
+                      { latitude: 32.5, longitude: -79.5, speed_m_s: 1 },
+                      { latitude: 32.5, longitude: -79.49, speed_m_s: 1 },
+                    ],
+                    termination: "max_steps",
+                    length_m: 100,
+                  },
+                ],
+                methodological_notes: [],
+              },
+            },
+          }),
+        ),
+      );
     return Promise.resolve(new Response("{}", { status: 404 }));
   });
   vi.stubGlobal("fetch", fetch);
@@ -174,6 +207,43 @@ it("opens cached currents with time, depth and provenance", async () => {
   });
   expect(screen.getByText(/32.5, -79.5 · 10 m/)).toBeInTheDocument();
   expect(screen.getByLabelText("Online basemap tiles")).not.toBeChecked();
+});
+it("calculates and labels bounded current streamlines for a complete grid", async () => {
+  const gridRows = [
+    [32.5, -79.5],
+    [32.5, -79.4],
+    [32.6, -79.5],
+    [32.6, -79.4],
+  ].flatMap(([latitude, longitude], index) =>
+    [rows[0], rows[1]].map((row) => ({
+      ...row,
+      id: `grid-${index}-${row.variable}`,
+      location: { latitude, longitude },
+    })),
+  );
+  const fetch = setup(gridRows);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open ocean current map" }),
+  );
+  await screen.findByRole("option", { name: /copernicus_marine/ });
+  fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
+    target: { value: "cache" },
+  });
+  const button = await screen.findByRole("button", {
+    name: "Calculate bounded streamlines",
+  });
+  expect(button).toBeEnabled();
+  fireEvent.click(button);
+  expect(
+    await screen.findByRole("region", { name: "Current streamline result" }),
+  ).toHaveTextContent("not organism trajectories");
+  const call = fetch.mock.calls.find(([input]) =>
+    String(input).includes("environment/analyses/current-streamline"),
+  );
+  expect(call).toBeDefined();
+  const body = JSON.parse(String(call?.[1]?.body));
+  expect(body.scientific_record_ids).toHaveLength(8);
+  expect(body.seeds).toHaveLength(4);
 });
 it("filters unpaired times and separates depth datums", async () => {
   const earlierOrphan = {

@@ -106,6 +106,29 @@ const heatmap = {
   content_sha256: "c".repeat(64),
   methodological_notes: ["Pending predictions are not verified."],
 };
+const comparison = {
+  algorithm: "reefvision.class-aware-box-comparison.v1",
+  source_a_sha256: "d".repeat(64),
+  source_b_sha256: "e".repeat(64),
+  content_sha256: "f".repeat(64),
+  per_class: {
+    fish: {
+      count_a: 2,
+      count_b: 3,
+      signed_count_difference_b_minus_a: 1,
+      absolute_count_difference: 1,
+      reference_relative_percent_difference: 50,
+      reference_relative_percent_reason: null,
+      matched_count: 2,
+      mean_matched_iou: 0.8,
+      unmatched_a_ids: [],
+      unmatched_b_ids: ["prediction-3"],
+      false_positive_ids: ["prediction-3"],
+      false_negative_ids: [],
+    },
+  },
+  methodological_notes: [],
+};
 
 function json(value: unknown) {
   return new Response(JSON.stringify(value), {
@@ -209,5 +232,35 @@ describe("ScientificHeatmapsPanel", () => {
     expect(
       screen.getByText("Pending predictions are not verified."),
     ).toBeInTheDocument();
+  });
+
+  it("compares a pinned prediction job without claiming reviewer identity", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (url) => {
+        const path = String(url);
+        if (path.includes("annotation-comparisons"))
+          return json({ result_id: "comparison-result", comparison });
+        return json(path.includes("scientific-heatmaps") ? heatmap : imagePage);
+      });
+    renderPanel();
+    await screen.findByRole("img", { name: "Source-pixel heatmap overlay" });
+    fireEvent.change(screen.getByLabelText("Prediction job ID"), {
+      target: { value: "11111111-1111-4111-8111-111111111111" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Compare evidence" }));
+    const result = await screen.findByRole("region", {
+      name: "Annotation comparison result",
+    });
+    expect(result).toHaveTextContent("fish: A 2, B 3, matched 2");
+    expect(result).toHaveTextContent("no reviewer-performance");
+    const request = fetch.mock.calls.find(([url]) =>
+      String(url).includes("annotation-comparisons"),
+    );
+    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+      reference_side: "a",
+      source_a: { kind: "reviewed_boxes" },
+      source_b: { kind: "prediction_job" },
+    });
   });
 });

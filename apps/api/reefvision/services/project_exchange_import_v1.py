@@ -1085,6 +1085,8 @@ def import_project_exchange_v1(
                 aggregates.definition_response(definition_row)
             elif definition_row.definition_kind == "mask_coverage":
                 mask_coverage.definition_response(definition_row)
+            elif definition_row.definition_kind == "annotation_comparison":
+                continue
             else:
                 computed.definition_response(definition_row)
         for result_row in session.scalars(
@@ -1106,6 +1108,8 @@ def import_project_exchange_v1(
                         "Imported mask coverage evidence is stale after remapping: "
                         + ", ".join(coverage_validation.reasons)
                     )
+            elif result_row.result_kind == "annotation_comparison":
+                continue
             else:
                 computed.result_response(result_row)
         environment = EnvironmentalContextService(session)

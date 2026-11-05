@@ -278,6 +278,52 @@ export function getCachedDataset(
     { signal },
   );
 }
+
+export interface CurrentStreamlinePoint {
+  latitude: number;
+  longitude: number;
+  speed_m_s: number;
+}
+export interface CurrentStreamline {
+  points: CurrentStreamlinePoint[];
+  termination: string;
+  length_m: number;
+}
+export interface CurrentStreamlinePreview {
+  result_id?: string;
+  algorithm_version: "wgs84-stationary-bilinear-rk4-v1";
+  source_record_ids: string[];
+  observed_at: string;
+  source_kind: ScientificSourceKind;
+  depth_m: number | null;
+  depth_reference: string | null;
+  input_sha256: string;
+  streamlines: CurrentStreamline[];
+  methodological_notes: string[];
+}
+export function previewCurrentStreamlines(
+  projectId: string,
+  payload: {
+    scientific_record_ids: string[];
+    seeds: { latitude: number; longitude: number }[];
+    step_seconds?: number;
+    max_steps?: number;
+    max_length_m?: number;
+  },
+): Promise<CurrentStreamlinePreview> {
+  return request<{
+    result: { id: string; payload: CurrentStreamlinePreview };
+  }>(
+    `/projects/${encodeURIComponent(projectId)}/environment/analyses/current-streamline`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: `Current streamlines ${new Date().toISOString()}`,
+        ...payload,
+      }),
+    },
+  ).then(({ result }) => ({ ...result.payload, result_id: result.id }));
+}
 export function importCopernicus(
   projectId: string,
   payload: CopernicusRequest,

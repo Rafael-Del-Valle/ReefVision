@@ -1,5 +1,12 @@
 # ReefVision 1.1 development roadmap
 
+## 2026-11-05 release-candidate scientific completion checkpoint
+
+- Geographic distances now use the shared GeographicLib WGS84 inverse implementation with independent antipodal and near-antipodal regressions. Survey-grade uncertainty propagation, absolute UTC/VFR alignment, surveyed GCP validation, persisted pairwise measurements, and GeoPackage remain open.
+- Annotation-source comparison now provides immutable reviewed-box versus pinned prediction-job calculations with deterministic class-aware one-to-one IoU matching, explicit reference semantics, source snapshots and hashes, React inspection, and atomic exchange remapping. Legacy rows do not establish independent reviewer identity; reviewer-performance claims and verified-mask comparison remain open.
+- Ocean-current streamlines now use paired numeric `ScientificRecord` inputs from one UTC/depth/source/cache slice, strict four-corner bilinear sampling, bounded WGS84 RK4, explicit termination/QC/uncertainty limitations, immutable environmental-analysis persistence, CSV export, React map rendering, and atomic exchange remapping. They are frozen-field flow geometry, not organism trajectories. Time/depth-aligned organism comparison remains unavailable without absolute UTC and explicit organism-depth evidence.
+- Existing migration `0042` remains the single Alembic head; this checkpoint adds no competing persistence system or schema migration.
+
 Status date: 2026-11-04 UTC. Development only; no release acceptance claimed.
 
 ## Baseline and audit

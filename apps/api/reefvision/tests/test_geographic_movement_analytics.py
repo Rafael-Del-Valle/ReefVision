@@ -89,6 +89,28 @@ def test_wgs84_distance_matches_known_diagonal_pair() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("end_latitude_deg", "expected_distance_m"),
+    [
+        pytest.param(0.0, 20_003_931.458625443, id="antipodal"),
+        pytest.param(1e-8, 20_003_931.4575197, id="near-antipodal"),
+    ],
+)
+def test_wgs84_distance_matches_independent_meridian_integral_near_antipodes(
+    end_latitude_deg: float,
+    expected_distance_m: float,
+) -> None:
+    # Independent WGS84 meridian-arc quadrature, rather than an inverse-geodesic
+    # calculation: M(phi) = a(1-e^2)/(1-e^2 sin(phi)^2)^(3/2), with
+    # a=6378137 m, f=1/298.257223563 and e^2=f(2-f). The shortest path is
+    # 2*integral(M, 0, pi/2) - integral(M, 0, radians(end_latitude_deg)).
+    assert geographic_distance_m(0.0, 0.0, end_latitude_deg, 180.0) == pytest.approx(
+        expected_distance_m,
+        abs=1e-5,
+        rel=0,
+    )
+
+
 def test_segment_preserves_identity_and_calculates_speed() -> None:
     start = observation(
         "observation-1",

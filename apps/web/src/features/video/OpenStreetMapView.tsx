@@ -9,10 +9,12 @@ import { useEffect, useMemo, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 
 import type { GeoReferencedObservationSummary } from "./videoGeoreferencedObservationsApi";
+import type { CurrentStreamline } from "../environmental-context/environmentalContextApi";
 
 interface OpenStreetMapViewProps {
   observations: GeoReferencedObservationSummary[];
   currentVectors?: CurrentVector[];
+  currentStreamlines?: CurrentStreamline[];
   showCurrentArrows?: boolean;
   showCurrentSpeedHeatmap?: boolean;
   showBasemap?: boolean;
@@ -26,6 +28,7 @@ interface OpenStreetMapViewProps {
 }
 
 const NO_CURRENTS: CurrentVector[] = [];
+const NO_STREAMLINES: CurrentStreamline[] = [];
 const DEFAULT_CENTER: L.LatLngExpression = [0, 0];
 const DEFAULT_ZOOM = 2;
 
@@ -41,6 +44,7 @@ function observationPosition(
 export function OpenStreetMapView({
   observations,
   currentVectors = NO_CURRENTS,
+  currentStreamlines = NO_STREAMLINES,
   showCurrentArrows = true,
   showCurrentSpeedHeatmap = false,
   showBasemap = true,
@@ -181,7 +185,28 @@ export function OpenStreetMapView({
       ...drawableCurrents.map(
         (vector) => [vector.latitude, vector.longitude] as L.LatLngTuple,
       ),
+      ...currentStreamlines.flatMap((line) =>
+        line.points
+          .filter((point) => Math.abs(point.latitude) <= 85)
+          .map((point) => [point.latitude, point.longitude] as L.LatLngTuple),
+      ),
     ];
+    for (const line of currentStreamlines) {
+      const linePositions = line.points
+        .filter((point) => Math.abs(point.latitude) <= 85)
+        .map((point) => [point.latitude, point.longitude] as L.LatLngTuple);
+      if (linePositions.length < 2) continue;
+      L.polyline(linePositions, {
+        color: "#34d6ff",
+        weight: 2,
+        opacity: 0.8,
+        dashArray: "6 4",
+      })
+        .bindTooltip(
+          `Modeled current streamline; ${line.length_m.toFixed(1)} m numerical path; ${line.termination}`,
+        )
+        .addTo(overlays);
+    }
     for (const vector of drawableCurrents) {
       if (showCurrentSpeedHeatmap) {
         // A sample-centered intensity marker, not an interpolated raster or
@@ -306,6 +331,7 @@ export function OpenStreetMapView({
   }, [
     activeObservationId,
     currentVectors,
+    currentStreamlines,
     showCurrentArrows,
     showCurrentSpeedHeatmap,
     showBasemap,

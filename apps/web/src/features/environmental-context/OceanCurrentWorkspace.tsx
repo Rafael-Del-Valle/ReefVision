@@ -14,6 +14,7 @@ import {
   getCachedDataset,
   getEnvironmentalDatasets,
   importCopernicus,
+  previewCurrentStreamlines,
   type CopernicusRequest,
 } from "./environmentalContextApi";
 import { utcTime } from "./ScientificRecordCard";
@@ -103,6 +104,22 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
     [allVectors, selectedTime, selectedDepth],
   );
   const metrics = useMemo(() => summarizeCurrentSlice(vectors), [vectors]);
+  const streamlineMutation = useMutation({
+    mutationFn: () =>
+      previewCurrentStreamlines(projectId, {
+        scientific_record_ids: vectors.flatMap((vector) => vector.recordIds),
+        seeds: vectors.slice(0, 25).map((vector) => ({
+          latitude: vector.latitude,
+          longitude: vector.longitude,
+        })),
+        step_seconds: 60,
+        max_steps: 100,
+        max_length_m: 10000,
+      }),
+  });
+  const gridReady =
+    new Set(vectors.map((vector) => vector.latitude)).size >= 2 &&
+    new Set(vectors.map((vector) => vector.longitude)).size >= 2;
   const overlay = useMemo(
     () =>
       showObjects
@@ -320,6 +337,41 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
                   individual measurements rather than averaging across datasets.
                 </p>
               )}
+              <button
+                type="button"
+                disabled={!gridReady || streamlineMutation.isPending}
+                onClick={() => streamlineMutation.mutate()}
+              >
+                {streamlineMutation.isPending
+                  ? "Calculating streamlines…"
+                  : "Calculate bounded streamlines"}
+              </button>
+              {!gridReady && vectors.length > 0 && (
+                <p role="status">
+                  Streamlines require a complete paired current grid with at
+                  least two unique latitudes and longitudes.
+                </p>
+              )}
+              {streamlineMutation.error && (
+                <p role="alert">{streamlineMutation.error.message}</p>
+              )}
+              {streamlineMutation.data && (
+                <section aria-label="Current streamline result">
+                  <h4>Bounded current streamlines</h4>
+                  <p>
+                    {streamlineMutation.data.streamlines.length} flow lines ·
+                    input {streamlineMutation.data.input_sha256.slice(0, 12)}… ·{" "}
+                    {streamlineMutation.data.algorithm_version}
+                  </p>
+                  <p>
+                    Immutable result ID: {streamlineMutation.data.result_id}
+                  </p>
+                  <p>
+                    Frozen-field flow geometry only; these are not organism
+                    trajectories and do not imply environmental causation.
+                  </p>
+                </section>
+              )}
               {allVectors.length === 0 && (
                 <p role="status">
                   No QC-compatible paired eastward/northward currents in this
@@ -329,6 +381,7 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
               <OpenStreetMapView
                 observations={overlay}
                 currentVectors={visible || speedHeatmap ? vectors : []}
+                currentStreamlines={streamlineMutation.data?.streamlines ?? []}
                 showCurrentArrows={visible}
                 showCurrentSpeedHeatmap={speedHeatmap}
                 showBasemap={basemap}

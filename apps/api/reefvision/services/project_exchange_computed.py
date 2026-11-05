@@ -18,6 +18,10 @@ from reefvision.domain.computed_metrics import (
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.scientific_units import UNITS
+from reefvision.schemas.annotation_comparison import (
+    AnnotationComparisonPreviewRequest,
+    AnnotationComparisonPreviewResponse,
+)
 from reefvision.schemas.computed_aggregate_metrics import ComputedAggregateDefinitionCreate
 from reefvision.schemas.computed_mask_coverage import (
     ComputedMaskCoverageDefinitionCreate,
@@ -35,6 +39,64 @@ AGGREGATE_FORMULA_VERSION = "reefvision.annotation-aggregate.v1"
 MASK_COVERAGE_KIND = "mask_coverage"
 MASK_COVERAGE_FORMULA_VERSION = "reefvision.mask-coverage.v1"
 MASK_COVERAGE_ALGORITHM = "reefvision.source-pixel-mask-union.v1"
+ANNOTATION_COMPARISON_KIND = "annotation_comparison"
+ANNOTATION_COMPARISON_VERSION = "reefvision.annotation-comparison.v1"
+
+
+def _remap_identifiers(value: Any, id_map: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        return id_map.get(value, value)
+    if isinstance(value, list):
+        return [_remap_identifiers(item, id_map) for item in value]
+    if isinstance(value, dict):
+        return {key: _remap_identifiers(item, id_map) for key, item in value.items()}
+    return value
+
+
+def _validate_annotation_comparison_definition(
+    project_id: str, row: dict[str, Any], sections: dict[str, list[dict[str, Any]]]
+) -> None:
+    config = row.get("configuration_json")
+    request = AnnotationComparisonPreviewRequest.model_validate(config)
+    images = {item["id"]: item for item in sections.get("images", [])}
+    image = images.get(str(request.image_id))
+    if image is None or image.get("project_id") != project_id:
+        raise ValidationError("Annotation comparison refers to a missing project image")
+    if (
+        row.get("project_id") != project_id
+        or row.get("definition_kind") != ANNOTATION_COMPARISON_KIND
+        or row.get("formula_version") != ANNOTATION_COMPARISON_VERSION
+        or row.get("input_spec_json") != []
+        or row.get("output_unit") != "count"
+        or content_hash(_aggregate_definition_payload(row)) != row.get("definition_sha256")
+    ):
+        raise ValidationError("Annotation comparison definition checksum mismatch")
+
+
+def _validate_annotation_comparison_result(
+    project_id: str, row: dict[str, Any], definition: dict[str, Any]
+) -> None:
+    payload = row.get("payload_json")
+    if (
+        row.get("project_id") != project_id
+        or row.get("result_kind") != ANNOTATION_COMPARISON_KIND
+        or not isinstance(payload, dict)
+        or content_hash(payload) != row.get("content_sha256")
+        or payload.get("definition_id") != definition.get("id")
+        or payload.get("definition_name") != definition.get("name")
+        or payload.get("definition_sha256") != definition.get("definition_sha256")
+        or payload.get("formula_version") != ANNOTATION_COMPARISON_VERSION
+    ):
+        raise ValidationError("Annotation comparison result checksum mismatch")
+    comparison = payload.get("comparison")
+    AnnotationComparisonPreviewResponse.model_validate(comparison)
+    if not isinstance(comparison, dict):
+        raise ValidationError("Annotation comparison payload is invalid")
+    comparison_content = {
+        key: value for key, value in comparison.items() if key != "content_sha256"
+    }
+    if content_hash(comparison_content) != comparison.get("content_sha256"):
+        raise ValidationError("Annotation comparison evidence checksum mismatch")
 
 
 def _definition_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -590,6 +652,10 @@ def validate_computed_exchange_records(
     try:
         compiled_by_id: dict[str, Any] = {}
         for identifier, row in definitions.items():
+            if row.get("definition_kind") == ANNOTATION_COMPARISON_KIND:
+                _validate_annotation_comparison_definition(project_id, row, sections)
+                compiled_by_id[identifier] = None
+                continue
             if row.get("definition_kind", "scalar") == AGGREGATE_KIND:
                 _validate_aggregate_definition(project_id, row, labels)
                 compiled_by_id[identifier] = None
@@ -617,6 +683,17 @@ def validate_computed_exchange_records(
             compiled_by_id[identifier] = ComputedMetricService._compile_definition(payload)
 
         for row in sections.get("computed_metric_results", []):
+            if row.get("result_kind") == ANNOTATION_COMPARISON_KIND:
+                definition = definitions.get(row.get("definition_id"))
+                if (
+                    definition is None
+                    or definition.get("definition_kind") != ANNOTATION_COMPARISON_KIND
+                ):
+                    raise ValidationError(
+                        "Annotation comparison result refers to a missing definition"
+                    )
+                _validate_annotation_comparison_result(project_id, row, definition)
+                continue
             if row.get("result_kind", "scalar") == AGGREGATE_KIND:
                 definition_id = row.get("definition_id")
                 definition = definitions.get(definition_id)
@@ -825,10 +902,27 @@ def remap_computed_sections(
                 config["roi_label_class_id"] = id_map[config["roi_label_class_id"]]
             row["configuration_json"] = config
             row["definition_sha256"] = content_hash(_aggregate_definition_payload(row))
+        elif row.get("definition_kind") == ANNOTATION_COMPARISON_KIND:
+            row["configuration_json"] = _remap_identifiers(row["configuration_json"], id_map)
+            row["definition_sha256"] = content_hash(_aggregate_definition_payload(row))
         remapped_definitions[old_id] = row
     for row in result["computed_metric_results"]:
         payload = row["payload_json"]
         old_definition_id = row["definition_id"]
+        if row.get("result_kind") == ANNOTATION_COMPARISON_KIND:
+            mapped_definition = remapped_definitions[old_definition_id]
+            payload = _remap_identifiers(payload, id_map)
+            comparison = payload["comparison"]
+            comparison["content_sha256"] = content_hash(
+                {key: value for key, value in comparison.items() if key != "content_sha256"}
+            )
+            payload["definition_id"] = mapped_definition["id"]
+            payload["definition_sha256"] = mapped_definition["definition_sha256"]
+            row["payload_json"] = payload
+            row["project_id"] = id_map[row["project_id"]]
+            row["definition_id"] = mapped_definition["id"]
+            row["content_sha256"] = content_hash(payload)
+            continue
         if row.get("result_kind", "scalar") == AGGREGATE_KIND:
             mapped_definition = remapped_definitions[old_definition_id]
             payload["definition_id"] = mapped_definition["id"]

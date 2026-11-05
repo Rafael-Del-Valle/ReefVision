@@ -8,6 +8,7 @@ from reefvision.api.routes.advanced_provider_execution import (
 )
 from reefvision.api.routes.advanced_providers import router as advanced_providers_router
 from reefvision.api.routes.annotation_aggregates import router as annotation_aggregates_router
+from reefvision.api.routes.annotation_comparison import router as annotation_comparison_router
 from reefvision.api.routes.annotation_imports import router as annotation_imports_router
 from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
@@ -23,6 +24,7 @@ from reefvision.api.routes.computed_aggregate_metrics import (
 from reefvision.api.routes.computed_mask_coverage import router as computed_mask_coverage_router
 from reefvision.api.routes.computed_metrics import router as computed_metrics_router
 from reefvision.api.routes.coral_structure import router as coral_structure_router
+from reefvision.api.routes.current_field import router as current_field_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
 from reefvision.api.routes.environmental_analysis import router as environmental_analysis_router
 from reefvision.api.routes.environmental_context import router as environmental_context_router
@@ -80,6 +82,8 @@ api_router.include_router(environmental_context_router)
 api_router.include_router(lunar_context_router)
 api_router.include_router(scientific_data_router)
 api_router.include_router(scientific_heatmaps_router)
+api_router.include_router(annotation_comparison_router)
+api_router.include_router(current_field_router)
 api_router.include_router(computed_aggregate_metrics_router)
 api_router.include_router(computed_mask_coverage_router)
 api_router.include_router(computed_metrics_router)

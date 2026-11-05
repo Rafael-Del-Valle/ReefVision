@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { getImages, imageDisplayUrl, type Project } from "../../api/client";
@@ -9,6 +9,7 @@ import {
 } from "../../components/ui/AsyncState";
 import {
   getScientificHeatmap,
+  previewAnnotationComparison,
   type HeatmapKind,
   type ScientificHeatmap,
 } from "./scientificHeatmapsApi";
@@ -59,6 +60,8 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
   const [rows, setRows] = useState(16);
   const [opacity, setOpacity] = useState(0.65);
   const [scaleMode, setScaleMode] = useState<ScaleMode>("per_layer");
+  const [predictionJobId, setPredictionJobId] = useState("");
+  const [referenceSide, setReferenceSide] = useState<"a" | "b" | "">("a");
 
   const [visible, setVisible] = useState<Record<HeatmapKind, boolean>>({
     reviewed_boxes: true,
@@ -102,6 +105,17 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
   });
 
   const heatmap = heatmapQuery.data;
+  const comparison = useMutation({
+    mutationFn: () => {
+      if (!selectedImage) throw new Error("Choose an image first.");
+      return previewAnnotationComparison(
+        project.id,
+        selectedImage.id,
+        predictionJobId,
+        referenceSide || null,
+      );
+    },
+  });
 
   const sharedMaximum = Math.max(
     1,
@@ -260,6 +274,71 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
           </p>
         </section>
       </div>
+
+      <section
+        className="panel-card training-content"
+        aria-label="Annotation comparison"
+      >
+        <h3>Reviewed annotations vs model prediction job</h3>
+        <p>
+          This comparison uses class-aware one-to-one IoU matching. It does not
+          infer independent reviewer identities from legacy annotations.
+        </p>
+        <label>
+          Prediction job ID
+          <input
+            value={predictionJobId}
+            placeholder="UUID"
+            onChange={(event) => setPredictionJobId(event.target.value)}
+          />
+        </label>
+        <label>
+          Explicit reference
+          <select
+            value={referenceSide}
+            onChange={(event) =>
+              setReferenceSide(event.target.value as "a" | "b" | "")
+            }
+          >
+            <option value="a">Reviewed annotations (A)</option>
+            <option value="b">Prediction job (B)</option>
+            <option value="">No reference; neutral unmatched terms</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          disabled={!selectedImage || !predictionJobId || comparison.isPending}
+          onClick={() => comparison.mutate()}
+        >
+          {comparison.isPending ? "Comparing…" : "Compare evidence"}
+        </button>
+        {comparison.error && <p role="alert">{comparison.error.message}</p>}
+        {comparison.data && (
+          <div role="region" aria-label="Annotation comparison result">
+            <p>
+              {Object.keys(comparison.data.per_class).length} classes · result{" "}
+              <code>{comparison.data.content_sha256.slice(0, 12)}…</code>
+            </p>
+            <p>Immutable result ID: {comparison.data.result_id}</p>
+            <ul>
+              {Object.entries(comparison.data.per_class).map(
+                ([classId, item]) => (
+                  <li key={classId}>
+                    {classId}: A {item.count_a}, B {item.count_b}, matched{" "}
+                    {item.matched_count}, unmatched A{" "}
+                    {item.unmatched_a_ids.length}, unmatched B{" "}
+                    {item.unmatched_b_ids.length}
+                  </li>
+                ),
+              )}
+            </ul>
+            <p>
+              Descriptive evidence comparison only. Images are the independent
+              sampling unit; no reviewer-performance or causal claim is made.
+            </p>
+          </div>
+        )}
+      </section>
 
       {imagesQuery.isPending ? (
         <LoadingState title="Loading project images" />

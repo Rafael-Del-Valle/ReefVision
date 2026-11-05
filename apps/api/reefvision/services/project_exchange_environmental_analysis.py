@@ -19,6 +19,7 @@ ANALYSIS_KINDS = {
     "event_window",
     "observation_environment_join",
     "lagged_comparison",
+    "current_streamline",
 }
 WORKFLOW_NODE_BY_KIND = {
     "lunar_context": "lunar_context_analysis",
@@ -26,6 +27,7 @@ WORKFLOW_NODE_BY_KIND = {
     "event_window": "event_window_analysis",
     "observation_environment_join": "observation_environment_join",
     "lagged_comparison": "lagged_comparison",
+    "current_streamline": "current_streamline_analysis",
 }
 
 
@@ -129,6 +131,12 @@ def _validate_environmental_analysis_exchange(
             source = results.get(config.get("join_result_id"))
             if source is None or source.get("analysis_kind") != "observation_environment_join":
                 raise ValidationError("Lagged analysis refers to a missing environmental join")
+        if row["analysis_kind"] == "current_streamline":
+            source_ids = config.get("scientific_record_ids")
+            if not isinstance(source_ids, list) or any(
+                identifier not in records for identifier in source_ids
+            ):
+                raise ValidationError("Current streamline refers to missing scientific records")
 
     for row in results.values():
         definition = definitions.get(row.get("definition_id"))

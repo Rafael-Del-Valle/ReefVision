@@ -19,6 +19,10 @@ from reefvision.db.models.environmental_analysis import (
 from reefvision.db.models.scientific_record import ScientificRecord
 from reefvision.db.models.workflow_execution import WorkflowNodeRun, WorkflowRun
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.schemas.current_field import (
+    CurrentFieldAnalysisRequest,
+    CurrentFieldStreamlineRequest,
+)
 from reefvision.schemas.environmental_analysis import (
     EnvironmentalAnalysisDefinitionPage,
     EnvironmentalAnalysisDefinitionResponse,
@@ -35,6 +39,7 @@ from reefvision.schemas.environmental_analysis import (
     TidalContextAnalysisRequest,
 )
 from reefvision.schemas.lunar_context import LunarContextRequest
+from reefvision.services.current_field import CurrentFieldService
 from reefvision.services.environmental_context import EnvironmentalContextService
 from reefvision.services.geographic_movement_analytics import geographic_distance_m
 from reefvision.services.lunar_context import ALGORITHM, calculate_lunar_context
@@ -92,6 +97,65 @@ class EnvironmentalAnalysisService:
         self.session.add(row)
         self.session.flush()
         return row
+
+    def create_current_streamline(
+        self,
+        project_id: str,
+        request: CurrentFieldAnalysisRequest,
+        *,
+        workflow_run_id: str | None = None,
+        workflow_node_run_id: str | None = None,
+    ) -> EnvironmentalAnalysisSingleResponse:
+        preview_request = request.model_dump(exclude={"name"})
+        preview = CurrentFieldService(self.session).preview(
+            project_id,
+            CurrentFieldStreamlineRequest.model_validate(preview_request),
+        )
+        configuration = request.model_dump(mode="json", exclude={"name"})
+        definition = self.create_definition(
+            project_id,
+            analysis_kind="current_streamline",
+            name=request.name,
+            configuration=configuration,
+            calculation_version=preview.algorithm_version,
+        )
+        source_rows = [
+            self.session.get(ScientificRecord, str(identifier))
+            for identifier in request.scientific_record_ids
+        ]
+        if any(row is None for row in source_rows):
+            raise ValidationError("Current streamline source record disappeared")
+        source_snapshot = [
+            self.science.response(cast(ScientificRecord, row)).model_dump(mode="json")
+            for row in source_rows
+        ]
+        result = self.create_result(
+            definition,
+            observed_at=preview.observed_at,
+            payload=preview.model_dump(mode="json"),
+            input_snapshot={
+                "configuration": configuration,
+                "scientific_records": source_snapshot,
+                "input_sha256": preview.input_sha256,
+            },
+            source_record_ids=[str(value) for value in request.scientific_record_ids],
+            quality_control={
+                "status": "accepted",
+                "flags": [],
+                "termination_reasons": [line.termination for line in preview.streamlines],
+            },
+            uncertainty={
+                "available": False,
+                "reason": "component_uncertainty_not_propagated_through_streamline_integration",
+            },
+            workflow_run_id=workflow_run_id,
+            workflow_node_run_id=workflow_node_run_id,
+        )
+        self.session.commit()
+        return EnvironmentalAnalysisSingleResponse(
+            definition=self.definition_response(definition),
+            result=self.result_response(result),
+        )
 
     def _definition_hash(self, row: EnvironmentalAnalysisDefinition) -> str:
         return content_hash(

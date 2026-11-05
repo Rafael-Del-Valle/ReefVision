@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.schemas.current_field import CurrentFieldAnalysisRequest
 from reefvision.schemas.environmental_analysis import (
     EnvironmentalAnalysisDefinitionPage,
     EnvironmentalAnalysisKind,
@@ -25,6 +26,17 @@ from reefvision.services.environmental_analysis import EnvironmentalAnalysisServ
 
 router = APIRouter(tags=["environmental-analysis"])
 DbSession = Annotated[Session, Depends(get_db_session)]
+
+
+@router.post(
+    "/projects/{project_id}/environment/analyses/current-streamline",
+    response_model=EnvironmentalAnalysisSingleResponse,
+    status_code=201,
+)
+def create_current_streamline_analysis(
+    project_id: UUID, payload: CurrentFieldAnalysisRequest, session: DbSession
+) -> EnvironmentalAnalysisSingleResponse:
+    return EnvironmentalAnalysisService(session).create_current_streamline(str(project_id), payload)
 
 
 @router.post(

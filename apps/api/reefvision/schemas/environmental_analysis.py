@@ -16,6 +16,7 @@ EnvironmentalAnalysisKind = Literal[
     "event_window",
     "observation_environment_join",
     "lagged_comparison",
+    "current_streamline",
 ]
 
 

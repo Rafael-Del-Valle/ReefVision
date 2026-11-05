@@ -6,6 +6,7 @@ from itertools import pairwise
 
 from geographiclib.geodesic import Geodesic
 
+from reefvision.geospatial.geodesy import geodesic_distance_m
 from reefvision.schemas.geographic_movement_analytics import (
     GeographicCoordinate,
     GeographicMovementObservation,
@@ -14,11 +15,6 @@ from reefvision.schemas.geographic_movement_analytics import (
 )
 
 SUPPORTED_GEOGRAPHIC_CRS = "EPSG:4326"
-
-# WGS84 ellipsoid constants.
-_WGS84_SEMI_MAJOR_AXIS_M = 6_378_137.0
-_WGS84_FLATTENING = 1.0 / 298.257223563
-_WGS84_SEMI_MINOR_AXIS_M = (1.0 - _WGS84_FLATTENING) * _WGS84_SEMI_MAJOR_AXIS_M
 
 
 class GeographicMovementAnalyticsError(ValueError):
@@ -74,132 +70,17 @@ def geographic_distance_m(
     end_latitude_deg: float,
     end_longitude_deg: float,
 ) -> float:
-    """Return ellipsoidal WGS84 distance in meters using Vincenty's inverse method."""
+    """Return ellipsoidal WGS84 distance using the shared robust inverse solver."""
 
-    _validate_coordinate(
+    _validate_coordinate(start_latitude_deg, start_longitude_deg)
+    _validate_coordinate(end_latitude_deg, end_longitude_deg)
+
+    return geodesic_distance_m(
         start_latitude_deg,
         start_longitude_deg,
-    )
-    _validate_coordinate(
         end_latitude_deg,
         end_longitude_deg,
     )
-
-    if start_latitude_deg == end_latitude_deg and start_longitude_deg == end_longitude_deg:
-        return 0.0
-
-    a = _WGS84_SEMI_MAJOR_AXIS_M
-    b = _WGS84_SEMI_MINOR_AXIS_M
-    f = _WGS84_FLATTENING
-
-    phi_1 = math.radians(start_latitude_deg)
-    phi_2 = math.radians(end_latitude_deg)
-    longitude_delta = math.radians(end_longitude_deg - start_longitude_deg)
-
-    reduced_1 = math.atan((1.0 - f) * math.tan(phi_1))
-    reduced_2 = math.atan((1.0 - f) * math.tan(phi_2))
-
-    sin_reduced_1 = math.sin(reduced_1)
-    cos_reduced_1 = math.cos(reduced_1)
-    sin_reduced_2 = math.sin(reduced_2)
-    cos_reduced_2 = math.cos(reduced_2)
-
-    lambda_value = longitude_delta
-
-    sin_sigma = 0.0
-    cos_sigma = 0.0
-    sigma = 0.0
-    sin_alpha = 0.0
-    cos_sq_alpha = 0.0
-    cos_two_sigma_mid = 0.0
-
-    for _ in range(200):
-        sin_lambda = math.sin(lambda_value)
-        cos_lambda = math.cos(lambda_value)
-
-        sin_sigma = math.sqrt(
-            (cos_reduced_2 * sin_lambda) ** 2
-            + (cos_reduced_1 * sin_reduced_2 - sin_reduced_1 * cos_reduced_2 * cos_lambda) ** 2
-        )
-
-        if sin_sigma == 0.0:
-            return 0.0
-
-        cos_sigma = sin_reduced_1 * sin_reduced_2 + cos_reduced_1 * cos_reduced_2 * cos_lambda
-
-        sigma = math.atan2(
-            sin_sigma,
-            cos_sigma,
-        )
-
-        sin_alpha = cos_reduced_1 * cos_reduced_2 * sin_lambda / sin_sigma
-
-        cos_sq_alpha = 1.0 - sin_alpha * sin_alpha
-
-        if cos_sq_alpha == 0.0:
-            cos_two_sigma_mid = 0.0
-        else:
-            cos_two_sigma_mid = cos_sigma - (2.0 * sin_reduced_1 * sin_reduced_2 / cos_sq_alpha)
-
-        coefficient_c = f / 16.0 * cos_sq_alpha * (4.0 + f * (4.0 - 3.0 * cos_sq_alpha))
-
-        previous_lambda = lambda_value
-
-        lambda_value = longitude_delta + (1.0 - coefficient_c) * f * sin_alpha * (
-            sigma
-            + coefficient_c
-            * sin_sigma
-            * (
-                cos_two_sigma_mid
-                + coefficient_c * cos_sigma * (-1.0 + 2.0 * cos_two_sigma_mid * cos_two_sigma_mid)
-            )
-        )
-
-        if abs(lambda_value - previous_lambda) <= 1e-12:
-            break
-    else:
-        raise GeographicMovementInputError("WGS84 inverse distance calculation did not converge.")
-
-    reduced_parameter = cos_sq_alpha * (a * a - b * b) / (b * b)
-
-    coefficient_a = 1.0 + reduced_parameter / 16_384.0 * (
-        4096.0
-        + reduced_parameter * (-768.0 + reduced_parameter * (320.0 - 175.0 * reduced_parameter))
-    )
-
-    coefficient_b = (
-        reduced_parameter
-        / 1024.0
-        * (
-            256.0
-            + reduced_parameter * (-128.0 + reduced_parameter * (74.0 - 47.0 * reduced_parameter))
-        )
-    )
-
-    delta_sigma = (
-        coefficient_b
-        * sin_sigma
-        * (
-            cos_two_sigma_mid
-            + coefficient_b
-            / 4.0
-            * (
-                cos_sigma * (-1.0 + 2.0 * cos_two_sigma_mid * cos_two_sigma_mid)
-                - coefficient_b
-                / 6.0
-                * cos_two_sigma_mid
-                * (-3.0 + 4.0 * sin_sigma * sin_sigma)
-                * (-3.0 + 4.0 * cos_two_sigma_mid * cos_two_sigma_mid)
-            )
-        )
-    )
-
-    distance_m = b * coefficient_a * (sigma - delta_sigma)
-
-    if distance_m < 0.0:
-        raise GeographicMovementInputError("Calculated geographic distance cannot be negative.")
-
-    return distance_m
 
 
 def _coordinate(
