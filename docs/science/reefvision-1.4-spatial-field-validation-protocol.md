@@ -49,3 +49,20 @@ Before testing, define numerical tolerances by quantity and precision (e.g., abs
 ## Release evidence register
 
 Record per-gate: test fixture identifier, reference method, exact commit SHA, Actions run/job URL, platform, result, reviewer and date. Backend unit/API tests, frontend interactive preview tests, persisted workflow tests, migration roundtrips, Windows MSI/CAB packaging, installed-GUI import and preview, and local GPU acceptance are **separate gates**. GitHub Actions success cannot substitute for an installed Windows GUI/GPU test or independent scientific review. Keep versions 1.4 and 1.5 unreleased until all applicable gates have explicit passing evidence.
+
+## Field specimen evidence capture and decision matrix
+
+For each independent specimen, preserve a stable project-scoped specimen ID and separate acquisition/observation IDs. Record acquisition UTC time, operator, camera and lens, calibration artifact ID and physical reference uncertainty, reconstruction software/version, raw source file SHA-256, original format, coordinate frame and units, acquisition conditions (visibility, occlusion, lighting), and reference measurement method. Link any reconstructed mesh or point cloud to the immutable raw acquisitions; never infer an anatomical branch measurement from a surface-edge path.
+
+Use an explicit review record for each proposed longitudinal match: source and target observation IDs, proposed organism identity, registration method and transform provenance, reviewer ID, decision (accepted/rejected/needs-review), decision UTC time, rationale, and source/target geometry fingerprints. An automated similarity score or a supplied transform cannot populate an accepted decision. Any changed geometry fingerprint, calibration reference, or coordinate-frame definition invalidates the earlier match for downstream verified comparisons until a new human review is recorded.
+
+| Scenario | Required standalone behavior | Required saved-workflow behavior |
+| --- | --- | --- |
+| Same geometry in OBJ, ASCII PLY and GLB | Comparable geometry within documented precision, distinct source hashes and format provenance | Persist/replay matching numeric quantities and source-specific hashes |
+| PLY point cloud without faces | Extents only; no fabricated surface area, enclosed volume or anatomical centerline | Preserve unavailable quantities and explicit QC after reload |
+| Missing or unreviewed calibration | Withhold physical-unit claims or label caller-supplied values unverified | Retain calibration evidence and unverified status in persisted artifact |
+| Mutated source bytes or stored filename metadata | Reject compromised asset before preview/measurement | Reject replay instead of silently substituting a new asset |
+| Reidentification with stale source/target fingerprint | Reject or withhold accepted match | Never inherit previously accepted identity from stale evidence |
+| Repeated views from one specimen | Treat as dependent measurements, not additional biological replicates | Preserve specimen clustering keys in export and analysis metadata |
+
+Acceptance requires a second reviewer to reconcile disagreements against the raw evidence, with the original decisions retained in the audit trail. The matrix describes **required behavior**, not claims that all cases are implemented or validated. Every row needs a traceable test identifier, independent expected outcome, exact commit and Actions evidence, and installed-GUI observation where applicable before its release gate can be marked complete.
