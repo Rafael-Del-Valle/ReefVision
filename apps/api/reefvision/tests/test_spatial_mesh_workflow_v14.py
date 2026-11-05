@@ -707,6 +707,14 @@ def test_saved_obj_workflow_calibration_scaling_reference(client: TestClient, sc
     expected_perimeter = (5 + 13**0.5) * scale
     for measured in (standalone.json(), artifact):
         assert measured["surface_area_m2"] == pytest.approx(expected_area)
+        # Independently verify each spatial dimension and its linear scale error.
+        assert measured["axis_aligned_dimensions_m"] == pytest.approx([2 * scale, 3 * scale, 0])
+        assert measured["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
+            [0.1 * scale, 0.15 * scale, 0]
+        )
+        assert measured["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
+            13**0.5 * scale
+        )
         assert measured["boundary_edge_length_m"] == pytest.approx(expected_perimeter)
         # Calibration uncertainty follows squared area and linear perimeter scaling.
         assert measured["surface_area_scale_interval_m2"] == pytest.approx(
