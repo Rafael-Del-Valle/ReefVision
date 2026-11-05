@@ -146,16 +146,46 @@ def calculate_movement_segment(
     # it does not estimate the organism's body orientation or intervening path.
     initial_bearing_deg = float(geodesic["azi1"]) % 360.0 if geodesic["s12"] > 0.0 else None
 
+    distance_uncertainty_m: float | None = None
+    bearing_uncertainty_deg: float | None = None
+    uncertainty_method = None
+    uncertainty_reason: str | None = None
+    if start.horizontal_sigma_m is None or end.horizontal_sigma_m is None:
+        uncertainty_reason = "missing_endpoint_standard_uncertainty"
+    elif (
+        not start.uncertainty_correlation_group_id
+        or not end.uncertainty_correlation_group_id
+        or start.uncertainty_correlation_group_id == end.uncertainty_correlation_group_id
+    ):
+        uncertainty_reason = "unknown_or_shared_endpoint_correlation"
+    else:
+        distance_uncertainty_m = math.hypot(
+            start.horizontal_sigma_m, end.horizontal_sigma_m
+        )
+        uncertainty_method = "independent_isotropic_first_order"
+        if distance_m > 5.0 * distance_uncertainty_m:
+            bearing_uncertainty_deg = math.degrees(distance_uncertainty_m / distance_m)
+        else:
+            uncertainty_reason = "bearing_geometry_ill_conditioned"
+
     elapsed_time_s = end.frame_time_s - start.frame_time_s
 
     if elapsed_time_s > 0.0:
         speed_m_s: float | None = distance_m / elapsed_time_s
         speed_valid = True
         invalid_reason = None
+        speed_uncertainty_m_s = (
+            distance_uncertainty_m / elapsed_time_s
+            if distance_uncertainty_m is not None
+            else None
+        )
     else:
         speed_m_s = None
         speed_valid = False
         invalid_reason = "non_positive_elapsed_time"
+        speed_uncertainty_m_s = None
+        if distance_uncertainty_m is not None:
+            uncertainty_reason = "non_positive_elapsed_time"
 
     return GeographicMovementSegment(
         track_id=start.track_id,
@@ -172,6 +202,11 @@ def calculate_movement_segment(
         distance_m=distance_m,
         speed_m_s=speed_m_s,
         initial_bearing_deg=initial_bearing_deg,
+        distance_standard_uncertainty_m=distance_uncertainty_m,
+        speed_standard_uncertainty_m_s=speed_uncertainty_m_s,
+        bearing_standard_uncertainty_deg=bearing_uncertainty_deg,
+        uncertainty_method=uncertainty_method,
+        uncertainty_unavailable_reason=uncertainty_reason,
         cumulative_distance_m=(cumulative_distance_before_m + distance_m),
         speed_valid=speed_valid,
         invalid_reason=invalid_reason,

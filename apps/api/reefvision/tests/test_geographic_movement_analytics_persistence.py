@@ -77,6 +77,32 @@ def test_maps_database_uuid_identity_to_schema_string() -> None:
     assert mapped.observation_id == str(observation_id)
 
 
+def test_maps_typed_endpoint_uncertainty_without_inventing_correlation() -> None:
+    row = persisted(
+        "observation-1",
+        frame_index=42,
+        frame_time_s=1.4,
+        latitude_deg=32.750123,
+        longitude_deg=-79.930456,
+    )
+    row.payload_json = {
+        "uncertainty": {
+            "available": True,
+            "unit": "m",
+            "coordinate_frame": "local_enu_horizontal",
+            "method": "propagated_1sigma",
+            "horizontal_sigma_m": 1.25,
+            "correlation_group_id": "independent-fix-42",
+        }
+    }
+
+    mapped = geographic_movement_observation_from_persisted(row)
+
+    assert mapped.horizontal_sigma_m == 1.25
+    assert mapped.uncertainty_method == "propagated_1sigma"
+    assert mapped.uncertainty_correlation_group_id == "independent-fix-42"
+
+
 def test_supports_canonical_persistence_aliases_and_nested_location() -> None:
     row = {
         "observation_id": "observation-1",

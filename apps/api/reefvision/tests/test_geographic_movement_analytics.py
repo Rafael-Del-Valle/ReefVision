@@ -24,6 +24,8 @@ def observation(
     track_id: str | None = "track-1",
     video_asset_id: str = "video-1",
     crs: str = "EPSG:4326",
+    horizontal_sigma_m: float | None = None,
+    uncertainty_group: str | None = None,
 ) -> GeographicMovementObservation:
     return GeographicMovementObservation(
         observation_id=observation_id,
@@ -34,7 +36,69 @@ def observation(
         latitude_deg=latitude_deg,
         longitude_deg=longitude_deg,
         crs=crs,
+        horizontal_sigma_m=horizontal_sigma_m,
+        uncertainty_method=("propagated_1sigma" if horizontal_sigma_m is not None else None),
+        uncertainty_correlation_group_id=uncertainty_group,
     )
+
+
+def test_segment_propagates_only_explicit_independent_one_sigma_uncertainty() -> None:
+    start = observation(
+        "start",
+        frame_index=0,
+        frame_time_s=0,
+        latitude_deg=0,
+        longitude_deg=0,
+        horizontal_sigma_m=3,
+        uncertainty_group="gps-fix-a",
+    )
+    end = observation(
+        "end",
+        frame_index=10,
+        frame_time_s=10,
+        latitude_deg=0,
+        longitude_deg=0.001,
+        horizontal_sigma_m=4,
+        uncertainty_group="gps-fix-b",
+    )
+
+    segment = calculate_movement_segment(start, end)
+
+    assert segment.distance_standard_uncertainty_m == 5
+    assert segment.speed_standard_uncertainty_m_s == 0.5
+    assert segment.bearing_standard_uncertainty_deg == pytest.approx(
+        5 / segment.distance_m * 180 / 3.141592653589793
+    )
+    assert segment.uncertainty_method == "independent_isotropic_first_order"
+    assert segment.uncertainty_unavailable_reason is None
+
+
+def test_segment_does_not_assume_independence_for_shared_or_unknown_sources() -> None:
+    start = observation(
+        "start",
+        frame_index=0,
+        frame_time_s=0,
+        latitude_deg=0,
+        longitude_deg=0,
+        horizontal_sigma_m=2,
+        uncertainty_group="shared-flight-solution",
+    )
+    end = observation(
+        "end",
+        frame_index=1,
+        frame_time_s=1,
+        latitude_deg=0,
+        longitude_deg=0.001,
+        horizontal_sigma_m=2,
+        uncertainty_group="shared-flight-solution",
+    )
+
+    segment = calculate_movement_segment(start, end)
+
+    assert segment.distance_standard_uncertainty_m is None
+    assert segment.bearing_standard_uncertainty_deg is None
+    assert segment.uncertainty_method is None
+    assert segment.uncertainty_unavailable_reason == "unknown_or_shared_endpoint_correlation"
 
 
 def test_wgs84_distance_is_zero_for_identical_coordinates() -> None:

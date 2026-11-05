@@ -33,6 +33,15 @@ function bearing(value: number | null | undefined): string {
   return value == null ? "Unavailable" : `${value.toFixed(2)}°`;
 }
 
+function uncertainty(
+  value: number | null | undefined,
+  unit: "m" | "m/s" | "°",
+  reason: string | null | undefined,
+): string {
+  if (value != null) return `${value.toFixed(2)} ${unit} (1σ)`;
+  return reason ? `Unavailable: ${reason.replaceAll("_", " ")}` : "Unavailable";
+}
+
 function coordinate(value: GeographicCoordinate | null): string {
   if (value === null) {
     return "Unavailable";
@@ -118,6 +127,8 @@ function AnalyticsResults({
                 <th>Speed</th>
                 <th>Speed status</th>
                 <th>Initial bearing</th>
+                <th>Distance uncertainty</th>
+                <th>Bearing uncertainty</th>
                 <th>Video</th>
               </tr>
             </thead>
@@ -150,6 +161,20 @@ function AnalyticsResults({
                           : (segment.invalid_reason ?? "Invalid")}
                     </td>
                     <td>{bearing(segment.initial_bearing_deg)}</td>
+                    <td>
+                      {uncertainty(
+                        segment.distance_standard_uncertainty_m,
+                        "m",
+                        segment.uncertainty_unavailable_reason,
+                      )}
+                    </td>
+                    <td>
+                      {uncertainty(
+                        segment.bearing_standard_uncertainty_deg,
+                        "°",
+                        segment.uncertainty_unavailable_reason,
+                      )}
+                    </td>
                     <td>
                       {onFrameSelect && target ? (
                         <button
@@ -202,6 +227,8 @@ export function GeographicMovementAnalyticsPanel({
         observations. Initial bearing describes displacement between sampled
         positions on WGS84, in degrees clockwise from true north. Organism
         orientation is not measured; coincident positions have no bearing.
+        Uncertainty is shown only for explicit independent isotropic one-sigma
+        endpoint evidence; shared or unknown correlation is not propagated.
       </p>
 
       <button

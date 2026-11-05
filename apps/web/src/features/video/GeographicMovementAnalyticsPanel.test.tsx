@@ -351,6 +351,32 @@ describe("Task 16G panel synchronization", () => {
     },
   );
 
+  it("shows propagated one-sigma uncertainty and the independence limitation", () => {
+    render(
+      <GeographicMovementAnalyticsPanel
+        state={successState({
+          ...data,
+          segments: [
+            {
+              ...segment,
+              distance_standard_uncertainty_m: 0.5,
+              bearing_standard_uncertainty_deg: 1.25,
+              uncertainty_method: "independent_isotropic_first_order",
+              uncertainty_unavailable_reason: null,
+            },
+          ],
+        })}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("0.50 m (1σ)")).toBeInTheDocument();
+    expect(screen.getByText("1.25 ° (1σ)")).toBeInTheDocument();
+    expect(
+      screen.getByText(/shared or unknown correlation/i),
+    ).toBeInTheDocument();
+  });
+
   it("seeks to the persisted endpoint without reloading analytics", () => {
     const onFrameSelect = vi.fn();
     const onReload = vi.fn();
