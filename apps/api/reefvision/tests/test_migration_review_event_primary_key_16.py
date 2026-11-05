@@ -6,6 +6,7 @@ review event IDs across distinct review items. Preflight must remain read-only.
 
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
 
@@ -98,6 +99,22 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                 assert connection.scalar(
                     text("SELECT COUNT(*) FROM review_queue_item_events WHERE id = 'event-1'")
                 ) == 2
+            if primary_key == "correct":
+                # The valid single-column primary key must actually prevent
+                # cross-queue reuse of a global audit-event identity.
+                with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
+                    connection.execute(
+                        text(
+                            "INSERT INTO review_queue_item_events "
+                            "(id, review_queue_id, review_queue_item_id, project_id, "
+                            "client_request_id, event_type, actor, created_at) "
+                            "VALUES ('event-1', 'queue-2', 'item-2', 'project-1', "
+                            "'request-2', 'comment', 'researcher', '2026-11-05')"
+                        )
+                    )
+                assert connection.scalar(
+                    text("SELECT COUNT(*) FROM review_queue_item_events WHERE id = 'event-1'")
+                ) == 1
             schema_before = tuple(
                 connection.execute(
                     text("SELECT name, sql FROM sqlite_master ORDER BY name")
