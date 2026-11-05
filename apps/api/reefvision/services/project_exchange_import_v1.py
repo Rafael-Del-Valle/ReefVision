@@ -22,7 +22,12 @@ from reefvision.db.models import (
     BehaviorStateDefinition,
     ClassOperation,
     ClassVisibilityPreference,
+    ComputedMetricDefinition,
+    ComputedMetricResult,
     DatasetVersion,
+    EnvironmentalAnalysisDefinition,
+    EnvironmentalAnalysisResult,
+    EnvironmentalEventDefinition,
     ExportRecord,
     GeoReferencedObservation,
     MaskAnnotationEvent,
@@ -57,6 +62,7 @@ from reefvision.db.models.pose_training_dataset import (
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.project_exchange import ProjectExchangeImportResponse
 from reefvision.services import project_exchange_import as base_import
 from reefvision.services.pose_active_learning import (
@@ -1032,58 +1038,130 @@ def import_project_exchange_v1(
     """Import the complete 1.0 portable record inventory into a new project."""
 
     _register_v1_sections()
-    result = base_import.import_project_exchange(
-        source,
-        session,
-        settings,
-        project_name=project_name,
-    )
-    project = session.get(Project, result.project_id)
-    if project is None:
-        raise RuntimeError("Imported project disappeared before artifact restoration")
+    copied_generated = 0
 
-    try:
+    def finalize(project: Project, package: ProjectExchangePackage) -> None:
+        nonlocal copied_generated
         _mark_imported_georeferencing_stale(session, project.id)
         _refresh_class_operation_checksums(session, project.id)
         _refresh_review_queue_checksums(session, project.id)
         _refresh_active_learning_checksums(session, project.id)
-        _refresh_pose_training_exchange_integrity(
-            session,
-            project.id,
+        _refresh_pose_training_exchange_integrity(session, project.id)
+        # Validate canonical ownership/run lineage after remapping, before commit.
+        from reefvision.db.models import ScientificRecord
+        from reefvision.schemas.scientific_data import ScientificRecordCreate
+        from reefvision.services.scientific_data import ScientificDataService
+
+        science = ScientificDataService(session)
+        for scientific_row in session.scalars(
+            select(ScientificRecord).where(ScientificRecord.project_id == project.id)
+        ):
+            item = ScientificRecordCreate.model_validate(
+                {
+                    key: value
+                    for key, value in scientific_row.payload_json.items()
+                    if key in ScientificRecordCreate.model_fields
+                }
+            )
+            science.validate_subject(project.id, item.subject, item.pixel)
+            science.response(scientific_row)
+        from reefvision.services.computed_aggregate_metrics import (
+            ComputedAggregateMetricService,
         )
-        copied_telemetry_sidecars = _restore_telemetry_sidecars(
+        from reefvision.services.computed_mask_coverage import ComputedMaskCoverageService
+        from reefvision.services.computed_metrics import ComputedMetricService
+        from reefvision.services.environmental_analysis import EnvironmentalAnalysisService
+        from reefvision.services.environmental_context import EnvironmentalContextService
+
+        computed = ComputedMetricService(session)
+        aggregates = ComputedAggregateMetricService(session)
+        mask_coverage = ComputedMaskCoverageService(session, settings)
+        for definition_row in session.scalars(
+            select(ComputedMetricDefinition).where(
+                ComputedMetricDefinition.project_id == project.id
+            )
+        ):
+            if definition_row.definition_kind == "annotation_aggregate":
+                aggregates.definition_response(definition_row)
+            elif definition_row.definition_kind == "mask_coverage":
+                mask_coverage.definition_response(definition_row)
+            elif definition_row.definition_kind in {
+                "annotation_comparison",
+                "geographic_pairwise",
+            }:
+                continue
+            else:
+                computed.definition_response(definition_row)
+        for result_row in session.scalars(
+            select(ComputedMetricResult).where(ComputedMetricResult.project_id == project.id)
+        ):
+            if result_row.result_kind == "annotation_aggregate":
+                aggregates.result_response(result_row)
+                aggregate_validation = aggregates.validate_result(project.id, result_row.id)
+                if not aggregate_validation.current:
+                    raise ValidationError(
+                        "Imported computed aggregate evidence is stale after remapping: "
+                        + ", ".join(aggregate_validation.reasons)
+                    )
+            elif result_row.result_kind == "mask_coverage":
+                mask_coverage.result_response(result_row)
+                coverage_validation = mask_coverage.validate_result(project.id, result_row.id)
+                if not coverage_validation.current:
+                    raise ValidationError(
+                        "Imported mask coverage evidence is stale after remapping: "
+                        + ", ".join(coverage_validation.reasons)
+                    )
+            elif result_row.result_kind in {
+                "annotation_comparison",
+                "geographic_pairwise",
+            }:
+                continue
+            else:
+                computed.result_response(result_row)
+        environment = EnvironmentalContextService(session)
+        for event_row in session.scalars(
+            select(EnvironmentalEventDefinition).where(
+                EnvironmentalEventDefinition.project_id == project.id
+            )
+        ):
+            environment.event_definition_response(event_row)
+        analyses = EnvironmentalAnalysisService(session)
+        for analysis_definition_row in session.scalars(
+            select(EnvironmentalAnalysisDefinition).where(
+                EnvironmentalAnalysisDefinition.project_id == project.id
+            )
+        ):
+            analyses.definition_response(analysis_definition_row)
+        for analysis_result_row in session.scalars(
+            select(EnvironmentalAnalysisResult).where(
+                EnvironmentalAnalysisResult.project_id == project.id
+            )
+        ):
+            analyses.result_response(analysis_result_row)
+            validation = analyses.validate_result(project.id, analysis_result_row.id)
+            if not validation.current:
+                raise ValidationError(
+                    "Imported environmental analysis evidence is stale after remapping: "
+                    + ", ".join(validation.reasons)
+                )
+        copied_telemetry = _restore_telemetry_sidecars(
             source,
             project=project,
             session=session,
             settings=settings,
-            manifest=dict(result.package.manifest_json),
+            manifest=dict(package.manifest_json),
         )
-
         copied_generated = _restore_generated_artifacts(
-            source,
-            project=project,
-            settings=settings,
-            manifest=dict(result.package.manifest_json),
+            source, project=project, settings=settings, manifest=dict(package.manifest_json)
         )
-        package = session.get(ProjectExchangePackage, result.package.id)
-        if package is None:
-            raise RuntimeError("Imported exchange provenance record disappeared")
         package.options_json = {
             **dict(package.options_json or {}),
             "copied_generated_artifact_count": copied_generated,
-            "copied_telemetry_sidecar_count": copied_telemetry_sidecars,
+            "copied_telemetry_sidecar_count": copied_telemetry,
         }
-        session.commit()
-        session.refresh(package)
-        result.copied_generated_artifact_count = copied_generated
-        result.package = type(result.package).model_validate(package)
-        return result
-    except Exception:
-        session.rollback()
-        project_root = resolve_managed_project_path(settings, project.storage_root)
-        doomed = session.get(Project, result.project_id)
-        if doomed is not None:
-            session.delete(doomed)
-            session.commit()
-        shutil.rmtree(project_root, ignore_errors=True)
-        raise
+
+    result = base_import.import_project_exchange(
+        source, session, settings, project_name=project_name, finalize=finalize
+    )
+    result.copied_generated_artifact_count = copied_generated
+    return result

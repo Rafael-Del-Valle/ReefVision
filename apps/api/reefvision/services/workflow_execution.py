@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -21,6 +22,7 @@ from reefvision.db.models import (
     PredictionProposal,
     Project,
     ProjectExchangePackage,
+    ScientificRecord,
     VideoAsset,
     WorkflowArtifact,
     WorkflowGraphRecord,
@@ -29,6 +31,17 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
+from reefvision.schemas.annotation_comparison import AnnotationComparisonCalculateRequest
+from reefvision.schemas.current_field import CurrentFieldAnalysisRequest
+from reefvision.schemas.environmental_analysis import (
+    EventWindowAnalysisRequest,
+    LaggedComparisonAnalysisRequest,
+    LunarAnalysisBatchRequest,
+    ObservationEnvironmentJoinRequest,
+    TidalContextAnalysisRequest,
+)
+from reefvision.schemas.environmental_context import EnvironmentalThresholdRequest
+from reefvision.schemas.geographic_pairwise import GeographicPairwiseCalculateRequest
 from reefvision.schemas.workflow_execution import (
     WorkflowArtifactResponse,
     WorkflowGraphRecordResponse,
@@ -39,7 +52,19 @@ from reefvision.schemas.workflow_execution import (
     WorkflowRunResponse,
 )
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
+from reefvision.services.annotation_comparison import (
+    BOX_FORMULA_VERSION,
+    MASK_FORMULA_VERSION,
+    AnnotationComparisonService,
+)
+from reefvision.services.computed_aggregate_metrics import ComputedAggregateMetricService
+from reefvision.services.computed_mask_coverage import ComputedMaskCoverageService
+from reefvision.services.computed_metrics import ComputedMetricService
+from reefvision.services.environmental_analysis import EnvironmentalAnalysisService
+from reefvision.services.environmental_context import EnvironmentalContextService
+from reefvision.services.geographic_pairwise import GeographicPairwiseService
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
+from reefvision.services.scientific_data import ScientificDataService
 from reefvision.services.workflow_classification import (
     materialize_workflow_classification_dataset,
     train_workflow_classifier,
@@ -59,6 +84,19 @@ from reefvision.storage.datasets import canonical_json_sha256
 
 EXECUTABLE_NODE_TYPES = {
     "project_source",
+    "scientific_records_source",
+    "computed_metric",
+    "annotation_aggregate",
+    "mask_coverage",
+    "annotation_comparison",
+    "geographic_pairwise",
+    "environmental_threshold",
+    "current_streamline_analysis",
+    "lunar_context_analysis",
+    "tidal_context_analysis",
+    "event_window_analysis",
+    "observation_environment_join",
+    "lagged_comparison",
     "project_images",
     "dataset_version_source",
     "dataset_version_create",
@@ -355,6 +393,555 @@ class WorkflowExecutionService:
                 },
             )
         ]
+
+    def _execute_scientific_records_source(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Scientific record source project artifact is mismatched")
+        raw_ids = parameters.get("record_ids")
+        if (
+            not isinstance(raw_ids, list)
+            or not raw_ids
+            or len(raw_ids) > 500
+            or any(not isinstance(value, str) or not value for value in raw_ids)
+        ):
+            raise ValidationError("Scientific record source requires 1 to 500 explicit record IDs")
+        record_ids = list(dict.fromkeys(raw_ids))
+        if len(record_ids) != len(raw_ids):
+            raise ValidationError("Scientific record source IDs must be unique")
+        scientific = ScientificDataService(self.session)
+        checksums: dict[str, str] = {}
+        for record_id in record_ids:
+            row = self.session.get(ScientificRecord, record_id)
+            if row is None or row.project_id != project_id:
+                raise ValidationError("Every workflow scientific record must belong to the project")
+            checksums[record_id] = scientific.response(row).content_sha256
+        return [
+            WorkflowArtifactSpec(
+                port_id="records",
+                data_type="scientific_record_collection",
+                payload={
+                    "project_id": project_id,
+                    "record_ids": record_ids,
+                    "content_sha256": checksums,
+                },
+            )
+        ]
+
+    def _execute_computed_metric(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        records_payload = self._single_payload(inputs, "records")
+        if records_payload.get("project_id") != project_id:
+            raise ValidationError("Computed metric record artifact is project-mismatched")
+        allowed_ids = records_payload.get("record_ids")
+        raw_bindings = parameters.get("bindings")
+        definition_id = parameters.get("definition_id")
+        if not isinstance(definition_id, str) or not definition_id:
+            raise ValidationError("Computed metric requires a definition_id")
+        if not isinstance(raw_bindings, dict) or not raw_bindings:
+            raise ValidationError("Computed metric requires explicit symbol bindings")
+        bindings = {str(symbol): str(record_id) for symbol, record_id in raw_bindings.items()}
+        if not isinstance(allowed_ids, list) or any(
+            record_id not in allowed_ids for record_id in bindings.values()
+        ):
+            raise ValidationError(
+                "Computed metric bindings must reference records from the connected source"
+            )
+        service = ComputedMetricService(self.session)
+        result = service.calculate(
+            project_id,
+            definition_id,
+            bindings,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        response = service.result_response(result)
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="computed_metric_result",
+                payload={
+                    "result_id": str(response.id),
+                    "definition_id": str(response.definition_id),
+                    "definition_sha256": response.definition_sha256,
+                    "formula_version": response.formula_version,
+                    "value": response.value,
+                    "unit": response.unit,
+                    "uncertainty": response.uncertainty,
+                    "observed_at": response.observed_at.isoformat(),
+                    "input_record_ids": {
+                        symbol: str(record_id)
+                        for symbol, record_id in response.input_record_ids.items()
+                    },
+                    "content_sha256": response.content_sha256,
+                },
+            )
+        ]
+
+    def _execute_annotation_aggregate(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Annotation aggregate project artifact is mismatched")
+        definition_id = parameters.get("definition_id")
+        raw_image_ids = parameters.get("image_ids")
+        if not isinstance(definition_id, str) or not definition_id:
+            raise ValidationError("Annotation aggregate requires a definition_id")
+        if (
+            not isinstance(raw_image_ids, list)
+            or not raw_image_ids
+            or len(raw_image_ids) > 500
+            or any(not isinstance(value, str) or not value for value in raw_image_ids)
+        ):
+            raise ValidationError("Annotation aggregate requires 1 to 500 explicit image IDs")
+        image_ids = list(dict.fromkeys(raw_image_ids))
+        if len(image_ids) != len(raw_image_ids):
+            raise ValidationError("Annotation aggregate image IDs must be unique")
+        service = ComputedAggregateMetricService(self.session)
+        result = service.calculate(
+            project_id,
+            definition_id,
+            image_ids,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        response = service.result_response(result)
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="computed_metric_result",
+                payload={
+                    "result_id": str(response.id),
+                    "result_kind": response.result_kind,
+                    "definition_id": str(response.definition_id),
+                    "definition_sha256": response.definition_sha256,
+                    "formula_version": response.formula_version,
+                    "observation_count": response.observation_count,
+                    "image_count": response.image_count,
+                    "independent_unit_count": response.independent_unit_count,
+                    "mean_per_independent_unit": response.mean_per_independent_unit,
+                    "unit": response.output_unit,
+                    "evidence_sha256": response.evidence_sha256,
+                    "content_sha256": response.content_sha256,
+                },
+            )
+        ]
+
+    def _execute_mask_coverage(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Mask coverage project artifact is mismatched")
+        definition_id = parameters.get("definition_id")
+        raw_image_ids = parameters.get("image_ids")
+        if not isinstance(definition_id, str) or not definition_id:
+            raise ValidationError("Mask coverage requires a definition_id")
+        if (
+            not isinstance(raw_image_ids, list)
+            or not raw_image_ids
+            or len(raw_image_ids) > 500
+            or any(not isinstance(value, str) or not value for value in raw_image_ids)
+        ):
+            raise ValidationError("Mask coverage requires 1 to 500 explicit image IDs")
+        image_ids = list(dict.fromkeys(raw_image_ids))
+        if len(image_ids) != len(raw_image_ids):
+            raise ValidationError("Mask coverage image IDs must be unique")
+        service = ComputedMaskCoverageService(self.session, self._required_settings())
+        result = service.calculate(
+            project_id,
+            definition_id,
+            image_ids,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        response = service.result_response(result)
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="computed_metric_result",
+                payload={
+                    "result_id": str(response.id),
+                    "result_kind": response.result_kind,
+                    "definition_id": str(response.definition_id),
+                    "definition_sha256": response.definition_sha256,
+                    "formula_version": response.formula_version,
+                    "mask_count": response.mask_count,
+                    "density_object_count": response.density_object_count,
+                    "summed_mask_area_pixels": response.summed_mask_area_pixels,
+                    "union_area_pixels": response.union_area_pixels,
+                    "image_coverage_percent": response.image_coverage_percent,
+                    "roi_coverage_percent": response.roi_coverage_percent,
+                    "physical_unit": response.physical_unit,
+                    "union_area_physical": response.union_area_physical,
+                    "object_density_per_square_unit": response.object_density_per_square_unit,
+                    "evidence_sha256": response.evidence_sha256,
+                    "content_sha256": response.content_sha256,
+                },
+            )
+        ]
+
+    def _execute_annotation_comparison(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Annotation comparison project artifact is mismatched")
+        try:
+            request = AnnotationComparisonCalculateRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid annotation-comparison parameters") from exc
+        response = AnnotationComparisonService(self.session, self._required_settings()).calculate(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="computed_metric_result",
+                payload={
+                    "result_id": str(response.result_id),
+                    "result_kind": "annotation_comparison",
+                    "definition_id": str(response.definition_id),
+                    "definition_sha256": response.definition_sha256,
+                    "formula_version": (
+                        MASK_FORMULA_VERSION
+                        if response.comparison.geometry_kind == "masks"
+                        else BOX_FORMULA_VERSION
+                    ),
+                    "geometry_kind": response.comparison.geometry_kind,
+                    "image_id": str(response.comparison.image_id),
+                    "comparison_sha256": response.comparison.content_sha256,
+                    "content_sha256": response.result_sha256,
+                },
+            )
+        ]
+
+    def _execute_geographic_pairwise(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Geographic pairwise project artifact is mismatched")
+        try:
+            request = GeographicPairwiseCalculateRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid geographic-pairwise parameters") from exc
+        response = GeographicPairwiseService(self.session).calculate(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="computed_metric_result",
+                payload={
+                    "result_id": str(response.result_id),
+                    "result_kind": "geographic_pairwise",
+                    "definition_id": str(response.definition_id),
+                    "definition_sha256": response.definition_sha256,
+                    "formula_version": "reefvision.geographic-pairwise.v1",
+                    "distance_m": response.measurement.distance_m,
+                    "initial_bearing_deg": response.measurement.initial_bearing_deg,
+                    "measurement_sha256": response.measurement.content_sha256,
+                    "content_sha256": response.result_sha256,
+                },
+            )
+        ]
+
+    def _execute_environmental_threshold(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Environmental threshold project artifact is mismatched")
+        query = parameters.get("query")
+        if not isinstance(query, dict):
+            raise ValidationError("Environmental threshold requires an explicit query object")
+        service = EnvironmentalContextService(self.session)
+        definition_id = None
+        definition_sha256 = None
+        if set(query) == {"definition_id"}:
+            try:
+                definition_id = str(UUID(str(query["definition_id"])))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise ValidationError("Invalid environmental event definition ID") from exc
+            definition = service.event_definition_response(
+                service.get_event_definition(project_id, definition_id)
+            )
+            definition_sha256 = definition.definition_sha256
+            request = definition.query
+        else:
+            try:
+                request = EnvironmentalThresholdRequest.model_validate(query)
+            except ValueError as exc:
+                raise ValidationError("Invalid environmental threshold query") from exc
+        result = service.threshold_samples(project_id, request)
+        if len(result.matches) > 250:
+            raise ValidationError(
+                "Environmental threshold returned over 250 samples; narrow the query bounds"
+            )
+        return [
+            WorkflowArtifactSpec(
+                port_id="samples",
+                data_type="environmental_threshold_samples",
+                payload={
+                    "project_id": project_id,
+                    "workflow_run_id": run_id,
+                    "workflow_node_run_id": node_run.id,
+                    "query": request.model_dump(mode="json"),
+                    "definition_id": definition_id,
+                    "definition_sha256": definition_sha256,
+                    "method": result.method,
+                    "normalized_threshold": result.normalized_threshold,
+                    "normalized_unit": result.normalized_unit,
+                    "direction": result.direction,
+                    "sample_count": len(result.matches),
+                    "matches": [
+                        {
+                            "record_id": str(match.record.id),
+                            "content_sha256": match.record.content_sha256,
+                            "snapshot": match.model_dump(mode="json"),
+                        }
+                        for match in result.matches
+                    ],
+                },
+            )
+        ]
+
+    def _environmental_analysis_project_input(
+        self, project_id: str, inputs: dict[str, list[WorkflowArtifact]]
+    ) -> None:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Environmental analysis project artifact is mismatched")
+
+    @staticmethod
+    def _environmental_analysis_artifact(response: Any) -> list[WorkflowArtifactSpec]:
+        definition = response.definition
+        result = response.result
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="environmental_analysis_result",
+                payload={
+                    "result_id": str(result.id),
+                    "definition_id": str(definition.id),
+                    "definition_sha256": definition.definition_sha256,
+                    "analysis_kind": result.analysis_kind,
+                    "observed_at": result.observed_at.isoformat(),
+                    "payload": result.payload,
+                    "input_snapshot": result.input_snapshot,
+                    "source_record_ids": [str(value) for value in result.source_record_ids],
+                    "source_analysis_result_ids": [
+                        str(value) for value in result.source_analysis_result_ids
+                    ],
+                    "quality_control": result.quality_control,
+                    "uncertainty": result.uncertainty,
+                    "workflow_run_id": str(result.workflow_run_id)
+                    if result.workflow_run_id
+                    else None,
+                    "workflow_node_run_id": str(result.workflow_node_run_id)
+                    if result.workflow_node_run_id
+                    else None,
+                    "content_sha256": result.content_sha256,
+                },
+            )
+        ]
+
+    def _execute_lunar_context_analysis(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = LunarAnalysisBatchRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid lunar-context analysis parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_lunar_batch(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        single = SimpleNamespace(definition=response.definition, result=response.results[0])
+        return self._environmental_analysis_artifact(single)
+
+    def _execute_current_streamline_analysis(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = CurrentFieldAnalysisRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid current-streamline analysis parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_current_streamline(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
+
+    def _execute_tidal_context_analysis(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = TidalContextAnalysisRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid tidal-context analysis parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_tidal_context(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
+
+    def _execute_event_window_analysis(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = EventWindowAnalysisRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid event-window analysis parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_event_window(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
+
+    def _execute_observation_environment_join(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = ObservationEnvironmentJoinRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid observation-environment join parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_observation_environment_join(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
+
+    def _execute_lagged_comparison(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = LaggedComparisonAnalysisRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid lagged-comparison parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_lagged_comparison(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
 
     def _execute_project_images(
         self,

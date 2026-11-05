@@ -161,6 +161,10 @@ class GeoreferencingUncertainty(BaseModel):
 
     available: bool
 
+    unit: Literal["m"] = "m"
+    coordinate_frame: Literal["local_enu_horizontal"] = "local_enu_horizontal"
+    correlation_group_id: str | None = None
+
     method: Literal[
         "not_estimated",
         "propagated_1sigma",

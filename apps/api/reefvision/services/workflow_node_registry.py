@@ -54,6 +54,281 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             implementation_notes=["The project ID comes from the API route, not graph JSON."],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="scientific_records_source",
+            display_name="Scientific Records",
+            category="sources",
+            description=(
+                "Load explicit immutable scientific records for a computed metric without "
+                "searching or guessing inputs."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("records", "Scientific Records", "scientific_record_collection")],
+            required_parameters=["record_ids"],
+            optional_parameters={},
+            execution_state="executable_source",
+            executable=True,
+            implementation_notes=[
+                "Every record ID is project-scoped and checksum-verified at execution time."
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="computed_metric",
+            display_name="Computed Scientific Metric",
+            category="analysis",
+            description=(
+                "Evaluate one persisted safe unit-aware metric definition and save its result."
+            ),
+            input_ports=[_input("records", "Scientific Records", "scientific_record_collection")],
+            output_ports=[_output("result", "Computed Metric Result", "computed_metric_result")],
+            required_parameters=["definition_id", "bindings"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Uses the same immutable definition/result service as the standalone Metrics UI.",
+                "Bindings map declared formula symbols to record IDs in the connected source.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="annotation_aggregate",
+            display_name="Reviewed Annotation Aggregate",
+            category="analysis",
+            description=(
+                "Count reviewed canonical boxes or verified masks with an explicit image or "
+                "researcher-declared image-group independence contract."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Aggregate Result", "computed_metric_result")],
+            required_parameters=["definition_id", "image_ids"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Uses the standalone immutable annotation aggregate service.",
+                "Image IDs are explicit; only reviewed evidence is eligible.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="mask_coverage",
+            display_name="Verified Mask Area & Coverage",
+            category="analysis",
+            description=(
+                "Calculate exact source-pixel summed and union mask area, full-image or "
+                "verified-ROI coverage, and compatible calibrated physical area/density."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Mask Coverage Result", "computed_metric_result")],
+            required_parameters=["definition_id", "image_ids"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Uses the standalone immutable verified-mask coverage service.",
+                "Overlapping masks are unioned; predictions and non-verified masks are excluded.",
+                "Physical values fail closed for missing, mixed, or projective calibration.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="annotation_comparison",
+            display_name="Annotation Source Comparison",
+            category="analysis",
+            description=(
+                "Persist a deterministic class-aware comparison of reviewed boxes, explicit "
+                "verified masks, or a pinned model-prediction job."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Comparison Result", "computed_metric_result")],
+            required_parameters=["name", "image_id", "source_a", "source_b"],
+            optional_parameters={
+                "geometry_kind": "boxes",
+                "iou_threshold": 0.5,
+                "reference_side": None,
+            },
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Mask sources use explicit independently identifiable verified-mask IDs.",
+                "Predictions are pinned by job ID and retain model/checksum provenance.",
+                "The selected reference is a descriptive convention, not biological truth.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="geographic_pairwise",
+            display_name="Pairwise Geographic Measurement",
+            category="analysis",
+            description=(
+                "Persist WGS84 endpoint distance, initial bearing, explicit time-basis "
+                "separation, and qualified uncertainty from two geographic observations."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Geographic Result", "computed_metric_result")],
+            required_parameters=["name", "start_observation_id", "end_observation_id"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Requires two explicit current EPSG:4326 observation IDs.",
+                "Initial bearing is endpoint displacement, not orientation or trajectory.",
+                "The pair is descriptive and is not presented as an independent replicate.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="environmental_threshold",
+            display_name="Environmental Threshold Samples",
+            category="analysis",
+            description=(
+                "Evaluate bounded environmental observations against an explicit threshold "
+                "without interpolating values or inferring event durations."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[
+                _output(
+                    "samples",
+                    "Threshold Samples",
+                    "environmental_threshold_samples",
+                )
+            ],
+            required_parameters=["query"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "The query uses the validated environmental threshold request schema.",
+                "Only currently eligible QC-passing observations are included.",
+                "Persisted results contain original record IDs, checksums, and provenance.",
+                "An empty result is valid; this node does not infer event durations.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="current_streamline_analysis",
+            display_name="Persisted Current Streamlines",
+            category="analysis",
+            description=(
+                "Integrate and persist deterministic streamlines through one frozen, "
+                "QC-compatible current field."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[
+                _output("result", "Current Streamlines", "environmental_analysis_result")
+            ],
+            required_parameters=["name", "scientific_record_ids", "seeds"],
+            optional_parameters={
+                "step_seconds": 60,
+                "max_steps": 1000,
+                "max_length_m": 100000,
+                "stagnation_m_s": 1e-9,
+            },
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Requires a complete paired eastward/northward component grid.",
+                "All inputs share one UTC, depth, source, dataset/model, and cache identity.",
+                "Streamlines describe a frozen Eulerian field and are not organism trajectories.",
+                "Obsolete environmental snapshots and spatial calibrations fail closed.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="lunar_context_analysis",
+            display_name="Persisted Lunar Context",
+            category="analysis",
+            description="Calculate and persist deterministic offline lunar context.",
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Lunar Analysis", "environmental_analysis_result")],
+            required_parameters=["name", "observed_at"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Requires exactly one explicit timezone-aware timestamp per workflow node.",
+                "Uses the same qualified low-precision calculator and immutable result service.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="tidal_context_analysis",
+            display_name="NOAA Tidal Context",
+            category="analysis",
+            description="Persist bounded observed and predicted NOAA tidal context.",
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Tidal Analysis", "environmental_analysis_result")],
+            required_parameters=[
+                "name",
+                "observed_at",
+                "location",
+                "station_id",
+                "datum",
+                "max_time_delta_s",
+                "max_distance_m",
+            ],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Observed and predicted water levels remain separate source records.",
+                "Station, datum, UTC time, and distance bounds are mandatory.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="event_window_analysis",
+            display_name="Environmental Event Windows",
+            category="analysis",
+            description="Create deterministic windows around saved threshold samples.",
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Event Windows", "environmental_analysis_result")],
+            required_parameters=[
+                "name",
+                "event_definition_id",
+                "before_s",
+                "after_s",
+                "boundary_policy",
+            ],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Uses an immutable legacy threshold-definition snapshot.",
+                "Boundary policy and overlap merging are explicit; duration is not interpolated.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="observation_environment_join",
+            display_name="Observation-Environment Join",
+            category="analysis",
+            description="Join explicit biological records to bounded environmental evidence.",
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Joined Evidence", "environmental_analysis_result")],
+            required_parameters=[
+                "name",
+                "observation_record_ids",
+                "environmental_variable",
+                "max_time_delta_s",
+                "max_distance_m",
+                "require_depth_match",
+            ],
+            optional_parameters={"max_depth_delta_m": 0},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Observation time comes from scientific_record.observed_at, never result creation.",
+                "Every pair retains time, geodesic distance, depth, and tie-break evidence.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="lagged_comparison",
+            display_name="Lagged Environmental Comparison",
+            category="analysis",
+            description="Re-match a saved join at explicit lags and report reuse diagnostics.",
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Lagged Comparison", "environmental_analysis_result")],
+            required_parameters=["name", "join_result_id", "lags_s"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Outputs are descriptive and include repeated-unit/pseudoreplication warnings.",
+                "No significance, independence, effect, or causal claim is calculated.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="project_images",
             display_name="Project Images",
             category="sources",

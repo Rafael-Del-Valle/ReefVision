@@ -23,6 +23,9 @@ class GeographicMovementObservation(_MovementAnalyticsModel):
     latitude_deg: float = Field(ge=-90.0, le=90.0)
     longitude_deg: float = Field(ge=-180.0, le=180.0)
     crs: str = Field(min_length=1)
+    horizontal_sigma_m: float | None = Field(default=None, ge=0.0)
+    uncertainty_method: str | None = None
+    uncertainty_correlation_group_id: str | None = None
 
 
 class GeographicCoordinate(_MovementAnalyticsModel):
@@ -50,6 +53,29 @@ class GeographicMovementSegment(_MovementAnalyticsModel):
 
     distance_m: float = Field(ge=0.0)
     speed_m_s: float | None = Field(default=None, ge=0.0)
+    initial_bearing_deg: float | None = Field(
+        default=None,
+        ge=0.0,
+        lt=360.0,
+        description=(
+            "Initial azimuth of the WGS84 geodesic from the start location to the end "
+            "location, in degrees clockwise from true north. Null for coincident locations. "
+            "This describes sampled geographic displacement, not organism body orientation."
+        ),
+    )
+    distance_standard_uncertainty_m: float | None = Field(default=None, ge=0.0)
+    speed_standard_uncertainty_m_s: float | None = Field(default=None, ge=0.0)
+    bearing_standard_uncertainty_deg: float | None = Field(default=None, ge=0.0)
+    uncertainty_method: Literal["independent_isotropic_first_order"] | None = None
+    uncertainty_unavailable_reason: (
+        Literal[
+            "missing_endpoint_standard_uncertainty",
+            "unknown_or_shared_endpoint_correlation",
+            "bearing_geometry_ill_conditioned",
+            "non_positive_elapsed_time",
+        ]
+        | None
+    ) = None
     cumulative_distance_m: float = Field(ge=0.0)
 
     speed_valid: bool

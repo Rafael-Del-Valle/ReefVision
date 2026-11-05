@@ -118,8 +118,8 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
             if manifest.get("format_name") != FORMAT_NAME:
                 errors.append("Archive is not a ReefVision project exchange package")
             version = str(manifest.get("format_version", ""))
-            if version.split(".", 1)[0] != FORMAT_VERSION.split(".", 1)[0]:
-                errors.append("Exchange format major version is incompatible")
+            if version not in {"1.0", "1.1"}:
+                errors.append("Unsupported exchange format version")
 
             sections = manifest.get("sections", {})
             if not isinstance(sections, dict):

@@ -22,6 +22,13 @@ export interface GeographicMovementSegment {
   end_location: GeographicCoordinate;
   distance_m: number;
   speed_m_s: number | null;
+  /** WGS84 initial azimuth clockwise from true north; null for coincident positions. */
+  initial_bearing_deg: number | null;
+  distance_standard_uncertainty_m?: number | null;
+  speed_standard_uncertainty_m_s?: number | null;
+  bearing_standard_uncertainty_deg?: number | null;
+  uncertainty_method?: "independent_isotropic_first_order" | null;
+  uncertainty_unavailable_reason?: string | null;
   cumulative_distance_m: number;
   speed_valid: boolean;
   invalid_reason: string | null;
