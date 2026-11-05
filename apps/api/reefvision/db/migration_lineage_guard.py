@@ -318,7 +318,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "reviewed data-preserving migration, never by stamping."
             )
 
-    # SQLite UNIQUE permits repeated NULL identities. A forged 0041 stamp
+    # SQLite UNIQUE permits repeated NULL identities. A forged review-lineage stamp
     # with nullable request keys could bypass reviewer-event idempotency even
     # when the named two-column UNIQUE constraint exists. The actual 0038
     # migration declares both fields NOT NULL; inspect without altering data.
