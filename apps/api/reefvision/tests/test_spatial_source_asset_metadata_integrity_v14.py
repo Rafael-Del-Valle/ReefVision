@@ -60,6 +60,7 @@ OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
         "original_filename_path",
         "original_filename_empty",
         "original_filename_control",
+        "original_filename_bidi",
     ],
 )
 def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
@@ -120,6 +121,8 @@ def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
             record.original_filename = f"../{filename}"
         elif corrupt_field == "original_filename_control":
             record.original_filename = f"coral\\nrelabelled.{filename.rsplit('.', 1)[-1]}"
+        elif corrupt_field == "original_filename_bidi":
+            record.original_filename = f"coral\u202erelabelled.{filename.rsplit('.', 1)[-1]}"
         else:
             record.original_filename = ""
         session.commit()
