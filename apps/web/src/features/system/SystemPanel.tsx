@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { developmentLine } from "../../buildIdentity";
+
 import {
   cancelJob,
   createBackup,
@@ -323,6 +325,12 @@ export function SystemPanel({
             </div>
           </div>
           <dl className="system-list">
+            {developmentLine && (
+              <div>
+                <dt>Development line</dt>
+                <dd>ReefVision {developmentLine}</dd>
+              </div>
+            )}
             <div>
               <dt>ReefVision</dt>
               <dd>{versionData.application_version}</dd>
