@@ -261,6 +261,32 @@ describe("TrainingRunDetail", () => {
     expect(screen.getByText(/— of —/)).toBeInTheDocument();
   });
 
+  it("shows the first live training loss before a second epoch exists", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          status: "training",
+          progress_epoch: 1,
+          metrics_history: {
+            epoch: [1],
+            "train/box_loss": [1.25],
+            "train/cls_loss": [0.75],
+            "train/dfl_loss": [0.5],
+          },
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    const box = screen.getByRole("img", { name: /train box loss across 1 epoch/i });
+    expect(box.querySelector("circle")).toHaveAttribute("cx", "50");
+    expect(screen.getByText(/Latest 1\.2500 · 1 epoch/)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /train cls loss across 1 epoch/i })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /train dfl loss across 1 epoch/i })).toBeInTheDocument();
+  });
+
   it("shows every available detection, segmentation, and validation metric", () => {
     render(
       <TrainingRunDetail
