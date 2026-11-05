@@ -136,7 +136,6 @@ def test_invalid_source_is_rejected(client: TestClient, filename: str, payload: 
     assert client.get(url).json() == []
 
 
-
 @pytest.mark.parametrize(
     "filename,payload",
     [
