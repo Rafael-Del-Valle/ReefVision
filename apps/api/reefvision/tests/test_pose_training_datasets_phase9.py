@@ -6,7 +6,6 @@ import io
 import json
 import zipfile
 from typing import cast
-from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
