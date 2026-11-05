@@ -311,7 +311,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 image_exif = image.getexif()
                 exif = dict(image_exif)
             except (
-                    OSError,
+                OSError,
                 SyntaxError,
                 ValueError,
                 TypeError,
@@ -319,7 +319,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 OverflowError,
                 IndexError,
                 KeyError,
-                ):
+            ):
                 exif = {}
                 exif_warning = "EXIF metadata could not be decoded; capture time is unavailable"
             else:
