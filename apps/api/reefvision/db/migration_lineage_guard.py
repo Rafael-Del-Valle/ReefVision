@@ -318,6 +318,18 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "reviewed data-preserving migration, never by stamping."
             )
 
+    # The 0038 migration gives every reviewer event a single global primary key.
+    # A restored schema with only the request UNIQUE constraint could still
+    # admit duplicate event IDs across items, corrupting audit references.
+    # Validate the original primary key without modifying reviewer records.
+    event_primary_key = inspector.get_pk_constraint(_REVIEW_TABLE).get("constrained_columns")
+    if event_primary_key != ["id"]:
+        raise RuntimeError(
+            f"Unsafe ReefVision Alembic revision {revision} collision: "
+            "review-event primary key must be exactly id. Preserve reviewer "
+            "history and reconcile through a reviewed data-preserving migration."
+        )
+
     # SQLite UNIQUE permits repeated NULL identities. A forged review-lineage stamp
     # with nullable request keys could bypass reviewer-event idempotency even
     # when the named two-column UNIQUE constraint exists. The actual 0038
