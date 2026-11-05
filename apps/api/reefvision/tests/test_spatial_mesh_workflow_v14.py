@@ -738,9 +738,7 @@ def test_saved_obj_workflow_calibration_scaling_reference(client: TestClient, sc
             assert dimension - uncertainty <= dimension <= dimension + uncertainty
         area_low, area_high = measured["surface_area_scale_interval_m2"]
         assert area_low <= measured["surface_area_m2"] <= area_high
-        perimeter_low, perimeter_high = measured[
-            "boundary_loop_perimeter_scale_intervals_m"
-        ][0]
+        perimeter_low, perimeter_high = measured["boundary_loop_perimeter_scale_intervals_m"][0]
         assert perimeter_low <= measured["boundary_edge_length_m"] <= perimeter_high
     assert (
         artifact["provenance"]["geometry_sha256"]
