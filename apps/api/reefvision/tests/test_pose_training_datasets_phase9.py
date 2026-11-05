@@ -717,6 +717,8 @@ def test_frozen_dataset_rejects_resigned_blank_video_digest(
         ("source_models_json", [{}]),
         ("source_models_json", [{"model_id": ""}]),
         ("source_models_json", [{"model_id": None}]),
+        ("source_models_json", [{"model_id": " model-with-space "}]),
+        ("source_job_ids_json", [" job-with-space "]),
         ("source_job_ids_json", {"job-id": "not-a-list"}),
         ("source_job_ids_json", [None]),
         ("source_models_json", [{"model_id": "same"}, {"model_id": "same"}]),
