@@ -13,9 +13,7 @@ def test_earlier_review_revision_rejects_missing_event_request_uniqueness(
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
-            )
+            connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
             connection.execute(
                 text("INSERT INTO alembic_version VALUES (:revision)"),
                 {"revision": revision},
@@ -47,17 +45,13 @@ def test_earlier_review_revision_rejects_missing_event_request_uniqueness(
                     "'comment', 'researcher', 'observed', NULL, '2026-11-04')"
                 )
             )
-            before = connection.execute(
-                text("SELECT * FROM review_queue_item_events")
-            ).all()
+            before = connection.execute(text("SELECT * FROM review_queue_item_events")).all()
             with pytest.raises(RuntimeError, match="idempotency UNIQUE constraint"):
                 assert_compatible_revision_0038(connection)
-            assert connection.execute(
-                text("SELECT * FROM review_queue_item_events")
-            ).all() == before
             assert (
-                connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                connection.execute(text("SELECT * FROM review_queue_item_events")).all() == before
             )
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
     finally:
         engine.dispose()
 
@@ -71,9 +65,7 @@ def test_earlier_review_revision_rejects_nullable_request_identity_with_unique_k
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
-            )
+            connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
             connection.execute(
                 text("INSERT INTO alembic_version VALUES (:revision)"),
                 {"revision": revision},
@@ -89,8 +81,7 @@ def test_earlier_review_revision_rejects_nullable_request_identity_with_unique_k
                 allowed.append("triage_complete")
             check = ", ".join(f"'{event}'" for event in allowed)
             identity = {
-                field: f"{field} TEXT"
-                + ("" if field == nullable_field else " NOT NULL")
+                field: f"{field} TEXT" + ("" if field == nullable_field else " NOT NULL")
                 for field in ("review_queue_item_id", "client_request_id")
             }
             connection.execute(
@@ -117,22 +108,18 @@ def test_earlier_review_revision_rejects_nullable_request_identity_with_unique_k
                     "'request-1', 'comment', 'researcher', '2026-11-05')"
                 )
             )
-            before = tuple(
-                connection.execute(text("SELECT * FROM review_queue_item_events")).all()
-            )
+            before = tuple(connection.execute(text("SELECT * FROM review_queue_item_events")).all())
             for _ in range(2):
                 with pytest.raises(RuntimeError, match="nullable review-event idempotency"):
                     assert_compatible_revision_0038(connection)
-                assert tuple(
-                    connection.execute(text("SELECT * FROM review_queue_item_events")).all()
-                ) == before
+                assert (
+                    tuple(connection.execute(text("SELECT * FROM review_queue_item_events")).all())
+                    == before
+                )
                 assert connection.scalar(text("SELECT value FROM observations")) == (
                     "preserved biological observation"
                 )
-                assert (
-                    connection.scalar(text("SELECT version_num FROM alembic_version"))
-                    == revision
-                )
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
     finally:
         engine.dispose()
 
@@ -192,21 +179,15 @@ def test_earlier_review_revision_rejects_nullable_reviewer_attribution(
                     "('e1', 'q1', 'i1', 'p1', 'r1', 'researcher', '2026-11-05', 'comment')"
                 )
             )
-            before = tuple(
-                connection.execute(text("SELECT * FROM review_queue_item_events"))
-            )
+            before = tuple(connection.execute(text("SELECT * FROM review_queue_item_events")))
             for _ in range(2):
                 with pytest.raises(RuntimeError, match="nullable review-event attribution"):
                     assert_compatible_revision_0038(connection)
-                assert tuple(
-                    connection.execute(text("SELECT * FROM review_queue_item_events"))
-                ) == before
-                assert connection.scalar(text("SELECT value FROM observations")) == (
-                    "preserved"
-                )
                 assert (
-                    connection.scalar(text("SELECT version_num FROM alembic_version"))
-                    == revision
+                    tuple(connection.execute(text("SELECT * FROM review_queue_item_events")))
+                    == before
                 )
+                assert connection.scalar(text("SELECT value FROM observations")) == ("preserved")
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
     finally:
         engine.dispose()
