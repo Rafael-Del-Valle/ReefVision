@@ -712,8 +712,10 @@ def test_saved_obj_workflow_calibration_scaling_reference(client: TestClient, sc
         assert measured["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
             [0.1 * scale, 0.15 * scale, 0]
         )
-        assert measured["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
-            13**0.5 * scale
+        assert measured["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(13**0.5 * scale)
+        # The diagonal must agree with the independently measured orthogonal extents.
+        assert measured["axis_aligned_bounding_box_diagonal_m"] ** 2 == pytest.approx(
+            sum(length**2 for length in measured["axis_aligned_dimensions_m"])
         )
         assert measured["boundary_edge_length_m"] == pytest.approx(expected_perimeter)
         # Calibration uncertainty follows squared area and linear perimeter scaling.
