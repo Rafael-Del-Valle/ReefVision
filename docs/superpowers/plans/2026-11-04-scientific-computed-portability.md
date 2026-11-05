@@ -31,10 +31,12 @@
 ### Task 1: Failing portability and integrity regressions
 
 **Files:**
+
 - Create: `apps/api/reefvision/tests/test_computed_metric_project_exchange.py`
 - Modify: `apps/api/reefvision/tests/test_computed_metrics_review.py`
 
 **Interfaces:**
+
 - Consumes: existing exchange HTTP/job helpers and computed/environmental APIs.
 - Produces: round-trip, reproducibility, tamper, legacy, and rollback acceptance tests.
 
@@ -46,6 +48,7 @@
 ### Task 2: Explicit computed exchange remapping and validation
 
 **Files:**
+
 - Create: `apps/api/reefvision/services/project_exchange_computed.py`
 - Modify: `apps/api/reefvision/services/project_exchange.py`
 - Modify: `apps/api/reefvision/services/project_exchange_v1.py`
@@ -53,6 +56,7 @@
 - Modify: `apps/api/reefvision/services/project_exchange_import_v1.py`
 
 **Interfaces:**
+
 - Produces: `COMPUTED_SECTIONS`, `validate_computed_exchange_records(...)`, and `remap_computed_sections(...)`.
 - Consumes: the established scientific remapper output and shared archive ID map.
 
@@ -66,10 +70,12 @@
 ### Task 3: Documentation, migration coordination, and verification
 
 **Files:**
+
 - Modify: `docs/SCIENTIFIC_ENVIRONMENTAL_CONTEXT.md`
 - Modify: `docs/roadmap/REEFVISION_1_1.md`
 
 **Interfaces:**
+
 - Produces: exact portability scope, evidence, limitations, and cross-version migration reconciliation notes.
 
 - [ ] Document exchange coverage and immutable source-archive/hash behavior.

@@ -1,6 +1,6 @@
 # ReefVision 1.1 development roadmap
 
-Status date: 2026-10-28 UTC. Development only; no release acceptance claimed.
+Status date: 2026-11-04 UTC. Development only; no release acceptance claimed.
 
 ## Baseline and audit
 
@@ -15,7 +15,7 @@ by successful run 38545559271. Release validation remains separate from code CI.
 
 The application is React/TypeScript + TanStack Query + Leaflet, hosted in
 Tauri with a local FastAPI worker/backend. SQLAlchemy owns the SQLite model;
-The baseline Alembic head was 0037; this branch adds 0038 and 0039. Public IDs are UUIDs, source coordinates are
+The baseline Alembic head was 0037; this branch adds 0038, 0039 and 0040. Public IDs are UUIDs, source coordinates are
 pixels, and model predictions remain separate from verified annotations.
 
 Reusable implementations inspected:
@@ -32,20 +32,44 @@ Reusable implementations inspected:
 
 ## Milestones and acceptance
 
-| Phase                                   | Dependencies                            | Implemented                                                                                                                   | Tested                                                                                                           | Release-validated | Acceptance remaining                                                                                                                                      |
-| --------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 Scientific foundation                 | Validated baseline                      | Core records, units, UTC, WGS84/pixels, calibration snapshots, provenance, QC and cache tables                                | API, integrity, serialization, migration round trip and legacy exchange tests pass                               | No                | Additional CRS transforms, scientific project exchange, broader real-project migration acceptance                                                         |
-| 2 Telemetry and geographic measurements | 1; existing georeferencing              | Existing telemetry/calibration reused; stale-coordinate exclusion and WGS84 segment bearings added                            | 71 focused backend tests pass, including datum-change/invalidation/recomputation; frontend regression tests pass | No                | Propagated geographic uncertainty, pairwise geographic motion, mask geometry, GeoPackage, absolute UTC/VFR alignment, surveyed drone references           |
-| 3 Environmental context                 | 1                                       | Local JSON import, NOAA station temperature, persistent 24-hour cache/offline, bounded lookup and project workspace           | Provider/API/cache tests and live NOAA smoke test pass; UI unit tests/build pass                                 | No                | Copernicus current/temperature/salinity grids, credential settings, unattended daily refresh, detection/track lookup controls, browser/desktop acceptance |
-| 4 Current visualizer                    | 2, 3                                    | Not started                                                                                                                   | No                                                                                                               | No                | Streamlines, time/depth, layers, trajectories, cache/provenance, desktop acceptance                                                                       |
-| 5 Scientific heatmaps                   | 1; existing pose/annotation records     | Existing partial infrastructure                                                                                               | Not assessed for 1.1                                                                                             | No                | Independent reviewer/model layers and disagreement validation                                                                                             |
-| 6 Computed metrics                      | 1; calibration and verified annotations | First scalar vertical slice: safe unit-aware arithmetic, immutable definitions/results, API/CSV/UI, executable workflow nodes | Domain/API/migration/workflow/UI regressions pass; broad final-head validation recorded below                    | No                | Aggregate annotation/mask counts and coverage, replicate/group contracts, broader formula functions and field-data acceptance                             |
-| 7 Event/environment analysis            | 2, 3, 6                                 | Not started                                                                                                                   | No                                                                                                               | No                | Event windows; automated tidal/lunar context for dated, georeferenced observations; reproducible analysis and exports                                     |
+| Phase                                   | Dependencies                            | Implemented                                                                                                                                 | Tested                                                                                                           | Release-validated | Acceptance remaining                                                                                                                            |
+| --------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Scientific foundation                 | Validated baseline                      | Core records, units, UTC, WGS84/pixels, calibration snapshots, provenance, QC/cache tables and scientific/computed/event exchange           | API, integrity, serialization, migration and ID-remapped exchange round trips pass                               | No                | Additional CRS transforms and broader real-project migration acceptance                                                                         |
+| 2 Telemetry and geographic measurements | 1; existing georeferencing              | Existing telemetry/calibration reused; stale-coordinate exclusion and WGS84 segment bearings added                                          | 71 focused backend tests pass, including datum-change/invalidation/recomputation; frontend regression tests pass | No                | Propagated geographic uncertainty, pairwise geographic motion, mask geometry, GeoPackage, absolute UTC/VFR alignment, surveyed drone references |
+| 3 Environmental context                 | 1                                       | Local JSON, NOAA station temperature and bounded Copernicus grid acquisition with persistent cache/offline and project workspace            | Provider/API/cache/live NOAA and Copernicus fixture tests pass; UI unit tests/build pass                         | No                | Production credential acceptance, unattended daily refresh, broader subject lookup controls and browser/desktop acceptance                      |
+| 4 Current visualizer                    | 2, 3                                    | Cached UTC/depth current slices, direction arrows, summaries, provenance/QC/uncertainty display and CSV; offline basemap optional           | Vector pairing, scientific filtering, summary/export and current-map UI regressions pass                         | No                | Streamlines, trajectory overlay and representative cached/live desktop acceptance                                                               |
+| 5 Scientific heatmaps                   | 1; existing pose/annotation records     | Source-pixel grid overlays for reviewed boxes, verified masks and opt-in pending predictions, with revision/hash provenance and JSON export | API/UI regressions and full frontend suite pass                                                                  | No                | Separate reviewer identity/comparison layers, disagreement analysis and representative project acceptance                                       |
+| 6 Computed metrics                      | 1; calibration and verified annotations | Safe unit-aware scalar definitions/results, API/CSV/UI, executable workflow nodes and project exchange                                      | Domain/API/migration/workflow/UI and reproducible exchange regressions pass                                      | No                | Aggregate annotation/mask counts and coverage, replicate/group contracts, broader formula functions and field-data acceptance                   |
+| 7 Event/environment analysis            | 2, 3, 6                                 | Bounded sample thresholds, immutable event definitions and executable saved workflow references; definitions are portable                   | Domain/API/workflow/project-isolation/tamper and exchange regressions pass                                       | No                | Event windows/aggregation; automated tidal/lunar context; lagged comparisons; reproducible tabular/geographic exports                           |
 
 Optional advection is deferred until core acceptance. Existing 1.0.x GUI,
 GPU and scientific acceptance issues do not block additive foundation work,
 but must be reconciled before a combined 1.1 release. Do not merge, tag,
 publish installers, bundle model weights or mark the release complete.
+
+## 2026-11-04 scientific portability checkpoint
+
+Exchange `1.1` now transfers scientific records and caches together with computed metric
+definitions/results and environmental-event definitions. Import creates fresh project-scoped
+IDs, remaps workflow/scientific relationships, rebuilds computed input snapshots and result
+hashes, preserves literal source/provider evidence, and retains the untouched source archive as
+import provenance. A saved workflow result was exported, imported, inspected and recalculated
+with the same value and uncertainty. Tampered definitions, results, inputs, snapshots, subjects,
+formula versions and provenance were rejected atomically. The focused exchange/computed/event
+matrix passed 62 tests on the implementation checkpoint; this is development evidence, not
+installed-desktop or field-data release acceptance.
+
+Project exchange still does not make the full release portable by itself: aggregate metric
+contracts, tidal/lunar results, future event-window artifacts, additional CRS transforms and
+representative real-project acceptance remain unfinished.
+
+### Published migration conflict
+
+ReefVision 1.1 migration `0038_scientific_data.py` and the independent ReefVision 1.6
+migration also identified as `0038` are distinct published branch histories. Do not rename,
+combine or rewrite either migration. Eventual integration must preserve both histories and add a
+new uniquely identified reconciliation migration with explicit upgrades, downgrades and
+cross-version data-preservation tests. The 1.1 sequence remains `0038` -> `0039` -> `0040`.
 
 ## Planned tidal and lunar context (v1.1)
 
@@ -153,10 +177,11 @@ explicit source pixels or WGS84; unsupported transformations fail closed.
 Unknown uncertainty/depth remain unknown, never zero.
 
 Environmental cache entries retain raw provider payloads, request identity,
-checksum, acquisition/expiry times and URL. NOAA is the first remote adapter;
+checksum, acquisition/expiry times and URL. NOAA was the first remote adapter;
 local researcher records work without a network. Refresh is explicit and
-reuses a cache for 24 hours; offline requests never contact a provider.
-Copernicus credentials and grid adapters follow after these contracts pass.
+reuses a cache for 24 hours; offline requests never contact a provider. The
+subsequent bounded Copernicus adapter reuses these contracts for current,
+temperature and salinity grids.
 
 This approach avoids a second project store or heavyweight geospatial/data
 dependencies. A generic unvalidated JSON bag would lose scientific guarantees;
@@ -319,12 +344,12 @@ already-shared migration is rewritten in this 1.1 work.
 
 1. Record final-head remote CI in draft PR #71 and resolve any exact-head
    failures without weakening the scientific contracts.
-2. Extend project exchange to carry scientific records/cache and remap their
-   referenced IDs; validate actual researcher 1.0.x projects and installed-app restore.
+2. Validate scientific/computed/event project exchange against actual researcher
+   1.0.x projects and installed-app restore.
 3. Bind provider lookup in image/video/track inspectors and expose record
    revision selection, with explicit distance/time/depth limits.
-4. Add a credential-configurable Copernicus subset/grid adapter and cached
-   current, temperature and salinity fixtures before the current visualizer.
+4. Validate authenticated Copernicus acquisition and cached current-map behavior
+   in the installed application, then add streamlines and trajectory overlays.
 5. Extend telemetry uncertainty and surveyed georeferencing acceptance, then
    GeoPackage and pairwise movement exports. Keep approximate positions marked.
 6. Extend computed metrics beyond the first exact-subject scalar slice with

@@ -11,25 +11,31 @@ values, times and source descriptions with your own measurements:
 
 ```json
 {
-  "records": [{
-    "variable": "water_temperature",
-    "value": 20.0,
-    "unit": "degC",
-    "observed_at": "2026-04-03T13:00:00Z",
-    "source_kind": "observed",
-    "location": {"crs": "EPSG:4326", "latitude": 32.75, "longitude": -79.93},
-    "depth_m": 5,
-    "depth_reference": "sea_surface",
-    "uncertainty": {"value": 0.2, "kind": "standard_deviation"},
-    "qc": "unassessed",
-    "provenance": {
-      "source": "Replace with sensor and deployment identity",
-      "dataset_id": "Replace with researcher dataset identity",
-      "acquired_at": "2026-04-03T13:01:00Z",
-      "processing_parameters": {},
-      "source_metadata": {}
+  "records": [
+    {
+      "variable": "water_temperature",
+      "value": 20.0,
+      "unit": "degC",
+      "observed_at": "2026-04-03T13:00:00Z",
+      "source_kind": "observed",
+      "location": {
+        "crs": "EPSG:4326",
+        "latitude": 32.75,
+        "longitude": -79.93
+      },
+      "depth_m": 5,
+      "depth_reference": "sea_surface",
+      "uncertainty": { "value": 0.2, "kind": "standard_deviation" },
+      "qc": "unassessed",
+      "provenance": {
+        "source": "Replace with sensor and deployment identity",
+        "dataset_id": "Replace with researcher dataset identity",
+        "acquired_at": "2026-04-03T13:01:00Z",
+        "processing_parameters": {},
+        "source_metadata": {}
+      }
     }
-  }]
+  ]
 }
 ```
 
@@ -69,7 +75,7 @@ marks that snapshot as no longer current without rewriting the saved value.
 POST `/api/v1/projects/{project_id}/environment/noaa` with:
 
 ```json
-{"station_id": "8665530", "day": "2026-10-16", "offline": false}
+{ "station_id": "8665530", "day": "2026-10-16", "offline": false }
 ```
 
 The initial adapter supports CO-OPS water temperature, one UTC day per request.
@@ -93,6 +99,7 @@ cache intact. No authentication is required for this NOAA endpoint. Copernicus
 credentials, currents, salinity grids and local CSV import remain future work.
 
 Protocol references:
+
 - https://api.tidesandcurrents.noaa.gov/api/prod/
 - https://api.tidesandcurrents.noaa.gov/api/prod/responseHelp.html
 
@@ -132,10 +139,13 @@ installed Windows behavior. No Windows/GPU/physical field acceptance is claimed.
 
 ## Project exchange in 1.1
 
-Project exchange format `1.1` includes scientific records and environmental cache
-entries, including superseded snapshots, original units, QC, uncertainty,
-calibration snapshots and CRS. Projects without scientific records retain format
-`1.0`. Both versions can be imported; other versions fail inspection explicitly.
+Project exchange format `1.1` includes scientific records, environmental cache
+entries, computed metric definitions/results and immutable environmental-event
+definitions. This includes superseded environmental snapshots, original units, QC,
+uncertainty, calibration snapshots, CRS, formula/algorithm versions, input snapshots,
+workflow run/node linkage and definition/result checksums. Projects without any of
+this enriched scientific state retain format `1.0`. Both versions can be imported;
+other versions fail inspection explicitly.
 
 An import creates a new project and fresh internal identifiers. Scientific subject
 links and cache record links are remapped, checksums are recomputed, and the source
@@ -145,11 +155,34 @@ Import validates ownership, references and scientific integrity and commits once
 after media and artifact restoration. A failure rolls back all imported rows and
 removes only the new import directory. Existing projects are never overwritten.
 
+Computed results are accepted only when their archived definition, input record IDs,
+input snapshots, timestamps, units, values, uncertainty and provenance hashes reproduce
+the stored result under the recorded safe formula-engine version. Import remaps declared
+project/scientific/workflow identifiers, rebuilds each input snapshot from the remapped
+scientific records and recomputes the result checksum. Literal dataset IDs, provider
+metadata and source URLs remain evidence and are not rewritten merely because their text
+matches an internal UUID. The untouched source archive and its original identifiers stay
+available as import provenance.
+
+Environmental-event definitions retain their immutable typed threshold query and checksum;
+saved workflow references are remapped through the existing workflow exchange inventory.
+This portability slice does not add event aggregation, inferred onset/duration, tidal/lunar
+context or causal interpretation.
+
 **Full application backup** copies the database and managed files for exact
 restoration, preserving identifiers. **Project exchange** transfers a selected
 project into a new independent project. Optional media/artifact inclusion still
 applies to exchange; scientific cache payloads are included as scientific data,
 not as model weights. Neither workflow includes provider credentials.
+
+### Migration-lineage coordination
+
+This 1.1 branch owns `0038_scientific_data.py`, followed by
+`0039_computed_metrics.py` and `0040_environmental_event_definitions.py`. Independent 1.6
+work also published a different migration identified as `0038`. Neither published
+migration may be renamed, combined or rewritten in its source branch. Eventual cross-version
+integration must first preserve both branch histories, then add an explicit reconciliation
+migration with a new unique revision ID and cross-version upgrade/downgrade tests.
 
 ## Subject-specific environmental inspection
 
@@ -195,7 +228,6 @@ stays explicitly unknown; a known zero remains zero. No vector-speed, bearing or
 position uncertainty is inferred without the necessary covariance/position
 evidence. A non-finite derived speed is not displayed, even when both individual
 velocity components are finite.
-
 
 **Acquire Copernicus modeled data** accepts an exact `cmems_mod_…` dataset/version,
 variables `uo`, `vo`, `thetao`, `so`, WGS84 bounds, UTC interval and sea-surface depth.
