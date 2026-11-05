@@ -45,7 +45,7 @@ try {
     $env:HF_HUB_OFFLINE = "1"
     $env:VITE_REEFVISION_DEV_LINE = "1.1.0-dev"
 
-    Write-Host "ReefVision 1.1 development — laptop" -ForegroundColor Cyan
+    Write-Host "ReefVision 1.1 development - laptop" -ForegroundColor Cyan
     Write-Host "Source branch: $CurrentBranch"
     Write-Host "Data directory: $DataRoot"
     Write-Host "Display line: $env:VITE_REEFVISION_DEV_LINE"
