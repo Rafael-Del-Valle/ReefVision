@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type {
   GeographicCoordinate,
   GeographicTrackAnalytics,
@@ -9,8 +11,14 @@ import {
   activeGeographicSegmentForFrame,
   geographicSegmentSeekTarget,
 } from "./videoGeographicMovementSynchronization";
+import {
+  calculateGeographicPairwise,
+  geographicPairwiseCsvUrl,
+  type GeographicPairwiseSaved,
+} from "./geographicPairwiseApi";
 
 interface GeographicMovementAnalyticsPanelProps {
+  projectId?: string;
   state: GeographicMovementAnalyticsState;
   onReload: () => void;
   activeFrameIndex?: number | null;
@@ -205,11 +213,41 @@ function AnalyticsResults({
 }
 
 export function GeographicMovementAnalyticsPanel({
+  projectId,
   state,
   onReload,
   activeFrameIndex = null,
   onFrameSelect,
 }: GeographicMovementAnalyticsPanelProps) {
+  const [startObservationId, setStartObservationId] = useState("");
+  const [endObservationId, setEndObservationId] = useState("");
+  const [pairwise, setPairwise] = useState<GeographicPairwiseSaved | null>(
+    null,
+  );
+  const [pairwiseError, setPairwiseError] = useState<string | null>(null);
+  const [pairwisePending, setPairwisePending] = useState(false);
+
+  async function calculatePairwise() {
+    if (!projectId) return;
+    setPairwisePending(true);
+    setPairwiseError(null);
+    try {
+      setPairwise(
+        await calculateGeographicPairwise(
+          projectId,
+          startObservationId.trim(),
+          endObservationId.trim(),
+        ),
+      );
+    } catch (error) {
+      setPairwiseError(
+        error instanceof Error ? error.message : "Pairwise measurement failed.",
+      );
+    } finally {
+      setPairwisePending(false);
+    }
+  }
+
   return (
     <section
       className="management-card"
@@ -270,6 +308,84 @@ export function GeographicMovementAnalyticsPanel({
           activeFrameIndex={activeFrameIndex}
           onFrameSelect={onFrameSelect}
         />
+      )}
+
+      {projectId && (
+        <section aria-label="Pairwise geographic measurement">
+          <h4>Persisted pairwise measurement</h4>
+          <p className="annotation-helper">
+            Select two current geographic observation IDs. This computes
+            endpoint displacement only; it does not infer a trajectory, organism
+            orientation, or independent replicate.
+          </p>
+          <label>
+            Start observation ID
+            <input
+              value={startObservationId}
+              onChange={(event) => setStartObservationId(event.target.value)}
+            />
+          </label>
+          <label>
+            End observation ID
+            <input
+              value={endObservationId}
+              onChange={(event) => setEndObservationId(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            disabled={
+              pairwisePending ||
+              !startObservationId.trim() ||
+              !endObservationId.trim()
+            }
+            onClick={() => void calculatePairwise()}
+          >
+            {pairwisePending
+              ? "Calculating pair…"
+              : "Calculate and persist pair"}
+          </button>
+          {pairwiseError && <p role="alert">{pairwiseError}</p>}
+          {pairwise && (
+            <div role="region" aria-label="Pairwise geographic result">
+              <dl className="annotation-selection-list">
+                <div className="annotation-selection-row">
+                  <dt>WGS84 distance</dt>
+                  <dd>{meters(pairwise.measurement.distance_m)}</dd>
+                </div>
+                <div className="annotation-selection-row">
+                  <dt>Initial bearing</dt>
+                  <dd>{bearing(pairwise.measurement.initial_bearing_deg)}</dd>
+                </div>
+                <div className="annotation-selection-row">
+                  <dt>Time separation</dt>
+                  <dd>
+                    {seconds(pairwise.measurement.signed_time_delta_s)} (
+                    {pairwise.measurement.time_basis})
+                  </dd>
+                </div>
+                <div className="annotation-selection-row">
+                  <dt>Distance uncertainty</dt>
+                  <dd>
+                    {uncertainty(
+                      pairwise.measurement.distance_standard_uncertainty_m,
+                      "m",
+                      pairwise.measurement.uncertainty_unavailable_reason,
+                    )}
+                  </dd>
+                </div>
+              </dl>
+              <p>Immutable result ID: {pairwise.result_id}</p>
+              <a
+                href={geographicPairwiseCsvUrl(projectId, pairwise.result_id)}
+                download={`geographic-pairwise-${pairwise.result_id}.csv`}
+              >
+                Export pair CSV
+              </a>
+            </div>
+          )}
+        </section>
       )}
     </section>
   );

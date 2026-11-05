@@ -31,6 +31,7 @@ from reefvision.api.routes.environmental_context import router as environmental_
 from reefvision.api.routes.geographic_movement_analytics import (
     router as geographic_movement_analytics_router,
 )
+from reefvision.api.routes.geographic_pairwise import router as geographic_pairwise_router
 from reefvision.api.routes.georeferenced_observations import (
     router as georeferenced_observations_router,
 )
@@ -88,6 +89,7 @@ api_router.include_router(computed_aggregate_metrics_router)
 api_router.include_router(computed_mask_coverage_router)
 api_router.include_router(computed_metrics_router)
 api_router.include_router(geographic_movement_analytics_router)
+api_router.include_router(geographic_pairwise_router)
 api_router.include_router(health_router)
 api_router.include_router(capabilities_router)
 api_router.include_router(system_router)

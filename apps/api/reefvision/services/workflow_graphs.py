@@ -69,6 +69,9 @@ _ACTIONS: dict[str, str] = {
     "annotation_comparison": (
         "Compare explicit annotation sources with class-aware deterministic IoU matching."
     ),
+    "geographic_pairwise": (
+        "Measure WGS84 distance and initial bearing between two explicit geographic endpoints."
+    ),
     "environmental_threshold": (
         "Find bounded QC-eligible threshold samples with provenance, without event inference."
     ),

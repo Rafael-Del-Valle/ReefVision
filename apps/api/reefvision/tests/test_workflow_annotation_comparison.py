@@ -106,14 +106,13 @@ def test_verified_mask_comparison_executes_with_workflow_lineage(client: TestCli
         item for item in detail["artifacts"] if item["data_type"] == "computed_metric_result"
     )
     result_id = artifact["payload_json"]["result_id"]
-    response = client.get(
-        f"/api/v1/projects/{project['id']}/annotation-comparisons/{result_id}"
-    )
+    response = client.get(f"/api/v1/projects/{project['id']}/annotation-comparisons/{result_id}")
     assert response.status_code == 200, response.text
     assert response.json()["comparison"]["per_class"][class_id]["union_iou"] == 0.6
-    assert artifact["payload_json"]["comparison_sha256"] == response.json()["comparison"][
-        "content_sha256"
-    ]
+    assert (
+        artifact["payload_json"]["comparison_sha256"]
+        == response.json()["comparison"]["content_sha256"]
+    )
     with app.state.session_factory() as session:
         row = session.get(ComputedMetricResult, result_id)
         assert row is not None

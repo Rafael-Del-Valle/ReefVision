@@ -415,4 +415,60 @@ describe("Task 16G panel synchronization", () => {
       screen.queryByRole("button", { name: /Seek to frame/ }),
     ).not.toBeInTheDocument();
   });
+
+  it("persists an explicit pairwise measurement without trajectory claims", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result_id: "pair-result",
+          definition_id: "pair-definition",
+          result_sha256: "a".repeat(64),
+          measurement: {
+            content_sha256: "b".repeat(64),
+            distance_m: 12.345,
+            initial_bearing_deg: 90,
+            bearing_unavailable_reason: null,
+            signed_time_delta_s: 2,
+            time_basis: "utc",
+            distance_standard_uncertainty_m: 0.5,
+            bearing_standard_uncertainty_deg: 1,
+            uncertainty_method: "independent_isotropic_first_order",
+            uncertainty_unavailable_reason: null,
+            methodological_notes: [],
+          },
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    render(
+      <GeographicMovementAnalyticsPanel
+        projectId="project-1"
+        state={successState(analytics())}
+        onReload={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Start observation ID"), {
+      target: { value: "start-1" },
+    });
+    fireEvent.change(screen.getByLabelText("End observation ID"), {
+      target: { value: "end-1" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Calculate and persist pair" }),
+    );
+
+    const result = await screen.findByRole("region", {
+      name: "Pairwise geographic result",
+    });
+    expect(result).toHaveTextContent("12.35 m");
+    expect(result).toHaveTextContent("90.00°");
+    expect(screen.getByText(/endpoint displacement only/i)).toBeInTheDocument();
+    expect(result).toHaveTextContent("pair-result");
+    const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(request).toMatchObject({
+      start_observation_id: "start-1",
+      end_observation_id: "end-1",
+    });
+    fetch.mockRestore();
+  });
 });

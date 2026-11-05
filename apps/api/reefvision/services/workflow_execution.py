@@ -40,6 +40,7 @@ from reefvision.schemas.environmental_analysis import (
     TidalContextAnalysisRequest,
 )
 from reefvision.schemas.environmental_context import EnvironmentalThresholdRequest
+from reefvision.schemas.geographic_pairwise import GeographicPairwiseCalculateRequest
 from reefvision.schemas.workflow_execution import (
     WorkflowArtifactResponse,
     WorkflowGraphRecordResponse,
@@ -60,6 +61,7 @@ from reefvision.services.computed_mask_coverage import ComputedMaskCoverageServi
 from reefvision.services.computed_metrics import ComputedMetricService
 from reefvision.services.environmental_analysis import EnvironmentalAnalysisService
 from reefvision.services.environmental_context import EnvironmentalContextService
+from reefvision.services.geographic_pairwise import GeographicPairwiseService
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
 from reefvision.services.scientific_data import ScientificDataService
 from reefvision.services.workflow_classification import (
@@ -86,6 +88,7 @@ EXECUTABLE_NODE_TYPES = {
     "annotation_aggregate",
     "mask_coverage",
     "annotation_comparison",
+    "geographic_pairwise",
     "environmental_threshold",
     "lunar_context_analysis",
     "tidal_context_analysis",
@@ -623,9 +626,7 @@ class WorkflowExecutionService:
             request = AnnotationComparisonCalculateRequest.model_validate(parameters)
         except ValueError as exc:
             raise ValidationError("Invalid annotation-comparison parameters") from exc
-        response = AnnotationComparisonService(
-            self.session, self._required_settings()
-        ).calculate(
+        response = AnnotationComparisonService(self.session, self._required_settings()).calculate(
             project_id,
             request,
             workflow_run_id=run_id,
@@ -648,6 +649,47 @@ class WorkflowExecutionService:
                     "geometry_kind": response.comparison.geometry_kind,
                     "image_id": str(response.comparison.image_id),
                     "comparison_sha256": response.comparison.content_sha256,
+                    "content_sha256": response.result_sha256,
+                },
+            )
+        ]
+
+    def _execute_geographic_pairwise(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Geographic pairwise project artifact is mismatched")
+        try:
+            request = GeographicPairwiseCalculateRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid geographic-pairwise parameters") from exc
+        response = GeographicPairwiseService(self.session).calculate(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="computed_metric_result",
+                payload={
+                    "result_id": str(response.result_id),
+                    "result_kind": "geographic_pairwise",
+                    "definition_id": str(response.definition_id),
+                    "definition_sha256": response.definition_sha256,
+                    "formula_version": "reefvision.geographic-pairwise.v1",
+                    "distance_m": response.measurement.distance_m,
+                    "initial_bearing_deg": response.measurement.initial_bearing_deg,
+                    "measurement_sha256": response.measurement.content_sha256,
                     "content_sha256": response.result_sha256,
                 },
             )

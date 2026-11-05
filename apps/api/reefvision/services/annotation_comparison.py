@@ -115,14 +115,11 @@ class AnnotationComparisonService:
                 .where(MaskAnnotation.id.in_(requested_ids))
                 .order_by(MaskAnnotation.id)
             ).all()
-            if (
-                len(mask_rows) != len(requested_ids)
-                or any(
-                    mask_row.image_id != image.id
-                    or mask_row.deleted_at is not None
-                    or mask_row.status != "verified"
-                    for mask_row in mask_rows
-                )
+            if len(mask_rows) != len(requested_ids) or any(
+                mask_row.image_id != image.id
+                or mask_row.deleted_at is not None
+                or mask_row.status != "verified"
+                for mask_row in mask_rows
             ):
                 raise ValidationError(
                     "All selected masks must be current verified masks on the project image"
@@ -288,8 +285,10 @@ class AnnotationComparisonService:
                     try:
                         runs_list: list[tuple[int, int, int]] = []
                         for run in raw_runs:
-                            if not isinstance(run, list) or len(run) != 3 or not all(
-                                isinstance(value, int) for value in run
+                            if (
+                                not isinstance(run, list)
+                                or len(run) != 3
+                                or not all(isinstance(value, int) for value in run)
                             ):
                                 raise ValueError("invalid pixel run")
                             runs_list.append((run[0], run[1], run[2]))
@@ -414,9 +413,7 @@ class AnnotationComparisonService:
             comparison=comparison,
         )
 
-    def _saved_response(
-        self, project_id: str, result_id: str
-    ) -> AnnotationComparisonSavedResponse:
+    def _saved_response(self, project_id: str, result_id: str) -> AnnotationComparisonSavedResponse:
         result = self.session.get(ComputedMetricResult, result_id)
         if (
             result is None

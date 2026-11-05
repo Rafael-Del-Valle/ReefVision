@@ -28,6 +28,7 @@ from reefvision.schemas.computed_mask_coverage import (
     ComputedMaskCoverageResultResponse,
 )
 from reefvision.schemas.computed_metrics import ComputedMetricDefinitionCreate
+from reefvision.schemas.geographic_pairwise import GeographicPairwiseMeasurement
 from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.schemas.scientific_data import ScientificRecordResponse
 from reefvision.services.computed_metrics import ComputedMetricService
@@ -42,6 +43,98 @@ MASK_COVERAGE_ALGORITHM = "reefvision.source-pixel-mask-union.v1"
 ANNOTATION_COMPARISON_KIND = "annotation_comparison"
 ANNOTATION_COMPARISON_VERSION = "reefvision.annotation-comparison.v1"
 ANNOTATION_MASK_COMPARISON_VERSION = "reefvision.annotation-comparison.v2"
+GEOGRAPHIC_PAIRWISE_KIND = "geographic_pairwise"
+GEOGRAPHIC_PAIRWISE_VERSION = "reefvision.geographic-pairwise.v1"
+GEOGRAPHIC_PAIRWISE_ALGORITHM = "reefvision.wgs84-pairwise-geodesic.v1"
+
+
+def _validate_geographic_pairwise_definition(
+    project_id: str, row: dict[str, Any], sections: dict[str, list[dict[str, Any]]]
+) -> None:
+    config = row.get("configuration_json")
+    if not isinstance(config, dict):
+        raise ValidationError("Geographic pairwise configuration is invalid")
+    endpoints = {item["id"]: item for item in sections.get("georeferenced_observations", [])}
+    endpoint_ids = [config.get("start_observation_id"), config.get("end_observation_id")]
+    if any(
+        not isinstance(value, str)
+        or value not in endpoints
+        or endpoints[value].get("project_id") != project_id
+        for value in endpoint_ids
+    ):
+        raise ValidationError("Geographic pairwise definition has a missing endpoint")
+    expected_config = {
+        "schema_version": "1.1.0",
+        "start_observation_id": endpoint_ids[0],
+        "end_observation_id": endpoint_ids[1],
+    }
+    if (
+        row.get("project_id") != project_id
+        or row.get("definition_kind") != GEOGRAPHIC_PAIRWISE_KIND
+        or row.get("formula_version") != GEOGRAPHIC_PAIRWISE_VERSION
+        or row.get("expression") != "wgs84_inverse(endpoint_a, endpoint_b)"
+        or row.get("input_spec_json") != []
+        or row.get("output_unit") != "m"
+        or config != expected_config
+        or content_hash(_aggregate_definition_payload(row)) != row.get("definition_sha256")
+    ):
+        raise ValidationError("Geographic pairwise definition checksum mismatch")
+
+
+def _validate_geographic_pairwise_result(
+    project_id: str,
+    row: dict[str, Any],
+    definition: dict[str, Any],
+    workflow_runs: dict[str, dict[str, Any]],
+    workflow_nodes: dict[str, dict[str, Any]],
+) -> None:
+    payload = row.get("payload_json")
+    if (
+        row.get("project_id") != project_id
+        or row.get("result_kind") != GEOGRAPHIC_PAIRWISE_KIND
+        or not isinstance(payload, dict)
+        or content_hash(payload) != row.get("content_sha256")
+        or payload.get("definition_id") != definition.get("id")
+        or payload.get("definition_name") != definition.get("name")
+        or payload.get("definition_sha256") != definition.get("definition_sha256")
+        or payload.get("expression") != definition.get("expression")
+        or payload.get("formula_version") != definition.get("formula_version")
+        or payload.get("output_unit") != "m"
+    ):
+        raise ValidationError("Geographic pairwise result checksum mismatch")
+    measurement = GeographicPairwiseMeasurement.model_validate(payload.get("measurement"))
+    raw = measurement.model_dump(mode="json")
+    measurement_hash = raw.pop("content_sha256")
+    if (
+        content_hash(raw) != measurement_hash
+        or measurement.algorithm != GEOGRAPHIC_PAIRWISE_ALGORITHM
+        or str(measurement.project_id) != project_id
+        or content_hash(measurement.start_snapshot) != measurement.start_snapshot_sha256
+        or content_hash(measurement.end_snapshot) != measurement.end_snapshot_sha256
+    ):
+        raise ValidationError("Geographic pairwise measurement checksum mismatch")
+    config = definition["configuration_json"]
+    if (
+        str(measurement.start_observation_id) != config["start_observation_id"]
+        or str(measurement.end_observation_id) != config["end_observation_id"]
+        or measurement.start_snapshot.get("observation", {}).get("id")
+        != config["start_observation_id"]
+        or measurement.end_snapshot.get("observation", {}).get("id") != config["end_observation_id"]
+    ):
+        raise ValidationError("Geographic pairwise endpoint snapshot mismatch")
+    workflow_run_id = row.get("workflow_run_id")
+    workflow_node_run_id = row.get("workflow_node_run_id")
+    if workflow_run_id is not None and workflow_run_id not in workflow_runs:
+        raise ValidationError("Geographic pairwise result refers to a missing workflow run")
+    if workflow_node_run_id is not None:
+        node = workflow_nodes.get(workflow_node_run_id)
+        if (
+            node is None
+            or workflow_run_id is None
+            or node.get("workflow_run_id") != workflow_run_id
+            or node.get("node_type") != "geographic_pairwise"
+        ):
+            raise ValidationError("Geographic pairwise workflow provenance mismatch")
 
 
 def _remap_identifiers(value: Any, id_map: dict[str, str]) -> Any:
@@ -97,8 +190,7 @@ def _remap_annotation_comparison_payload(
                 if isinstance(value, str) and value in id_map:
                     snapshot[field] = id_map[value]
     comparison["per_class"] = {
-        id_map.get(class_id, class_id): value
-        for class_id, value in comparison["per_class"].items()
+        id_map.get(class_id, class_id): value for class_id, value in comparison["per_class"].items()
     }
     for value in comparison["per_class"].values():
         for match in value.get("matches", []):
@@ -117,6 +209,34 @@ def _remap_annotation_comparison_payload(
     comparison["source_b_sha256"] = content_hash(comparison["source_b_snapshot"])
     comparison["content_sha256"] = content_hash(
         {key: value for key, value in comparison.items() if key != "content_sha256"}
+    )
+    return mapped
+
+
+def _remap_geographic_pairwise_payload(
+    payload: dict[str, Any], id_map: dict[str, str]
+) -> dict[str, Any]:
+    """Remap declared endpoint relations while preserving telemetry/calibration provenance."""
+    mapped = deepcopy(payload)
+    measurement = mapped["measurement"]
+    measurement["project_id"] = id_map[measurement["project_id"]]
+    measurement["start_observation_id"] = id_map[measurement["start_observation_id"]]
+    measurement["end_observation_id"] = id_map[measurement["end_observation_id"]]
+    for snapshot_name in ("start_snapshot", "end_snapshot"):
+        observation = measurement[snapshot_name]["observation"]
+        for field in (
+            "id",
+            "project_id",
+            "video_asset_id",
+            "track_id",
+            "detection_id",
+        ):
+            value = observation.get(field)
+            if isinstance(value, str) and value in id_map:
+                observation[field] = id_map[value]
+        measurement[f"{snapshot_name}_sha256"] = content_hash(measurement[snapshot_name])
+    measurement["content_sha256"] = content_hash(
+        {key: value for key, value in measurement.items() if key != "content_sha256"}
     )
     return mapped
 
@@ -180,12 +300,9 @@ def _validate_annotation_comparison_result(
     }
     if content_hash(comparison_content) != comparison.get("content_sha256"):
         raise ValidationError("Annotation comparison evidence checksum mismatch")
-    if (
-        content_hash(comparison.get("source_a_snapshot"))
-        != comparison.get("source_a_sha256")
-        or content_hash(comparison.get("source_b_snapshot"))
-        != comparison.get("source_b_sha256")
-    ):
+    if content_hash(comparison.get("source_a_snapshot")) != comparison.get(
+        "source_a_sha256"
+    ) or content_hash(comparison.get("source_b_snapshot")) != comparison.get("source_b_sha256"):
         raise ValidationError("Annotation comparison source snapshot checksum mismatch")
     workflow_run_id = row.get("workflow_run_id")
     workflow_node_run_id = row.get("workflow_node_run_id")
@@ -755,6 +872,10 @@ def validate_computed_exchange_records(
     try:
         compiled_by_id: dict[str, Any] = {}
         for identifier, row in definitions.items():
+            if row.get("definition_kind") == GEOGRAPHIC_PAIRWISE_KIND:
+                _validate_geographic_pairwise_definition(project_id, row, sections)
+                compiled_by_id[identifier] = None
+                continue
             if row.get("definition_kind") == ANNOTATION_COMPARISON_KIND:
                 _validate_annotation_comparison_definition(project_id, row, sections)
                 compiled_by_id[identifier] = None
@@ -786,6 +907,19 @@ def validate_computed_exchange_records(
             compiled_by_id[identifier] = ComputedMetricService._compile_definition(payload)
 
         for row in sections.get("computed_metric_results", []):
+            if row.get("result_kind") == GEOGRAPHIC_PAIRWISE_KIND:
+                definition = definitions.get(row.get("definition_id"))
+                if (
+                    definition is None
+                    or definition.get("definition_kind") != GEOGRAPHIC_PAIRWISE_KIND
+                ):
+                    raise ValidationError(
+                        "Geographic pairwise result refers to a missing definition"
+                    )
+                _validate_geographic_pairwise_result(
+                    project_id, row, definition, workflow_runs, workflow_nodes
+                )
+                continue
             if row.get("result_kind") == ANNOTATION_COMPARISON_KIND:
                 definition = definitions.get(row.get("definition_id"))
                 if (
@@ -1007,6 +1141,12 @@ def remap_computed_sections(
                 config["roi_label_class_id"] = id_map[config["roi_label_class_id"]]
             row["configuration_json"] = config
             row["definition_sha256"] = content_hash(_aggregate_definition_payload(row))
+        elif row.get("definition_kind") == GEOGRAPHIC_PAIRWISE_KIND:
+            config = deepcopy(row["configuration_json"])
+            config["start_observation_id"] = id_map[config["start_observation_id"]]
+            config["end_observation_id"] = id_map[config["end_observation_id"]]
+            row["configuration_json"] = config
+            row["definition_sha256"] = content_hash(_aggregate_definition_payload(row))
         elif row.get("definition_kind") == ANNOTATION_COMPARISON_KIND:
             row["configuration_json"] = _remap_annotation_comparison_configuration(
                 row["configuration_json"], id_map
@@ -1016,6 +1156,16 @@ def remap_computed_sections(
     for row in result["computed_metric_results"]:
         payload = row["payload_json"]
         old_definition_id = row["definition_id"]
+        if row.get("result_kind") == GEOGRAPHIC_PAIRWISE_KIND:
+            mapped_definition = remapped_definitions[old_definition_id]
+            payload = _remap_geographic_pairwise_payload(payload, id_map)
+            payload["definition_id"] = mapped_definition["id"]
+            payload["definition_sha256"] = mapped_definition["definition_sha256"]
+            row["payload_json"] = payload
+            row["project_id"] = id_map[row["project_id"]]
+            row["definition_id"] = mapped_definition["id"]
+            row["content_sha256"] = content_hash(payload)
+            continue
         if row.get("result_kind") == ANNOTATION_COMPARISON_KIND:
             mapped_definition = remapped_definitions[old_definition_id]
             payload = _remap_annotation_comparison_payload(payload, id_map)

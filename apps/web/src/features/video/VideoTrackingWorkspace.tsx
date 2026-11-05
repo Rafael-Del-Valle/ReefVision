@@ -2437,6 +2437,7 @@ export function VideoTrackingWorkspace({
       )}
 
       <GeographicMovementAnalyticsPanel
+        projectId={project.id}
         state={geographicMovementAnalyticsState}
         onReload={reloadGeographicMovementAnalytics}
         activeFrameIndex={frameIndex}

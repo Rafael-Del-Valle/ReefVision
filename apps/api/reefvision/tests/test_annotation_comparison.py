@@ -235,14 +235,12 @@ def test_verified_mask_comparison_preview_and_persistence(client, test_settings)
     )
     assert fetched.status_code == 200, fetched.text
     current = client.get(
-        f"/api/v1/projects/{project['id']}/annotation-comparisons/"
-        f"{result['result_id']}/validation"
+        f"/api/v1/projects/{project['id']}/annotation-comparisons/{result['result_id']}/validation"
     )
     assert current.status_code == 200, current.text
     assert current.json()["is_current"] is True
     exported = client.get(
-        f"/api/v1/projects/{project['id']}/annotation-comparisons/"
-        f"{result['result_id']}/export.csv"
+        f"/api/v1/projects/{project['id']}/annotation-comparisons/{result['result_id']}/export.csv"
     )
     assert exported.status_code == 200, exported.text
     assert "symmetric_difference_area_pixels" in exported.text
@@ -283,8 +281,7 @@ def test_verified_mask_comparison_preview_and_persistence(client, test_settings)
         changed.revision += 1
         session.commit()
     stale = client.get(
-        f"/api/v1/projects/{project['id']}/annotation-comparisons/"
-        f"{result['result_id']}/validation"
+        f"/api/v1/projects/{project['id']}/annotation-comparisons/{result['result_id']}/validation"
     )
     assert stale.status_code == 200, stale.text
     assert stale.json()["is_current"] is False

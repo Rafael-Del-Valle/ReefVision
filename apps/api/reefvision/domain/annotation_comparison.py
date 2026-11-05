@@ -140,9 +140,7 @@ def _iou(first: BoxEvidence, second: BoxEvidence) -> float:
     return intersection / union if union > 0.0 else 0.0
 
 
-def _validate_unique(
-    items: list[BoxEvidence] | list[MaskEvidence], source_name: str
-) -> None:
+def _validate_unique(items: list[BoxEvidence] | list[MaskEvidence], source_name: str) -> None:
     identifiers = [item.evidence_id for item in items]
     if len(set(identifiers)) != len(identifiers):
         raise ValueError(f"{source_name} evidence identifiers must be unique")
@@ -308,9 +306,7 @@ def compare_mask_evidence(
                 continue
             matched_a.add(a_id)
             matched_b.add(b_id)
-            matches.append(
-                MaskMatch(a_id, b_id, by_a[a_id].image_id, overlap, intersection, union)
-            )
+            matches.append(MaskMatch(a_id, b_id, by_a[a_id].image_id, overlap, intersection, union))
         unmatched_a = tuple(
             item.evidence_id for item in items_a if item.evidence_id not in matched_a
         )

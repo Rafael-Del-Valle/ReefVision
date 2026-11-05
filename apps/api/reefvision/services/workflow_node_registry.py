@@ -153,6 +153,26 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="geographic_pairwise",
+            display_name="Pairwise Geographic Measurement",
+            category="analysis",
+            description=(
+                "Persist WGS84 endpoint distance, initial bearing, explicit time-basis "
+                "separation, and qualified uncertainty from two geographic observations."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Geographic Result", "computed_metric_result")],
+            required_parameters=["name", "start_observation_id", "end_observation_id"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Requires two explicit current EPSG:4326 observation IDs.",
+                "Initial bearing is endpoint displacement, not orientation or trajectory.",
+                "The pair is descriptive and is not presented as an independent replicate.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="environmental_threshold",
             display_name="Environmental Threshold Samples",
             category="analysis",
