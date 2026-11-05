@@ -113,3 +113,11 @@ class ComputedAggregateResultResponse(ComputedAggregatePreview):
 class ComputedAggregateResultPage(AggregateModel):
     items: list[ComputedAggregateResultResponse]
     total: int
+
+
+class ComputedAggregateValidationResponse(AggregateModel):
+    result_id: UUID
+    current: bool
+    saved_evidence_sha256: str
+    current_evidence_sha256: str
+    reasons: list[str]

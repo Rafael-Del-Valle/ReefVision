@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
@@ -15,6 +15,7 @@ from reefvision.schemas.computed_aggregate_metrics import (
     ComputedAggregateResultPage,
     ComputedAggregateResultResponse,
     ComputedAggregateSelection,
+    ComputedAggregateValidationResponse,
 )
 from reefvision.services.computed_aggregate_metrics import ComputedAggregateMetricService
 
@@ -99,4 +100,26 @@ def list_results(
 ) -> ComputedAggregateResultPage:
     return ComputedAggregateMetricService(session).list_results(
         str(project_id), limit=limit, offset=offset
+    )
+
+
+@router.get(
+    "/projects/{project_id}/computed-aggregate-results/{result_id}/validation",
+    response_model=ComputedAggregateValidationResponse,
+)
+def validate_result(
+    project_id: UUID, result_id: UUID, session: DbSession
+) -> ComputedAggregateValidationResponse:
+    return ComputedAggregateMetricService(session).validate_result(str(project_id), str(result_id))
+
+
+@router.get("/projects/{project_id}/computed-aggregate-results.csv")
+def export_results(project_id: UUID, session: DbSession) -> Response:
+    content = ComputedAggregateMetricService(session).export_csv(str(project_id))
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="computed-annotation-aggregates.csv"'
+        },
     )

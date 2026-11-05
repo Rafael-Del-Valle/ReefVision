@@ -6,7 +6,15 @@ from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import Job, ModelRegistration, PredictionProposal
+from reefvision.db.models import (
+    Annotation,
+    ComputedMetricResult,
+    ImageAsset,
+    Job,
+    MaskAnnotation,
+    ModelRegistration,
+    PredictionProposal,
+)
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -89,6 +97,13 @@ def _definition(
 def _preview(client: TestClient, project_id: str, definition_id: str, image_ids: list[str]):
     return client.post(
         f"/api/v1/projects/{project_id}/computed-aggregate-definitions/{definition_id}/preview",
+        json={"image_ids": image_ids},
+    )
+
+
+def _calculate(client: TestClient, project_id: str, definition_id: str, image_ids: list[str]):
+    return client.post(
+        f"/api/v1/projects/{project_id}/computed-aggregate-definitions/{definition_id}/calculate",
         json={"image_ids": image_ids},
     )
 
@@ -285,3 +300,137 @@ def test_calculation_persists_immutable_typed_result_and_lists_separately(
     assert (
         client.get(f"/api/v1/projects/{project['id']}/computed-metric-results").json()["total"] == 0
     )
+
+
+def test_result_validation_detects_deleted_and_reclassified_annotations(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Aggregate currentness")
+    image_id = _import(client, project["id"], 11)
+    first_label = str(project["label_classes"][0]["id"])
+    second_label = str(project["label_classes"][1]["id"])
+    _save(client, image_id, [first_label, first_label])
+    definition = _definition(client, project["id"])
+    result = _calculate(client, project["id"], definition["id"], [image_id]).json()
+    url = f"/api/v1/projects/{project['id']}/computed-aggregate-results/{result['id']}/validation"
+
+    current = client.get(url)
+    assert current.status_code == 200, current.text
+    assert current.json() == {
+        "result_id": result["id"],
+        "current": True,
+        "saved_evidence_sha256": result["evidence_sha256"],
+        "current_evidence_sha256": result["evidence_sha256"],
+        "reasons": [],
+    }
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        rows = session.query(Annotation).filter_by(image_id=image_id).order_by(Annotation.id).all()
+        rows[0].label_class_id = second_label
+        rows[0].revision += 1
+        rows[1].deleted_at = rows[1].updated_at
+        session.commit()
+
+    stale = client.get(url)
+    assert stale.status_code == 200, stale.text
+    assert stale.json()["current"] is False
+    assert stale.json()["current_evidence_sha256"] != result["evidence_sha256"]
+    assert any("label_changed" in reason for reason in stale.json()["reasons"])
+    assert any("missing" in reason for reason in stale.json()["reasons"])
+
+
+def test_result_validation_detects_mask_and_image_contract_changes(client: TestClient) -> None:
+    project = create_project(client, "Mask currentness")
+    image_id = _import(client, project["id"], 12)
+    label_id = str(project["label_classes"][0]["id"])
+    _save(client, image_id, [], masks=[(label_id, "verified")])
+    response = client.patch(
+        f"/api/v1/images/{image_id}",
+        json={"annotation_status": "reviewed", "group_key": "colony-a"},
+    )
+    assert response.status_code == 200, response.text
+    definition = _definition(
+        client, project["id"], source_kind="verified_masks", grouping_level="image_group_key"
+    )
+    result = _calculate(client, project["id"], definition["id"], [image_id]).json()
+    url = f"/api/v1/projects/{project['id']}/computed-aggregate-results/{result['id']}/validation"
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        mask = session.query(MaskAnnotation).filter_by(image_id=image_id).one()
+        mask.status = "draft"
+        mask.revision += 1
+        image = session.get(ImageAsset, image_id)
+        image.group_key = "colony-b"
+        image.annotation_status = "annotated"
+        session.commit()
+
+    stale = client.get(url).json()
+    assert stale["current"] is False
+    assert any("status_changed" in reason for reason in stale["reasons"])
+    assert any("group_key_changed" in reason for reason in stale["reasons"])
+    assert any("review_status_changed" in reason for reason in stale["reasons"])
+
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        session.delete(image)
+        session.commit()
+    missing = client.get(url).json()
+    assert missing["current"] is False
+    assert f"image_missing:{image_id}" in missing["reasons"]
+
+
+def test_result_validation_rejects_tampered_result_checksum(client: TestClient) -> None:
+    project = create_project(client, "Tampered aggregate")
+    image_id = _import(client, project["id"], 13)
+    label_id = str(project["label_classes"][0]["id"])
+    _save(client, image_id, [label_id])
+    definition = _definition(client, project["id"])
+    result = _calculate(client, project["id"], definition["id"], [image_id]).json()
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        row = session.get(ComputedMetricResult, result["id"])
+        row.payload_json = {**row.payload_json, "observation_count": 999}
+        session.commit()
+
+    response = client.get(
+        f"/api/v1/projects/{project['id']}/computed-aggregate-results/{result['id']}/validation"
+    )
+    assert response.status_code == 409
+    assert "checksum" in response.json()["detail"].lower()
+
+
+def test_aggregate_csv_preserves_overall_group_class_and_sample_size_provenance(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Aggregate CSV")
+    first = _import(client, project["id"], 14)
+    second = _import(client, project["id"], 15)
+    labels = [str(item["id"]) for item in project["label_classes"][:2]]
+    _save(client, first, [labels[0], labels[1]])
+    _save(client, second, [labels[0]])
+    for image_id in (first, second):
+        response = client.patch(
+            f"/api/v1/images/{image_id}",
+            json={"annotation_status": "reviewed", "group_key": "colony-a"},
+        )
+        assert response.status_code == 200
+    definition = _definition(client, project["id"], grouping_level="image_group_key")
+    result = _calculate(client, project["id"], definition["id"], [first, second]).json()
+
+    exported = client.get(f"/api/v1/projects/{project['id']}/computed-aggregate-results.csv")
+    assert exported.status_code == 200, exported.text
+    assert "text/csv" in exported.headers["content-type"]
+    lines = exported.text.splitlines()
+    assert len(lines) == 3
+    assert "row_kind" in lines[0]
+    assert "independent_unit_count" in lines[0]
+    assert "independence_contract" in lines[0]
+    assert "observation_ids_json" in lines[0]
+    assert result["content_sha256"] in lines[1]
+    assert result["evidence_sha256"] in lines[1]
+    assert "overall" in lines[1]
+    assert "colony-a" in lines[2]
+    assert "one_unit_per_image_group_key" in lines[1]
+    assert labels[0] in lines[1] and labels[1] in lines[1]
+    assert first in lines[1] and second in lines[1]

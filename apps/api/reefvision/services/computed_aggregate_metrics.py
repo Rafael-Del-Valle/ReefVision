@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import Any
@@ -29,6 +32,7 @@ from reefvision.schemas.computed_aggregate_metrics import (
     ComputedAggregatePreview,
     ComputedAggregateResultPage,
     ComputedAggregateResultResponse,
+    ComputedAggregateValidationResponse,
 )
 from reefvision.services.scientific_data import content_hash
 
@@ -380,3 +384,220 @@ class ComputedAggregateMetricService:
         return ComputedAggregateResultPage(
             items=[self.result_response(row) for row in rows], total=total
         )
+
+    def validate_result(
+        self, project_id: str, result_id: str
+    ) -> ComputedAggregateValidationResponse:
+        self.require_project(project_id)
+        row = self.session.get(ComputedMetricResult, result_id)
+        if row is None or row.project_id != project_id or row.result_kind != RESULT_KIND:
+            raise NotFoundError("Computed aggregate result not found")
+        saved = self.result_response(row)
+        definition = self.get_definition(project_id, str(saved.definition_id))
+        config = definition.configuration_json or {}
+        saved_images = {str(item["image_id"]): item for item in saved.image_snapshot}
+        saved_observations = {str(item["id"]): item for item in saved.observation_snapshot}
+        reasons: list[str] = []
+
+        current_images: list[dict[str, Any]] = []
+        for image_id in sorted(saved_images):
+            previous = saved_images[image_id]
+            image = self.session.get(ImageAsset, image_id)
+            if image is None or image.project_id != project_id:
+                reasons.append(f"image_missing:{image_id}")
+                continue
+            current = {
+                "image_id": image.id,
+                "sha256": image.sha256,
+                "annotation_revision": image.annotation_revision,
+                "annotation_status": image.annotation_status,
+                "group_key": image.group_key,
+            }
+            current_images.append(current)
+            if image.annotation_status != previous.get("annotation_status"):
+                reasons.append(f"image_review_status_changed:{image_id}")
+            if image.group_key != previous.get("group_key"):
+                reasons.append(f"image_group_key_changed:{image_id}")
+            if image.sha256 != previous.get("sha256"):
+                reasons.append(f"image_checksum_changed:{image_id}")
+            if image.annotation_revision != previous.get("annotation_revision"):
+                reasons.append(f"image_annotation_revision_changed:{image_id}")
+
+        source_kind = str(config.get("source_kind"))
+        model = Annotation if source_kind == "verified_annotations" else MaskAnnotation
+        current_observations: list[dict[str, Any]] = []
+        for observation_id in sorted(saved_observations):
+            previous = saved_observations[observation_id]
+            observation = self.session.get(model, observation_id)
+            if observation is None or observation.deleted_at is not None:
+                reasons.append(f"observation_missing:{observation_id}")
+                continue
+            if isinstance(observation, MaskAnnotation) and observation.status != "verified":
+                reasons.append(f"observation_status_changed:{observation_id}")
+                continue
+            current = {
+                "id": observation.id,
+                "image_id": observation.image_id,
+                "label_class_id": observation.label_class_id,
+                "source_type": observation.source_type,
+                "revision": observation.revision,
+            }
+            current_observations.append(current)
+            if observation.label_class_id != previous.get("label_class_id"):
+                reasons.append(f"observation_label_changed:{observation_id}")
+            if observation.revision != previous.get("revision"):
+                reasons.append(f"observation_revision_changed:{observation_id}")
+            if observation.source_type != previous.get("source_type"):
+                reasons.append(f"observation_source_changed:{observation_id}")
+
+        image_ids = sorted(saved_images)
+        label_filter = set(config.get("label_class_ids", []))
+        if model is Annotation:
+            statement = select(Annotation).where(
+                Annotation.image_id.in_(image_ids), Annotation.deleted_at.is_(None)
+            )
+            if label_filter:
+                statement = statement.where(Annotation.label_class_id.in_(label_filter))
+        else:
+            statement = select(MaskAnnotation).where(
+                MaskAnnotation.image_id.in_(image_ids),
+                MaskAnnotation.deleted_at.is_(None),
+                MaskAnnotation.status == "verified",
+            )
+            if label_filter:
+                statement = statement.where(MaskAnnotation.label_class_id.in_(label_filter))
+        eligible = self.session.scalars(statement.order_by(model.id)).all()
+        eligible_ids = {item.id for item in eligible}
+        for observation_id in sorted(eligible_ids - set(saved_observations)):
+            reasons.append(f"observation_added:{observation_id}")
+
+        proposal_statement = select(PredictionProposal).where(
+            PredictionProposal.image_id.in_(image_ids)
+        )
+        if label_filter:
+            proposal_statement = proposal_statement.where(
+                PredictionProposal.label_class_id.in_(label_filter)
+            )
+        proposals = self.session.scalars(proposal_statement.order_by(PredictionProposal.id)).all()
+        current_proposals = dict(sorted(Counter(item.review_status for item in proposals).items()))
+        if current_proposals != saved.excluded_proposals_by_status:
+            reasons.append("proposal_inventory_changed")
+        evidence_payload = {
+            "definition_sha256": definition.definition_sha256,
+            "images": current_images,
+            "observations": current_observations,
+            "excluded_proposals_by_status": current_proposals,
+        }
+        current_hash = content_hash(evidence_payload)
+        if current_hash != saved.evidence_sha256 and not reasons:
+            reasons.append("evidence_snapshot_changed")
+        return ComputedAggregateValidationResponse(
+            result_id=row.id,
+            current=current_hash == saved.evidence_sha256 and not reasons,
+            saved_evidence_sha256=saved.evidence_sha256,
+            current_evidence_sha256=current_hash,
+            reasons=sorted(set(reasons)),
+        )
+
+    def export_csv(self, project_id: str) -> str:
+        self.require_project(project_id)
+        rows = self.session.scalars(
+            select(ComputedMetricResult)
+            .where(
+                ComputedMetricResult.project_id == project_id,
+                ComputedMetricResult.result_kind == RESULT_KIND,
+            )
+            .order_by(ComputedMetricResult.created_at, ComputedMetricResult.id)
+        ).all()
+        fieldnames = [
+            "row_kind",
+            "result_id",
+            "definition_id",
+            "definition_name",
+            "source_kind",
+            "grouping_level",
+            "independence_contract",
+            "unit_key",
+            "observation_count",
+            "image_count",
+            "independent_unit_count",
+            "mean_per_independent_unit",
+            "counts_by_class_json",
+            "image_ids_json",
+            "observation_ids_json",
+            "workflow_run_id",
+            "workflow_node_run_id",
+            "definition_sha256",
+            "evidence_sha256",
+            "content_sha256",
+            "observed_at_utc",
+        ]
+        output = io.StringIO(newline="")
+        writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            item = self.result_response(row)
+            definition = self.get_definition(project_id, str(item.definition_id))
+            config = definition.configuration_json or {}
+            all_image_ids = [str(value["image_id"]) for value in item.image_snapshot]
+            common = {
+                "result_id": str(item.id),
+                "definition_id": str(item.definition_id),
+                "definition_name": item.definition_name,
+                "source_kind": item.source_kind,
+                "grouping_level": item.grouping_level,
+                "independence_contract": config.get("independence_contract", ""),
+                "workflow_run_id": str(item.workflow_run_id) if item.workflow_run_id else "",
+                "workflow_node_run_id": (
+                    str(item.workflow_node_run_id) if item.workflow_node_run_id else ""
+                ),
+                "definition_sha256": item.definition_sha256,
+                "evidence_sha256": item.evidence_sha256,
+                "content_sha256": item.content_sha256,
+                "observed_at_utc": item.observed_at.isoformat(),
+            }
+            writer.writerow(
+                {
+                    **common,
+                    "row_kind": "overall",
+                    "unit_key": "",
+                    "observation_count": item.observation_count,
+                    "image_count": item.image_count,
+                    "independent_unit_count": item.independent_unit_count,
+                    "mean_per_independent_unit": item.mean_per_independent_unit,
+                    "counts_by_class_json": json.dumps(
+                        [value.model_dump(mode="json") for value in item.counts_by_class],
+                        sort_keys=True,
+                    ),
+                    "image_ids_json": json.dumps(all_image_ids),
+                    "observation_ids_json": json.dumps(
+                        [str(value["id"]) for value in item.observation_snapshot]
+                    ),
+                }
+            )
+            for group in item.groups:
+                group_image_ids = {str(value) for value in group.image_ids}
+                writer.writerow(
+                    {
+                        **common,
+                        "row_kind": "group",
+                        "unit_key": group.unit_key,
+                        "observation_count": group.observation_count,
+                        "image_count": len(group.image_ids),
+                        "independent_unit_count": 1,
+                        "mean_per_independent_unit": group.observation_count,
+                        "counts_by_class_json": json.dumps(
+                            [value.model_dump(mode="json") for value in group.counts_by_class],
+                            sort_keys=True,
+                        ),
+                        "image_ids_json": json.dumps(sorted(group_image_ids)),
+                        "observation_ids_json": json.dumps(
+                            [
+                                str(value["id"])
+                                for value in item.observation_snapshot
+                                if str(value["image_id"]) in group_image_ids
+                            ]
+                        ),
+                    }
+                )
+        return output.getvalue()
