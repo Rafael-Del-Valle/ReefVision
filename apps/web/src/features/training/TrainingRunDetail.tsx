@@ -57,7 +57,12 @@ function bestEpoch(
   if (
     epochs &&
     (epochs.length !== metric[1].length ||
-      !epochs.every((epoch) => Number.isSafeInteger(epoch) && epoch > 0))
+      !epochs.every(
+        (epoch, index) =>
+          Number.isSafeInteger(epoch) &&
+          epoch > 0 &&
+          (index === 0 || epoch > epochs[index - 1]),
+      ))
   ) {
     return null;
   }
