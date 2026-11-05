@@ -159,9 +159,7 @@ def calculate_movement_segment(
     ):
         uncertainty_reason = "unknown_or_shared_endpoint_correlation"
     else:
-        distance_uncertainty_m = math.hypot(
-            start.horizontal_sigma_m, end.horizontal_sigma_m
-        )
+        distance_uncertainty_m = math.hypot(start.horizontal_sigma_m, end.horizontal_sigma_m)
         uncertainty_method = "independent_isotropic_first_order"
         if distance_m > 5.0 * distance_uncertainty_m:
             bearing_uncertainty_deg = math.degrees(distance_uncertainty_m / distance_m)
@@ -175,9 +173,7 @@ def calculate_movement_segment(
         speed_valid = True
         invalid_reason = None
         speed_uncertainty_m_s = (
-            distance_uncertainty_m / elapsed_time_s
-            if distance_uncertainty_m is not None
-            else None
+            distance_uncertainty_m / elapsed_time_s if distance_uncertainty_m is not None else None
         )
     else:
         speed_m_s = None

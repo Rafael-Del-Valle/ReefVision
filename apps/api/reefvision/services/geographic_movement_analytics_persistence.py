@@ -297,13 +297,9 @@ def geographic_movement_observation_from_persisted(
     )
 
     payload = _read_optional_value(persisted, "payload_json")
-    uncertainty = (
-        _read_optional_value(payload, "uncertainty") if payload is not None else None
-    )
+    uncertainty = _read_optional_value(payload, "uncertainty") if payload is not None else None
     horizontal_sigma_raw = (
-        _read_optional_value(uncertainty, "horizontal_sigma_m")
-        if uncertainty is not None
-        else None
+        _read_optional_value(uncertainty, "horizontal_sigma_m") if uncertainty is not None else None
     )
     horizontal_sigma_m = (
         _required_float(horizontal_sigma_raw, field_name="horizontal_sigma_m")

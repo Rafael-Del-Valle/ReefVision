@@ -67,12 +67,15 @@ class GeographicMovementSegment(_MovementAnalyticsModel):
     speed_standard_uncertainty_m_s: float | None = Field(default=None, ge=0.0)
     bearing_standard_uncertainty_deg: float | None = Field(default=None, ge=0.0)
     uncertainty_method: Literal["independent_isotropic_first_order"] | None = None
-    uncertainty_unavailable_reason: Literal[
-        "missing_endpoint_standard_uncertainty",
-        "unknown_or_shared_endpoint_correlation",
-        "bearing_geometry_ill_conditioned",
-        "non_positive_elapsed_time",
-    ] | None = None
+    uncertainty_unavailable_reason: (
+        Literal[
+            "missing_endpoint_standard_uncertainty",
+            "unknown_or_shared_endpoint_correlation",
+            "bearing_geometry_ill_conditioned",
+            "non_positive_elapsed_time",
+        ]
+        | None
+    ) = None
     cumulative_distance_m: float = Field(ge=0.0)
 
     speed_valid: bool
