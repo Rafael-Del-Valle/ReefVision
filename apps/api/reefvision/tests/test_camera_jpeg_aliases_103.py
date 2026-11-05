@@ -135,3 +135,25 @@ def test_camera_jpeg_without_timezone_does_not_invent_utc_capture_time(
     assert (inspected.width_px, inspected.height_px) == (37, 21)
     assert inspected.sha256 == digest
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("suffix", [".JPG", ".jpeg", ".JFIF"])
+def test_camera_local_exposure_reports_uncertainty_without_discarding_exif(
+    tmp_path, suffix: str
+) -> None:
+    """A local exposure time remains provenance, not a fabricated UTC instant."""
+    path = tmp_path / ("local_exposure" + suffix)
+    exif = Image.Exif()
+    exif[36867] = "2026:04:03 14:25:30"
+    Image.new("RGB", (37, 21), (12, 34, 56)).save(path, format="JPEG", exif=exif)
+    original = path.read_bytes()
+
+    inspected = inspect_staged_image(path, hashlib.sha256(original).hexdigest(), len(original))
+
+    assert inspected.capture_timestamp is None
+    assert inspected.metadata["capture_time_warning"] == (
+        "EXIF camera-local exposure time has no UTC offset; "
+        "UTC capture timestamp not inferred"
+    )
+    assert inspected.metadata["exif"]["DateTimeOriginal"] == "2026:04:03 14:25:30"
+    assert path.read_bytes() == original
