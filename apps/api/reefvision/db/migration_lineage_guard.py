@@ -300,7 +300,10 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     # for idempotent researcher comments and assignments. A forged or
     # incomplete migration stamp must not silently admit duplicate events,
     # even when the newer bulk-request registry itself is valid.
-    if revision == "0041":
+    # The event idempotency key originates in 0038, not 0041. Reject
+    # incomplete earlier review-lineage schemas before upgrading, otherwise
+    # a replay could duplicate biological QC comments or assignments.
+    if revision in {"0038", "0039", "0040", "0041"}:
         unique_constraints = inspector.get_unique_constraints(_REVIEW_TABLE)
         has_request_identity = any(
             constraint.get("name") == "uq_review_queue_item_event_request"
