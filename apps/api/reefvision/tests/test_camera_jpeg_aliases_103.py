@@ -71,3 +71,44 @@ def test_camera_jpeg_aliases_accept_realistic_unicode_and_dotted_names(
     assert inspected.sha256 == digest
     assert path.name == filename
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("suffix", [".JPG", ".jpeg", ".JfIf"])
+def test_cmyk_camera_jpeg_alias_preserves_capture_bytes(tmp_path, suffix: str) -> None:
+    """CMYK JPEGs must be recognized without rewriting their source captures."""
+    path = tmp_path / ("CMYK capture" + suffix)
+    Image.new("CMYK", (29, 13), (10, 40, 70, 5)).save(path, format="JPEG")
+    original = path.read_bytes()
+    digest = hashlib.sha256(original).hexdigest()
+
+    ensure_supported_extension(path.name)
+    inspected = inspect_staged_image(path, digest, len(original))
+
+    assert inspected.media_type == "image/jpeg"
+    assert inspected.extension == ".jpg"
+    assert (inspected.width_px, inspected.height_px) == (29, 13)
+    assert inspected.sha256 == digest
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("orientation", [3, 6, 8])
+def test_exif_oriented_jpeg_inspection_retains_raw_pixel_dimensions(
+    tmp_path, orientation: int
+) -> None:
+    """EXIF display rotation must not change the immutable source-pixel frame."""
+    path = tmp_path / f"rotated_{orientation}.JPEG"
+    exif = Image.Exif()
+    exif[274] = orientation
+    Image.new("RGB", (31, 17), (15, 90, 180)).save(path, format="JPEG", exif=exif)
+    original = path.read_bytes()
+    digest = hashlib.sha256(original).hexdigest()
+
+    ensure_supported_extension(path.name)
+    inspected = inspect_staged_image(path, digest, len(original))
+
+    assert (inspected.width_px, inspected.height_px) == (31, 17)
+    assert inspected.media_type == "image/jpeg"
+    assert inspected.sha256 == digest
+    with Image.open(path) as reopened:
+        assert reopened.getexif().get(274) == orientation
+    assert path.read_bytes() == original
