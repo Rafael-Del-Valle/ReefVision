@@ -131,6 +131,26 @@ describe("TrainingRunDetail", () => {
     ).toBeEnabled();
   });
 
+  it("uses a populated validation metric when a higher-priority metric column is empty", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          metrics_history: {
+            epoch: [1, 2, 3],
+            "metrics/mAP50-95(B)": [],
+            "metrics/mAP50(B)": [0.2, 0.6, 0.4],
+          },
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Best epoch").parentElement).toHaveTextContent("2");
+    expect(screen.getByText(/metrics mAP50\(B\) 0\.6000/i)).toBeInTheDocument();
+  });
+
   it("does not plot non-finite training metrics or report a fictitious best epoch", () => {
     render(
       <TrainingRunDetail
