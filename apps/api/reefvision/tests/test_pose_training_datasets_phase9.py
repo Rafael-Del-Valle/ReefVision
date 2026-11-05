@@ -719,6 +719,8 @@ def test_frozen_dataset_rejects_resigned_blank_video_digest(
         ("source_models_json", [{"model_id": None}]),
         ("source_job_ids_json", {"job-id": "not-a-list"}),
         ("source_job_ids_json", [None]),
+        ("source_models_json", [{"model_id": "same"}, {"model_id": "same"}]),
+        ("source_job_ids_json", ["same-job", "same-job"]),
     ],
 )
 def test_frozen_dataset_rejects_resigned_malformed_source_lineage(
