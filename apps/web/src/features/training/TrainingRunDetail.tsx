@@ -26,7 +26,9 @@ function metricLabel(key: string): string {
 }
 
 function preferredMetric(run: TrainingRun): [string, number[]] | null {
-  const entries = Object.entries(history(run));
+  // Empty metric columns cannot identify a best epoch; prefer the next
+  // populated validation metric rather than hiding a valid result.
+  const entries = Object.entries(history(run)).filter(([, values]) => values.length > 0);
   const preferences =
     run.task === "classify"
       ? ["metrics/accuracy_top1", "metrics/accuracy_top5", "val/accuracy"]
