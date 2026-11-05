@@ -18,9 +18,10 @@ def test_review_event_check_literals_are_case_sensitive(
             connection.execute(text("INSERT INTO alembic_version VALUES ('0038')"))
             connection.execute(text("CREATE TABLE observations (value TEXT NOT NULL)"))
             connection.execute(text("INSERT INTO observations VALUES ('coral observation')"))
-            values = ("COMMENT", "ASSIGN", "UNASSIGN") if uppercase_literals else (
-                "comment", "assign", "unassign"
-            )
+            if uppercase_literals:
+                values = ("COMMENT", "ASSIGN", "UNASSIGN")
+            else:
+                values = ("comment", "assign", "unassign")
             keyword = "IN" if uppercase_keywords else "in"
             identifier = "EVENT_TYPE" if uppercase_keywords else "event_type"
             check = f"{identifier} {keyword} ({', '.join(repr(value) for value in values)})"
@@ -54,9 +55,7 @@ def test_review_event_check_literals_are_case_sensitive(
                         text("SELECT name, sql FROM sqlite_master ORDER BY name")
                     ).all()
                 ) == before
-                assert connection.scalar(text("SELECT value FROM observations")) == (
-                    "coral observation"
-                )
+                assert connection.scalar(text("SELECT value FROM observations")) == "coral observation"
                 assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0038"
     finally:
         engine.dispose()
