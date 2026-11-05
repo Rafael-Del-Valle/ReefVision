@@ -599,3 +599,84 @@ def test_symlinked_originals_directory_cannot_replay_saved_mesh(
     assert not any(
         item["data_type"] == "mesh_measurement_preview" for item in detail.json()["artifacts"]
     )
+
+
+@pytest.mark.parametrize(
+    "filename,payload,endpoint,node_type,artifact_type",
+    [
+        ("colony.obj", OBJ, "mesh-preview", "mesh_surface_preview", "mesh_measurement_preview"),
+        (
+            "survey.ply",
+            CLOUD_PLY,
+            "point-cloud-preview",
+            "point_cloud_preview",
+            "point_cloud_measurement_preview",
+        ),
+        (
+            "model.glb",
+            base64.b64decode(make_glb()),
+            "mesh-preview",
+            "mesh_surface_preview",
+            "mesh_measurement_preview",
+        ),
+    ],
+)
+def test_foreign_project_asset_cannot_execute_in_saved_workflow(
+    client: TestClient,
+    filename: str,
+    payload: bytes,
+    endpoint: str,
+    node_type: str,
+    artifact_type: str,
+) -> None:
+    """A saved graph cannot resolve another project's immutable source ID."""
+    owner = str(create_project(client, "Source asset owner")["id"])
+    outsider = str(create_project(client, "Foreign workflow project")["id"])
+    imported = client.post(
+        f"/api/v1/projects/{owner}/spatial/assets",
+        files={"file": (filename, payload)},
+    )
+    assert imported.status_code == 201, imported.text
+    asset = imported.json()
+    params = {
+        "asset_id": asset["id"],
+        "expected_source_payload_sha256": asset["sha256"],
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unreviewed survey ruler",
+    }
+    assert (
+        client.post(f"/api/v1/projects/{outsider}/spatial/{endpoint}", json=params).status_code
+        == 404
+    )
+    graph = {
+        "graph_id": f"foreign-asset-{node_type}",
+        "name": "Project boundary source replay",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "measure", "node_type": node_type, "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-measure",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "measure",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    base = f"/api/v1/projects/{outsider}"
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(item["data_type"] == artifact_type for item in detail.json()["artifacts"])
+    assert client.get(f"/api/v1/projects/{owner}/spatial/assets/{asset['id']}/content").content == payload
