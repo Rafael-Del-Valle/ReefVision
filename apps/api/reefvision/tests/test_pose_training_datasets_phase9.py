@@ -714,6 +714,9 @@ def test_frozen_dataset_rejects_resigned_blank_video_digest(
     ("field", "malformed"),
     [
         ("source_models_json", ["not-a-model-snapshot"]),
+        ("source_models_json", [{}]),
+        ("source_models_json", [{"model_id": ""}]),
+        ("source_models_json", [{"model_id": None}]),
         ("source_job_ids_json", {"job-id": "not-a-list"}),
         ("source_job_ids_json", [None]),
     ],
