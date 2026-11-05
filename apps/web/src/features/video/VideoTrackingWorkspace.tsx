@@ -128,6 +128,10 @@ export function VideoTrackingWorkspace({
   const lastWorkspaceCommandIdRef = useRef(0);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [telemetryFile, setTelemetryFile] = useState<File | null>(null);
+  const [telemetryUtcOffsetMinutes, setTelemetryUtcOffsetMinutes] =
+    useState("");
+  const [telemetryUtcOffsetEvidence, setTelemetryUtcOffsetEvidence] =
+    useState("");
   const [airdataFile, setAirdataFile] = useState<File | null>(null);
   const [airdataTimeOffsetSeconds, setAirdataTimeOffsetSeconds] = useState(0);
   const [airdataTimeOffsetEvidence, setAirdataTimeOffsetEvidence] =
@@ -559,6 +563,8 @@ export function VideoTrackingWorkspace({
       setSelectedVideoId(video.id);
       setUploadFile(null);
       setTelemetryFile(null);
+      setTelemetryUtcOffsetMinutes("");
+      setTelemetryUtcOffsetEvidence("");
       setAirdataFile(null);
       setAirdataTimeOffsetSeconds(0);
       setAirdataTimeOffsetEvidence("");
@@ -599,8 +605,25 @@ export function VideoTrackingWorkspace({
           "Nonzero AirData time offsets require alignment evidence",
         );
       }
+      if (
+        telemetryFile &&
+        (telemetryUtcOffsetMinutes.trim() !== "" ||
+          telemetryUtcOffsetEvidence.trim() !== "") &&
+        (telemetryUtcOffsetMinutes.trim() === "" ||
+          !telemetryUtcOffsetEvidence.trim())
+      ) {
+        throw new Error(
+          "DJI SRT UTC alignment requires both a timezone offset and evidence",
+        );
+      }
       return importVideo(project.id, uploadFile, {
         telemetryFile,
+        ...(telemetryUtcOffsetMinutes.trim() === ""
+          ? {}
+          : {
+              telemetryUtcOffsetMinutes: Number(telemetryUtcOffsetMinutes),
+              telemetryUtcOffsetEvidence,
+            }),
         airdataFile,
         airdataTimeOffsetSeconds,
         airdataTimeOffsetEvidence,
@@ -610,6 +633,8 @@ export function VideoTrackingWorkspace({
       setSelectedVideoId(video.id);
       setUploadFile(null);
       setTelemetryFile(null);
+      setTelemetryUtcOffsetMinutes("");
+      setTelemetryUtcOffsetEvidence("");
       setAirdataFile(null);
       setAirdataTimeOffsetSeconds(0);
       setAirdataTimeOffsetEvidence("");
@@ -1222,6 +1247,38 @@ export function VideoTrackingWorkspace({
             }
           />
         </label>
+        {telemetryFile && (
+          <div className="workspace-guide compact">
+            <label>
+              SRT wall-clock UTC offset (minutes, optional)
+              <input
+                type="number"
+                min={-840}
+                max={840}
+                step={1}
+                value={telemetryUtcOffsetMinutes}
+                onChange={(event) =>
+                  setTelemetryUtcOffsetMinutes(event.target.value)
+                }
+              />
+            </label>
+            <label>
+              SRT timezone evidence
+              <textarea
+                value={telemetryUtcOffsetEvidence}
+                onChange={(event) =>
+                  setTelemetryUtcOffsetEvidence(event.target.value)
+                }
+                placeholder="Describe the field log or source metadata establishing this offset."
+              />
+            </label>
+            <p className="annotation-helper">
+              SRT wall-clock text has no timezone. ReefVision only derives UTC
+              when both an explicit offset and independent evidence are saved;
+              otherwise absolute UTC remains unavailable.
+            </p>
+          </div>
+        )}
         <label>
           AirData CSV telemetry (optional)
           <input
@@ -1312,6 +1369,13 @@ export function VideoTrackingWorkspace({
               {selectedVideo.airdata_telemetry.available
                 ? ` | offset ${selectedVideo.airdata_alignment.time_offset_s.toFixed(2)} s`
                 : ""}
+            </p>
+            <p className="annotation-helper">
+              Absolute SRT time:{" "}
+              {selectedVideo.telemetry.utc_offset_minutes !== undefined &&
+              selectedVideo.telemetry.utc_offset_minutes !== null
+                ? `evidence-backed UTC offset ${selectedVideo.telemetry.utc_offset_minutes} min · ${selectedVideo.telemetry.wall_clock_sample_count ?? 0} wall-clock samples · ${selectedVideo.telemetry.utc_offset_evidence ?? "evidence unavailable"} · ${selectedVideo.telemetry.content_sha256?.slice(0, 12) ?? "unhashed"}…`
+                : "unavailable; the SRT wall clock is not assigned a timezone without explicit evidence"}
             </p>
             <div
               className="workspace-guide compact"

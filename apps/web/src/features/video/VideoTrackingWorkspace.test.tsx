@@ -341,6 +341,15 @@ describe("VideoTrackingWorkspace", () => {
       target: { files: [srt] },
     });
     fireEvent.change(
+      await screen.findByLabelText(
+        "SRT wall-clock UTC offset (minutes, optional)",
+      ),
+      { target: { value: "-300" } },
+    );
+    fireEvent.change(screen.getByLabelText("SRT timezone evidence"), {
+      target: { value: "field log confirms EST" },
+    });
+    fireEvent.change(
       screen.getByLabelText("AirData CSV telemetry (optional)"),
       {
         target: { files: [airdata] },
@@ -361,6 +370,8 @@ describe("VideoTrackingWorkspace", () => {
     await waitFor(() =>
       expect(api.importVideo).toHaveBeenCalledWith(project.id, video, {
         telemetryFile: srt,
+        telemetryUtcOffsetMinutes: -300,
+        telemetryUtcOffsetEvidence: "field log confirms EST",
         airdataFile: airdata,
         airdataTimeOffsetSeconds: 6.19,
         airdataTimeOffsetEvidence: "source-only SRT/AirData alignment",

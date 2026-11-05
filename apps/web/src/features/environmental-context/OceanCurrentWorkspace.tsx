@@ -146,6 +146,12 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
             in m/s. No interpolation or particle simulation is used. Arrow
             length is a display symbol, not travel distance.
           </p>
+          <p>
+            Trajectory–current comparison is unavailable unless a geographic
+            track has evidence-backed absolute UTC, location, and organism depth
+            compatible with one current slice. ReefVision does not infer missing
+            organism depth or treat current alignment as biological causation.
+          </p>
           <label>
             Cached ocean dataset
             <select

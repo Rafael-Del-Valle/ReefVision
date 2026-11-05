@@ -149,6 +149,9 @@ it("shows a local sample heatmap without forcing current arrows or online tiles"
   fireEvent.click(
     screen.getByRole("button", { name: "Open ocean current map" }),
   );
+  expect(
+    screen.getByText(/Trajectory–current comparison is unavailable/),
+  ).toBeInTheDocument();
   await screen.findByRole("option", { name: /copernicus_marine/ });
   fireEvent.change(screen.getByLabelText("Cached ocean dataset"), {
     target: { value: "cache" },
