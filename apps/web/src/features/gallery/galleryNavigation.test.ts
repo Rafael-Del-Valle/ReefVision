@@ -91,7 +91,9 @@ describe("gallery preferences", () => {
       page: 5,
       wrap: true,
     });
-    expect(JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null")).toEqual({
+    expect(
+      JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null"),
+    ).toEqual({
       imageId: "camera-original-2",
       page: 5,
       wrap: true,
@@ -218,7 +220,11 @@ describe("gallery preferences", () => {
       wrap: false,
     });
     const saved = storage.getItem(key);
-    for (const imageId of ["camera\noriginal", "camera\u0000original", "camera\u007foriginal"]) {
+    for (const imageId of [
+      "camera\noriginal",
+      "camera\u0000original",
+      "camera\u007foriginal",
+    ]) {
       const corrupted = memoryStorage({
         [key]: JSON.stringify({ imageId, page: 7, wrap: true }),
       });
