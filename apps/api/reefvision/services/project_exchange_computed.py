@@ -68,6 +68,14 @@ def _same_number(left: object, right: object) -> bool:
     return isclose(float(left), float(right), rel_tol=1e-12, abs_tol=1e-12)
 
 
+def _source_category(subject: dict[str, Any]) -> str:
+    if subject.get("prediction_id"):
+        return "model_prediction"
+    if subject.get("annotation_id") or subject.get("mask_id"):
+        return "verified_annotation"
+    return "scientific_observation"
+
+
 def validate_computed_exchange_records(
     project_id: str, sections: dict[str, list[dict[str, Any]]]
 ) -> None:
@@ -75,6 +83,8 @@ def validate_computed_exchange_records(
 
     definitions = {row["id"]: row for row in sections.get("computed_metric_definitions", [])}
     scientific = {row["id"]: row for row in sections.get("scientific_records", [])}
+    workflow_runs = {row["id"]: row for row in sections.get("workflow_runs", [])}
+    workflow_nodes = {row["id"]: row for row in sections.get("workflow_node_runs", [])}
     try:
         compiled_by_id: dict[str, Any] = {}
         for identifier, row in definitions.items():
@@ -108,6 +118,18 @@ def validate_computed_exchange_records(
             definition = definitions.get(definition_id)
             if definition is None or payload.get("definition_id") != definition_id:
                 raise ValidationError("Computed metric result refers to a missing definition")
+            workflow_run_id = row.get("workflow_run_id")
+            workflow_node_run_id = row.get("workflow_node_run_id")
+            if workflow_run_id is not None and workflow_run_id not in workflow_runs:
+                raise ValidationError("Computed metric result refers to a missing workflow run")
+            if workflow_node_run_id is not None:
+                workflow_node = workflow_nodes.get(workflow_node_run_id)
+                if (
+                    workflow_node is None
+                    or workflow_run_id is None
+                    or workflow_node.get("workflow_run_id") != workflow_run_id
+                ):
+                    raise ValidationError("Computed metric result workflow provenance mismatch")
             for field, definition_field in (
                 ("definition_name", "name"),
                 ("expression", "expression"),
@@ -163,15 +185,41 @@ def validate_computed_exchange_records(
                 or provenance.get("definition_sha256") != definition["definition_sha256"]
             ):
                 raise ValidationError("Computed metric formula engine provenance mismatch")
-            first_snapshot = snapshots[next(iter(sorted(symbols)))]
-            expected_subject = {
-                key: value for key, value in first_snapshot["subject"].items() if value is not None
-            }
-            if payload.get("subject") != expected_subject:
+            ordered_snapshots = [snapshots[symbol] for symbol in sorted(symbols)]
+            subjects = [
+                {key: value for key, value in snapshot["subject"].items() if value is not None}
+                for snapshot in ordered_snapshots
+            ]
+            if (
+                any(subject != subjects[0] for subject in subjects[1:])
+                or payload.get("subject") != subjects[0]
+            ):
                 raise ValidationError("Computed metric result subject snapshot mismatch")
             evaluation = evaluate_expression(
                 compiled_by_id[definition_id], quantities, output_unit=definition["output_unit"]
             )
+            uncertainty_kinds = {
+                uncertainty["kind"]
+                for snapshot in ordered_snapshots
+                if (uncertainty := snapshot.get("uncertainty")) is not None
+            }
+            expected_provenance = {
+                "source_categories": sorted({_source_category(subject) for subject in subjects}),
+                "uncertainty_kind": (
+                    next(iter(uncertainty_kinds)) if evaluation.uncertainty is not None else None
+                ),
+                "uncertainty_method": (
+                    "independent_first_order_root_sum_square"
+                    if evaluation.uncertainty is not None
+                    else "unavailable_missing_input_uncertainty"
+                ),
+            }
+            if (
+                "bound" in uncertainty_kinds
+                or len(uncertainty_kinds) > 1
+                or any(provenance.get(key) != value for key, value in expected_provenance.items())
+            ):
+                raise ValidationError("Computed metric result provenance mismatch")
             expected_values = {
                 "value": evaluation.value,
                 "normalized_value": evaluation.normalized_value,

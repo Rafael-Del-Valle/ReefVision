@@ -55,8 +55,8 @@ IDs, remaps workflow/scientific relationships, rebuilds computed input snapshots
 hashes, preserves literal source/provider evidence, and retains the untouched source archive as
 import provenance. A saved workflow result was exported, imported, inspected and recalculated
 with the same value and uncertainty. Tampered definitions, results, inputs, snapshots, subjects,
-formula versions and provenance were rejected atomically. The focused exchange/computed/event
-matrix passed 62 tests on the implementation checkpoint; this is development evidence, not
+formula versions and provenance were rejected atomically. The final focused
+exchange/computed/event matrix passed 112 tests; this is development evidence, not
 installed-desktop or field-data release acceptance.
 
 Project exchange still does not make the full release portable by itself: aggregate metric

@@ -154,6 +154,43 @@ def test_computed_results_and_event_definitions_round_trip_with_reproducible_inp
     assert evaluated.json()["definition_sha256"] == source_event["definition_sha256"]
 
 
+@pytest.mark.parametrize("record_kind", ["computed definition", "event definition"])
+def test_standalone_scientific_definitions_select_enriched_exchange_and_survive_import(
+    client: TestClient, test_settings, record_kind: str
+) -> None:
+    project = create_project(client, f"Portable {record_kind}")
+    if record_kind == "computed definition":
+        source = create_density_definition(client, project["id"])
+        section = "computed_metric_definitions"
+        endpoint = "computed-metric-definitions"
+    else:
+        response = client.post(
+            f"/api/v1/projects/{project['id']}/environment/events/definitions",
+            json={"name": "Warm water", "query": threshold_query()},
+        )
+        assert response.status_code == 201, response.text
+        source = response.json()
+        section = "environmental_event_definitions"
+        endpoint = "environment/events/definitions"
+
+    raw = export_archive(client, test_settings, project["id"])
+    inspection = client.post(
+        "/api/v1/exchange-packages/inspect", files={"file": ("standalone.zip", raw)}
+    )
+    assert inspection.status_code == 200, inspection.text
+    assert inspection.json()["format_version"] == "1.1"
+    assert inspection.json()["section_counts"][section] == 1
+
+    imported = import_archive(client, raw)
+    assert imported.status_code == 201, imported.text
+    restored = client.get(f"/api/v1/projects/{imported.json()['project_id']}/{endpoint}").json()[
+        "items"
+    ]
+    assert len(restored) == 1
+    assert restored[0]["id"] != source["id"]
+    assert restored[0]["definition_sha256"] == source["definition_sha256"]
+
+
 @pytest.mark.parametrize(
     "corruption",
     [
@@ -163,6 +200,8 @@ def test_computed_results_and_event_definitions_round_trip_with_reproducible_inp
         "mismatched_snapshot",
         "mismatched_subject",
         "mismatched_definition_provenance",
+        "mismatched_category_provenance",
+        "mismatched_workflow_run",
         "foreign_project",
         "unsupported_formula",
     ],
@@ -193,6 +232,14 @@ def test_computed_exchange_rejects_invalid_inventory_atomically(
         elif corruption == "mismatched_definition_provenance":
             result["payload_json"]["provenance"]["definition_sha256"] = "0" * 64
             result["content_sha256"] = content_hash(result["payload_json"])
+        elif corruption == "mismatched_category_provenance":
+            result["payload_json"]["provenance"]["source_categories"] = ["model_prediction"]
+            result["content_sha256"] = content_hash(result["payload_json"])
+        elif corruption == "mismatched_workflow_run":
+            unrelated_run = deepcopy(sections["workflow_runs"][0])
+            unrelated_run["id"] = "11111111-1111-4111-8111-111111111111"
+            sections["workflow_runs"].append(unrelated_run)
+            result["workflow_run_id"] = unrelated_run["id"]
         elif corruption == "foreign_project":
             result["project_id"] = "foreign"
         else:
