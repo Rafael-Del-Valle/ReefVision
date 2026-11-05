@@ -85,7 +85,6 @@ def test_identical_source_bytes_cannot_silently_change_original_filename(
     assert repeated.json() == original
 
 
-
 @pytest.mark.parametrize(
     "filename,payload",
     [
@@ -103,9 +102,7 @@ def test_same_source_bytes_remain_independent_between_projects(
     first_url = f"/api/v1/projects/{first_id}/spatial/assets"
     second_url = f"/api/v1/projects/{second_id}/spatial/assets"
     first = client.post(first_url, files={"file": (filename, payload)})
-    second = client.post(
-        second_url, files={"file": (f"independent-{filename}", payload)}
-    )
+    second = client.post(second_url, files={"file": (f"independent-{filename}", payload)})
     assert first.status_code == 201, first.text
     assert second.status_code == 201, second.text
     first_asset, second_asset = first.json(), second.json()
