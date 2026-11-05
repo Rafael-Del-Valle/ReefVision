@@ -106,6 +106,18 @@ def frozen_pose_item_fingerprints_match(
         # Otherwise a corrupted JSON value could raise an AttributeError
         # instead of rejecting the dataset before export or workflow execution.
         review = row.review_provenance_json
+        # Persisted model/job lineage is part of frozen scientific evidence.
+        # Reject malformed JSON collections even if a manifest is re-signed.
+        if (
+            not isinstance(row.source_models_json, list)
+            or any(not isinstance(model, dict) for model in row.source_models_json)
+            or not isinstance(row.source_job_ids_json, list)
+            or any(
+                not isinstance(job_id, str) or not job_id.strip()
+                for job_id in row.source_job_ids_json
+            )
+        ):
+            return False
         if (
             not isinstance(row.acquisition_provenance_json, dict)
             or not isinstance(review, dict)
