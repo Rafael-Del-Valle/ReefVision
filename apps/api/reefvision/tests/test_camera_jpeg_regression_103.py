@@ -839,6 +839,7 @@ def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
             opened = original_open(*args, **kwargs)
             open_count += 1
             if open_count == 2:
+
                 def broken_getexif() -> Image.Exif:
                     raise error_type("malformed camera EXIF")
 
@@ -847,6 +848,7 @@ def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
 
         monkeypatch.setattr(image_storage.Image, "open", open_with_broken_exif)
     else:
+
         def broken_get_ifd(_exif: Image.Exif, _tag: int) -> dict[int, object]:
             raise error_type("malformed nested camera EXIF IFD")
 
@@ -899,6 +901,7 @@ def test_noncanonical_nested_camera_exif_keeps_original_and_uncertainty(
     assert "invalid" in metadata["metadata_json"]["capture_time_warning"]
     assert metadata["metadata_json"]["exif"]["DateTimeOriginal"] == malformed_timestamp
     assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
 
 @pytest.mark.parametrize(
     ("exposure", "offset"),
