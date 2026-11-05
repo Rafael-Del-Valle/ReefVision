@@ -24,6 +24,7 @@ from reefvision.api.routes.computed_mask_coverage import router as computed_mask
 from reefvision.api.routes.computed_metrics import router as computed_metrics_router
 from reefvision.api.routes.coral_structure import router as coral_structure_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
+from reefvision.api.routes.environmental_analysis import router as environmental_analysis_router
 from reefvision.api.routes.environmental_context import router as environmental_context_router
 from reefvision.api.routes.geographic_movement_analytics import (
     router as geographic_movement_analytics_router,
@@ -74,6 +75,7 @@ from reefvision.services.workflow_v1_install import install_workflow_v1_extensio
 install_workflow_v1_extensions()
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(environmental_analysis_router)
 api_router.include_router(environmental_context_router)
 api_router.include_router(lunar_context_router)
 api_router.include_router(scientific_data_router)

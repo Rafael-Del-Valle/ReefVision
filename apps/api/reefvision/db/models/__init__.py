@@ -20,6 +20,10 @@ from reefvision.db.models.classification_prediction import ClassificationPredict
 from reefvision.db.models.computed_metric import ComputedMetricDefinition, ComputedMetricResult
 from reefvision.db.models.dataset_version import DatasetVersion
 from reefvision.db.models.dataset_version_item import DatasetVersionItem
+from reefvision.db.models.environmental_analysis import (
+    EnvironmentalAnalysisDefinition,
+    EnvironmentalAnalysisResult,
+)
 from reefvision.db.models.experiment_record import ExperimentRecord
 from reefvision.db.models.export_record import ExportRecord
 from reefvision.db.models.geo_referenced_observation import GeoReferencedObservation
@@ -96,6 +100,8 @@ __all__ = [
     "ComputedMetricResult",
     "DatasetVersion",
     "DatasetVersionItem",
+    "EnvironmentalAnalysisDefinition",
+    "EnvironmentalAnalysisResult",
     "EnvironmentalCacheEntry",
     "EnvironmentalEventDefinition",
     "ExperimentRecord",
