@@ -160,7 +160,7 @@ describe("TrainingRunDetail", () => {
   });
 
   it("does not invent best epochs from mismatched or fractional epoch history", () => {
-    for (const epoch of [[1, 2], [1, 2.5, 3], [1, 2, 0]]) {
+    for (const epoch of [[1, 2], [1, 2.5, 3], [1, 2, 0], [1, 1, 3], [1, 3, 2]]) {
       const { unmount } = render(
         <TrainingRunDetail
           run={{ ...run, metrics_history: {
