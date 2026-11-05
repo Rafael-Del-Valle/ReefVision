@@ -710,6 +710,46 @@ def test_frozen_dataset_rejects_resigned_blank_video_digest(
     assert "item lineage" in response.text
 
 
+@pytest.mark.parametrize(
+    ("field", "malformed"),
+    [
+        ("source_models_json", ["not-a-model-snapshot"]),
+        ("source_job_ids_json", {"job-id": "not-a-list"}),
+        ("source_job_ids_json", [None]),
+    ],
+)
+def test_frozen_dataset_rejects_resigned_malformed_source_lineage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    malformed: object,
+) -> None:
+    # Freeze a persisted, scientist-verified round, then simulate corrupt
+    # stored lineage even when an attacker re-signs the manifest evidence.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    created = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert created.status_code == 201, created.text
+    dataset_id = created.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
+        setattr(item, field, malformed)
+        manifest = copy.deepcopy(dataset.manifest_json)
+        manifest["items"][0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        dataset.manifest_json = manifest
+        dataset.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
+    assert response.status_code == 409, response.text
+    assert "item lineage" in response.text
+
+
 def test_native_pose_training_package_is_deterministic_and_verified_only(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
