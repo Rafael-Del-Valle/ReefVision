@@ -63,6 +63,9 @@ _ACTIONS: dict[str, str] = {
     "annotation_aggregate": (
         "Count reviewed annotation evidence using explicit images and an independence contract."
     ),
+    "mask_coverage": (
+        "Calculate verified-mask union area and explicit image or ROI coverage denominators."
+    ),
     "environmental_threshold": (
         "Find bounded QC-eligible threshold samples with provenance, without event inference."
     ),

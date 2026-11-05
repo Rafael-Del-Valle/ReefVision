@@ -109,6 +109,26 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="mask_coverage",
+            display_name="Verified Mask Area & Coverage",
+            category="analysis",
+            description=(
+                "Calculate exact source-pixel summed and union mask area, full-image or "
+                "verified-ROI coverage, and compatible calibrated physical area/density."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Mask Coverage Result", "computed_metric_result")],
+            required_parameters=["definition_id", "image_ids"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Uses the standalone immutable verified-mask coverage service.",
+                "Overlapping masks are unioned; predictions and non-verified masks are excluded.",
+                "Physical values fail closed for missing, mixed, or projective calibration.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="environmental_threshold",
             display_name="Environmental Threshold Samples",
             category="analysis",

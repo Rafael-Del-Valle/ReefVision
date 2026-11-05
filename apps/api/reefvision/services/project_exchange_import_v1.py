@@ -1066,11 +1066,13 @@ def import_project_exchange_v1(
         from reefvision.services.computed_aggregate_metrics import (
             ComputedAggregateMetricService,
         )
+        from reefvision.services.computed_mask_coverage import ComputedMaskCoverageService
         from reefvision.services.computed_metrics import ComputedMetricService
         from reefvision.services.environmental_context import EnvironmentalContextService
 
         computed = ComputedMetricService(session)
         aggregates = ComputedAggregateMetricService(session)
+        mask_coverage = ComputedMaskCoverageService(session, settings)
         for definition_row in session.scalars(
             select(ComputedMetricDefinition).where(
                 ComputedMetricDefinition.project_id == project.id
@@ -1078,6 +1080,8 @@ def import_project_exchange_v1(
         ):
             if definition_row.definition_kind == "annotation_aggregate":
                 aggregates.definition_response(definition_row)
+            elif definition_row.definition_kind == "mask_coverage":
+                mask_coverage.definition_response(definition_row)
             else:
                 computed.definition_response(definition_row)
         for result_row in session.scalars(
@@ -1085,11 +1089,19 @@ def import_project_exchange_v1(
         ):
             if result_row.result_kind == "annotation_aggregate":
                 aggregates.result_response(result_row)
-                validation = aggregates.validate_result(project.id, result_row.id)
-                if not validation.current:
+                aggregate_validation = aggregates.validate_result(project.id, result_row.id)
+                if not aggregate_validation.current:
                     raise ValidationError(
                         "Imported computed aggregate evidence is stale after remapping: "
-                        + ", ".join(validation.reasons)
+                        + ", ".join(aggregate_validation.reasons)
+                    )
+            elif result_row.result_kind == "mask_coverage":
+                mask_coverage.result_response(result_row)
+                coverage_validation = mask_coverage.validate_result(project.id, result_row.id)
+                if not coverage_validation.current:
+                    raise ValidationError(
+                        "Imported mask coverage evidence is stale after remapping: "
+                        + ", ".join(coverage_validation.reasons)
                     )
             else:
                 computed.result_response(result_row)

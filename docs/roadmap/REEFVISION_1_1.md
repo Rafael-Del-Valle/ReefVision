@@ -39,7 +39,7 @@ Reusable implementations inspected:
 | 3 Environmental context                 | 1                                       | Local JSON, NOAA station temperature and bounded Copernicus grid acquisition with persistent cache/offline and project workspace            | Provider/API/cache/live NOAA and Copernicus fixture tests pass; UI unit tests/build pass                         | No                | Production credential acceptance, unattended daily refresh, broader subject lookup controls and browser/desktop acceptance                      |
 | 4 Current visualizer                    | 2, 3                                    | Cached UTC/depth current slices, direction arrows, summaries, provenance/QC/uncertainty display and CSV; offline basemap optional           | Vector pairing, scientific filtering, summary/export and current-map UI regressions pass                         | No                | Streamlines, trajectory overlay and representative cached/live desktop acceptance                                                               |
 | 5 Scientific heatmaps                   | 1; existing pose/annotation records     | Source-pixel grid overlays for reviewed boxes, verified masks and opt-in pending predictions, with revision/hash provenance and JSON export | API/UI regressions and full frontend suite pass                                                                  | No                | Separate reviewer identity/comparison layers, disagreement analysis and representative project acceptance                                       |
-| 6 Computed metrics                      | 1; calibration and verified annotations | Safe scalar metrics plus reviewed annotation/verified-mask counts with explicit image or `group_key` independence; API/CSV/UI/workflows/exchange | Domain/API/migration/workflow/UI and reproducible exchange regressions pass                                      | No                | Mask union/coverage, calibrated area/density, subject hierarchy, inferential statistics, broader formula functions and field-data acceptance     |
+| 6 Computed metrics                      | 1; calibration and verified annotations | Safe scalar metrics; reviewed annotation/verified-mask counts; exact verified-mask summed/union area, image or verified-class ROI coverage, compatible scalar physical area and sampling-area density; explicit image or `group_key` independence; API/CSV/UI/workflows/exchange | Domain/API/migration/workflow/UI, synthetic exact-geometry fixtures and reproducible exchange regressions pass   | No                | Arbitrary saved ROI geometry, projective union resampling, subject hierarchy, inferential statistics, broader formula functions and field-data acceptance |
 | 7 Event/environment analysis            | 2, 3, 6                                 | Bounded sample thresholds, immutable event definitions and executable saved workflow references; definitions are portable                   | Domain/API/workflow/project-isolation/tamper and exchange regressions pass                                       | No                | Event windows/aggregation; automated tidal/lunar context; lagged comparisons; reproducible tabular/geographic exports                           |
 
 Optional advection is deferred until core acceptance. Existing 1.0.x GUI,
@@ -340,6 +340,17 @@ physical area or density, infer subjects/colonies/treatments/time points, calcul
 or perform inferential statistics. Representative field data, Windows installed-app behavior and
 independent scientific acceptance also remain open.
 
+The subsequent Priority A mask-coverage slice adds an immutable `mask_coverage` metric over
+explicitly selected reviewed images. Verified polygon and source-sized raster masks use exact
+source-pixel row-run geometry. Results distinguish summed area from overlap-safe union area,
+report full-image coverage, optionally use the union of one explicit verified mask class as the
+ROI denominator, preserve per-image/class/group summaries, and calculate physical union area and
+object density only when every contributing image has compatible scalar calibration. Compatible
+mixed length units normalize to metres; missing, unknown-unit, invalid, and projective calibrations
+retain pixel results but expose physical values as unavailable. Standalone API/UI, CSV, Workflow Builder execution and project exchange share this
+contract. Synthetic fixtures validate known overlaps and denominators; they do not establish field
+or installed-desktop scientific acceptance.
+
 Migration `0041_computed_annotation_aggregates.py` additively follows the existing untouched
 `0038_scientific_data.py -> 0039_computed_metrics.py -> 0040_environmental_event_definitions.py`
 lineage. It discriminates scalar and aggregate rows without changing existing scalar payloads or
@@ -360,10 +371,10 @@ already-shared migration is rewritten in this 1.1 work.
    in the installed application, then add streamlines and trajectory overlays.
 5. Extend telemetry uncertainty and surveyed georeferencing acceptance, then
    GeoPackage and pairwise movement exports. Keep approximate positions marked.
-6. Extend the verified count slice with exact mask union/coverage, calibrated physical area and
-   density only after overlap, ROI and calibration contracts are explicit; add richer subject/
-   treatment/timepoint models and reviewed formula functions without inferring replicates. Keep
-   the comprehensive visual node editor reserved for 2.0.
+6. Extend the verified mask-coverage slice with arbitrary persisted ROI geometry and exact
+   projective/homography union resampling; add richer subject/treatment/timepoint models and
+   reviewed formula functions without inferring replicates. Keep the comprehensive visual node
+   editor reserved for 2.0.
 
 Windows installed-app/WebView, NVIDIA hardware, real drone/GCP reference data,
 authenticated Copernicus and researcher sensor/reference acceptance are still

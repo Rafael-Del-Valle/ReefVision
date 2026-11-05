@@ -21,6 +21,7 @@ import {
   type MetricDimension,
 } from "./computedMetricsApi";
 import { AnnotationAggregatePanel } from "./AnnotationAggregatePanel";
+import { MaskCoveragePanel } from "./MaskCoveragePanel";
 
 const DIMENSIONS = new Set<MetricDimension>([
   "dimensionless",
@@ -78,6 +79,7 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
   const [bindings, setBindings] = useState("");
   const [showAnnotationAggregates, setShowAnnotationAggregates] =
     useState(false);
+  const [showMaskCoverage, setShowMaskCoverage] = useState(false);
 
   const definitionsQuery = useInfiniteQuery({
     queryKey: ["computed-metric-definitions", project.id],
@@ -445,6 +447,15 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
         {showAnnotationAggregates && (
           <AnnotationAggregatePanel project={project} />
         )}
+        <button
+          type="button"
+          onClick={() => setShowMaskCoverage((value) => !value)}
+        >
+          {showMaskCoverage
+            ? "Close verified mask coverage"
+            : "Open verified mask coverage"}
+        </button>
+        {showMaskCoverage && <MaskCoveragePanel project={project} />}
       </section>
     </section>
   );

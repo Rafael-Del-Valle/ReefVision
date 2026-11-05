@@ -20,6 +20,7 @@ from reefvision.api.routes.classification import router as classification_router
 from reefvision.api.routes.computed_aggregate_metrics import (
     router as computed_aggregate_metrics_router,
 )
+from reefvision.api.routes.computed_mask_coverage import router as computed_mask_coverage_router
 from reefvision.api.routes.computed_metrics import router as computed_metrics_router
 from reefvision.api.routes.coral_structure import router as coral_structure_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
@@ -78,6 +79,7 @@ api_router.include_router(lunar_context_router)
 api_router.include_router(scientific_data_router)
 api_router.include_router(scientific_heatmaps_router)
 api_router.include_router(computed_aggregate_metrics_router)
+api_router.include_router(computed_mask_coverage_router)
 api_router.include_router(computed_metrics_router)
 api_router.include_router(geographic_movement_analytics_router)
 api_router.include_router(health_router)

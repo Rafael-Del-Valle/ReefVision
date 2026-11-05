@@ -113,6 +113,38 @@ const reviewedAnnotationAggregate = {
   ],
 };
 
+const verifiedMaskCoverage = {
+  graph_id: "verified-mask-coverage",
+  name: "Verified mask area and coverage",
+  schema_version: "workflow-graph-0001",
+  nodes: [
+    {
+      node_id: "project",
+      node_type: "project_source",
+      parameters: {},
+      position: { x: 40, y: 80 },
+    },
+    {
+      node_id: "coverage",
+      node_type: "mask_coverage",
+      parameters: {
+        definition_id: "replace-with-mask-coverage-definition-id",
+        image_ids: ["replace-with-reviewed-image-id"],
+      },
+      position: { x: 380, y: 80 },
+    },
+  ],
+  edges: [
+    {
+      edge_id: "project-coverage",
+      source_node_id: "project",
+      source_port_id: "project",
+      target_node_id: "coverage",
+      target_port_id: "project",
+    },
+  ],
+};
+
 const localConsensus = {
   graph_id: "two-of-three-detection-consensus",
   name: "2-of-3 local detection consensus",
@@ -1044,6 +1076,13 @@ export function createPoseArchitectureWorkflow(
 }
 
 export const workflowTemplates: WorkflowTemplate[] = [
+  {
+    id: "verified-mask-coverage",
+    name: "Verified mask area and coverage",
+    description:
+      "Explicit reviewed images → overlap-safe mask union and coverage → immutable result.",
+    graph: verifiedMaskCoverage,
+  },
   {
     id: "reviewed-annotation-aggregate",
     name: "Reviewed annotation aggregate",

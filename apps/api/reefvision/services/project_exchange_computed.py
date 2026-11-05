@@ -17,8 +17,14 @@ from reefvision.domain.computed_metrics import (
     evaluate_expression,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.scientific_units import UNITS
 from reefvision.schemas.computed_aggregate_metrics import ComputedAggregateDefinitionCreate
+from reefvision.schemas.computed_mask_coverage import (
+    ComputedMaskCoverageDefinitionCreate,
+    ComputedMaskCoverageResultResponse,
+)
 from reefvision.schemas.computed_metrics import ComputedMetricDefinitionCreate
+from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.schemas.scientific_data import ScientificRecordResponse
 from reefvision.services.computed_metrics import ComputedMetricService
 from reefvision.services.scientific_data import content_hash
@@ -26,6 +32,9 @@ from reefvision.services.scientific_data import content_hash
 COMPUTED_SECTIONS = {"computed_metric_definitions", "computed_metric_results"}
 AGGREGATE_KIND = "annotation_aggregate"
 AGGREGATE_FORMULA_VERSION = "reefvision.annotation-aggregate.v1"
+MASK_COVERAGE_KIND = "mask_coverage"
+MASK_COVERAGE_FORMULA_VERSION = "reefvision.mask-coverage.v1"
+MASK_COVERAGE_ALGORITHM = "reefvision.source-pixel-mask-union.v1"
 
 
 def _definition_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -46,6 +55,250 @@ def _aggregate_definition_payload(row: dict[str, Any]) -> dict[str, Any]:
         "output_unit": row["output_unit"],
         "configuration": row["configuration_json"],
     }
+
+
+def _validate_mask_coverage_definition(
+    project_id: str,
+    row: dict[str, Any],
+    labels: dict[str, dict[str, Any]],
+) -> None:
+    config = row.get("configuration_json")
+    if not isinstance(config, dict):
+        raise ValidationError("Mask coverage definition configuration is invalid")
+    payload = ComputedMaskCoverageDefinitionCreate.model_validate(
+        {
+            "name": row["name"],
+            "grouping_level": config["grouping_level"],
+            "label_class_ids": config.get("label_class_ids", []),
+            "roi_label_class_id": config.get("roi_label_class_id"),
+        }
+    )
+    expected_config = {
+        "schema_version": "1.1.0",
+        "grouping_level": payload.grouping_level,
+        "label_class_ids": [str(value) for value in payload.label_class_ids],
+        "roi_label_class_id": (
+            str(payload.roi_label_class_id) if payload.roi_label_class_id else None
+        ),
+        "operation": "verified_mask_union_coverage",
+        "required_review_state": "reviewed",
+        "independence_contract": (
+            "one_unit_per_image"
+            if payload.grouping_level == "image"
+            else "one_unit_per_image_group_key"
+        ),
+        "roi_contract": (
+            "verified_mask_class_union" if payload.roi_label_class_id else "full_image"
+        ),
+    }
+    referenced_labels = [str(value) for value in payload.label_class_ids]
+    if payload.roi_label_class_id is not None:
+        referenced_labels.append(str(payload.roi_label_class_id))
+    if any(
+        label_id not in labels or labels[label_id].get("project_id") != project_id
+        for label_id in referenced_labels
+    ):
+        raise ValidationError("Mask coverage definition has a missing label class")
+    if (
+        row.get("project_id") != project_id
+        or row.get("definition_kind") != MASK_COVERAGE_KIND
+        or row.get("formula_version") != MASK_COVERAGE_FORMULA_VERSION
+        or row.get("expression") != "union_area(verified_masks) / explicit_denominator"
+        or row.get("input_spec_json") != []
+        or row.get("output_unit") != "percent"
+        or config != expected_config
+        or content_hash(_aggregate_definition_payload(row)) != row.get("definition_sha256")
+    ):
+        raise ValidationError("Mask coverage definition checksum or contract mismatch")
+
+
+def _validate_mask_coverage_result(
+    project_id: str,
+    row: dict[str, Any],
+    definition: dict[str, Any],
+    sections: dict[str, list[dict[str, Any]]],
+    workflow_runs: dict[str, dict[str, Any]],
+    workflow_nodes: dict[str, dict[str, Any]],
+) -> None:
+    payload = row.get("payload_json")
+    if (
+        row.get("project_id") != project_id
+        or row.get("result_kind") != MASK_COVERAGE_KIND
+        or not isinstance(payload, dict)
+        or content_hash(payload) != row.get("content_sha256")
+    ):
+        raise ValidationError("Mask coverage result checksum mismatch")
+    ComputedMaskCoverageResultResponse.model_validate(
+        {
+            **payload,
+            "id": row["id"],
+            "project_id": row["project_id"],
+            "result_kind": row["result_kind"],
+            "content_sha256": row["content_sha256"],
+            "workflow_run_id": row.get("workflow_run_id"),
+            "workflow_node_run_id": row.get("workflow_node_run_id"),
+            "created_at": row["created_at"],
+        }
+    )
+    if (
+        payload.get("definition_id") != definition.get("id")
+        or payload.get("definition_name") != definition.get("name")
+        or payload.get("expression") != definition.get("expression")
+        or payload.get("formula_version") != definition.get("formula_version")
+        or payload.get("definition_sha256") != definition.get("definition_sha256")
+        or payload.get("output_unit") != "percent"
+        or payload.get("algorithm") != MASK_COVERAGE_ALGORITHM
+        or payload.get("coordinate_frame") != "source_image_pixels"
+    ):
+        raise ValidationError("Mask coverage result definition snapshot mismatch")
+    workflow_run_id = row.get("workflow_run_id")
+    workflow_node_run_id = row.get("workflow_node_run_id")
+    if workflow_run_id is not None and workflow_run_id not in workflow_runs:
+        raise ValidationError("Mask coverage result refers to a missing workflow run")
+    if workflow_node_run_id is not None:
+        node = workflow_nodes.get(workflow_node_run_id)
+        if (
+            node is None
+            or workflow_run_id is None
+            or node.get("workflow_run_id") != workflow_run_id
+            or node.get("node_type") != "mask_coverage"
+        ):
+            raise ValidationError("Mask coverage result workflow provenance mismatch")
+
+    images = {item["id"]: item for item in sections.get("images", [])}
+    labels = {item["id"]: item for item in sections.get("label_classes", [])}
+    masks = {item["id"]: item for item in sections.get("mask_annotations", [])}
+    image_snapshot = payload.get("image_snapshot")
+    mask_snapshot = payload.get("mask_snapshot")
+    if not isinstance(image_snapshot, list) or not isinstance(mask_snapshot, list):
+        raise ValidationError("Mask coverage evidence inventory is invalid")
+    raw_image_ids = [item.get("image_id") for item in image_snapshot if isinstance(item, dict)]
+    raw_mask_ids = [item.get("id") for item in mask_snapshot if isinstance(item, dict)]
+    if (
+        len(raw_image_ids) != len(image_snapshot)
+        or any(not isinstance(value, str) for value in raw_image_ids)
+        or len(raw_mask_ids) != len(mask_snapshot)
+        or any(not isinstance(value, str) for value in raw_mask_ids)
+    ):
+        raise ValidationError("Mask coverage evidence inventory is invalid")
+    image_ids = [str(value) for value in raw_image_ids]
+    mask_ids = [str(value) for value in raw_mask_ids]
+    if (
+        image_ids != sorted(image_ids)
+        or len(image_ids) != len(set(image_ids))
+        or mask_ids != sorted(mask_ids)
+        or len(mask_ids) != len(set(mask_ids))
+    ):
+        raise ValidationError("Mask coverage evidence inventory is duplicated or unordered")
+    config = definition["configuration_json"]
+    for snapshot in image_snapshot:
+        image = images.get(snapshot["image_id"])
+        if image is None or image.get("project_id") != project_id:
+            raise ValidationError("Mask coverage image snapshot refers to a missing image")
+        raw_calibration = dict(image.get("metadata_json") or {}).get("measurement_calibration")
+        unavailable = None
+        calibration = raw_calibration
+        if raw_calibration is None:
+            unavailable = "missing_calibration"
+        elif not isinstance(raw_calibration, dict):
+            unavailable = "invalid_calibration"
+        else:
+            try:
+                parsed_calibration = MeasurementCalibrationUpdate.model_validate(raw_calibration)
+            except SchemaError:
+                unavailable = "invalid_calibration"
+            else:
+                calibration = parsed_calibration.model_dump(mode="json")
+                if (
+                    parsed_calibration.unit not in UNITS
+                    or UNITS[parsed_calibration.unit][0] != "length"
+                ):
+                    unavailable = "unsupported_calibration_unit"
+                elif parsed_calibration.perspective_homography is not None:
+                    unavailable = "perspective_homography_requires_union_resampling"
+        expected = {
+            "image_id": image["id"],
+            "sha256": image["sha256"],
+            "width_px": image["width_px"],
+            "height_px": image["height_px"],
+            "annotation_revision": image["annotation_revision"],
+            "annotation_status": image["annotation_status"],
+            "group_key": image.get("group_key"),
+            "updated_at": _utc(image["updated_at"]).isoformat(),
+            "calibration": calibration,
+            "physical_unavailable_reason": unavailable,
+        }
+        if snapshot != expected or image.get("annotation_status") != "reviewed":
+            raise ValidationError("Mask coverage image snapshot mismatch")
+        if config["grouping_level"] == "image_group_key" and not image.get("group_key"):
+            raise ValidationError("Mask coverage group key is missing")
+
+    label_filter = set(config.get("label_class_ids", []))
+    roi_label = config.get("roi_label_class_id")
+    eligible_ids: set[str] = set()
+    for mask in masks.values():
+        is_eligible = (
+            mask.get("image_id") in image_ids
+            and mask.get("deleted_at") is None
+            and mask.get("status") == "verified"
+            and (
+                mask.get("label_class_id") == roi_label
+                or (
+                    mask.get("label_class_id") != roi_label
+                    and (not label_filter or mask.get("label_class_id") in label_filter)
+                )
+            )
+        )
+        if is_eligible:
+            eligible_ids.add(mask["id"])
+    if eligible_ids != set(mask_ids):
+        raise ValidationError("Mask coverage mask inventory mismatch")
+    for snapshot in mask_snapshot:
+        mask = masks[snapshot["id"]]
+        label_id = mask.get("label_class_id")
+        expected_label = labels.get(label_id, {}).get("name", "Unclassified")
+        if (
+            snapshot.get("image_id") != mask.get("image_id")
+            or snapshot.get("role") != ("roi" if label_id == roi_label else "target")
+            or snapshot.get("label_class_id") != label_id
+            or snapshot.get("label_name") != expected_label
+            or snapshot.get("geometry_kind") != mask.get("geometry_kind")
+            or snapshot.get("polygon") != mask.get("polygon_json")
+            or snapshot.get("mask_path") != mask.get("mask_path")
+            or snapshot.get("source_type") != mask.get("source_type")
+            or snapshot.get("status") != mask.get("status")
+            or snapshot.get("revision") != mask.get("revision")
+        ):
+            raise ValidationError("Mask coverage mask snapshot mismatch")
+    evidence_hash = content_hash(
+        {
+            "definition_sha256": definition["definition_sha256"],
+            "algorithm": MASK_COVERAGE_ALGORITHM,
+            "coordinate_frame": "source_image_pixels",
+            "images": image_snapshot,
+            "masks": mask_snapshot,
+        }
+    )
+    if payload.get("evidence_sha256") != evidence_hash:
+        raise ValidationError("Mask coverage evidence checksum mismatch")
+    provenance = payload.get("provenance")
+    expected_provenance = {
+        "definition_sha256": definition["definition_sha256"],
+        "evidence_sha256": evidence_hash,
+        "selection_is_explicit": True,
+        "verified_masks_only": True,
+        "predictions_counted": False,
+        "algorithm": MASK_COVERAGE_ALGORITHM,
+        "coordinate_frame": "source_image_pixels",
+        "density_numerator": "verified_target_masks_intersecting_sampling_region",
+        "density_denominator": "verified_roi_area_or_full_image_area",
+    }
+    if provenance != expected_provenance:
+        raise ValidationError("Mask coverage provenance mismatch")
+    observed_at = _utc(row["observed_at"])
+    expected_observed_at = max(_utc(images[image_id]["updated_at"]) for image_id in image_ids)
+    if _utc(payload["observed_at"]) != observed_at or observed_at != expected_observed_at:
+        raise ValidationError("Mask coverage observation timestamp mismatch")
 
 
 def _validate_aggregate_definition(
@@ -341,6 +594,10 @@ def validate_computed_exchange_records(
                 _validate_aggregate_definition(project_id, row, labels)
                 compiled_by_id[identifier] = None
                 continue
+            if row.get("definition_kind") == MASK_COVERAGE_KIND:
+                _validate_mask_coverage_definition(project_id, row, labels)
+                compiled_by_id[identifier] = None
+                continue
             if row.get("project_id") != project_id:
                 raise ValidationError("Foreign project reference in computed metric definitions")
             if row.get("formula_version") != FORMULA_ENGINE_VERSION:
@@ -368,6 +625,20 @@ def validate_computed_exchange_records(
                         "Computed aggregate result refers to a missing definition"
                     )
                 _validate_aggregate_result(
+                    project_id,
+                    row,
+                    definition,
+                    sections,
+                    workflow_runs,
+                    workflow_nodes,
+                )
+                continue
+            if row.get("result_kind") == MASK_COVERAGE_KIND:
+                definition_id = row.get("definition_id")
+                definition = definitions.get(definition_id)
+                if definition is None or definition.get("definition_kind") != MASK_COVERAGE_KIND:
+                    raise ValidationError("Mask coverage result refers to a missing definition")
+                _validate_mask_coverage_result(
                     project_id,
                     row,
                     definition,
@@ -545,6 +816,15 @@ def remap_computed_sections(
             ]
             row["configuration_json"] = config
             row["definition_sha256"] = content_hash(_aggregate_definition_payload(row))
+        elif row.get("definition_kind") == MASK_COVERAGE_KIND:
+            config = deepcopy(row["configuration_json"])
+            config["label_class_ids"] = [
+                id_map[label_id] for label_id in config.get("label_class_ids", [])
+            ]
+            if config.get("roi_label_class_id") is not None:
+                config["roi_label_class_id"] = id_map[config["roi_label_class_id"]]
+            row["configuration_json"] = config
+            row["definition_sha256"] = content_hash(_aggregate_definition_payload(row))
         remapped_definitions[old_id] = row
     for row in result["computed_metric_results"]:
         payload = row["payload_json"]
@@ -585,6 +865,56 @@ def remap_computed_sections(
                     "images": payload["image_snapshot"],
                     "observations": payload["observation_snapshot"],
                     "excluded_proposals_by_status": payload["excluded_proposals_by_status"],
+                }
+            )
+            payload["provenance"]["definition_sha256"] = mapped_definition["definition_sha256"]
+            payload["provenance"]["evidence_sha256"] = payload["evidence_sha256"]
+            row["project_id"] = id_map[row["project_id"]]
+            row["definition_id"] = mapped_definition["id"]
+            row["content_sha256"] = content_hash(payload)
+            continue
+        if row.get("result_kind") == MASK_COVERAGE_KIND:
+            mapped_definition = remapped_definitions[old_definition_id]
+            payload["definition_id"] = mapped_definition["id"]
+            payload["definition_sha256"] = mapped_definition["definition_sha256"]
+            for snapshot in payload["image_snapshot"]:
+                snapshot["image_id"] = id_map[snapshot["image_id"]]
+            payload["image_snapshot"].sort(key=lambda item: item["image_id"])
+            for snapshot in payload["mask_snapshot"]:
+                snapshot["id"] = id_map[snapshot["id"]]
+                snapshot["image_id"] = id_map[snapshot["image_id"]]
+                if snapshot.get("label_class_id") is not None:
+                    snapshot["label_class_id"] = id_map[snapshot["label_class_id"]]
+            payload["mask_snapshot"].sort(key=lambda item: item["id"])
+
+            def remap_class_areas(rows: list[dict[str, Any]]) -> None:
+                for item in rows:
+                    if item.get("label_class_id") is not None:
+                        item["label_class_id"] = id_map[item["label_class_id"]]
+                rows.sort(key=lambda item: str(item.get("label_class_id") or ""))
+
+            remap_class_areas(payload["area_by_class"])
+            for image in payload["images"]:
+                old_image_id = image["image_id"]
+                image["image_id"] = id_map[old_image_id]
+                if payload["grouping_level"] == "image":
+                    image["unit_key"] = id_map[old_image_id]
+                remap_class_areas(image["area_by_class"])
+            payload["images"].sort(key=lambda item: item["image_id"])
+            for group in payload["groups"]:
+                if payload["grouping_level"] == "image":
+                    group["unit_key"] = id_map[group["unit_key"]]
+                group["image_ids"] = [id_map[image_id] for image_id in group["image_ids"]]
+                group["image_ids"].sort()
+                remap_class_areas(group["area_by_class"])
+            payload["groups"].sort(key=lambda item: item["unit_key"])
+            payload["evidence_sha256"] = content_hash(
+                {
+                    "definition_sha256": mapped_definition["definition_sha256"],
+                    "algorithm": MASK_COVERAGE_ALGORITHM,
+                    "coordinate_frame": "source_image_pixels",
+                    "images": payload["image_snapshot"],
+                    "masks": payload["mask_snapshot"],
                 }
             )
             payload["provenance"]["definition_sha256"] = mapped_definition["definition_sha256"]

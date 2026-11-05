@@ -331,3 +331,187 @@ export function validateComputedAggregateResult(
 export function computedAggregateCsvUrl(projectId: string): string {
   return `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}/computed-aggregate-results.csv`;
 }
+
+export interface ComputedMaskCoverageDefinitionCreate {
+  name: string;
+  grouping_level: AggregateGroupingLevel;
+  label_class_ids: string[];
+  roi_label_class_id: string | null;
+}
+
+export interface ComputedMaskCoverageDefinition extends ComputedMaskCoverageDefinitionCreate {
+  id: string;
+  project_id: string;
+  definition_kind: "mask_coverage";
+  expression: string;
+  operation: "verified_mask_union_coverage";
+  output_unit: "percent";
+  formula_version: "reefvision.mask-coverage.v1";
+  schema_version: "1.1.0";
+  required_review_state: "reviewed";
+  independence_contract: "one_unit_per_image" | "one_unit_per_image_group_key";
+  roi_contract: "full_image" | "verified_mask_class_union";
+  definition_sha256: string;
+  created_at: string;
+}
+
+export interface MaskCoverageClassArea {
+  label_class_id: string | null;
+  label_name: string;
+  mask_count: number;
+  summed_mask_area_pixels: number;
+  union_area_pixels: number;
+  physical_unit: string | null;
+  union_area_physical: number | null;
+}
+
+export interface MaskCoverageSummary {
+  mask_count: number;
+  density_object_count: number;
+  summed_mask_area_pixels: number;
+  union_area_pixels: number;
+  overlap_area_pixels: number;
+  image_denominator_pixels: number;
+  image_coverage_percent: number;
+  roi_denominator_pixels: number | null;
+  target_union_in_roi_pixels: number | null;
+  roi_coverage_percent: number | null;
+  area_by_class: MaskCoverageClassArea[];
+  physical_unit: string | null;
+  union_area_physical: number | null;
+  sampling_area_physical: number | null;
+  object_density_per_square_unit: number | null;
+  calibration_method: "scalar_distance_per_pixel" | null;
+  physical_unavailable_reason: string | null;
+}
+
+export interface MaskCoverageImageSummary extends MaskCoverageSummary {
+  image_id: string;
+  unit_key: string;
+  width_px: number;
+  height_px: number;
+}
+
+export interface MaskCoverageGroupSummary extends MaskCoverageSummary {
+  unit_key: string;
+  image_ids: string[];
+}
+
+export interface ComputedMaskCoveragePreview extends MaskCoverageSummary {
+  schema_version: "1.1.0";
+  definition_id: string;
+  definition_sha256: string;
+  grouping_level: AggregateGroupingLevel;
+  required_review_state: "reviewed";
+  roi_contract: "full_image" | "verified_mask_class_union";
+  image_count: number;
+  independent_unit_count: number;
+  algorithm: "reefvision.source-pixel-mask-union.v1";
+  coordinate_frame: "source_image_pixels";
+  images: MaskCoverageImageSummary[];
+  groups: MaskCoverageGroupSummary[];
+  image_snapshot: Array<Record<string, unknown>>;
+  mask_snapshot: Array<Record<string, unknown>>;
+  evidence_sha256: string;
+}
+
+export interface ComputedMaskCoverageResult extends ComputedMaskCoveragePreview {
+  id: string;
+  project_id: string;
+  result_kind: "mask_coverage";
+  definition_name: string;
+  expression: string;
+  formula_version: "reefvision.mask-coverage.v1";
+  output_unit: "percent";
+  observed_at: string;
+  provenance: Record<string, unknown>;
+  content_sha256: string;
+  workflow_run_id: string | null;
+  workflow_node_run_id: string | null;
+  created_at: string;
+}
+
+export interface ComputedMaskCoverageValidation {
+  result_id: string;
+  current: boolean;
+  saved_evidence_sha256: string;
+  current_evidence_sha256: string;
+  reasons: string[];
+}
+
+export interface ComputedMaskCoverageDefinitionPage {
+  items: ComputedMaskCoverageDefinition[];
+  total: number;
+}
+
+export interface ComputedMaskCoverageResultPage {
+  items: ComputedMaskCoverageResult[];
+  total: number;
+}
+
+export function getComputedMaskCoverageDefinitions(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ComputedMaskCoverageDefinitionPage> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-mask-coverage-definitions?limit=500&offset=0`,
+    { signal },
+  );
+}
+
+export function createComputedMaskCoverageDefinition(
+  projectId: string,
+  payload: ComputedMaskCoverageDefinitionCreate,
+): Promise<ComputedMaskCoverageDefinition> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-mask-coverage-definitions`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function previewComputedMaskCoverage(
+  projectId: string,
+  definitionId: string,
+  imageIds: string[],
+): Promise<ComputedMaskCoveragePreview> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-mask-coverage-definitions/${encodeURIComponent(definitionId)}/preview`,
+    { method: "POST", body: JSON.stringify({ image_ids: imageIds }) },
+  );
+}
+
+export function calculateComputedMaskCoverage(
+  projectId: string,
+  definitionId: string,
+  imageIds: string[],
+): Promise<ComputedMaskCoverageResult> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-mask-coverage-definitions/${encodeURIComponent(definitionId)}/calculate`,
+    { method: "POST", body: JSON.stringify({ image_ids: imageIds }) },
+  );
+}
+
+export function getComputedMaskCoverageResults(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ComputedMaskCoverageResultPage> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-mask-coverage-results?limit=500&offset=0`,
+    { signal },
+  );
+}
+
+export function validateComputedMaskCoverageResult(
+  projectId: string,
+  resultId: string,
+  signal?: AbortSignal,
+): Promise<ComputedMaskCoverageValidation> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-mask-coverage-results/${encodeURIComponent(resultId)}/validation`,
+    { signal },
+  );
+}
+
+export function computedMaskCoverageCsvUrl(projectId: string): string {
+  return `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}/computed-mask-coverage-results.csv`;
+}

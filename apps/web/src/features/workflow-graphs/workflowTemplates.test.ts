@@ -31,6 +31,24 @@ describe("workflowTemplates", () => {
     );
   });
 
+  it("includes an executable verified mask coverage workflow", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "verified-mask-coverage",
+    );
+    expect(template).toBeDefined();
+    const graph = template?.graph as {
+      nodes: Array<{ node_type: string; parameters: Record<string, unknown> }>;
+    };
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "mask_coverage",
+    ]);
+    expect(graph.nodes[1].parameters).toEqual({
+      definition_id: "replace-with-mask-coverage-definition-id",
+      image_ids: ["replace-with-reviewed-image-id"],
+    });
+  });
+
   it("includes an explicit scientific-record metric workflow", () => {
     const template = workflowTemplates.find(
       (item) => item.id === "computed-scientific-metric",
