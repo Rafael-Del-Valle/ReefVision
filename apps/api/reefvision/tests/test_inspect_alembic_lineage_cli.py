@@ -47,3 +47,42 @@ def test_missing_database_is_not_created(tmp_path):
     with pytest.raises(ValueError, match="does not exist"):
         module.inspect(path)
     assert not path.exists()
+
+
+@pytest.mark.parametrize(
+    ("revision_rows", "tables", "expected_warning"),
+    [
+        ([], [], "invalid_revision_marker_count_or_value"),
+        (["0038", "0038"], [], "invalid_revision_marker_count_or_value"),
+        ([""], [], "invalid_revision_marker_count_or_value"),
+        (["0038"], ["scientific_records", "review_queue_item_events"], "mixed_scientific_and_qc_lineage"),
+        (["0038"], ["scientific_records"], "revision_0038_requires_schema_lineage_reconciliation"),
+        (["0037"], [], "unrecognized_schema_lineage"),
+    ],
+)
+def test_lineage_warnings_are_read_only(tmp_path, revision_rows, tables, expected_warning):
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.executemany("INSERT INTO alembic_version VALUES (?)", [(row,) for row in revision_rows])
+        for table in tables:
+            db.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY)')
+        db.commit()
+    before = path.read_bytes()
+    result = module.inspect(path)
+    assert expected_warning in result["warnings"]
+    assert result["upgrade_authorized"] is False
+    assert path.read_bytes() == before
+
+
+def test_missing_revision_table_is_explicitly_reported(tmp_path):
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY)")
+        db.commit()
+    before = path.read_bytes()
+    result = module.inspect(path)
+    assert "missing_alembic_version_table" in result["warnings"]
+    assert result["lineage_hint"] == "scientific"
+    assert result["upgrade_authorized"] is False
+    assert path.read_bytes() == before
