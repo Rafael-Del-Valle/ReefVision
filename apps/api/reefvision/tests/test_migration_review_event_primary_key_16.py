@@ -66,6 +66,23 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                     "'request-1', 'comment', 'researcher', '2026-11-05')"
                 )
             )
+            # A per-item request UNIQUE constraint does not protect global
+            # event identity: an event ID can be reused for another item when
+            # the global primary key is absent. Exercise that actual failure
+            # mode, not merely the inspector's reported schema metadata.
+            if primary_key == "missing":
+                connection.execute(
+                    text(
+                        "INSERT INTO review_queue_item_events "
+                        "(id, review_queue_id, review_queue_item_id, project_id, "
+                        "client_request_id, event_type, actor, created_at) "
+                        "VALUES ('event-1', 'queue-1', 'item-2', 'project-1', "
+                        "'request-2', 'comment', 'researcher', '2026-11-05')"
+                    )
+                )
+                assert connection.scalar(
+                    text("SELECT COUNT(*) FROM review_queue_item_events WHERE id = 'event-1'")
+                ) == 2
             schema_before = tuple(
                 connection.execute(
                     text("SELECT name, sql FROM sqlite_master ORDER BY name")
