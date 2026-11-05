@@ -7,13 +7,18 @@ from reefvision.db.migration_lineage_guard import assert_compatible_revision_003
 
 
 @pytest.mark.parametrize("revision", ["0038", "0039", "0040"])
-def test_earlier_review_revision_rejects_missing_event_request_uniqueness(revision: str) -> None:
+def test_earlier_review_revision_rejects_missing_event_request_uniqueness(
+    revision: str,
+) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
         with engine.begin() as connection:
-            connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
             connection.execute(
-                text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
+                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+            )
+            connection.execute(
+                text("INSERT INTO alembic_version VALUES (:revision)"),
+                {"revision": revision},
             )
             allowed = ["comment", "assign", "unassign"]
             if revision in {"0039", "0040"}:
@@ -50,6 +55,8 @@ def test_earlier_review_revision_rejects_missing_event_request_uniqueness(revisi
             assert connection.execute(
                 text("SELECT * FROM review_queue_item_events")
             ).all() == before
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+            assert (
+                connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+            )
     finally:
         engine.dispose()
