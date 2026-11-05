@@ -426,6 +426,9 @@ def import_project_exchange(
                         # Thumbnails are generated artifacts, not original media. Never
                         # leave an imported image pointing into the source project tree.
                         values["thumbnail_path"] = None
+                        # group_key is researcher-authored replicate metadata, not an ID link.
+                        # A UUID-looking group value must remain literal across exchange.
+                        values["group_key"] = row.get("group_key")
 
                     if section_name == "dataset_versions":
                         old_parent = row.get("parent_version_id")

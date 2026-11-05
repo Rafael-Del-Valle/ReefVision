@@ -60,6 +60,7 @@ from reefvision.db.models.pose_training_dataset import (
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.project_exchange import ProjectExchangeImportResponse
 from reefvision.services import project_exchange_import as base_import
 from reefvision.services.pose_active_learning import (
@@ -1062,20 +1063,36 @@ def import_project_exchange_v1(
             )
             science.validate_subject(project.id, item.subject, item.pixel)
             science.response(scientific_row)
+        from reefvision.services.computed_aggregate_metrics import (
+            ComputedAggregateMetricService,
+        )
         from reefvision.services.computed_metrics import ComputedMetricService
         from reefvision.services.environmental_context import EnvironmentalContextService
 
         computed = ComputedMetricService(session)
+        aggregates = ComputedAggregateMetricService(session)
         for definition_row in session.scalars(
             select(ComputedMetricDefinition).where(
                 ComputedMetricDefinition.project_id == project.id
             )
         ):
-            computed.definition_response(definition_row)
+            if definition_row.definition_kind == "annotation_aggregate":
+                aggregates.definition_response(definition_row)
+            else:
+                computed.definition_response(definition_row)
         for result_row in session.scalars(
             select(ComputedMetricResult).where(ComputedMetricResult.project_id == project.id)
         ):
-            computed.result_response(result_row)
+            if result_row.result_kind == "annotation_aggregate":
+                aggregates.result_response(result_row)
+                validation = aggregates.validate_result(project.id, result_row.id)
+                if not validation.current:
+                    raise ValidationError(
+                        "Imported computed aggregate evidence is stale after remapping: "
+                        + ", ".join(validation.reasons)
+                    )
+            else:
+                computed.result_response(result_row)
         environment = EnvironmentalContextService(session)
         for event_row in session.scalars(
             select(EnvironmentalEventDefinition).where(
