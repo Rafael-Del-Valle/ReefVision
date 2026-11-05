@@ -729,9 +729,7 @@ class PoseTrainingDatasetService:
         if source_model_ids is None:
             source_model_ids = []
         if not isinstance(source_model_ids, list) or any(
-            not isinstance(model_id, str)
-            or not model_id.strip()
-            or model_id != model_id.strip()
+            not isinstance(model_id, str) or not model_id.strip() or model_id != model_id.strip()
             for model_id in source_model_ids
         ):
             raise ConflictError("Verified pose source model IDs must be nonempty, trimmed strings")
