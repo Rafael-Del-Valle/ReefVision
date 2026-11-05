@@ -37,7 +37,7 @@ def _safe_original_filename(name: str | None) -> bool:
         and name not in {".", ".."}
         and Path(name).name == name
         and "\\" not in name
-        and "\x00" not in name
+        and not any(ord(character) < 32 or ord(character) == 127 for character in name)
     )
 
 
