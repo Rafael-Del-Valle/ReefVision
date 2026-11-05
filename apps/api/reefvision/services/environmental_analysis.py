@@ -330,8 +330,15 @@ class EnvironmentalAnalysisService:
         )
 
     def create_lunar_batch(
-        self, project_id: str, request: LunarAnalysisBatchRequest
+        self,
+        project_id: str,
+        request: LunarAnalysisBatchRequest,
+        *,
+        workflow_run_id: str | None = None,
+        workflow_node_run_id: str | None = None,
     ) -> LunarAnalysisBatchResponse:
+        if workflow_node_run_id is not None and len(request.observed_at) != 1:
+            raise ValidationError("Workflow lunar analysis requires exactly one timestamp")
         definition = self.create_definition(
             project_id,
             analysis_kind="lunar_context",
@@ -366,6 +373,8 @@ class EnvironmentalAnalysisService:
                             "Truncated geocentric longitude series; not a high-precision ephemeris"
                         ),
                     },
+                    workflow_run_id=workflow_run_id,
+                    workflow_node_run_id=workflow_node_run_id,
                 )
             )
         self.session.commit()
@@ -390,7 +399,12 @@ class EnvironmentalAnalysisService:
         }
 
     def create_tidal_context(
-        self, project_id: str, request: TidalContextAnalysisRequest
+        self,
+        project_id: str,
+        request: TidalContextAnalysisRequest,
+        *,
+        workflow_run_id: str | None = None,
+        workflow_node_run_id: str | None = None,
     ) -> EnvironmentalAnalysisSingleResponse:
         self.science.require_project(project_id)
         window = timedelta(seconds=request.max_time_delta_s)
@@ -529,6 +543,8 @@ class EnvironmentalAnalysisService:
                     "observed": nearest_observed[1] if nearest_observed else None,
                 },
             },
+            workflow_run_id=workflow_run_id,
+            workflow_node_run_id=workflow_node_run_id,
         )
         self.session.commit()
         return EnvironmentalAnalysisSingleResponse(
@@ -537,7 +553,12 @@ class EnvironmentalAnalysisService:
         )
 
     def create_event_window(
-        self, project_id: str, request: EventWindowAnalysisRequest
+        self,
+        project_id: str,
+        request: EventWindowAnalysisRequest,
+        *,
+        workflow_run_id: str | None = None,
+        workflow_node_run_id: str | None = None,
     ) -> EnvironmentalAnalysisSingleResponse:
         context = EnvironmentalContextService(self.session)
         legacy = context.get_event_definition(project_id, str(request.event_definition_id))
@@ -616,6 +637,8 @@ class EnvironmentalAnalysisService:
                 "type": "boundary_policy",
                 "statement": "Windows surround qualifying samples; duration is not interpolated",
             },
+            workflow_run_id=workflow_run_id,
+            workflow_node_run_id=workflow_node_run_id,
         )
         self.session.commit()
         return EnvironmentalAnalysisSingleResponse(
@@ -748,7 +771,12 @@ class EnvironmentalAnalysisService:
         )
 
     def create_observation_environment_join(
-        self, project_id: str, request: ObservationEnvironmentJoinRequest
+        self,
+        project_id: str,
+        request: ObservationEnvironmentJoinRequest,
+        *,
+        workflow_run_id: str | None = None,
+        workflow_node_run_id: str | None = None,
     ) -> EnvironmentalAnalysisSingleResponse:
         self.science.require_project(project_id)
         pairs, source_ids, observed_at = self._bounded_pairs(project_id, request)
@@ -789,6 +817,8 @@ class EnvironmentalAnalysisService:
                 "type": "matching_tolerance",
                 "statement": "Each pair reports its actual time, distance and depth offsets",
             },
+            workflow_run_id=workflow_run_id,
+            workflow_node_run_id=workflow_node_run_id,
         )
         self.session.commit()
         return EnvironmentalAnalysisSingleResponse(
@@ -797,7 +827,12 @@ class EnvironmentalAnalysisService:
         )
 
     def create_lagged_comparison(
-        self, project_id: str, request: LaggedComparisonAnalysisRequest
+        self,
+        project_id: str,
+        request: LaggedComparisonAnalysisRequest,
+        *,
+        workflow_run_id: str | None = None,
+        workflow_node_run_id: str | None = None,
     ) -> EnvironmentalAnalysisSingleResponse:
         source_result = self.get_result(project_id, str(request.join_result_id))
         if source_result.analysis_kind != "observation_environment_join":
@@ -860,6 +895,8 @@ class EnvironmentalAnalysisService:
                 "type": "matching_tolerance",
                 "statement": "Lagged pairs retain actual matching offsets and reuse counts",
             },
+            workflow_run_id=workflow_run_id,
+            workflow_node_run_id=workflow_node_run_id,
         )
         self.session.commit()
         return EnvironmentalAnalysisSingleResponse(

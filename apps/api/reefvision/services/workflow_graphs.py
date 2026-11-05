@@ -69,6 +69,13 @@ _ACTIONS: dict[str, str] = {
     "environmental_threshold": (
         "Find bounded QC-eligible threshold samples with provenance, without event inference."
     ),
+    "lunar_context_analysis": "Persist deterministic offline lunar context.",
+    "tidal_context_analysis": "Persist bounded observed and predicted NOAA tidal context.",
+    "event_window_analysis": "Create explicit windows around saved threshold samples.",
+    "observation_environment_join": (
+        "Join explicit biological records to bounded environmental records."
+    ),
+    "lagged_comparison": "Re-match a saved environmental join at explicit descriptive lags.",
     "project_images": "Resolve project images using the configured filters.",
     "dataset_version_source": "Load one immutable dataset version and its image membership.",
     "dataset_version_create": (

@@ -6,6 +6,36 @@ import {
 } from "./workflowTemplates";
 
 describe("workflowTemplates", () => {
+  it("includes executable templates for every environmental-analysis node", () => {
+    const expected = new Set([
+      "lunar_context_analysis",
+      "tidal_context_analysis",
+      "event_window_analysis",
+      "observation_environment_join",
+      "lagged_comparison",
+    ]);
+    const found = new Set<string>();
+
+    for (const template of workflowTemplates.filter((item) =>
+      item.id.startsWith("environmental-"),
+    )) {
+      const graph = template.graph as {
+        nodes: Array<{ node_type: string }>;
+        edges: Array<{ source_port_id: string; target_port_id: string }>;
+      };
+      expect(graph.nodes[0].node_type).toBe("project_source");
+      found.add(graph.nodes[1].node_type);
+      expect(graph.edges).toContainEqual(
+        expect.objectContaining({
+          source_port_id: "project",
+          target_port_id: "project",
+        }),
+      );
+    }
+
+    expect(found).toEqual(expected);
+  });
+
   it("includes an explicit reviewed annotation aggregate workflow", () => {
     const template = workflowTemplates.find(
       (item) => item.id === "reviewed-annotation-aggregate",

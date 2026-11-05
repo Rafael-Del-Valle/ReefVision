@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -30,6 +31,13 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
+from reefvision.schemas.environmental_analysis import (
+    EventWindowAnalysisRequest,
+    LaggedComparisonAnalysisRequest,
+    LunarAnalysisBatchRequest,
+    ObservationEnvironmentJoinRequest,
+    TidalContextAnalysisRequest,
+)
 from reefvision.schemas.environmental_context import EnvironmentalThresholdRequest
 from reefvision.schemas.workflow_execution import (
     WorkflowArtifactResponse,
@@ -44,6 +52,7 @@ from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPla
 from reefvision.services.computed_aggregate_metrics import ComputedAggregateMetricService
 from reefvision.services.computed_mask_coverage import ComputedMaskCoverageService
 from reefvision.services.computed_metrics import ComputedMetricService
+from reefvision.services.environmental_analysis import EnvironmentalAnalysisService
 from reefvision.services.environmental_context import EnvironmentalContextService
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
 from reefvision.services.scientific_data import ScientificDataService
@@ -71,6 +80,11 @@ EXECUTABLE_NODE_TYPES = {
     "annotation_aggregate",
     "mask_coverage",
     "environmental_threshold",
+    "lunar_context_analysis",
+    "tidal_context_analysis",
+    "event_window_analysis",
+    "observation_environment_join",
+    "lagged_comparison",
     "project_images",
     "dataset_version_source",
     "dataset_version_create",
@@ -651,6 +665,162 @@ class WorkflowExecutionService:
                 },
             )
         ]
+
+    def _environmental_analysis_project_input(
+        self, project_id: str, inputs: dict[str, list[WorkflowArtifact]]
+    ) -> None:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Environmental analysis project artifact is mismatched")
+
+    @staticmethod
+    def _environmental_analysis_artifact(response: Any) -> list[WorkflowArtifactSpec]:
+        definition = response.definition
+        result = response.result
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="environmental_analysis_result",
+                payload={
+                    "result_id": str(result.id),
+                    "definition_id": str(definition.id),
+                    "definition_sha256": definition.definition_sha256,
+                    "analysis_kind": result.analysis_kind,
+                    "observed_at": result.observed_at.isoformat(),
+                    "payload": result.payload,
+                    "input_snapshot": result.input_snapshot,
+                    "source_record_ids": [str(value) for value in result.source_record_ids],
+                    "source_analysis_result_ids": [
+                        str(value) for value in result.source_analysis_result_ids
+                    ],
+                    "quality_control": result.quality_control,
+                    "uncertainty": result.uncertainty,
+                    "workflow_run_id": str(result.workflow_run_id)
+                    if result.workflow_run_id
+                    else None,
+                    "workflow_node_run_id": str(result.workflow_node_run_id)
+                    if result.workflow_node_run_id
+                    else None,
+                    "content_sha256": result.content_sha256,
+                },
+            )
+        ]
+
+    def _execute_lunar_context_analysis(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = LunarAnalysisBatchRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid lunar-context analysis parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_lunar_batch(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        single = SimpleNamespace(definition=response.definition, result=response.results[0])
+        return self._environmental_analysis_artifact(single)
+
+    def _execute_tidal_context_analysis(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = TidalContextAnalysisRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid tidal-context analysis parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_tidal_context(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
+
+    def _execute_event_window_analysis(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = EventWindowAnalysisRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid event-window analysis parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_event_window(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
+
+    def _execute_observation_environment_join(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = ObservationEnvironmentJoinRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid observation-environment join parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_observation_environment_join(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
+
+    def _execute_lagged_comparison(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        self._environmental_analysis_project_input(project_id, inputs)
+        try:
+            request = LaggedComparisonAnalysisRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid lagged-comparison parameters") from exc
+        response = EnvironmentalAnalysisService(self.session).create_lagged_comparison(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return self._environmental_analysis_artifact(response)
 
     def _execute_project_images(
         self,

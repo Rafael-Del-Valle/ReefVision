@@ -25,6 +25,8 @@ from reefvision.db.models import (
     ComputedMetricDefinition,
     ComputedMetricResult,
     DatasetVersion,
+    EnvironmentalAnalysisDefinition,
+    EnvironmentalAnalysisResult,
     EnvironmentalEventDefinition,
     ExportRecord,
     GeoReferencedObservation,
@@ -1068,6 +1070,7 @@ def import_project_exchange_v1(
         )
         from reefvision.services.computed_mask_coverage import ComputedMaskCoverageService
         from reefvision.services.computed_metrics import ComputedMetricService
+        from reefvision.services.environmental_analysis import EnvironmentalAnalysisService
         from reefvision.services.environmental_context import EnvironmentalContextService
 
         computed = ComputedMetricService(session)
@@ -1112,6 +1115,19 @@ def import_project_exchange_v1(
             )
         ):
             environment.event_definition_response(event_row)
+        analyses = EnvironmentalAnalysisService(session)
+        for analysis_definition_row in session.scalars(
+            select(EnvironmentalAnalysisDefinition).where(
+                EnvironmentalAnalysisDefinition.project_id == project.id
+            )
+        ):
+            analyses.definition_response(analysis_definition_row)
+        for analysis_result_row in session.scalars(
+            select(EnvironmentalAnalysisResult).where(
+                EnvironmentalAnalysisResult.project_id == project.id
+            )
+        ):
+            analyses.result_response(analysis_result_row)
         copied_telemetry = _restore_telemetry_sidecars(
             source,
             project=project,

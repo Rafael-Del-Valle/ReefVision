@@ -26,6 +26,8 @@ from reefvision.db.models import (
     ComputedMetricResult,
     DatasetVersion,
     DatasetVersionItem,
+    EnvironmentalAnalysisDefinition,
+    EnvironmentalAnalysisResult,
     EnvironmentalCacheEntry,
     EnvironmentalEventDefinition,
     ExperimentRecord,
@@ -130,6 +132,8 @@ class ProjectExchangeService:
             ComputedMetricDefinition,
             ComputedMetricResult,
             EnvironmentalEventDefinition,
+            EnvironmentalAnalysisDefinition,
+            EnvironmentalAnalysisResult,
         )
         return (
             "1.1"
@@ -337,6 +341,20 @@ class ProjectExchangeService:
                     self.session.scalars(
                         select(EnvironmentalEventDefinition).where(
                             EnvironmentalEventDefinition.project_id == project.id
+                        )
+                    )
+                ),
+                "environmental_analysis_definitions": list(
+                    self.session.scalars(
+                        select(EnvironmentalAnalysisDefinition).where(
+                            EnvironmentalAnalysisDefinition.project_id == project.id
+                        )
+                    )
+                ),
+                "environmental_analysis_results": list(
+                    self.session.scalars(
+                        select(EnvironmentalAnalysisResult).where(
+                            EnvironmentalAnalysisResult.project_id == project.id
                         )
                     )
                 ),

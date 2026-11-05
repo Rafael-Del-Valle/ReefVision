@@ -24,6 +24,8 @@ from reefvision.db.models import (
     ComputedMetricResult,
     DatasetVersion,
     DatasetVersionItem,
+    EnvironmentalAnalysisDefinition,
+    EnvironmentalAnalysisResult,
     EnvironmentalCacheEntry,
     EnvironmentalEventDefinition,
     ExperimentRecord,
@@ -60,6 +62,11 @@ from reefvision.services.project_exchange_computed import (
     remap_computed_sections,
     validate_computed_exchange_records,
 )
+from reefvision.services.project_exchange_environmental_analysis import (
+    ANALYSIS_SECTIONS,
+    remap_environmental_analysis_sections,
+    validate_environmental_analysis_exchange,
+)
 from reefvision.services.project_exchange_inspection import (
     MANIFEST_NAME,
     inspect_project_exchange,
@@ -79,6 +86,8 @@ SECTION_MODELS: dict[str, type[Any]] = {
     "computed_metric_definitions": ComputedMetricDefinition,
     "computed_metric_results": ComputedMetricResult,
     "environmental_event_definitions": EnvironmentalEventDefinition,
+    "environmental_analysis_definitions": EnvironmentalAnalysisDefinition,
+    "environmental_analysis_results": EnvironmentalAnalysisResult,
     "label_classes": LabelClass,
     "images": ImageAsset,
     "videos": VideoAsset,
@@ -139,6 +148,8 @@ SECTION_ORDER = [
     "computed_metric_definitions",
     "computed_metric_results",
     "environmental_event_definitions",
+    "environmental_analysis_definitions",
+    "environmental_analysis_results",
 ]
 
 MEDIA_KIND_BY_SECTION = {
@@ -328,6 +339,7 @@ def import_project_exchange(
 
         validate_exchange_records(old_project_id, section_rows, SECTION_MODELS)
         validate_computed_exchange_records(old_project_id, section_rows)
+        validate_environmental_analysis_exchange(old_project_id, section_rows)
 
         project: Project | None = None
         try:
@@ -380,6 +392,9 @@ def import_project_exchange(
 
             scientific_rows = remap_scientific_sections(section_rows, id_map)
             computed_rows = remap_computed_sections(section_rows, id_map, scientific_rows)
+            environmental_analysis_rows = remap_environmental_analysis_sections(
+                section_rows, id_map
+            )
             media = _media_inventory(manifest)
             warnings = list(inspection.warnings)
             imported_counts: dict[str, int] = {}
@@ -409,6 +424,9 @@ def import_project_exchange(
                             values["payload_json"] = mapped["payload_json"]
                         else:
                             values = _coerce_row(model, mapped, id_map)
+                    elif section_name in ANALYSIS_SECTIONS:
+                        mapped = environmental_analysis_rows[section_name][row_index]
+                        values = _coerce_row(model, mapped, id_map)
                     else:
                         values = _coerce_row(model, row, id_map)
                     _rewrite_project_paths(

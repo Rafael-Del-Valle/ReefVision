@@ -34,6 +34,138 @@ const projectImages = {
   ],
 };
 
+function environmentalAnalysisGraph(
+  graphId: string,
+  name: string,
+  nodeType: string,
+  parameters: Record<string, unknown>,
+) {
+  return {
+    graph_id: graphId,
+    name,
+    schema_version: "workflow-graph-0001",
+    metadata: {
+      scientific_scope: "descriptive_environmental_context",
+      causal_claims_supported: false,
+    },
+    nodes: [
+      {
+        node_id: "project",
+        node_type: "project_source",
+        parameters: {},
+        position: { x: 40, y: 80 },
+      },
+      {
+        node_id: "analysis",
+        node_type: nodeType,
+        parameters,
+        position: { x: 380, y: 80 },
+      },
+    ],
+    edges: [
+      {
+        edge_id: "project-analysis",
+        source_node_id: "project",
+        source_port_id: "project",
+        target_node_id: "analysis",
+        target_port_id: "project",
+      },
+    ],
+  };
+}
+
+const environmentalAnalysisTemplates: WorkflowTemplate[] = [
+  {
+    id: "environmental-lunar-context",
+    name: "Persisted lunar context",
+    description:
+      "Explicit UTC timestamps → deterministic offline lunar calculation → immutable evidence.",
+    graph: environmentalAnalysisGraph(
+      "persisted-lunar-context",
+      "Persisted lunar context",
+      "lunar_context_analysis",
+      {
+        name: "Lunar context",
+        observed_at: ["2026-04-03T13:00:00Z"],
+      },
+    ),
+  },
+  {
+    id: "environmental-tidal-context",
+    name: "Bounded NOAA tidal context",
+    description:
+      "Explicit station, datum, UTC time, and distance bounds → separate observed and predicted tidal evidence.",
+    graph: environmentalAnalysisGraph(
+      "bounded-noaa-tidal-context",
+      "Bounded NOAA tidal context",
+      "tidal_context_analysis",
+      {
+        name: "Tidal context",
+        observed_at: "2026-04-03T13:00:00Z",
+        location: { latitude: 32.7808, longitude: -79.9236 },
+        station_id: "8665530",
+        datum: "MLLW",
+        max_time_delta_s: 900,
+        max_distance_m: 1000,
+      },
+    ),
+  },
+  {
+    id: "environmental-event-windows",
+    name: "Environmental event windows",
+    description:
+      "Saved threshold samples → explicit bounded windows with deterministic overlap merging.",
+    graph: environmentalAnalysisGraph(
+      "environmental-event-windows",
+      "Environmental event windows",
+      "event_window_analysis",
+      {
+        name: "Environmental event windows",
+        event_definition_id: "replace-with-threshold-definition-id",
+        before_s: 3600,
+        after_s: 3600,
+        boundary_policy: "inclusive",
+      },
+    ),
+  },
+  {
+    id: "environmental-observation-join",
+    name: "Observation–environment join",
+    description:
+      "Explicit biological records → bounded time, location, and optional depth matching.",
+    graph: environmentalAnalysisGraph(
+      "observation-environment-join",
+      "Observation–environment join",
+      "observation_environment_join",
+      {
+        name: "Observation–environment join",
+        observation_record_ids: ["replace-with-observation-record-id"],
+        environmental_variable: "water_temperature",
+        max_time_delta_s: 3600,
+        max_distance_m: 1000,
+        require_depth_match: false,
+        max_depth_delta_m: 0,
+      },
+    ),
+  },
+  {
+    id: "environmental-lagged-comparison",
+    name: "Descriptive lagged comparison",
+    description:
+      "Saved observation join → explicit lags with sample-reuse and pseudoreplication diagnostics.",
+    graph: environmentalAnalysisGraph(
+      "descriptive-lagged-comparison",
+      "Descriptive lagged comparison",
+      "lagged_comparison",
+      {
+        name: "Descriptive lagged comparison",
+        join_result_id: "replace-with-join-result-id",
+        lags_s: [-3600, 0, 3600],
+      },
+    ),
+  },
+];
+
 const computedScientificMetric = {
   graph_id: "computed-scientific-metric",
   name: "Computed scientific metric",
@@ -1076,6 +1208,7 @@ export function createPoseArchitectureWorkflow(
 }
 
 export const workflowTemplates: WorkflowTemplate[] = [
+  ...environmentalAnalysisTemplates,
   {
     id: "verified-mask-coverage",
     name: "Verified mask area and coverage",
