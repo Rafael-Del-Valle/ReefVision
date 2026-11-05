@@ -97,6 +97,12 @@ class SpatialSourceAssetService:
         )
         if existing is not None:
             self.read_verified(project_id, existing.id)
+            # Deduplication must not silently replace the caller-supplied
+            # original filename with a different prior import identity.
+            if existing.original_filename != name:
+                raise ValidationError(
+                    "Identical spatial bytes already exist under a different original filename"
+                )
             return existing
         asset_id = str(uuid4())
         relative = f"{project.storage_root}/spatial/originals/{asset_id}.{source_format}"
