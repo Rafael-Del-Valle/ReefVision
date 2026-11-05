@@ -85,6 +85,42 @@ def test_identical_source_bytes_cannot_silently_change_original_filename(
     assert repeated.json() == original
 
 
+
+@pytest.mark.parametrize(
+    "filename,payload",
+    [
+        ("colony.obj", OBJ),
+        ("survey.ply", CLOUD_PLY),
+        ("model.glb", base64.b64decode(make_glb())),
+    ],
+)
+def test_same_source_bytes_remain_independent_between_projects(
+    client: TestClient, filename: str, payload: bytes
+) -> None:
+    """Content hashes must never collapse provenance across project boundaries."""
+    first_id = str(create_project(client, "Independent source project A")["id"])
+    second_id = str(create_project(client, "Independent source project B")["id"])
+    first_url = f"/api/v1/projects/{first_id}/spatial/assets"
+    second_url = f"/api/v1/projects/{second_id}/spatial/assets"
+    first = client.post(first_url, files={"file": (filename, payload)})
+    second = client.post(
+        second_url, files={"file": (f"independent-{filename}", payload)}
+    )
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    first_asset, second_asset = first.json(), second.json()
+    assert first_asset["id"] != second_asset["id"]
+    assert first_asset["sha256"] == second_asset["sha256"] == sha256(payload).hexdigest()
+    assert first_asset["original_filename"] == filename
+    assert second_asset["original_filename"] == f"independent-{filename}"
+    assert client.get(f"{first_url}/{first_asset['id']}/content").content == payload
+    assert client.get(f"{second_url}/{second_asset['id']}/content").content == payload
+    assert client.get(f"{first_url}/{second_asset['id']}").status_code == 404
+    assert client.get(f"{second_url}/{first_asset['id']}").status_code == 404
+    assert client.get(first_url).json() == [first_asset]
+    assert client.get(second_url).json() == [second_asset]
+
+
 @pytest.mark.parametrize(
     "filename,payload",
     [
