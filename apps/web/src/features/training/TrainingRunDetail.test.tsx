@@ -195,9 +195,12 @@ describe("TrainingRunDetail", () => {
     const chart = screen.getByRole("img", {
       name: /train box loss across 150000 epochs/i,
     });
-    expect(chart.querySelector("polyline")?.getAttribute("points")).not.toMatch(
-      /NaN|Infinity/,
-    );
+    const points = chart.querySelector("polyline")?.getAttribute("points") ?? "";
+    expect(points).not.toMatch(/NaN|Infinity/);
+    // Long histories must not create 150,000 SVG vertices.
+    expect(points.split(" ").length).toBeLessThanOrEqual(1002);
+    expect(points.split(" ")[0]).toMatch(/^0,/);
+    expect(points.split(" ").at(-1)).toMatch(/^100,/);
   });
 
   it("shows every available detection, segmentation, and validation metric", () => {
