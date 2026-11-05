@@ -124,6 +124,25 @@ describe("TrainingRunDetail", () => {
     }
   });
 
+  it("keeps interrupted runs visible when no artifact manifest has been written", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          status: "training",
+          artifact_manifest: null as unknown as TrainingRun["artifact_manifest"],
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Dataset snapshot")).toBeInTheDocument();
+    expect(screen.getByText("Configuration and provenance")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /train box loss across 3 epochs/i })).toBeInTheDocument();
+    expect(screen.queryByText("Best checkpoint")).not.toBeInTheDocument();
+  });
+
   it("shows the actual best epoch, task metrics, checkpoints, artifacts, and provenance", () => {
     render(
       <TrainingRunDetail
