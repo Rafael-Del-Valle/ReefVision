@@ -83,7 +83,11 @@ function MetricChart({ label, values }: { label: string; values: number[] }) {
     if (value < minimum) minimum = value;
     if (value > maximum) maximum = value;
   }
-  const range = maximum - minimum || 1;
+  // Scale before subtraction: finite extremes can otherwise overflow the
+  // difference to Infinity and flatten the scientific loss trace.
+  const scale = Math.max(Math.abs(minimum), Math.abs(maximum), 1);
+  const scaledMinimum = minimum / scale;
+  const scaledRange = maximum / scale - scaledMinimum || 1;
   // Bound SVG complexity for long-running training jobs without changing the
   // underlying recorded history. Preserve the first/last samples and local
   // extrema so short loss spikes remain visible in the overview.
@@ -113,7 +117,7 @@ function MetricChart({ label, values }: { label: string; values: number[] }) {
   const points = samples
     .map(
       ([index, value]) =>
-        `${(index / (values.length - 1)) * 100},${40 - ((value - minimum) / range) * 36}`,
+        `${(index / (values.length - 1)) * 100},${40 - ((value / scale - scaledMinimum) / scaledRange) * 36}`,
     )
     .join(" ");
   return (
