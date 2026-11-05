@@ -2301,6 +2301,51 @@ describe("Gallery", () => {
     expect(filmstrip.scrollLeft).toBe(0);
   });
 
+  it("normalizes Windows line and page wheel units without moving the document", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    Object.defineProperty(filmstrip, "scrollWidth", {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(filmstrip, "clientWidth", {
+      configurable: true,
+      value: 200,
+    });
+
+    const lineWheel = new WheelEvent("wheel", {
+      deltaY: 3,
+      deltaMode: 1,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, lineWheel);
+    expect(lineWheel.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(48);
+
+    const pageWheel = new WheelEvent("wheel", {
+      deltaY: 1,
+      deltaMode: 2,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, pageWheel);
+    expect(pageWheel.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(248);
+  });
+
   it("keeps focus navigation inside the horizontal filmstrip", async () => {
     const secondImage: ProjectImage = {
       ...image,
