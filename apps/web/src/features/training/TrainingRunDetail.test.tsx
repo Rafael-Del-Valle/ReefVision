@@ -203,6 +203,30 @@ describe("TrainingRunDetail", () => {
     expect(points.split(" ").at(-1)).toMatch(/^100,/);
   });
 
+  it("keeps SVG coordinates finite for extreme but finite training losses", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          metrics_history: {
+            "train/box_loss": [-1e308, 0, 1e308],
+          },
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    const chart = screen.getByRole("img", {
+      name: /train box loss across 3 epochs/i,
+    });
+    const points = chart.querySelector("polyline")?.getAttribute("points") ?? "";
+    expect(points).not.toMatch(/NaN|Infinity/);
+    expect(points.split(" ").map((point) => Number(point.split(",")[1]))).toEqual([
+      40, 22, 4,
+    ]);
+  });
+
   it("shows every available detection, segmentation, and validation metric", () => {
     render(
       <TrainingRunDetail
