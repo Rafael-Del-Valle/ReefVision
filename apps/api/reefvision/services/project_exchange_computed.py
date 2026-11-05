@@ -143,9 +143,14 @@ def _validate_aggregate_result(
     observation_snapshot = payload.get("observation_snapshot")
     if not isinstance(image_snapshot, list) or not isinstance(observation_snapshot, list):
         raise ValidationError("Computed aggregate evidence inventory is invalid")
-    image_ids = [item.get("image_id") for item in image_snapshot if isinstance(item, dict)]
-    if len(image_ids) != len(image_snapshot) or len(image_ids) != len(set(image_ids)):
+    raw_image_ids = [item.get("image_id") for item in image_snapshot if isinstance(item, dict)]
+    if (
+        len(raw_image_ids) != len(image_snapshot)
+        or any(not isinstance(value, str) for value in raw_image_ids)
+        or len(raw_image_ids) != len(set(raw_image_ids))
+    ):
         raise ValidationError("Computed aggregate image inventory is duplicated or invalid")
+    image_ids = [value for value in raw_image_ids if isinstance(value, str)]
     if image_ids != sorted(image_ids):
         raise ValidationError("Computed aggregate image inventory is not deterministic")
     for snapshot in image_snapshot:

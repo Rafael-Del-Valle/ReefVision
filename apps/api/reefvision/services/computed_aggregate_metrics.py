@@ -184,22 +184,31 @@ class ComputedAggregateMetricService:
         label_filter = set(config.get("label_class_ids", []))
         selected_ids = [image.id for image in images]
         source_kind = str(config["source_kind"])
+        observations: list[Annotation | MaskAnnotation]
         if source_kind == "verified_annotations":
-            statement = select(Annotation).where(
+            annotation_statement = select(Annotation).where(
                 Annotation.image_id.in_(selected_ids), Annotation.deleted_at.is_(None)
             )
             if label_filter:
-                statement = statement.where(Annotation.label_class_id.in_(label_filter))
-            observations = list(self.session.scalars(statement.order_by(Annotation.id)).all())
+                annotation_statement = annotation_statement.where(
+                    Annotation.label_class_id.in_(label_filter)
+                )
+            observations = list(
+                self.session.scalars(annotation_statement.order_by(Annotation.id)).all()
+            )
         elif source_kind == "verified_masks":
-            statement = select(MaskAnnotation).where(
+            mask_statement = select(MaskAnnotation).where(
                 MaskAnnotation.image_id.in_(selected_ids),
                 MaskAnnotation.deleted_at.is_(None),
                 MaskAnnotation.status == "verified",
             )
             if label_filter:
-                statement = statement.where(MaskAnnotation.label_class_id.in_(label_filter))
-            observations = list(self.session.scalars(statement.order_by(MaskAnnotation.id)).all())
+                mask_statement = mask_statement.where(
+                    MaskAnnotation.label_class_id.in_(label_filter)
+                )
+            observations = list(
+                self.session.scalars(mask_statement.order_by(MaskAnnotation.id)).all()
+            )
         else:
             raise ValidationError(f"Unsupported aggregate source kind: {source_kind}")
 
@@ -443,11 +452,14 @@ class ComputedAggregateMetricService:
                 reasons.append(f"image_annotation_revision_changed:{image_id}")
 
         source_kind = str(config.get("source_kind"))
-        model = Annotation if source_kind == "verified_annotations" else MaskAnnotation
         current_observations: list[dict[str, Any]] = []
         for observation_id in sorted(saved_observations):
             previous = saved_observations[observation_id]
-            observation = self.session.get(model, observation_id)
+            observation: Annotation | MaskAnnotation | None
+            if source_kind == "verified_annotations":
+                observation = self.session.get(Annotation, observation_id)
+            else:
+                observation = self.session.get(MaskAnnotation, observation_id)
             if observation is None or observation.deleted_at is not None:
                 reasons.append(f"observation_missing:{observation_id}")
                 continue
@@ -471,22 +483,34 @@ class ComputedAggregateMetricService:
 
         image_ids = sorted(saved_images)
         label_filter = set(config.get("label_class_ids", []))
-        if model is Annotation:
-            statement = select(Annotation).where(
+        if source_kind == "verified_annotations":
+            annotation_statement = select(Annotation).where(
                 Annotation.image_id.in_(image_ids), Annotation.deleted_at.is_(None)
             )
             if label_filter:
-                statement = statement.where(Annotation.label_class_id.in_(label_filter))
+                annotation_statement = annotation_statement.where(
+                    Annotation.label_class_id.in_(label_filter)
+                )
+            eligible_ids = set(
+                self.session.scalars(
+                    annotation_statement.with_only_columns(Annotation.id).order_by(Annotation.id)
+                ).all()
+            )
         else:
-            statement = select(MaskAnnotation).where(
+            mask_statement = select(MaskAnnotation).where(
                 MaskAnnotation.image_id.in_(image_ids),
                 MaskAnnotation.deleted_at.is_(None),
                 MaskAnnotation.status == "verified",
             )
             if label_filter:
-                statement = statement.where(MaskAnnotation.label_class_id.in_(label_filter))
-        eligible = self.session.scalars(statement.order_by(model.id)).all()
-        eligible_ids = {item.id for item in eligible}
+                mask_statement = mask_statement.where(
+                    MaskAnnotation.label_class_id.in_(label_filter)
+                )
+            eligible_ids = set(
+                self.session.scalars(
+                    mask_statement.with_only_columns(MaskAnnotation.id).order_by(MaskAnnotation.id)
+                ).all()
+            )
         for observation_id in sorted(eligible_ids - set(saved_observations)):
             reasons.append(f"observation_added:{observation_id}")
 
