@@ -152,8 +152,7 @@ def test_camera_local_exposure_reports_uncertainty_without_discarding_exif(
 
     assert inspected.capture_timestamp is None
     assert inspected.metadata["capture_time_warning"] == (
-        "EXIF camera-local exposure time has no UTC offset; "
-        "UTC capture timestamp not inferred"
+        "EXIF camera-local exposure time has no UTC offset; UTC capture timestamp not inferred"
     )
     assert inspected.metadata["exif"]["DateTimeOriginal"] == "2026:04:03 14:25:30"
     assert path.read_bytes() == original
