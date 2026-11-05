@@ -452,6 +452,17 @@ class ComputedAggregateMetricService:
                 reasons.append(f"image_annotation_revision_changed:{image_id}")
 
         source_kind = str(config.get("source_kind"))
+        saved_label_names = {
+            str(item.label_class_id): item.label_name
+            for item in saved.counts_by_class
+            if item.label_class_id is not None
+        }
+        for label_id, saved_name in sorted(saved_label_names.items()):
+            label = self.session.get(LabelClass, label_id)
+            if label is None or label.project_id != project_id:
+                reasons.append(f"label_missing:{label_id}")
+            elif label.name != saved_name:
+                reasons.append(f"label_name_changed:{label_id}")
         current_observations: list[dict[str, Any]] = []
         for observation_id in sorted(saved_observations):
             previous = saved_observations[observation_id]

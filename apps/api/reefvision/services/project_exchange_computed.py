@@ -175,6 +175,10 @@ def _validate_aggregate_result(
             raise ValidationError("Computed aggregate image snapshot mismatch")
         if config["grouping_level"] == "image_group_key" and not image.get("group_key"):
             raise ValidationError("Computed aggregate group key is missing")
+    observed_at = _utc(row["observed_at"])
+    expected_observed_at = max(_utc(images[image_id]["updated_at"]) for image_id in image_ids)
+    if _utc(payload["observed_at"]) != observed_at or observed_at != expected_observed_at:
+        raise ValidationError("Computed aggregate observation timestamp mismatch")
 
     source_section = (
         "annotations" if config["source_kind"] == "verified_annotations" else "mask_annotations"

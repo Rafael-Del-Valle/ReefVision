@@ -11,6 +11,7 @@ from reefvision.db.models import (
     ComputedMetricResult,
     ImageAsset,
     Job,
+    LabelClass,
     MaskAnnotation,
     ModelRegistration,
     PredictionProposal,
@@ -378,6 +379,27 @@ def test_result_validation_detects_mask_and_image_contract_changes(client: TestC
     missing = client.get(url).json()
     assert missing["current"] is False
     assert f"image_missing:{image_id}" in missing["reasons"]
+
+
+def test_result_validation_detects_class_label_taxonomy_change(client: TestClient) -> None:
+    project = create_project(client, "Aggregate label currentness")
+    image_id = _import(client, project["id"], 16)
+    label_id = str(project["label_classes"][0]["id"])
+    _save(client, image_id, [label_id])
+    definition = _definition(client, project["id"])
+    result = _calculate(client, project["id"], definition["id"], [image_id]).json()
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        label = session.get(LabelClass, label_id)
+        label.name = "Renamed taxon"
+        session.commit()
+
+    response = client.get(
+        f"/api/v1/projects/{project['id']}/computed-aggregate-results/{result['id']}/validation"
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["current"] is False
+    assert response.json()["reasons"] == [f"label_name_changed:{label_id}"]
 
 
 def test_result_validation_rejects_tampered_result_checksum(client: TestClient) -> None:

@@ -105,6 +105,7 @@ def test_annotation_aggregate_round_trip_remaps_evidence_but_preserves_group_key
         "duplicate_observation",
         "wrong_class",
         "group_total",
+        "observed_at",
     ],
 )
 def test_annotation_aggregate_exchange_rejects_corruption_atomically(
@@ -137,6 +138,10 @@ def test_annotation_aggregate_exchange_rejects_corruption_atomically(
             result["content_sha256"] = content_hash(payload)
         elif corruption == "wrong_class":
             payload["observation_snapshot"][0]["label_class_id"] = "missing"
+            result["content_sha256"] = content_hash(payload)
+        elif corruption == "observed_at":
+            result["observed_at"] = "2030-01-01T00:00:00+00:00"
+            payload["observed_at"] = result["observed_at"]
             result["content_sha256"] = content_hash(payload)
         else:
             payload["groups"][0]["observation_count"] = 999
