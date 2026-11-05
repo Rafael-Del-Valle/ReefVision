@@ -139,9 +139,9 @@ def test_invalid_source_is_rejected(client: TestClient, filename: str, payload: 
 @pytest.mark.parametrize(
     "filename,payload",
     [
-        ("coral\\u202eobj.obj", OBJ),
-        ("survey\\u200b.ply", CLOUD_PLY),
-        ("model\\u2066.glb", base64.b64decode(make_glb())),
+        ("coral\u202eobj.obj", OBJ),
+        ("survey\u200b.ply", CLOUD_PLY),
+        ("model\u2066.glb", base64.b64decode(make_glb())),
     ],
 )
 def test_unicode_format_controls_cannot_disguise_original_source_filename(
@@ -153,7 +153,6 @@ def test_unicode_format_controls_cannot_disguise_original_source_filename(
     rejected = client.post(url, files={"file": (filename, payload)})
     assert rejected.status_code == 400, rejected.text
     assert client.get(url).json() == []
-
 
 
 @pytest.mark.parametrize(
