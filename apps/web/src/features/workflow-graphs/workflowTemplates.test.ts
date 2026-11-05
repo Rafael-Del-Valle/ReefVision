@@ -6,6 +6,31 @@ import {
 } from "./workflowTemplates";
 
 describe("workflowTemplates", () => {
+  it("includes an explicit reviewed annotation aggregate workflow", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "reviewed-annotation-aggregate",
+    );
+    expect(template).toBeDefined();
+    const graph = template?.graph as {
+      nodes: Array<{ node_type: string; parameters: Record<string, unknown> }>;
+      edges: Array<{ source_port_id: string; target_port_id: string }>;
+    };
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "annotation_aggregate",
+    ]);
+    expect(graph.nodes[1].parameters).toEqual({
+      definition_id: "replace-with-aggregate-definition-id",
+      image_ids: ["replace-with-reviewed-image-id"],
+    });
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({
+        source_port_id: "project",
+        target_port_id: "project",
+      }),
+    );
+  });
+
   it("includes an explicit scientific-record metric workflow", () => {
     const template = workflowTemplates.find(
       (item) => item.id === "computed-scientific-metric",

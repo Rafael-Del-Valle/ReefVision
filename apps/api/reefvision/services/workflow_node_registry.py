@@ -90,6 +90,25 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="annotation_aggregate",
+            display_name="Reviewed Annotation Aggregate",
+            category="analysis",
+            description=(
+                "Count reviewed canonical boxes or verified masks with an explicit image or "
+                "researcher-declared image-group independence contract."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Aggregate Result", "computed_metric_result")],
+            required_parameters=["definition_id", "image_ids"],
+            optional_parameters={},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Uses the standalone immutable annotation aggregate service.",
+                "Image IDs are explicit; only reviewed evidence is eligible.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="environmental_threshold",
             display_name="Environmental Threshold Samples",
             category="analysis",

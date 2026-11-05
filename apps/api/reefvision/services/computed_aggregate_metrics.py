@@ -311,6 +311,25 @@ class ComputedAggregateMetricService:
         workflow_node_run_id: str | None = None,
     ) -> ComputedMetricResult:
         definition = self.get_definition(project_id, definition_id)
+        if workflow_node_run_id is not None:
+            existing = self.session.scalar(
+                select(ComputedMetricResult).where(
+                    ComputedMetricResult.workflow_node_run_id == workflow_node_run_id
+                )
+            )
+            if existing is not None:
+                response = self.result_response(existing)
+                saved_image_ids = sorted(str(item["image_id"]) for item in response.image_snapshot)
+                if (
+                    existing.project_id != project_id
+                    or existing.definition_id != definition_id
+                    or saved_image_ids != sorted(image_ids)
+                    or existing.workflow_run_id != workflow_run_id
+                ):
+                    raise ConflictError(
+                        "Workflow aggregate replay conflicts with its persisted result"
+                    )
+                return existing
         preview = self._build_preview(definition, image_ids)
         if preview.observation_count == 0:
             raise ValidationError(

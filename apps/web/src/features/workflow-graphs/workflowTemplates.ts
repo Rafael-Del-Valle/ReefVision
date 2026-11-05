@@ -81,6 +81,38 @@ const computedScientificMetric = {
   ],
 };
 
+const reviewedAnnotationAggregate = {
+  graph_id: "reviewed-annotation-aggregate",
+  name: "Reviewed annotation aggregate",
+  schema_version: "workflow-graph-0001",
+  nodes: [
+    {
+      node_id: "project",
+      node_type: "project_source",
+      parameters: {},
+      position: { x: 40, y: 80 },
+    },
+    {
+      node_id: "aggregate",
+      node_type: "annotation_aggregate",
+      parameters: {
+        definition_id: "replace-with-aggregate-definition-id",
+        image_ids: ["replace-with-reviewed-image-id"],
+      },
+      position: { x: 380, y: 80 },
+    },
+  ],
+  edges: [
+    {
+      edge_id: "project-aggregate",
+      source_node_id: "project",
+      source_port_id: "project",
+      target_node_id: "aggregate",
+      target_port_id: "project",
+    },
+  ],
+};
+
 const localConsensus = {
   graph_id: "two-of-three-detection-consensus",
   name: "2-of-3 local detection consensus",
@@ -1012,6 +1044,13 @@ export function createPoseArchitectureWorkflow(
 }
 
 export const workflowTemplates: WorkflowTemplate[] = [
+  {
+    id: "reviewed-annotation-aggregate",
+    name: "Reviewed annotation aggregate",
+    description:
+      "Explicit reviewed images → replicate-aware verified annotation count → immutable result.",
+    graph: reviewedAnnotationAggregate,
+  },
   {
     id: "pose-architecture-training",
     name: "Pose architecture → train from scratch",

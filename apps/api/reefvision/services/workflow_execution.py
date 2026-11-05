@@ -41,6 +41,7 @@ from reefvision.schemas.workflow_execution import (
     WorkflowRunResponse,
 )
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
+from reefvision.services.computed_aggregate_metrics import ComputedAggregateMetricService
 from reefvision.services.computed_metrics import ComputedMetricService
 from reefvision.services.environmental_context import EnvironmentalContextService
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
@@ -66,6 +67,7 @@ EXECUTABLE_NODE_TYPES = {
     "project_source",
     "scientific_records_source",
     "computed_metric",
+    "annotation_aggregate",
     "environmental_threshold",
     "project_images",
     "dataset_version_source",
@@ -458,6 +460,63 @@ class WorkflowExecutionService:
                         symbol: str(record_id)
                         for symbol, record_id in response.input_record_ids.items()
                     },
+                    "content_sha256": response.content_sha256,
+                },
+            )
+        ]
+
+    def _execute_annotation_aggregate(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Annotation aggregate project artifact is mismatched")
+        definition_id = parameters.get("definition_id")
+        raw_image_ids = parameters.get("image_ids")
+        if not isinstance(definition_id, str) or not definition_id:
+            raise ValidationError("Annotation aggregate requires a definition_id")
+        if (
+            not isinstance(raw_image_ids, list)
+            or not raw_image_ids
+            or len(raw_image_ids) > 500
+            or any(not isinstance(value, str) or not value for value in raw_image_ids)
+        ):
+            raise ValidationError("Annotation aggregate requires 1 to 500 explicit image IDs")
+        image_ids = list(dict.fromkeys(raw_image_ids))
+        if len(image_ids) != len(raw_image_ids):
+            raise ValidationError("Annotation aggregate image IDs must be unique")
+        service = ComputedAggregateMetricService(self.session)
+        result = service.calculate(
+            project_id,
+            definition_id,
+            image_ids,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        response = service.result_response(result)
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="computed_metric_result",
+                payload={
+                    "result_id": str(response.id),
+                    "result_kind": response.result_kind,
+                    "definition_id": str(response.definition_id),
+                    "definition_sha256": response.definition_sha256,
+                    "formula_version": response.formula_version,
+                    "observation_count": response.observation_count,
+                    "image_count": response.image_count,
+                    "independent_unit_count": response.independent_unit_count,
+                    "mean_per_independent_unit": response.mean_per_independent_unit,
+                    "unit": response.output_unit,
+                    "evidence_sha256": response.evidence_sha256,
                     "content_sha256": response.content_sha256,
                 },
             )

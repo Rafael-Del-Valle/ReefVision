@@ -60,6 +60,9 @@ _ACTIONS: dict[str, str] = {
     "computed_metric": (
         "Evaluate a safe unit-aware metric definition and persist the provenance-complete result."
     ),
+    "annotation_aggregate": (
+        "Count reviewed annotation evidence using explicit images and an independence contract."
+    ),
     "environmental_threshold": (
         "Find bounded QC-eligible threshold samples with provenance, without event inference."
     ),
