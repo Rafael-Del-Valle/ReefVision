@@ -39,7 +39,7 @@ Reusable implementations inspected:
 | 3 Environmental context                 | 1                                       | Local JSON, NOAA station temperature and bounded Copernicus grid acquisition with persistent cache/offline and project workspace            | Provider/API/cache/live NOAA and Copernicus fixture tests pass; UI unit tests/build pass                         | No                | Production credential acceptance, unattended daily refresh, broader subject lookup controls and browser/desktop acceptance                      |
 | 4 Current visualizer                    | 2, 3                                    | Cached UTC/depth current slices, direction arrows, summaries, provenance/QC/uncertainty display and CSV; offline basemap optional           | Vector pairing, scientific filtering, summary/export and current-map UI regressions pass                         | No                | Streamlines, trajectory overlay and representative cached/live desktop acceptance                                                               |
 | 5 Scientific heatmaps                   | 1; existing pose/annotation records     | Source-pixel grid overlays for reviewed boxes, verified masks and opt-in pending predictions, with revision/hash provenance and JSON export | API/UI regressions and full frontend suite pass                                                                  | No                | Separate reviewer identity/comparison layers, disagreement analysis and representative project acceptance                                       |
-| 6 Computed metrics                      | 1; calibration and verified annotations | Safe unit-aware scalar definitions/results, API/CSV/UI, executable workflow nodes and project exchange                                      | Domain/API/migration/workflow/UI and reproducible exchange regressions pass                                      | No                | Aggregate annotation/mask counts and coverage, replicate/group contracts, broader formula functions and field-data acceptance                   |
+| 6 Computed metrics                      | 1; calibration and verified annotations | Safe scalar metrics plus reviewed annotation/verified-mask counts with explicit image or `group_key` independence; API/CSV/UI/workflows/exchange | Domain/API/migration/workflow/UI and reproducible exchange regressions pass                                      | No                | Mask union/coverage, calibrated area/density, subject hierarchy, inferential statistics, broader formula functions and field-data acceptance     |
 | 7 Event/environment analysis            | 2, 3, 6                                 | Bounded sample thresholds, immutable event definitions and executable saved workflow references; definitions are portable                   | Domain/API/workflow/project-isolation/tamper and exchange regressions pass                                       | No                | Event windows/aggregation; automated tidal/lunar context; lagged comparisons; reproducible tabular/geographic exports                           |
 
 Optional advection is deferred until core acceptance. Existing 1.0.x GUI,
@@ -326,16 +326,24 @@ consolidated fix. A scoped re-review verified every finding addressed with no
 new critical/important breakage or out-of-scope observation. Conservative
 unsupported cases now fail closed as documented above.
 
-This is intentionally a scalar, exact-observation slice. It does not yet infer
-counts or coverage directly from annotation/mask collections, combine subjects,
-define biological replicates, calculate bulk dataset summaries, or expose
-general functions/exponentiation. Those require explicit aggregation and
-evidence contracts; silently grouping frames, tracks or model predictions is
-not acceptable. Representative field data, Windows installed-app behavior and
+The next 1.1 slice adds immutable counts from explicitly selected reviewed images. Canonical
+boxes and verified masks remain separate sources; draft masks and model proposals are excluded.
+Definitions choose either one independent unit per image or one per researcher-declared,
+nonblank `group_key`. Results keep observation, image and independent-unit counts distinct and
+snapshot groups/classes/source IDs, proposal exclusions and hashes. Standalone preview/
+calculation, currentness validation, overall-plus-group CSV, Workflow Builder execution and
+project exchange all use the same evidence contract. Exchange explicitly remaps source IDs,
+preserves literal group keys and rejects non-reproducible totals atomically.
+
+This remains a descriptive count slice. It does not calculate mask union/coverage, calibrated
+physical area or density, infer subjects/colonies/treatments/time points, calculate ROI summaries
+or perform inferential statistics. Representative field data, Windows installed-app behavior and
 independent scientific acceptance also remain open.
 
-Migration `0039_computed_metrics.py` follows this branch's existing, untouched
-`0038_scientific_data.py`. Independent 1.6 work in PR #77 also uses a migration
+Migration `0041_computed_annotation_aggregates.py` additively follows the existing untouched
+`0038_scientific_data.py -> 0039_computed_metrics.py -> 0040_environmental_event_definitions.py`
+lineage. It discriminates scalar and aggregate rows without changing existing scalar payloads or
+hashes. Independent 1.6 work in PR #77 also uses a migration
 number `0038`; merge sequencing must preserve both histories and create a
 deliberate Alembic merge/renumber decision in the integrating branch. Neither
 already-shared migration is rewritten in this 1.1 work.
@@ -352,10 +360,10 @@ already-shared migration is rewritten in this 1.1 work.
    in the installed application, then add streamlines and trajectory overlays.
 5. Extend telemetry uncertainty and surveyed georeferencing acceptance, then
    GeoPackage and pairwise movement exports. Keep approximate positions marked.
-6. Extend computed metrics beyond the first exact-subject scalar slice with
-   aggregate verified-annotation/mask counts and coverage, explicit replicate
-   grouping, bulk calculation/export and additional reviewed formula functions;
-   keep the comprehensive visual node editor reserved for 2.0.
+6. Extend the verified count slice with exact mask union/coverage, calibrated physical area and
+   density only after overlap, ROI and calibration contracts are explicit; add richer subject/
+   treatment/timepoint models and reviewed formula functions without inferring replicates. Keep
+   the comprehensive visual node editor reserved for 2.0.
 
 Windows installed-app/WebView, NVIDIA hardware, real drone/GCP reference data,
 authenticated Copernicus and researcher sensor/reference acceptance are still

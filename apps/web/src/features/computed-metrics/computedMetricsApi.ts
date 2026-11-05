@@ -170,3 +170,164 @@ export function getComputedMetricResults(
 export function computedMetricCsvUrl(projectId: string): string {
   return `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}/computed-metric-results.csv`;
 }
+
+export type AggregateSourceKind = "verified_annotations" | "verified_masks";
+export type AggregateGroupingLevel = "image" | "image_group_key";
+
+export interface ComputedAggregateDefinitionCreate {
+  name: string;
+  source_kind: AggregateSourceKind;
+  grouping_level: AggregateGroupingLevel;
+  label_class_ids: string[];
+}
+
+export interface ComputedAggregateDefinition extends ComputedAggregateDefinitionCreate {
+  id: string;
+  project_id: string;
+  definition_kind: "annotation_aggregate";
+  expression: string;
+  operation: "count";
+  output_unit: "count";
+  formula_version: "reefvision.annotation-aggregate.v1";
+  schema_version: "1.1.0";
+  required_review_state: "reviewed";
+  independence_contract: "one_unit_per_image" | "one_unit_per_image_group_key";
+  definition_sha256: string;
+  created_at: string;
+}
+
+export interface AggregateClassCount {
+  label_class_id: string | null;
+  label_name: string;
+  count: number;
+}
+
+export interface AggregateGroup {
+  unit_key: string;
+  image_ids: string[];
+  observation_count: number;
+  counts_by_class: AggregateClassCount[];
+}
+
+export interface ComputedAggregatePreview {
+  schema_version: "1.1.0";
+  definition_id: string;
+  definition_sha256: string;
+  source_kind: AggregateSourceKind;
+  grouping_level: AggregateGroupingLevel;
+  operation: "count";
+  required_review_state: "reviewed";
+  image_count: number;
+  independent_unit_count: number;
+  observation_count: number;
+  mean_per_independent_unit: number;
+  counts_by_class: AggregateClassCount[];
+  groups: AggregateGroup[];
+  excluded_proposals_by_status: Record<string, number>;
+  image_snapshot: Array<Record<string, unknown>>;
+  observation_snapshot: Array<Record<string, unknown>>;
+  evidence_sha256: string;
+}
+
+export interface ComputedAggregateResult extends ComputedAggregatePreview {
+  id: string;
+  project_id: string;
+  result_kind: "annotation_aggregate";
+  definition_name: string;
+  expression: string;
+  formula_version: "reefvision.annotation-aggregate.v1";
+  output_unit: "count";
+  observed_at: string;
+  provenance: Record<string, unknown>;
+  content_sha256: string;
+  workflow_run_id: string | null;
+  workflow_node_run_id: string | null;
+  created_at: string;
+}
+
+export interface ComputedAggregateValidation {
+  result_id: string;
+  current: boolean;
+  saved_evidence_sha256: string;
+  current_evidence_sha256: string;
+  reasons: string[];
+}
+
+export interface ComputedAggregateDefinitionPage {
+  items: ComputedAggregateDefinition[];
+  total: number;
+}
+
+export interface ComputedAggregateResultPage {
+  items: ComputedAggregateResult[];
+  total: number;
+}
+
+export function getComputedAggregateDefinitions(
+  projectId: string,
+  signal?: AbortSignal,
+  offset = 0,
+): Promise<ComputedAggregateDefinitionPage> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-aggregate-definitions?limit=500&offset=${offset}`,
+    { signal },
+  );
+}
+
+export function createComputedAggregateDefinition(
+  projectId: string,
+  payload: ComputedAggregateDefinitionCreate,
+): Promise<ComputedAggregateDefinition> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-aggregate-definitions`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function previewComputedAggregate(
+  projectId: string,
+  definitionId: string,
+  imageIds: string[],
+): Promise<ComputedAggregatePreview> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-aggregate-definitions/${encodeURIComponent(definitionId)}/preview`,
+    { method: "POST", body: JSON.stringify({ image_ids: imageIds }) },
+  );
+}
+
+export function calculateComputedAggregate(
+  projectId: string,
+  definitionId: string,
+  imageIds: string[],
+): Promise<ComputedAggregateResult> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-aggregate-definitions/${encodeURIComponent(definitionId)}/calculate`,
+    { method: "POST", body: JSON.stringify({ image_ids: imageIds }) },
+  );
+}
+
+export function getComputedAggregateResults(
+  projectId: string,
+  signal?: AbortSignal,
+  offset = 0,
+): Promise<ComputedAggregateResultPage> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-aggregate-results?limit=500&offset=${offset}`,
+    { signal },
+  );
+}
+
+export function validateComputedAggregateResult(
+  projectId: string,
+  resultId: string,
+  signal?: AbortSignal,
+): Promise<ComputedAggregateValidation> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/computed-aggregate-results/${encodeURIComponent(resultId)}/validation`,
+    { signal },
+  );
+}
+
+export function computedAggregateCsvUrl(projectId: string): string {
+  return `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}/computed-aggregate-results.csv`;
+}

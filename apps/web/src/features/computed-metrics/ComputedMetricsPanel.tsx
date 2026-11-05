@@ -20,6 +20,7 @@ import {
   type ComputedMetricDefinitionCreate,
   type MetricDimension,
 } from "./computedMetricsApi";
+import { AnnotationAggregatePanel } from "./AnnotationAggregatePanel";
 
 const DIMENSIONS = new Set<MetricDimension>([
   "dimensionless",
@@ -75,6 +76,8 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
   const [outputUnit, setOutputUnit] = useState("1");
   const [selectedDefinitionId, setSelectedDefinitionId] = useState("");
   const [bindings, setBindings] = useState("");
+  const [showAnnotationAggregates, setShowAnnotationAggregates] =
+    useState(false);
 
   const definitionsQuery = useInfiniteQuery({
     queryKey: ["computed-metric-definitions", project.id],
@@ -419,6 +422,28 @@ export function ComputedMetricsPanel({ project }: { project: Project }) {
           >
             Load more results
           </button>
+        )}
+      </section>
+
+      <section
+        className="training-content"
+        aria-label="Image-derived aggregate metrics"
+      >
+        <h3>Image-derived aggregate metrics</h3>
+        <p>
+          Build replicate-aware counts from reviewed canonical annotations or
+          verified masks.
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowAnnotationAggregates((value) => !value)}
+        >
+          {showAnnotationAggregates
+            ? "Close reviewed annotation aggregates"
+            : "Open reviewed annotation aggregates"}
+        </button>
+        {showAnnotationAggregates && (
+          <AnnotationAggregatePanel project={project} />
         )}
       </section>
     </section>

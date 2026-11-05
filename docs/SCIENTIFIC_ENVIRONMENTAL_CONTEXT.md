@@ -169,6 +169,40 @@ saved workflow references are remapped through the existing workflow exchange in
 This portability slice does not add event aggregation, inferred onset/duration, tidal/lunar
 context or causal interpretation.
 
+## Reviewed annotation aggregate metrics
+
+ReefVision can persist count definitions over either canonical bounding-box annotations or
+verified masks. The sources remain separate. Only explicitly selected images whose annotation
+status is `reviewed` are eligible; draft masks and model proposals are excluded. Accepted model
+proposals count only after they have become canonical annotations or verified masks, with their
+source provenance retained. A preview may show zero observations, but ReefVision refuses to save
+that result because the current schema cannot distinguish a true observed zero from missing
+annotation work.
+
+Every definition declares one of two independence contracts. `image` treats each selected image
+as one independent unit. `image_group_key` combines images with the same nonblank, researcher-
+declared `group_key`; missing keys fail validation. ReefVision does not infer biological
+replicates, subjects, colonies, treatments or time points. Results report observation count,
+image count and independent-unit count separately, plus literal group totals, per-class totals
+and the mean count per independent unit. The UI deliberately does not relabel annotation count
+as a statistical sample size.
+
+Saved results contain deterministic image, annotation/mask, label, proposal-exclusion and group
+snapshots with definition, evidence and result SHA-256 values. The currentness endpoint rebuilds
+the source inventory and reports explicit changes such as deletion, reclassification, mask
+status/revision, image review status, group key or missing media. CSV emits an overall row and
+one row per independent unit while retaining source IDs, sample-size fields, class counts,
+workflow lineage and checksums. The executable `annotation_aggregate` Workflow Builder node uses
+the same calculation service. Project exchange validates the archived totals against canonical
+evidence, explicitly remaps project-owned IDs, preserves literal group keys, re-canonicalizes
+ordering after UUID replacement and requires the imported result to validate as current before
+commit.
+
+This slice does **not** calculate mask union area, fractional coverage, calibrated physical area,
+density, ROI summaries, generic subject hierarchies, treatment/timepoint models or inferential
+statistics. Summing mask areas would double-count overlaps and is therefore not presented as
+coverage. These remain follow-on scientific contracts rather than implicit behavior.
+
 **Full application backup** copies the database and managed files for exact
 restoration, preserving identifiers. **Project exchange** transfers a selected
 project into a new independent project. Optional media/artifact inclusion still
@@ -178,7 +212,9 @@ not as model weights. Neither workflow includes provider credentials.
 ### Migration-lineage coordination
 
 This 1.1 branch owns `0038_scientific_data.py`, followed by
-`0039_computed_metrics.py` and `0040_environmental_event_definitions.py`. Independent 1.6
+`0039_computed_metrics.py`, `0040_environmental_event_definitions.py` and the additive
+`0041_computed_annotation_aggregates.py`. The last migration adds metric-kind discriminators and
+aggregate configuration without rewriting scalar rows or hashes. Independent 1.6
 work also published a different migration identified as `0038`. Neither published
 migration may be renamed, combined or rewritten in its source branch. Eventual cross-version
 integration must first preserve both branch histories, then add an explicit reconciliation
