@@ -60,6 +60,34 @@ def test_import_deduplicates_and_isolates_original_bytes(
 @pytest.mark.parametrize(
     "filename,payload",
     [
+        ("colony.obj", OBJ),
+        ("survey.ply", CLOUD_PLY),
+        ("model.glb", base64.b64decode(make_glb())),
+    ],
+)
+def test_identical_source_bytes_cannot_silently_change_original_filename(
+    client: TestClient, filename: str, payload: bytes
+) -> None:
+    """Deduplication must retain original source attribution or reject the import."""
+    project_id = str(create_project(client, "Original filename attribution")["id"])
+    url = f"/api/v1/projects/{project_id}/spatial/assets"
+    first = client.post(url, files={"file": (filename, payload)})
+    assert first.status_code == 201, first.text
+    original = first.json()
+    renamed = f"alternate-{filename}"
+    conflict = client.post(url, files={"file": (renamed, payload)})
+    assert conflict.status_code == 400, conflict.text
+    assert "different original filename" in conflict.text
+    assert client.get(url).json() == [original]
+    assert client.get(f"{url}/{original['id']}/content").content == payload
+    repeated = client.post(url, files={"file": (filename, payload)})
+    assert repeated.status_code == 201, repeated.text
+    assert repeated.json() == original
+
+
+@pytest.mark.parametrize(
+    "filename,payload",
+    [
         ("../escape.obj", OBJ),
         ("folder\\escape.ply", OBJ),
         ("coral.exe", OBJ),
