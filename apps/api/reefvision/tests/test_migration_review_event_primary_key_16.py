@@ -33,9 +33,7 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                 allowed.append("triage_complete")
             check_values = ", ".join(f"'{event_type}'" for event_type in allowed)
             id_column = (
-                "id TEXT NOT NULL PRIMARY KEY"
-                if primary_key == "correct"
-                else "id TEXT NOT NULL"
+                "id TEXT NOT NULL PRIMARY KEY" if primary_key == "correct" else "id TEXT NOT NULL"
             )
             composite = (
                 ", PRIMARY KEY (id, review_queue_id)" if primary_key == "composite" else ""
@@ -129,14 +127,18 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                 else:
                     with pytest.raises(RuntimeError, match="primary key must be exactly id"):
                         assert_compatible_revision_0038(connection)
-                assert tuple(
-                    connection.execute(
-                        text("SELECT name, sql FROM sqlite_master ORDER BY name")
-                    ).all()
-                ) == schema_before
-                assert tuple(
-                    connection.execute(text("SELECT * FROM review_queue_item_events")).all()
-                ) == events_before
+                assert (
+                    tuple(
+                        connection.execute(
+                            text("SELECT name, sql FROM sqlite_master ORDER BY name")
+                        ).all()
+                    )
+                    == schema_before
+                )
+                assert (
+                    tuple(connection.execute(text("SELECT * FROM review_queue_item_events")).all())
+                    == events_before
+                )
                 assert connection.scalar(text("SELECT value FROM observations")) == (
                     "coral observation"
                 )
