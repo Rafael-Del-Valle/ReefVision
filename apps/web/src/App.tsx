@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { version as applicationVersion } from "../package.json";
+import { developmentLine, displayVersion } from "./buildIdentity";
 
 import {
   archiveProject,
@@ -688,6 +689,11 @@ function ReefVisionMainApp() {
           >
             System status
           </button>
+          {developmentLine && (
+            <span className="status-chip" aria-label="Development release line">
+              ReefVision {developmentLine}
+            </span>
+          )}
           <div className="api-status" aria-live="polite">
             <StatusBadge
               status={
@@ -717,7 +723,7 @@ function ReefVisionMainApp() {
         {!selectedProjectId && activeView !== "system" && (
           <ProjectLauncher
             projects={projectSummaries.data ?? []}
-            version={health.data?.version ?? applicationVersion}
+            version={displayVersion(health.data?.version ?? applicationVersion)}
             serviceState={
               health.isPending
                 ? "pending"
@@ -1120,7 +1126,7 @@ function ReefVisionMainApp() {
       )}
       {showOnboarding && (
         <OnboardingModal
-          version={health.data?.version ?? applicationVersion}
+          version={displayVersion(health.data?.version ?? applicationVersion)}
           onClose={() => setShowOnboarding(false)}
           onDismissPermanently={dismissOnboardingPermanently}
         />
