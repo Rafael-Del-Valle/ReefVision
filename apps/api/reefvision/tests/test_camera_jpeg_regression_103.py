@@ -824,9 +824,7 @@ def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
     source = tmp_path / "CAMERA_BROKEN_EXIF.JPG"
     exif = Image.Exif()
     exif[306] = "2026:10:01 12:30:00"
-    Image.new("RGB", (64, 48), (20, 90, 120)).save(
-        source, format="JPEG", exif=exif
-    )
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(source, format="JPEG", exif=exif)
     original = source.read_bytes()
 
     if parser_stage == "top_level":
@@ -855,9 +853,7 @@ def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
 
         monkeypatch.setattr(Image.Exif, "get_ifd", broken_get_ifd)
 
-    inspected = image_storage.inspect_staged_image(
-        source, "0" * 64, len(original)
-    )
+    inspected = image_storage.inspect_staged_image(source, "0" * 64, len(original))
     assert (inspected.width_px, inspected.height_px) == (64, 48)
     assert inspected.media_type == "image/jpeg"
     assert inspected.capture_timestamp is None
@@ -891,14 +887,10 @@ def test_noncanonical_nested_camera_exif_keeps_original_and_uncertainty(
     exif = Image.Exif()
     exif[34665] = {36867: malformed_timestamp, 36881: "-04:00"}
     stream = BytesIO()
-    Image.new("RGB", (64, 48), (20, 90, 120)).save(
-        stream, format="JPEG", exif=exif
-    )
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
     original = stream.getvalue()
 
-    report = import_one(
-        client, project["id"], filename="DSC_NONCANONICAL.JPEG", content=original
-    )
+    report = import_one(client, project["id"], filename="DSC_NONCANONICAL.JPEG", content=original)
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
     response = client.get(f"/api/v1/images/{image_id}")
@@ -916,9 +908,7 @@ def test_noncanonical_nested_camera_exif_keeps_original_and_uncertainty(
         ("9999:12:31 23:59:59", "-14:00"),
     ],
 )
-def test_exif_utc_rollover_beyond_datetime_bounds_is_uncertain(
-    exposure: str, offset: str
-) -> None:
+def test_exif_utc_rollover_beyond_datetime_bounds_is_uncertain(exposure: str, offset: str) -> None:
     """A valid camera-local time must not crash import when UTC is unrepresentable."""
     exif = {36867: exposure, 36881: offset, 36868: "2026:10:01 12:30:00"}
     assert _capture_timestamp(exif) is None
@@ -939,23 +929,17 @@ def test_camera_jpeg_utc_rollover_preserves_original_and_uncertainty(
     exif = Image.Exif()
     exif[34665] = {36867: exposure, 36881: offset}
     stream = BytesIO()
-    Image.new("RGB", (64, 48), (20, 90, 120)).save(
-        stream, format="JPEG", exif=exif
-    )
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=exif)
     payload = stream.getvalue()
 
-    report = import_one(
-        client, project["id"], filename="DSC_BOUNDARY.JPEG", content=payload
-    )
+    report = import_one(client, project["id"], filename="DSC_BOUNDARY.JPEG", content=payload)
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
     record = client.get(f"/api/v1/images/{image_id}").json()
     assert record["capture_timestamp"] is None
     assert record["metadata_json"]["exif"]["DateTimeOriginal"] == exposure
     assert record["metadata_json"]["exif"]["OffsetTimeOriginal"] == offset
-    assert "UTC capture timestamp not inferred" in record["metadata_json"][
-        "capture_time_warning"
-    ]
+    assert "UTC capture timestamp not inferred" in record["metadata_json"]["capture_time_warning"]
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
 
 
@@ -984,9 +968,7 @@ def test_nonfinite_camera_metadata_remains_json_safe_and_original_immutable(
         return image
 
     monkeypatch.setattr(Image, "open", open_with_nonfinite_metadata)
-    report = import_one(
-        client, project["id"], filename="DSC_NONFINITE.JPEG", content=original
-    )
+    report = import_one(client, project["id"], filename="DSC_NONFINITE.JPEG", content=original)
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
     response = client.get(f"/api/v1/images/{image_id}")
