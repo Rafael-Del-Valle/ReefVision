@@ -337,12 +337,10 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "reconcile through a reviewed data-preserving migration."
             )
 
-    # A valid 0041 stamp must also preserve the original NOT NULL contract
-    # for reviewer attribution. A forged table can otherwise accept events
-    # with NULL actor, queue/project scope, timestamp or primary identity;
-    # these events cannot serve as trustworthy human-review provenance.
-    # Older 0038-0040 schemas are not changed by this 0041 preflight.
-    if revision == "0041":
+    # The NOT NULL attribution contract originates in 0038, not 0041.
+    # Every stamped review lineage must reject NULL reviewer, queue/project,
+    # timestamp or event identity before any migration or QC replay.
+    if revision in {"0038", "0039", "0040", "0041"}:
         nullable_event_attribution = sorted(
             name
             for name in ("id", "review_queue_id", "project_id", "actor", "created_at")
@@ -350,7 +348,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         )
         if nullable_event_attribution:
             raise RuntimeError(
-                "Unsafe ReefVision Alembic revision 0041 collision: "
+                f"Unsafe ReefVision Alembic revision {revision} collision: "
                 "nullable review-event attribution fields="
                 f"{nullable_event_attribution}. Preserve the database and "
                 "reviewer history; reconcile through a reviewed data-preserving "
