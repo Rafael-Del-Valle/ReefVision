@@ -157,3 +157,34 @@ def test_camera_local_exposure_reports_uncertainty_without_discarding_exif(
     )
     assert inspected.metadata["exif"]["DateTimeOriginal"] == "2026:04:03 14:25:30"
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("suffix", "offset", "expected_utc"),
+    [
+        (".JPG", "+02:30", "2026-04-03T11:55:30+00:00"),
+        (".jpeg", "-04:00", "2026-04-03T18:25:30+00:00"),
+        (".JFIF", "+00:00", "2026-04-03T14:25:30+00:00"),
+    ],
+)
+def test_camera_exif_explicit_offset_converts_to_utc_without_rewriting_capture(
+    tmp_path, suffix: str, offset: str, expected_utc: str
+) -> None:
+    """Only explicit exposure offsets justify a UTC acquisition timestamp."""
+    path = tmp_path / ("offset_exposure" + suffix)
+    exif = Image.Exif()
+    exif[36867] = "2026:04:03 14:25:30"
+    exif[36881] = offset
+    Image.new("RGB", (37, 21), (12, 34, 56)).save(path, format="JPEG", exif=exif)
+    original = path.read_bytes()
+    digest = hashlib.sha256(original).hexdigest()
+
+    inspected = inspect_staged_image(path, digest, len(original))
+
+    assert inspected.capture_timestamp is not None
+    assert inspected.capture_timestamp.isoformat() == expected_utc
+    assert inspected.sha256 == digest
+    assert inspected.media_type == "image/jpeg"
+    assert inspected.extension == ".jpg"
+    assert inspected.metadata["exif"]["DateTimeOriginal"] == "2026:04:03 14:25:30"
+    assert path.read_bytes() == original
