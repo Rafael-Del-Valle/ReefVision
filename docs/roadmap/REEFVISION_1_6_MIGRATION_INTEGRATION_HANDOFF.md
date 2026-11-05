@@ -256,3 +256,68 @@ MSI/CAB upgrade/rollback and installed GUI acceptance remain mandatory.
 ### Preserved SQLite views without Alembic provenance (2026-11-02)
 
 A SQLite backup can retain a view referring to a missing biological table while the `alembic_version` table is absent or empty. Table-only inspection incorrectly classifies this schema as a fresh database. The 1.6 desktop preflight now inspects views as well as tables and refuses migrations without revision provenance. Two parameterized read-only regressions check both absent and empty version tables, repeated desktop startup rejection, and byte-for-byte SQL schema snapshots. This is a safety hold, **not** a migration reconciliation or permission to stamp damaged databases. Existing saved Workflow Builder graphs and reviewer records must remain untouched. Full CI and native Windows validation are still required.
+
+
+## 2026-11-05 — reproducible read-only lineage inventory (Track D)
+
+The actual isolated migration sources were re-read at their branch refs:
+1.1 `0038_scientific_data.py` creates `scientific_records` and
+`environmental_cache_entries`; 1.6 `0038_review_queue_item_events.py`
+creates `review_queue_item_events`. Both declare `revision = "0038"` and
+`down_revision = "0037"`. Therefore the Alembic marker alone is
+**insufficient evidence** of which schema was applied. This is a confirmed
+identifier collision, not a failed or pending automated merge.
+
+Before proposing any reconciliation, make a **separate, immutable copy** of
+an installed database and inspect that copy in read-only mode. The following
+Python standard-library diagnostic does not import application models, run
+Alembic, execute migrations, or write a database. Pass the copy's path as its
+single argument; do not run it against a live database being written by the
+application:
+
+```python
+import sqlite3
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1]).resolve()
+if not path.is_file():
+    raise SystemExit(f"Not a database file: {path}")
+with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as db:
+    db.execute("PRAGMA query_only=ON")
+    tables = {
+        row[0] for row in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }
+    revisions = (
+        [row[0] for row in db.execute("SELECT version_num FROM alembic_version")]
+        if "alembic_version" in tables else []
+    )
+    names = (
+        "scientific_records", "environmental_cache_entries",
+        "computed_metric_definitions", "computed_metric_results",
+        "review_queue_item_events", "review_queue_bulk_requests",
+    )
+    print("Alembic revision rows (including duplicates):", revisions)
+    for name in names:
+        if name in tables:
+            columns = [row[1] for row in db.execute(f"PRAGMA table_info({name})")]
+            count = db.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
+            print(name, "rows=", count, "columns=", columns)
+        else:
+            print(name, "ABSENT")
+```
+
+Treat a revision 0038/0039 with only scientific tables as the 1.1 lineage,
+with only review-event tables as the 1.6 lineage, and with both families or
+partial tables as **ambiguous** until a full constraint/index/foreign-key
+inventory and migration history are reviewed. Never infer safe upgrade solely
+from table names or row counts. Preserve identifiers and data; no stamping,
+downgrades, renumbering of previously applied revisions, or destructive DDL
+are authorized by this diagnostic. The next implementation step remains a
+reviewed, tested unified migration graph covering all installed lineages.
+
+**Evidence scope:** migration source inspection and read-only diagnostic
+specification only. No installed database, Windows MSI, or executable test
+was run as part of this documentation update. Release HOLD remains in force.
