@@ -728,6 +728,20 @@ def test_saved_obj_workflow_calibration_scaling_reference(client: TestClient, sc
         assert measured["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(3 / 13)
         assert measured["provenance"]["calibration_verified"] is False
         assert measured["measurement_status"] == "caller_supplied_unverified"
+        # Bounds must enclose the measured values without claiming verified calibration.
+        for dimension, uncertainty in zip(
+            measured["axis_aligned_dimensions_m"],
+            measured["axis_aligned_dimension_scale_uncertainty_m"],
+            strict=True,
+        ):
+            assert uncertainty >= 0
+            assert dimension - uncertainty <= dimension <= dimension + uncertainty
+        area_low, area_high = measured["surface_area_scale_interval_m2"]
+        assert area_low <= measured["surface_area_m2"] <= area_high
+        perimeter_low, perimeter_high = measured[
+            "boundary_loop_perimeter_scale_intervals_m"
+        ][0]
+        assert perimeter_low <= measured["boundary_edge_length_m"] <= perimeter_high
     assert (
         artifact["provenance"]["geometry_sha256"]
         == standalone.json()["provenance"]["geometry_sha256"]
