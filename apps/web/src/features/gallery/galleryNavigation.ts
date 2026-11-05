@@ -58,7 +58,8 @@ export function readGalleryPreference(
     // A saved page without a selected image is not a meaningful restore target.
     // Start from the first page so the initial camera image remains visible.
     return {
-      imageId: typeof candidate.imageId === "string" ? candidate.imageId.trim() : null,
+      imageId:
+        typeof candidate.imageId === "string" ? candidate.imageId.trim() : null,
       page: candidate.imageId === null ? 1 : candidate.page,
       wrap: candidate.wrap === true,
     };
@@ -69,7 +70,9 @@ export function readGalleryPreference(
 
 // WebView2 may deny access to the localStorage property itself (SecurityError),
 // before getItem/setItem can be called. Keep image browsing usable even then.
-export function readBrowserGalleryPreference(projectId: string): GalleryPreference {
+export function readBrowserGalleryPreference(
+  projectId: string,
+): GalleryPreference {
   try {
     return readGalleryPreference(window.localStorage, projectId);
   } catch {
@@ -110,7 +113,8 @@ export function writeGalleryPreference(
       preferenceKey(projectId),
       JSON.stringify({
         ...preference,
-        imageId: typeof preference.imageId === "string" ? preference.imageId.trim() : null,
+        imageId:
+          typeof preference.imageId === "string" ? preference.imageId.trim() : null,
         page: preference.imageId === null ? 1 : preference.page,
       }),
     );
@@ -120,7 +124,10 @@ export function writeGalleryPreference(
 }
 
 /** Parse an explicit gallery page without accepting exponent or partial-number input. */
-export function parseGalleryPageDraft(draft: string, totalPages: number): number | null {
+export function parseGalleryPageDraft(
+  draft: string,
+  totalPages: number,
+): number | null {
   if (!Number.isSafeInteger(totalPages) || totalPages < 1) return null;
   const value = draft.trim();
   if (!/^\d+$/.test(value)) return null;
