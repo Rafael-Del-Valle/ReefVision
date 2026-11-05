@@ -81,7 +81,9 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                     with pytest.raises(RuntimeError, match="primary key must be exactly id"):
                         assert_compatible_revision_0038(connection)
                 assert tuple(
-                    connection.execute(text("SELECT name, sql FROM sqlite_master ORDER BY name")).all()
+                    connection.execute(
+                        text("SELECT name, sql FROM sqlite_master ORDER BY name")
+                    ).all()
                 ) == schema_before
                 assert tuple(
                     connection.execute(text("SELECT * FROM review_queue_item_events")).all()
