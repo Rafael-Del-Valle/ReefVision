@@ -247,6 +247,20 @@ describe("TrainingRunDetail", () => {
     ]);
   });
 
+  it("labels invalid training progress as unavailable instead of showing NaN or Infinity", () => {
+    render(
+      <TrainingRunDetail
+        run={{ ...run, progress_epoch: Number.NaN, progress_total_epochs: Number.POSITIVE_INFINITY }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    const progress = screen.getByRole("progressbar", { name: /Coral detector training progress/i });
+    expect(progress).toHaveAttribute("value", "0");
+    expect(screen.getByText(/— of —/)).toBeInTheDocument();
+  });
+
   it("shows every available detection, segmentation, and validation metric", () => {
     render(
       <TrainingRunDetail
