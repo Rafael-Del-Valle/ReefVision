@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from hashlib import sha256
 from pathlib import Path
+from unicodedata import category
 from typing import Any, BinaryIO
 from uuid import uuid4
 
@@ -37,7 +38,7 @@ def _safe_original_filename(name: str | None) -> bool:
         and name not in {".", ".."}
         and Path(name).name == name
         and "\\" not in name
-        and not any(ord(character) < 32 or ord(character) == 127 for character in name)
+        and not any(\n            ord(character) < 32\n            or ord(character) == 127\n            or category(character) == "Cf"\n            for character in name\n        )
     )
 
 
