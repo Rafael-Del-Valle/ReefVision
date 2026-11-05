@@ -444,7 +444,8 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             allowed.extend(["triage_start", "triage_skip", "triage_return"])
         if revision in {"0040", "0041"}:
             allowed.append("triage_complete")
-        # SQL keywords are case-insensitive; event-type string literals are not.\n        expected_check = (
+        # SQL keywords are case-insensitive; event-type string literals are not.
+        expected_check = (
             r"\s*(?i:event_type)\s+(?i:IN)\s*\(\s*"
             + r"\s*,\s*".join(f"'{event_type}'" for event_type in allowed)
             + r"\s*\)\s*"
