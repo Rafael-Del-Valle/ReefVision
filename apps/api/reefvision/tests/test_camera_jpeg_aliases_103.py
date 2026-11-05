@@ -112,3 +112,26 @@ def test_exif_oriented_jpeg_inspection_retains_raw_pixel_dimensions(
     with Image.open(path) as reopened:
         assert reopened.getexif().get(274) == orientation
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("suffix", [".JPG", ".jpeg", ".JFIF"])
+def test_camera_jpeg_without_timezone_does_not_invent_utc_capture_time(
+    tmp_path, suffix: str
+) -> None:
+    """A camera-local EXIF exposure time is not a verified UTC instant."""
+    path = tmp_path / ("untimed_camera_capture" + suffix)
+    exif = Image.Exif()
+    exif[36867] = "2026:04:03 14:25:30"
+    Image.new("RGB", (37, 21), (12, 34, 56)).save(path, format="JPEG", exif=exif)
+    original = path.read_bytes()
+    digest = hashlib.sha256(original).hexdigest()
+
+    ensure_supported_extension(path.name)
+    inspected = inspect_staged_image(path, digest, len(original))
+
+    assert inspected.capture_timestamp is None
+    assert inspected.media_type == "image/jpeg"
+    assert inspected.extension == ".jpg"
+    assert (inspected.width_px, inspected.height_px) == (37, 21)
+    assert inspected.sha256 == digest
+    assert path.read_bytes() == original
