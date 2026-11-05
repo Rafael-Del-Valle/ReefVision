@@ -76,6 +76,19 @@ function bestEpoch(
 }
 
 function MetricChart({ label, values }: { label: string; values: number[] }) {
+  // A live training job has only one loss observation after its first epoch.
+  // Render that sample rather than hiding the chart until epoch two.
+  if (values.length === 1) {
+    return (
+      <figure className="training-metric-chart">
+        <figcaption>{metricLabel(label)}</figcaption>
+        <svg viewBox="0 0 100 44" role="img" aria-label={`${metricLabel(label)} across 1 epoch`}>
+          <circle cx="50" cy="22" r="2" />
+        </svg>
+        <small>Latest {values[0].toFixed(4)} · 1 epoch</small>
+      </figure>
+    );
+  }
   if (values.length < 2) return null;
   // Avoid spreading a long training history into function arguments: large
   // runs can exceed the JavaScript engine's argument limit and crash the view.
