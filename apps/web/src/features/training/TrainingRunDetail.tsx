@@ -12,8 +12,12 @@ import { useState } from "react";
 import { getRuntimeContext, openDesktopTrainingConsole } from "../../runtime";
 
 function history(run: TrainingRun): Record<string, number[]> {
+  // Older or interrupted training providers may omit the history payload.
+  // Keep the run detail and its immutable provenance accessible regardless.
+  const rawHistory = run.metrics_history;
+  if (!rawHistory || typeof rawHistory !== "object" || Array.isArray(rawHistory)) return {};
   return Object.fromEntries(
-    Object.entries(run.metrics_history).filter(
+    Object.entries(rawHistory).filter(
       (entry): entry is [string, number[]] =>
         Array.isArray(entry[1]) &&
         entry[1].every((value) => typeof value === "number" && Number.isFinite(value)),
