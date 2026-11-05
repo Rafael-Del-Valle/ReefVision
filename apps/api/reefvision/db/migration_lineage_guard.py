@@ -444,13 +444,13 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             allowed.extend(["triage_start", "triage_skip", "triage_return"])
         if revision in {"0040", "0041"}:
             allowed.append("triage_complete")
-        expected_check = (
-            r"\s*event_type\s+IN\s*\(\s*"
+        # SQL keywords are case-insensitive; event-type string literals are not.\n        expected_check = (
+            r"\s*(?i:event_type)\s+(?i:IN)\s*\(\s*"
             + r"\s*,\s*".join(f"'{event_type}'" for event_type in allowed)
             + r"\s*\)\s*"
         )
         expression = str(named_check.get("sqltext") or "")
-        if re.fullmatch(expected_check, expression, flags=re.IGNORECASE) is None:
+        if re.fullmatch(expected_check, expression) is None:
             raise RuntimeError(
                 f"Unsafe ReefVision Alembic revision {revision} collision: the "
                 "review-event CHECK constraint still excludes required event "
