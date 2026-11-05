@@ -156,9 +156,15 @@ export function TrainingRunDetail({
     "running",
     "cancel_requested",
   ].includes(run.status);
+  // Malformed or stale provider progress must not render an invalid bar.
   const progress =
+    Number.isFinite(run.progress_epoch) &&
+    Number.isFinite(run.progress_total_epochs) &&
     run.progress_total_epochs > 0
-      ? Math.min(100, (run.progress_epoch / run.progress_total_epochs) * 100)
+      ? Math.max(
+          0,
+          Math.min(100, (run.progress_epoch / run.progress_total_epochs) * 100),
+        )
       : 0;
 
   return (
