@@ -354,8 +354,8 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 if converted is not None:
                     named_exif[name] = converted
             safe_info: dict[str, object] = {}
-            for key, value in image.info.items():
-                name = _safe_metadata_key(key)
+            for info_key, value in image.info.items():
+                name = _safe_metadata_key(info_key)
                 if name is None:
                     continue
                 converted = _json_safe(value)
