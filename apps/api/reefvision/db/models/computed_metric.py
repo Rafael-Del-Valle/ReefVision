@@ -17,10 +17,14 @@ class ComputedMetricDefinition(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    definition_kind: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="scalar", server_default="scalar"
+    )
     name: Mapped[str] = mapped_column(String(200))
     expression: Mapped[str] = mapped_column(String(1000))
     formula_version: Mapped[str] = mapped_column(String(100))
     input_spec_json: Mapped[list[dict[str, str]]] = mapped_column(JSON)
+    configuration_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     output_unit: Mapped[str] = mapped_column(String(50))
     definition_sha256: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -37,6 +41,9 @@ class ComputedMetricResult(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    result_kind: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="scalar", server_default="scalar"
+    )
     definition_id: Mapped[str] = mapped_column(
         ForeignKey("computed_metric_definitions.id", ondelete="RESTRICT")
     )

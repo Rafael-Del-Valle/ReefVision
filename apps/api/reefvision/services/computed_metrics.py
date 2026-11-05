@@ -125,6 +125,7 @@ class ComputedMetricService:
         row = ComputedMetricDefinition(
             id=str(uuid4()),
             project_id=project_id,
+            definition_kind="scalar",
             name=payload.name,
             expression=payload.expression,
             formula_version=FORMULA_ENGINE_VERSION,
@@ -139,6 +140,8 @@ class ComputedMetricService:
     def definition_response(
         self, row: ComputedMetricDefinition
     ) -> ComputedMetricDefinitionResponse:
+        if row.definition_kind != "scalar":
+            raise ValidationError("Metric definition is not a scalar formula")
         expected = content_hash(
             _definition_payload(
                 name=row.name,
@@ -166,7 +169,7 @@ class ComputedMetricService:
 
     def get_definition(self, project_id: str, definition_id: str) -> ComputedMetricDefinition:
         row = self.session.get(ComputedMetricDefinition, definition_id)
-        if row is None or row.project_id != project_id:
+        if row is None or row.project_id != project_id or row.definition_kind != "scalar":
             raise NotFoundError("Computed metric definition not found")
         self.definition_response(row)
         return row
@@ -176,7 +179,8 @@ class ComputedMetricService:
     ) -> ComputedMetricDefinitionPage:
         self.require_project(project_id)
         query = select(ComputedMetricDefinition).where(
-            ComputedMetricDefinition.project_id == project_id
+            ComputedMetricDefinition.project_id == project_id,
+            ComputedMetricDefinition.definition_kind == "scalar",
         )
         total = self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
         rows = self.session.scalars(
@@ -377,6 +381,7 @@ class ComputedMetricService:
         result_row = ComputedMetricResult(
             id=str(uuid4()),
             project_id=project_id,
+            result_kind="scalar",
             definition_id=definition.id,
             observed_at=observed_times[0],
             payload_json=result_payload,
@@ -389,6 +394,8 @@ class ComputedMetricService:
         return result_row
 
     def result_response(self, row: ComputedMetricResult) -> ComputedMetricResultResponse:
+        if row.result_kind != "scalar":
+            raise ValidationError("Computed result is not a scalar metric")
         if content_hash(row.payload_json) != row.content_sha256:
             raise ConflictError("Computed metric result checksum mismatch")
         return ComputedMetricResultResponse.model_validate(
@@ -405,7 +412,10 @@ class ComputedMetricService:
 
     def list_results(self, project_id: str, *, limit: int, offset: int) -> ComputedMetricResultPage:
         self.require_project(project_id)
-        query = select(ComputedMetricResult).where(ComputedMetricResult.project_id == project_id)
+        query = select(ComputedMetricResult).where(
+            ComputedMetricResult.project_id == project_id,
+            ComputedMetricResult.result_kind == "scalar",
+        )
         total = self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
         rows = self.session.scalars(
             query.order_by(ComputedMetricResult.created_at, ComputedMetricResult.id)
@@ -420,7 +430,10 @@ class ComputedMetricService:
         self.require_project(project_id)
         rows = self.session.scalars(
             select(ComputedMetricResult)
-            .where(ComputedMetricResult.project_id == project_id)
+            .where(
+                ComputedMetricResult.project_id == project_id,
+                ComputedMetricResult.result_kind == "scalar",
+            )
             .order_by(ComputedMetricResult.created_at, ComputedMetricResult.id)
             .execution_options(yield_per=500)
         )
