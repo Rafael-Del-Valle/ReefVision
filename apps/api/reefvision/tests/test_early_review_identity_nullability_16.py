@@ -50,8 +50,10 @@ def test_early_review_revision_rejects_nullable_request_key_without_writes(
             connection.execute(
                 text(
                     "INSERT INTO review_queue_item_events "
-                    "(id, review_queue_id, project_id, event_type, actor, created_at) "
-                    "VALUES ('existing-event', 'queue-1', 'project-1', 'comment', "
+                    "(id, review_queue_id, review_queue_item_id, client_request_id, "
+                    "project_id, event_type, actor, created_at) "
+                    "VALUES ('existing-event', 'queue-1', 'item-1', 'request-1', "
+                    "'project-1', 'comment', "
                     "'researcher-1', '2026-04-03T12:00:00')"
                 )
             )
