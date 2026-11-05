@@ -659,7 +659,7 @@ def test_saved_obj_workflow_calibration_scaling_reference(client: TestClient, sc
     base = f"/api/v1/projects/{project['id']}"
     params = {
         **MESH,
-        "obj_text": "v 0 0 0\\nv 2 0 0\\nv 0 3 0\\nf 1 2 3\\n",
+        "obj_text": "v 0 0 0\nv 2 0 0\nv 0 3 0\nf 1 2 3\n",
         "meters_per_unit": scale,
     }
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
