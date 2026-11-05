@@ -120,11 +120,14 @@ def frozen_pose_item_fingerprints_match(
                 not isinstance(model, dict)
                 or not isinstance(model.get("model_id"), str)
                 or not model["model_id"].strip()
+                or model["model_id"] != model["model_id"].strip()
                 for model in row.source_models_json
             )
             or not isinstance(row.source_job_ids_json, list)
             or any(
-                not isinstance(job_id, str) or not job_id.strip()
+                not isinstance(job_id, str)
+                or not job_id.strip()
+                or job_id != job_id.strip()
                 for job_id in row.source_job_ids_json
             )
         ):
