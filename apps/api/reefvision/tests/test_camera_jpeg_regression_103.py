@@ -643,9 +643,9 @@ def test_padded_camera_exif_fields_preserve_verified_utc(
     capture: str | bytes, offset: str | bytes, subseconds: str | bytes
 ) -> None:
     """EXIF ASCII padding must not invalidate an otherwise verified exposure."""
-    assert _capture_timestamp(
-        {36867: capture, 36881: offset, 37521: subseconds}
-    ) == datetime(2026, 10, 1, 16, 30, 0, 123000, tzinfo=UTC)
+    assert _capture_timestamp({36867: capture, 36881: offset, 37521: subseconds}) == datetime(
+        2026, 10, 1, 16, 30, 0, 123000, tzinfo=UTC
+    )
 
 
 def test_padded_nested_camera_exif_survives_jpeg_import_without_reencoding(
