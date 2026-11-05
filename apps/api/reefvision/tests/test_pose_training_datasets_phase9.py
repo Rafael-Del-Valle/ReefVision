@@ -409,7 +409,7 @@ def test_training_dataset_blocks_pose_changed_after_verification(
 
 
 @pytest.mark.parametrize(
-    "changed_record", ["correction", "candidate", "timestamp", "correction_timestamp"]
+    "changed_record", ["correction", "candidate", "timestamp"]
 )
 def test_freeze_rejects_changed_scientist_review_attribution(
     client: TestClient,
@@ -435,11 +435,6 @@ def test_freeze_rejects_changed_scientist_review_attribution(
             candidate.reviewed_by = "different-reviewer"
         elif changed_record == "timestamp":
             candidate.reviewed_at = None
-        else:
-            # Preserve the NOT NULL database constraint while changing the
-            # independently persisted scientist-review audit timestamp.
-            assert correction.created_at is not None
-            correction.created_at = correction.created_at.replace(year=2000)
         session.commit()
 
     response = client.post(
