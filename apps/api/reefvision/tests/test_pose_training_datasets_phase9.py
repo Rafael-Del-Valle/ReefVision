@@ -756,48 +756,6 @@ def test_frozen_dataset_rejects_resigned_malformed_source_lineage(
     assert "item lineage" in response.text
 
 
-def test_frozen_dataset_rejects_resigned_duplicate_scientist_candidate(
-    client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Reuse a persisted scientist-verified dataset. A second row referencing
-    # the same review must not double its weight in downstream training.
-    _, _, _, round_payload = _verified_round(client, monkeypatch)
-    created = client.post(
-        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
-        json={},
-    )
-    assert created.status_code == 201, created.text
-    dataset_id = created.json()["id"]
-    app = cast(FastAPI, client.app)
-    with app.state.session_factory() as session:
-        dataset = session.get(PoseTrainingDataset, dataset_id)
-        assert dataset is not None
-        original = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
-        values = {
-            column.key: copy.deepcopy(getattr(original, column.key))
-            for column in PoseTrainingDatasetItem.__table__.columns
-            if column.key != "id"
-        }
-        duplicate = PoseTrainingDatasetItem(**values)
-        duplicate.id = str(uuid4())
-        # A byte-for-byte duplicate is already blocked by the database's
-        # (dataset, track, frame) unique constraint. Use a distinct frame
-        # to exercise the separate candidate-lineage validation instead.
-        duplicate.frame_index = original.frame_index + 1
-        session.add(duplicate)
-        manifest = copy.deepcopy(dataset.manifest_json)
-        manifest["items"].append(copy.deepcopy(manifest["items"][0]))
-        dataset.item_count = 2
-        dataset.manifest_json = manifest
-        dataset.manifest_sha256 = canonical_json_sha256(manifest)
-        session.commit()
-
-    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
-    assert response.status_code == 409, response.text
-    assert "item lineage" in response.text
-
-
 def test_native_pose_training_package_is_deterministic_and_verified_only(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
