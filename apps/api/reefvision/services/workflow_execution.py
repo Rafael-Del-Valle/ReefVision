@@ -31,6 +31,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
+from reefvision.schemas.annotation_comparison import AnnotationComparisonCalculateRequest
 from reefvision.schemas.environmental_analysis import (
     EventWindowAnalysisRequest,
     LaggedComparisonAnalysisRequest,
@@ -49,6 +50,11 @@ from reefvision.schemas.workflow_execution import (
     WorkflowRunResponse,
 )
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
+from reefvision.services.annotation_comparison import (
+    BOX_FORMULA_VERSION,
+    MASK_FORMULA_VERSION,
+    AnnotationComparisonService,
+)
 from reefvision.services.computed_aggregate_metrics import ComputedAggregateMetricService
 from reefvision.services.computed_mask_coverage import ComputedMaskCoverageService
 from reefvision.services.computed_metrics import ComputedMetricService
@@ -79,6 +85,7 @@ EXECUTABLE_NODE_TYPES = {
     "computed_metric",
     "annotation_aggregate",
     "mask_coverage",
+    "annotation_comparison",
     "environmental_threshold",
     "lunar_context_analysis",
     "tidal_context_analysis",
@@ -595,6 +602,53 @@ class WorkflowExecutionService:
                     "object_density_per_square_unit": response.object_density_per_square_unit,
                     "evidence_sha256": response.evidence_sha256,
                     "content_sha256": response.content_sha256,
+                },
+            )
+        ]
+
+    def _execute_annotation_comparison(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Annotation comparison project artifact is mismatched")
+        try:
+            request = AnnotationComparisonCalculateRequest.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid annotation-comparison parameters") from exc
+        response = AnnotationComparisonService(
+            self.session, self._required_settings()
+        ).calculate(
+            project_id,
+            request,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
+        )
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="computed_metric_result",
+                payload={
+                    "result_id": str(response.result_id),
+                    "result_kind": "annotation_comparison",
+                    "definition_id": str(response.definition_id),
+                    "definition_sha256": response.definition_sha256,
+                    "formula_version": (
+                        MASK_FORMULA_VERSION
+                        if response.comparison.geometry_kind == "masks"
+                        else BOX_FORMULA_VERSION
+                    ),
+                    "geometry_kind": response.comparison.geometry_kind,
+                    "image_id": str(response.comparison.image_id),
+                    "comparison_sha256": response.comparison.content_sha256,
+                    "content_sha256": response.result_sha256,
                 },
             )
         ]

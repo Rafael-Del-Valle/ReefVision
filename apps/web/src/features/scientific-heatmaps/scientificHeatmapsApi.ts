@@ -94,10 +94,20 @@ export interface AnnotationClassComparison {
   unmatched_b_ids: string[];
   false_positive_ids: string[] | null;
   false_negative_ids: string[] | null;
+  union_area_a_pixels?: number;
+  union_area_b_pixels?: number;
+  intersection_area_pixels?: number;
+  union_area_pixels?: number;
+  symmetric_difference_area_pixels?: number;
+  union_iou?: number | null;
+  disagreement_runs?: [number, number, number][];
 }
 export interface AnnotationComparisonPreview {
   result_id?: string;
-  algorithm: "reefvision.class-aware-box-comparison.v1";
+  algorithm:
+    | "reefvision.class-aware-box-comparison.v1"
+    | "reefvision.class-aware-mask-comparison.v1";
+  geometry_kind: "boxes" | "masks";
   source_a_sha256: string;
   source_b_sha256: string;
   content_sha256: string;
@@ -107,8 +117,15 @@ export interface AnnotationComparisonPreview {
 export async function previewAnnotationComparison(
   projectId: string,
   imageId: string,
-  predictionJobId: string,
-  referenceSide: "a" | "b" | null,
+  options: {
+    geometryKind: "boxes" | "masks";
+    predictionJobId: string;
+    sourceAMaskIds: string[];
+    sourceBKind: "verified_masks" | "prediction_job";
+    sourceBMaskIds: string[];
+    referenceSide: "a" | "b" | null;
+    iouThreshold: number;
+  },
 ): Promise<AnnotationComparisonPreview> {
   const endpoint =
     `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}` +
@@ -119,13 +136,27 @@ export async function previewAnnotationComparison(
     body: JSON.stringify({
       name: `Annotation comparison ${new Date().toISOString()}`,
       image_id: imageId,
-      source_a: { kind: "reviewed_boxes" },
-      source_b: {
-        kind: "prediction_job",
-        prediction_job_id: predictionJobId,
-      },
-      reference_side: referenceSide,
-      iou_threshold: 0.5,
+      geometry_kind: options.geometryKind,
+      source_a:
+        options.geometryKind === "boxes"
+          ? { kind: "reviewed_boxes" }
+          : {
+              kind: "verified_masks",
+              mask_annotation_ids: options.sourceAMaskIds,
+            },
+      source_b:
+        options.geometryKind === "boxes" ||
+        options.sourceBKind === "prediction_job"
+          ? {
+              kind: "prediction_job",
+              prediction_job_id: options.predictionJobId,
+            }
+          : {
+              kind: "verified_masks",
+              mask_annotation_ids: options.sourceBMaskIds,
+            },
+      reference_side: options.referenceSide,
+      iou_threshold: options.iouThreshold,
     }),
   });
   if (!response.ok) {

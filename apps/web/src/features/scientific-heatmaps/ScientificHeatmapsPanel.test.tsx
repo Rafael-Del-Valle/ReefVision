@@ -258,9 +258,71 @@ describe("ScientificHeatmapsPanel", () => {
       String(url).includes("annotation-comparisons"),
     );
     expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+      geometry_kind: "boxes",
       reference_side: "a",
       source_a: { kind: "reviewed_boxes" },
       source_b: { kind: "prediction_job" },
+    });
+  });
+
+  it("compares explicit verified masks and draws disagreement geometry", async () => {
+    const maskComparison = {
+      ...comparison,
+      algorithm: "reefvision.class-aware-mask-comparison.v1",
+      geometry_kind: "masks",
+      per_class: {
+        fish: {
+          ...comparison.per_class.fish,
+          union_iou: 0.75,
+          symmetric_difference_area_pixels: 4,
+          disagreement_runs: [[1, 2, 5]],
+        },
+      },
+    };
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (url) => {
+        const path = String(url);
+        if (path.includes("annotation-comparisons"))
+          return json({
+            result_id: "mask-comparison-result",
+            comparison: maskComparison,
+          });
+        return json(path.includes("scientific-heatmaps") ? heatmap : imagePage);
+      });
+    renderPanel();
+    await screen.findByRole("img", { name: "Source-pixel heatmap overlay" });
+    fireEvent.change(screen.getByLabelText("Comparison geometry"), {
+      target: { value: "masks" },
+    });
+    fireEvent.change(screen.getByLabelText("Source A verified mask IDs"), {
+      target: { value: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+    });
+    fireEvent.change(screen.getByLabelText("Source B type"), {
+      target: { value: "verified_masks" },
+    });
+    fireEvent.change(screen.getByLabelText("Source B verified mask IDs"), {
+      target: { value: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Compare evidence" }));
+
+    expect(
+      await screen.findByRole("img", { name: "Mask disagreement geometry" }),
+    ).toBeVisible();
+    expect(screen.getByText(/union IoU 0.750/)).toBeVisible();
+    const request = fetch.mock.calls.find(([url]) =>
+      String(url).includes("annotation-comparisons"),
+    );
+    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+      geometry_kind: "masks",
+      source_a: {
+        kind: "verified_masks",
+        mask_annotation_ids: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+      },
+      source_b: {
+        kind: "verified_masks",
+        mask_annotation_ids: ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
+      },
     });
   });
 });

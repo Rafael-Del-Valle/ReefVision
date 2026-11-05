@@ -62,6 +62,15 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
   const [scaleMode, setScaleMode] = useState<ScaleMode>("per_layer");
   const [predictionJobId, setPredictionJobId] = useState("");
   const [referenceSide, setReferenceSide] = useState<"a" | "b" | "">("a");
+  const [comparisonGeometry, setComparisonGeometry] = useState<
+    "boxes" | "masks"
+  >("boxes");
+  const [sourceBKind, setSourceBKind] = useState<
+    "verified_masks" | "prediction_job"
+  >("prediction_job");
+  const [sourceAMaskIds, setSourceAMaskIds] = useState("");
+  const [sourceBMaskIds, setSourceBMaskIds] = useState("");
+  const [comparisonIou, setComparisonIou] = useState(0.5);
 
   const [visible, setVisible] = useState<Record<HeatmapKind, boolean>>({
     reviewed_boxes: true,
@@ -108,12 +117,15 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
   const comparison = useMutation({
     mutationFn: () => {
       if (!selectedImage) throw new Error("Choose an image first.");
-      return previewAnnotationComparison(
-        project.id,
-        selectedImage.id,
+      return previewAnnotationComparison(project.id, selectedImage.id, {
+        geometryKind: comparisonGeometry,
         predictionJobId,
-        referenceSide || null,
-      );
+        sourceAMaskIds: sourceAMaskIds.split(/[\s,]+/).filter(Boolean),
+        sourceBKind,
+        sourceBMaskIds: sourceBMaskIds.split(/[\s,]+/).filter(Boolean),
+        referenceSide: referenceSide || null,
+        iouThreshold: comparisonIou,
+      });
     },
   });
 
@@ -279,17 +291,82 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
         className="panel-card training-content"
         aria-label="Annotation comparison"
       >
-        <h3>Reviewed annotations vs model prediction job</h3>
+        <h3>Annotation source comparison</h3>
         <p>
-          This comparison uses class-aware one-to-one IoU matching. It does not
-          infer independent reviewer identities from legacy annotations.
+          Compare reviewed boxes or independently identifiable verified masks
+          with class-aware one-to-one IoU matching. A selected reference is a
+          descriptive convention, not biological ground truth.
         </p>
         <label>
-          Prediction job ID
+          Comparison geometry
+          <select
+            value={comparisonGeometry}
+            onChange={(event) =>
+              setComparisonGeometry(event.target.value as "boxes" | "masks")
+            }
+          >
+            <option value="boxes">
+              Reviewed boxes vs pinned prediction job
+            </option>
+            <option value="masks">Exact source-pixel masks</option>
+          </select>
+        </label>
+        {comparisonGeometry === "masks" && (
+          <>
+            <label>
+              Source A verified mask IDs
+              <textarea
+                value={sourceAMaskIds}
+                placeholder="Comma- or space-separated UUIDs"
+                onChange={(event) => setSourceAMaskIds(event.target.value)}
+              />
+            </label>
+            <label>
+              Source B type
+              <select
+                value={sourceBKind}
+                onChange={(event) =>
+                  setSourceBKind(
+                    event.target.value as "verified_masks" | "prediction_job",
+                  )
+                }
+              >
+                <option value="prediction_job">Pinned prediction job</option>
+                <option value="verified_masks">Verified mask inventory</option>
+              </select>
+            </label>
+          </>
+        )}
+        {(comparisonGeometry === "boxes" ||
+          sourceBKind === "prediction_job") && (
+          <label>
+            Prediction job ID
+            <input
+              value={predictionJobId}
+              placeholder="UUID"
+              onChange={(event) => setPredictionJobId(event.target.value)}
+            />
+          </label>
+        )}
+        {comparisonGeometry === "masks" && sourceBKind === "verified_masks" && (
+          <label>
+            Source B verified mask IDs
+            <textarea
+              value={sourceBMaskIds}
+              placeholder="Comma- or space-separated UUIDs"
+              onChange={(event) => setSourceBMaskIds(event.target.value)}
+            />
+          </label>
+        )}
+        <label>
+          IoU match threshold: {comparisonIou.toFixed(2)}
           <input
-            value={predictionJobId}
-            placeholder="UUID"
-            onChange={(event) => setPredictionJobId(event.target.value)}
+            type="range"
+            min={0.05}
+            max={1}
+            step={0.05}
+            value={comparisonIou}
+            onChange={(event) => setComparisonIou(Number(event.target.value))}
           />
         </label>
         <label>
@@ -300,14 +377,25 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
               setReferenceSide(event.target.value as "a" | "b" | "")
             }
           >
-            <option value="a">Reviewed annotations (A)</option>
-            <option value="b">Prediction job (B)</option>
+            <option value="a">Source A</option>
+            <option value="b">Source B</option>
             <option value="">No reference; neutral unmatched terms</option>
           </select>
         </label>
         <button
           type="button"
-          disabled={!selectedImage || !predictionJobId || comparison.isPending}
+          disabled={
+            !selectedImage ||
+            comparison.isPending ||
+            (comparisonGeometry === "boxes" && !predictionJobId) ||
+            (comparisonGeometry === "masks" && !sourceAMaskIds.trim()) ||
+            (comparisonGeometry === "masks" &&
+              sourceBKind === "prediction_job" &&
+              !predictionJobId) ||
+            (comparisonGeometry === "masks" &&
+              sourceBKind === "verified_masks" &&
+              !sourceBMaskIds.trim())
+          }
           onClick={() => comparison.mutate()}
         >
           {comparison.isPending ? "Comparing…" : "Compare evidence"}
@@ -328,10 +416,43 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
                     {item.matched_count}, unmatched A{" "}
                     {item.unmatched_a_ids.length}, unmatched B{" "}
                     {item.unmatched_b_ids.length}
+                    {item.union_iou !== undefined && (
+                      <>
+                        {" "}
+                        · union IoU {item.union_iou?.toFixed(3) ?? "n/a"} ·
+                        disagreement{" "}
+                        {item.symmetric_difference_area_pixels ?? 0} px
+                      </>
+                    )}
                   </li>
                 ),
               )}
             </ul>
+            {comparison.data.geometry_kind === "masks" && selectedImage && (
+              <svg
+                role="img"
+                aria-label="Mask disagreement geometry"
+                viewBox={`0 0 ${selectedImage.width_px} ${selectedImage.height_px}`}
+                style={{ width: "100%", maxHeight: 320, background: "#101820" }}
+              >
+                {Object.entries(comparison.data.per_class).flatMap(
+                  ([classId, item]) =>
+                    (item.disagreement_runs ?? []).map(
+                      ([y, start, end], index) => (
+                        <rect
+                          key={`${classId}-${y}-${start}-${index}`}
+                          x={start}
+                          y={y}
+                          width={end - start}
+                          height={1}
+                          fill="#ff5a5f"
+                          opacity={0.85}
+                        />
+                      ),
+                    ),
+                )}
+              </svg>
+            )}
             <p>
               Descriptive evidence comparison only. Images are the independent
               sampling unit; no reviewer-performance or causal claim is made.

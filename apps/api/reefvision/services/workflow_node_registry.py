@@ -129,6 +129,30 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="annotation_comparison",
+            display_name="Annotation Source Comparison",
+            category="analysis",
+            description=(
+                "Persist a deterministic class-aware comparison of reviewed boxes, explicit "
+                "verified masks, or a pinned model-prediction job."
+            ),
+            input_ports=[_input("project", "Project", "project_reference")],
+            output_ports=[_output("result", "Comparison Result", "computed_metric_result")],
+            required_parameters=["name", "image_id", "source_a", "source_b"],
+            optional_parameters={
+                "geometry_kind": "boxes",
+                "iou_threshold": 0.5,
+                "reference_side": None,
+            },
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Mask sources use explicit independently identifiable verified-mask IDs.",
+                "Predictions are pinned by job ID and retain model/checksum provenance.",
+                "The selected reference is a descriptive convention, not biological truth.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="environmental_threshold",
             display_name="Environmental Threshold Samples",
             category="analysis",

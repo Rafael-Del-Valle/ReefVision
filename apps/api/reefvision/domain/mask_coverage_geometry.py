@@ -62,6 +62,31 @@ def intersect_runs(left: Iterable[PixelRun], right: Iterable[PixelRun]) -> Pixel
     return tuple(output)
 
 
+def subtract_runs(left: Iterable[PixelRun], right: Iterable[PixelRun]) -> PixelRuns:
+    """Return occupied pixels in ``left`` that are absent from ``right``."""
+    normalized_left = _normalized(left)
+    normalized_right = _normalized(right)
+    right_by_row: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for y, start, end in normalized_right:
+        right_by_row[y].append((start, end))
+    output: list[PixelRun] = []
+    for y, start, end in normalized_left:
+        cursor = start
+        for cut_start, cut_end in right_by_row.get(y, []):
+            if cut_end <= cursor:
+                continue
+            if cut_start >= end:
+                break
+            if cut_start > cursor:
+                output.append((y, cursor, min(cut_start, end)))
+            cursor = max(cursor, cut_end)
+            if cursor >= end:
+                break
+        if cursor < end:
+            output.append((y, cursor, end))
+    return tuple(output)
+
+
 def run_area(runs: Iterable[PixelRun]) -> int:
     """Count occupied pixels after normalizing possible overlap."""
     return sum(end - start for _, start, end in _normalized(runs))

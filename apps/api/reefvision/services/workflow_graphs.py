@@ -66,6 +66,9 @@ _ACTIONS: dict[str, str] = {
     "mask_coverage": (
         "Calculate verified-mask union area and explicit image or ROI coverage denominators."
     ),
+    "annotation_comparison": (
+        "Compare explicit annotation sources with class-aware deterministic IoU matching."
+    ),
     "environmental_threshold": (
         "Find bounded QC-eligible threshold samples with provenance, without event inference."
     ),

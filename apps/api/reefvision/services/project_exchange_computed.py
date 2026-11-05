@@ -41,6 +41,7 @@ MASK_COVERAGE_FORMULA_VERSION = "reefvision.mask-coverage.v1"
 MASK_COVERAGE_ALGORITHM = "reefvision.source-pixel-mask-union.v1"
 ANNOTATION_COMPARISON_KIND = "annotation_comparison"
 ANNOTATION_COMPARISON_VERSION = "reefvision.annotation-comparison.v1"
+ANNOTATION_MASK_COMPARISON_VERSION = "reefvision.annotation-comparison.v2"
 
 
 def _remap_identifiers(value: Any, id_map: dict[str, str]) -> Any:
@@ -53,11 +54,88 @@ def _remap_identifiers(value: Any, id_map: dict[str, str]) -> Any:
     return value
 
 
+def _remap_annotation_comparison_configuration(
+    configuration: dict[str, Any], id_map: dict[str, str]
+) -> dict[str, Any]:
+    mapped = deepcopy(configuration)
+    mapped["image_id"] = id_map[mapped["image_id"]]
+    for side in ("source_a", "source_b"):
+        source = mapped[side]
+        if source.get("prediction_job_id") is not None:
+            source["prediction_job_id"] = id_map[source["prediction_job_id"]]
+        source["mask_annotation_ids"] = [
+            id_map[value] for value in source.get("mask_annotation_ids", [])
+        ]
+    return mapped
+
+
+def _remap_annotation_comparison_payload(
+    payload: dict[str, Any], id_map: dict[str, str]
+) -> dict[str, Any]:
+    """Remap only declared relational IDs, preserving opaque provenance strings."""
+    mapped = deepcopy(payload)
+    comparison = mapped["comparison"]
+    comparison["project_id"] = id_map[comparison["project_id"]]
+    comparison["image_id"] = id_map[comparison["image_id"]]
+    for side in ("source_a", "source_b"):
+        source = comparison[side]
+        if source.get("prediction_job_id") is not None:
+            source["prediction_job_id"] = id_map[source["prediction_job_id"]]
+        source["mask_annotation_ids"] = [
+            id_map[value] for value in source.get("mask_annotation_ids", [])
+        ]
+    for snapshot_name in ("source_a_snapshot", "source_b_snapshot"):
+        for snapshot in comparison[snapshot_name]:
+            for field in (
+                "evidence_id",
+                "image_id",
+                "class_id",
+                "model_id",
+                "prediction_job_id",
+            ):
+                value = snapshot.get(field)
+                if isinstance(value, str) and value in id_map:
+                    snapshot[field] = id_map[value]
+    comparison["per_class"] = {
+        id_map.get(class_id, class_id): value
+        for class_id, value in comparison["per_class"].items()
+    }
+    for value in comparison["per_class"].values():
+        for match in value.get("matches", []):
+            match["source_a_id"] = id_map.get(match["source_a_id"], match["source_a_id"])
+            match["source_b_id"] = id_map.get(match["source_b_id"], match["source_b_id"])
+            match["image_id"] = id_map.get(match["image_id"], match["image_id"])
+        for field in (
+            "unmatched_a_ids",
+            "unmatched_b_ids",
+            "false_positive_ids",
+            "false_negative_ids",
+        ):
+            if value.get(field) is not None:
+                value[field] = [id_map.get(item, item) for item in value[field]]
+    comparison["source_a_sha256"] = content_hash(comparison["source_a_snapshot"])
+    comparison["source_b_sha256"] = content_hash(comparison["source_b_snapshot"])
+    comparison["content_sha256"] = content_hash(
+        {key: value for key, value in comparison.items() if key != "content_sha256"}
+    )
+    return mapped
+
+
 def _validate_annotation_comparison_definition(
     project_id: str, row: dict[str, Any], sections: dict[str, list[dict[str, Any]]]
 ) -> None:
     config = row.get("configuration_json")
     request = AnnotationComparisonPreviewRequest.model_validate(config)
+    expected_version = (
+        ANNOTATION_MASK_COMPARISON_VERSION
+        if request.geometry_kind == "masks"
+        else ANNOTATION_COMPARISON_VERSION
+    )
+    expected_expression = (
+        "class_aware_one_to_one_mask_iou(source_a, source_b)"
+        if request.geometry_kind == "masks"
+        else "class_aware_one_to_one_box_iou(source_a, source_b)"
+    )
     images = {item["id"]: item for item in sections.get("images", [])}
     image = images.get(str(request.image_id))
     if image is None or image.get("project_id") != project_id:
@@ -65,7 +143,8 @@ def _validate_annotation_comparison_definition(
     if (
         row.get("project_id") != project_id
         or row.get("definition_kind") != ANNOTATION_COMPARISON_KIND
-        or row.get("formula_version") != ANNOTATION_COMPARISON_VERSION
+        or row.get("formula_version") != expected_version
+        or row.get("expression") != expected_expression
         or row.get("input_spec_json") != []
         or row.get("output_unit") != "count"
         or content_hash(_aggregate_definition_payload(row)) != row.get("definition_sha256")
@@ -74,7 +153,11 @@ def _validate_annotation_comparison_definition(
 
 
 def _validate_annotation_comparison_result(
-    project_id: str, row: dict[str, Any], definition: dict[str, Any]
+    project_id: str,
+    row: dict[str, Any],
+    definition: dict[str, Any],
+    workflow_runs: dict[str, dict[str, Any]],
+    workflow_nodes: dict[str, dict[str, Any]],
 ) -> None:
     payload = row.get("payload_json")
     if (
@@ -85,7 +168,7 @@ def _validate_annotation_comparison_result(
         or payload.get("definition_id") != definition.get("id")
         or payload.get("definition_name") != definition.get("name")
         or payload.get("definition_sha256") != definition.get("definition_sha256")
-        or payload.get("formula_version") != ANNOTATION_COMPARISON_VERSION
+        or payload.get("formula_version") != definition.get("formula_version")
     ):
         raise ValidationError("Annotation comparison result checksum mismatch")
     comparison = payload.get("comparison")
@@ -97,6 +180,26 @@ def _validate_annotation_comparison_result(
     }
     if content_hash(comparison_content) != comparison.get("content_sha256"):
         raise ValidationError("Annotation comparison evidence checksum mismatch")
+    if (
+        content_hash(comparison.get("source_a_snapshot"))
+        != comparison.get("source_a_sha256")
+        or content_hash(comparison.get("source_b_snapshot"))
+        != comparison.get("source_b_sha256")
+    ):
+        raise ValidationError("Annotation comparison source snapshot checksum mismatch")
+    workflow_run_id = row.get("workflow_run_id")
+    workflow_node_run_id = row.get("workflow_node_run_id")
+    if workflow_run_id is not None and workflow_run_id not in workflow_runs:
+        raise ValidationError("Annotation comparison refers to a missing workflow run")
+    if workflow_node_run_id is not None:
+        node = workflow_nodes.get(workflow_node_run_id)
+        if (
+            node is None
+            or workflow_run_id is None
+            or node.get("workflow_run_id") != workflow_run_id
+            or node.get("node_type") != "annotation_comparison"
+        ):
+            raise ValidationError("Annotation comparison workflow provenance mismatch")
 
 
 def _definition_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -692,7 +795,9 @@ def validate_computed_exchange_records(
                     raise ValidationError(
                         "Annotation comparison result refers to a missing definition"
                     )
-                _validate_annotation_comparison_result(project_id, row, definition)
+                _validate_annotation_comparison_result(
+                    project_id, row, definition, workflow_runs, workflow_nodes
+                )
                 continue
             if row.get("result_kind", "scalar") == AGGREGATE_KIND:
                 definition_id = row.get("definition_id")
@@ -903,7 +1008,9 @@ def remap_computed_sections(
             row["configuration_json"] = config
             row["definition_sha256"] = content_hash(_aggregate_definition_payload(row))
         elif row.get("definition_kind") == ANNOTATION_COMPARISON_KIND:
-            row["configuration_json"] = _remap_identifiers(row["configuration_json"], id_map)
+            row["configuration_json"] = _remap_annotation_comparison_configuration(
+                row["configuration_json"], id_map
+            )
             row["definition_sha256"] = content_hash(_aggregate_definition_payload(row))
         remapped_definitions[old_id] = row
     for row in result["computed_metric_results"]:
@@ -911,11 +1018,7 @@ def remap_computed_sections(
         old_definition_id = row["definition_id"]
         if row.get("result_kind") == ANNOTATION_COMPARISON_KIND:
             mapped_definition = remapped_definitions[old_definition_id]
-            payload = _remap_identifiers(payload, id_map)
-            comparison = payload["comparison"]
-            comparison["content_sha256"] = content_hash(
-                {key: value for key, value in comparison.items() if key != "content_sha256"}
-            )
+            payload = _remap_annotation_comparison_payload(payload, id_map)
             payload["definition_id"] = mapped_definition["id"]
             payload["definition_sha256"] = mapped_definition["definition_sha256"]
             row["payload_json"] = payload
