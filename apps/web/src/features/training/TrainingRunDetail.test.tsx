@@ -107,6 +107,23 @@ describe("TrainingRunDetail", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps interrupted or legacy runs accessible without a metrics history payload", () => {
+    for (const missing of [null, undefined]) {
+      const { unmount } = render(
+        <TrainingRunDetail
+          run={{ ...run, metrics_history: missing as unknown as TrainingRun["metrics_history"] }}
+          registering={false}
+          onCancel={vi.fn()}
+          onRegister={vi.fn()}
+        />,
+      );
+      expect(screen.getByText("Dataset snapshot")).toBeInTheDocument();
+      expect(screen.getByText("Configuration and provenance")).toBeInTheDocument();
+      expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
   it("shows the actual best epoch, task metrics, checkpoints, artifacts, and provenance", () => {
     render(
       <TrainingRunDetail
