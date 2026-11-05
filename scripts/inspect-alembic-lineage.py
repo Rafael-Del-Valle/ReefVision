@@ -39,7 +39,19 @@ def inspect(path: Path) -> dict:
         scientific = any(inventory[name]["present"] for name in FAMILIES["scientific"])
         qc = any(inventory[name]["present"] for name in FAMILIES["qc"])
         lineage = "ambiguous" if scientific and qc else "scientific" if scientific else "qc" if qc else "unknown"
+        warnings = []
+        if objects.get("alembic_version") != "table":
+            warnings.append("missing_alembic_version_table")
+        elif len(revisions) != 1 or not isinstance(revisions[0], str) or not revisions[0]:
+            warnings.append("invalid_revision_marker_count_or_value")
+        if lineage == "ambiguous":
+            warnings.append("mixed_scientific_and_qc_lineage")
+        if "0038" in revisions:
+            warnings.append("revision_0038_requires_schema_lineage_reconciliation")
+        if lineage == "unknown":
+            warnings.append("unrecognized_schema_lineage")
         return {
+            "warnings": warnings,
             "revision_rows": revisions,
             "lineage_hint": lineage,
             "upgrade_authorized": False,
