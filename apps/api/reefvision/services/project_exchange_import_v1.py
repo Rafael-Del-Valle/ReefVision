@@ -1128,6 +1128,12 @@ def import_project_exchange_v1(
             )
         ):
             analyses.result_response(analysis_result_row)
+            validation = analyses.validate_result(project.id, analysis_result_row.id)
+            if not validation.current:
+                raise ValidationError(
+                    "Imported environmental analysis evidence is stale after remapping: "
+                    + ", ".join(validation.reasons)
+                )
         copied_telemetry = _restore_telemetry_sidecars(
             source,
             project=project,

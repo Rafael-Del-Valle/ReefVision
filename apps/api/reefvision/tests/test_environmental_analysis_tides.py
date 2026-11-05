@@ -8,6 +8,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from reefvision.db.models import ScientificRecord
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.environmental_context import NOAATideImportRequest
 from reefvision.services.environmental_context import EnvironmentalContextService
@@ -160,6 +161,50 @@ def test_tidal_context_keeps_observed_and_predicted_evidence_separate(
         str(item.id) for item in [*predicted.items, *observed.items]
     }
     assert "causal" not in result["payload"]["methodological_notes"][0].lower()
+
+
+def test_environmental_analysis_currentness_detects_corrupt_source_evidence(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Tidal currentness")
+    _import_tides(client, project["id"])
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/environment/analyses/tidal-context",
+        json={
+            "name": "Current Charleston context",
+            "observed_at": "2026-04-03T13:00:00Z",
+            "location": {"latitude": 32.7808, "longitude": -79.9236},
+            "station_id": "8665530",
+            "datum": "MLLW",
+            "max_time_delta_s": 900,
+            "max_distance_m": 1000,
+        },
+    )
+    assert response.status_code == 201, response.text
+    result = response.json()["result"]
+    validation_url = (
+        f"/api/v1/projects/{project['id']}/environment/analyses/results/{result['id']}/validation"
+    )
+    current = client.get(validation_url)
+    assert current.status_code == 200, current.text
+    assert current.json() == {
+        "result_id": result["id"],
+        "current": True,
+        "result_sha256": result["content_sha256"],
+        "reasons": [],
+    }
+
+    source_id = result["source_record_ids"][0]
+    with client.app.state.session_factory() as session:
+        source = session.get(ScientificRecord, source_id)
+        assert source is not None
+        source.payload_json = {**source.payload_json, "unit": "tampered"}
+        session.commit()
+
+    stale = client.get(validation_url)
+    assert stale.status_code == 200, stale.text
+    assert stale.json()["current"] is False
+    assert stale.json()["reasons"] == [f"source_record_invalid:{source_id}"]
 
 
 def test_tidal_context_enforces_station_datum_time_and_distance(client: TestClient) -> None:

@@ -58,6 +58,13 @@ class EnvironmentalAnalysisResultPage(ScientificModel):
     total: int
 
 
+class EnvironmentalAnalysisValidationResponse(ScientificModel):
+    result_id: UUID
+    current: bool
+    result_sha256: str = Field(min_length=64, max_length=64)
+    reasons: list[str]
+
+
 class LunarAnalysisBatchRequest(ScientificModel):
     name: str = Field(min_length=1, max_length=200)
     observed_at: list[datetime] = Field(min_length=1, max_length=500)

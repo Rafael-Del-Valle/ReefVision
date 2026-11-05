@@ -14,6 +14,7 @@ from reefvision.tests.test_scientific_project_exchange import (
     import_archive,
     rewrite,
 )
+from reefvision.tests.test_workflow_environmental_analysis import _execute, lunar_graph
 
 
 def _source(client: TestClient) -> tuple[dict, list[dict], list[dict]]:
@@ -117,6 +118,31 @@ def test_environmental_analysis_round_trip_remaps_links_and_rebuilds_hashes(
 
 def _source_records(results: list[dict]) -> list[dict[str, str]]:
     return [{"id": identifier} for result in results for identifier in result["source_record_ids"]]
+
+
+def test_workflow_analysis_lineage_is_remapped_and_current_after_import(
+    client: TestClient, test_settings
+) -> None:
+    project = create_project(client, "Portable workflow analysis")
+    source_run, artifact = _execute(client, project["id"], lunar_graph())
+    source_result_id = artifact["payload_json"]["result_id"]
+    raw = export_archive(client, test_settings, project["id"])
+
+    imported = import_archive(client, raw)
+    assert imported.status_code == 201, imported.text
+    project_id = imported.json()["project_id"]
+    base = f"/api/v1/projects/{project_id}/environment/analyses"
+    results = client.get(f"{base}/results").json()["items"]
+    result = next(item for item in results if item["analysis_kind"] == "lunar_context")
+    assert result["id"] != source_result_id
+    assert result["workflow_run_id"] != source_run["id"]
+    assert result["workflow_node_run_id"]
+    imported_run = client.get(f"/api/v1/workflow-runs/{result['workflow_run_id']}")
+    assert imported_run.status_code == 200, imported_run.text
+    assert imported_run.json()["run"]["project_id"] == project_id
+    validation = client.get(f"{base}/results/{result['id']}/validation")
+    assert validation.status_code == 200, validation.text
+    assert validation.json()["current"] is True
 
 
 @pytest.mark.parametrize("damage", ["hash", "missing_source"])

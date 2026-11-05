@@ -13,6 +13,7 @@ from reefvision.schemas.environmental_analysis import (
     EnvironmentalAnalysisResultPage,
     EnvironmentalAnalysisResultResponse,
     EnvironmentalAnalysisSingleResponse,
+    EnvironmentalAnalysisValidationResponse,
     EventWindowAnalysisRequest,
     LaggedComparisonAnalysisRequest,
     LunarAnalysisBatchRequest,
@@ -125,6 +126,16 @@ def export_analysis_result_csv(project_id: UUID, result_id: UUID, session: DbSes
             "Content-Disposition": f'attachment; filename="environmental-analysis-{result_id}.csv"'
         },
     )
+
+
+@router.get(
+    "/projects/{project_id}/environment/analyses/results/{result_id}/validation",
+    response_model=EnvironmentalAnalysisValidationResponse,
+)
+def validate_analysis_result(
+    project_id: UUID, result_id: UUID, session: DbSession
+) -> EnvironmentalAnalysisValidationResponse:
+    return EnvironmentalAnalysisService(session).validate_result(str(project_id), str(result_id))
 
 
 @router.get(

@@ -17,6 +17,7 @@ from reefvision.db.models.environmental_analysis import (
     EnvironmentalAnalysisResult,
 )
 from reefvision.db.models.scientific_record import ScientificRecord
+from reefvision.db.models.workflow_execution import WorkflowNodeRun, WorkflowRun
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.environmental_analysis import (
     EnvironmentalAnalysisDefinitionPage,
@@ -25,6 +26,7 @@ from reefvision.schemas.environmental_analysis import (
     EnvironmentalAnalysisResultPage,
     EnvironmentalAnalysisResultResponse,
     EnvironmentalAnalysisSingleResponse,
+    EnvironmentalAnalysisValidationResponse,
     EventWindowAnalysisRequest,
     LaggedComparisonAnalysisRequest,
     LunarAnalysisBatchRequest,
@@ -327,6 +329,83 @@ class EnvironmentalAnalysisService:
         ).all()
         return EnvironmentalAnalysisResultPage(
             items=[self.result_response(row) for row in rows], total=int(total or 0)
+        )
+
+    def _currentness_reasons(
+        self, row: EnvironmentalAnalysisResult, visited: set[str]
+    ) -> list[str]:
+        if row.id in visited:
+            return [f"source_analysis_cycle:{row.id}"]
+        visited.add(row.id)
+        reasons: list[str] = []
+        try:
+            if self._result_hash(row) != row.content_sha256:
+                reasons.append(f"result_checksum_mismatch:{row.id}")
+        except (ConflictError, NotFoundError, ValidationError):
+            reasons.append(f"result_invalid:{row.id}")
+
+        for record_id in row.source_record_ids_json:
+            record = self.session.get(ScientificRecord, record_id)
+            if record is None or record.project_id != row.project_id:
+                reasons.append(f"source_record_missing:{record_id}")
+                continue
+            try:
+                response = self.science.response(record)
+            except (ConflictError, ValidationError):
+                reasons.append(f"source_record_invalid:{record_id}")
+                continue
+            if response.environmental_snapshot_current is False:
+                reasons.append(f"source_record_snapshot_stale:{record_id}")
+            if response.calibration_current is False:
+                reasons.append(f"source_record_calibration_stale:{record_id}")
+
+        for source_result_id in row.source_analysis_result_ids_json:
+            source = self.session.get(EnvironmentalAnalysisResult, source_result_id)
+            if source is None or source.project_id != row.project_id:
+                reasons.append(f"source_analysis_missing:{source_result_id}")
+                continue
+            nested = self._currentness_reasons(source, visited)
+            reasons.extend(f"source_analysis:{source_result_id}:{reason}" for reason in nested)
+
+        try:
+            definition = self.get_definition(row.project_id, row.definition_id)
+        except (ConflictError, NotFoundError):
+            reasons.append(f"definition_invalid:{row.definition_id}")
+        else:
+            event_definition_id = definition.configuration_json.get("event_definition_id")
+            if isinstance(event_definition_id, str):
+                try:
+                    EnvironmentalContextService(self.session).get_event_definition(
+                        row.project_id, event_definition_id
+                    )
+                except (ConflictError, NotFoundError, ValidationError):
+                    reasons.append(f"event_definition_invalid:{event_definition_id}")
+
+        if row.workflow_run_id is not None:
+            run = self.session.get(WorkflowRun, row.workflow_run_id)
+            if run is None or run.project_id != row.project_id:
+                reasons.append(f"workflow_run_invalid:{row.workflow_run_id}")
+        if row.workflow_node_run_id is not None:
+            node = self.session.get(WorkflowNodeRun, row.workflow_node_run_id)
+            if node is None or node.workflow_run_id != row.workflow_run_id:
+                reasons.append(f"workflow_node_run_invalid:{row.workflow_node_run_id}")
+
+        visited.remove(row.id)
+        return reasons
+
+    def validate_result(
+        self, project_id: str, result_id: str
+    ) -> EnvironmentalAnalysisValidationResponse:
+        self.science.require_project(project_id)
+        row = self.session.get(EnvironmentalAnalysisResult, result_id)
+        if row is None or row.project_id != project_id:
+            raise NotFoundError("Environmental analysis result not found")
+        reasons = sorted(set(self._currentness_reasons(row, set())))
+        return EnvironmentalAnalysisValidationResponse(
+            result_id=row.id,
+            current=not reasons,
+            result_sha256=row.content_sha256,
+            reasons=reasons,
         )
 
     def create_lunar_batch(
