@@ -576,7 +576,6 @@ def test_malformed_exposure_exif_does_not_fall_back_to_digitization_or_file_time
     assert _capture_timestamp(exif) is None
 
 
-
 # strptime('%z') accepts non-EXIF variants such as +0530 and +05:30:15.
 # Never turn these malformed camera fields into verified UTC exposure times.
 @pytest.mark.parametrize(
