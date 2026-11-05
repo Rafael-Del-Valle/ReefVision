@@ -36,10 +36,17 @@ from reefvision.schemas.environmental_context import (
     EnvironmentalThresholdRequest,
     EnvironmentalThresholdResponse,
     NOAAImportRequest,
+    NOAATideImportRequest,
 )
 from reefvision.schemas.scientific_data import ScientificRecordCreate
 from reefvision.services.geographic_movement_analytics import geographic_distance_m
-from reefvision.services.noaa_environment import fetch_noaa, noaa_request_url, parse_noaa
+from reefvision.services.noaa_environment import (
+    fetch_noaa,
+    noaa_request_url,
+    noaa_tide_request_url,
+    parse_noaa,
+    parse_noaa_tides,
+)
 from reefvision.services.scientific_data import ScientificDataService, content_hash
 
 
@@ -112,6 +119,43 @@ class EnvironmentalContextService:
         return self.store_dataset(
             project_id,
             identity={"source_url": source_url, "subject": request.subject.model_dump(mode="json")},
+            source_url=source_url,
+            raw=raw,
+            items=items,
+            missing=missing,
+            entry=entry,
+        )
+
+    def import_noaa_tides(
+        self, project_id: str, request: NOAATideImportRequest
+    ) -> EnvironmentalImportResponse:
+        self.science.require_project(project_id)
+        source_url = noaa_tide_request_url(request)
+        identity = {"source_url": source_url, "subject": request.subject.model_dump(mode="json")}
+        key = content_hash(identity)
+        query = select(EnvironmentalCacheEntry).where(
+            EnvironmentalCacheEntry.project_id == project_id,
+            EnvironmentalCacheEntry.cache_key == key,
+        )
+        entry = self.session.scalar(query)
+        if entry is not None:
+            self._cache_response(entry, "integrity_check")
+            if request.offline or self.now < _utc(entry.expires_at):
+                status = "fresh" if self.now < _utc(entry.expires_at) else "stale_offline"
+                return self._cache_response(entry, status)
+        elif request.offline:
+            raise NotFoundError(
+                "No cached NOAA tidal dataset matches this station, product, datum and day"
+            )
+        if self.http is None:
+            with httpx.Client() as http:
+                raw = fetch_noaa(http, source_url)
+        else:
+            raw = fetch_noaa(self.http, source_url)
+        items, missing = parse_noaa_tides(raw, request, self.now, source_url)
+        return self.store_dataset(
+            project_id,
+            identity=identity,
             source_url=source_url,
             raw=raw,
             items=items,

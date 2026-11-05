@@ -12,8 +12,13 @@ from reefvision.schemas.environmental_analysis import (
     EnvironmentalAnalysisKind,
     EnvironmentalAnalysisResultPage,
     EnvironmentalAnalysisResultResponse,
+    EnvironmentalAnalysisSingleResponse,
+    EventWindowAnalysisRequest,
+    LaggedComparisonAnalysisRequest,
     LunarAnalysisBatchRequest,
     LunarAnalysisBatchResponse,
+    ObservationEnvironmentJoinRequest,
+    TidalContextAnalysisRequest,
 )
 from reefvision.services.environmental_analysis import EnvironmentalAnalysisService
 
@@ -30,6 +35,52 @@ def create_lunar_analysis(
     project_id: UUID, payload: LunarAnalysisBatchRequest, session: DbSession
 ) -> LunarAnalysisBatchResponse:
     return EnvironmentalAnalysisService(session).create_lunar_batch(str(project_id), payload)
+
+
+@router.post(
+    "/projects/{project_id}/environment/analyses/tidal-context",
+    response_model=EnvironmentalAnalysisSingleResponse,
+    status_code=201,
+)
+def create_tidal_context_analysis(
+    project_id: UUID, payload: TidalContextAnalysisRequest, session: DbSession
+) -> EnvironmentalAnalysisSingleResponse:
+    return EnvironmentalAnalysisService(session).create_tidal_context(str(project_id), payload)
+
+
+@router.post(
+    "/projects/{project_id}/environment/analyses/event-window",
+    response_model=EnvironmentalAnalysisSingleResponse,
+    status_code=201,
+)
+def create_event_window_analysis(
+    project_id: UUID, payload: EventWindowAnalysisRequest, session: DbSession
+) -> EnvironmentalAnalysisSingleResponse:
+    return EnvironmentalAnalysisService(session).create_event_window(str(project_id), payload)
+
+
+@router.post(
+    "/projects/{project_id}/environment/analyses/observation-environment-join",
+    response_model=EnvironmentalAnalysisSingleResponse,
+    status_code=201,
+)
+def create_observation_environment_join(
+    project_id: UUID, payload: ObservationEnvironmentJoinRequest, session: DbSession
+) -> EnvironmentalAnalysisSingleResponse:
+    return EnvironmentalAnalysisService(session).create_observation_environment_join(
+        str(project_id), payload
+    )
+
+
+@router.post(
+    "/projects/{project_id}/environment/analyses/lagged-comparison",
+    response_model=EnvironmentalAnalysisSingleResponse,
+    status_code=201,
+)
+def create_lagged_comparison(
+    project_id: UUID, payload: LaggedComparisonAnalysisRequest, session: DbSession
+) -> EnvironmentalAnalysisSingleResponse:
+    return EnvironmentalAnalysisService(session).create_lagged_comparison(str(project_id), payload)
 
 
 @router.get(

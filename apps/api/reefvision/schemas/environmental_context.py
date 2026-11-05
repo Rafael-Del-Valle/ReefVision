@@ -23,6 +23,15 @@ class NOAAImportRequest(ScientificModel):
     subject: ScientificSubject = Field(default_factory=ScientificSubject)
 
 
+class NOAATideImportRequest(ScientificModel):
+    station_id: str = Field(pattern=r"^\d{7}$")
+    day: date
+    product: Literal["predictions", "water_level"]
+    datum: str = Field(min_length=2, max_length=20, pattern=r"^[A-Z0-9_-]+$")
+    offline: bool = False
+    subject: ScientificSubject = Field(default_factory=ScientificSubject)
+
+
 class EnvironmentalImportResponse(ScientificModel):
     items: list[ScientificRecordResponse]
     cache_status: str
@@ -79,6 +88,8 @@ ENVIRONMENTAL_VARIABLES = [
     "current_eastward_velocity",
     "current_northward_velocity",
     "current_speed",
+    "observed_water_level",
+    "predicted_water_level",
 ]
 
 

@@ -125,6 +125,8 @@ class ScientificRecordCreate(ScientificModel):
             "current_northward_velocity": "speed",
             "current_speed": "speed",
             "practical_salinity": "practical_salinity",
+            "observed_water_level": "length",
+            "predicted_water_level": "length",
         }.get(self.variable)
         if expected is not None and UNITS[self.unit][0] != expected:
             raise ValueError(f"{self.variable} requires {expected} units")

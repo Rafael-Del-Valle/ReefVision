@@ -22,6 +22,7 @@ from reefvision.schemas.environmental_context import (
     EnvironmentalThresholdRequest,
     EnvironmentalThresholdResponse,
     NOAAImportRequest,
+    NOAATideImportRequest,
 )
 from reefvision.services.copernicus_environment import CopernicusEnvironmentService
 from reefvision.services.environmental_context import EnvironmentalContextService
@@ -35,6 +36,15 @@ def import_noaa(
     project_id: UUID, payload: NOAAImportRequest, session: DbSession
 ) -> EnvironmentalImportResponse:
     return EnvironmentalContextService(session).import_noaa(str(project_id), payload)
+
+
+@router.post(
+    "/projects/{project_id}/environment/noaa/tides", response_model=EnvironmentalImportResponse
+)
+def import_noaa_tides(
+    project_id: UUID, payload: NOAATideImportRequest, session: DbSession
+) -> EnvironmentalImportResponse:
+    return EnvironmentalContextService(session).import_noaa_tides(str(project_id), payload)
 
 
 @router.post(
