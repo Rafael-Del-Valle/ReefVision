@@ -209,31 +209,25 @@ def test_huge_formula_constant_returns_structured_validation_error(client):
 
 
 @pytest.mark.parametrize("late_definition", [False, True])
-def test_exchange_refuses_to_silently_drop_computed_metrics(client, test_settings, late_definition):
+def test_exchange_includes_computed_metrics_created_before_queue_or_build(
+    client, test_settings, late_definition
+):
     project_id = create_project(client, "Exchange metric guard")["id"]
     if not late_definition:
         assert definition(client, project_id).status_code == 201
     queued = client.post(f"/api/v1/projects/{project_id}/exchange-packages", json={})
-    if not late_definition:
-        assert queued.status_code == 400, queued.text
-        assert "computed metric" in queued.json()["detail"]
-        return
     assert queued.status_code == 202, queued.text
-    saved = definition(client, project_id)
-    assert saved.status_code == 201
-    rows = add_records(client, project_id, [observation("a"), observation("b")])
-    assert (
-        calculate(
-            client, project_id, saved.json()["id"], {"a": rows[0]["id"], "b": rows[1]["id"]}
-        ).status_code
-        == 201
-    )
-    assert not process_project_exchange_export_job(
+    if late_definition:
+        saved = definition(client, project_id)
+        assert saved.status_code == 201
+    assert process_project_exchange_export_job(
         test_settings, client.app.state.session_factory, queued.json()["job_id"]
     )
     package = client.get(f"/api/v1/exchange-packages/{queued.json()['package']['id']}").json()
-    assert package["status"] != "complete"
-    assert client.get(f"/api/v1/exchange-packages/{package['id']}/download").status_code == 400
+    assert package["status"] == "complete"
+    assert package["format_version"] == "1.1"
+    assert package["manifest_json"]["sections"]["computed_metric_definitions"]["count"] == 1
+    assert client.get(f"/api/v1/exchange-packages/{package['id']}/download").status_code == 200
 
 
 def test_csv_queries_all_results_and_contains_normalized_workflow_provenance(client):

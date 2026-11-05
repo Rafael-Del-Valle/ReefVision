@@ -20,9 +20,12 @@ from reefvision.db.models import (
     Annotation,
     ClassificationDataset,
     ClassificationPrediction,
+    ComputedMetricDefinition,
+    ComputedMetricResult,
     DatasetVersion,
     DatasetVersionItem,
     EnvironmentalCacheEntry,
+    EnvironmentalEventDefinition,
     ExperimentRecord,
     ImageAsset,
     ImageLabel,
@@ -52,6 +55,11 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangePackageResponse,
 )
 from reefvision.schemas.projects import ProjectCreate
+from reefvision.services.project_exchange_computed import (
+    COMPUTED_SECTIONS,
+    remap_computed_sections,
+    validate_computed_exchange_records,
+)
 from reefvision.services.project_exchange_inspection import (
     MANIFEST_NAME,
     inspect_project_exchange,
@@ -68,6 +76,9 @@ from reefvision.storage.projects import resolve_managed_project_path
 SECTION_MODELS: dict[str, type[Any]] = {
     "scientific_records": ScientificRecord,
     "environmental_cache_entries": EnvironmentalCacheEntry,
+    "computed_metric_definitions": ComputedMetricDefinition,
+    "computed_metric_results": ComputedMetricResult,
+    "environmental_event_definitions": EnvironmentalEventDefinition,
     "label_classes": LabelClass,
     "images": ImageAsset,
     "videos": VideoAsset,
@@ -125,6 +136,9 @@ SECTION_ORDER = [
     "workflow_artifacts",
     "scientific_records",
     "environmental_cache_entries",
+    "computed_metric_definitions",
+    "computed_metric_results",
+    "environmental_event_definitions",
 ]
 
 MEDIA_KIND_BY_SECTION = {
@@ -313,6 +327,7 @@ def import_project_exchange(
                 section_rows[section_name] = _read_jsonl(archive, member)
 
         validate_exchange_records(old_project_id, section_rows, SECTION_MODELS)
+        validate_computed_exchange_records(old_project_id, section_rows)
 
         project: Project | None = None
         try:
@@ -364,6 +379,7 @@ def import_project_exchange(
                             id_map.setdefault(value, str(uuid4()))
 
             scientific_rows = remap_scientific_sections(section_rows, id_map)
+            computed_rows = remap_computed_sections(section_rows, id_map, scientific_rows)
             media = _media_inventory(manifest)
             warnings = list(inspection.warnings)
             imported_counts: dict[str, int] = {}
@@ -386,6 +402,13 @@ def import_project_exchange(
                         # Preserve JSON evidence; only scalar foreign keys use the shared mapper.
                         values = _coerce_row(model, {**mapped, "payload_json": {}}, id_map)
                         values["payload_json"] = mapped["payload_json"]
+                    elif section_name in COMPUTED_SECTIONS:
+                        mapped = computed_rows[section_name][row_index]
+                        if section_name == "computed_metric_results":
+                            values = _coerce_row(model, {**mapped, "payload_json": {}}, id_map)
+                            values["payload_json"] = mapped["payload_json"]
+                        else:
+                            values = _coerce_row(model, mapped, id_map)
                     else:
                         values = _coerce_row(model, row, id_map)
                     _rewrite_project_paths(

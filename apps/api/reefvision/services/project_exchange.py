@@ -27,6 +27,7 @@ from reefvision.db.models import (
     DatasetVersion,
     DatasetVersionItem,
     EnvironmentalCacheEntry,
+    EnvironmentalEventDefinition,
     ExperimentRecord,
     ImageAsset,
     ImageLabel,
@@ -123,10 +124,21 @@ class ProjectExchangeService:
         return ProjectExchangePackageResponse.model_validate(self._package(package_id))
 
     def _format_version(self, project_id: str) -> str:
-        enriched = self.session.scalar(
-            select(ScientificRecord.id).where(ScientificRecord.project_id == project_id).limit(1)
+        enriched_models = (
+            ScientificRecord,
+            EnvironmentalCacheEntry,
+            ComputedMetricDefinition,
+            ComputedMetricResult,
+            EnvironmentalEventDefinition,
         )
-        return "1.1" if enriched is not None else FORMAT_VERSION
+        return (
+            "1.1"
+            if any(
+                self.session.scalar(select(model.id).where(model.project_id == project_id).limit(1))
+                for model in enriched_models
+            )
+            else FORMAT_VERSION
+        )
 
     def queue_export(
         self,
@@ -134,7 +146,6 @@ class ProjectExchangeService:
         request: ProjectExchangeCreateRequest,
     ) -> ProjectExchangeCreateResponse:
         project = self._project(project_id)
-        self._require_supported_scientific_export(project_id)
         package_id = str(uuid4())
         archive_relative = f"{project.storage_root}/exchanges/{package_id}.reefvision.zip"
         package = ProjectExchangePackage(
@@ -165,16 +176,6 @@ class ProjectExchangeService:
             package=ProjectExchangePackageResponse.model_validate(package),
             job_id=job.id,
         )
-
-    def _require_supported_scientific_export(self, project_id: str) -> None:
-        # Neither exchange 1.0 nor 1.1 serializes/remaps computed metric provenance.
-        # Check at queue time and build time so queued work cannot silently lose new data.
-        for model in (ComputedMetricDefinition, ComputedMetricResult):
-            if self.session.scalar(select(model.id).where(model.project_id == project_id).limit(1)):
-                raise ValidationError(
-                    "Project exchange does not yet support computed metric definitions/results; "
-                    "export is blocked to prevent data loss. Export computed results as CSV."
-                )
 
     def archive_path(self, package_id: str) -> Path:
         package = self._package(package_id)
@@ -318,6 +319,27 @@ class ProjectExchangeService:
                         )
                     )
                 ),
+                "computed_metric_definitions": list(
+                    self.session.scalars(
+                        select(ComputedMetricDefinition).where(
+                            ComputedMetricDefinition.project_id == project.id
+                        )
+                    )
+                ),
+                "computed_metric_results": list(
+                    self.session.scalars(
+                        select(ComputedMetricResult).where(
+                            ComputedMetricResult.project_id == project.id
+                        )
+                    )
+                ),
+                "environmental_event_definitions": list(
+                    self.session.scalars(
+                        select(EnvironmentalEventDefinition).where(
+                            EnvironmentalEventDefinition.project_id == project.id
+                        )
+                    )
+                ),
             }
         )
         return sections
@@ -325,7 +347,6 @@ class ProjectExchangeService:
     def build_export(self, package_id: str) -> ProjectExchangePackageResponse:
         package = self._package(package_id)
         project = self._project(package.project_id)
-        self._require_supported_scientific_export(project.id)
         options = dict(package.options_json)
         include_media = bool(options.get("include_media", False))
         include_model_weights = bool(options.get("include_model_weights", False))

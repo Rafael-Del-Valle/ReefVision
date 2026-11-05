@@ -22,7 +22,10 @@ from reefvision.db.models import (
     BehaviorStateDefinition,
     ClassOperation,
     ClassVisibilityPreference,
+    ComputedMetricDefinition,
+    ComputedMetricResult,
     DatasetVersion,
+    EnvironmentalEventDefinition,
     ExportRecord,
     GeoReferencedObservation,
     MaskAnnotationEvent,
@@ -1047,18 +1050,39 @@ def import_project_exchange_v1(
         from reefvision.services.scientific_data import ScientificDataService
 
         science = ScientificDataService(session)
-        for row in session.scalars(
+        for scientific_row in session.scalars(
             select(ScientificRecord).where(ScientificRecord.project_id == project.id)
         ):
             item = ScientificRecordCreate.model_validate(
                 {
                     key: value
-                    for key, value in row.payload_json.items()
+                    for key, value in scientific_row.payload_json.items()
                     if key in ScientificRecordCreate.model_fields
                 }
             )
             science.validate_subject(project.id, item.subject, item.pixel)
-            science.response(row)
+            science.response(scientific_row)
+        from reefvision.services.computed_metrics import ComputedMetricService
+        from reefvision.services.environmental_context import EnvironmentalContextService
+
+        computed = ComputedMetricService(session)
+        for definition_row in session.scalars(
+            select(ComputedMetricDefinition).where(
+                ComputedMetricDefinition.project_id == project.id
+            )
+        ):
+            computed.definition_response(definition_row)
+        for result_row in session.scalars(
+            select(ComputedMetricResult).where(ComputedMetricResult.project_id == project.id)
+        ):
+            computed.result_response(result_row)
+        environment = EnvironmentalContextService(session)
+        for event_row in session.scalars(
+            select(EnvironmentalEventDefinition).where(
+                EnvironmentalEventDefinition.project_id == project.id
+            )
+        ):
+            environment.event_definition_response(event_row)
         copied_telemetry = _restore_telemetry_sidecars(
             source,
             project=project,

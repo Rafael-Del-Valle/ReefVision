@@ -61,7 +61,11 @@ from reefvision.db.models.quality_control_issue import QualityControlIssue
 from reefvision.db.models.quality_control_run import QualityControlRun
 from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
-from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, ScientificRecord
+from reefvision.db.models.scientific_record import (
+    EnvironmentalCacheEntry,
+    EnvironmentalEventDefinition,
+    ScientificRecord,
+)
 from reefvision.db.models.skeleton_analysis import SkeletonAnalysisRevision
 from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
@@ -93,6 +97,7 @@ __all__ = [
     "DatasetVersion",
     "DatasetVersionItem",
     "EnvironmentalCacheEntry",
+    "EnvironmentalEventDefinition",
     "ExperimentRecord",
     "ExportRecord",
     "GeoReferencedObservation",
