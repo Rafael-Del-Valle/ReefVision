@@ -50,3 +50,24 @@ def test_jpeg_suffix_does_not_make_invalid_camera_bytes_valid(tmp_path, suffix: 
         inspect_staged_image(path, hashlib.sha256(original).hexdigest(), len(original))
 
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("filename", ["DSC 0001.JPG", "échantillon_01.JPEG", "coral.sample.JpEg"])
+def test_camera_jpeg_aliases_accept_realistic_unicode_and_dotted_names(
+    tmp_path, filename: str
+) -> None:
+    """Filename normalization must not rewrite or corrupt the source capture."""
+    path = tmp_path / filename
+    Image.new("RGB", (23, 19), (17, 88, 143)).save(path, format="JPEG")
+    original = path.read_bytes()
+    digest = hashlib.sha256(original).hexdigest()
+
+    ensure_supported_extension(path.name)
+    inspected = inspect_staged_image(path, digest, len(original))
+
+    assert inspected.extension == ".jpg"
+    assert inspected.media_type == "image/jpeg"
+    assert (inspected.width_px, inspected.height_px) == (23, 19)
+    assert inspected.sha256 == digest
+    assert path.name == filename
+    assert path.read_bytes() == original
