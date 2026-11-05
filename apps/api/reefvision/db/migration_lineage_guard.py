@@ -312,7 +312,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         )
         if not has_request_identity:
             raise RuntimeError(
-                "Unsafe ReefVision Alembic revision 0041 collision: "
+                f"Unsafe ReefVision Alembic revision {revision} collision: "
                 "missing or altered review-event idempotency UNIQUE constraint. "
                 "Preserve the database and reviewer history; reconcile with a "
                 "reviewed data-preserving migration, never by stamping."
@@ -322,7 +322,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     # with nullable request keys could bypass reviewer-event idempotency even
     # when the named two-column UNIQUE constraint exists. The actual 0038
     # migration declares both fields NOT NULL; inspect without altering data.
-    if revision == "0041":
+    if revision in {"0038", "0039", "0040", "0041"}:
         event_identity_columns = {column["name"]: column for column in review_columns}
         nullable_event_identity = sorted(
             name
@@ -331,7 +331,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         )
         if nullable_event_identity:
             raise RuntimeError(
-                "Unsafe ReefVision Alembic revision 0041 collision: "
+                f"Unsafe ReefVision Alembic revision {revision} collision: "
                 "nullable review-event idempotency identity columns "
                 f"{nullable_event_identity}. Preserve reviewer history and "
                 "reconcile through a reviewed data-preserving migration."
