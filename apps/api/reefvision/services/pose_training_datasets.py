@@ -740,9 +740,14 @@ class PoseTrainingDatasetService:
         if source_job_ids is None:
             source_job_ids = []
         if not isinstance(source_job_ids, list) or any(
-            not isinstance(job_id, str) or not job_id.strip() for job_id in source_job_ids
+            not isinstance(job_id, str)
+            or not job_id.strip()
+            or job_id != job_id.strip()
+            for job_id in source_job_ids
         ):
-            raise ConflictError("Verified pose source job IDs must be a list of nonempty strings")
+            raise ConflictError("Verified pose source job IDs must be nonempty, trimmed strings")
+        if len(set(source_job_ids)) != len(source_job_ids):
+            raise ConflictError("Verified pose source job IDs must be unique")
         review = self._review_snapshot(candidate)
 
         raw_bbox = keyframe.get("bbox")
