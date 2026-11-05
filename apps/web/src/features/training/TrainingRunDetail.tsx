@@ -224,7 +224,14 @@ export function TrainingRunDetail({
           {run.tuning_config.mode && run.tuning_config.mode !== "disabled"
             ? "Trial"
             : "Epoch"}{" "}
-          {run.progress_epoch} of {run.progress_total_epochs || "—"}
+          {Number.isSafeInteger(run.progress_epoch) && run.progress_epoch >= 0
+            ? run.progress_epoch
+            : "—"}{" "}
+          of{" "}
+          {Number.isSafeInteger(run.progress_total_epochs) &&
+          run.progress_total_epochs > 0
+            ? run.progress_total_epochs
+            : "—"}
         </strong>
         <progress
           value={progress}
