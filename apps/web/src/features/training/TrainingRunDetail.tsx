@@ -84,9 +84,35 @@ function MetricChart({ label, values }: { label: string; values: number[] }) {
     if (value > maximum) maximum = value;
   }
   const range = maximum - minimum || 1;
-  const points = values
+  // Bound SVG complexity for long-running training jobs without changing the
+  // underlying recorded history. Preserve the first/last samples and local
+  // extrema so short loss spikes remain visible in the overview.
+  const maxBuckets = 500;
+  const samples: Array<[number, number]> = [[0, values[0]]];
+  if (values.length <= maxBuckets * 2 + 2) {
+    for (let index = 1; index < values.length - 1; index += 1) {
+      samples.push([index, values[index]]);
+    }
+  } else {
+    const interior = values.length - 2;
+    for (let bucket = 0; bucket < maxBuckets; bucket += 1) {
+      const start = 1 + Math.floor((bucket * interior) / maxBuckets);
+      const end = 1 + Math.floor(((bucket + 1) * interior) / maxBuckets);
+      let low = start;
+      let high = start;
+      for (let index = start + 1; index < end; index += 1) {
+        if (values[index] < values[low]) low = index;
+        if (values[index] > values[high]) high = index;
+      }
+      samples.push([low, values[low]]);
+      if (high !== low) samples.push([high, values[high]]);
+    }
+    samples.sort((left, right) => left[0] - right[0]);
+  }
+  samples.push([values.length - 1, values[values.length - 1]]);
+  const points = samples
     .map(
-      (value, index) =>
+      ([index, value]) =>
         `${(index / (values.length - 1)) * 100},${40 - ((value - minimum) / range) * 36}`,
     )
     .join(" ");
