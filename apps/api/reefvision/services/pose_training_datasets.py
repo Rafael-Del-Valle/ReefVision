@@ -110,7 +110,12 @@ def frozen_pose_item_fingerprints_match(
         # Reject malformed JSON collections even if a manifest is re-signed.
         if (
             not isinstance(row.source_models_json, list)
-            or any(not isinstance(model, dict) for model in row.source_models_json)
+            or any(
+                not isinstance(model, dict)
+                or not isinstance(model.get("model_id"), str)
+                or not model["model_id"].strip()
+                for model in row.source_models_json
+            )
             or not isinstance(row.source_job_ids_json, list)
             or any(
                 not isinstance(job_id, str) or not job_id.strip()
