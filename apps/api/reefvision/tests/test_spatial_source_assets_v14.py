@@ -679,4 +679,7 @@ def test_foreign_project_asset_cannot_execute_in_saved_workflow(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert not any(item["data_type"] == artifact_type for item in detail.json()["artifacts"])
-    assert client.get(f"/api/v1/projects/{owner}/spatial/assets/{asset['id']}/content").content == payload
+    owner_content = client.get(f"/api/v1/projects/{owner}/spatial/assets/{asset['id']}/content")
+    assert owner_content.status_code == 200, owner_content.text
+    assert owner_content.content == payload
+    assert sha256(owner_content.content).hexdigest() == asset["sha256"]
