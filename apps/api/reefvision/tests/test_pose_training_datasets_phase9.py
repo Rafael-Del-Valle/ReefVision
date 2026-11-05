@@ -781,6 +781,10 @@ def test_frozen_dataset_rejects_resigned_duplicate_scientist_candidate(
         }
         duplicate = PoseTrainingDatasetItem(**values)
         duplicate.id = str(uuid4())
+        # A byte-for-byte duplicate is already blocked by the database's
+        # (dataset, track, frame) unique constraint. Use a distinct frame
+        # to exercise the separate candidate-lineage validation instead.
+        duplicate.frame_index = original.frame_index + 1
         session.add(duplicate)
         manifest = copy.deepcopy(dataset.manifest_json)
         manifest["items"].append(copy.deepcopy(manifest["items"][0]))
