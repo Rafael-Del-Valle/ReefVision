@@ -31,8 +31,14 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
             if revision == "0040":
                 allowed.append("triage_complete")
             check_values = ", ".join(f"'{event_type}'" for event_type in allowed)
-            id_column = "id TEXT NOT NULL PRIMARY KEY" if primary_key == "correct" else "id TEXT NOT NULL"
-            composite = ", PRIMARY KEY (id, review_queue_id)" if primary_key == "composite" else ""
+            id_column = (
+                "id TEXT NOT NULL PRIMARY KEY"
+                if primary_key == "correct"
+                else "id TEXT NOT NULL"
+            )
+            composite = (
+                ", PRIMARY KEY (id, review_queue_id)" if primary_key == "composite" else ""
+            )
             connection.execute(
                 text(
                     "CREATE TABLE review_queue_item_events ("
@@ -80,7 +86,11 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                 assert tuple(
                     connection.execute(text("SELECT * FROM review_queue_item_events")).all()
                 ) == events_before
-                assert connection.scalar(text("SELECT value FROM observations")) == "coral observation"
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                assert connection.scalar(text("SELECT value FROM observations")) == (
+                    "coral observation"
+                )
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                    revision
+                )
     finally:
         engine.dispose()
