@@ -155,6 +155,35 @@ def test_unicode_format_controls_cannot_disguise_original_source_filename(
     assert client.get(url).json() == []
 
 
+
+@pytest.mark.parametrize(
+    "filename,payload",
+    [
+        ("coral‮obj.obj", OBJ),
+        ("survey​.ply", CLOUD_PLY),
+        ("model⁦.glb", base64.b64decode(make_glb())),
+    ],
+)
+def test_rejected_unicode_filename_does_not_mutate_existing_source(
+    client: TestClient, filename: str, payload: bytes
+) -> None:
+    """A rejected filename cannot overwrite a previously imported source."""
+    project_id = str(create_project(client, "Preserve imported source provenance")["id"])
+    url = f"/api/v1/projects/{project_id}/spatial/assets"
+    original_name = "original" + filename[-4:]
+    first = client.post(url, files={"file": (original_name, payload)})
+    assert first.status_code == 201, first.text
+    original = first.json()
+
+    rejected = client.post(url, files={"file": (filename, payload)})
+    assert rejected.status_code == 400, rejected.text
+    assert client.get(url).json() == [original]
+    content = client.get(f"{url}/{original['id']}/content")
+    assert content.status_code == 200, content.text
+    assert content.content == payload
+    assert sha256(content.content).hexdigest() == original["sha256"]
+
+
 def test_persisted_obj_measurement_matches_saved_workflow_and_detects_tampering(
     client: TestClient,
 ) -> None:
