@@ -163,3 +163,25 @@ def test_longitudinal_valid_utc_calendar_and_fractional_precision(
     comparison = compare_mesh_observations(before, after)
     assert comparison["elapsed_days"] == pytest.approx(expected_days)
     assert (before, after) == originals
+
+
+@pytest.mark.parametrize("observation", ["before", "after"])
+@pytest.mark.parametrize(
+    "fraction",
+    ["1234567", "0000001", "999999999"],
+)
+def test_longitudinal_replay_rejects_silently_truncated_submicrosecond_time(
+    observation: str, fraction: str
+) -> None:
+    """Python datetime truncates beyond six digits; never lose source precision."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    target = before if observation == "before" else after
+    date = "2026-10-01" if observation == "before" else "2026-10-02"
+    target["provenance"]["observed_at_utc"] = f"{date}T12:00:00.{fraction}Z"
+    originals = (deepcopy(before), deepcopy(after))
+    with pytest.raises(ValueError, match="explicit RFC 3339 UTC timestamps"):
+        compare_mesh_observations(before, after)
+    assert (before, after) == originals
