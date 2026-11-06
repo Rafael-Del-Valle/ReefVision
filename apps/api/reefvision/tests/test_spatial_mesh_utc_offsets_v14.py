@@ -343,3 +343,32 @@ def test_longitudinal_import_provenance_retains_unverified_status(
         not integrity_checked
     )
     assert (before, after) == originals
+
+
+@pytest.mark.parametrize("observation", ["before", "after"])
+@pytest.mark.parametrize("integrity_checked", [True, False])
+def test_longitudinal_import_integrity_qc_is_observation_specific(
+    observation: str, integrity_checked: bool
+) -> None:
+    """A source digest on one survey must not certify the other survey."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    target = before if observation == "before" else after
+    target["provenance"].update(
+        {
+            "source_format": "obj",
+            "source_payload_sha256": "b" * 64,
+            "source_payload_size_bytes": 123,
+            "source_payload_integrity_checked": integrity_checked,
+        }
+    )
+    originals = (deepcopy(before), deepcopy(after))
+    warnings = compare_mesh_observations(before, after)["qc_warnings"]
+    expected_warning = f"{observation}_imported_source_expected_digest_not_checked"
+    assert (expected_warning in warnings) is (not integrity_checked)
+    other = "after" if observation == "before" else "before"
+    assert f"{other}_imported_source_expected_digest_not_checked" not in warnings
+    assert "surface_area_change_is_not_verified_biological_growth" in warnings
+    assert (before, after) == originals
