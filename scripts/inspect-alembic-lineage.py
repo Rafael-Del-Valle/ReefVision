@@ -16,7 +16,8 @@ def inspect(path: Path) -> dict:
     if not path.is_file():
         raise ValueError(f"Database file does not exist: {path}")
     # SQLite URI read-only mode prevents accidental creation of missing databases.
-    uri = path.resolve().as_uri() + "?mode=ro"
+    resolved_path = path.resolve()
+    uri = resolved_path.as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as db:
         db.execute("PRAGMA query_only=ON")
         objects = {
@@ -51,9 +52,10 @@ def inspect(path: Path) -> dict:
         # Do not mistake a mutable database plus sidecars for an immutable backup.
         for suffix, warning in (
             ("-wal", "wal_sidecar_requires_consistent_snapshot"),
+            ("-shm", "shared_memory_sidecar_requires_consistent_snapshot"),
             ("-journal", "rollback_journal_requires_consistent_snapshot"),
         ):
-            if Path(str(path) + suffix).exists():
+            if Path(str(resolved_path) + suffix).exists():
                 warnings.append(warning)
         if not version_table_present:
             warnings.append("missing_alembic_version_table")
