@@ -955,7 +955,7 @@ class PoseTrainingDatasetService:
             or any(not isinstance(item, dict) for item in selected_items)
         ):
             raise ConflictError("Pose Active Learning selected candidate count changed")
-        # Reject duplicate selected observations even when only one candidate
+        # A persisted selection must still describe an observation inside its\n        # original frame window before it can become frozen training provenance.\n        if any(\n            candidate.frame_start > candidate.focus_frame\n            or candidate.focus_frame > candidate.frame_end\n            for candidate in candidates\n        ):\n            raise ConflictError(\n                "Pose Active Learning selection contains a focus frame outside its frame window"\n            )\n\n        # Reject duplicate selected observations even when only one candidate
         # was verified. The signed selection is the round-wide scientific
         # sampling record, not merely the subset chosen for training.
         selected_observations = [
