@@ -239,3 +239,32 @@ def test_longitudinal_replay_rejects_impossible_calendar_times_without_mutation(
     with pytest.raises(ValueError, match="valid UTC timestamps"):
         compare_mesh_observations(before, after)
     assert (before, after) == originals
+
+
+@pytest.mark.parametrize("observation", ["before", "after"])
+@pytest.mark.parametrize(
+    ("source_metadata", "expected_error"),
+    [
+        ({"source_format": "indexed_triangles", "source_payload_sha256": "a" * 64},
+         "Inline indexed triangles cannot carry imported source payload"),
+        ({"source_format": "indexed_triangles", "source_payload_size_bytes": 42},
+         "Inline indexed triangles cannot carry imported source payload"),
+        ({"source_payload_integrity_checked": True},
+         "Source payload integrity check requires a source SHA-256"),
+        ({"source_format": "unrecognized_mesh"}, "Unsupported mesh source format"),
+    ],
+)
+def test_longitudinal_replay_rejects_forged_source_import_provenance(
+    observation: str, source_metadata: dict, expected_error: str
+) -> None:
+    """Replay must not promote fabricated imported-byte evidence to scientific QC."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    target = before if observation == "before" else after
+    target["provenance"].update(source_metadata)
+    originals = (deepcopy(before), deepcopy(after))
+    with pytest.raises(ValueError, match=expected_error):
+        compare_mesh_observations(before, after)
+    assert (before, after) == originals
