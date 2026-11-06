@@ -216,9 +216,11 @@ def compare_mesh_observations(
     # replay. datetime.fromisoformat also accepts spaces, week dates, and
     # compact offsets that are not valid scientific observation timestamps.
     # RFC 3339 -00:00 signifies an unknown offset, not verified UTC.
+    # Python datetime retains at most six fractional digits. Reject finer
+    # precision instead of silently truncating distinct observation times.
     utc_timestamp_pattern = (
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"
-        r"(?:\.\d+)?(?:Z|\+00:00)"
+        r"(?:\.\d{1,6})?(?:Z|\+00:00)"
     )
     for metadata in (first, second):
         timestamp = metadata.get("observed_at_utc")
