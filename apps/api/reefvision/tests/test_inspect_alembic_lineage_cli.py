@@ -55,7 +55,11 @@ def test_missing_database_is_not_created(tmp_path):
         ([], [], "invalid_revision_marker_count_or_value"),
         (["0038", "0038"], [], "invalid_revision_marker_count_or_value"),
         ([""], [], "invalid_revision_marker_count_or_value"),
-        (["0038"], ["scientific_records", "review_queue_item_events"], "mixed_scientific_and_qc_lineage"),
+        (
+            ["0038"],
+            ["scientific_records", "review_queue_item_events"],
+            "mixed_scientific_and_qc_lineage",
+        ),
         (["0038"], ["scientific_records"], "revision_0038_requires_schema_lineage_reconciliation"),
         (["0037"], [], "unrecognized_schema_lineage"),
     ],
