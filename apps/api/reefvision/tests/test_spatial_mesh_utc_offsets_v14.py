@@ -26,7 +26,12 @@ def _preview(observation_id: str, timestamp: str) -> dict:
 
 @pytest.mark.parametrize(
     "invalid_timestamp",
-    ["2026-10-01T12:00:00+01:00", "2026-10-01T12:00:00-05:00"],
+    [
+        "2026-10-01T12:00:00+01:00",
+        "2026-10-01T12:00:00-05:00",
+        "2026-10-01T12:00:00+00:00:01",
+        "2026-10-01T12:00:00-00:00:01",
+    ],
 )
 def test_longitudinal_replay_rejects_non_utc_offsets(invalid_timestamp: str) -> None:
     before = _preview("survey-1", "2026-10-01T12:00:00Z")
