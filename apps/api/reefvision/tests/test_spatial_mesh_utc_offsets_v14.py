@@ -105,9 +105,7 @@ def test_unknown_rfc3339_zero_offset_is_not_verified_utc(observation: str) -> No
     after = _preview("survey-2", "2026-10-02T12:00:00Z")
     target = before if observation == "before" else after
     target["provenance"]["observed_at_utc"] = (
-        "2026-10-01T12:00:00-00:00"
-        if observation == "before"
-        else "2026-10-02T12:00:00-00:00"
+        "2026-10-01T12:00:00-00:00" if observation == "before" else "2026-10-02T12:00:00-00:00"
     )
     original_before, original_after = deepcopy(before), deepcopy(after)
     with pytest.raises(ValueError, match="known UTC offsets"):
