@@ -462,6 +462,27 @@ describe("resolveGalleryNavigation", () => {
     ).toEqual({ page: 9, edge: "index", index: 4 });
   });
 
+  it("wraps a single gallery page with multiple camera images without changing pages", () => {
+    const base = {
+      itemCount: 3,
+      page: 1,
+      pages: 1,
+      wrap: true,
+    };
+    expect(
+      resolveGalleryNavigation({ ...base, action: "next", index: 2 }),
+    ).toEqual({ page: 1, edge: "first" });
+    expect(
+      resolveGalleryNavigation({ ...base, action: "previous", index: 0 }),
+    ).toEqual({ page: 1, edge: "last" });
+    expect(
+      resolveGalleryNavigation({ ...base, action: "next", index: 2, wrap: false }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...base, action: "previous", index: 0, wrap: false }),
+    ).toBeNull();
+  });
+
   it("crosses page boundaries without loading the full collection", () => {
     expect(
       resolveGalleryNavigation({
