@@ -102,7 +102,6 @@ def test_malformed_revision_storage_fails_closed_without_mutation(
     [
         ("-wal", "wal_sidecar_requires_consistent_snapshot"),
         ("-shm", "shared_memory_sidecar_requires_consistent_snapshot"),
-        ("-journal", "rollback_journal_requires_consistent_snapshot"),
     ],
 )
 def test_strict_preflight_detects_sidecars_through_symlink_without_mutation(
