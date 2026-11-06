@@ -1220,9 +1220,9 @@ def test_verified_pose_freeze_accepts_last_recorded_video_frame(
     _, video, _, round_payload = _verified_round(client, monkeypatch)
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
-        candidate = session.query(PoseActiveLearningCandidate).filter_by(
-            round_id=round_payload["id"]
-        ).one()
+        candidate = (
+            session.query(PoseActiveLearningCandidate).filter_by(round_id=round_payload["id"]).one()
+        )
         asset = session.get(VideoAsset, str(video["id"]))
         assert asset is not None
         assert candidate.focus_frame >= 0
