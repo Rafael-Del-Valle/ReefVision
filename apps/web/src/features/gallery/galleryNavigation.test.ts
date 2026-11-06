@@ -248,7 +248,9 @@ describe("gallery preferences", () => {
       page: 1,
       wrap: false,
     });
-    expect(readGalleryPreference(storage, "project-a").imageId).toBe("camera-original-a");
+    expect(readGalleryPreference(storage, "project-a").imageId).toBe(
+      "camera-original-a",
+    );
     expect(readGalleryPreference(storage, "project-b").imageId).toBe("camera-original-b2");
   });
 
