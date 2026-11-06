@@ -35,9 +35,7 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
             id_column = (
                 "id TEXT NOT NULL PRIMARY KEY" if primary_key == "correct" else "id TEXT NOT NULL"
             )
-            composite = (
-                ", PRIMARY KEY (id, review_queue_id)" if primary_key == "composite" else ""
-            )
+            composite = ", PRIMARY KEY (id, review_queue_id)" if primary_key == "composite" else ""
             connection.execute(
                 text(
                     "CREATE TABLE review_queue_item_events ("
@@ -79,9 +77,12 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                         "'request-2', 'comment', 'researcher', '2026-11-05')"
                     )
                 )
-                assert connection.scalar(
-                    text("SELECT COUNT(*) FROM review_queue_item_events WHERE id = 'event-1'")
-                ) == 2
+                assert (
+                    connection.scalar(
+                        text("SELECT COUNT(*) FROM review_queue_item_events WHERE id = 'event-1'")
+                    )
+                    == 2
+                )
             if primary_key == "composite":
                 # A composite (id, queue) key permits duplicate event IDs
                 # across queues, even with per-item request uniqueness.
@@ -94,9 +95,12 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                         "'request-2', 'comment', 'researcher', '2026-11-05')"
                     )
                 )
-                assert connection.scalar(
-                    text("SELECT COUNT(*) FROM review_queue_item_events WHERE id = 'event-1'")
-                ) == 2
+                assert (
+                    connection.scalar(
+                        text("SELECT COUNT(*) FROM review_queue_item_events WHERE id = 'event-1'")
+                    )
+                    == 2
+                )
             if primary_key == "correct":
                 # The valid single-column primary key must actually prevent
                 # cross-queue reuse of a global audit-event identity.
@@ -110,13 +114,14 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                             "'request-2', 'comment', 'researcher', '2026-11-05')"
                         )
                     )
-                assert connection.scalar(
-                    text("SELECT COUNT(*) FROM review_queue_item_events WHERE id = 'event-1'")
-                ) == 1
+                assert (
+                    connection.scalar(
+                        text("SELECT COUNT(*) FROM review_queue_item_events WHERE id = 'event-1'")
+                    )
+                    == 1
+                )
             schema_before = tuple(
-                connection.execute(
-                    text("SELECT name, sql FROM sqlite_master ORDER BY name")
-                ).all()
+                connection.execute(text("SELECT name, sql FROM sqlite_master ORDER BY name")).all()
             )
             events_before = tuple(
                 connection.execute(text("SELECT * FROM review_queue_item_events")).all()
