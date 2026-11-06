@@ -117,6 +117,39 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("isolates restored camera selections when another project's preference is corrupt", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "camera-original-a",
+      page: 3,
+      wrap: true,
+    });
+    writeGalleryPreference(storage, "project-b", {
+      imageId: "camera-original-b",
+      page: 8,
+      wrap: false,
+    });
+    storage.setItem("reefvision.gallery.project-b.v1", "{corrupt JSON");
+
+    expect(readGalleryPreference(storage, "project-b")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+    expect(readGalleryPreference(storage, "project-a")).toEqual({
+      imageId: "camera-original-a",
+      page: 3,
+      wrap: true,
+    });
+    writeGalleryPreference(storage, "project-b", {
+      imageId: "camera-original-b2",
+      page: 1,
+      wrap: false,
+    });
+    expect(readGalleryPreference(storage, "project-a").imageId).toBe("camera-original-a");
+    expect(readGalleryPreference(storage, "project-b").imageId).toBe("camera-original-b2");
+  });
+
   it("normalizes padded camera IDs without losing their selected gallery page", () => {
     const storage = memoryStorage({
       "reefvision.gallery.project-a.v1": JSON.stringify({
