@@ -286,6 +286,27 @@ describe("gallery preferences", () => {
     }
   });
 
+  it("ignores non-object and malformed camera gallery preferences without hiding the first image", () => {
+    const key = "reefvision.gallery.project-a.v1";
+    for (const raw of [
+      "null",
+      "true",
+      "42",
+      '"camera-original-1"',
+      "[]",
+      JSON.stringify({ imageId: "camera-original-1", page: 1.5, wrap: true }),
+      JSON.stringify({ imageId: "camera-original-1", page: "2", wrap: true }),
+      JSON.stringify({ imageId: "camera-original-1", page: null, wrap: true }),
+    ]) {
+      const storage = memoryStorage({ [key]: raw });
+      expect(readGalleryPreference(storage, "project-a")).toEqual({
+        imageId: null,
+        page: 1,
+        wrap: false,
+      });
+    }
+  });
+
   it("rejects unsafe saved pages before loading the first camera image", () => {
     for (const page of [2 ** 53, 1e100, Number.MAX_VALUE]) {
       const storage = memoryStorage({
