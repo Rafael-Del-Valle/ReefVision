@@ -362,6 +362,29 @@ describe("resolveGalleryNavigation", () => {
     }
   });
 
+  it("rejects stale pages and unsafe integer indexes before requesting camera images", () => {
+    const valid = {
+      action: "next" as const,
+      index: 0,
+      itemCount: 24,
+      page: 1,
+      pages: 5,
+      wrap: true,
+    };
+    for (const page of [6, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(resolveGalleryNavigation({ ...valid, page })).toBeNull();
+    }
+    for (const index of [Number.MAX_SAFE_INTEGER + 1, -2]) {
+      expect(resolveGalleryNavigation({ ...valid, index })).toBeNull();
+    }
+    for (const itemCount of [Number.MAX_SAFE_INTEGER + 1, -1]) {
+      expect(resolveGalleryNavigation({ ...valid, itemCount })).toBeNull();
+    }
+    expect(
+      resolveGalleryNavigation({ ...valid, pages: Number.MAX_SAFE_INTEGER + 1 }),
+    ).toBeNull();
+  });
+
   it("rejects malformed runtime navigation payloads instead of advancing an image", () => {
     const valid = {
       action: "next" as const,
