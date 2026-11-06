@@ -139,3 +139,27 @@ def test_longitudinal_replay_rejects_non_rfc3339_utc_evidence(
     with pytest.raises(ValueError, match="explicit RFC 3339 UTC timestamps"):
         compare_mesh_observations(before, after)
     assert (before, after) == originals
+
+
+@pytest.mark.parametrize(
+    ("earlier", "later", "expected_days"),
+    [
+        ("2024-02-28T12:00:00Z", "2024-03-01T12:00:00Z", 2.0),
+        ("2026-10-01T12:00:00.000000Z", "2026-10-02T12:00:00.000000+00:00", 1.0),
+        ("2026-10-01T12:00:00.500Z", "2026-10-02T12:00:00.500Z", 1.0),
+    ],
+)
+def test_longitudinal_valid_utc_calendar_and_fractional_precision(
+    earlier: str, later: str, expected_days: float
+) -> None:
+    """Valid UTC representations preserve elapsed-time science and source records."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    before["provenance"]["observed_at_utc"] = earlier
+    after["provenance"]["observed_at_utc"] = later
+    originals = (deepcopy(before), deepcopy(after))
+    comparison = compare_mesh_observations(before, after)
+    assert comparison["elapsed_days"] == pytest.approx(expected_days)
+    assert (before, after) == originals
