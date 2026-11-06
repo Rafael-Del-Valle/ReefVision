@@ -1006,3 +1006,28 @@ def test_camera_jpeg_alias_uses_decoded_format_not_filename_for_managed_content(
     assert display.status_code == 200
     with Image.open(BytesIO(display.content)) as decoded:
         assert decoded.size == (41, 31)
+
+
+@pytest.mark.parametrize("extension", [".JPG", ".JPEG"])
+def test_mislabeled_camera_extension_does_not_fabricate_jpeg_provenance(
+    client: TestClient, extension: str
+) -> None:
+    """A filename is not proof of JPEG encoding: preserve decoded raster provenance."""
+    project = create_project(client, f"Camera content mismatch {extension}")
+    stream = BytesIO()
+    Image.new("RGB", (43, 29), (12, 72, 160)).save(stream, format="PNG")
+    original = stream.getvalue()
+
+    report = import_one(client, project["id"], filename=f"DSC_MISMATCH{extension}", content=original)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    assert record["original_filename"] == f"DSC_MISMATCH{extension}"
+    assert record["metadata_json"]["format"] == "PNG"
+    assert record["media_type"] == "image/png"
+    assert (record["width_px"], record["height_px"]) == (43, 29)
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    with Image.open(BytesIO(display.content)) as decoded:
+        assert decoded.size == (43, 29)
