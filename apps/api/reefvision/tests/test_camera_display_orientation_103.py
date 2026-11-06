@@ -40,7 +40,7 @@ def test_browser_display_does_not_exif_rotate_camera_pixels(tmp_path, orientatio
         assert rendered.size == camera.size == (19, 11)
         # Compare decoded pixels, not JPEG source colors, which may differ
         # from their pre-compression fixture values.
-        assert list(rendered.convert("RGB").getdata()) == list(camera.convert("RGB").getdata())
+        assert rendered.convert("RGB").tobytes() == camera.convert("RGB").tobytes()
         assert rendered.getexif().get(274) in (None, 1)
     assert source.read_bytes() == original
     assert hashlib.sha256(source.read_bytes()).hexdigest() == original_hash
