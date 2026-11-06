@@ -212,6 +212,12 @@ def compare_mesh_observations(
         )
     if first_id == second_id:
         raise ValueError("Longitudinal comparison requires distinct observation_id values")
+    # RFC 3339 -00:00 denotes an unknown local offset, not verified UTC.
+    # Python normalizes it to zero, so reject it before datetime parsing.
+    for metadata in (first, second):
+        timestamp = metadata.get("observed_at_utc")
+        if isinstance(timestamp, str) and timestamp.endswith("-00:00"):
+            raise ValueError("Observations require known UTC offsets, not -00:00")
     try:
         before_time = datetime.fromisoformat(first["observed_at_utc"].replace("Z", "+00:00"))
         after_time = datetime.fromisoformat(second["observed_at_utc"].replace("Z", "+00:00"))
