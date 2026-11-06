@@ -152,3 +152,43 @@ def test_strict_preflight_detects_sidecars_through_symlink_without_mutation(
     assert report["upgrade_authorized"] is False
     assert database.read_bytes() == before_database
     assert sidecar.read_bytes() == before_sidecar
+
+
+def test_sqlite_integrity_preflight_reports_clean_database(tmp_path: Path) -> None:
+    database = tmp_path / "clean.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0037')")
+        for name in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+    before = database.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["sqlite_integrity_ok"] is True
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before
+
+
+def test_corrupt_sqlite_file_fails_closed_without_mutation(tmp_path: Path) -> None:
+    database = tmp_path / "corrupt.sqlite"
+    database.write_bytes(b"not a SQLite database; preserve this evidence")
+    before = database.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert database.read_bytes() == before
