@@ -8,9 +8,9 @@ import zipfile
 from typing import cast
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from reefvision.db.models import (
     PoseActiveLearningCandidate,
