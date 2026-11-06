@@ -274,3 +274,43 @@ def test_longitudinal_replay_rejects_forged_source_import_provenance(
     with pytest.raises(ValueError, match=expected_error):
         compare_mesh_observations(before, after)
     assert (before, after) == originals
+
+
+@pytest.mark.parametrize("observation", ["before", "after"])
+@pytest.mark.parametrize(
+    ("source_metadata", "expected_error"),
+    [
+        ({"source_payload_sha256": "A" * 64}, "Source payload SHA-256"),
+        ({"source_payload_sha256": "g" * 64}, "Source payload SHA-256"),
+        ({"source_payload_size_bytes": -1}, "Source payload size"),
+        ({"source_payload_size_bytes": True}, "Source payload size"),
+        ({"source_payload_integrity_checked": 1}, "Source payload integrity check must be boolean"),
+        (
+            {"source_format": "obj", "source_payload_integrity_checked": True},
+            "Source payload integrity check requires a source SHA-256",
+        ),
+        (
+            {
+                "source_format": "obj",
+                "source_payload_sha256": "a" * 64,
+                "source_payload_integrity_checked": True,
+                "source_payload_size_bytes": 0,
+            },
+            "Source payload integrity check requires a positive source byte count",
+        ),
+    ],
+)
+def test_longitudinal_replay_rejects_invalid_import_integrity_fields(
+    observation: str, source_metadata: dict, expected_error: str
+) -> None:
+    """Invalid imported-source claims must fail without changing saved observations."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    target = before if observation == "before" else after
+    target["provenance"].update(source_metadata)
+    originals = (deepcopy(before), deepcopy(after))
+    with pytest.raises(ValueError, match=expected_error):
+        compare_mesh_observations(before, after)
+    assert (before, after) == originals
