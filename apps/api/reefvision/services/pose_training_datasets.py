@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import math
 import zipfile
 from datetime import datetime
 from typing import Any
@@ -966,6 +967,11 @@ class PoseTrainingDatasetService:
             raise ConflictError(
                 "Pose Active Learning selection contains a focus frame outside its frame window"
             )
+
+        # Non-finite acquisition scores cannot be reproduced or reliably ranked.
+        # Reject corrupted persisted selection data before freezing its lineage.
+        if any(not math.isfinite(candidate.acquisition_score) for candidate in candidates):
+            raise ConflictError("Pose Active Learning selection contains a non-finite acquisition score")
 
         # Reject duplicate selected observations even when only one candidate
         # was verified. The signed selection is the round-wide scientific
