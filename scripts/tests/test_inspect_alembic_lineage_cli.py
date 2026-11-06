@@ -27,7 +27,12 @@ def test_cli_strict_mode_is_opt_in_and_never_mutates_database(
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
         connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
-        for table in ("scientific_records", "environmental_cache_entries", "computed_metric_definitions", "computed_metric_results"):
+        for table in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
             connection.execute(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY)")
         connection.execute("CREATE TABLE biological_sentinel (id INTEGER PRIMARY KEY, note TEXT)")
         connection.execute("INSERT INTO biological_sentinel VALUES (1, 'preserve')")
@@ -65,7 +70,13 @@ def test_strict_cli_missing_database_does_not_create_it(tmp_path: Path) -> None:
     assert not database.exists()
 
 
-@pytest.mark.parametrize("version_schema", ["CREATE TABLE alembic_version (revision TEXT)", "CREATE VIEW alembic_version AS SELECT '0038' AS version_num"])
+@pytest.mark.parametrize(
+    "version_schema",
+    [
+        "CREATE TABLE alembic_version (revision TEXT)",
+        "CREATE VIEW alembic_version AS SELECT '0038' AS version_num",
+    ],
+)
 def test_malformed_revision_storage_fails_closed_without_mutation(
     tmp_path: Path, version_schema: str
 ) -> None:
