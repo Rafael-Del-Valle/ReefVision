@@ -86,3 +86,44 @@ def test_missing_revision_table_is_explicitly_reported(tmp_path):
     assert result["lineage_hint"] == "scientific"
     assert result["upgrade_authorized"] is False
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("tables", "expected_warnings"),
+    [
+        (["scientific_records"], {"incomplete_scientific_schema_family"}),
+        (["review_queue_item_events"], {"incomplete_qc_schema_family"}),
+        (
+            ["scientific_records", "review_queue_item_events"],
+            {"incomplete_scientific_schema_family", "incomplete_qc_schema_family", "mixed_scientific_and_qc_lineage"},
+        ),
+        (
+            [
+                "scientific_records",
+                "environmental_cache_entries",
+                "computed_metric_definitions",
+                "computed_metric_results",
+            ],
+            set(),
+        ),
+        (["review_queue_item_events", "review_queue_bulk_requests"], set()),
+    ],
+)
+def test_partial_migration_families_never_imply_safe_upgrade(tmp_path, tables, expected_warnings):
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0038')")
+        for table in tables:
+            db.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, evidence TEXT)')
+            db.execute(f'INSERT INTO "{table}" (evidence) VALUES (?)', ("coral sentinel",))
+        db.commit()
+    before = path.read_bytes()
+    result = module.inspect(path)
+    assert expected_warnings.issubset(set(result["warnings"]))
+    for family in ("scientific", "qc"):
+        warning = f"incomplete_{family}_schema_family"
+        assert (warning in result["warnings"]) == (warning in expected_warnings)
+    assert result["upgrade_authorized"] is False
+    assert all(result["inventory"][table]["rows"] == 1 for table in tables)
+    assert path.read_bytes() == before
