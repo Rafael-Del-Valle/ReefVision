@@ -1147,8 +1147,7 @@ class PoseTrainingDatasetService:
                 separators=(",", ":"),
                 ensure_ascii=False,
             )
-            + "
-"
+            + "\n"
         ).encode("utf-8")
 
         rows: list[str] = []
@@ -1186,47 +1185,32 @@ class PoseTrainingDatasetService:
                 )
             )
 
-        item_bytes = ("
-".join(rows) + "
-").encode("utf-8")
+        item_bytes = ("\n".join(rows) + "\n").encode("utf-8")
 
         readme = (
-            b"ReefVision immutable pose-training dataset
-"
-            b"
-"
+            b"ReefVision immutable pose-training dataset\n"
+            b"\n"
             b"This package contains only scientist-verified "
-            b"canonical pose snapshots.
-"
+            b"canonical pose snapshots.\n"
             b"Skipped, pending, and unreviewed model "
-            b"predictions are excluded.
-"
+            b"predictions are excluded.\n"
             b"External trainer-specific image extraction and "
             b"SLEAP/COCO/DLC/Ultralytics/NWB rendering are "
             b"performed in the next Phase 9 interoperability "
-            b"layer.
-"
-            b"
-"
-            b"Verify extracted files before scientific reuse:
-"
-            b"  Linux: sha256sum -c SHA256SUMS
-"
-            b"  macOS: shasum -a 256 -c SHA256SUMS
-"
-            b"  Windows: compare Get-FileHash -Algorithm SHA256 results
-"
-            b"           with the SHA256SUMS entries for each file.
-"
-            b"Run these checks from the extracted package directory.
-"
+            b"layer.\n"
+            b"\n"
+            b"Verify extracted files before scientific reuse:\n"
+            b"  Linux: sha256sum -c SHA256SUMS\n"
+            b"  macOS: shasum -a 256 -c SHA256SUMS\n"
+            b"  Windows: compare Get-FileHash -Algorithm SHA256 results\n"
+            b"           with the SHA256SUMS entries for each file.\n"
+            b"Run these checks from the extracted package directory.\n"
         )
 
         # A portable checksum index lets researchers validate extracted files
         # independently of ZIP metadata or the original download response.
         checksum_bytes = "".join(
-            f"{hashlib.sha256(payload).hexdigest()}  {name}
-"
+            f"{hashlib.sha256(payload).hexdigest()}  {name}\n"
             for name, payload in (
                 (PACKAGE_MANIFEST_FILENAME, manifest_bytes),
                 (PACKAGE_ITEMS_FILENAME, item_bytes),
