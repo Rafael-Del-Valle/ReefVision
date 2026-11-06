@@ -472,6 +472,30 @@ describe("resolveGalleryNavigation", () => {
     ).toEqual({ page: 5, edge: "last" });
   });
 
+  it("navigates single-image pages without treating the gallery as empty", () => {
+    const base = {
+      index: 0,
+      itemCount: 1,
+      pages: 3,
+      wrap: false,
+    };
+    expect(
+      resolveGalleryNavigation({ ...base, action: "next", page: 1 }),
+    ).toEqual({ page: 2, edge: "first" });
+    expect(
+      resolveGalleryNavigation({ ...base, action: "previous", page: 2 }),
+    ).toEqual({ page: 1, edge: "last" });
+    expect(
+      resolveGalleryNavigation({ ...base, action: "last", page: 1 }),
+    ).toEqual({ page: 3, edge: "last" });
+    expect(
+      resolveGalleryNavigation({ ...base, action: "next", page: 3 }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...base, action: "next", page: 3, wrap: true }),
+    ).toEqual({ page: 1, edge: "first" });
+  });
+
   it("moves within a page without requesting another page", () => {
     expect(
       resolveGalleryNavigation({
