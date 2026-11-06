@@ -326,9 +326,7 @@ def test_malformed_foreign_key_schema_is_structured_and_read_only(
     command = [sys.executable, str(SCRIPT)]
     if strict:
         command.append("--fail-on-warning")
-    result = subprocess.run(
-        [*command, str(database)], capture_output=True, text=True, check=False
-    )
+    result = subprocess.run([*command, str(database)], capture_output=True, text=True, check=False)
     assert result.returncode == (2 if strict else 0), result.stderr
     report = json.loads(result.stdout)
     assert report["sqlite_foreign_key_violations"] is None
@@ -349,9 +347,7 @@ def test_foreign_alembic_version_column_is_reported_without_mutation(
         connection.execute(
             "CREATE TABLE alembic_version (version_num TEXT NOT NULL, foreign_lineage TEXT)"
         )
-        connection.execute(
-            "INSERT INTO alembic_version VALUES ('0037', 'preserve')"
-        )
+        connection.execute("INSERT INTO alembic_version VALUES ('0037', 'preserve')")
         for name in (
             "scientific_records",
             "environmental_cache_entries",
@@ -363,9 +359,7 @@ def test_foreign_alembic_version_column_is_reported_without_mutation(
     command = [sys.executable, str(SCRIPT)]
     if strict:
         command.append("--fail-on-warning")
-    result = subprocess.run(
-        [*command, str(database)], capture_output=True, text=True, check=False
-    )
+    result = subprocess.run([*command, str(database)], capture_output=True, text=True, check=False)
     assert result.returncode == (2 if strict else 0), result.stderr
     report = json.loads(result.stdout)
     assert "unexpected_alembic_version_columns" in report["warnings"]
@@ -399,9 +393,7 @@ def test_noncanonical_revision_marker_fails_closed_without_mutation(
     command = [sys.executable, str(SCRIPT)]
     if strict:
         command.append("--fail-on-warning")
-    result = subprocess.run(
-        [*command, str(database)], capture_output=True, text=True, check=False
-    )
+    result = subprocess.run([*command, str(database)], capture_output=True, text=True, check=False)
     assert result.returncode == (2 if strict else 0), result.stderr
     report = json.loads(result.stdout)
     assert "invalid_revision_marker_count_or_value" in report["warnings"]
@@ -438,9 +430,7 @@ def test_invalid_revision_row_cardinality_fails_closed_without_mutation(
     command = [sys.executable, str(SCRIPT)]
     if strict:
         command.append("--fail-on-warning")
-    result = subprocess.run(
-        [*command, str(database)], capture_output=True, text=True, check=False
-    )
+    result = subprocess.run([*command, str(database)], capture_output=True, text=True, check=False)
     assert result.returncode == (2 if strict else 0), result.stderr
     report = json.loads(result.stdout)
     assert "invalid_revision_marker_count_or_value" in report["warnings"]
