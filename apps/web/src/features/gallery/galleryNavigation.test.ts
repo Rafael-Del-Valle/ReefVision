@@ -118,6 +118,35 @@ describe("browser gallery storage access", () => {
     });
   });
 
+  it("recovers a saved camera image when WebView2 getItem temporarily throws", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "camera-original-15",
+      page: 6,
+      wrap: true,
+    });
+    const blockedStorage = {
+      getItem: (_key: string): string | null => {
+        throw new DOMException("Storage unavailable", "SecurityError");
+      },
+      setItem: storage.setItem,
+    };
+    vi.stubGlobal("window", { localStorage: blockedStorage });
+    expect(readBrowserGalleryPreference("project-a")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+
+    // A transient read failure must not delete the persisted camera selection.
+    vi.stubGlobal("window", { localStorage: storage });
+    expect(readBrowserGalleryPreference("project-a")).toEqual({
+      imageId: "camera-original-15",
+      page: 6,
+      wrap: true,
+    });
+  });
+
   it("recovers when WebView2 denies access to the localStorage property itself", () => {
     vi.stubGlobal("window", {
       get localStorage(): Storage {
