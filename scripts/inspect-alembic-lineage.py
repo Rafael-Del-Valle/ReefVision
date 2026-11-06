@@ -20,6 +20,10 @@ def inspect(path: Path) -> dict:
     uri = resolved_path.as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as db:
         db.execute("PRAGMA query_only=ON")
+        # A corrupt snapshot must not be considered a valid migration candidate.
+        # quick_check(1) is bounded in reported errors; it does not repair data.
+        integrity_result = db.execute("PRAGMA quick_check(1)").fetchone()
+        integrity_ok = integrity_result is not None and integrity_result[0] == "ok"
         objects = {
             row[0]: row[1]
             for row in db.execute("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view')")
@@ -48,6 +52,8 @@ def inspect(path: Path) -> dict:
         qc = any(inventory[name]["present"] for name in FAMILIES["qc"])
         lineage = "ambiguous" if scientific and qc else "scientific" if scientific else "qc" if qc else "unknown"
         warnings = []
+        if not integrity_ok:
+            warnings.append("sqlite_integrity_check_failed")
         # A live SQLite WAL/journal can contain uncheckpointed scientific edits.
         # Do not mistake a mutable database plus sidecars for an immutable backup.
         for suffix, warning in (
@@ -76,6 +82,7 @@ def inspect(path: Path) -> dict:
             warnings.append("unrecognized_schema_lineage")
         return {
             "warnings": warnings,
+            "sqlite_integrity_ok": integrity_ok,
             "revision_rows": revisions,
             "lineage_hint": lineage,
             "upgrade_authorized": False,
