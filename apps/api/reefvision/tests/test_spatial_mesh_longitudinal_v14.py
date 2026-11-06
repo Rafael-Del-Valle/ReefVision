@@ -1597,8 +1597,10 @@ def test_mesh_comparison_rejects_same_instant_in_different_timezones(
             "observed_at_utc": later_timestamp,
         },
     }
-    with pytest.raises(ValueError, match="increasing timestamps"):
+    with pytest.raises(ValueError, match="explicit RFC 3339 UTC timestamps"):
         compare_mesh_observations(first, later)
+    assert first["provenance"]["observed_at_utc"] == "2026-10-01T12:00:00Z"
+    assert later["provenance"]["observed_at_utc"] == later_timestamp
 
 
 @pytest.mark.parametrize("invalid_scale", [True, 0, -1, "1", float("nan"), float("inf")])
