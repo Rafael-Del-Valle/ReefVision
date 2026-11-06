@@ -844,6 +844,14 @@ def test_native_pose_training_package_is_deterministic_and_verified_only(
             "SHA256SUMS",
         }
 
+        # Exported ZIP metadata must not vary with the host OS or clock.
+        # Check the actual scientist-verified package, not a mock archive.
+        for member in archive.infolist():
+            assert member.date_time == (1980, 1, 1, 0, 0, 0)
+            assert member.create_system == 3
+            assert member.external_attr >> 16 == 0o100644
+            assert member.compress_type == zipfile.ZIP_DEFLATED
+
         manifest = json.loads(archive.read("reefvision-pose-training-manifest.json"))
 
         rows = [
