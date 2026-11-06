@@ -136,7 +136,9 @@ def inspect(path: Path) -> dict:
             "sqlite_full_integrity_ok": full_integrity_ok,
             "sqlite_foreign_key_violations": foreign_key_violations,
             "sqlite_foreign_key_check_error": foreign_key_check_error,
-            "revision_rows": revisions,
+            # SQLite permits BLOB/INTEGER revision cells despite Alembic expecting TEXT.
+            # Keep the report JSON-safe without exposing arbitrary binary payloads.
+            "revision_rows": [value if isinstance(value, str) else None for value in revisions],
             "lineage_hint": lineage,
             "upgrade_authorized": False,
             "inventory": inventory,
