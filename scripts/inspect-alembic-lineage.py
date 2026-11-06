@@ -23,9 +23,16 @@ def inspect(path: Path) -> dict:
             row[0]: row[1]
             for row in db.execute("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view')")
         }
+        version_table_present = objects.get("alembic_version") == "table"
+        version_columns = (
+            {row[1] for row in db.execute('PRAGMA table_info("alembic_version")')}
+            if version_table_present
+            else set()
+        )
+        # A malformed Alembic table is a diagnostic finding, not an inspector crash.
         revisions = (
             [row[0] for row in db.execute("SELECT version_num FROM alembic_version")]
-            if objects.get("alembic_version") == "table"
+            if "version_num" in version_columns
             else []
         )
         inventory = {}
@@ -40,8 +47,10 @@ def inspect(path: Path) -> dict:
         qc = any(inventory[name]["present"] for name in FAMILIES["qc"])
         lineage = "ambiguous" if scientific and qc else "scientific" if scientific else "qc" if qc else "unknown"
         warnings = []
-        if objects.get("alembic_version") != "table":
+        if not version_table_present:
             warnings.append("missing_alembic_version_table")
+        elif "version_num" not in version_columns:
+            warnings.append("missing_alembic_version_column")
         elif len(revisions) != 1 or not isinstance(revisions[0], str) or not revisions[0]:
             warnings.append("invalid_revision_marker_count_or_value")
         # A single family marker is only a hint: partial migrations are not complete schemas.
