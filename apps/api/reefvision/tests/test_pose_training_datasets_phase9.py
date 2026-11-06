@@ -1237,6 +1237,36 @@ def test_verified_pose_freeze_accepts_last_recorded_video_frame(
     assert response.json()["item_count"] == 1
 
 
+
+def test_verified_pose_freeze_rejects_frame_past_recorded_video_end(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A verified observation at frame_count is outside the zero-based
+    # recorded timeline, even when its review and acquisition hashes agree.
+    _, video, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate).filter_by(round_id=round_payload["id"]).one()
+        )
+        asset = session.get(VideoAsset, str(video["id"]))
+        assert asset is not None
+        assert candidate.focus_frame > 0
+        asset.frame_count = candidate.focus_frame
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "outside the source video timeline" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
 def test_frozen_dataset_database_rejects_negative_frame_index(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
