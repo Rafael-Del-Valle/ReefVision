@@ -27,6 +27,8 @@ def test_cli_strict_mode_is_opt_in_and_never_mutates_database(
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
         connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for table in ("scientific_records", "environmental_cache_entries", "computed_metric_definitions", "computed_metric_results"):
+            connection.execute(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY)")
         connection.execute("CREATE TABLE biological_sentinel (id INTEGER PRIMARY KEY, note TEXT)")
         connection.execute("INSERT INTO biological_sentinel VALUES (1, 'preserve')")
     # This synthetic fixture has no 1.6 schema-family tables. Its revision 0038
