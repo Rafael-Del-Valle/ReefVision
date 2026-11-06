@@ -245,12 +245,18 @@ def test_longitudinal_replay_rejects_impossible_calendar_times_without_mutation(
 @pytest.mark.parametrize(
     ("source_metadata", "expected_error"),
     [
-        ({"source_format": "indexed_triangles", "source_payload_sha256": "a" * 64},
-         "Inline indexed triangles cannot carry imported source payload"),
-        ({"source_format": "indexed_triangles", "source_payload_size_bytes": 42},
-         "Inline indexed triangles cannot carry imported source payload"),
-        ({"source_payload_integrity_checked": True},
-         "Source payload integrity check requires a source SHA-256"),
+        (
+            {"source_format": "indexed_triangles", "source_payload_sha256": "a" * 64},
+            "Inline indexed triangles cannot carry imported source payload",
+        ),
+        (
+            {"source_format": "indexed_triangles", "source_payload_size_bytes": 42},
+            "Inline indexed triangles cannot carry imported source payload",
+        ),
+        (
+            {"source_payload_integrity_checked": True},
+            "Source payload integrity check requires a source SHA-256",
+        ),
         ({"source_format": "unrecognized_mesh"}, "Unsupported mesh source format"),
     ],
 )
