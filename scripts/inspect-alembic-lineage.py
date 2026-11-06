@@ -49,7 +49,10 @@ def inspect(path: Path) -> dict:
         warnings = []
         # A live SQLite WAL/journal can contain uncheckpointed scientific edits.
         # Do not mistake a mutable database plus sidecars for an immutable backup.
-        for suffix, warning in (("-wal", "wal_sidecar_requires_consistent_snapshot"), ("-journal", "rollback_journal_requires_consistent_snapshot")):
+        for suffix, warning in (
+            ("-wal", "wal_sidecar_requires_consistent_snapshot"),
+            ("-journal", "rollback_journal_requires_consistent_snapshot"),
+        ):
             if Path(str(path) + suffix).exists():
                 warnings.append(warning)
         if not version_table_present:
