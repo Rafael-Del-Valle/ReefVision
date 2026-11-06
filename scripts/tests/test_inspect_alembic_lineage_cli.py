@@ -335,3 +335,43 @@ def test_foreign_alembic_version_column_is_reported_without_mutation(
     assert report["revision_rows"] == ["0037"]
     assert report["upgrade_authorized"] is False
     assert database.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "revision",
+    [" 0037", "0037 ", "0037\\n", "0037\\x00", "0037\\x7f", "\\t"],
+)
+@pytest.mark.parametrize("strict", [False, True])
+def test_noncanonical_revision_marker_fails_closed_without_mutation(
+    tmp_path: Path, revision: str, strict: bool
+) -> None:
+    database = tmp_path / "noncanonical-revision.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for name in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE biological_sentinel (note TEXT)")
+        connection.execute("INSERT INTO biological_sentinel VALUES ('preserve')")
+    before = database.read_bytes()
+    command = [sys.executable, str(SCRIPT)]
+    if strict:
+        command.append("--fail-on-warning")
+    result = subprocess.run(
+        [*command, str(database)], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == (2 if strict else 0), result.stderr
+    report = json.loads(result.stdout)
+    assert "invalid_revision_marker_count_or_value" in report["warnings"]
+    assert report["revision_rows"] == [revision]
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
+            "preserve",
+        )
