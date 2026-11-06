@@ -44,6 +44,11 @@ def inspect(path: Path) -> dict:
             warnings.append("missing_alembic_version_table")
         elif len(revisions) != 1 or not isinstance(revisions[0], str) or not revisions[0]:
             warnings.append("invalid_revision_marker_count_or_value")
+        # A single family marker is only a hint: partial migrations are not complete schemas.
+        for family, names in FAMILIES.items():
+            present = [name for name in names if inventory[name]["present"]]
+            if present and len(present) != len(names):
+                warnings.append(f"incomplete_{family}_schema_family")
         if lineage == "ambiguous":
             warnings.append("mixed_scientific_and_qc_lineage")
         if "0038" in revisions:
