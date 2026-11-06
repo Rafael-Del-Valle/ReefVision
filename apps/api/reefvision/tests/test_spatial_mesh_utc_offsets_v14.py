@@ -372,3 +372,36 @@ def test_longitudinal_import_integrity_qc_is_observation_specific(
     assert f"{other}_imported_source_expected_digest_not_checked" not in warnings
     assert "surface_area_change_is_not_verified_biological_growth" in warnings
     assert (before, after) == originals
+
+
+@pytest.mark.parametrize("before_checked,after_checked", [(False, False), (False, True), (True, False), (True, True)])
+def test_longitudinal_two_imports_keep_independent_integrity_warnings(
+    before_checked: bool, after_checked: bool
+) -> None:
+    """Independent imported observations require independent digest verification."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    for observation, checked, digest in (
+        (before, before_checked, "a" * 64),
+        (after, after_checked, "b" * 64),
+    ):
+        observation["provenance"].update(
+            {
+                "source_format": "obj",
+                "source_payload_sha256": digest,
+                "source_payload_size_bytes": 123,
+                "source_payload_integrity_checked": checked,
+            }
+        )
+    originals = (deepcopy(before), deepcopy(after))
+    warnings = compare_mesh_observations(before, after)["qc_warnings"]
+    assert ("before_imported_source_expected_digest_not_checked" in warnings) is (
+        not before_checked
+    )
+    assert ("after_imported_source_expected_digest_not_checked" in warnings) is (
+        not after_checked
+    )
+    assert "surface_area_change_is_not_verified_biological_growth" in warnings
+    assert (before, after) == originals
