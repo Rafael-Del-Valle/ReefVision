@@ -1031,3 +1031,33 @@ def test_mislabeled_camera_extension_does_not_fabricate_jpeg_provenance(
     assert display.status_code == 200
     with Image.open(BytesIO(display.content)) as decoded:
         assert decoded.size == (43, 29)
+
+
+@pytest.mark.parametrize("extension", [".jPg", ".JpEg", ".JfI", ".JiF"])
+def test_mixed_case_camera_alias_preserves_original_and_decoded_jpeg(
+    client: TestClient, extension: str
+) -> None:
+    """Case-folded camera aliases must not rewrite originals or raster provenance."""
+    project = create_project(client, f"Mixed case camera alias {extension}")
+    stream = BytesIO()
+    Image.new("RGB", (47, 35), (32, 90, 170)).save(stream, format="JPEG")
+    original = stream.getvalue()
+
+    filename = f"DSC_MIXED{extension}"
+    report = import_one(client, project["id"], filename=filename, content=original)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    response = client.get(f"/api/v1/images/{image_id}")
+    assert response.status_code == 200
+    record = response.json()
+    assert record["original_filename"] == filename
+    assert record["metadata_json"]["format"] == "JPEG"
+    assert record["media_type"] == "image/jpeg"
+    assert (record["width_px"], record["height_px"]) == (47, 35)
+    original_response = client.get(f"/api/v1/images/{image_id}/content")
+    assert original_response.status_code == 200
+    assert original_response.content == original
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    with Image.open(BytesIO(display.content)) as decoded:
+        assert decoded.size == (47, 35)
