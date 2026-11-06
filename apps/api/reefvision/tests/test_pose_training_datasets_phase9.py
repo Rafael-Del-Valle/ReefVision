@@ -1210,3 +1210,44 @@ def test_freeze_rejects_boolean_acquisition_frame_even_with_resigned_checksum(
     with app.state.session_factory() as session:
         assert session.query(PoseTrainingDataset).count() == 0
         assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+def test_frozen_dataset_rejects_resigned_negative_frame_index(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A persisted scientist-verified freeze must remain invalid if its frame
+    # identity is rewritten to an impossible index, even with new hashes.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    created = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert created.status_code == 201, created.text
+    dataset_id = created.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
+        item.frame_index = -1
+        canonical = copy.deepcopy(item.canonical_pose_json)
+        canonical["frame_index"] = -1
+        item.canonical_pose_json = canonical
+        acquisition = copy.deepcopy(item.acquisition_provenance_json)
+        acquisition["focus_frame"] = -1
+        item.acquisition_provenance_json = acquisition
+        review = copy.deepcopy(item.review_provenance_json)
+        review["before"]["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
+        item.review_provenance_json = review
+        manifest = copy.deepcopy(dataset.manifest_json)
+        manifest["items"][0]["frame_index"] = -1
+        manifest["items"][0]["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
+        manifest["items"][0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        dataset.manifest_json = manifest
+        dataset.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
+    assert response.status_code == 409, response.text
+    assert "item lineage" in response.text
