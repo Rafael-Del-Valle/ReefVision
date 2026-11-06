@@ -42,6 +42,9 @@ def test_live_wal_is_reported_and_preserved(tmp_path: Path, strict: bool) -> Non
             assert wal.exists() and wal.stat().st_size > 0
             before_database = database.read_bytes()
             before_wal = wal.read_bytes()
+            shm = Path(str(database) + "-shm")
+            assert shm.exists()
+            before_shm = shm.read_bytes()
             command = [sys.executable, str(SCRIPT)]
             if strict:
                 command.append("--fail-on-warning")
@@ -51,9 +54,15 @@ def test_live_wal_is_reported_and_preserved(tmp_path: Path, strict: bool) -> Non
             assert result.returncode == (2 if strict else 0), result.stderr
             report = json.loads(result.stdout)
             assert "wal_sidecar_requires_consistent_snapshot" in report["warnings"]
+            assert "shared_memory_sidecar_requires_consistent_snapshot" in report["warnings"]
+            # The inspector must see committed records still resident in the WAL,
+            # not merely preserve the files while reading an older main DB image.
+            with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as snapshot:
+                assert snapshot.execute("SELECT COUNT(*) FROM biological_sentinel").fetchone() == (2,)
             assert report["upgrade_authorized"] is False
             assert database.read_bytes() == before_database
             assert wal.read_bytes() == before_wal
+            assert shm.read_bytes() == before_shm
             assert writer.execute(
                 "SELECT note FROM biological_sentinel ORDER BY id"
             ).fetchall() == [("preserve",), ("uncheckpointed",)]
