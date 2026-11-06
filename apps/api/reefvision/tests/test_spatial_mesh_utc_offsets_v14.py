@@ -185,3 +185,29 @@ def test_longitudinal_replay_rejects_silently_truncated_submicrosecond_time(
     with pytest.raises(ValueError, match="explicit RFC 3339 UTC timestamps"):
         compare_mesh_observations(before, after)
     assert (before, after) == originals
+
+
+@pytest.mark.parametrize(
+    ("earlier", "later", "expected_microseconds"),
+    [
+        ("2026-10-01T12:00:00.000000Z", "2026-10-01T12:00:00.000001Z", 1),
+        ("2026-10-01T12:00:00.999999Z", "2026-10-01T12:00:01.000000Z", 1),
+        ("2026-10-01T23:59:59.999999Z", "2026-10-02T00:00:00Z", 1),
+    ],
+)
+def test_longitudinal_preserves_supported_microsecond_elapsed_time(
+    earlier: str, later: str, expected_microseconds: int
+) -> None:
+    """Distinct valid observations must not collapse at second boundaries."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    before["provenance"]["observed_at_utc"] = earlier
+    after["provenance"]["observed_at_utc"] = later
+    originals = (deepcopy(before), deepcopy(after))
+    comparison = compare_mesh_observations(before, after)
+    assert comparison["elapsed_days"] == pytest.approx(
+        expected_microseconds / 86_400_000_000, rel=1e-9, abs=1e-16
+    )
+    assert (before, after) == originals
