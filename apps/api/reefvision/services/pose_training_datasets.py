@@ -955,6 +955,17 @@ class PoseTrainingDatasetService:
             or any(not isinstance(item, dict) for item in selected_items)
         ):
             raise ConflictError("Pose Active Learning selected candidate count changed")
+        # Reject duplicate selected observations even when only one candidate
+        # was verified. The signed selection is the round-wide scientific
+        # sampling record, not merely the subset chosen for training.
+        selected_observations = [
+            (candidate.video_track_id, candidate.focus_frame) for candidate in candidates
+        ]
+        if len(selected_observations) != len(set(selected_observations)):
+            raise ConflictError(
+                "Pose Active Learning selection contains duplicate track/frame observations"
+            )
+
         selected_fields = (
             "video_track_id",
             "focus_frame",
