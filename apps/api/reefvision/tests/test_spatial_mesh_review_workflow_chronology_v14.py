@@ -221,6 +221,8 @@ def test_saved_longitudinal_review_chronology_matches_standalone(
     [
         ("2026-10-01T12:00:00.999999Z", "2026-10-01T12:00:01Z", 1 / 86_400_000_000),
         ("2026-10-01T23:59:59.999999Z", "2026-10-02T00:00:00Z", 1 / 86_400_000_000),
+        ("2026-10-01T12:00:00.999999+00:00", "2026-10-01T12:00:01Z", 1 / 86_400_000_000),
+        ("2026-10-01T23:59:59.999999Z", "2026-10-02T00:00:00+00:00", 1 / 86_400_000_000),
     ],
 )
 def test_saved_longitudinal_preserves_microsecond_observation_order(
@@ -284,7 +286,8 @@ def test_saved_longitudinal_preserves_microsecond_observation_order(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_longitudinal_comparison"
     ]
     assert len(artifacts) == 1
