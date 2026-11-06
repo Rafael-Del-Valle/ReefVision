@@ -376,7 +376,7 @@ def test_foreign_alembic_version_column_is_reported_without_mutation(
 
 @pytest.mark.parametrize(
     "revision",
-    [" 0037", "0037 ", "0037\\n", "0037\\x00", "0037\\x7f", "\\t"],
+    [" 0037", "0037 ", "0037\n", "0037\x00", "0037\x7f", "\t"],
 )
 @pytest.mark.parametrize("strict", [False, True])
 def test_noncanonical_revision_marker_fails_closed_without_mutation(
