@@ -65,6 +65,20 @@ def valid_workflow() -> str:
       release-version: ${{ steps.package-version.outputs.release-version }}
       release-slug: ${{ steps.package-version.outputs.release-slug }}
     steps:
+      - uses: actions/checkout@v4
+      - name: Verify installer build uses exact clean source revision
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) {
+            throw "Installer checkout SHA $actual does not match workflow SHA $env:GITHUB_SHA"
+          }
+          $dirty = @(git status --porcelain --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $dirty.Count -gt 0) {
+            throw "Installer source checkout must be clean before packaging."
+          }
+      - name: Bootstrap build environment
+        run: echo bootstrap
       - uses: actions/setup-python@v5
       - name: Resolve package version
         id: package-version
