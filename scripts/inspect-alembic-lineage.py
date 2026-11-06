@@ -32,9 +32,7 @@ def inspect(path: Path) -> dict:
         # Unlike quick_check, integrity_check also validates UNIQUE constraints
         # and index/table consistency; an immutable scientific backup needs both.
         full_integrity_result = db.execute("PRAGMA integrity_check(1)").fetchone()
-        full_integrity_ok = (
-            full_integrity_result is not None and full_integrity_result[0] == "ok"
-        )
+        full_integrity_ok = full_integrity_result is not None and full_integrity_result[0] == "ok"
         # quick_check does not detect orphaned foreign-key references.
         # Preserve a bounded count without exposing potentially sensitive row contents.
         try:
@@ -112,11 +110,13 @@ def inspect(path: Path) -> dict:
         if (
             version_table_present
             and "version_num" in version_columns
-            and (len(revisions) != 1
-            or not isinstance(revisions[0], str)
-            or not revisions[0]
-            or revisions[0] != revisions[0].strip()
-            or any(ord(character) < 32 or ord(character) == 127 for character in revisions[0]))
+            and (
+                len(revisions) != 1
+                or not isinstance(revisions[0], str)
+                or not revisions[0]
+                or revisions[0] != revisions[0].strip()
+                or any(ord(character) < 32 or ord(character) == 127 for character in revisions[0])
+            )
         ):
             warnings.append("invalid_revision_marker_count_or_value")
         # A single family marker is only a hint: partial migrations are not complete schemas.
