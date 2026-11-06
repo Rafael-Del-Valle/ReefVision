@@ -95,3 +95,50 @@ def test_malformed_revision_storage_fails_closed_without_mutation(
         assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
             "preserve",
         )
+
+
+@pytest.mark.parametrize(
+    ("suffix", "expected_warning"),
+    [
+        ("-wal", "wal_sidecar_requires_consistent_snapshot"),
+        ("-shm", "shared_memory_sidecar_requires_consistent_snapshot"),
+        ("-journal", "rollback_journal_requires_consistent_snapshot"),
+    ],
+)
+def test_strict_preflight_detects_sidecars_through_symlink_without_mutation(
+    tmp_path: Path, suffix: str, expected_warning: str
+) -> None:
+    database = tmp_path / "original.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0037')")
+        for name in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE biological_sentinel (note TEXT)")
+        connection.execute("INSERT INTO biological_sentinel VALUES ('preserve')")
+    sidecar = Path(str(database) + suffix)
+    sidecar.write_bytes(b"snapshot-sidecar-sentinel")
+    alias = tmp_path / "alias.sqlite"
+    try:
+        alias.symlink_to(database)
+    except (OSError, NotImplementedError):
+        pytest.skip("Filesystem does not support symlinks")
+    before_database = database.read_bytes()
+    before_sidecar = sidecar.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-warning", str(alias)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    assert expected_warning in report["warnings"]
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before_database
+    assert sidecar.read_bytes() == before_sidecar
