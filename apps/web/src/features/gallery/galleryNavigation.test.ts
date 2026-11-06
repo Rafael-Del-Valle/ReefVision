@@ -852,4 +852,25 @@ describe("resolveGalleryNavigation", () => {
       }),
     ).toBeNull();
   });
+  it("rejects blank and control-character camera IDs without losing a valid saved selection", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+    };
+    const project = "camera-id-recovery";
+    writeGalleryPreference(storage, project, { imageId: "valid-camera-frame", page: 4, wrap: true });
+    const key = "reefvision.gallery.camera-id-recovery.v1";
+    const saved = values.get(key);
+    expect(saved).toBeDefined();
+    for (const invalid of ["", "   ", "frame\\nsecond", "frame\\u0000second", "frame\\u007fsecond"]) {
+      values.set(key, JSON.stringify({ imageId: invalid, page: 4, wrap: true }));
+      expect(readGalleryPreference(storage, project)).toEqual({ imageId: null, page: 1, wrap: false });
+    }
+    values.set(key, saved!);
+    expect(readGalleryPreference(storage, project)).toEqual({ imageId: "valid-camera-frame", page: 4, wrap: true });
+    writeGalleryPreference(storage, project, { imageId: "bad\\nframe", page: 7, wrap: false });
+    expect(values.get(key)).toBe(saved);
+  });
+
 });
