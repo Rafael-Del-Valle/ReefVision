@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from itertools import zip_longest
 from json import dumps
@@ -220,6 +220,8 @@ def compare_mesh_observations(
     if (
         before_time.utcoffset() is None
         or after_time.utcoffset() is None
+        or before_time.utcoffset() != timedelta(0)
+        or after_time.utcoffset() != timedelta(0)
         or after_time <= before_time
     ):
         raise ValueError("Observations must have timezone-aware increasing timestamps")
