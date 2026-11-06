@@ -94,3 +94,23 @@ def test_longitudinal_replay_requires_forward_time_without_mutating_sources(
         assert comparison["elapsed_days"] == pytest.approx(expected_elapsed_days)
     assert before == original_before
     assert after == original_after
+
+
+@pytest.mark.parametrize("observation", ["before", "after"])
+def test_unknown_rfc3339_zero_offset_is_not_verified_utc(observation: str) -> None:
+    """RFC 3339 -00:00 marks unknown offset, despite datetime normalization."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    target = before if observation == "before" else after
+    target["provenance"]["observed_at_utc"] = (
+        "2026-10-01T12:00:00-00:00"
+        if observation == "before"
+        else "2026-10-02T12:00:00-00:00"
+    )
+    original_before, original_after = deepcopy(before), deepcopy(after)
+    with pytest.raises(ValueError, match="known UTC offsets"):
+        compare_mesh_observations(before, after)
+    assert before == original_before
+    assert after == original_after
