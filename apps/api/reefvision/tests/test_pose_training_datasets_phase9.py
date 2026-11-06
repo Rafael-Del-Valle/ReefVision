@@ -286,7 +286,8 @@ def test_freeze_rejects_blank_dataset_name_without_persisting_record(
         f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
         json={"name": "   ", "created_by": "scientist"},
     )
-    assert response.status_code == 422, response.text
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Pose training dataset name cannot be blank"
 
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
