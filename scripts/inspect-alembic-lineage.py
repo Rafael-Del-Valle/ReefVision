@@ -24,6 +24,9 @@ def inspect(path: Path) -> dict:
         # quick_check(1) is bounded in reported errors; it does not repair data.
         integrity_result = db.execute("PRAGMA quick_check(1)").fetchone()
         integrity_ok = integrity_result is not None and integrity_result[0] == "ok"
+        # quick_check does not detect orphaned foreign-key references.
+        # Preserve a bounded count without exposing potentially sensitive row contents.
+        foreign_key_violations = sum(1 for _ in db.execute("PRAGMA foreign_key_check"))
         objects = {
             row[0]: row[1]
             for row in db.execute("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view')")
@@ -54,6 +57,8 @@ def inspect(path: Path) -> dict:
         warnings = []
         if not integrity_ok:
             warnings.append("sqlite_integrity_check_failed")
+        if foreign_key_violations:
+            warnings.append("sqlite_foreign_key_violations")
         # A live SQLite WAL/journal can contain uncheckpointed scientific edits.
         # Do not mistake a mutable database plus sidecars for an immutable backup.
         for suffix, warning in (
@@ -83,6 +88,7 @@ def inspect(path: Path) -> dict:
         return {
             "warnings": warnings,
             "sqlite_integrity_ok": integrity_ok,
+            "sqlite_foreign_key_violations": foreign_key_violations,
             "revision_rows": revisions,
             "lineage_hint": lineage,
             "upgrade_authorized": False,
