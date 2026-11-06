@@ -511,6 +511,41 @@ describe("parseGalleryPageDraft", () => {
   });
 });
 
+describe("gallery partial final-page navigation", () => {
+  it("crosses a full page into a one-image final page and back without skipping images", () => {
+    const base = {
+      action: "next" as const,
+      index: 3,
+      itemCount: 4,
+      page: 1,
+      pages: 2,
+      wrap: false,
+    };
+    expect(resolveGalleryNavigation(base)).toEqual({ page: 2, edge: "first" });
+    expect(
+      resolveGalleryNavigation({
+        ...base,
+        action: "previous",
+        index: 0,
+        itemCount: 1,
+        page: 2,
+      }),
+    ).toEqual({ page: 1, edge: "last" });
+    expect(
+      resolveGalleryNavigation({ ...base, index: 0, itemCount: 1, page: 2 }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({
+        ...base,
+        index: 0,
+        itemCount: 1,
+        page: 2,
+        wrap: true,
+      }),
+    ).toEqual({ page: 1, edge: "first" });
+  });
+});
+
 describe("resolveGalleryNavigation", () => {
   it("does not navigate using stale or malformed pagination state", () => {
     const valid = {
