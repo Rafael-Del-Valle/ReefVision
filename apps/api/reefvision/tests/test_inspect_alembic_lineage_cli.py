@@ -95,7 +95,11 @@ def test_missing_revision_table_is_explicitly_reported(tmp_path):
         (["review_queue_item_events"], {"incomplete_qc_schema_family"}),
         (
             ["scientific_records", "review_queue_item_events"],
-            {"incomplete_scientific_schema_family", "incomplete_qc_schema_family", "mixed_scientific_and_qc_lineage"},
+            {
+                "incomplete_scientific_schema_family",
+                "incomplete_qc_schema_family",
+                "mixed_scientific_and_qc_lineage",
+            },
         ),
         (
             [
