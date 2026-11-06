@@ -119,7 +119,9 @@ def test_earlier_review_revision_rejects_nullable_request_identity_with_unique_k
                 assert connection.scalar(text("SELECT value FROM observations")) == (
                     "preserved biological observation"
                 )
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                )
     finally:
         engine.dispose()
 
@@ -188,6 +190,8 @@ def test_earlier_review_revision_rejects_nullable_reviewer_attribution(
                     == before
                 )
                 assert connection.scalar(text("SELECT value FROM observations")) == ("preserved")
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                )
     finally:
         engine.dispose()
