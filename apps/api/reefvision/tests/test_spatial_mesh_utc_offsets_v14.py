@@ -211,3 +211,31 @@ def test_longitudinal_preserves_supported_microsecond_elapsed_time(
         expected_microseconds / 86_400_000_000, rel=1e-9, abs=1e-16
     )
     assert (before, after) == originals
+
+
+@pytest.mark.parametrize(
+    "invalid_timestamp",
+    [
+        "2026-02-29T12:00:00Z",  # Non-leap-year February 29.
+        "2024-02-30T12:00:00Z",  # Leap year does not permit February 30.
+        "2026-13-01T12:00:00Z",  # Invalid month.
+        "2026-10-01T24:00:00Z",  # RFC 3339 hour must be 00 through 23.
+        "2026-10-01T12:60:00Z",  # Invalid minute.
+        "2026-10-01T12:00:60Z",  # Leap seconds are not supported by datetime.
+    ],
+)
+@pytest.mark.parametrize("observation", ["before", "after"])
+def test_longitudinal_replay_rejects_impossible_calendar_times_without_mutation(
+    invalid_timestamp: str, observation: str
+) -> None:
+    """Syntactically UTC evidence must also represent a real supported instant."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    target = before if observation == "before" else after
+    target["provenance"]["observed_at_utc"] = invalid_timestamp
+    originals = (deepcopy(before), deepcopy(after))
+    with pytest.raises(ValueError, match="valid UTC timestamps"):
+        compare_mesh_observations(before, after)
+    assert (before, after) == originals
