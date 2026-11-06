@@ -29,6 +29,12 @@ jobs:
       - name: Show exact Ruff formatting diff on failure
         if: failure()
         run: python -m ruff format --diff apps/api
+      - name: Lint read-only Alembic lineage preflight and regressions
+        run: |
+          python -m ruff check scripts/inspect-alembic-lineage.py scripts/tests/test_inspect_alembic_lineage_cli.py
+          python -m ruff format --check scripts/inspect-alembic-lineage.py scripts/tests/test_inspect_alembic_lineage_cli.py
+      - name: Test read-only Alembic lineage preflight (strict and informational)
+        run: python -m pytest scripts/tests/test_inspect_alembic_lineage_cli.py -v
       - run: python -m mypy -p reefvision
       - run: python -m pytest apps/api/reefvision/tests
       - name: Test offline MSI/CAB provenance verifier (Python 3.11)
