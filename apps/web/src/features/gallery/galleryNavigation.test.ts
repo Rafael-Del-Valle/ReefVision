@@ -483,6 +483,27 @@ describe("resolveGalleryNavigation", () => {
     ).toBeNull();
   });
 
+  it("jumps to the first or last camera image on the current page without a redundant page fetch", () => {
+    const base = {
+      itemCount: 7,
+      page: 1,
+      pages: 1,
+      wrap: false,
+    };
+    expect(
+      resolveGalleryNavigation({ ...base, action: "first", index: 4 }),
+    ).toEqual({ page: 1, edge: "first" });
+    expect(
+      resolveGalleryNavigation({ ...base, action: "last", index: 2 }),
+    ).toEqual({ page: 1, edge: "last" });
+    expect(
+      resolveGalleryNavigation({ ...base, action: "first", index: 0 }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...base, action: "last", index: 6 }),
+    ).toBeNull();
+  });
+
   it("crosses page boundaries without loading the full collection", () => {
     expect(
       resolveGalleryNavigation({
