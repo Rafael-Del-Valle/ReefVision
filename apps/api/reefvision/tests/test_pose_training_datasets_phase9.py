@@ -1212,12 +1212,12 @@ def test_freeze_rejects_boolean_acquisition_frame_even_with_resigned_checksum(
         assert session.query(PoseTrainingDatasetItem).count() == 0
 
 
-def test_frozen_dataset_rejects_resigned_negative_frame_index(
+def test_frozen_dataset_database_rejects_negative_frame_index(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # A persisted scientist-verified freeze must remain invalid if its frame
-    # identity is rewritten to an impossible index, even with new hashes.
+    # The persisted database must reject a negative frame identity even when
+    # all associated scientific evidence and manifest hashes are re-signed.
     _, _, _, round_payload = _verified_round(client, monkeypatch)
     created = client.post(
         f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
@@ -1246,8 +1246,9 @@ def test_frozen_dataset_rejects_resigned_negative_frame_index(
         manifest["items"][0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
         dataset.manifest_json = manifest
         dataset.manifest_sha256 = canonical_json_sha256(manifest)
-        session.commit()
+        with pytest.raises(IntegrityError, match="ck_pose_training_item_frame"):
+            session.commit()
+        session.rollback()
 
     response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
-    assert response.status_code == 409, response.text
-    assert "item lineage" in response.text
+    assert response.status_code == 200, response.text
