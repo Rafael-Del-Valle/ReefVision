@@ -104,7 +104,11 @@ def inspect(path: Path) -> dict:
         if (
             version_table_present
             and "version_num" in version_columns
-            and (len(revisions) != 1 or not isinstance(revisions[0], str) or not revisions[0])
+            and (len(revisions) != 1
+            or not isinstance(revisions[0], str)
+            or not revisions[0]
+            or revisions[0] != revisions[0].strip()
+            or any(ord(character) < 32 or ord(character) == 127 for character in revisions[0]))
         ):
             warnings.append("invalid_revision_marker_count_or_value")
         # A single family marker is only a hint: partial migrations are not complete schemas.
