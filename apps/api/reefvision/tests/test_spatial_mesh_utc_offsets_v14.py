@@ -61,3 +61,31 @@ def test_longitudinal_replay_rejects_invalid_utc_on_either_observation(
     target["provenance"]["observed_at_utc"] = invalid_timestamp
     with pytest.raises(ValueError, match="timezone-aware increasing timestamps"):
         compare_mesh_observations(before, after)
+
+
+@pytest.mark.parametrize(
+    ("later_timestamp", "expected_elapsed_days"),
+    [
+        ("2026-10-01T12:00:00Z", None),
+        ("2026-09-30T12:00:00Z", None),
+        ("2026-10-02T12:00:00+00:00", 1.0),
+    ],
+)
+def test_longitudinal_replay_requires_forward_time_without_mutating_sources(
+    later_timestamp: str, expected_elapsed_days: float | None
+) -> None:
+    """Temporal QC must not rewrite source evidence on rejection or success."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", later_timestamp)
+    original_before = deepcopy(before)
+    original_after = deepcopy(after)
+    if expected_elapsed_days is None:
+        with pytest.raises(ValueError, match="timezone-aware increasing timestamps"):
+            compare_mesh_observations(before, after)
+    else:
+        comparison = compare_mesh_observations(before, after)
+        assert comparison["elapsed_days"] == pytest.approx(expected_elapsed_days)
+    assert before == original_before
+    assert after == original_after
