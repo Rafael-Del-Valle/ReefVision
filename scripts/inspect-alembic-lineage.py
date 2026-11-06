@@ -7,7 +7,12 @@ import sqlite3
 from pathlib import Path
 
 FAMILIES = {
-    "scientific": ("scientific_records", "environmental_cache_entries", "computed_metric_definitions", "computed_metric_results"),
+    "scientific": (
+        "scientific_records",
+        "environmental_cache_entries",
+        "computed_metric_definitions",
+        "computed_metric_results",
+    ),
     "qc": ("review_queue_item_events", "review_queue_bulk_requests"),
 }
 
@@ -37,7 +42,9 @@ def inspect(path: Path) -> dict:
             foreign_key_check_error = str(exc)
         objects = {
             row[0]: row[1]
-            for row in db.execute("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view')")
+            for row in db.execute(
+                "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view')"
+            )
         }
         version_table_present = objects.get("alembic_version") == "table"
         version_columns = (
@@ -52,7 +59,7 @@ def inspect(path: Path) -> dict:
             else []
         )
         inventory = {}
-        for name in sorted(set(sum((list(v) for v in FAMILIES.values()), []))):
+        for name in sorted({name for family in FAMILIES.values() for name in family}):
             if objects.get(name) != "table":
                 inventory[name] = {"present": False}
                 continue
@@ -61,7 +68,15 @@ def inspect(path: Path) -> dict:
             inventory[name] = {"present": True, "columns": columns, "rows": count}
         scientific = any(inventory[name]["present"] for name in FAMILIES["scientific"])
         qc = any(inventory[name]["present"] for name in FAMILIES["qc"])
-        lineage = "ambiguous" if scientific and qc else "scientific" if scientific else "qc" if qc else "unknown"
+        lineage = (
+            "ambiguous"
+            if scientific and qc
+            else "scientific"
+            if scientific
+            else "qc"
+            if qc
+            else "unknown"
+        )
         warnings = []
         if not integrity_ok:
             warnings.append("sqlite_integrity_check_failed")
@@ -120,7 +135,9 @@ def inspect(path: Path) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("database", type=Path, help="Path to an immutable copy of the SQLite database")
+    parser.add_argument(
+        "database", type=Path, help="Path to an immutable copy of the SQLite database"
+    )
     parser.add_argument(
         "--fail-on-warning",
         action="store_true",
