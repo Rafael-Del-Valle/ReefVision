@@ -41,3 +41,23 @@ def test_longitudinal_replay_accepts_explicit_zero_utc_offset() -> None:
     after = _preview("survey-2", "2026-10-02T12:00:00Z")
     before["provenance"]["observed_at_utc"] = "2026-10-01T12:00:00+00:00"
     assert compare_mesh_observations(before, after)["elapsed_days"] == pytest.approx(1)
+
+
+@pytest.mark.parametrize("observation", ["before", "after"])
+@pytest.mark.parametrize(
+    "invalid_timestamp",
+    [
+        "2026-10-01T12:00:00+01:00",
+        "2026-10-01T12:00:00-05:00",
+        "2026-10-01T12:00:00",
+    ],
+)
+def test_longitudinal_replay_rejects_invalid_utc_on_either_observation(
+    observation: str, invalid_timestamp: str
+) -> None:
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    target = before if observation == "before" else after
+    target["provenance"]["observed_at_utc"] = invalid_timestamp
+    with pytest.raises(ValueError, match="timezone-aware increasing timestamps"):
+        compare_mesh_observations(before, after)
