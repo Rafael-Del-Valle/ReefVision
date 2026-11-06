@@ -217,6 +217,9 @@ def frozen_pose_item_fingerprints_match(
             or canonical_pose.get("schema_version") != "reefvision-canonical-pose-frame-0001"
             or type(canonical_pose.get("frame_index")) is not int
             or canonical_pose["frame_index"] != row.frame_index
+            # Re-signed frozen rows must not turn a verified video observation
+            # into an impossible negative frame index.
+            or row.frame_index < 0
         ):
             return False
         # A matching recomputed hash cannot make an empty, re-signed pose
