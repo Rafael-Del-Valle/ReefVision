@@ -8,6 +8,7 @@ import zipfile
 from typing import cast
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -510,13 +511,12 @@ def test_freeze_rejects_modified_scientist_correction_evidence(
 
 
 @pytest.mark.parametrize("invalid_score", [float("nan"), float("inf"), -float("inf")])
-def test_freeze_rejects_nonfinite_persisted_acquisition_score(
+def test_database_rejects_nonfinite_persisted_acquisition_score(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
     invalid_score: float,
 ) -> None:
-    # Corrupt the stored score of a genuinely reviewed round, rather than
-    # fabricating a candidate or bypassing the freeze API.
+    # Validate the actual database constraint on a reviewed persisted round.
     _, _, _, round_payload = _verified_round(client, monkeypatch)
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
@@ -526,15 +526,11 @@ def test_freeze_rejects_nonfinite_persisted_acquisition_score(
             .one()
         )
         candidate.acquisition_score = invalid_score
-        session.commit()
-
-    response = client.post(
-        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
-        json={"name": "Must not freeze nonfinite acquisition score"},
-    )
-    assert response.status_code == 409, response.text
-    assert "non-finite acquisition score" in response.text
-    with app.state.session_factory() as session:
+        # SQLite rejects NaN via NOT NULL and infinities via the score CHECK
+        # constraint before the freeze endpoint can read these values.
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
         assert session.query(PoseTrainingDataset).count() == 0
 
 
