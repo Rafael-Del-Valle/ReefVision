@@ -147,6 +147,34 @@ describe("browser gallery storage access", () => {
     });
   });
 
+  it("keeps first-image browsing available before WebView2 storage is initialized", () => {
+    vi.stubGlobal("window", { localStorage: undefined });
+
+    expect(readBrowserGalleryPreference("project-a")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+    expect(() =>
+      writeBrowserGalleryPreference("project-a", {
+        imageId: "camera-original-1",
+        page: 1,
+        wrap: false,
+      }),
+    ).not.toThrow();
+
+    const storage = memoryStorage();
+    vi.stubGlobal("window", { localStorage: storage });
+    writeBrowserGalleryPreference("project-a", {
+      imageId: "camera-original-1",
+      page: 1,
+      wrap: false,
+    });
+    expect(readBrowserGalleryPreference("project-a").imageId).toBe(
+      "camera-original-1",
+    );
+  });
+
   it("recovers when WebView2 denies access to the localStorage property itself", () => {
     vi.stubGlobal("window", {
       get localStorage(): Storage {
