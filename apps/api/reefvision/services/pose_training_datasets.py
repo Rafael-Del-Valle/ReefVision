@@ -1121,6 +1121,9 @@ class PoseTrainingDatasetService:
         # ZipInfo defaults to a host-specific OS marker. Pin it so the same
         # frozen scientific package has identical bytes on Windows and Linux.
         info.create_system = 3
+        # Pin regular-file permissions instead of inheriting host defaults.
+        # Exported science packages must be byte-identical across platforms.
+        info.external_attr = 0o100644 << 16
         archive.writestr(info, content)
 
     def native_package(
