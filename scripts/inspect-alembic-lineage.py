@@ -29,6 +29,12 @@ def inspect(path: Path) -> dict:
         # quick_check(1) is bounded in reported errors; it does not repair data.
         integrity_result = db.execute("PRAGMA quick_check(1)").fetchone()
         integrity_ok = integrity_result is not None and integrity_result[0] == "ok"
+        # Unlike quick_check, integrity_check also validates UNIQUE constraints
+        # and index/table consistency; an immutable scientific backup needs both.
+        full_integrity_result = db.execute("PRAGMA integrity_check(1)").fetchone()
+        full_integrity_ok = (
+            full_integrity_result is not None and full_integrity_result[0] == "ok"
+        )
         # quick_check does not detect orphaned foreign-key references.
         # Preserve a bounded count without exposing potentially sensitive row contents.
         try:
@@ -80,6 +86,8 @@ def inspect(path: Path) -> dict:
         warnings = []
         if not integrity_ok:
             warnings.append("sqlite_integrity_check_failed")
+        if not full_integrity_ok:
+            warnings.append("sqlite_full_integrity_check_failed")
         if foreign_key_check_error is not None:
             warnings.append("sqlite_foreign_key_check_failed")
         elif foreign_key_violations:
@@ -125,6 +133,7 @@ def inspect(path: Path) -> dict:
         return {
             "warnings": warnings,
             "sqlite_integrity_ok": integrity_ok,
+            "sqlite_full_integrity_ok": full_integrity_ok,
             "sqlite_foreign_key_violations": foreign_key_violations,
             "sqlite_foreign_key_check_error": foreign_key_check_error,
             "revision_rows": revisions,
