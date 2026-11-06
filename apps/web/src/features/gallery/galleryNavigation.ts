@@ -18,10 +18,10 @@ const DEFAULT_PREFERENCE: GalleryPreference = {
   wrap: false,
 };
 
-// Gallery IDs are opaque database identifiers, never multiline/control-character text.
+// Gallery IDs are opaque database identifiers, never control or line-separator text.
 // Reject corrupted WebView2 preferences rather than restoring a phantom image.
 function validGalleryImageId(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0 && !/[\x00-\x1f\x7f]/.test(value);
+  return typeof value === "string" && value.trim().length > 0 && !/[\x00-\x1f\x7f-\x9f\u2028\u2029]/.test(value);
 }
 
 function preferenceKey(projectId: string): string {
