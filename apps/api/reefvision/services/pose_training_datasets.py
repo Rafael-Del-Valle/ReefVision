@@ -913,8 +913,7 @@ class PoseTrainingDatasetService:
         # Otherwise duplicate verified candidates can silently overweight a
         # single scientific observation in the frozen training dataset.
         observation_keys = [
-            (item.video_id, item.video_track_id, item.frame_index)
-            for item in item_rows
+            (item.video_id, item.video_track_id, item.frame_index) for item in item_rows
         ]
         if len(observation_keys) != len(set(observation_keys)):
             raise ConflictError(
