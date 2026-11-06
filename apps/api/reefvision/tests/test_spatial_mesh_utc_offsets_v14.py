@@ -314,3 +314,32 @@ def test_longitudinal_replay_rejects_invalid_import_integrity_fields(
     with pytest.raises(ValueError, match=expected_error):
         compare_mesh_observations(before, after)
     assert (before, after) == originals
+
+
+@pytest.mark.parametrize("source_format", ["obj", "ply_ascii", "glb_2_0"])
+@pytest.mark.parametrize("integrity_checked", [True, False])
+def test_longitudinal_import_provenance_retains_unverified_status(
+    source_format: str, integrity_checked: bool
+) -> None:
+    """Well-formed imported-byte claims never certify biological measurements."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    before["provenance"].update(
+        {
+            "source_format": source_format,
+            "source_payload_sha256": "a" * 64,
+            "source_payload_size_bytes": 123,
+            "source_payload_integrity_checked": integrity_checked,
+        }
+    )
+    originals = (deepcopy(before), deepcopy(after))
+    comparison = compare_mesh_observations(before, after)
+    warnings = comparison["qc_warnings"]
+    assert "calibration_not_verified" in warnings
+    assert "surface_area_change_is_not_verified_biological_growth" in warnings
+    assert ("before_imported_source_expected_digest_not_checked" in warnings) is (
+        not integrity_checked
+    )
+    assert (before, after) == originals
