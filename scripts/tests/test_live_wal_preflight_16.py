@@ -58,7 +58,8 @@ def test_live_wal_is_reported_and_preserved(tmp_path: Path, strict: bool) -> Non
             # The inspector must see committed records still resident in the WAL,
             # not merely preserve the files while reading an older main DB image.
             with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as snapshot:
-                assert snapshot.execute("SELECT COUNT(*) FROM biological_sentinel").fetchone() == (2,)
+                count = snapshot.execute("SELECT COUNT(*) FROM biological_sentinel").fetchone()
+                assert count == (2,)
             assert report["upgrade_authorized"] is False
             assert database.read_bytes() == before_database
             assert wal.read_bytes() == before_wal
