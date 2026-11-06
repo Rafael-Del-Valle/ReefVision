@@ -909,6 +909,18 @@ class PoseTrainingDatasetService:
             item_rows.append(item)
             item_summaries.append(summary)
 
+        # One observation per video/track/frame is required before persistence.
+        # Otherwise duplicate verified candidates can silently overweight a
+        # single scientific observation in the frozen training dataset.
+        observation_keys = [
+            (item.video_id, item.video_track_id, item.frame_index)
+            for item in item_rows
+        ]
+        if len(observation_keys) != len(set(observation_keys)):
+            raise ConflictError(
+                "Verified pose candidates contain duplicate video/track/frame observations"
+            )
+
         # The freeze API must independently verify the selection that led to
         # scientist review. Workflow Builder review gates are not the only
         # entry point to creating immutable training data.
