@@ -107,7 +107,9 @@ describe("gallery preferences", () => {
       page: 9,
       wrap: true,
     });
-    expect(JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null")).toEqual({
+    expect(
+      JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null"),
+    ).toEqual({
       imageId: null,
       page: 1,
       wrap: true,
