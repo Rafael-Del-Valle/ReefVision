@@ -955,7 +955,18 @@ class PoseTrainingDatasetService:
             or any(not isinstance(item, dict) for item in selected_items)
         ):
             raise ConflictError("Pose Active Learning selected candidate count changed")
-        # A persisted selection must still describe an observation inside its\n        # original frame window before it can become frozen training provenance.\n        if any(\n            candidate.frame_start > candidate.focus_frame\n            or candidate.focus_frame > candidate.frame_end\n            for candidate in candidates\n        ):\n            raise ConflictError(\n                "Pose Active Learning selection contains a focus frame outside its frame window"\n            )\n\n        # Reject duplicate selected observations even when only one candidate
+        # A persisted selection must still describe an observation inside its
+        # original frame window before it can become frozen training provenance.
+        if any(
+            candidate.frame_start > candidate.focus_frame
+            or candidate.focus_frame > candidate.frame_end
+            for candidate in candidates
+        ):
+            raise ConflictError(
+                "Pose Active Learning selection contains a focus frame outside its frame window"
+            )
+
+        # Reject duplicate selected observations even when only one candidate
         # was verified. The signed selection is the round-wide scientific
         # sampling record, not merely the subset chosen for training.
         selected_observations = [
@@ -1136,7 +1147,8 @@ class PoseTrainingDatasetService:
                 separators=(",", ":"),
                 ensure_ascii=False,
             )
-            + "\n"
+            + "
+"
         ).encode("utf-8")
 
         rows: list[str] = []
@@ -1174,32 +1186,47 @@ class PoseTrainingDatasetService:
                 )
             )
 
-        item_bytes = ("\n".join(rows) + "\n").encode("utf-8")
+        item_bytes = ("
+".join(rows) + "
+").encode("utf-8")
 
         readme = (
-            b"ReefVision immutable pose-training dataset\n"
-            b"\n"
+            b"ReefVision immutable pose-training dataset
+"
+            b"
+"
             b"This package contains only scientist-verified "
-            b"canonical pose snapshots.\n"
+            b"canonical pose snapshots.
+"
             b"Skipped, pending, and unreviewed model "
-            b"predictions are excluded.\n"
+            b"predictions are excluded.
+"
             b"External trainer-specific image extraction and "
             b"SLEAP/COCO/DLC/Ultralytics/NWB rendering are "
             b"performed in the next Phase 9 interoperability "
-            b"layer.\n"
-            b"\n"
-            b"Verify extracted files before scientific reuse:\n"
-            b"  Linux: sha256sum -c SHA256SUMS\n"
-            b"  macOS: shasum -a 256 -c SHA256SUMS\n"
-            b"  Windows: compare Get-FileHash -Algorithm SHA256 results\n"
-            b"           with the SHA256SUMS entries for each file.\n"
-            b"Run these checks from the extracted package directory.\n"
+            b"layer.
+"
+            b"
+"
+            b"Verify extracted files before scientific reuse:
+"
+            b"  Linux: sha256sum -c SHA256SUMS
+"
+            b"  macOS: shasum -a 256 -c SHA256SUMS
+"
+            b"  Windows: compare Get-FileHash -Algorithm SHA256 results
+"
+            b"           with the SHA256SUMS entries for each file.
+"
+            b"Run these checks from the extracted package directory.
+"
         )
 
         # A portable checksum index lets researchers validate extracted files
         # independently of ZIP metadata or the original download response.
         checksum_bytes = "".join(
-            f"{hashlib.sha256(payload).hexdigest()}  {name}\n"
+            f"{hashlib.sha256(payload).hexdigest()}  {name}
+"
             for name, payload in (
                 (PACKAGE_MANIFEST_FILENAME, manifest_bytes),
                 (PACKAGE_ITEMS_FILENAME, item_bytes),
