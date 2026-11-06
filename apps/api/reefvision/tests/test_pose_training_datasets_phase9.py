@@ -1237,7 +1237,6 @@ def test_verified_pose_freeze_accepts_last_recorded_video_frame(
     assert response.json()["item_count"] == 1
 
 
-
 def test_verified_pose_freeze_rejects_frame_past_recorded_video_end(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
