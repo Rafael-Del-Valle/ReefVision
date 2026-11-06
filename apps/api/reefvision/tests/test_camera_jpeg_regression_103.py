@@ -981,3 +981,28 @@ def test_nonfinite_camera_metadata_remains_json_safe_and_original_immutable(
         "exposure": 0.125,
     }
     assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+
+@pytest.mark.parametrize("extension", [".JPG", ".JPEG", ".JPE", ".JFIF"])
+def test_camera_jpeg_alias_uses_decoded_format_not_filename_for_managed_content(
+    client: TestClient, extension: str
+) -> None:
+    """Camera filename aliases must not change decoded scientific raster provenance."""
+    project = create_project(client, f"Camera alias canonical media {extension}")
+    stream = BytesIO()
+    Image.new("RGB", (41, 31), (24, 80, 120)).save(stream, format="JPEG")
+    original = stream.getvalue()
+
+    report = import_one(client, project["id"], filename=f"DSC_0123{extension}", content=original)
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    assert record["original_filename"] == f"DSC_0123{extension}"
+    assert record["media_type"] == "image/jpeg"
+    assert record["metadata_json"]["format"] == "JPEG"
+    assert (record["width_px"], record["height_px"]) == (41, 31)
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    with Image.open(BytesIO(display.content)) as decoded:
+        assert decoded.size == (41, 31)
