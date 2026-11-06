@@ -38,10 +38,7 @@ export function readGalleryPreference(
     const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== "object") return { ...DEFAULT_PREFERENCE };
     const candidate = parsed as Record<string, unknown>;
-    if (
-      candidate.imageId !== null &&
-      !validGalleryImageId(candidate.imageId)
-    ) {
+    if (candidate.imageId !== null && !validGalleryImageId(candidate.imageId)) {
       return { ...DEFAULT_PREFERENCE };
     }
     // Corrupted persisted pages such as 1e100 are integers in JavaScript but
@@ -70,9 +67,7 @@ export function readGalleryPreference(
 
 // WebView2 may deny access to the localStorage property itself (SecurityError),
 // before getItem/setItem can be called. Keep image browsing usable even then.
-export function readBrowserGalleryPreference(
-  projectId: string,
-): GalleryPreference {
+export function readBrowserGalleryPreference(projectId: string): GalleryPreference {
   try {
     return readGalleryPreference(window.localStorage, projectId);
   } catch {
@@ -124,10 +119,7 @@ export function writeGalleryPreference(
 }
 
 /** Parse an explicit gallery page without accepting exponent or partial-number input. */
-export function parseGalleryPageDraft(
-  draft: string,
-  totalPages: number,
-): number | null {
+export function parseGalleryPageDraft(draft: string, totalPages: number): number | null {
   if (!Number.isSafeInteger(totalPages) || totalPages < 1) return null;
   const value = draft.trim();
   if (!/^\d+$/.test(value)) return null;
