@@ -290,9 +290,12 @@ def test_freeze_rejects_blank_dataset_name_without_persisting_record(
 
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
-        assert session.query(PoseTrainingDataset).filter_by(
-            source_round_id=str(round_payload["id"])
-        ).count() == 0
+        assert (
+            session.query(PoseTrainingDataset)
+            .filter_by(source_round_id=str(round_payload["id"]))
+            .count()
+            == 0
+        )
 
 
 def test_verified_pose_without_immutable_schema_is_rejected(
