@@ -176,8 +176,45 @@ def test_sqlite_integrity_preflight_reports_clean_database(tmp_path: Path) -> No
     assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout)
     assert report["sqlite_integrity_ok"] is True
+    assert report["sqlite_full_integrity_ok"] is True
     assert report["upgrade_authorized"] is False
     assert database.read_bytes() == before
+
+
+def test_full_integrity_preflight_preserves_indexed_research_data(tmp_path: Path) -> None:
+    database = tmp_path / "indexed.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0037')")
+        for name in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+        connection.execute(
+            "CREATE TABLE biological_sentinel (id INTEGER PRIMARY KEY, note TEXT UNIQUE)"
+        )
+        connection.execute("INSERT INTO biological_sentinel VALUES (1, 'preserve')")
+        connection.execute("CREATE INDEX sentinel_note_idx ON biological_sentinel(note)")
+    before = database.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["sqlite_integrity_ok"] is True
+    assert report["sqlite_full_integrity_ok"] is True
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
+            "preserve",
+        )
 
 
 def test_corrupt_sqlite_file_fails_closed_without_mutation(tmp_path: Path) -> None:
