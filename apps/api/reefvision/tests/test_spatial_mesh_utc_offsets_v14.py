@@ -374,7 +374,10 @@ def test_longitudinal_import_integrity_qc_is_observation_specific(
     assert (before, after) == originals
 
 
-@pytest.mark.parametrize("before_checked,after_checked", [(False, False), (False, True), (True, False), (True, True)])
+@pytest.mark.parametrize(
+    ("before_checked", "after_checked"),
+    [(False, False), (False, True), (True, False), (True, True)],
+)
 def test_longitudinal_two_imports_keep_independent_integrity_warnings(
     before_checked: bool, after_checked: bool
 ) -> None:
