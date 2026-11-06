@@ -73,6 +73,51 @@ describe("browser gallery storage access", () => {
     });
   });
 
+  it("preserves the last camera selection when WebView2 storage quota is exhausted", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "camera-original-7",
+      page: 2,
+      wrap: true,
+    });
+    const saved = storage.getItem("reefvision.gallery.project-a.v1");
+
+    const quotaStorage = {
+      getItem: storage.getItem,
+      setItem: (_key: string, _value: string): void => {
+        throw new DOMException("Quota exceeded", "QuotaExceededError");
+      },
+    };
+    vi.stubGlobal("window", { localStorage: quotaStorage });
+    expect(() =>
+      writeBrowserGalleryPreference("project-a", {
+        imageId: "camera-original-8",
+        page: 3,
+        wrap: false,
+      }),
+    ).not.toThrow();
+
+    // An optional preference write must not erase a previously saved image.
+    expect(storage.getItem("reefvision.gallery.project-a.v1")).toBe(saved);
+    expect(readBrowserGalleryPreference("project-a")).toEqual({
+      imageId: "camera-original-7",
+      page: 2,
+      wrap: true,
+    });
+
+    vi.stubGlobal("window", { localStorage: storage });
+    writeBrowserGalleryPreference("project-a", {
+      imageId: "camera-original-8",
+      page: 3,
+      wrap: false,
+    });
+    expect(readBrowserGalleryPreference("project-a")).toEqual({
+      imageId: "camera-original-8",
+      page: 3,
+      wrap: false,
+    });
+  });
+
   it("recovers when WebView2 denies access to the localStorage property itself", () => {
     vi.stubGlobal("window", {
       get localStorage(): Storage {
