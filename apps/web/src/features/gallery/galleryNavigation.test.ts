@@ -28,6 +28,51 @@ describe("browser gallery storage access", () => {
     vi.unstubAllGlobals();
   });
 
+  it("restores a saved camera selection after transient WebView2 storage denial", () => {
+    const savedStorage = memoryStorage();
+    writeGalleryPreference(savedStorage, "project-a", {
+      imageId: "camera-original-42",
+      page: 3,
+      wrap: true,
+    });
+
+    vi.stubGlobal("window", {
+      get localStorage(): Storage {
+        throw new DOMException("Access denied", "SecurityError");
+      },
+    });
+    expect(readBrowserGalleryPreference("project-a")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+    expect(() =>
+      writeBrowserGalleryPreference("project-a", {
+        imageId: "camera-original-99",
+        page: 9,
+        wrap: false,
+      }),
+    ).not.toThrow();
+
+    // Denied access must not erase the persisted image or its original page.
+    vi.stubGlobal("window", { localStorage: savedStorage });
+    expect(readBrowserGalleryPreference("project-a")).toEqual({
+      imageId: "camera-original-42",
+      page: 3,
+      wrap: true,
+    });
+    writeBrowserGalleryPreference("project-a", {
+      imageId: "camera-original-43",
+      page: 4,
+      wrap: false,
+    });
+    expect(readBrowserGalleryPreference("project-a")).toEqual({
+      imageId: "camera-original-43",
+      page: 4,
+      wrap: false,
+    });
+  });
+
   it("recovers when WebView2 denies access to the localStorage property itself", () => {
     vi.stubGlobal("window", {
       get localStorage(): Storage {
