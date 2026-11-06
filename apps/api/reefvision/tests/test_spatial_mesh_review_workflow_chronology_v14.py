@@ -223,7 +223,7 @@ def test_saved_longitudinal_review_chronology_matches_standalone(
         ("2026-10-01T23:59:59.999999Z", "2026-10-02T00:00:00Z", 1 / 86_400_000_000),
         ("2026-10-01T12:00:00.999999+00:00", "2026-10-01T12:00:01Z", 1 / 86_400_000_000),
         ("2026-10-01T23:59:59.999999Z", "2026-10-02T00:00:00+00:00", 1 / 86_400_000_000),
-        # Equivalent instants with nonzero offsets must retain microsecond precision.
+        # Nonzero UTC offsets must retain one-microsecond observation ordering.
         ("2026-10-01T06:59:59.999999-05:00", "2026-10-01T12:00:00Z", 1 / 86_400_000_000),
         ("2026-10-01T13:59:59.999999+02:00", "2026-10-01T07:00:00-05:00", 1 / 86_400_000_000),
     ],
