@@ -47,6 +47,11 @@ def inspect(path: Path) -> dict:
         qc = any(inventory[name]["present"] for name in FAMILIES["qc"])
         lineage = "ambiguous" if scientific and qc else "scientific" if scientific else "qc" if qc else "unknown"
         warnings = []
+        # A live SQLite WAL/journal can contain uncheckpointed scientific edits.
+        # Do not mistake a mutable database plus sidecars for an immutable backup.
+        for suffix, warning in (("-wal", "wal_sidecar_requires_consistent_snapshot"), ("-journal", "rollback_journal_requires_consistent_snapshot")):
+            if Path(str(path) + suffix).exists():
+                warnings.append(warning)
         if not version_table_present:
             warnings.append("missing_alembic_version_table")
         elif "version_num" not in version_columns:
