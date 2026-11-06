@@ -894,6 +894,10 @@ class PoseTrainingDatasetService:
         if not verified:
             raise ValidationError("Training dataset requires at least one scientist-verified pose")
 
+        # Reject blank dataset labels before creating an immutable scientific record.
+        if request.name is not None and not request.name.strip():
+            raise ValidationError("Pose training dataset name cannot be blank")
+
         dataset_id = str(uuid4())
 
         item_rows: list[PoseTrainingDatasetItem] = []
