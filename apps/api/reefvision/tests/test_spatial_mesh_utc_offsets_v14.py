@@ -403,8 +403,6 @@ def test_longitudinal_two_imports_keep_independent_integrity_warnings(
     assert ("before_imported_source_expected_digest_not_checked" in warnings) is (
         not before_checked
     )
-    assert ("after_imported_source_expected_digest_not_checked" in warnings) is (
-        not after_checked
-    )
+    assert ("after_imported_source_expected_digest_not_checked" in warnings) is (not after_checked)
     assert "surface_area_change_is_not_verified_biological_growth" in warnings
     assert (before, after) == originals
