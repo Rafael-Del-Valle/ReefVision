@@ -429,6 +429,9 @@ describe("gallery preferences", () => {
       "camera\noriginal",
       "camera\u0000original",
       "camera\u007foriginal",
+      "camera\u0085original",
+      "camera\u2028original",
+      "camera\u2029original",
     ]) {
       const corrupted = memoryStorage({
         [key]: JSON.stringify({ imageId, page: 7, wrap: true }),
