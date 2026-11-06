@@ -82,7 +82,11 @@ def inspect(path: Path) -> dict:
             warnings.append("missing_alembic_version_table")
         elif "version_num" not in version_columns:
             warnings.append("missing_alembic_version_column")
-        elif len(revisions) != 1 or not isinstance(revisions[0], str) or not revisions[0]:
+        elif version_columns != {"version_num"}:
+            # Match the desktop migration guard: a foreign metadata column
+            # makes the Alembic stamp ambiguous even if its revision is valid.
+            warnings.append("unexpected_alembic_version_columns")
+        if version_table_present and "version_num" in version_columns and (len(revisions) != 1 or not isinstance(revisions[0], str) or not revisions[0]):
             warnings.append("invalid_revision_marker_count_or_value")
         # A single family marker is only a hint: partial migrations are not complete schemas.
         for family, names in FAMILIES.items():
