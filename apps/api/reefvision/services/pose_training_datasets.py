@@ -96,6 +96,11 @@ def frozen_pose_item_fingerprints_match(
     if len({row.candidate_id for row in rows}) != len(rows):
         return False
 
+    # Distinct candidates must not silently duplicate one verified video frame
+    # in a frozen training set, which would overweight the same observation.
+    if len({(row.video_id, row.video_track_id, row.frame_index) for row in rows}) != len(rows):
+        return False
+
     # A matching manifest and item_sha256 column cannot prove that the
     # persisted canonical landmarks are still the scientist-verified pose.
     # Recompute the original verification fingerprint from frozen row data.
