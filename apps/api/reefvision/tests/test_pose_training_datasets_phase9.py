@@ -276,6 +276,25 @@ def test_verified_pose_round_freezes_immutable_training_dataset(
     assert frozen_again["item_sha256"] == frozen["item_sha256"]
 
 
+def test_freeze_rejects_blank_dataset_name_without_persisting_record(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "   ", "created_by": "scientist"},
+    )
+    assert response.status_code == 422, response.text
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).filter_by(
+            source_round_id=str(round_payload["id"])
+        ).count() == 0
+
+
 def test_verified_pose_without_immutable_schema_is_rejected(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
