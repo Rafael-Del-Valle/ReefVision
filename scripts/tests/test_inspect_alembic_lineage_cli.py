@@ -301,3 +301,37 @@ def test_malformed_foreign_key_schema_is_structured_and_read_only(
     assert database.read_bytes() == before
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT note FROM observations").fetchone() == ("preserve",)
+
+
+@pytest.mark.parametrize("strict", [False, True])
+def test_foreign_alembic_version_column_is_reported_without_mutation(
+    tmp_path: Path, strict: bool
+) -> None:
+    database = tmp_path / "foreign-stamp.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE alembic_version (version_num TEXT NOT NULL, foreign_lineage TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO alembic_version VALUES ('0037', 'preserve')"
+        )
+        for name in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+    before = database.read_bytes()
+    command = [sys.executable, str(SCRIPT)]
+    if strict:
+        command.append("--fail-on-warning")
+    result = subprocess.run(
+        [*command, str(database)], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == (2 if strict else 0), result.stderr
+    report = json.loads(result.stdout)
+    assert "unexpected_alembic_version_columns" in report["warnings"]
+    assert report["revision_rows"] == ["0037"]
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before
