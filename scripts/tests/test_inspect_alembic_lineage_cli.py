@@ -443,7 +443,7 @@ def test_invalid_revision_row_cardinality_fails_closed_without_mutation(
         )
 
 
-@pytest.mark.parametrize("revision", [None, 38, b"\\x00\\xff0038"])
+@pytest.mark.parametrize("revision", [None, 38, b"\x00\xff0038"])
 @pytest.mark.parametrize("strict", [False, True])
 def test_nontext_revision_markers_are_json_safe_and_read_only(
     tmp_path: Path, revision: object, strict: bool
