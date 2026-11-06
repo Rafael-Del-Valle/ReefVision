@@ -958,7 +958,8 @@ class PoseTrainingDatasetService:
         # A persisted selection must still describe an observation inside its
         # original frame window before it can become frozen training provenance.
         if any(
-            candidate.frame_start > candidate.focus_frame
+            candidate.frame_start < 0
+            or candidate.frame_start > candidate.focus_frame
             or candidate.focus_frame > candidate.frame_end
             for candidate in candidates
         ):
