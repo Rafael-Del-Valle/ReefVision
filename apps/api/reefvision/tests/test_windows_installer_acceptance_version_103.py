@@ -181,7 +181,7 @@ def test_historical_release_notes_outside_acceptance_job_are_allowed() -> None:
     ],
 )
 def test_stale_version_reference_is_rejected(stale_reference: str) -> None:
-    workflow = valid_workflow() + f"      # {stale_reference}\n"
+    workflow = valid_workflow() + f"      - run: echo '{stale_reference}'\n"
     assert any(
         "hardcoded release version" in error for error in MODULE.check_workflow(workflow, "1.0.3")
     )
@@ -239,7 +239,7 @@ def test_invalid_release_version_is_rejected() -> None:
 
 
 def test_mixed_msi_versions_are_rejected() -> None:
-    workflow = valid_workflow() + "      # ReefVision_1.0.2_x64_en-US.msi\n"
+    workflow = valid_workflow() + "      - run: echo 'ReefVision_1.0.2_x64_en-US.msi'\n"
     assert any(
         "hardcoded release version" in error for error in MODULE.check_workflow(workflow, "1.0.3")
     )
