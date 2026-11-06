@@ -37,7 +37,7 @@ def test_longitudinal_replay_rejects_non_utc_offsets(invalid_timestamp: str) -> 
     before = _preview("survey-1", "2026-10-01T12:00:00Z")
     after = _preview("survey-2", "2026-10-02T12:00:00Z")
     before["provenance"]["observed_at_utc"] = invalid_timestamp
-    with pytest.raises(ValueError, match="timezone-aware increasing timestamps"):
+    with pytest.raises(ValueError, match="explicit RFC 3339 UTC timestamps|timezone-aware increasing timestamps"):
         compare_mesh_observations(before, after)
 
 
@@ -64,7 +64,7 @@ def test_longitudinal_replay_rejects_invalid_utc_on_either_observation(
     after = _preview("survey-2", "2026-10-02T12:00:00Z")
     target = before if observation == "before" else after
     target["provenance"]["observed_at_utc"] = invalid_timestamp
-    with pytest.raises(ValueError, match="timezone-aware increasing timestamps"):
+    with pytest.raises(ValueError, match="explicit RFC 3339 UTC timestamps|timezone-aware increasing timestamps"):
         compare_mesh_observations(before, after)
 
 
@@ -87,7 +87,7 @@ def test_longitudinal_replay_requires_forward_time_without_mutating_sources(
     original_before = deepcopy(before)
     original_after = deepcopy(after)
     if expected_elapsed_days is None:
-        with pytest.raises(ValueError, match="timezone-aware increasing timestamps"):
+        with pytest.raises(ValueError, match="explicit RFC 3339 UTC timestamps|timezone-aware increasing timestamps"):
             compare_mesh_observations(before, after)
     else:
         comparison = compare_mesh_observations(before, after)
@@ -108,7 +108,34 @@ def test_unknown_rfc3339_zero_offset_is_not_verified_utc(observation: str) -> No
         "2026-10-01T12:00:00-00:00" if observation == "before" else "2026-10-02T12:00:00-00:00"
     )
     original_before, original_after = deepcopy(before), deepcopy(after)
-    with pytest.raises(ValueError, match="known UTC offsets"):
+    with pytest.raises(ValueError, match="explicit RFC 3339 UTC timestamps"):
         compare_mesh_observations(before, after)
     assert before == original_before
     assert after == original_after
+
+
+@pytest.mark.parametrize(
+    "invalid_timestamp",
+    [
+        "2026-10-01 12:00:00+00:00",
+        "2026-10-01T12:00:00+0000",
+        "2026-W40-4T12:00:00Z",
+        "2026-10-01T12:00:00+00:00:00",
+        "2026-10-01T12:00:00z",
+    ],
+)
+@pytest.mark.parametrize("observation", ["before", "after"])
+def test_longitudinal_replay_rejects_non_rfc3339_utc_evidence(
+    invalid_timestamp: str, observation: str
+) -> None:
+    """Permissive Python datetime parsing must not certify replayed timestamps."""
+    from copy import deepcopy
+
+    before = _preview("survey-1", "2026-10-01T12:00:00Z")
+    after = _preview("survey-2", "2026-10-02T12:00:00Z")
+    target = before if observation == "before" else after
+    target["provenance"]["observed_at_utc"] = invalid_timestamp
+    originals = (deepcopy(before), deepcopy(after))
+    with pytest.raises(ValueError, match="explicit RFC 3339 UTC timestamps"):
+        compare_mesh_observations(before, after)
+    assert (before, after) == originals
