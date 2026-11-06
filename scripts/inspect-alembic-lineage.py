@@ -70,12 +70,19 @@ def inspect(path: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("database", type=Path, help="Path to an immutable copy of the SQLite database")
+    parser.add_argument(
+        "--fail-on-warning",
+        action="store_true",
+        help="Exit with status 2 when any lineage warning is present (for CI/preflight only)",
+    )
     args = parser.parse_args()
     try:
         result = inspect(args.database)
     except (sqlite3.Error, ValueError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2, sort_keys=True))
+    if args.fail_on_warning and result["warnings"]:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
