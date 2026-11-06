@@ -192,3 +192,74 @@ def test_corrupt_sqlite_file_fails_closed_without_mutation(tmp_path: Path) -> No
     )
     assert result.returncode != 0
     assert database.read_bytes() == before
+
+
+def test_orphaned_foreign_key_blocks_strict_preflight_without_mutation(tmp_path: Path) -> None:
+    database = tmp_path / "orphaned.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0037')")
+        for name in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE parents (id INTEGER PRIMARY KEY)")
+        connection.execute(
+            "CREATE TABLE observations (id INTEGER PRIMARY KEY, "
+            "parent_id INTEGER REFERENCES parents(id), note TEXT)"
+        )
+        # SQLite permits legacy orphaned records when foreign_keys is disabled.
+        connection.execute("INSERT INTO observations VALUES (1, 999, 'preserve')")
+    before = database.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    assert report["sqlite_integrity_ok"] is True
+    assert report["sqlite_foreign_key_violations"] == 1
+    assert "sqlite_foreign_key_violations" in report["warnings"]
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT note FROM observations").fetchone() == ("preserve",)
+
+
+def test_valid_foreign_keys_allow_warning_free_preflight(tmp_path: Path) -> None:
+    database = tmp_path / "linked.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0037')")
+        for name in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE parents (id INTEGER PRIMARY KEY)")
+        connection.execute(
+            "CREATE TABLE observations (id INTEGER PRIMARY KEY, "
+            "parent_id INTEGER REFERENCES parents(id))"
+        )
+        connection.execute("INSERT INTO parents VALUES (1)")
+        connection.execute("INSERT INTO observations VALUES (1, 1)")
+    before = database.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["sqlite_foreign_key_violations"] == 0
+    assert report["warnings"] == []
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before
