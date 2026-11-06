@@ -1018,7 +1018,9 @@ def test_mislabeled_camera_extension_does_not_fabricate_jpeg_provenance(
     Image.new("RGB", (43, 29), (12, 72, 160)).save(stream, format="PNG")
     original = stream.getvalue()
 
-    report = import_one(client, project["id"], filename=f"DSC_MISMATCH{extension}", content=original)
+    report = import_one(
+        client, project["id"], filename=f"DSC_MISMATCH{extension}", content=original
+    )
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
     record = client.get(f"/api/v1/images/{image_id}").json()
