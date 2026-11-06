@@ -263,3 +263,41 @@ def test_valid_foreign_keys_allow_warning_free_preflight(tmp_path: Path) -> None
     assert report["warnings"] == []
     assert report["upgrade_authorized"] is False
     assert database.read_bytes() == before
+
+
+@pytest.mark.parametrize("strict", [False, True])
+def test_malformed_foreign_key_schema_is_structured_and_read_only(
+    tmp_path: Path, strict: bool
+) -> None:
+    database = tmp_path / "invalid-fk.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0037')")
+        for name in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE parents (id INTEGER)")
+        connection.execute(
+            "CREATE TABLE observations (parent_id INTEGER REFERENCES parents(id), note TEXT)"
+        )
+        connection.execute("INSERT INTO observations VALUES (999, 'preserve')")
+    before = database.read_bytes()
+    command = [sys.executable, str(SCRIPT)]
+    if strict:
+        command.append("--fail-on-warning")
+    result = subprocess.run(
+        [*command, str(database)], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == (2 if strict else 0), result.stderr
+    report = json.loads(result.stdout)
+    assert report["sqlite_foreign_key_violations"] is None
+    assert "foreign key mismatch" in report["sqlite_foreign_key_check_error"]
+    assert "sqlite_foreign_key_check_failed" in report["warnings"]
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT note FROM observations").fetchone() == ("preserve",)
