@@ -435,6 +435,10 @@ describe("gallery preferences", () => {
       "camera\u200boriginal",
       "camera\u200doriginal",
       "camera\u2060original",
+      "camera\u202eoriginal",
+      "camera\u202aoriginal",
+      "camera\u2066original",
+      "camera\u2069original",
       "camera\ufefforiginal",
     ]) {
       const corrupted = memoryStorage({
