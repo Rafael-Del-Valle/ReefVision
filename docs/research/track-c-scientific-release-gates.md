@@ -30,3 +30,20 @@ Field/edge inference, mosaic drift, plugin execution, multimodal fusion, surveys
 5. The exact evidence (commit, workflow run IDs, fixture/data versions, environment, reviewer and remaining limitations) is recorded in issue #76 and reviewed in PR #79 or the appropriate isolated 1.5 PR.
 
 Green CI validates only the jobs that actually ran. A Windows build job is not proof of MSI/CAB installation or functioning GPU/GUI. No release marker should be added until every applicable gate above is evidenced.
+
+## Executable field-validation fixture contract (planned, not yet passed)
+
+Each paired coral observation must carry a stable specimen identifier, observation UUID, UTC capture timestamp, site/survey identifier, acquisition device, source-file SHA-256, reconstruction method/version, coordinate reference frame, calibration source and units, and reviewer decision. Record unavailable values as missing; do not manufacture a default calibration or specimen identity. Keep original source files immutable and preserve both raw and derived artifact hashes.
+
+| Fixture | Independent reference | Acceptance assertion | Required rejection/QC |
+| --- | --- | --- | --- |
+| Metric scale target imaged with the specimen | Physical ruler or measured fiducial with uncertainty and dated calibration record | Recovered known lengths and surface dimensions in meters, with signed error and repeatability across independent reconstructions | Missing/contradictory units, stale calibration, nonfinite scale, unsupported uncertainty assumptions |
+| Watertight geometric reference object | Known analytic area and dimensions; multiple OBJ/PLY/GLB representations | Cross-format agreement within declared numerical tolerance; distinguish numeric tolerance from biological accuracy | Reversed winding, holes, duplicate faces, degenerate triangles and false biological-volume inference |
+| Branching physical coral surrogate | Independently measured centerline graph, endpoints and branch junctions | Branch lengths by named branch and total length, with explicit junction/occlusion policy; independent annotator agreement | Surface-edge geodesic presented as anatomical centerline, missing branches or ambiguous junctions |
+| Repeated observation of one coral | Blindly reviewed identity, known camera pose/registration targets and repeat scans | Signed area/extent change, centroid displacement and uncertainty budgets in the target frame; saved workflow matches standalone output | Unverified transform, reused evidence bound to other geometry, nonoverlapping reconstructions, unreviewed identity |
+| Different but similar coral specimens | Blinded expert adjudication and separate specimen histories | Reidentification false-match and missed-match rates with confidence bounds on held-out specimens | Automatic promotion of appearance similarity to verified identity |
+| Partial/occluded reconstruction | Capture coverage reference and repeated reconstructions | Completeness and sensitivity reported alongside measured area; do not interpret missing surface as tissue loss | Occlusion, detached fragments, inconsistent sampling density or unresolved source integrity |
+
+For every fixture, store the independent reference method, reference uncertainty, sample size, numerical tolerance chosen **before** execution, analyst/reviewer identities, software commit, platform, and failure cases. The test suite should execute the same input through the standalone scientific service and a **saved, reloaded, typed Workflow Builder graph**; compare numeric values, units, warning codes, provenance, verification state, artifact hashes and immutable run revision. A graph that merely plans successfully is insufficient.
+
+A scientific gate passes only when the corresponding fixture data and executed results are attached to issue #76 and reviewed. CI with synthetic fixtures is necessary for regression safety but cannot substitute for measured coral reference material or installed desktop acceptance.
