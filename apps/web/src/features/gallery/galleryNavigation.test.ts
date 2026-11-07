@@ -1053,4 +1053,39 @@ describe("resolveGalleryNavigation", () => {
     });
     expect(values.get(key)).toBe(saved);
   });
+
+  it("restores supplementary Unicode camera IDs but rejects lone surrogates", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    };
+    const project = "unicode-camera";
+    const imageId = "coral-📷-reef.JPG";
+    writeGalleryPreference(storage, project, {
+      imageId,
+      page: 2,
+      wrap: true,
+    });
+    expect(readGalleryPreference(storage, project)).toEqual({
+      imageId,
+      page: 2,
+      wrap: true,
+    });
+    const key = "reefvision.gallery.unicode-camera.v1";
+    const saved = values.get(key);
+    for (const malformed of ["bad\\ud800", "bad\\udc00"]) {
+      values.set(key, JSON.stringify({ imageId: malformed, page: 2, wrap: true }));
+      expect(readGalleryPreference(storage, project).imageId).toBeNull();
+      values.set(key, saved!);
+      writeGalleryPreference(storage, project, {
+        imageId: malformed,
+        page: 3,
+        wrap: false,
+      });
+      expect(values.get(key)).toBe(saved);
+    }
+  });
 });
