@@ -339,9 +339,13 @@ def test_type_alias_cannot_rebind_migration_revision(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "dynamic_source",
     [
-        """exec("revision = '0039'")\n""",
-        """eval("globals().__setitem__('revision', '0039')")\n""",
-        """if True:\n    exec("revision = '0039'")\n""",
+        """exec("revision = '0039'")
+""",
+        """eval("globals().__setitem__('revision', '0039')")
+""",
+        """if True:
+    exec("revision = '0039'")
+""",
     ],
 )
 def test_dynamic_execution_cannot_bypass_static_revision_audit(
