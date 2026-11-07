@@ -179,6 +179,10 @@ def frozen_pose_item_fingerprints_match(
             or any(char not in "0123456789abcdef" for char in row.video_sha256)
             or acquisition.get("video_sha256") != row.video_sha256
             or acquisition.get("video_track_id") != row.video_track_id
+            # A re-signed persisted item must not turn a negative or boolean
+            # frame index into valid scientific video-frame evidence.
+            or type(row.frame_index) is not int
+            or row.frame_index < 0
             or type(acquisition.get("focus_frame")) is not int
             or acquisition["focus_frame"] != row.frame_index
             or acquisition.get("pose_schema_id") != row.pose_schema_id
