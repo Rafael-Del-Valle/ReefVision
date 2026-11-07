@@ -750,7 +750,10 @@ def test_frozen_dataset_rejects_resigned_incorrect_manifest_item_count(
 
     response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
     assert response.status_code == 409, response.text
-    assert "manifest lineage" in response.text
+    expected_detail = (
+        "manifest checksum" if type(invalid_count) is bool else "manifest item count"
+    )
+    assert expected_detail in response.text
 
 
 @pytest.mark.parametrize("digest_variant", ["blank", "uppercase", "truncated"])
