@@ -218,9 +218,7 @@ def test_zero_caller_error_bounds_preserve_exact_signed_component_intervals() ->
         ("registration_alignment_error_bound_m", -0.01),
     ],
 )
-def test_mutated_prevalidated_evidence_rejects_all_bound_fields(
-    field: str, invalid: float
-) -> None:
+def test_mutated_prevalidated_evidence_rejects_all_bound_fields(field: str, invalid: float) -> None:
     """A mutable evidence model cannot bypass validation after construction."""
     evidence = MeshRegistrationEvidence.model_validate(
         {
@@ -231,5 +229,28 @@ def test_mutated_prevalidated_evidence_rejects_all_bound_fields(
         }
     )
     setattr(evidence, field, invalid)
+    with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
+        _compare(evidence)
+
+
+@pytest.mark.parametrize(
+    "missing_field",
+    [
+        "source_centroid_position_error_bound_m",
+        "target_centroid_position_error_bound_m",
+        "registration_alignment_error_bound_m",
+    ],
+)
+def test_mutated_prevalidated_evidence_rejects_partial_caller_bounds(missing_field: str) -> None:
+    """Removing one bound after validation must not permit a partial interval."""
+    evidence = MeshRegistrationEvidence.model_validate(
+        {
+            **_registration(),
+            "source_centroid_position_error_bound_m": 0.1,
+            "target_centroid_position_error_bound_m": 0.2,
+            "registration_alignment_error_bound_m": 0.05,
+        }
+    )
+    setattr(evidence, missing_field, None)
     with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
         _compare(evidence)
