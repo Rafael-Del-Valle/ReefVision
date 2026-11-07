@@ -1076,7 +1076,11 @@ describe("resolveGalleryNavigation", () => {
     });
     const key = "reefvision.gallery.unicode-camera.v1";
     const saved = values.get(key);
-    for (const malformed of ["bad\\ud800", "bad\\udc00"]) {
+    // Use actual unpaired UTF-16 code units, not literal backslash-u text.
+    for (const malformed of [
+      `bad${String.fromCharCode(0xd800)}`,
+      `bad${String.fromCharCode(0xdc00)}`,
+    ]) {
       values.set(key, JSON.stringify({ imageId: malformed, page: 2, wrap: true }));
       expect(readGalleryPreference(storage, project).imageId).toBeNull();
       values.set(key, saved!);
