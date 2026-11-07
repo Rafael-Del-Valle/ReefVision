@@ -26,6 +26,7 @@ from reefvision.ml.reefpose.targets import ReefPoseTargets
 
 CancellationCheck = Callable[[], bool]
 StepCallback = Callable[[], None]
+EpochCallback = Callable[[int, int, dict[str, float]], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +236,7 @@ class ReefPoseTrainer:
         validation_batches: Iterable[dict[str, Any]] | None = None,
         cancellation_check: CancellationCheck | None = None,
         resume_from: Path | None = None,
+        epoch_callback: EpochCallback | None = None,
     ) -> ReefPoseTrainingResult:
         last_checkpoint = self.config.output_dir / "last.pt"
         best_checkpoint = self.config.output_dir / "best.pt"
@@ -350,6 +352,8 @@ class ReefPoseTrainer:
                         "metrics": metrics,
                     }
                 )
+                if epoch_callback is not None:
+                    epoch_callback(epoch + 1, self.config.epochs, dict(metrics))
                 last_completed_epoch = epoch
         except ReefPoseCancelledError:
             self._save(

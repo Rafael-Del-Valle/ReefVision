@@ -9,23 +9,33 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from PIL import Image
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import (
+    ExperimentRecord,
     Job,
     ModelRegistration,
     PoseModelSchemaBinding,
     PoseTrainingDataset,
     Project,
     TrainingRun,
+    VideoAsset,
 )
 from reefvision.jobs.pose_training import (
     materialize_pose_training_exports,
+    process_pose_training_job,
 )
 from reefvision.jobs.training import (
     _complete_training_run,
 )
+from reefvision.ml.reefpose.checkpoints import save_checkpoint
+from reefvision.ml.reefpose.errors import ReefPoseCancelledError
+from reefvision.ml.reefpose.training import ReefPoseTrainer
+from reefvision.services.jobs import JobService
+from reefvision.services.pose_training_exports import PoseTrainingExportService
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
 )
@@ -276,6 +286,84 @@ def _pose_export_zip(
         )
 
     return stream.getvalue()
+
+
+def _synthetic_exact_frames(
+    *,
+    source: Path,
+    video: VideoAsset,
+    frame_indices: list[int],
+    export_format: str,
+) -> tuple[dict[str, bytes], list[dict[str, object]]]:
+    del source
+    width = int(video.width_px)
+    height = int(video.height_px)
+    files: dict[str, bytes] = {}
+    records: list[dict[str, object]] = []
+    for frame_index in sorted(set(frame_indices)):
+        stream = io.BytesIO()
+        Image.new("RGB", (width, height), color=(48, 96, 144)).save(stream, format="PNG")
+        content = stream.getvalue()
+        relative = PoseTrainingExportService._frame_path(export_format, frame_index)  # type: ignore[arg-type]
+        files[relative] = content
+        records.append(
+            {
+                "source_frame_index": frame_index,
+                "path": relative,
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "size_bytes": len(content),
+                "width_px": width,
+                "height_px": height,
+                "encoding": "png-lossless",
+            }
+        )
+    return files, records
+
+
+def _queue_native_reefpose_run(
+    app: FastAPI,
+    settings: Settings,
+    *,
+    project: dict[str, object],
+    dataset: dict[str, object],
+    epochs: int = 1,
+) -> tuple[str, str]:
+    with app.state.session_factory() as session:
+        with pytest.raises(Exception, match="job=queued, run=queued"):
+            create_pose_workflow_training_result(
+                session,
+                settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                parameters={
+                    "provider_id": "reefpose",
+                    "architecture": "reefpose-s",
+                    "device": "cpu",
+                    "precision": "fp32",
+                    "random_seed": 61,
+                    "training_config": {
+                        "epochs": epochs,
+                        "batch": 1,
+                        "input_height": 64,
+                        "input_width": 64,
+                        "base_channels": 4,
+                        "fpn_channels": 8,
+                        "workers": 0,
+                    },
+                },
+                processor=lambda _settings, _factory, _job_id: True,
+            )
+        run = session.scalar(
+            select(TrainingRun)
+            .where(TrainingRun.provider_id == "reefpose")
+            .order_by(TrainingRun.created_at.desc())
+        )
+        assert run is not None and run.job_id is not None
+        return run.id, run.job_id
 
 
 def test_pose_materialization_never_silently_reuses_training_for_validation(
@@ -574,3 +662,166 @@ def test_reefpose_workflow_rejects_wrong_architecture_and_cross_provider_replay(
                 workflow_node_run_id="provider-replay-node",
                 processor=_fake_pose_processor,
             )
+
+
+def test_native_reefpose_workflow_executes_and_persists_best_checkpoint(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            parameters={
+                "provider_id": "reefpose",
+                "architecture": "reefpose-s",
+                "device": "cpu",
+                "precision": "fp32",
+                "random_seed": 59,
+                "training_config": {
+                    "epochs": 1,
+                    "batch": 1,
+                    "input_height": 64,
+                    "input_width": 64,
+                    "base_channels": 4,
+                    "fpn_channels": 8,
+                    "workers": 0,
+                },
+            },
+        )
+
+        run = session.get(TrainingRun, str(result["training_run_id"]))
+        job = session.get(Job, str(result["training_job_id"]))
+        assert run is not None and job is not None
+        assert run.status == "completed"
+        assert job.status == "succeeded"
+        assert run.progress_epoch == 1
+        assert run.metrics_json["selection_loss"] >= 0
+        assert run.artifact_manifest_json["dataset_format"] == "ultralytics_pose"
+        assert run.artifact_manifest_json["best_checkpoint_path"] == run.result_checkpoint_path
+
+    checkpoint = resolve_managed_project_path(test_settings, str(result["result_checkpoint_path"]))
+    assert checkpoint.is_file()
+    assert checkpoint.read_bytes()
+
+
+def test_native_reefpose_cancellation_retries_from_resumable_checkpoint(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    run_id, job_id = _queue_native_reefpose_run(
+        app,
+        test_settings,
+        project=project,
+        dataset=dataset,
+    )
+    original_fit = ReefPoseTrainer.fit
+
+    def cancel_fit(self: ReefPoseTrainer, *args: object, **kwargs: object) -> object:
+        del args, kwargs
+        save_checkpoint(
+            self.config.output_dir / "cancelled.pt",
+            model=self.model,
+            schema=self.schema,
+            epoch=-1,
+            global_step=0,
+            optimizer=self.optimizer,
+            scaler=self.scaler,
+            training_config=self.config.to_dict(),
+            reproducibility=self.reproducibility,
+        )
+        raise ReefPoseCancelledError("synthetic cancellation")
+
+    monkeypatch.setattr(ReefPoseTrainer, "fit", cancel_fit)
+    assert process_pose_training_job(test_settings, app.state.session_factory, job_id)
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, run_id)
+        job = session.get(Job, job_id)
+        assert run is not None and job is not None
+        assert run.status == job.status == "cancelled"
+        assert run.result_checkpoint_path is None
+        assert run.artifact_manifest_json["resume_checkpoint_path"]
+        JobService(session).retry(job_id)
+        session.refresh(run)
+        assert run.status == "queued"
+
+    monkeypatch.setattr(ReefPoseTrainer, "fit", original_fit)
+    assert process_pose_training_job(test_settings, app.state.session_factory, job_id)
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, run_id)
+        job = session.get(Job, job_id)
+        assert run is not None and job is not None
+        assert run.status == "completed"
+        assert job.status == "succeeded"
+        assert run.result_checkpoint_path
+
+
+def test_native_reefpose_execution_rejects_schema_drift_without_registration_artifact(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    run_id, job_id = _queue_native_reefpose_run(
+        app,
+        test_settings,
+        project=project,
+        dataset=dataset,
+    )
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, run_id)
+        frozen = session.get(PoseTrainingDataset, str(dataset["id"]))
+        assert run is not None and frozen is not None
+        original_manifest = frozen.manifest_sha256
+        run.artifact_manifest_json = {
+            **dict(run.artifact_manifest_json),
+            "pose_schema_content_hash": "0" * 64,
+        }
+        session.commit()
+
+    assert not process_pose_training_job(test_settings, app.state.session_factory, job_id)
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, run_id)
+        frozen = session.get(PoseTrainingDataset, str(dataset["id"]))
+        experiment = session.scalar(
+            select(ExperimentRecord).where(ExperimentRecord.training_run_id == run_id)
+        )
+        assert run is not None and frozen is not None
+        assert run.status == "failed"
+        assert "schema changed" in str(run.error_message)
+        assert run.result_checkpoint_path is None
+        assert experiment is None
+        assert frozen.manifest_sha256 == original_manifest

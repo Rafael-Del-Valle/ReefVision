@@ -815,7 +815,7 @@ def create_pose_workflow_training_result(
         run.id,
     )
 
-    if not processed or refreshed_job is None or refreshed_run is None:
+    if refreshed_job is None or refreshed_run is None:
         raise ValidationError("Pose training child job did not complete")
 
     job = refreshed_job
@@ -825,6 +825,9 @@ def create_pose_workflow_training_result(
         detail = run.error_message or job.error_message or (f"job={job.status}, run={run.status}")
 
         raise ValidationError("Pose training child job failed: " + detail)
+
+    if not processed:
+        raise ValidationError("Pose training child processor did not report completion")
 
     if not run.result_checkpoint_path:
         raise ValidationError("Completed pose training did not produce a checkpoint")

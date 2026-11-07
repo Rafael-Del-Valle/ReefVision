@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import Job, WorkflowNodeRun, WorkflowRun
+from reefvision.db.models import Job, TrainingRun, WorkflowNodeRun, WorkflowRun
 from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ConflictError, NotFoundError
 from reefvision.repositories.backups import BackupRepository
@@ -85,7 +85,22 @@ class JobService:
 
     def retry(self, job_id: str) -> Job:
         job = self.get(job_id)
-        if job.status != "failed" or job.job_type not in {
+        training_run = (
+            self.session.scalar(select(TrainingRun).where(TrainingRun.job_id == job.id))
+            if job.job_type == "training"
+            else None
+        )
+        native_training_retry = (
+            job.status in {"failed", "cancelled"}
+            and training_run is not None
+            and training_run.provider_id == "reefpose"
+            and bool(
+                dict(training_run.artifact_manifest_json or {}).get(
+                    "resume_checkpoint_path"
+                )
+            )
+        )
+        ordinary_retry = job.status == "failed" and job.job_type in {
             "thumbnail",
             "inference",
             "sam_image_proposals",
@@ -96,7 +111,8 @@ class JobService:
             "model_install",
             "workflow_run",
             "video_tracking",
-        }:
+        }
+        if not ordinary_retry and not native_training_retry:
             raise ConflictError("Only supported failed background jobs can be retried")
         job.status = "queued"
         job.progress_current = 0
@@ -104,6 +120,21 @@ class JobService:
         job.started_at = None
         job.completed_at = None
         job.result_json = None
+        if native_training_retry and training_run is not None:
+            training_run.status = "queued"
+            training_run.stage = "queued"
+            training_run.error_message = None
+            training_run.started_at = None
+            training_run.completed_at = None
+            training_run.result_checkpoint_path = None
+            job.progress_current = training_run.progress_epoch
+            job.progress_total = training_run.progress_total_epochs
+            job.result_json = {
+                "stage": "queued",
+                "task": "pose",
+                "provider_id": "reefpose",
+                "resume": True,
+            }
         backup = self.backups.get_by_job_id(job.id) if job.job_type == "backup" else None
         if backup is not None:
             backup.status = "queued"

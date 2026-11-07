@@ -187,6 +187,33 @@ class CheckpointAndTrainingTests(unittest.TestCase):
             self.assertEqual(resumed.completed_epochs, 1)
             self.assertEqual(resumed.global_step, 1)
 
+    def test_epoch_callback_reports_completed_epoch_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            reported: list[tuple[int, int, dict[str, float]]] = []
+            trainer = ReefPoseTrainer(
+                ReefPoseS(
+                    ReefPoseConfig(
+                        num_keypoints=2,
+                        input_height=64,
+                        input_width=64,
+                        base_channels=8,
+                    )
+                ),
+                _schema(),
+                ReefPoseTrainingConfig(epochs=1, device="cpu", output_dir=Path(raw)),
+            )
+
+            trainer.fit(
+                [_batch()],
+                epoch_callback=lambda epoch, total, metrics: reported.append(
+                    (epoch, total, dict(metrics))
+                ),
+            )
+
+            self.assertEqual(len(reported), 1)
+            self.assertEqual(reported[0][0:2], (1, 1))
+            self.assertIn("selection_loss", reported[0][2])
+
     def test_mid_epoch_cancellation_records_completed_optimizer_steps(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             output = Path(raw)
