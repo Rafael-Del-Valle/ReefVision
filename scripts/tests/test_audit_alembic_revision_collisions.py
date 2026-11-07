@@ -272,3 +272,25 @@ def test_non_assignment_revision_bindings_fail_closed(
     with pytest.raises(ValueError, match=message):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "binding",
+    [
+        "[item for revision in items]\\n",
+        "{revision for revision in items}\\n",
+        "{revision: item for revision in items}\\n",
+        "(item for revision in items)\\n",
+        "[item for (revision, other) in pairs]\\n",
+    ],
+)
+def test_comprehension_revision_bindings_fail_closed(
+    tmp_path: Path, binding: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + binding, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="comprehension rebinds revision"):
+        load_audit()([root])
+    assert file.read_bytes() == before
