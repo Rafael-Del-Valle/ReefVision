@@ -162,3 +162,24 @@ def test_divergent_collision_fingerprints_remain_read_only(tmp_path: Path) -> No
     assert len(set(hashes.values())) == 2
     assert report["safe_to_reconcile_automatically"] is False
     assert [path.read_bytes() for path in files] == before
+
+
+@pytest.mark.parametrize(
+    "nested_source",
+    [
+        'if True:\n    revision = "unexpected"\n',
+        'def alter_revision():\n    revision = "unexpected"\n',
+        'if True:\n    revision += "unexpected"\n',
+        'if (revision := "unexpected"):\n    pass\n',
+    ],
+)
+def test_nested_revision_mutations_fail_closed(
+    tmp_path: Path, nested_source: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + nested_source, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="nested revision assignment"):
+        load_audit()([root])
+    assert file.read_bytes() == before
