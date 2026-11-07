@@ -38,6 +38,11 @@ def audit(roots: list[Path]) -> dict:
         canonical_root = root.resolve(strict=False)
         if canonical_root in seen_roots:
             raise ValueError(f"Migration directory specified more than once: {root}")
+        if any(
+            canonical_root in previous.parents or previous in canonical_root.parents
+            for previous in seen_roots
+        ):
+            raise ValueError(f"Migration directories overlap: {root}")
         seen_roots.add(canonical_root)
         if not root.is_dir():
             raise ValueError(f"Migration directory missing: {root}")
