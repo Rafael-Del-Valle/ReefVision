@@ -433,6 +433,27 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("rejects oversized camera identifiers before writing a gallery selection", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: false,
+    });
+    const key = "reefvision.gallery.project-a.v1";
+    const saved = storage.getItem(key);
+
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "x".repeat(100_000),
+      page: 3,
+      wrap: true,
+    });
+    expect(storage.getItem(key)).toBe(saved);
+    expect(readGalleryPreference(storage, "project-a").imageId).toBe(
+      "camera-original-1",
+    );
+  });
+
   it("does not persist camera IDs that exceed the bounded preference reader", () => {
     const storage = memoryStorage();
     writeGalleryPreference(storage, "project-a", {
