@@ -103,7 +103,7 @@ def revision_from_source(path: Path) -> str | None:
         elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if statement.name == "revision":
                 raise ValueError(f"{path}: declaration rebinds revision")
-        elif isinstance(statement, ast.TypeAlias) and any(
+        elif isinstance(statement, getattr(ast, "TypeAlias", ())) and any(
             isinstance(name, ast.Name) and name.id == "revision"
             for name in ast.walk(statement.name)
         ):
