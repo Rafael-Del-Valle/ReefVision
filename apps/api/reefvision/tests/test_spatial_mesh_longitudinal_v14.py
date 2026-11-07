@@ -2877,9 +2877,15 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
     assert len(artifact["payload_sha256"]) == 64
 
 
-@pytest.mark.parametrize("bound", [0.0, 0.05])
+@pytest.mark.parametrize(
+    ("source_bound", "target_bound", "alignment_bound"),
+    [(0.0, 0.0, 0.0), (0.05, 0.05, 0.05), (0.01, 0.03, 0.06)],
+)
 def test_registered_centroid_caller_bounds_survive_saved_workflow(
-    client: TestClient, bound: float
+    client: TestClient,
+    source_bound: float,
+    target_bound: float,
+    alignment_bound: float,
 ) -> None:
     """Typed persisted graphs must retain the standalone provisional interval and QC."""
     project_id = str(create_project(client, "Registered centroid interval parity")["id"])
@@ -2896,9 +2902,9 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
         "correspondence_count": 6,
         "evidence_note": "Caller-supplied bounds; independent verification pending",
         "source_to_target_transform_m": _rigid_transform(),
-        "source_centroid_position_error_bound_m": bound,
-        "target_centroid_position_error_bound_m": bound,
-        "registration_alignment_error_bound_m": bound,
+        "source_centroid_position_error_bound_m": source_bound,
+        "target_centroid_position_error_bound_m": target_bound,
+        "registration_alignment_error_bound_m": alignment_bound,
     }
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
@@ -2906,9 +2912,10 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     )
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
+    total_bound = source_bound + target_bound + alignment_bound
     assert expected["registered_surface_centroid_separation_m"] == pytest.approx(0.1)
     assert expected["registered_surface_centroid_separation_caller_bound_interval_m"] == (
-        pytest.approx([max(0.0, 0.1 - 3 * bound), 0.1 + 3 * bound])
+        pytest.approx([max(0.0, 0.1 - total_bound), 0.1 + total_bound])
     )
     assert expected["provenance"]["coordinate_registration_verified"] is False
     assert (
