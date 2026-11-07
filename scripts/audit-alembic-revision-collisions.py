@@ -27,17 +27,22 @@ def revision_from_source(path: Path) -> str | None:
 
 def audit(roots: list[Path]) -> dict:
     by_revision: dict[str, list[str]] = defaultdict(list)
+    migration_files = 0
     for root in roots:
         if not root.is_dir():
             raise ValueError(f"Migration directory missing: {root}")
         for path in sorted(root.rglob("*.py")):
             if path.name == "__init__.py":
                 continue
+            migration_files += 1
             revision = revision_from_source(path)
-            if revision is not None:
-                if not revision.strip() or revision != revision.strip():
-                    raise ValueError(f"{path}: noncanonical revision")
-                by_revision[revision].append(str(path))
+            if revision is None:
+                raise ValueError(f"{path}: missing literal revision assignment")
+            if not revision.strip() or revision != revision.strip():
+                raise ValueError(f"{path}: noncanonical revision")
+            by_revision[revision].append(str(path))
+    if migration_files == 0:
+        raise ValueError("No migration revision files found")
     collisions = {
         revision: paths
         for revision, paths in sorted(by_revision.items())
