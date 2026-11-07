@@ -2885,6 +2885,8 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
         (0.01, 0.03, 0.06),
         (0.0, 0.0, 0.2),
         (0.0, 0.1, 0.0),
+        (0.12, 0.0, 0.0),
+        (0.02, 0.0, 0.01),
     ],
 )
 def test_registered_centroid_caller_bounds_survive_saved_workflow(
