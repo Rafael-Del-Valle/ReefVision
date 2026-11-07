@@ -1053,5 +1053,4 @@ describe("resolveGalleryNavigation", () => {
     });
     expect(values.get(key)).toBe(saved);
   });
-
 });
