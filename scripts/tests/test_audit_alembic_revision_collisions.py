@@ -154,7 +154,9 @@ def test_overlapping_roots_rejected_without_double_counting(
 def test_divergent_collision_fingerprints_remain_read_only(tmp_path: Path) -> None:
     first, second = tmp_path / "one", tmp_path / "two"
     files = [migration(first, "0038_a.py", "0038"), migration(second, "0038_b.py", "0038")]
-    files[1].write_text(files[1].read_text(encoding="utf-8") + "# distinct schema\n", encoding="utf-8")
+    files[1].write_text(
+        files[1].read_text(encoding="utf-8") + "# distinct schema\n", encoding="utf-8"
+    )
     before = [path.read_bytes() for path in files]
     report = load_audit()([first, second])
     hashes = report["collision_source_sha256"]["0038"]
