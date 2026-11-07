@@ -1,0 +1,58 @@
+{
+  "biological_accuracy_validated": false,
+  "configuration": {
+    "amp_requested": true,
+    "batch_size": 16,
+    "device": "cuda",
+    "inference_iterations": 100,
+    "model": {
+      "base_channels": 32,
+      "fpn_channels": null,
+      "heatmap_stride": 4,
+      "input_channels": 3,
+      "input_height": 256,
+      "input_width": 256,
+      "num_keypoints": 8
+    },
+    "seed": 1337,
+    "training_steps": 50,
+    "warmup_iterations": 10
+  },
+  "inference": {
+    "batch_size": 16,
+    "images_per_second": 3603.1613236018356,
+    "iterations": 100,
+    "mean_latency_ms": 4.44054500007951,
+    "p50_latency_ms": 4.318400000556721,
+    "p95_latency_ms": 5.06630000018049,
+    "peak_gpu_memory_bytes": 175742464
+  },
+  "model": {
+    "architecture": "reefpose-s",
+    "architecture_version": "1",
+    "parameter_count": 2622704,
+    "trainable_parameter_count": 2622704
+  },
+  "runtime": {
+    "amp_enabled": true,
+    "cuda_version": "12.8",
+    "cudnn_version": 91900,
+    "device": "cuda:0",
+    "device_name": "NVIDIA GeForce RTX 3090",
+    "device_type": "cuda",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "python_version": "3.12.10",
+    "torch_version": "2.11.0+cu128"
+  },
+  "schema_version": "reefpose-benchmark-0001",
+  "synthetic_fixture": true,
+  "training": {
+    "batch_size": 16,
+    "final_synthetic_loss": 0.1110011637210846,
+    "images_per_second": 1079.9324124305813,
+    "peak_gpu_memory_bytes": 352571904,
+    "steps": 50,
+    "steps_per_second": 67.49577577691133
+  },
+  "validation_notice": "Synthetic tensors validate engineering performance only; real labeled animal data is required for biological accuracy evaluation."
+}

@@ -65,9 +65,7 @@ class ReefPoseLossTests(unittest.TestCase):
             visibility_logits=torch.zeros(1, 2),
         )
         changed_absent_heatmap = ReefPoseOutput(
-            heatmaps=torch.cat(
-                [torch.zeros(1, 1, 4, 4), torch.full((1, 1, 4, 4), 20.0)], dim=1
-            ),
+            heatmaps=torch.cat([torch.zeros(1, 1, 4, 4), torch.full((1, 1, 4, 4), 20.0)], dim=1),
             visibility_logits=torch.zeros(1, 2),
         )
         changed_visibility = ReefPoseOutput(
@@ -103,4 +101,3 @@ class ReefPoseLossTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

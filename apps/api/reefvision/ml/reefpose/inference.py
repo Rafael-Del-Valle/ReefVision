@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import torch
@@ -179,4 +178,3 @@ class ReefPosePredictor:
             anatomy_schema_revision=self.schema.revision,
             anatomy_integrity_hash=self.schema.integrity_hash,
         )
-

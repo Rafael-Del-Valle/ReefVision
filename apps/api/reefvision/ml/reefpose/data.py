@@ -37,9 +37,9 @@ def _sha256(path: Path) -> str:
 
 
 def _canonical_hash(payload: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -85,7 +85,9 @@ class PoseRecord:
             if visibility > 0 and not (
                 0 <= x <= self.source_width and 0 <= y <= self.source_height
             ):
-                raise ReefPoseValidationError("Visible pose record coordinate is outside the source")
+                raise ReefPoseValidationError(
+                    "Visible pose record coordinate is outside the source"
+                )
         if self.crop_box is not None:
             x_min, y_min, x_max, y_max = self.crop_box
             if (
@@ -238,14 +240,20 @@ def _record_from_annotation(
     visibility: list[int] = []
     visibility_states: list[str] = []
     for landmark in schema.landmarks:
-        observation = by_slot.pop((landmark.name, landmark.occurrence_index), None)
-        if observation is None:
+        slot = (landmark.name, landmark.occurrence_index)
+        matched_observation = by_slot.pop(slot) if slot in by_slot else None
+        if matched_observation is None:
             keypoints.append((0.0, 0.0))
             visibility.append(0)
             visibility_states.append("absent")
             continue
-        state = str(observation.get("status") or "absent").strip().casefold()
-        keypoints.append((float(observation.get("x", 0.0)), float(observation.get("y", 0.0))))
+        state = str(matched_observation.get("status") or "absent").strip().casefold()
+        keypoints.append(
+            (
+                float(matched_observation.get("x", 0.0)),
+                float(matched_observation.get("y", 0.0)),
+            )
+        )
         visibility.append(_visibility_value(state))
         visibility_states.append(state)
     if by_slot:
@@ -386,7 +394,9 @@ class ReefPoseDataset(Dataset[dict[str, Any]]):
         if not self.records:
             raise ReefPoseValidationError("ReefPose dataset requires at least one record")
         if input_height % 4 or input_width % 4:
-            raise ReefPoseValidationError("ReefPose dataset input dimensions must be divisible by 4")
+            raise ReefPoseValidationError(
+                "ReefPose dataset input dimensions must be divisible by 4"
+            )
         if heatmap_sigma <= 0:
             raise ReefPoseValidationError("ReefPose heatmap sigma must be positive")
         if any(len(record.keypoints) != schema.keypoint_count for record in self.records):
@@ -479,4 +489,3 @@ def group_aware_split(
     if not training or not validation:
         raise ReefPoseValidationError("Leakage-safe split produced an empty partition")
     return training, validation
-

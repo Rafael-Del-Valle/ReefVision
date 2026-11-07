@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import torch
 from PIL import Image
 
-from reefvision.ml.reefpose.provider import REEFPOSE_PROVIDER_ID, ReefPoseRegistrationProvider
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.inference import _pose_prediction_provenance, _validate_model_prediction
 from reefvision.ml.provider_hub import (
@@ -19,6 +18,7 @@ from reefvision.ml.provider_hub import (
 from reefvision.ml.providers import DetectionSettings, PixelBox, PoseKeypointPrediction
 from reefvision.ml.reefpose.checkpoints import save_checkpoint
 from reefvision.ml.reefpose.model import ReefPoseConfig, ReefPoseS
+from reefvision.ml.reefpose.provider import REEFPOSE_PROVIDER_ID, ReefPoseRegistrationProvider
 from reefvision.ml.reefpose.schema import AnatomySchema, LandmarkDefinition
 
 
@@ -88,9 +88,9 @@ class ReefPoseProviderTests(unittest.TestCase):
             self.assertEqual(metadata.provider_name, REEFPOSE_PROVIDER_ID)
             self.assertEqual(metadata.class_labels, ["jellyfish"])
             self.assertEqual(metadata.metadata["pose_keypoint_shape"], [3, 3])
-            self.assertEqual(metadata.metadata["pose_landmark_labels"], [
-                "bell_center", "tentacle", "tentacle"
-            ])
+            self.assertEqual(
+                metadata.metadata["pose_landmark_labels"], ["bell_center", "tentacle", "tentacle"]
+            )
             self.assertEqual(len(predictions), 1)
             self.assertEqual(len(predictions[0].keypoints or ()), 3)
             self.assertEqual(predictions[0].pose_schema["schema_revision"], 4)
@@ -165,4 +165,3 @@ class ReefPoseProviderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

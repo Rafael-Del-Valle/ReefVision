@@ -85,26 +85,22 @@ class ImageTransform:
         self._validate_points(points)
         output = points.to(dtype=torch.float32).clone()
         output[..., 0] = (
-            (output[..., 0] - self.crop_x) * self.resized_width / self.crop_width
-            + self.pad_left
-        )
+            output[..., 0] - self.crop_x
+        ) * self.resized_width / self.crop_width + self.pad_left
         output[..., 1] = (
-            (output[..., 1] - self.crop_y) * self.resized_height / self.crop_height
-            + self.pad_top
-        )
+            output[..., 1] - self.crop_y
+        ) * self.resized_height / self.crop_height + self.pad_top
         return output
 
     def input_to_source(self, points: torch.Tensor, *, clamp: bool = False) -> torch.Tensor:
         self._validate_points(points)
         output = points.to(dtype=torch.float32).clone()
         output[..., 0] = (
-            (output[..., 0] - self.pad_left) * self.crop_width / self.resized_width
-            + self.crop_x
-        )
+            output[..., 0] - self.pad_left
+        ) * self.crop_width / self.resized_width + self.crop_x
         output[..., 1] = (
-            (output[..., 1] - self.pad_top) * self.crop_height / self.resized_height
-            + self.crop_y
-        )
+            output[..., 1] - self.pad_top
+        ) * self.crop_height / self.resized_height + self.crop_y
         if clamp:
             output[..., 0].clamp_(0.0, float(self.source_width - 1))
             output[..., 1].clamp_(0.0, float(self.source_height - 1))
@@ -156,12 +152,20 @@ def letterbox_tensor(
     if image.ndim != 3:
         raise ReefPoseValidationError("ReefPose images must be CHW tensors")
     _, source_height, source_width = image.shape
+    float_crop_box = None
+    if crop_box is not None:
+        float_crop_box = (
+            float(crop_box[0]),
+            float(crop_box[1]),
+            float(crop_box[2]),
+            float(crop_box[3]),
+        )
     transform = ImageTransform.for_source(
         source_width=source_width,
         source_height=source_height,
         input_width=input_width,
         input_height=input_height,
-        crop_box=tuple(float(item) for item in crop_box) if crop_box is not None else None,
+        crop_box=float_crop_box,
     )
     working = image
     if crop_box is not None:
@@ -179,4 +183,3 @@ def letterbox_tensor(
         value=float(padding_value),
     )
     return padded, transform
-

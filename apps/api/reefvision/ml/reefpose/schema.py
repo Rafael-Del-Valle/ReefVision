@@ -11,9 +11,7 @@ from uuid import NAMESPACE_URL, uuid5
 from reefvision.ml.reefpose.errors import ReefPoseValidationError
 
 VisibilityState = str
-VISIBILITY_STATES = frozenset(
-    {"absent", "occluded", "visible", "uncertain", "out_of_frame"}
-)
+VISIBILITY_STATES = frozenset({"absent", "occluded", "visible", "uncertain", "out_of_frame"})
 
 
 def _required_text(value: str, field_name: str) -> str:
@@ -255,17 +253,15 @@ class AnatomySchema:
                         landmark_id=stable_id,
                         name=landmark_name,
                         description=(
-                            str(raw["description"])
-                            if raw.get("description") is not None
-                            else None
+                            str(raw["description"]) if raw.get("description") is not None else None
                         ),
                         group=str(raw["group"]) if raw.get("group") is not None else None,
                         occurrence_index=occurrence,
                     )
                 )
-                by_legacy_key[
-                    landmark_name if count == 1 else f"{landmark_name}#{occurrence}"
-                ] = stable_id
+                by_legacy_key[landmark_name if count == 1 else f"{landmark_name}#{occurrence}"] = (
+                    stable_id
+                )
         edges: list[SkeletonEdge] = []
         for source, target in skeleton or []:
             source_id = by_legacy_key.get(source, source)
@@ -279,4 +275,3 @@ class AnatomySchema:
             landmarks=tuple(landmarks),
             skeleton=tuple(edges),
         )
-

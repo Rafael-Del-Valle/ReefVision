@@ -58,12 +58,10 @@ class ReefPoseLoss(nn.Module):
             target_batch.visibility_targets,
         )
         total = (
-            heatmap_loss * self.heatmap_loss_weight
-            + visibility_loss * self.visibility_loss_weight
+            heatmap_loss * self.heatmap_loss_weight + visibility_loss * self.visibility_loss_weight
         )
         return ReefPoseLossOutput(
             total=total,
             heatmap=heatmap_loss,
             visibility=visibility_loss,
         )
-

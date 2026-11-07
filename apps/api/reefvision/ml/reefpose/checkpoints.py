@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
 import torch
@@ -17,6 +17,12 @@ from reefvision.ml.reefpose.model import ReefPoseConfig, ReefPoseS
 from reefvision.ml.reefpose.schema import AnatomySchema
 
 CHECKPOINT_FORMAT = "reefpose-checkpoint-0001"
+
+
+class StatefulScaler(Protocol):
+    def state_dict(self) -> dict[str, Any]: ...
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
 
 
 def _safe_metadata(value: Any, *, label: str) -> Any:
@@ -37,10 +43,7 @@ def _safe_metadata(value: Any, *, label: str) -> Any:
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, dict):
-        return {
-            str(key): _safe_metadata(item, label=label)
-            for key, item in value.items()
-        }
+        return {str(key): _safe_metadata(item, label=label) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_safe_metadata(item, label=label) for item in value]
     raise ReefPoseValidationError(
@@ -71,7 +74,7 @@ def save_checkpoint(
     global_step: int,
     metrics: dict[str, float] | None = None,
     optimizer: torch.optim.Optimizer | None = None,
-    scaler: torch.amp.GradScaler | None = None,
+    scaler: StatefulScaler | None = None,
     training_config: dict[str, Any] | None = None,
     reproducibility: dict[str, Any] | None = None,
 ) -> None:
@@ -96,9 +99,7 @@ def save_checkpoint(
         "optimizer_state": optimizer.state_dict() if optimizer is not None else None,
         "scaler_state": scaler.state_dict() if scaler is not None else None,
         "training_config": _safe_metadata(dict(training_config or {}), label="training config"),
-        "reproducibility": _safe_metadata(
-            dict(reproducibility or {}), label="reproducibility"
-        ),
+        "reproducibility": _safe_metadata(dict(reproducibility or {}), label="reproducibility"),
         "created_at": datetime.now(UTC).isoformat(),
     }
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
@@ -115,7 +116,7 @@ def load_checkpoint(
     device: torch.device | str = "cpu",
     model: ReefPoseS | None = None,
     optimizer: torch.optim.Optimizer | None = None,
-    scaler: torch.amp.GradScaler | None = None,
+    scaler: StatefulScaler | None = None,
     expected_schema_hash: str | None = None,
 ) -> CheckpointState:
     if not path.is_file():
@@ -175,4 +176,3 @@ def load_checkpoint(
         raise
     except Exception as exc:
         raise ReefPoseValidationError("ReefPose checkpoint contents are invalid") from exc
-

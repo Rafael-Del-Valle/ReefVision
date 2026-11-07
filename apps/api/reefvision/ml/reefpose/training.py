@@ -110,7 +110,9 @@ class ReefPoseTrainer:
             lr=config.learning_rate,
             weight_decay=config.weight_decay,
         )
-        self.scaler = torch.amp.GradScaler("cuda", enabled=self.amp_enabled)
+        self.scaler = torch.amp.GradScaler(  # type: ignore[attr-defined]
+            "cuda", enabled=self.amp_enabled
+        )
         self.criterion = ReefPoseLoss(
             heatmap_loss_weight=config.heatmap_loss_weight,
             visibility_loss_weight=config.visibility_loss_weight,
@@ -135,7 +137,7 @@ class ReefPoseTrainer:
             "torch_version": str(torch.__version__),
             "numpy_version": str(np.__version__),
             "cuda_version": torch.version.cuda,
-            "cudnn_version": torch.backends.cudnn.version(),
+            "cudnn_version": torch.backends.cudnn.version(),  # type: ignore[no-untyped-call]
             "device": str(self.device),
             "anatomy_integrity_hash": self.schema.integrity_hash,
         }
@@ -168,9 +170,12 @@ class ReefPoseTrainer:
             images, targets = self._batch_targets(batch)
             if training:
                 self.optimizer.zero_grad(set_to_none=True)
-            with torch.set_grad_enabled(training), torch.amp.autocast(
-                device_type=self.device.type,
-                enabled=self.amp_enabled,
+            with (
+                torch.set_grad_enabled(training),
+                torch.amp.autocast(  # type: ignore[attr-defined]
+                    device_type=self.device.type,
+                    enabled=self.amp_enabled,
+                ),
             ):
                 losses = self.criterion(self.model(images), targets)
             if training:
@@ -314,4 +319,3 @@ class ReefPoseTrainer:
             best_checkpoint=best_checkpoint,
             metrics_history=history,
         )
-

@@ -147,11 +147,14 @@ class ReefVisionPoseExportTests(unittest.TestCase):
                 heatmap_sigma=1.5,
             )[0]
 
-            self.assertEqual(bundle.schema.expanded_names, (
-                "bell_center",
-                "tentacle",
-                "tentacle",
-            ))
+            self.assertEqual(
+                bundle.schema.expanded_names,
+                (
+                    "bell_center",
+                    "tentacle",
+                    "tentacle",
+                ),
+            )
             self.assertEqual(record.group_id, "video-1")
             self.assertEqual(record.keypoints[0], (8.0, 5.0))
             self.assertEqual(record.visibility, (2, 1, 0))
@@ -195,9 +198,9 @@ class GroupAwareSplitTests(unittest.TestCase):
         train_groups = {record.group_id for record in train}
         validation_groups = {record.group_id for record in validation}
         self.assertFalse(train_groups & validation_groups)
-        self.assertEqual({record.sample_id for record in (*train, *validation)}, {
-            "a1", "a2", "b1", "c1"
-        })
+        self.assertEqual(
+            {record.sample_id for record in (*train, *validation)}, {"a1", "a2", "b1", "c1"}
+        )
 
     def test_one_group_cannot_be_silently_split(self) -> None:
         with self.assertRaisesRegex(ReefPoseValidationError, "two groups"):
@@ -210,4 +213,3 @@ class GroupAwareSplitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

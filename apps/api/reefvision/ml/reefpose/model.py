@@ -11,6 +11,13 @@ from torch.nn import functional as F
 from reefvision.ml.reefpose.errors import ReefPoseValidationError
 
 
+def _integer_field(payload: dict[str, object], name: str, default: int | None = None) -> int:
+    value = payload.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ReefPoseValidationError(f"ReefPose configuration field {name!r} must be an integer")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class ReefPoseConfig:
     num_keypoints: int
@@ -50,16 +57,21 @@ class ReefPoseConfig:
 
     @classmethod
     def from_dict(cls, payload: dict[str, object]) -> ReefPoseConfig:
+        raw_fpn_channels = payload.get("fpn_channels")
+        if raw_fpn_channels is not None and (
+            isinstance(raw_fpn_channels, bool) or not isinstance(raw_fpn_channels, int)
+        ):
+            raise ReefPoseValidationError(
+                "ReefPose configuration field 'fpn_channels' must be an integer or null"
+            )
         return cls(
-            num_keypoints=int(payload["num_keypoints"]),
-            input_height=int(payload.get("input_height", 256)),
-            input_width=int(payload.get("input_width", 256)),
-            input_channels=int(payload.get("input_channels", 3)),
-            base_channels=int(payload.get("base_channels", 32)),
-            fpn_channels=(
-                int(payload["fpn_channels"]) if payload.get("fpn_channels") is not None else None
-            ),
-            heatmap_stride=int(payload.get("heatmap_stride", 4)),
+            num_keypoints=_integer_field(payload, "num_keypoints"),
+            input_height=_integer_field(payload, "input_height", 256),
+            input_width=_integer_field(payload, "input_width", 256),
+            input_channels=_integer_field(payload, "input_channels", 3),
+            base_channels=_integer_field(payload, "base_channels", 32),
+            fpn_channels=raw_fpn_channels,
+            heatmap_stride=_integer_field(payload, "heatmap_stride", 4),
         )
 
 
@@ -104,7 +116,10 @@ class ResidualBlock(nn.Module):
         self.activation = nn.SiLU(inplace=True)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.activation(inputs + self.block(inputs))
+        output = self.activation(inputs + self.block(inputs))
+        if not isinstance(output, torch.Tensor):
+            raise TypeError("ReefPose residual activation returned a non-tensor")
+        return output
 
 
 class EncoderStage(nn.Sequential):
@@ -202,4 +217,3 @@ class ReefPoseS(nn.Module):
                 "ReefPose input must have shape "
                 f"[batch, {expected[0]}, {expected[1]}, {expected[2]}]"
             )
-

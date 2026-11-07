@@ -424,9 +424,7 @@ def _reefpose_descriptor() -> ModelProviderDescriptor:
             "No pretrained checkpoints are downloaded automatically.",
         ),
         desktop_packaging_state="source_provider_not_yet_bundled",
-        clean_machine_verification_state=(
-            "runtime_ready" if ready else "dependency_not_ready"
-        ),
+        clean_machine_verification_state=("runtime_ready" if ready else "dependency_not_ready"),
         availability_status="ready" if ready else "dependency_missing",
         availability_reason=None if ready else "Missing " + ", ".join(missing),
         default_registration_purpose="detector",

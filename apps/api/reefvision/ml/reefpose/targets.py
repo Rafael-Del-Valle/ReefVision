@@ -73,10 +73,9 @@ def generate_gaussian_heatmaps(
     y_grid = torch.arange(height, device=points.device, dtype=torch.float32)
     x_grid = torch.arange(width, device=points.device, dtype=torch.float32)
     yy, xx = torch.meshgrid(y_grid, x_grid, indexing="ij")
-    squared_distance = (
-        (xx.unsqueeze(0) - point_values[:, 0, None, None]).square()
-        + (yy.unsqueeze(0) - point_values[:, 1, None, None]).square()
-    )
+    squared_distance = (xx.unsqueeze(0) - point_values[:, 0, None, None]).square() + (
+        yy.unsqueeze(0) - point_values[:, 1, None, None]
+    ).square()
     heatmaps = torch.exp(-squared_distance / (2.0 * float(sigma) ** 2))
     heatmaps *= supervised[:, None, None].to(dtype=heatmaps.dtype)
     heatmap_weights = torch.where(
@@ -93,4 +92,3 @@ def generate_gaussian_heatmaps(
         heatmap_weights=heatmap_weights,
         visibility_targets=supervised.to(dtype=torch.float32),
     )
-

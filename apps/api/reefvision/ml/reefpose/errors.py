@@ -11,4 +11,3 @@ class ReefPoseValidationError(ReefPoseError, ValueError):
 
 class ReefPoseCancelledError(ReefPoseError):
     """Raised after a cooperative training cancellation request."""
-

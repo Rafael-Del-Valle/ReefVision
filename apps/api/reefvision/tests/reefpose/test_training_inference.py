@@ -128,7 +128,9 @@ class CheckpointAndTrainingTests(unittest.TestCase):
             self.assertEqual(first.completed_epochs, 1)
             self.assertEqual(first.global_step, 1)
             self.assertTrue(first.last_checkpoint.is_file())
-            rows = [json.loads(line) for line in (output / "training.jsonl").read_text().splitlines()]
+            rows = [
+                json.loads(line) for line in (output / "training.jsonl").read_text().splitlines()
+            ]
             self.assertEqual(rows[0]["epoch"], 0)
             self.assertEqual(rows[0]["device"], "cpu")
             self.assertFalse(rows[0]["amp_enabled"])
@@ -184,9 +186,7 @@ class _FixedPoseModel(nn.Module):
         heatmaps = torch.full((inputs.shape[0], 2, 16, 16), -10.0, device=inputs.device)
         heatmaps[:, 0, 8, 8] = 10.0
         heatmaps[:, 1, 4, 12] = 10.0
-        visibility = torch.tensor([[10.0, -10.0]], device=inputs.device).repeat(
-            inputs.shape[0], 1
-        )
+        visibility = torch.tensor([[10.0, -10.0]], device=inputs.device).repeat(inputs.shape[0], 1)
         return ReefPoseOutput(heatmaps=heatmaps, visibility_logits=visibility)
 
 
@@ -210,4 +210,3 @@ class InferenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

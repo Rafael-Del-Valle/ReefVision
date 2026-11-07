@@ -84,9 +84,7 @@ class ReefPoseRegistrationProvider:
         )
         try:
             state = load_checkpoint(model_path, device="cpu")
-            self._class_label = str(
-                state.training_config.get("class_label") or "animal"
-            ).strip()
+            self._class_label = str(state.training_config.get("class_label") or "animal").strip()
             self._predictor = ReefPosePredictor.from_checkpoint(model_path, device=device)
         except ReefPoseError as exc:
             raise _validation_error(exc) from exc
@@ -144,4 +142,3 @@ class ReefPoseRegistrationProvider:
                 torch.cuda.empty_cache()
         except Exception:
             return
-

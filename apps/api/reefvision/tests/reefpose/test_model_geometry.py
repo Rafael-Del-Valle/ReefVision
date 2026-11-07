@@ -24,12 +24,15 @@ class ReefPoseModelTests(unittest.TestCase):
         output = model(inputs)
 
         self.assertEqual(len(features), 4)
-        self.assertEqual([tuple(item.shape[-2:]) for item in features], [
-            (32, 40),
-            (16, 20),
-            (8, 10),
-            (4, 5),
-        ])
+        self.assertEqual(
+            [tuple(item.shape[-2:]) for item in features],
+            [
+                (32, 40),
+                (16, 20),
+                (8, 10),
+                (4, 5),
+            ],
+        )
         self.assertEqual(tuple(output.heatmaps.shape), (2, 7, 32, 40))
         self.assertEqual(tuple(output.visibility_logits.shape), (2, 7))
 
@@ -101,4 +104,3 @@ class ImageGeometryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
