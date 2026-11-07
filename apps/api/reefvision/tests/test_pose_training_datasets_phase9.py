@@ -572,6 +572,8 @@ def test_freeze_rejects_changed_candidate_acquisition_provenance(
     ("field", "replacement", "expected_error"),
     [
         ("video_sha256", None, "Source video checksum changed after acquisition"),
+        ("video_sha256", "A" * 64, "Source video checksum changed after acquisition"),
+        ("video_sha256", "a" * 63, "Source video checksum changed after acquisition"),
         ("video_id", "wrong-video", "does not match verified source"),
         ("video_track_id", "wrong-track", "does not match verified source"),
         ("focus_frame", -1, "does not match verified source"),
