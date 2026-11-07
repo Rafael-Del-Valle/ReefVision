@@ -82,6 +82,12 @@ def _review(evidence_key: str, project_id: str, reviewed_at_utc: str) -> dict:
         ("2026-10-03T02:00:00+14:00", True, False),
         # Local wall-clock ordering cannot override UTC ordering.
         ("2026-10-02T13:59:59.999999+02:00", False, False),
+        # Fractional-hour offsets are common in field-survey metadata; review
+        # chronology must normalize these before comparing instants.
+        ("2026-10-02T17:29:59.999999+05:30", False, False),
+        ("2026-10-02T17:30:00+05:30", True, False),
+        ("2026-10-02T17:45:00+05:45", True, False),
+        ("2026-10-02T04:00:00-08:00", True, False),
         ("2026-10-03T07:00:00-05:00", True, False),
         # A caller cannot impersonate an independent reviewer with a case-only alias.
         ("2026-10-03T07:00:00-05:00", False, True),
