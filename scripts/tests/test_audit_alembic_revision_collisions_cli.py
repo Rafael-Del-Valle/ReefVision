@@ -70,3 +70,27 @@ def test_cli_missing_directory_fails_closed(tmp_path: Path) -> None:
     result = _run(tmp_path / "missing")
     assert result.returncode != 0
     assert "Migration directory missing" in result.stderr
+
+
+def test_cli_missing_revision_in_python_migration_fails_closed(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    source = root / "0038_unversioned.py"
+    source.write_text("down_revision = '0037'\n", encoding="utf-8")
+    before = source.read_bytes()
+
+    result = _run(root)
+
+    assert result.returncode != 0
+    assert "missing literal revision assignment" in result.stderr
+    assert source.read_bytes() == before
+
+
+def test_cli_empty_migration_directory_fails_closed(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+
+    result = _run(root)
+
+    assert result.returncode != 0
+    assert "No migration revision files found" in result.stderr
