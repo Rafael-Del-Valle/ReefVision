@@ -1,6 +1,7 @@
 """Regression coverage for non-destructive Alembic revision collision auditing."""
 
 import importlib.util
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,11 @@ def test_conflicting_revision_ids_are_reported_without_modification(tmp_path: Pa
     assert report["collision_free"] is False
     assert report["safe_to_reconcile_automatically"] is False
     assert report["collisions"]["0038"] == [str(files[0]), str(files[1])]
+    assert report["collision_source_sha256"]["0038"] == {
+        str(path): hashlib.sha256(contents).hexdigest()
+        for path, contents in zip(files, before, strict=True)
+    }
+    assert len(set(report["collision_source_sha256"]["0038"].values())) == 1
     assert [path.read_bytes() for path in files] == before
 
 
@@ -45,6 +51,7 @@ def test_unique_revision_ids_do_not_authorize_migration(tmp_path: Path) -> None:
     assert report["collision_free"] is True
     assert report["safe_to_reconcile_automatically"] is False
     assert report["revision_count"] == 2
+    assert report["collision_source_sha256"] == {}
 
 
 def test_nonliteral_revision_is_rejected(tmp_path: Path) -> None:
@@ -111,3 +118,16 @@ def test_overlapping_roots_rejected_without_double_counting(
     with pytest.raises(ValueError, match="directories overlap"):
         load_audit()(roots)
     assert file.read_bytes() == before
+
+
+def test_divergent_collision_fingerprints_remain_read_only(tmp_path: Path) -> None:
+    first, second = tmp_path / "one", tmp_path / "two"
+    files = [migration(first, "0038_a.py", "0038"), migration(second, "0038_b.py", "0038")]
+    files[1].write_text(files[1].read_text(encoding="utf-8") + "# distinct schema\n", encoding="utf-8")
+    before = [path.read_bytes() for path in files]
+    report = load_audit()([first, second])
+    hashes = report["collision_source_sha256"]["0038"]
+    assert set(hashes) == {str(path) for path in files}
+    assert len(set(hashes.values())) == 2
+    assert report["safe_to_reconcile_automatically"] is False
+    assert [path.read_bytes() for path in files] == before
