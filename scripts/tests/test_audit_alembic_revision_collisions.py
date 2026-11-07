@@ -183,3 +183,23 @@ def test_nested_revision_mutations_fail_closed(
     with pytest.raises(ValueError, match="nested revision assignment"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "deletion",
+    [
+        "del revision\n",
+        "if True:\n    del revision\n",
+        "def discard_revision():\n    global revision\n    del revision\n",
+    ],
+)
+def test_revision_deletion_fails_closed_without_source_mutation(
+    tmp_path: Path, deletion: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + deletion, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="deletion of revision"):
+        load_audit()([root])
+    assert file.read_bytes() == before
