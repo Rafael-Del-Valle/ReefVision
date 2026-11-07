@@ -175,7 +175,8 @@ def frozen_pose_item_fingerprints_match(
             or acquisition.get("project_id") != dataset.project_id
             or acquisition.get("video_id") != row.video_id
             or not isinstance(row.video_sha256, str)
-            or not row.video_sha256.strip()
+            or len(row.video_sha256) != 64
+            or any(char not in "0123456789abcdef" for char in row.video_sha256)
             or acquisition.get("video_sha256") != row.video_sha256
             or acquisition.get("video_track_id") != row.video_track_id
             or type(acquisition.get("focus_frame")) is not int
