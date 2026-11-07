@@ -27,6 +27,13 @@ def revision_from_source(path: Path) -> str | None:
                 for target in targets
                 for name in ast.walk(target)
             ):
+                # A destructured target can bind revision to only part of a
+                # literal string (e.g. revision, other = "ab"). Reject it
+                # even when no separate revision assignment exists.
+                if len(targets) != 1 or not (
+                    isinstance(targets[0], ast.Name) and targets[0].id == "revision"
+                ):
+                    raise ValueError(f"{path}: revision must be a literal string assignment")
                 value = node.value
                 if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
                     raise ValueError(f"{path}: revision must be a literal string")
