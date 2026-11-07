@@ -116,6 +116,7 @@ export function writeGalleryPreference(
         imageId:
           typeof preference.imageId === "string" ? preference.imageId.trim() : null,
         page: preference.imageId === null ? 1 : preference.page,
+        wrap: preference.wrap,
       }),
     );
   } catch {
