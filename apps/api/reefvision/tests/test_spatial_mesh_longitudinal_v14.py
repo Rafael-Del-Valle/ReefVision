@@ -2879,7 +2879,13 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
 
 @pytest.mark.parametrize(
     ("source_bound", "target_bound", "alignment_bound"),
-    [(0.0, 0.0, 0.0), (0.05, 0.05, 0.05), (0.01, 0.03, 0.06)],
+    [
+        (0.0, 0.0, 0.0),
+        (0.05, 0.05, 0.05),
+        (0.01, 0.03, 0.06),
+        (0.0, 0.0, 0.2),
+        (0.0, 0.1, 0.0),
+    ],
 )
 def test_registered_centroid_caller_bounds_survive_saved_workflow(
     client: TestClient,
