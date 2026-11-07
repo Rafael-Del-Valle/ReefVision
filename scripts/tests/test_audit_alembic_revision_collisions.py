@@ -62,6 +62,26 @@ def test_nonliteral_revision_is_rejected(tmp_path: Path) -> None:
         load_audit()([root])
 
 
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        'revision, parent = "0038", "0037"',
+        'revision, parent = compute_revisions()',
+        'revision, (parent, branch) = "0038", ("0037", None)',
+    ],
+)
+def test_destructured_revision_assignment_fails_closed(
+    tmp_path: Path, assignment: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + assignment + "\\n", encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="revision must be a literal string"):
+        load_audit()([root])
+    assert file.read_bytes() == before
+
+
 @pytest.mark.parametrize("link_is_directory", [False, True])
 def test_nested_symlink_is_rejected_without_reading_external_content(
     tmp_path: Path, link_is_directory: bool
