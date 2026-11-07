@@ -203,3 +203,25 @@ def test_revision_deletion_fails_closed_without_source_mutation(
     with pytest.raises(ValueError, match="deletion of revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "rebinding",
+    [
+        'for revision in ["0039"]:\n    pass\n',
+        'async def mutate():\n    async for revision in stream():\n        pass\n',
+        'with open("ignored") as revision:\n    pass\n',
+        'async def mutate():\n    async with manager() as revision:\n        pass\n',
+        'try:\n    pass\nexcept Exception as revision:\n    pass\n',
+    ],
+)
+def test_implicit_revision_rebinding_fails_closed(
+    tmp_path: Path, rebinding: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + rebinding, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="revision"):
+        load_audit()([root])
+    assert file.read_bytes() == before
