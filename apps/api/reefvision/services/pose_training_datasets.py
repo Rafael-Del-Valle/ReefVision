@@ -657,6 +657,12 @@ class PoseTrainingDatasetService:
             raise ConflictError(
                 "Verified pose source video does not match the Active Learning round"
             )
+        # An invalid persisted video duration cannot establish the bounds of
+        # scientist-verified observations. Zero denotes an unknown frame count.
+        if video.frame_count is not None and (
+            type(video.frame_count) is not int or video.frame_count < 0
+        ):
+            raise ConflictError("Source video has an invalid recorded frame count")
         # A verified frame must exist within the source video's recorded
         # timeline. Reject out-of-range observations before freezing them as
         # immutable scientist-reviewed training evidence.
