@@ -91,6 +91,27 @@ def test_destructured_revision_assignment_fails_closed(tmp_path: Path, assignmen
     assert file.read_bytes() == before
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        'revision, other = "ab"\\n',
+        'other, revision = "ab"\\n',
+        'revision, (other, third) = "a", ("b", "c")\\n',
+    ],
+)
+def test_standalone_destructured_revision_is_not_a_literal_binding(
+    tmp_path: Path, source: str
+) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    file = root / "0038.py"
+    file.write_text(source, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="revision must be a literal string assignment"):
+        load_audit()([root])
+    assert file.read_bytes() == before
+
+
 @pytest.mark.parametrize("link_is_directory", [False, True])
 def test_nested_symlink_is_rejected_without_reading_external_content(
     tmp_path: Path, link_is_directory: bool
