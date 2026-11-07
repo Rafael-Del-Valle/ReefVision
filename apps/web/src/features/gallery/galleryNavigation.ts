@@ -23,6 +23,7 @@ const DEFAULT_PREFERENCE: GalleryPreference = {
 function validGalleryImageId(value: unknown): value is string {
   return (
     typeof value === "string" &&
+    value.length <= 4096 &&
     value.trim().length > 0 &&
     !/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060\u2066-\u2069\ud800-\udfff\ufeff]/.test(value)
   );
