@@ -203,6 +203,10 @@ def test_zero_caller_error_bounds_preserve_exact_signed_component_intervals() ->
     intervals = result[
         "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"
     ]
-    assert intervals == pytest.approx([[1.0, 1.0], [0.0, 0.0], [0.0, 0.0]])
+    assert intervals is not None
+    for observed, expected in zip(
+        intervals, [[1.0, 1.0], [0.0, 0.0], [0.0, 0.0]], strict=True
+    ):
+        assert observed == pytest.approx(expected)
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
