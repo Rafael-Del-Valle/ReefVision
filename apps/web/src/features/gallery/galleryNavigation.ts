@@ -111,7 +111,8 @@ export function writeGalleryPreference(
     storage.setItem(
       preferenceKey(projectId),
       JSON.stringify({
-        ...preference,
+        // Persist only the versioned preference contract, not arbitrary fields
+        // accidentally attached to a runtime object (e.g. image metadata).
         imageId:
           typeof preference.imageId === "string" ? preference.imageId.trim() : null,
         page: preference.imageId === null ? 1 : preference.page,
