@@ -334,3 +334,23 @@ def test_type_alias_cannot_rebind_migration_revision(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="type alias rebinds revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "dynamic_source",
+    [
+        'exec("revision = \\'0039\\'")\\n',
+        'eval("globals().__setitem__(\\'revision\\', \\'0039\\')")\\n',
+        'if True:\\n    exec("revision = \\'0039\\'")\\n',
+    ],
+)
+def test_dynamic_execution_cannot_bypass_static_revision_audit(
+    tmp_path: Path, dynamic_source: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + dynamic_source, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="dynamic execution may rebind revision"):
+        load_audit()([root])
+    assert file.read_bytes() == before
