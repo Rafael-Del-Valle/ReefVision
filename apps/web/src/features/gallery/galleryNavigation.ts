@@ -75,9 +75,7 @@ export function readGalleryPreference(
 
 // WebView2 may deny access to the localStorage property itself (SecurityError),
 // before getItem/setItem can be called. Keep image browsing usable even then.
-export function readBrowserGalleryPreference(
-  projectId: string,
-): GalleryPreference {
+export function readBrowserGalleryPreference(projectId: string): GalleryPreference {
   try {
     return readGalleryPreference(window.localStorage, projectId);
   } catch {
