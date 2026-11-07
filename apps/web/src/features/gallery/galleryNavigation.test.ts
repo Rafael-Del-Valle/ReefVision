@@ -564,6 +564,9 @@ describe("parseGalleryPageDraft", () => {
     ]) {
       expect(parseGalleryPageDraft(draft, 5)).toBeNull();
     }
+    // Pasted pathological inputs must not trigger unbounded numeric parsing.
+    expect(parseGalleryPageDraft("0".repeat(100_000) + "2", 5)).toBeNull();
+    expect(parseGalleryPageDraft("0".repeat(63) + "2", 5)).toBe(2);
     expect(parseGalleryPageDraft("2", 0)).toBeNull();
     expect(parseGalleryPageDraft("2", Number.MAX_SAFE_INTEGER + 1)).toBeNull();
   });
