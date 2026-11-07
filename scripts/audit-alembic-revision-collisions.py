@@ -28,7 +28,17 @@ def revision_from_source(path: Path) -> str | None:
 def audit(roots: list[Path]) -> dict:
     by_revision: dict[str, list[str]] = defaultdict(list)
     migration_files = 0
+    seen_roots: set[Path] = set()
     for root in roots:
+        # A repeated directory must not manufacture a revision collision.
+        # Check each path component before resolving so symlinked ancestors
+        # cannot silently redirect the audit outside the requested tree.
+        if any(part.is_symlink() for part in (root, *root.parents)):
+            raise ValueError(f"Migration directory has a symbolic-link ancestor: {root}")
+        canonical_root = root.resolve(strict=False)
+        if canonical_root in seen_roots:
+            raise ValueError(f"Migration directory specified more than once: {root}")
+        seen_roots.add(canonical_root)
         if not root.is_dir():
             raise ValueError(f"Migration directory missing: {root}")
         if root.is_symlink():
