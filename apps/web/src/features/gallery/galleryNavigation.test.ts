@@ -581,7 +581,11 @@ describe("gallery preferences", () => {
         page: 1,
         wrap: false,
       });
-      writeGalleryPreference(storage, "project-a", { imageId, page: 7, wrap: true });
+      writeGalleryPreference(storage, "project-a", {
+        imageId,
+        page: 7,
+        wrap: true,
+      });
       expect(storage.getItem(key)).toBe(saved);
     }
   });
