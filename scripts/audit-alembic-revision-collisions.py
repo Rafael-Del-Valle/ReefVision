@@ -31,6 +31,15 @@ def revision_from_source(path: Path) -> str | None:
                 if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
                     raise ValueError(f"{path}: revision must be a literal string")
                 revisions.append(value.value)
+    # Deleting the revision binding is also a mutation: a later import may
+    # fail or observe a different value. Reject deletion at any depth.
+    for statement in ast.walk(tree):
+        if isinstance(statement, ast.Delete) and any(
+            isinstance(name, ast.Name) and name.id == "revision"
+            for target in statement.targets
+            for name in ast.walk(target)
+        ):
+            raise ValueError(f"{path}: deletion of revision is not permitted")
     # Nested writes can change the effective revision at import time. Never
     # execute migrations to discover that value; reject ambiguous source.
     for statement in ast.walk(tree):
