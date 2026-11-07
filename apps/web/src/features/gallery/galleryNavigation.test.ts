@@ -950,7 +950,7 @@ describe("resolveGalleryNavigation", () => {
     const key = "reefvision.gallery.camera-id-recovery.v1";
     const saved = values.get(key);
     expect(saved).toBeDefined();
-    for (const invalid of ["", "   ", "frame\\nsecond", "frame\\u0000second", "frame\\u007fsecond"]) {
+    for (const invalid of ["", "   ", "frame\nsecond", "frame\u0000second", "frame\u007fsecond"]) {
       values.set(key, JSON.stringify({ imageId: invalid, page: 4, wrap: true }));
       expect(readGalleryPreference(storage, project)).toEqual({ imageId: null, page: 1, wrap: false });
     }
