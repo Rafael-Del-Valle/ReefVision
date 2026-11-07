@@ -38,7 +38,10 @@ export function readGalleryPreference(
 ): GalleryPreference {
   try {
     const value = storage.getItem(preferenceKey(projectId));
-    if (!value) return { ...DEFAULT_PREFERENCE };
+    if (!value || value.length > 4096) return { ...DEFAULT_PREFERENCE };
+    // Corrupted or oversized WebView2 preferences must not block first-image
+    // rendering with expensive JSON parsing. Valid preferences contain only
+    // a short opaque image ID, page number, and wrap flag.
     const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== "object") return { ...DEFAULT_PREFERENCE };
     const candidate = parsed as Record<string, unknown>;
