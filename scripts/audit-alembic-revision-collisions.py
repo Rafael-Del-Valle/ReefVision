@@ -9,9 +9,11 @@ from collections import defaultdict
 from pathlib import Path
 
 
-def revision_from_source(path: Path) -> str | None:
-    """Read a literal revision assignment without importing migration side effects."""
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
+    """Parse a single source snapshot without importing migration side effects."""
+    if source is None:
+        source = path.read_bytes()
+    tree = ast.parse(source, filename=str(path))
     revisions = []
     for node in tree.body:
         if (
@@ -165,13 +167,14 @@ def audit(roots: list[Path]) -> dict:
             if path.name == "__init__.py":
                 continue
             migration_files += 1
-            revision = revision_from_source(path)
+            source = path.read_bytes()
+            revision = revision_from_source(path, source)
             if revision is None:
                 raise ValueError(f"{path}: missing literal revision assignment")
             if not revision.strip() or revision != revision.strip():
                 raise ValueError(f"{path}: noncanonical revision")
             by_revision[revision].append(str(path))
-            source_sha256[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+            source_sha256[str(path)] = hashlib.sha256(source).hexdigest()
     if migration_files == 0:
         raise ValueError("No migration revision files found")
     collisions = {
