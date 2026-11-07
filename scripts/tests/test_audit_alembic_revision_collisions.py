@@ -358,3 +358,31 @@ def test_dynamic_execution_cannot_bypass_static_revision_audit(
     with pytest.raises(ValueError, match="dynamic execution may rebind revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+def test_collision_fingerprint_uses_the_same_bytes_as_revision_parsing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A changing file must not produce a hash for different parsed bytes."""
+    first, second = tmp_path / "one", tmp_path / "two"
+    files = [migration(first, "0038_a.py", "0038"), migration(second, "0038_b.py", "0038")]
+    originals = {path: path.read_bytes() for path in files}
+    alternate = b'revision = "0039"\n'
+    original_read_bytes = Path.read_bytes
+    reads = {path: 0 for path in files}
+
+    def controlled_read_bytes(path: Path) -> bytes:
+        if path in reads:
+            reads[path] += 1
+            if reads[path] > 1:
+                return alternate
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", controlled_read_bytes)
+    report = load_audit()([first, second])
+    assert reads == {path: 1 for path in files}
+    assert report["collisions"]["0038"] == [str(path) for path in files]
+    assert report["collision_source_sha256"]["0038"] == {
+        str(path): hashlib.sha256(originals[path]).hexdigest() for path in files
+    }
+    assert report["safe_to_reconcile_automatically"] is False
