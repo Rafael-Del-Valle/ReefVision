@@ -154,3 +154,39 @@ def test_signed_centroid_component_intervals_bound_each_axis(separation: float) 
         assert observed == pytest.approx(expected)
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
     assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("separation", "source_bound", "target_bound", "alignment_bound", "expected"),
+    [
+        (0.0, 0.0, 0.0, 0.0, [0.0, 0.0]),
+        (0.0, 0.1, 0.2, 0.05, [0.0, 0.35]),
+        (0.2, 0.1, 0.2, 0.05, [0.0, 0.55]),
+        (1.0, 0.0, 0.0, 0.0, [1.0, 1.0]),
+    ],
+)
+def test_caller_separation_bounds_clip_at_zero_without_claiming_verification(
+    separation: float,
+    source_bound: float,
+    target_bound: float,
+    alignment_bound: float,
+    expected: list[float],
+) -> None:
+    """A conservative distance interval cannot have a negative lower endpoint."""
+    evidence = {
+        **_registration(),
+        "source_centroid_position_error_bound_m": source_bound,
+        "target_centroid_position_error_bound_m": target_bound,
+        "registration_alignment_error_bound_m": alignment_bound,
+    }
+    result = compare_mesh_observations(
+        _observation("before", "2026-10-01T12:00:00Z", 0.0),
+        _observation("after", "2026-10-02T12:00:00Z", separation),
+        registration_evidence=evidence,
+    )
+    assert result["registered_surface_centroid_separation_m"] == pytest.approx(separation)
+    assert result["registered_surface_centroid_separation_caller_bound_interval_m"] == pytest.approx(
+        expected
+    )
+    assert result["provenance"]["coordinate_registration_verified"] is False
+    assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
