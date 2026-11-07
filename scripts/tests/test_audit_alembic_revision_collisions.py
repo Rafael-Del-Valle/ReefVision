@@ -277,11 +277,11 @@ def test_non_assignment_revision_bindings_fail_closed(
 @pytest.mark.parametrize(
     "binding",
     [
-        "[item for revision in items]\\n",
-        "{revision for revision in items}\\n",
-        "{revision: item for revision in items}\\n",
-        "(item for revision in items)\\n",
-        "[item for (revision, other) in pairs]\\n",
+        "[item for revision in items]\n",
+        "{revision for revision in items}\n",
+        "{revision: item for revision in items}\n",
+        "(item for revision in items)\n",
+        "[item for (revision, other) in pairs]\n",
     ],
 )
 def test_comprehension_revision_bindings_fail_closed(
