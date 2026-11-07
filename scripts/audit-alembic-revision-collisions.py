@@ -76,6 +76,25 @@ def revision_from_source(path: Path) -> str | None:
             for name in ast.walk(target)
         ):
             raise ValueError(f"{path}: implicit revision rebinding is not permitted")
+    # Imports and declarations also bind names without an assignment node.
+    # Reject them rather than assuming a previously parsed literal survives.
+    for statement in ast.walk(tree):
+        if isinstance(statement, (ast.Import, ast.ImportFrom)):
+            if any(
+                (alias.asname or alias.name.split(".")[0]) == "revision"
+                for alias in statement.names
+            ):
+                raise ValueError(f"{path}: import rebinds revision")
+        elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if statement.name == "revision":
+                raise ValueError(f"{path}: declaration rebinds revision")
+    # Structural pattern matching can bind revision without an Assign node.
+    # Capture names occur in MatchAs/MatchStar/MatchMapping patterns.
+    for statement in ast.walk(tree):
+        if isinstance(statement, (ast.MatchAs, ast.MatchStar)) and statement.name == "revision":
+            raise ValueError(f"{path}: pattern rebinds revision")
+        if isinstance(statement, ast.MatchMapping) and statement.rest == "revision":
+            raise ValueError(f"{path}: pattern rebinds revision")
     if len(revisions) > 1:
         raise ValueError(f"{path}: multiple revision assignments")
     return revisions[0] if revisions else None
