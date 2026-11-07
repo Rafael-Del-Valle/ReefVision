@@ -282,6 +282,23 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("persists only the approved gallery preference fields", () => {
+    const storage = memoryStorage();
+    const runtimePreference = {
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: true,
+      originalImagePath: "C:\\private\\camera\\original.jpg",
+      annotationPayload: { scientificData: "must-not-persist" },
+    };
+    writeGalleryPreference(storage, "project-a", runtimePreference);
+    expect(JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null")).toEqual({
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: true,
+    });
+  });
+
   it("normalizes an unselected image to page one before persisting", () => {
     const storage = memoryStorage();
     writeGalleryPreference(storage, "project-a", {
