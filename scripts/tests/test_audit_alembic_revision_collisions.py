@@ -97,3 +97,17 @@ def test_symlinked_parent_is_rejected_without_external_reads(tmp_path: Path) -> 
     with pytest.raises(ValueError, match="symbolic-link ancestor"):
         load_audit()([alias / "versions"])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize("parent_first", [True, False])
+def test_overlapping_roots_rejected_without_double_counting(
+    tmp_path: Path, parent_first: bool
+) -> None:
+    parent = tmp_path / "migrations"
+    child = parent / "versions"
+    file = migration(child, "0038.py", "0038")
+    before = file.read_bytes()
+    roots = [parent, child] if parent_first else [child, parent]
+    with pytest.raises(ValueError, match="directories overlap"):
+        load_audit()(roots)
+    assert file.read_bytes() == before
