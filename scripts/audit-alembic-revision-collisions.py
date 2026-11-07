@@ -33,6 +33,11 @@ def audit(roots: list[Path]) -> dict:
             raise ValueError(f"Migration directory missing: {root}")
         if root.is_symlink():
             raise ValueError(f"Migration directory is a symbolic link: {root}")
+        # rglob may silently omit symlinked directories; fail closed rather than
+        # reporting a misleading collision-free audit of an incomplete tree.
+        for entry in root.rglob("*"):
+            if entry.is_symlink():
+                raise ValueError(f"Migration tree contains a symbolic link: {entry}")
         for path in sorted(root.rglob("*.py")):
             if path.is_symlink():
                 raise ValueError(f"Migration file is a symbolic link: {path}")
