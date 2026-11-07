@@ -112,17 +112,18 @@ export function writeGalleryPreference(
     return;
   }
   try {
-    storage.setItem(
-      preferenceKey(projectId),
-      JSON.stringify({
-        // Persist only the versioned preference contract, not arbitrary fields
-        // accidentally attached to a runtime object (e.g. image metadata).
-        imageId:
-          typeof preference.imageId === "string" ? preference.imageId.trim() : null,
-        page: preference.imageId === null ? 1 : preference.page,
-        wrap: preference.wrap,
-      }),
-    );
+    const serialized = JSON.stringify({
+      // Persist only the versioned preference contract, not arbitrary fields
+      // accidentally attached to a runtime object (e.g. image metadata).
+      imageId:
+        typeof preference.imageId === "string" ? preference.imageId.trim() : null,
+      page: preference.imageId === null ? 1 : preference.page,
+      wrap: preference.wrap,
+    });
+    // Keep writes compatible with the bounded reader. An oversized camera ID
+    // must not overwrite a previously restorable first-image selection.
+    if (serialized.length > 4096) return;
+    storage.setItem(preferenceKey(projectId), serialized);
   } catch {
     // A blocked or full preference store must not prevent annotation work.
   }
