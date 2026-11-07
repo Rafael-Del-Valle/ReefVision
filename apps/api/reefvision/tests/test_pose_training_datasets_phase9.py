@@ -1266,6 +1266,31 @@ def test_verified_pose_freeze_rejects_frame_past_recorded_video_end(
         assert session.query(PoseTrainingDatasetItem).count() == 0
 
 
+def test_verified_pose_freeze_rejects_negative_recorded_video_frame_count(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Invalid persisted source-video metadata must never be frozen into
+    # immutable scientist-reviewed pose training evidence.
+    _, video, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        asset = session.get(VideoAsset, str(video["id"]))
+        assert asset is not None
+        asset.frame_count = -1
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "invalid recorded frame count" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
 def test_frozen_dataset_database_rejects_negative_frame_index(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
