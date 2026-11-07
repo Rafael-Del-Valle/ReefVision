@@ -296,3 +296,42 @@ def test_rotated_translated_centroid_bounds_use_target_frame(
     )
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
+
+
+@pytest.mark.parametrize(
+    ("target_z", "expected_z"),
+    [(4.0, 0.0), (1.0, -3.0)],
+)
+def test_three_dimensional_registered_centroid_bounds_include_z_axis(
+    target_z: float, expected_z: float
+) -> None:
+    """Rigid registration and uncertainty intervals must retain vertical displacement."""
+    evidence = {
+        **_registration(),
+        "source_to_target_transform_m": [
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0, 6.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        "source_centroid_position_error_bound_m": 0.1,
+        "target_centroid_position_error_bound_m": 0.2,
+        "registration_alignment_error_bound_m": 0.05,
+    }
+    before = _observation("before", "2026-10-01T12:00:00Z", 2.0)
+    after = _observation("after", "2026-10-02T12:00:00Z", 0.0)
+    after["area_weighted_surface_centroid_m"] = [0.0, 0.0, target_z]
+    result = compare_mesh_observations(before, after, registration_evidence=evidence)
+    assert result["registered_surface_centroid_offset_target_frame_m"] == pytest.approx(
+        [0.0, 0.0, expected_z]
+    )
+    assert result["registered_surface_centroid_separation_m"] == pytest.approx(abs(expected_z))
+    intervals = result["registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"]
+    assert intervals is not None
+    for observed, center in zip(intervals, [0.0, 0.0, expected_z], strict=True):
+        assert observed == pytest.approx([center - 0.35, center + 0.35])
+    assert result["registered_surface_centroid_separation_caller_bound_interval_m"] == (
+        pytest.approx([max(0.0, abs(expected_z) - 0.35), abs(expected_z) + 0.35])
+    )
+    assert result["provenance"]["coordinate_registration_verified"] is False
+    assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
