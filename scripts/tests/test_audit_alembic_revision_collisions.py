@@ -53,3 +53,24 @@ def test_nonliteral_revision_is_rejected(tmp_path: Path) -> None:
     (root / "bad.py").write_text("revision = get_revision()\n", encoding="utf-8")
     with pytest.raises(ValueError, match="literal string"):
         load_audit()([root])
+
+
+@pytest.mark.parametrize("link_is_directory", [False, True])
+def test_nested_symlink_is_rejected_without_reading_external_content(
+    tmp_path: Path, link_is_directory: bool
+) -> None:
+    root = tmp_path / "versions"
+    migration(root, "0037.py", "0037")
+    outside = tmp_path / "external"
+    outside.mkdir()
+    external_file = migration(outside, "0038.py", "0038")
+    original = external_file.read_bytes()
+    target = outside if link_is_directory else external_file
+    link = root / ("linked_dir" if link_is_directory else "linked.py")
+    try:
+        link.symlink_to(target, target_is_directory=link_is_directory)
+    except (NotImplementedError, OSError):
+        pytest.skip("Filesystem does not permit symbolic links")
+    with pytest.raises(ValueError, match="symbolic link"):
+        load_audit()([root])
+    assert external_file.read_bytes() == original
