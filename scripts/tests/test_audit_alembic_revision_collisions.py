@@ -313,3 +313,14 @@ def test_wildcard_import_cannot_silently_rebind_revision(
     with pytest.raises(ValueError, match="wildcard import may rebind revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+def test_type_alias_cannot_rebind_migration_revision(tmp_path: Path) -> None:
+    """Python 3.12+ type declarations bind their alias name at module scope."""
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + "type revision = str\n", encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="type alias rebinds revision"):
+        load_audit()([root])
+    assert file.read_bytes() == before
