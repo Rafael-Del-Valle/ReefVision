@@ -94,11 +94,7 @@ class JobService:
             job.status in {"failed", "cancelled"}
             and training_run is not None
             and training_run.provider_id == "reefpose"
-            and bool(
-                dict(training_run.artifact_manifest_json or {}).get(
-                    "resume_checkpoint_path"
-                )
-            )
+            and bool(dict(training_run.artifact_manifest_json or {}).get("resume_checkpoint_path"))
         )
         ordinary_retry = job.status == "failed" and job.job_type in {
             "thumbnail",

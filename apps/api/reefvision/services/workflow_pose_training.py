@@ -87,9 +87,7 @@ SUPPORTED_POSE_TRAINING_PROVIDERS = frozenset({"reefpose", "ultralytics"})
 def _validate_reefpose_training_configuration(configuration: dict[str, Any]) -> None:
     unknown = sorted(set(configuration) - set(DEFAULT_REEFPOSE_TRAINING_CONFIG))
     if unknown:
-        raise ValidationError(
-            "Unsupported ReefPose training configuration: " + ", ".join(unknown)
-        )
+        raise ValidationError("Unsupported ReefPose training configuration: " + ", ".join(unknown))
     integer_fields = ("epochs", "batch", "input_height", "input_width", "base_channels", "workers")
     for name in integer_fields:
         value = configuration[name]
@@ -123,9 +121,7 @@ def _validate_reefpose_training_configuration(configuration: dict[str, Any]) -> 
         or not isinstance(gradient_clip_norm, (int, float))
         or float(gradient_clip_norm) <= 0
     ):
-        raise ValidationError(
-            "ReefPose training field gradient_clip_norm must be null or positive"
-        )
+        raise ValidationError("ReefPose training field gradient_clip_norm must be null or positive")
     if not isinstance(configuration["deterministic"], bool):
         raise ValidationError("ReefPose training field deterministic must be a boolean")
 
@@ -232,9 +228,7 @@ def _seed_pose_model(
         raise ValidationError("Pose retraining seed does not belong to this project")
 
     if model.purpose != "detector" or model.task != "pose" or model.provider_name != provider_id:
-        raise ValidationError(
-            f"Pose retraining seed must be a registered {provider_id} pose model"
-        )
+        raise ValidationError(f"Pose retraining seed must be a registered {provider_id} pose model")
 
     binding = session.get(
         PoseModelSchemaBinding,

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
+import os
+import time
 import zipfile
 from pathlib import Path
 from typing import cast
 
 import pytest
+import torch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -890,9 +894,10 @@ def test_completed_native_reefpose_checkpoint_registers_and_runs_inference(
     assert registered.provider_name == "reefpose"
     assert registered.task == "pose"
     assert registered.metadata_json["source_training_run_id"] == trained["training_run_id"]
-    assert registered.metadata_json["source_pose_schema_content_hash"] == dataset[
-        "pose_schema_content_hash"
-    ]
+    assert (
+        registered.metadata_json["source_pose_schema_content_hash"]
+        == dataset["pose_schema_content_hash"]
+    )
 
     image_path = tmp_path / "synthetic-animal.png"
     Image.new("RGB", (80, 48), color=(32, 64, 96)).save(image_path)
@@ -971,9 +976,7 @@ def test_saved_native_reefpose_workflow_executes_and_replays(
 
     for _ in range(2):
         run_id, job_id = _save_and_queue(client, str(project["id"]), graph)
-        processed = process_workflow_run_job(
-            app.state.settings, app.state.session_factory, job_id
-        )
+        processed = process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
         if not processed:
             state = client.get(f"/api/v1/workflow-runs/{run_id}")
             pytest.fail(f"Native ReefPose saved workflow failed: {state.json()!r}")
@@ -988,6 +991,101 @@ def test_saved_native_reefpose_workflow_executes_and_replays(
             )
             assert model_artifact is not None
             assert model_artifact.payload_json["provider_name"] == "reefpose"
-            assert model_artifact.payload_json["pose_schema_content_hash"] == dataset[
-                "pose_schema_content_hash"
-            ]
+            assert (
+                model_artifact.payload_json["pose_schema_content_hash"]
+                == dataset["pose_schema_content_hash"]
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("REEFPOSE_RUN_GPU_TESTS") != "1",
+    reason="Set REEFPOSE_RUN_GPU_TESTS=1 for the explicit RTX validation run",
+)
+def test_native_reefpose_cuda_workflow_registration_and_inference(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    assert torch.cuda.is_available()
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
+    started = time.perf_counter()
+
+    with app.state.session_factory() as session:
+        trained = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            parameters={
+                "provider_id": "reefpose",
+                "architecture": "reefpose-s",
+                "device": "cuda",
+                "precision": "amp",
+                "random_seed": 71,
+                "training_config": {
+                    "epochs": 1,
+                    "batch": 1,
+                    "input_height": 64,
+                    "input_width": 64,
+                    "base_channels": 4,
+                    "fpn_channels": 8,
+                    "workers": 0,
+                },
+            },
+        )
+        registered = SemanticModelService(session, test_settings).register_model_from_run(
+            str(project["id"]),
+            RegisterModelFromRunRequest(
+                training_run_id=str(trained["training_run_id"]),
+                display_name="Phase 2A RTX 3090 validation",
+            ),
+        )
+
+    image_path = tmp_path / "synthetic-gpu-animal.png"
+    Image.new("RGB", (96, 64), color=(24, 72, 120)).save(image_path)
+    checkpoint = resolve_managed_project_path(test_settings, registered.managed_path)
+    provider = ReefPoseRegistrationProvider()
+    provider.load_model(checkpoint, "cuda")
+    predictions = provider.predict(
+        image_path,
+        DetectionSettings(confidence_threshold=0.0, iou_threshold=0.5, device="cuda"),
+    )
+    torch.cuda.synchronize()
+    elapsed = time.perf_counter() - started
+    peak_memory = torch.cuda.max_memory_allocated()
+    provider.unload_model()
+
+    assert len(predictions) == 1
+    assert len(predictions[0].keypoints or ()) == 2
+    evidence = {
+        "schema_version": "reefpose-phase2a-gpu-validation-0001",
+        "scientific_accuracy_validated": False,
+        "device": torch.cuda.get_device_name(0),
+        "torch_version": torch.__version__,
+        "cuda_version": torch.version.cuda,
+        "training_run_id": trained["training_run_id"],
+        "training_job_id": trained["training_job_id"],
+        "model_id": registered.id,
+        "checkpoint_sha256": trained["result_checkpoint_sha256"],
+        "training_metrics": trained["metrics"],
+        "workflow_seconds": elapsed,
+        "peak_gpu_memory_bytes": peak_memory,
+        "inference_detection_count": len(predictions),
+        "inference_keypoint_count": len(predictions[0].keypoints or ()),
+        "source_image_size": [96, 64],
+    }
+    print("REEFPOSE_PHASE2A_GPU_EVIDENCE=" + json.dumps(evidence, sort_keys=True))

@@ -280,9 +280,7 @@ def process_reefpose_training_job(
                     fpn_channels=configuration["fpn_channels"],
                 )
                 if model.config != expected:
-                    raise ValidationError(
-                        "ReefPose resume checkpoint model configuration changed"
-                    )
+                    raise ValidationError("ReefPose resume checkpoint model configuration changed")
             else:
                 model = ReefPoseS(
                     ReefPoseConfig(
@@ -310,9 +308,7 @@ def process_reefpose_training_job(
                 ),
             )
             run.status = run.stage = "training"
-            run.logs_path = _relative_to_data_dir(
-                settings, managed_output_dir / "training.jsonl"
-            )
+            run.logs_path = _relative_to_data_dir(settings, managed_output_dir / "training.jsonl")
             run.artifact_manifest_json = {
                 **dict(run.artifact_manifest_json or {}),
                 "initialization_mode": (
@@ -439,9 +435,7 @@ def process_reefpose_training_job(
             now = datetime.now(UTC)
             if run is not None:
                 if output_dir is not None and managed_output_dir is not None:
-                    _record_interrupted_checkpoint(
-                        settings, run, output_dir, managed_output_dir
-                    )
+                    _record_interrupted_checkpoint(settings, run, output_dir, managed_output_dir)
                     log_path = output_dir / "training.jsonl"
                     if log_path.is_file():
                         shutil.copy2(log_path, managed_output_dir / "training.jsonl")

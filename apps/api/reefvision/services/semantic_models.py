@@ -243,13 +243,8 @@ class SemanticModelService(SegmentationModelService):
             raise ValidationError("Trained pose checkpoint is missing")
 
         actual_checkpoint_sha256, _ = hash_model_file(source_path)
-        expected_checkpoint_sha256 = str(
-            artifact_manifest.get("best_checkpoint_sha256") or ""
-        )
-        if (
-            expected_checkpoint_sha256
-            and actual_checkpoint_sha256 != expected_checkpoint_sha256
-        ):
+        expected_checkpoint_sha256 = str(artifact_manifest.get("best_checkpoint_sha256") or "")
+        if expected_checkpoint_sha256 and actual_checkpoint_sha256 != expected_checkpoint_sha256:
             raise ValidationError("Trained pose checkpoint checksum changed after completion")
 
         # Inspect before registration so a malformed or incompatible
