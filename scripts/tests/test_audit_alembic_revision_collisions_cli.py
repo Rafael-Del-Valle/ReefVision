@@ -94,3 +94,35 @@ def test_cli_empty_migration_directory_fails_closed(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "No migration revision files found" in result.stderr
+
+
+def test_cli_rejects_symlinked_migration_file_without_reading_target(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    external = tmp_path / "external_scientific_record.py"
+    external.write_text('revision = "external"\n', encoding="utf-8")
+    linked = root / "0038_link.py"
+    linked.symlink_to(external)
+    before = external.read_bytes()
+
+    result = _run(root)
+
+    assert result.returncode != 0
+    assert "Migration file is a symbolic link" in result.stderr
+    assert external.read_bytes() == before
+
+
+def test_cli_rejects_symlinked_migration_directory(tmp_path: Path) -> None:
+    external = tmp_path / "external"
+    external.mkdir()
+    source = external / "0038.py"
+    source.write_text('revision = "0038"\n', encoding="utf-8")
+    linked = tmp_path / "versions"
+    linked.symlink_to(external, target_is_directory=True)
+    before = source.read_bytes()
+
+    result = _run(linked)
+
+    assert result.returncode != 0
+    assert "Migration directory is a symbolic link" in result.stderr
+    assert source.read_bytes() == before
