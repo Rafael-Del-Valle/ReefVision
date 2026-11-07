@@ -28,11 +28,11 @@ Result: `1 passed`.
 - CUDA runtime reported by PyTorch: 12.8
 - Precision: CUDA AMP
 - Synthetic fixture: one immutable verified pose sample, two landmarks, 64x64 network input, one training epoch
-- Training run: `70f53268-b229-458e-9377-715d50ddb778`
-- Training job: `a1166732-cdc8-406b-9f0a-adc4b985fc39`
-- Registered model: `329e7f8f-6164-40c0-a778-8bdac776d98d`
-- Best checkpoint SHA-256: `45e9e600398d9b4555ed2d09ef2432fec8ca74f4c633ec8c612b470ca5ba769c`
-- End-to-end train/register/inference wall time: 2.1953 seconds
+- Training run: `0cc58f2c-bb80-430f-b1d6-3e38872696e5`
+- Training job: `44f06b39-d550-405b-8930-cccf31ec66ee`
+- Registered model: `939efef0-7ab4-4b6c-b8dd-d75c0df8ce00`
+- Best checkpoint SHA-256: `3ade9bbe4fac5088aa1fc3a8b6ebffff44cac184af945bbaae5abade22759881`
+- End-to-end train/register/inference wall time: 2.0757 seconds
 - Peak allocated GPU memory: 18,968,064 bytes (18.09 MiB)
 - Registered inference result: one detection with two source-image-coordinate keypoints on a 96x64 synthetic image
 - Final synthetic selection loss: 0.1709549725

@@ -849,8 +849,20 @@ def test_native_reefpose_cancellation_retries_from_resumable_checkpoint(
     def cancel_fit(self: ReefPoseTrainer, *args: object, **kwargs: object) -> object:
         del args
         epoch_callback = kwargs.get("epoch_callback")
-        best_metrics = {"selection_loss": 0.1, "best_selection_loss": 0.1}
-        latest_metrics = {"selection_loss": 0.5, "best_selection_loss": 0.1}
+        best_metrics = {
+            "train_loss": 0.1,
+            "train_heatmap_loss": 0.08,
+            "train_visibility_loss": 0.2,
+            "selection_loss": 0.1,
+            "best_selection_loss": 0.1,
+        }
+        latest_metrics = {
+            "train_loss": 0.5,
+            "train_heatmap_loss": 0.45,
+            "train_visibility_loss": 0.5,
+            "selection_loss": 0.5,
+            "best_selection_loss": 0.1,
+        }
         for name, metrics in (
             ("best.pt", best_metrics),
             ("last.pt", latest_metrics),
@@ -893,6 +905,32 @@ def test_native_reefpose_cancellation_retries_from_resumable_checkpoint(
         assert run.status == "queued"
 
     monkeypatch.setattr(ReefPoseTrainer, "fit", original_fit)
+    real_copy2 = shutil.copy2
+    failed_once = {"value": False}
+
+    def fail_resumed_finalization(
+        source: object, destination: object, *args: object, **kwargs: object
+    ):
+        if (
+            not failed_once["value"]
+            and "reefpose-run-" in str(source)
+            and Path(destination).name == "best.pt"
+        ):
+            failed_once["value"] = True
+            raise OSError("synthetic resumed finalization failure")
+        return real_copy2(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr("reefvision.jobs.reefpose_training.shutil.copy2", fail_resumed_finalization)
+    assert not process_next_thumbnail_job(test_settings, app.state.session_factory)
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, run_id)
+        assert run is not None
+        resume_path = str(run.artifact_manifest_json["resume_checkpoint_path"])
+        assert Path(resume_path).name == "last.pt"
+        JobService(session).retry(job_id)
+
+    monkeypatch.setattr("reefvision.jobs.reefpose_training.shutil.copy2", real_copy2)
     assert process_next_thumbnail_job(test_settings, app.state.session_factory)
 
     with app.state.session_factory() as session:

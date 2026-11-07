@@ -298,7 +298,9 @@ def process_reefpose_training_job(
             checkpoint_source = resume_from or registered_seed
             resume_state = None
             if checkpoint_source is not None:
-                short_resume = output_dir / checkpoint_source.name
+                short_resume = output_dir / (
+                    "resume-input.pt" if resume_from is not None else "seed-input.pt"
+                )
                 shutil.copy2(checkpoint_source, short_resume)
                 source_best = checkpoint_source.with_name("best.pt")
                 if (
@@ -399,7 +401,10 @@ def process_reefpose_training_job(
                 callback_job = callback_session.get(Job, job_id)
                 if callback_run is None or callback_job is None:
                     raise RuntimeError("ReefPose progress target disappeared")
-                history = dict(callback_run.metrics_history_json or {})
+                history = {
+                    key: list(values)
+                    for key, values in dict(callback_run.metrics_history_json or {}).items()
+                }
                 history.setdefault("epoch", []).append(epoch)
                 for key, value in metrics.items():
                     history.setdefault(key, []).append(float(value))
