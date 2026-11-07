@@ -194,9 +194,7 @@ def test_divergent_collision_fingerprints_remain_read_only(tmp_path: Path) -> No
         'if (revision := "unexpected"):\n    pass\n',
     ],
 )
-def test_nested_revision_mutations_fail_closed(
-    tmp_path: Path, nested_source: str
-) -> None:
+def test_nested_revision_mutations_fail_closed(tmp_path: Path, nested_source: str) -> None:
     root = tmp_path / "versions"
     file = migration(root, "0038.py", "0038")
     file.write_text(file.read_text(encoding="utf-8") + nested_source, encoding="utf-8")
@@ -230,15 +228,13 @@ def test_revision_deletion_fails_closed_without_source_mutation(
     "rebinding",
     [
         'for revision in ["0039"]:\n    pass\n',
-        'async def mutate():\n    async for revision in stream():\n        pass\n',
+        "async def mutate():\n    async for revision in stream():\n        pass\n",
         'with open("ignored") as revision:\n    pass\n',
-        'async def mutate():\n    async with manager() as revision:\n        pass\n',
-        'try:\n    pass\nexcept Exception as revision:\n    pass\n',
+        "async def mutate():\n    async with manager() as revision:\n        pass\n",
+        "try:\n    pass\nexcept Exception as revision:\n    pass\n",
     ],
 )
-def test_implicit_revision_rebinding_fails_closed(
-    tmp_path: Path, rebinding: str
-) -> None:
+def test_implicit_revision_rebinding_fails_closed(tmp_path: Path, rebinding: str) -> None:
     root = tmp_path / "versions"
     file = migration(root, "0038.py", "0038")
     file.write_text(file.read_text(encoding="utf-8") + rebinding, encoding="utf-8")
@@ -284,9 +280,7 @@ def test_non_assignment_revision_bindings_fail_closed(
         "[item for (revision, other) in pairs]\n",
     ],
 )
-def test_comprehension_revision_bindings_fail_closed(
-    tmp_path: Path, binding: str
-) -> None:
+def test_comprehension_revision_bindings_fail_closed(tmp_path: Path, binding: str) -> None:
     root = tmp_path / "versions"
     file = migration(root, "0038.py", "0038")
     file.write_text(file.read_text(encoding="utf-8") + binding, encoding="utf-8")
@@ -303,9 +297,7 @@ def test_comprehension_revision_bindings_fail_closed(
         "if True:\n    from package import *\n",
     ],
 )
-def test_wildcard_import_cannot_silently_rebind_revision(
-    tmp_path: Path, source: str
-) -> None:
+def test_wildcard_import_cannot_silently_rebind_revision(tmp_path: Path, source: str) -> None:
     root = tmp_path / "versions"
     file = migration(root, "0038.py", "0038")
     file.write_text(file.read_text(encoding="utf-8") + source, encoding="utf-8")
