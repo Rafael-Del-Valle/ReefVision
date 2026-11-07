@@ -28,32 +28,38 @@ Result: `1 passed`.
 - CUDA runtime reported by PyTorch: 12.8
 - Precision: CUDA AMP
 - Synthetic fixture: one immutable verified pose sample, two landmarks, 64x64 network input, one training epoch
-- Training run: `a43db311-7bc3-4030-8908-e750ffcb0b42`
-- Training job: `1af2f373-100c-4290-b792-89d19ac98139`
-- Registered model: `6ebd9eb8-9dc2-4378-aa90-ed0f7cad61e1`
-- Best checkpoint SHA-256: `3a346cadc791c671b3cdea226bd9a0dedb9dced0bdb487aca1ba865fdf6b1ac7`
-- End-to-end train/register/inference wall time: 2.1645 seconds
+- Training run: `70f53268-b229-458e-9377-715d50ddb778`
+- Training job: `a1166732-cdc8-406b-9f0a-adc4b985fc39`
+- Registered model: `329e7f8f-6164-40c0-a778-8bdac776d98d`
+- Best checkpoint SHA-256: `45e9e600398d9b4555ed2d09ef2432fec8ca74f4c633ec8c612b470ca5ba769c`
+- End-to-end train/register/inference wall time: 2.1953 seconds
 - Peak allocated GPU memory: 18,968,064 bytes (18.09 MiB)
 - Registered inference result: one detection with two source-image-coordinate keypoints on a 96x64 synthetic image
-- Final synthetic selection loss: 0.1654775888
+- Final synthetic selection loss: 0.1709549725
 
 This is an engineering fixture only. It does not validate biological or scientific accuracy.
 
 ## Automated validation
 
-- Native Workflow, cancellation/resume, schema drift, rollback, registration, inference, saved replay, Phase 1, existing Phase 10C, and Ultralytics initialization/compatibility: `75 passed`.
+- Native Workflow, cancellation/resume, schema drift, rollback, registration, inference, saved replay, Phase 1, existing Phase 10C, Ultralytics initialization/compatibility, and existing semantic/segmentation dispatch: `73 passed, 1 skipped` (the explicit CUDA test is the skip).
 - Phase 1 plus registered provider tests in the dependency-complete verification environment: `39 passed`.
 - Explicit RTX 3090 vertical slice: `1 passed`.
 - Ruff lint: passed for all `apps/api` files.
 - Ruff format check: passed for all `apps/api` files after formatting the Phase 2A changes.
 - Mypy: passed for all 419 backend source files.
 
-Repository-wide pytest result: `1392 passed, 38 skipped, 13 failed` in 713.95 seconds.
+Repository-wide pytest result with a short Windows temporary root: `1402 passed, 38 skipped, 7 failed` in 702.53 seconds.
 
-The 13 failures are not Phase 2A regressions:
+The seven failures are not Phase 2A regressions:
 
 - Six pose-interoperability integration failures require optional `sleap-io==0.9.2`, which was intentionally not installed into the verification environment.
-- Seven unrelated failures were Windows deep-temporary-path failures in segmentation training, skeleton export/records/skeletonization, annotated-video export, and telemetry upload. Rerunning those exact seven tests with `--basetemp C:\rvpt` produced `7 passed`.
+- One unrelated annotation event-ordering assertion failed in the full run and passed immediately when rerun alone (`1 passed`). The test orders multiple same-clock events by timestamp and UUID, so this is a pre-existing nondeterministic ordering failure.
+
+An earlier default-temporary-root run also exposed seven unrelated Windows deep-path failures in segmentation training, skeleton export/records/skeletonization, annotated-video export, and telemetry upload. Those exact tests passed with `--basetemp C:\rvpt`; the final full run used the short root and did not reproduce them.
+
+## Independent review corrections
+
+The final read-only review identified and drove regression coverage for recovery and reproducibility edge cases. The corrected implementation now routes retried pose jobs through the normal worker, verifies the queued split-manifest hash and both dataset hashes, preserves historical-best checkpoints plus prior logs and metrics across cancellation, treats registered checkpoints as weight-only initialization, honors seed zero before model construction, and completes post-training finalization retries without rerunning an already-complete epoch range.
 
 The GPU-only environment `C:\AI-Projects\venvs\reefpose` remains unchanged. It has PyTorch/CUDA but lacks pytest, SQLAlchemy, and the rest of ReefVision's service dependencies. Service tests ran in the isolated `C:\AI-Projects\venvs\reefpose-phase2a-verification` environment. Frontend checks were invoked but could not start because `apps/web/node_modules` is absent (`prettier`, `tsc`, and `vitest` not found); no frontend files changed in Phase 2A.
 

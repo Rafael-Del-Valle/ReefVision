@@ -21,8 +21,13 @@ from reefvision.ml.reefpose.checkpoints import load_checkpoint
 from reefvision.ml.reefpose.data import ReefPoseDataset, load_reefvision_pose_export
 from reefvision.ml.reefpose.errors import ReefPoseCancelledError
 from reefvision.ml.reefpose.model import ReefPoseConfig, ReefPoseS
-from reefvision.ml.reefpose.training import ReefPoseTrainer, ReefPoseTrainingConfig
+from reefvision.ml.reefpose.training import (
+    ReefPoseTrainer,
+    ReefPoseTrainingConfig,
+    ReefPoseTrainingResult,
+)
 from reefvision.services.pose_training_exports import PoseTrainingExportService
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -40,8 +45,16 @@ def _dataset_for_run(
     if dataset.status != "complete":
         raise ValidationError(f"Pose {role} dataset must remain complete")
     manifest = dict(run.artifact_manifest_json or {})
-    expected_id = manifest.get(f"pose_{role}_dataset_id")
-    expected_sha = manifest.get(f"pose_{role}_dataset_manifest_sha256")
+    split_manifest = dict(manifest.get("pose_split_manifest") or {})
+    expected_split_sha = manifest.get("pose_split_manifest_sha256")
+    if expected_split_sha and canonical_json_sha256(split_manifest) != expected_split_sha:
+        raise ValidationError("Pose split snapshot integrity changed before execution")
+    expected_id = split_manifest.get(f"{role}_dataset_id")
+    expected_sha = split_manifest.get(f"{role}_dataset_manifest_sha256")
+    if expected_id is None:
+        expected_id = manifest.get(f"pose_{role}_dataset_id")
+    if expected_sha is None:
+        expected_sha = manifest.get(f"pose_{role}_dataset_manifest_sha256")
     if expected_id is not None and expected_id != dataset.id:
         raise ValidationError(f"Pose {role} dataset identity changed before execution")
     if role == "training" and dataset.manifest_sha256 != run.dataset_manifest_sha256:
@@ -73,6 +86,18 @@ def _metrics_history(rows: list[dict[str, float]]) -> dict[str, list[float | int
     return history
 
 
+def _history_rows(history: dict[str, list[float | int]]) -> list[dict[str, float | int]]:
+    epochs = list(history.get("epoch") or [])
+    rows: list[dict[str, float | int]] = []
+    for index, epoch in enumerate(epochs):
+        row: dict[str, float | int] = {"epoch": epoch}
+        for key, values in history.items():
+            if key != "epoch" and index < len(values):
+                row[key] = values[index]
+        rows.append(row)
+    return rows
+
+
 def _record_interrupted_checkpoint(
     settings: Settings,
     run: TrainingRun,
@@ -86,9 +111,18 @@ def _record_interrupted_checkpoint(
         managed_output_dir.mkdir(parents=True, exist_ok=True)
         persisted = managed_output_dir / checkpoint.name
         shutil.copy2(checkpoint, persisted)
+        best = work_output_dir / "best.pt"
+        persisted_best = managed_output_dir / "best.pt"
+        if best.is_file():
+            shutil.copy2(best, persisted_best)
         run.artifact_manifest_json = {
             **dict(run.artifact_manifest_json or {}),
             "resume_checkpoint_path": _relative_to_data_dir(settings, persisted),
+            "resume_best_checkpoint_path": (
+                _relative_to_data_dir(settings, persisted_best)
+                if persisted_best.is_file()
+                else None
+            ),
         }
 
 
@@ -222,7 +256,8 @@ def process_reefpose_training_job(
                 if validation_bundle is not None
                 else None
             )
-            generator = torch.Generator().manual_seed(run.random_seed or 1337)
+            effective_seed = 1337 if run.random_seed is None else run.random_seed
+            generator = torch.Generator().manual_seed(effective_seed)
             training_loader = DataLoader(
                 training_data,
                 batch_size=int(configuration["batch"]),
@@ -246,6 +281,7 @@ def process_reefpose_training_job(
                 if resume_relative is not None
                 else None
             )
+            registered_seed: Path | None = None
             if resume_from is None and run.initial_checkpoint_model_id:
                 from reefvision.services.workflow_pose_training import _seed_pose_model
 
@@ -257,21 +293,29 @@ def process_reefpose_training_job(
                     dataset=training_dataset,
                     provider_id="reefpose",
                 )
-                resume_from = resolve_managed_project_path(settings, seed_model.managed_path)
+                registered_seed = resolve_managed_project_path(settings, seed_model.managed_path)
 
-            if resume_from is not None:
-                short_resume = output_dir / resume_from.name
-                shutil.copy2(resume_from, short_resume)
-                source_best = resume_from.with_name("best.pt")
-                if source_best.is_file() and source_best != resume_from:
+            checkpoint_source = resume_from or registered_seed
+            resume_state = None
+            if checkpoint_source is not None:
+                short_resume = output_dir / checkpoint_source.name
+                shutil.copy2(checkpoint_source, short_resume)
+                source_best = checkpoint_source.with_name("best.pt")
+                if (
+                    resume_from is not None
+                    and source_best.is_file()
+                    and source_best != checkpoint_source
+                ):
                     shutil.copy2(source_best, output_dir / "best.pt")
-                resume_from = short_resume
                 state = load_checkpoint(
-                    resume_from,
+                    short_resume,
                     device="cpu",
                     expected_schema_hash=training_bundle.schema.integrity_hash,
                 )
                 model = state.model
+                if resume_from is not None:
+                    resume_from = short_resume
+                    resume_state = state
                 expected = ReefPoseConfig(
                     num_keypoints=training_bundle.schema.keypoint_count,
                     input_height=int(configuration["input_height"]),
@@ -282,6 +326,7 @@ def process_reefpose_training_job(
                 if model.config != expected:
                     raise ValidationError("ReefPose resume checkpoint model configuration changed")
             else:
+                torch.manual_seed(effective_seed)
                 model = ReefPoseS(
                     ReefPoseConfig(
                         num_keypoints=training_bundle.schema.keypoint_count,
@@ -301,12 +346,15 @@ def process_reefpose_training_job(
                     weight_decay=float(configuration["weight_decay"]),
                     device=run.device,
                     amp=run.precision == "amp",
-                    seed=run.random_seed or 1337,
+                    seed=effective_seed,
                     output_dir=output_dir,
                     gradient_clip_norm=configuration["gradient_clip_norm"],
                     deterministic=bool(configuration["deterministic"]),
                 ),
             )
+            managed_log = managed_output_dir / "training.jsonl"
+            if resume_from is not None and managed_log.is_file():
+                shutil.copy2(managed_log, trainer.log_path)
             run.status = run.stage = "training"
             run.logs_path = _relative_to_data_dir(settings, managed_output_dir / "training.jsonl")
             run.artifact_manifest_json = {
@@ -369,13 +417,31 @@ def process_reefpose_training_job(
                 }
                 callback_session.commit()
 
-        result = trainer.fit(
-            training_loader,
-            validation_batches=validation_loader,
-            cancellation_check=cancellation_check,
-            resume_from=resume_from,
-            epoch_callback=report_epoch,
-        )
+        configured_epochs = int(configuration["epochs"])
+        if resume_state is not None and resume_state.epoch + 1 >= configured_epochs:
+            completed_last = output_dir / "last.pt"
+            if resume_from is None:
+                raise RuntimeError("Completed ReefPose resume checkpoint is unavailable")
+            if resume_from.resolve() != completed_last.resolve():
+                shutil.copy2(resume_from, completed_last)
+            completed_best = output_dir / "best.pt"
+            if not completed_best.is_file():
+                shutil.copy2(resume_from, completed_best)
+            result = ReefPoseTrainingResult(
+                completed_epochs=configured_epochs,
+                global_step=resume_state.global_step,
+                last_checkpoint=completed_last,
+                best_checkpoint=completed_best,
+                metrics_history=[dict(resume_state.metrics)],
+            )
+        else:
+            result = trainer.fit(
+                training_loader,
+                validation_batches=validation_loader,
+                cancellation_check=cancellation_check,
+                resume_from=resume_from,
+                epoch_callback=report_epoch,
+            )
 
         with factory() as session:
             run = session.get(TrainingRun, run_id)
@@ -397,7 +463,10 @@ def process_reefpose_training_job(
             best_sha256, best_size = hash_model_file(managed_best)
             run.result_checkpoint_path = best_relative
             run.metrics_json = dict(result.metrics_history[-1])
-            run.metrics_history_json = _metrics_history(result.metrics_history)
+            persisted_history = dict(run.metrics_history_json or {})
+            if not persisted_history.get("epoch"):
+                persisted_history = _metrics_history(result.metrics_history)
+            run.metrics_history_json = persisted_history
             run.progress_epoch = result.completed_epochs
             run.progress_total_epochs = int(run.training_config_json["epochs"])
             run.artifact_manifest_json = {
@@ -406,7 +475,7 @@ def process_reefpose_training_job(
                 "best_checkpoint_sha256": best_sha256,
                 "best_checkpoint_size_bytes": best_size,
                 "last_checkpoint_path": last_relative,
-                "native_results_rows": list(result.metrics_history),
+                "native_results_rows": _history_rows(persisted_history),
                 "artifacts": [
                     {
                         "name": "best.pt",

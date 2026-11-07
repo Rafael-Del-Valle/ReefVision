@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import time
 import zipfile
 from pathlib import Path
@@ -34,9 +35,11 @@ from reefvision.jobs.pose_training import (
     materialize_pose_training_exports,
     process_pose_training_job,
 )
+from reefvision.jobs.reefpose_training import _dataset_for_run
 from reefvision.jobs.training import (
     _complete_training_run,
 )
+from reefvision.jobs.worker import process_next_thumbnail_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.ml.providers import DetectionSettings
 from reefvision.ml.reefpose.checkpoints import save_checkpoint
@@ -53,6 +56,7 @@ from reefvision.services.workflow_pose_training import (
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
@@ -704,7 +708,7 @@ def test_native_reefpose_workflow_executes_and_persists_best_checkpoint(
                 "architecture": "reefpose-s",
                 "device": "cpu",
                 "precision": "fp32",
-                "random_seed": 59,
+                "random_seed": 0,
                 "training_config": {
                     "epochs": 1,
                     "batch": 1,
@@ -724,12 +728,101 @@ def test_native_reefpose_workflow_executes_and_persists_best_checkpoint(
         assert job.status == "succeeded"
         assert run.progress_epoch == 1
         assert run.metrics_json["selection_loss"] >= 0
+        assert run.artifact_manifest_json["reproducibility"]["seed"] == 0
         assert run.artifact_manifest_json["dataset_format"] == "ultralytics_pose"
         assert run.artifact_manifest_json["best_checkpoint_path"] == run.result_checkpoint_path
 
     checkpoint = resolve_managed_project_path(test_settings, str(result["result_checkpoint_path"]))
     assert checkpoint.is_file()
     assert checkpoint.read_bytes()
+
+
+def test_native_reefpose_retry_dispatches_through_normal_worker(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    run_id, job_id = _queue_native_reefpose_run(
+        app,
+        test_settings,
+        project=project,
+        dataset=dataset,
+    )
+
+    assert process_next_thumbnail_job(test_settings, app.state.session_factory)
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, run_id)
+        job = session.get(Job, job_id)
+        assert run is not None and job is not None
+        assert run.status == "completed"
+        assert job.status == "succeeded"
+
+
+def test_native_reefpose_validation_dataset_uses_queued_split_snapshot(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    run_id, _job_id = _queue_native_reefpose_run(
+        app,
+        test_settings,
+        project=project,
+        dataset=dataset,
+    )
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, run_id)
+        original = session.get(PoseTrainingDataset, str(dataset["id"]))
+        assert run is not None and original is not None
+        original_sha = original.manifest_sha256
+        manifest = dict(run.artifact_manifest_json or {})
+        manifest["pose_split_manifest"] = {
+            **dict(manifest["pose_split_manifest"]),
+            "validation_dataset_id": original.id,
+            "validation_dataset_manifest_sha256": original_sha,
+        }
+        manifest["pose_split_manifest_sha256"] = canonical_json_sha256(
+            manifest["pose_split_manifest"]
+        )
+        run.artifact_manifest_json = manifest
+        session.flush()
+
+        corrupted = dict(manifest)
+        corrupted["pose_split_manifest"] = {
+            **dict(manifest["pose_split_manifest"]),
+            "validation_dataset_manifest_sha256": "0" * 64,
+        }
+        run.artifact_manifest_json = corrupted
+        session.flush()
+        with pytest.raises(Exception, match="split snapshot integrity changed"):
+            _dataset_for_run(
+                session,
+                run=run,
+                dataset_id=original.id,
+                role="validation",
+            )
+
+        run.artifact_manifest_json = manifest
+        original.manifest_sha256 = "f" * 64
+        session.flush()
+
+        with pytest.raises(Exception, match="validation dataset manifest changed"):
+            _dataset_for_run(
+                session,
+                run=run,
+                dataset_id=original.id,
+                role="validation",
+            )
 
 
 def test_native_reefpose_cancellation_retries_from_resumable_checkpoint(
@@ -749,22 +842,35 @@ def test_native_reefpose_cancellation_retries_from_resumable_checkpoint(
         test_settings,
         project=project,
         dataset=dataset,
+        epochs=2,
     )
     original_fit = ReefPoseTrainer.fit
 
     def cancel_fit(self: ReefPoseTrainer, *args: object, **kwargs: object) -> object:
-        del args, kwargs
-        save_checkpoint(
-            self.config.output_dir / "cancelled.pt",
-            model=self.model,
-            schema=self.schema,
-            epoch=-1,
-            global_step=0,
-            optimizer=self.optimizer,
-            scaler=self.scaler,
-            training_config=self.config.to_dict(),
-            reproducibility=self.reproducibility,
-        )
+        del args
+        epoch_callback = kwargs.get("epoch_callback")
+        best_metrics = {"selection_loss": 0.1, "best_selection_loss": 0.1}
+        latest_metrics = {"selection_loss": 0.5, "best_selection_loss": 0.1}
+        for name, metrics in (
+            ("best.pt", best_metrics),
+            ("last.pt", latest_metrics),
+            ("cancelled.pt", latest_metrics),
+        ):
+            save_checkpoint(
+                self.config.output_dir / name,
+                model=self.model,
+                schema=self.schema,
+                epoch=0,
+                global_step=1,
+                metrics=metrics,
+                optimizer=self.optimizer,
+                scaler=self.scaler,
+                training_config=self.config.to_dict(),
+                reproducibility=self.reproducibility,
+            )
+        assert callable(epoch_callback)
+        epoch_callback(1, 2, latest_metrics)
+        self.log_path.write_text('{"event":"before-cancel"}\n', encoding="utf-8")
         raise ReefPoseCancelledError("synthetic cancellation")
 
     monkeypatch.setattr(ReefPoseTrainer, "fit", cancel_fit)
@@ -777,12 +883,17 @@ def test_native_reefpose_cancellation_retries_from_resumable_checkpoint(
         assert run.status == job.status == "cancelled"
         assert run.result_checkpoint_path is None
         assert run.artifact_manifest_json["resume_checkpoint_path"]
+        managed_best = resolve_managed_project_path(
+            test_settings,
+            str(run.artifact_manifest_json["resume_best_checkpoint_path"]),
+        )
+        assert managed_best.is_file()
         JobService(session).retry(job_id)
         session.refresh(run)
         assert run.status == "queued"
 
     monkeypatch.setattr(ReefPoseTrainer, "fit", original_fit)
-    assert process_pose_training_job(test_settings, app.state.session_factory, job_id)
+    assert process_next_thumbnail_job(test_settings, app.state.session_factory)
 
     with app.state.session_factory() as session:
         run = session.get(TrainingRun, run_id)
@@ -790,6 +901,128 @@ def test_native_reefpose_cancellation_retries_from_resumable_checkpoint(
         assert run is not None and job is not None
         assert run.status == "completed"
         assert job.status == "succeeded"
+        assert run.result_checkpoint_path
+        assert run.metrics_history_json["epoch"] == [1, 2]
+        assert len(run.artifact_manifest_json["native_results_rows"]) == 2
+        managed_log = resolve_managed_project_path(test_settings, str(run.logs_path))
+        assert '"event":"before-cancel"' in managed_log.read_text(encoding="utf-8")
+
+
+def test_registered_reefpose_checkpoint_starts_a_fresh_training_run(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {
+        "provider_id": "reefpose",
+        "architecture": "reefpose-s",
+        "device": "cpu",
+        "precision": "fp32",
+        "training_config": {
+            "epochs": 1,
+            "batch": 1,
+            "input_height": 64,
+            "input_width": 64,
+            "base_channels": 4,
+            "fpn_channels": 8,
+            "workers": 0,
+        },
+    }
+
+    with app.state.session_factory() as session:
+        first = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters=parameters,
+            workflow_run_id="native-seed-source",
+            workflow_node_run_id="native-seed-source-node",
+        )
+        registered = SemanticModelService(session, test_settings).register_model_from_run(
+            str(project["id"]),
+            RegisterModelFromRunRequest(
+                training_run_id=str(first["training_run_id"]),
+                display_name="Native ReefPose seed",
+            ),
+        )
+        second = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            initial_model_payload={"model_id": registered.id},
+            parameters={**parameters, "initialization_mode": "registered_model"},
+            workflow_run_id="native-seed-target",
+            workflow_node_run_id="native-seed-target-node",
+        )
+        second_run = session.get(TrainingRun, str(second["training_run_id"]))
+        assert second_run is not None
+        assert second_run.status == "completed"
+        assert second_run.progress_epoch == 1
+        assert second_run.artifact_manifest_json["initialization_mode"] == "registered_model"
+
+
+def test_native_reefpose_finalization_failure_retries_without_retraining(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    run_id, job_id = _queue_native_reefpose_run(
+        app,
+        test_settings,
+        project=project,
+        dataset=dataset,
+    )
+    real_copy2 = shutil.copy2
+    failed_once = {"value": False}
+
+    def fail_first_best_copy(source: object, destination: object, *args: object, **kwargs: object):
+        if not failed_once["value"] and Path(destination).name == "best.pt":
+            failed_once["value"] = True
+            raise OSError("synthetic finalization failure")
+        return real_copy2(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr("reefvision.jobs.reefpose_training.shutil.copy2", fail_first_best_copy)
+    assert not process_pose_training_job(test_settings, app.state.session_factory, job_id)
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, run_id)
+        job = session.get(Job, job_id)
+        assert run is not None and job is not None
+        assert run.status == "failed"
+        JobService(session).retry(job_id)
+
+    monkeypatch.setattr("reefvision.jobs.reefpose_training.shutil.copy2", real_copy2)
+    processed = process_pose_training_job(test_settings, app.state.session_factory, job_id)
+    with app.state.session_factory() as session:
+        retry_run = session.get(TrainingRun, run_id)
+        assert retry_run is not None
+        assert processed, retry_run.error_message
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, run_id)
+        assert run is not None
+        assert run.status == "completed"
         assert run.result_checkpoint_path
 
 
