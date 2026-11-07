@@ -24,7 +24,7 @@ function validGalleryImageId(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value.trim().length > 0 &&
-    !/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028\u2029\u2060\ufeff]/.test(value)
+    !/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/.test(value)
   );
 }
 
