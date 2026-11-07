@@ -62,7 +62,7 @@ def test_nonliteral_revision_is_rejected(tmp_path: Path) -> None:
         load_audit()([root])
 
 
-@pytest.mark.parametrize("suffix", ["revision += \"extra\"", "revision -= 1"])
+@pytest.mark.parametrize("suffix", ['revision += "extra"', "revision -= 1"])
 def test_augmented_revision_assignment_fails_closed(tmp_path: Path, suffix: str) -> None:
     root = tmp_path / "versions"
     file = migration(root, "0038.py", "0038")
@@ -77,13 +77,11 @@ def test_augmented_revision_assignment_fails_closed(tmp_path: Path, suffix: str)
     "assignment",
     [
         'revision, parent = "0038", "0037"',
-        'revision, parent = compute_revisions()',
+        "revision, parent = compute_revisions()",
         'revision, (parent, branch) = "0038", ("0037", None)',
     ],
 )
-def test_destructured_revision_assignment_fails_closed(
-    tmp_path: Path, assignment: str
-) -> None:
+def test_destructured_revision_assignment_fails_closed(tmp_path: Path, assignment: str) -> None:
     root = tmp_path / "versions"
     file = migration(root, "0038.py", "0038")
     file.write_text(file.read_text(encoding="utf-8") + assignment + "\n", encoding="utf-8")
