@@ -304,6 +304,10 @@ def test_saved_longitudinal_preserves_microsecond_observation_order(
     [
         ("2026-10-01T12:00:00Z", "2026-10-01T07:00:00-05:00"),
         ("2026-10-01T12:00:00Z", "2026-10-01T06:59:59.999999-05:00"),
+        # Distinct local dates and offsets can still refer to identical UTC instants.
+        ("2026-10-02T00:00:00+14:00", "2026-10-01T10:00:00Z"),
+        # A later-looking wall clock must not hide an earlier absolute instant.
+        ("2026-10-01T23:59:59-05:00", "2026-10-02T00:00:00Z"),
     ],
 )
 def test_saved_longitudinal_rejects_nonincreasing_absolute_time(
