@@ -76,6 +76,15 @@ def revision_from_source(path: Path) -> str | None:
             for name in ast.walk(target)
         ):
             raise ValueError(f"{path}: implicit revision rebinding is not permitted")
+    # Comprehension targets are implicit bindings too. Although their scope is
+    # local in Python 3, reject them consistently with nested function writes:
+    # the auditor must not infer runtime revision semantics from executable code.
+    for statement in ast.walk(tree):
+        if isinstance(statement, ast.comprehension) and any(
+            isinstance(name, ast.Name) and name.id == "revision"
+            for name in ast.walk(statement.target)
+        ):
+            raise ValueError(f"{path}: comprehension rebinds revision")
     # Imports and declarations also bind names without an assignment node.
     # Reject them rather than assuming a previously parsed literal survives.
     for statement in ast.walk(tree):
