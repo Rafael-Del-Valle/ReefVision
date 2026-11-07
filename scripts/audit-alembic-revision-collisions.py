@@ -89,6 +89,12 @@ def revision_from_source(path: Path) -> str | None:
     # Reject them rather than assuming a previously parsed literal survives.
     for statement in ast.walk(tree):
         if isinstance(statement, (ast.Import, ast.ImportFrom)):
+            # Star imports may introduce an arbitrary revision binding at runtime.
+            # Never execute imported modules to determine their exported names.
+            if isinstance(statement, ast.ImportFrom) and any(
+                alias.name == "*" for alias in statement.names
+            ):
+                raise ValueError(f"{path}: wildcard import may rebind revision")
             if any(
                 (alias.asname or alias.name.split(".")[0]) == "revision"
                 for alias in statement.names
