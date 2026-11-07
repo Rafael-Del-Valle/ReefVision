@@ -20,11 +20,11 @@
   },
   "inference": {
     "batch_size": 16,
-    "images_per_second": 3603.1613236018356,
+    "images_per_second": 3716.435074647356,
     "iterations": 100,
-    "mean_latency_ms": 4.44054500007951,
-    "p50_latency_ms": 4.318400000556721,
-    "p95_latency_ms": 5.06630000018049,
+    "mean_latency_ms": 4.305201000051966,
+    "p50_latency_ms": 4.283900000700669,
+    "p95_latency_ms": 4.571800000121584,
     "peak_gpu_memory_bytes": 175742464
   },
   "model": {
@@ -48,11 +48,11 @@
   "synthetic_fixture": true,
   "training": {
     "batch_size": 16,
-    "final_synthetic_loss": 0.1110011637210846,
-    "images_per_second": 1079.9324124305813,
+    "final_synthetic_loss": 0.11100219935178757,
+    "images_per_second": 1094.2475406780022,
     "peak_gpu_memory_bytes": 352571904,
     "steps": 50,
-    "steps_per_second": 67.49577577691133
+    "steps_per_second": 68.39047129237514
   },
   "validation_notice": "Synthetic tensors validate engineering performance only; real labeled animal data is required for biological accuracy evaluation."
 }
