@@ -115,6 +115,16 @@ def revision_from_source(path: Path) -> str | None:
             raise ValueError(f"{path}: pattern rebinds revision")
         if isinstance(statement, ast.MatchMapping) and statement.rest == "revision":
             raise ValueError(f"{path}: pattern rebinds revision")
+    # Dynamic execution can mutate the module namespace after a literal
+    # revision assignment. Static inspection cannot establish its outcome.
+    # Reject it without running any migration code or imported modules.
+    for statement in ast.walk(tree):
+        if (
+            isinstance(statement, ast.Call)
+            and isinstance(statement.func, ast.Name)
+            and statement.func.id in {"exec", "eval"}
+        ):
+            raise ValueError(f"{path}: dynamic execution may rebind revision")
     if len(revisions) > 1:
         raise ValueError(f"{path}: multiple revision assignments")
     return revisions[0] if revisions else None
