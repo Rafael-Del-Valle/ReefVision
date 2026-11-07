@@ -708,6 +708,8 @@ class PoseTrainingDatasetService:
         if (
             not isinstance(source_video_sha, str)
             or not source_video_sha.strip()
+            or len(source_video_sha) != 64
+            or any(character not in "0123456789abcdef" for character in source_video_sha)
             or source_video_sha != video.sha256
         ):
             raise ConflictError("Source video checksum changed after acquisition")
