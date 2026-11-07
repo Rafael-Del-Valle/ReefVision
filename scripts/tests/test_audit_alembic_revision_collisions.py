@@ -62,6 +62,17 @@ def test_nonliteral_revision_is_rejected(tmp_path: Path) -> None:
         load_audit()([root])
 
 
+@pytest.mark.parametrize("suffix", ["revision += \"extra\"", "revision -= 1"])
+def test_augmented_revision_assignment_fails_closed(tmp_path: Path, suffix: str) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + suffix + "\n", encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="augmented revision assignment"):
+        load_audit()([root])
+    assert file.read_bytes() == before
+
+
 @pytest.mark.parametrize(
     "assignment",
     [
