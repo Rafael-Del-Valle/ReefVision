@@ -53,6 +53,22 @@ def revision_from_source(path: Path) -> str | None:
                 for name in ast.walk(target)
             ):
                 raise ValueError(f"{path}: nested revision assignment is not permitted")
+    # Loop and context-manager targets bind names without Assign nodes. A
+    # migration that rebinds revision this way cannot be audited statically.
+    for statement in ast.walk(tree):
+        targets = []
+        if isinstance(statement, (ast.For, ast.AsyncFor)):
+            targets = [statement.target]
+        elif isinstance(statement, (ast.With, ast.AsyncWith)):
+            targets = [item.optional_vars for item in statement.items if item.optional_vars]
+        elif isinstance(statement, ast.ExceptHandler) and statement.name == "revision":
+            raise ValueError(f"{path}: exception handler rebinds revision")
+        if any(
+            isinstance(name, ast.Name) and name.id == "revision"
+            for target in targets
+            for name in ast.walk(target)
+        ):
+            raise ValueError(f"{path}: implicit revision rebinding is not permitted")
     if len(revisions) > 1:
         raise ValueError(f"{path}: multiple revision assignments")
     return revisions[0] if revisions else None
