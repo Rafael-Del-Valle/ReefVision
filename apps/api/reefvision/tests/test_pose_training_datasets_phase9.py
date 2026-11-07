@@ -722,12 +722,15 @@ def test_frozen_dataset_rejects_resigned_incompatible_schema_version(
     assert "manifest lineage" in response.text
 
 
-def test_frozen_dataset_rejects_resigned_blank_video_digest(
+@pytest.mark.parametrize("digest_variant", ["blank", "uppercase", "truncated"])
+def test_frozen_dataset_rejects_resigned_noncanonical_video_digest(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    digest_variant: str,
 ) -> None:
-    # Exercise an actual scientist-verified frozen dataset, then re-sign its
-    # persisted manifest and review evidence around a missing video digest.
+    # Re-sign an actual scientist-verified frozen dataset after corrupting its
+    # video digest. Even matching lineage hashes cannot legitimize a digest
+    # that is not canonical lowercase 64-character SHA-256.
     _, _, _, round_payload = _verified_round(client, monkeypatch)
     response = client.post(
         f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
@@ -740,15 +743,27 @@ def test_frozen_dataset_rejects_resigned_blank_video_digest(
         dataset = session.get(PoseTrainingDataset, dataset_id)
         assert dataset is not None
         item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
-        item.video_sha256 = ""
-        acquisition = {**item.acquisition_provenance_json, "video_sha256": ""}
+        original_digest = item.video_sha256
+        assert len(original_digest) == 64
+        assert original_digest == original_digest.lower()
+        malformed_digest = {
+            "blank": "",
+            "uppercase": original_digest.upper(),
+            "truncated": original_digest[:-1],
+        }[digest_variant]
+        assert malformed_digest != original_digest
+        item.video_sha256 = malformed_digest
+        acquisition = {
+            **item.acquisition_provenance_json,
+            "video_sha256": malformed_digest,
+        }
         item.acquisition_provenance_json = acquisition
         review = copy.deepcopy(item.review_provenance_json)
         review["before"]["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
         item.review_provenance_json = review
         manifest = copy.deepcopy(dataset.manifest_json)
         summary = manifest["items"][0]
-        summary["video_sha256"] = ""
+        summary["video_sha256"] = malformed_digest
         summary["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
         summary["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
         dataset.manifest_json = manifest
