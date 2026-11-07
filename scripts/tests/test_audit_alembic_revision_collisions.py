@@ -75,7 +75,7 @@ def test_destructured_revision_assignment_fails_closed(
 ) -> None:
     root = tmp_path / "versions"
     file = migration(root, "0038.py", "0038")
-    file.write_text(file.read_text(encoding="utf-8") + assignment + "\\n", encoding="utf-8")
+    file.write_text(file.read_text(encoding="utf-8") + assignment + "\n", encoding="utf-8")
     before = file.read_bytes()
     with pytest.raises(ValueError, match="revision must be a literal string"):
         load_audit()([root])
