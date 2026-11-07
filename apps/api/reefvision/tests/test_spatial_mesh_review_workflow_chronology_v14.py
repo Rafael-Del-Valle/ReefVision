@@ -73,6 +73,9 @@ def _review(evidence_key: str, project_id: str, reviewed_at_utc: str) -> dict:
     [
         ("2026-10-02T06:59:59-05:00", False, False),
         ("2026-10-02T07:00:00-05:00", True, False),
+        # Review timestamps one microsecond around the later observation boundary.
+        ("2026-10-02T11:59:59.999999Z", False, False),
+        ("2026-10-02T12:00:00.000001Z", True, False),
         ("2026-10-03T07:00:00-05:00", True, False),
         # A caller cannot impersonate an independent reviewer with a case-only alias.
         ("2026-10-03T07:00:00-05:00", False, True),
