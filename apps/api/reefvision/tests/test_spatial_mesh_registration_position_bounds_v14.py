@@ -185,8 +185,24 @@ def test_caller_separation_bounds_clip_at_zero_without_claiming_verification(
         registration_evidence=evidence,
     )
     assert result["registered_surface_centroid_separation_m"] == pytest.approx(separation)
-    assert result["registered_surface_centroid_separation_caller_bound_interval_m"] == pytest.approx(
-        expected
-    )
+    interval = result["registered_surface_centroid_separation_caller_bound_interval_m"]
+    assert interval == pytest.approx(expected)
+    assert result["provenance"]["coordinate_registration_verified"] is False
+    assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
+
+
+def test_zero_caller_error_bounds_preserve_exact_signed_component_intervals() -> None:
+    """Zero caller bounds must not imply independently verified registration."""
+    evidence = {
+        **_registration(),
+        "source_centroid_position_error_bound_m": 0.0,
+        "target_centroid_position_error_bound_m": 0.0,
+        "registration_alignment_error_bound_m": 0.0,
+    }
+    result = _compare(evidence)
+    intervals = result[
+        "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"
+    ]
+    assert intervals == pytest.approx([[1.0, 1.0], [0.0, 0.0], [0.0, 0.0]])
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
