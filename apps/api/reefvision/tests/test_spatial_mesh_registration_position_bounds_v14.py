@@ -252,5 +252,7 @@ def test_mutated_prevalidated_evidence_rejects_partial_caller_bounds(missing_fie
         }
     )
     setattr(evidence, missing_field, None)
-    with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
+    with pytest.raises(
+        ValueError, match="Centroid separation bounds require a transform and all three error bounds"
+    ):
         _compare(evidence)
