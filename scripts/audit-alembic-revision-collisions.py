@@ -81,9 +81,7 @@ def audit(roots: list[Path]) -> dict:
     if migration_files == 0:
         raise ValueError("No migration revision files found")
     collisions = {
-        revision: paths
-        for revision, paths in sorted(by_revision.items())
-        if len(paths) > 1
+        revision: paths for revision, paths in sorted(by_revision.items()) if len(paths) > 1
     }
     return {
         "safe_to_reconcile_automatically": False,
