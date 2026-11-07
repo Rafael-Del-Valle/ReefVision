@@ -3,8 +3,8 @@
 
 import argparse
 import ast
-import json
 import hashlib
+import json
 from collections import defaultdict
 from pathlib import Path
 
@@ -14,9 +14,12 @@ def revision_from_source(path: Path) -> str | None:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     revisions = []
     for node in tree.body:
-        if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
-            if node.target.id == "revision":
-                raise ValueError(f"{path}: augmented revision assignment is not permitted")
+        if (
+            isinstance(node, ast.AugAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "revision"
+        ):
+            raise ValueError(f"{path}: augmented revision assignment is not permitted")
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             if any(
