@@ -53,11 +53,24 @@ class DetectionModelMetadata:
 
 
 @dataclass(frozen=True)
+class PoseKeypointPrediction:
+    landmark_id: str
+    name: str
+    occurrence_index: int
+    x: float
+    y: float
+    confidence: float
+    visibility_state: str
+
+
+@dataclass(frozen=True)
 class DetectionPrediction:
     label: str
     class_index: int | None
     confidence: float
     box: PixelBox
+    keypoints: tuple[PoseKeypointPrediction, ...] | None = None
+    pose_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

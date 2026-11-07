@@ -20,6 +20,11 @@ from reefvision.ml.providers import (
     SegmentAnythingAssistProvider,
     UltralyticsDetectionProvider,
 )
+from reefvision.ml.reefpose.provider import (
+    REEFPOSE_PROVIDER_ID,
+    REEFPOSE_PROVIDER_VERSION,
+    ReefPoseRegistrationProvider,
+)
 from reefvision.ml.sleap_nn_provider import (
     SLEAP_IO_SUPPORTED_VERSION,
     SLEAP_NN_SUPPORTED_VERSION,
@@ -366,6 +371,77 @@ def _sleap_nn_descriptor() -> ModelProviderDescriptor:
     )
 
 
+def _reefpose_descriptor() -> ModelProviderDescriptor:
+    torch_version = _package_version("torch")
+    pillow_version = _package_version("pillow")
+    ready = torch_version is not None and pillow_version is not None
+    missing = [
+        name
+        for name, installed in (("torch", torch_version), ("pillow", pillow_version))
+        if installed is None
+    ]
+    return ModelProviderDescriptor(
+        provider_id=REEFPOSE_PROVIDER_ID,
+        display_name="ReefPose-S",
+        provider_version=REEFPOSE_PROVIDER_VERSION,
+        package_version=torch_version,
+        supported_model_families=("Native ReefPose-S heatmap checkpoints",),
+        supported_tasks=("pose",),
+        supported_input_types=("image",),
+        supported_output_types=("prediction_proposals", "keypoints", "visibility"),
+        cpu_support=True,
+        cuda_support=True,
+        supported_precision_modes=("fp32", "amp"),
+        video_support=False,
+        training_support=True,
+        tiling_support=False,
+        supported_execution_runtimes=("pytorch",),
+        required_packages=(
+            ProviderPackageDescriptor(
+                distribution_name="torch",
+                required_version=">=2.5",
+                installed_version=torch_version,
+                status="ok" if torch_version is not None else "missing",
+            ),
+            ProviderPackageDescriptor(
+                distribution_name="pillow",
+                required_version=">=11,<14",
+                installed_version=pillow_version,
+                status="ok" if pillow_version is not None else "missing",
+            ),
+        ),
+        required_model_files=(".pt", ".pth"),
+        code_license="AGPL-3.0-only as part of ReefVision.",
+        weight_license="User-trained ReefPose checkpoints; redistribution terms follow the data/model owner.",
+        memory_recommendations=(
+            "CPU is supported for validation and low-volume inference.",
+            "CUDA AMP is recommended for training and throughput benchmarking.",
+        ),
+        known_limitations=(
+            "Phase 1 is single-animal and does not detect multiple instances.",
+            "Still-image review stores full keypoints in proposal provenance while the current editor displays the derived bounding box.",
+            "Workflow Builder training dispatch remains Ultralytics-specific pending provider-neutral routing.",
+            "No pretrained checkpoints are downloaded automatically.",
+        ),
+        desktop_packaging_state="source_provider_not_yet_bundled",
+        clean_machine_verification_state=(
+            "runtime_ready" if ready else "dependency_not_ready"
+        ),
+        availability_status="ready" if ready else "dependency_missing",
+        availability_reason=None if ready else "Missing " + ", ".join(missing),
+        default_registration_purpose="detector",
+        registerable=True,
+        capabilities=ProviderCapabilityMatrix(
+            image_detection=True,
+            training=True,
+            validation=True,
+            cpu_inference=True,
+            cuda_inference=True,
+            fp16=True,
+        ),
+    )
+
+
 def _implemented_segment_anything_descriptor(
     report: ProviderPreflightReport,
 ) -> ModelProviderDescriptor:
@@ -512,6 +588,7 @@ def _list_model_providers_uncached(
     reports = _implemented_report_map(settings, refresh=refresh).value
     providers = [
         _implemented_ultralytics_descriptor(reports["ultralytics"]),
+        _reefpose_descriptor(),
         _implemented_segment_anything_descriptor(reports["segment_anything"]),
         _sleap_nn_descriptor(),
         _blocked_descriptor(
@@ -1030,6 +1107,11 @@ def provider_for_registration(
             if not descriptor.registerable:
                 raise ValidationError("SLEAP-NN registration is not available")
             return SleapNNPoseRegistrationProvider()
+        if normalized == REEFPOSE_PROVIDER_ID:
+            descriptor = get_model_provider(REEFPOSE_PROVIDER_ID, settings)
+            if not descriptor.registerable:
+                raise ValidationError("ReefPose registration is not available")
+            return ReefPoseRegistrationProvider()
         raise ValidationError(f"Unsupported detector provider: {provider_name}")
     if purpose == "assist":
         if normalized in {"", "segment_anything"}:
@@ -1051,6 +1133,8 @@ def detection_provider_for_name(provider_name: str) -> DetectionProvider:
         return UltralyticsDetectionProvider()
     if normalized == "sleap_nn":
         return SleapNNPoseRegistrationProvider()
+    if normalized == REEFPOSE_PROVIDER_ID:
+        return ReefPoseRegistrationProvider()
     raise ValidationError(f"Unsupported detection provider: {provider_name}")
 
 
