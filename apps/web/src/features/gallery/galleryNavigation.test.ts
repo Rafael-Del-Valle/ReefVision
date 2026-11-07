@@ -282,6 +282,24 @@ describe("gallery preferences", () => {
     });
   });
 
+  it("does not expose unknown persisted camera metadata when restoring a selection", () => {
+    const storage = memoryStorage({
+      "reefvision.gallery.project-a.v1": JSON.stringify({
+        imageId: "camera-original-1",
+        page: 2,
+        wrap: true,
+        originalImagePath: "C:\\private\\camera\\original.jpg",
+        annotationPayload: { scientificData: "must-not-restore" },
+      }),
+    });
+
+    expect(readGalleryPreference(storage, "project-a")).toEqual({
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: true,
+    });
+  });
+
   it("persists only the approved gallery preference fields", () => {
     const storage = memoryStorage();
     const runtimePreference = {
