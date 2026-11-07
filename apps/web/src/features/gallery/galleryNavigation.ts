@@ -132,7 +132,10 @@ export function parseGalleryPageDraft(
 ): number | null {
   if (!Number.isSafeInteger(totalPages) || totalPages < 1) return null;
   const value = draft.trim();
-  if (!/^\d+$/.test(value)) return null;
+  // Bound parsing work for pasted or corrupted page drafts. A safe integer
+  // requires at most 16 decimal digits; leading zeros are harmless but
+  // unbounded input must not stall the gallery navigation UI.
+  if (value.length > 64 || !/^\d+$/.test(value)) return null;
   const requested = Number(value);
   if (!Number.isSafeInteger(requested) || requested < 1) return null;
   return Math.min(totalPages, requested);
