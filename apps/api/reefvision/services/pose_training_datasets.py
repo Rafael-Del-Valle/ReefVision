@@ -74,6 +74,10 @@ def frozen_pose_item_fingerprints_match(
         or not isinstance(manifest, dict)
         or manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION
         or not isinstance(manifest.get("items"), list)
+        # A re-signed manifest must not advertise a different number of
+        # scientist-verified observations than the persisted frozen dataset.
+        or type(manifest.get("item_count")) is not int
+        or manifest["item_count"] != dataset.item_count
     ):
         return False
 
