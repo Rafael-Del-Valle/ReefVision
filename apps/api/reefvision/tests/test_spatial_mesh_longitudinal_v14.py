@@ -2925,6 +2925,11 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     assert expected["registered_surface_centroid_separation_caller_bound_interval_m"] == (
         pytest.approx([max(0.0, 0.1 - total_bound), 0.1 + total_bound])
     )
+    interval = expected["registered_surface_centroid_separation_caller_bound_interval_m"]
+    assert interval[0] >= 0.0  # Euclidean separation cannot be negative.
+    assert interval[0] <= expected["registered_surface_centroid_separation_m"]
+    assert interval[1] >= expected["registered_surface_centroid_separation_m"]
+    assert interval[1] == pytest.approx(0.1 + total_bound)
     assert expected["provenance"]["coordinate_registration_verified"] is False
     assert (
         "registered_centroid_caller_interval_not_a_confidence_interval" in (expected["qc_warnings"])
