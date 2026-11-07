@@ -131,6 +131,9 @@ export function parseGalleryPageDraft(
   totalPages: number,
 ): number | null {
   if (!Number.isSafeInteger(totalPages) || totalPages < 1) return null;
+  // Reject oversized input before trimming so pasted whitespace cannot force
+  // an unnecessary full-string normalization on the gallery UI thread.
+  if (draft.length > 64) return null;
   const value = draft.trim();
   // Bound parsing work for pasted or corrupted page drafts. A safe integer
   // requires at most 16 decimal digits; leading zeros are harmless but
