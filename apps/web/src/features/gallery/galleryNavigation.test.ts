@@ -251,7 +251,9 @@ describe("gallery preferences", () => {
     expect(readGalleryPreference(storage, "project-a").imageId).toBe(
       "camera-original-a",
     );
-    expect(readGalleryPreference(storage, "project-b").imageId).toBe("camera-original-b2");
+    expect(readGalleryPreference(storage, "project-b").imageId).toBe(
+      "camera-original-b2",
+    );
   });
 
   it("normalizes padded camera IDs without losing their selected gallery page", () => {
@@ -310,7 +312,9 @@ describe("gallery preferences", () => {
       annotationPayload: { scientificData: "must-not-persist" },
     };
     writeGalleryPreference(storage, "project-a", runtimePreference);
-    expect(JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null")).toEqual({
+    expect(
+      JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null"),
+    ).toEqual({
       imageId: "camera-original-1",
       page: 2,
       wrap: true,
@@ -735,8 +739,12 @@ describe("resolveGalleryNavigation", () => {
       pages: 2,
       wrap: false,
     };
-    expect(resolveGalleryNavigation({ ...valid, wrap: "false" as unknown as boolean })).toBeNull();
-    expect(resolveGalleryNavigation({ ...valid, wrap: null as unknown as boolean })).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...valid, wrap: "false" as unknown as boolean }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...valid, wrap: null as unknown as boolean }),
+    ).toBeNull();
     expect(
       resolveGalleryNavigation({
         ...valid,
@@ -800,7 +808,9 @@ describe("resolveGalleryNavigation", () => {
       page: 1,
       edge: "first",
     });
-    expect(resolveGalleryNavigation({ ...lastImage, action: "next", wrap: false })).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...lastImage, action: "next", wrap: false }),
+    ).toBeNull();
     expect(
       resolveGalleryNavigation({
         action: "previous",
