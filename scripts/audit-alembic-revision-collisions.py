@@ -4,6 +4,7 @@
 import argparse
 import ast
 import json
+import hashlib
 from collections import defaultdict
 from pathlib import Path
 
@@ -27,6 +28,7 @@ def revision_from_source(path: Path) -> str | None:
 
 def audit(roots: list[Path]) -> dict:
     by_revision: dict[str, list[str]] = defaultdict(list)
+    source_sha256: dict[str, str] = {}
     migration_files = 0
     seen_roots: set[Path] = set()
     for root in roots:
@@ -65,6 +67,7 @@ def audit(roots: list[Path]) -> dict:
             if not revision.strip() or revision != revision.strip():
                 raise ValueError(f"{path}: noncanonical revision")
             by_revision[revision].append(str(path))
+            source_sha256[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
     if migration_files == 0:
         raise ValueError("No migration revision files found")
     collisions = {
@@ -76,6 +79,10 @@ def audit(roots: list[Path]) -> dict:
         "safe_to_reconcile_automatically": False,
         "revision_count": len(by_revision),
         "collisions": collisions,
+        "collision_source_sha256": {
+            revision: {path: source_sha256[path] for path in paths}
+            for revision, paths in collisions.items()
+        },
         "collision_free": not bool(collisions),
     }
 
