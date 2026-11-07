@@ -226,6 +226,10 @@ def test_saved_longitudinal_review_chronology_matches_standalone(
         # Nonzero UTC offsets must retain one-microsecond observation ordering.
         ("2026-10-01T06:59:59.999999-05:00", "2026-10-01T12:00:00Z", 1 / 86_400_000_000),
         ("2026-10-01T13:59:59.999999+02:00", "2026-10-01T07:00:00-05:00", 1 / 86_400_000_000),
+        # Local date-line crossing must use absolute UTC rather than wall-clock dates.
+        ("2026-10-02T00:00:00+14:00", "2026-10-01T10:00:00.000001Z", 1 / 86_400_000_000),
+        # Leap-day boundaries must not round away microsecond growth intervals.
+        ("2028-02-29T23:59:59.999999Z", "2028-03-01T00:00:00Z", 1 / 86_400_000_000),
     ],
 )
 def test_saved_longitudinal_preserves_microsecond_observation_order(
