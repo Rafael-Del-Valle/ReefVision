@@ -660,10 +660,14 @@ class PoseTrainingDatasetService:
         # A verified frame must exist within the source video's recorded
         # timeline. Reject out-of-range observations before freezing them as
         # immutable scientist-reviewed training evidence.
-        if type(candidate.focus_frame) is not int or candidate.focus_frame < 0 or (
-            isinstance(video.frame_count, int)
-            and video.frame_count > 0
-            and candidate.focus_frame >= video.frame_count
+        if (
+            type(candidate.focus_frame) is not int
+            or candidate.focus_frame < 0
+            or (
+                isinstance(video.frame_count, int)
+                and video.frame_count > 0
+                and candidate.focus_frame >= video.frame_count
+            )
         ):
             raise ConflictError("Verified pose frame is outside the source video timeline")
 
