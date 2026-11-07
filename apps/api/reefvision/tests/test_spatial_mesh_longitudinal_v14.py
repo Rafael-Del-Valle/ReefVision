@@ -2911,8 +2911,8 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
         pytest.approx([max(0.0, 0.1 - 3 * bound), 0.1 + 3 * bound])
     )
     assert expected["provenance"]["coordinate_registration_verified"] is False
-    assert "registered_centroid_caller_interval_not_a_confidence_interval" in (
-        expected["qc_warnings"]
+    assert (
+        "registered_centroid_caller_interval_not_a_confidence_interval" in (expected["qc_warnings"])
     )
 
     graph = {
@@ -2964,7 +2964,8 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_longitudinal_comparison"
     )
     assert artifact["payload_json"] == expected
