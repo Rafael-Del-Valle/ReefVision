@@ -257,3 +257,42 @@ def test_mutated_prevalidated_evidence_rejects_partial_caller_bounds(missing_fie
         match="Centroid separation bounds require a transform and all three error bounds",
     ):
         _compare(evidence)
+
+
+@pytest.mark.parametrize(
+    ("target_y", "expected_y"),
+    [(3.0, 0.0), (1.0, -2.0)],
+)
+def test_rotated_translated_centroid_bounds_use_target_frame(
+    target_y: float, expected_y: float
+) -> None:
+    """Registration must rotate source position before bounding target-frame offsets."""
+    evidence = {
+        **_registration(),
+        "source_to_target_transform_m": [
+            [0.0, -1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        "source_centroid_position_error_bound_m": 0.1,
+        "target_centroid_position_error_bound_m": 0.2,
+        "registration_alignment_error_bound_m": 0.05,
+    }
+    before = _observation("before", "2026-10-01T12:00:00Z", 2.0)
+    after = _observation("after", "2026-10-02T12:00:00Z", 0.0)
+    after["area_weighted_surface_centroid_m"] = [0.0, target_y, 0.0]
+    result = compare_mesh_observations(before, after, registration_evidence=evidence)
+    assert result["registered_surface_centroid_offset_target_frame_m"] == pytest.approx(
+        [0.0, expected_y, 0.0]
+    )
+    assert result["registered_surface_centroid_separation_m"] == pytest.approx(abs(expected_y))
+    intervals = result["registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"]
+    assert intervals is not None
+    for observed, center in zip(intervals, [0.0, expected_y, 0.0], strict=True):
+        assert observed == pytest.approx([center - 0.35, center + 0.35])
+    assert result["registered_surface_centroid_separation_caller_bound_interval_m"] == (
+        pytest.approx([max(0.0, abs(expected_y) - 0.35), abs(expected_y) + 0.35])
+    )
+    assert result["provenance"]["coordinate_registration_verified"] is False
+    assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
