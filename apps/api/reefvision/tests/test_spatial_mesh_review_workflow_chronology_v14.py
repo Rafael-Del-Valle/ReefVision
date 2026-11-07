@@ -297,3 +297,75 @@ def test_saved_longitudinal_preserves_microsecond_observation_order(
     assert artifacts[0]["payload_json"] == expected
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert expected["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("earlier", "later"),
+    [
+        ("2026-10-01T12:00:00Z", "2026-10-01T07:00:00-05:00"),
+        ("2026-10-01T12:00:00Z", "2026-10-01T06:59:59.999999-05:00"),
+    ],
+)
+def test_saved_longitudinal_rejects_nonincreasing_absolute_time(
+    client: TestClient, earlier: str, later: str
+) -> None:
+    """Offset-equivalent or reversed observations cannot produce growth artifacts."""
+    project_id = str(create_project(client, "Absolute UTC ordering rejection QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    before = _observation("survey-1", earlier)
+    after = _observation("survey-2", later)
+    standalone = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after},
+    )
+    assert standalone.status_code in (400, 422), standalone.text
+
+    graph = {
+        "graph_id": "invalid-absolute-time",
+        "name": "Reject invalid absolute observation chronology",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
+            {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": after},
+            {"node_id": "compare", "node_type": "mesh_longitudinal_comparison"},
+        ],
+        "edges": [
+            {
+                "edge_id": f"project-{node}",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": node,
+                "target_port_id": "project",
+            }
+            for node in ("early", "late")
+        ]
+        + [
+            {
+                "edge_id": f"{node}-compare",
+                "source_node_id": node,
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": port,
+            }
+            for node, port in (("early", "before"), ("late", "after"))
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not [
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    ]
