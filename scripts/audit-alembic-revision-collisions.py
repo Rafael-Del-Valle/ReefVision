@@ -31,6 +31,19 @@ def revision_from_source(path: Path) -> str | None:
                 if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
                     raise ValueError(f"{path}: revision must be a literal string")
                 revisions.append(value.value)
+    # Nested writes can change the effective revision at import time. Never
+    # execute migrations to discover that value; reject ambiguous source.
+    for statement in ast.walk(tree):
+        if statement in tree.body:
+            continue
+        if isinstance(statement, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            if any(
+                isinstance(name, ast.Name) and name.id == "revision"
+                for target in targets
+                for name in ast.walk(target)
+            ):
+                raise ValueError(f"{path}: nested revision assignment is not permitted")
     if len(revisions) > 1:
         raise ValueError(f"{path}: multiple revision assignments")
     return revisions[0] if revisions else None
