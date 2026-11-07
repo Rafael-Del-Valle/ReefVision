@@ -899,7 +899,7 @@ describe("resolveGalleryNavigation", () => {
     }
     values.set(key, saved!);
     expect(readGalleryPreference(storage, project)).toEqual({ imageId: "valid-camera-frame", page: 4, wrap: true });
-    writeGalleryPreference(storage, project, { imageId: "bad\\nframe", page: 7, wrap: false });
+    writeGalleryPreference(storage, project, { imageId: "bad\nframe", page: 7, wrap: false });
     expect(values.get(key)).toBe(saved);
   });
 
