@@ -14,11 +14,9 @@ from reefvision.ml.providers import (
     require_local_checkpoint_path,
 )
 from reefvision.ml.reefpose.checkpoints import load_checkpoint
+from reefvision.ml.reefpose.constants import REEFPOSE_PROVIDER_ID, REEFPOSE_PROVIDER_VERSION
 from reefvision.ml.reefpose.errors import ReefPoseError
 from reefvision.ml.reefpose.inference import ReefPosePredictor
-
-REEFPOSE_PROVIDER_ID = "reefpose"
-REEFPOSE_PROVIDER_VERSION = "1.0"
 
 
 def _validation_error(exc: Exception) -> ValidationError:

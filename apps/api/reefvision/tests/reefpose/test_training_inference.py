@@ -169,7 +169,92 @@ class CheckpointAndTrainingTests(unittest.TestCase):
 
             with self.assertRaises(ReefPoseCancelledError):
                 trainer.fit([_batch()], cancellation_check=lambda: True)
-            self.assertTrue((output / "cancelled.pt").is_file())
+            cancelled = output / "cancelled.pt"
+            self.assertTrue(cancelled.is_file())
+            state = load_checkpoint(cancelled, device="cpu")
+            self.assertEqual(state.epoch, -1)
+            self.assertEqual(state.global_step, 0)
+
+            resumed = ReefPoseTrainer(
+                ReefPoseS(model.config),
+                _schema(),
+                ReefPoseTrainingConfig(
+                    epochs=1,
+                    device="cpu",
+                    output_dir=output / "resumed",
+                ),
+            ).fit([_batch()], resume_from=cancelled)
+            self.assertEqual(resumed.completed_epochs, 1)
+            self.assertEqual(resumed.global_step, 1)
+
+    def test_mid_epoch_cancellation_records_completed_optimizer_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            output = Path(raw)
+            model = ReefPoseS(
+                ReefPoseConfig(
+                    num_keypoints=2,
+                    input_height=64,
+                    input_width=64,
+                    base_channels=8,
+                )
+            )
+            trainer = ReefPoseTrainer(
+                model,
+                _schema(),
+                ReefPoseTrainingConfig(epochs=1, device="cpu", output_dir=output),
+            )
+            checks = iter((False, True))
+
+            with self.assertRaises(ReefPoseCancelledError):
+                trainer.fit([_batch(), _batch()], cancellation_check=lambda: next(checks))
+
+            state = load_checkpoint(output / "cancelled.pt", device="cpu")
+            self.assertEqual(state.epoch, -1)
+            self.assertEqual(state.global_step, 1)
+
+    def test_resume_preserves_historical_best_checkpoint_in_new_output(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            original = root / "original"
+            original.mkdir()
+            config = ReefPoseConfig(
+                num_keypoints=2,
+                input_height=64,
+                input_width=64,
+                base_channels=8,
+            )
+            model = ReefPoseS(config)
+            schema = _schema()
+            save_checkpoint(
+                original / "best.pt",
+                model=model,
+                schema=schema,
+                epoch=0,
+                global_step=1,
+                metrics={"selection_loss": 0.0, "best_selection_loss": 0.0},
+            )
+            save_checkpoint(
+                original / "last.pt",
+                model=model,
+                schema=schema,
+                epoch=0,
+                global_step=1,
+                metrics={"selection_loss": 0.4, "best_selection_loss": 0.0},
+            )
+
+            result = ReefPoseTrainer(
+                ReefPoseS(config),
+                schema,
+                ReefPoseTrainingConfig(
+                    epochs=2,
+                    device="cpu",
+                    output_dir=root / "resumed",
+                ),
+            ).fit([_batch()], resume_from=original / "last.pt")
+
+            best = load_checkpoint(result.best_checkpoint, device="cpu")
+            self.assertEqual(best.metrics["selection_loss"], 0.0)
+            self.assertEqual(best.metrics["best_selection_loss"], 0.0)
 
 
 class _FixedPoseModel(nn.Module):

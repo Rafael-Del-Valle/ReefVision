@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import math
 import platform
 import random
+import shutil
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -23,6 +25,7 @@ from reefvision.ml.reefpose.schema import AnatomySchema
 from reefvision.ml.reefpose.targets import ReefPoseTargets
 
 CancellationCheck = Callable[[], bool]
+StepCallback = Callable[[], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +163,7 @@ class ReefPoseTrainer:
         *,
         training: bool,
         cancellation_check: CancellationCheck | None,
+        step_callback: StepCallback | None = None,
     ) -> tuple[dict[str, float], int]:
         self.model.train(training)
         totals = {"loss": 0.0, "heatmap_loss": 0.0, "visibility_loss": 0.0}
@@ -187,6 +191,8 @@ class ReefPoseTrainer:
                     )
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
+                if step_callback is not None:
+                    step_callback()
             totals["loss"] += float(losses.total.detach())
             totals["heatmap_loss"] += float(losses.heatmap.detach())
             totals["visibility_loss"] += float(losses.visibility.detach())
@@ -230,10 +236,13 @@ class ReefPoseTrainer:
         cancellation_check: CancellationCheck | None = None,
         resume_from: Path | None = None,
     ) -> ReefPoseTrainingResult:
+        last_checkpoint = self.config.output_dir / "last.pt"
+        best_checkpoint = self.config.output_dir / "best.pt"
         start_epoch = 0
         global_step = 0
         best_loss = float("inf")
         history: list[dict[str, float]] = []
+        latest_metrics: dict[str, float] = {}
         if resume_from is not None:
             state = load_checkpoint(
                 resume_from,
@@ -245,23 +254,58 @@ class ReefPoseTrainer:
             )
             start_epoch = state.epoch + 1
             global_step = state.global_step
-            best_loss = float(state.metrics.get("selection_loss", float("inf")))
+            latest_metrics = dict(state.metrics)
+            resume_loss = float(state.metrics.get("selection_loss", float("inf")))
+            best_loss = float(state.metrics.get("best_selection_loss", resume_loss))
+            source_best = resume_from.with_name("best.pt")
+            preserved_source: Path | None = None
+            if source_best.is_file():
+                best_state = load_checkpoint(
+                    source_best,
+                    device="cpu",
+                    expected_schema_hash=self.schema.integrity_hash,
+                )
+                source_best_loss = float(best_state.metrics.get("selection_loss", float("inf")))
+                if not math.isfinite(source_best_loss):
+                    raise ReefPoseValidationError(
+                        "Historical ReefPose best checkpoint has no selection loss"
+                    )
+                if math.isfinite(best_loss) and source_best_loss > best_loss + 1e-12:
+                    raise ReefPoseValidationError(
+                        "Historical ReefPose best checkpoint does not match resume metadata"
+                    )
+                best_loss = min(best_loss, source_best_loss)
+                preserved_source = source_best
+            elif math.isfinite(resume_loss) and resume_loss <= best_loss + 1e-12:
+                best_loss = resume_loss
+                preserved_source = resume_from
+            elif math.isfinite(best_loss):
+                raise ReefPoseValidationError("Historical ReefPose best checkpoint is missing")
+            if preserved_source is not None and (
+                preserved_source.resolve() != best_checkpoint.resolve()
+            ):
+                shutil.copy2(preserved_source, best_checkpoint)
         if start_epoch >= self.config.epochs:
             raise ReefPoseValidationError("Checkpoint already reached the configured epoch count")
 
-        last_checkpoint = self.config.output_dir / "last.pt"
-        best_checkpoint = self.config.output_dir / "best.pt"
-        current_epoch = start_epoch - 1
-        latest_metrics: dict[str, float] = {}
+        last_completed_epoch = start_epoch - 1
+        active_epoch = start_epoch
+
+        def record_optimizer_step() -> None:
+            nonlocal global_step
+            global_step += 1
+
         try:
             for epoch in range(start_epoch, self.config.epochs):
-                current_epoch = epoch
+                active_epoch = epoch
                 train_metrics, steps = self._run_epoch(
                     training_batches,
                     training=True,
                     cancellation_check=cancellation_check,
+                    step_callback=record_optimizer_step,
                 )
-                global_step += steps
+                if steps < 1:
+                    raise ReefPoseValidationError("ReefPose training epoch completed no steps")
                 metrics = {f"train_{key}": value for key, value in train_metrics.items()}
                 if validation_batches is not None:
                     validation_metrics, _ = self._run_epoch(
@@ -276,6 +320,10 @@ class ReefPoseTrainer:
                 else:
                     selection_loss = train_metrics["loss"]
                 metrics["selection_loss"] = selection_loss
+                improved = selection_loss <= best_loss
+                if improved:
+                    best_loss = selection_loss
+                metrics["best_selection_loss"] = best_loss
                 latest_metrics = metrics
                 history.append(dict(metrics))
                 self._save(
@@ -284,8 +332,7 @@ class ReefPoseTrainer:
                     global_step=global_step,
                     metrics=metrics,
                 )
-                if selection_loss <= best_loss:
-                    best_loss = selection_loss
+                if improved:
                     self._save(
                         best_checkpoint,
                         epoch=epoch,
@@ -303,13 +350,18 @@ class ReefPoseTrainer:
                         "metrics": metrics,
                     }
                 )
+                last_completed_epoch = epoch
         except ReefPoseCancelledError:
             self._save(
                 self.config.output_dir / "cancelled.pt",
-                epoch=current_epoch,
+                epoch=last_completed_epoch,
                 global_step=global_step,
                 metrics=latest_metrics,
-                extra_reproducibility={"cancelled": True},
+                extra_reproducibility={
+                    "cancelled": True,
+                    "interrupted_epoch": active_epoch,
+                    "resume_policy": "replay_interrupted_epoch",
+                },
             )
             raise
         return ReefPoseTrainingResult(

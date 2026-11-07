@@ -13,10 +13,12 @@ from PIL import Image
 from reefvision.ml.reefpose.data import (
     PoseRecord,
     ReefPoseDataset,
+    _validate_archive,
     group_aware_split,
     load_reefvision_pose_export,
 )
 from reefvision.ml.reefpose.errors import ReefPoseValidationError
+from reefvision.ml.reefpose.schema import AnatomySchema, LandmarkDefinition
 
 
 def _canonical_hash(payload: dict[str, object]) -> str:
@@ -24,7 +26,13 @@ def _canonical_hash(payload: dict[str, object]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _pose_export(path: Path, *, bad_frame_hash: bool = False, unsafe: bool = False) -> None:
+def _pose_export(
+    path: Path,
+    *,
+    bad_frame_hash: bool = False,
+    unsafe: bool = False,
+    legacy_keypoints: bool = False,
+) -> None:
     image_stream = io.BytesIO()
     Image.new("RGB", (16, 10), color=(80, 120, 160)).save(image_stream, format="PNG")
     image_bytes = image_stream.getvalue()
@@ -79,7 +87,9 @@ def _pose_export(path: Path, *, bad_frame_hash: bool = False, unsafe: bool = Fal
                 "video_track_id": "track-1",
                 "canonical_pose": {
                     "bbox": [2.0, 1.0, 10.0, 8.0],
-                    "pose_observations": [
+                    "pose_observations": []
+                    if legacy_keypoints
+                    else [
                         {
                             "semantic_label": "bell_center",
                             "occurrence_index": 0,
@@ -102,6 +112,11 @@ def _pose_export(path: Path, *, bad_frame_hash: bool = False, unsafe: bool = Fal
                             "status": "absent",
                         },
                     ],
+                    "keypoints": (
+                        [[8.0, 5.0, 1.0], [4.0, 8.0, 0.5], [0.0, 0.0, 0.0]]
+                        if legacy_keypoints
+                        else []
+                    ),
                 },
             }
         ],
@@ -126,6 +141,15 @@ def _record(sample_id: str, group_id: str) -> PoseRecord:
         keypoints=((1.0, 1.0),),
         visibility=(2,),
         visibility_states=("visible",),
+    )
+
+
+def _single_landmark_schema() -> AnatomySchema:
+    return AnatomySchema(
+        schema_id="schema-edge",
+        name="Edge anatomy",
+        revision=1,
+        landmarks=(LandmarkDefinition(landmark_id="point", name="point"),),
     )
 
 
@@ -182,6 +206,84 @@ class ReefVisionPoseExportTests(unittest.TestCase):
             with self.assertRaisesRegex(ReefPoseValidationError, "unsafe"):
                 load_reefvision_pose_export(archive, root / "extracted")
             self.assertFalse((root / "escape.txt").exists())
+
+    def test_windows_drive_archive_path_is_rejected_without_extraction(self) -> None:
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("reefvision-pose-training-export-manifest.json", "{}")
+            archive.writestr("D:/outside.txt", "unsafe")
+        stream.seek(0)
+
+        with (
+            zipfile.ZipFile(stream) as archive,
+            self.assertRaisesRegex(ReefPoseValidationError, "unsafe"),
+        ):
+            _validate_archive(archive, 1024)
+
+    def test_legacy_schema_ordered_keypoints_preserve_positive_supervision(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            archive = root / "dataset.zip"
+            _pose_export(archive, legacy_keypoints=True)
+
+            record = load_reefvision_pose_export(archive, root / "extracted").records[0]
+
+            self.assertEqual(record.keypoints, ((8.0, 5.0), (4.0, 8.0), (0.0, 0.0)))
+            self.assertEqual(record.visibility, (2, 2, 0))
+            self.assertEqual(record.visibility_states, ("visible", "visible", "absent"))
+
+    def test_crop_right_bottom_boundary_generates_a_valid_heatmap(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            image_path = root / "frame.png"
+            Image.new("RGB", (16, 10), color=(80, 120, 160)).save(image_path)
+            record = PoseRecord(
+                sample_id="edge",
+                image_path=image_path,
+                group_id="video-1",
+                source_width=16,
+                source_height=10,
+                keypoints=((12.0, 9.0),),
+                visibility=(2,),
+                visibility_states=("visible",),
+                crop_box=(2.0, 1.0, 12.0, 9.0),
+            )
+
+            sample = ReefPoseDataset(
+                (record,),
+                _single_landmark_schema(),
+                input_height=64,
+                input_width=64,
+                heatmap_sigma=1.5,
+            )[0]
+
+            self.assertGreater(float(sample["heatmaps"].max()), 0.9)
+
+    def test_supervised_landmark_outside_crop_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            image_path = root / "frame.png"
+            Image.new("RGB", (16, 10), color=(80, 120, 160)).save(image_path)
+            record = PoseRecord(
+                sample_id="outside",
+                image_path=image_path,
+                group_id="video-1",
+                source_width=16,
+                source_height=10,
+                keypoints=((13.0, 9.0),),
+                visibility=(2,),
+                visibility_states=("visible",),
+                crop_box=(2.0, 1.0, 12.0, 9.0),
+            )
+
+            with self.assertRaisesRegex(ReefPoseValidationError, "outside.*crop"):
+                ReefPoseDataset(
+                    (record,),
+                    _single_landmark_schema(),
+                    input_height=64,
+                    input_width=64,
+                    heatmap_sigma=1.5,
+                )[0]
 
 
 class GroupAwareSplitTests(unittest.TestCase):

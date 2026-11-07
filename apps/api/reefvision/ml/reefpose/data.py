@@ -11,7 +11,7 @@ import stat
 import tempfile
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, cast
 
 import numpy as np
@@ -26,6 +26,15 @@ from reefvision.ml.reefpose.targets import generate_gaussian_heatmaps
 
 EXPORT_MANIFEST_FILENAME = "reefvision-pose-training-export-manifest.json"
 EXPORT_SCHEMA_VERSION = "pose-training-external-export-0001"
+_WINDOWS_RESERVED_NAMES = {
+    "AUX",
+    "CON",
+    "NUL",
+    "PRN",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
+_WINDOWS_INVALID_FILENAME_CHARACTERS = frozenset('<>:"|?*')
 
 
 def _sha256(path: Path) -> str:
@@ -53,6 +62,43 @@ def _required_list(value: object, label: str) -> list[Any]:
     if not isinstance(value, list):
         raise ReefPoseValidationError(f"ReefVision export {label} must be an array")
     return value
+
+
+def _safe_relative_parts(raw_path: str) -> tuple[str, ...]:
+    normalized = raw_path.replace("\\", "/")
+    trimmed = normalized.rstrip("/")
+    posix_path = PurePosixPath(trimmed)
+    windows_path = PureWindowsPath(trimmed)
+    if (
+        not trimmed
+        or normalized.startswith("/")
+        or posix_path.is_absolute()
+        or windows_path.is_absolute()
+        or bool(windows_path.drive)
+    ):
+        raise ReefPoseValidationError("ReefVision pose export contains an unsafe path")
+    raw_parts = trimmed.split("/")
+    if any(part in {"", ".", ".."} for part in raw_parts):
+        raise ReefPoseValidationError("ReefVision pose export contains an unsafe path")
+    for part in raw_parts:
+        if (
+            part != part.rstrip(" .")
+            or any(ord(character) < 32 for character in part)
+            or any(character in _WINDOWS_INVALID_FILENAME_CHARACTERS for character in part)
+            or part.split(".", 1)[0].upper() in _WINDOWS_RESERVED_NAMES
+        ):
+            raise ReefPoseValidationError("ReefVision pose export contains an unsafe path")
+    return tuple(posix_path.parts)
+
+
+def _contained_path(root: Path, parts: tuple[str, ...]) -> Path:
+    resolved_root = root.resolve()
+    resolved = resolved_root.joinpath(*parts).resolve(strict=False)
+    try:
+        resolved.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ReefPoseValidationError("ReefVision pose export contains an unsafe path") from exc
+    return resolved
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,19 +161,19 @@ def _validate_archive(archive: zipfile.ZipFile, max_uncompressed_bytes: int) -> 
     total_size = 0
     for info in archive.infolist():
         normalized = info.filename.replace("\\", "/")
-        path = PurePosixPath(normalized)
-        if path.is_absolute() or ".." in path.parts or not normalized:
-            raise ReefPoseValidationError("ReefVision pose export contains an unsafe path")
-        if normalized in names:
+        parts = _safe_relative_parts(normalized)
+        canonical = "/".join(parts)
+        comparison_key = canonical.casefold()
+        if comparison_key in names:
             raise ReefPoseValidationError("ReefVision pose export contains duplicate paths")
-        names.add(normalized)
+        names.add(comparison_key)
         unix_mode = info.external_attr >> 16
         if stat.S_ISLNK(unix_mode):
             raise ReefPoseValidationError("ReefVision pose export contains an unsafe symlink")
         total_size += info.file_size
         if total_size > max_uncompressed_bytes:
             raise ReefPoseValidationError("ReefVision pose export is too large to extract safely")
-    if EXPORT_MANIFEST_FILENAME not in names:
+    if EXPORT_MANIFEST_FILENAME.casefold() not in names:
         raise ReefPoseValidationError("ReefVision pose export manifest is missing")
 
 
@@ -146,7 +192,7 @@ def _extract_archive(
             _validate_archive(archive, max_uncompressed_bytes)
             for info in archive.infolist():
                 normalized = info.filename.replace("\\", "/")
-                output = temporary.joinpath(*PurePosixPath(normalized).parts)
+                output = _contained_path(temporary, _safe_relative_parts(normalized))
                 if info.is_dir():
                     output.mkdir(parents=True, exist_ok=True)
                     continue
@@ -226,15 +272,35 @@ def _record_from_annotation(
     pose = _required_mapping(annotation.get("canonical_pose"), "canonical pose")
     observations = _required_list(pose.get("pose_observations"), "pose observations")
     by_slot: dict[tuple[str, int], dict[str, Any]] = {}
-    for raw in observations:
-        observation = _required_mapping(raw, "pose observation")
-        key = (
-            str(observation.get("semantic_label", "")).strip(),
-            int(observation.get("occurrence_index", -1)),
-        )
-        if not key[0] or key[1] < 0 or key in by_slot:
-            raise ReefPoseValidationError("Frozen pose observation identities are invalid")
-        by_slot[key] = observation
+    if observations:
+        for raw in observations:
+            observation = _required_mapping(raw, "pose observation")
+            key = (
+                str(observation.get("semantic_label", "")).strip(),
+                int(observation.get("occurrence_index", -1)),
+            )
+            if not key[0] or key[1] < 0 or key in by_slot:
+                raise ReefPoseValidationError("Frozen pose observation identities are invalid")
+            by_slot[key] = observation
+    else:
+        legacy_keypoints = _required_list(pose.get("keypoints"), "legacy pose keypoints")
+        if len(legacy_keypoints) != schema.keypoint_count:
+            raise ReefPoseValidationError(
+                "Frozen pose keypoint count does not match its immutable schema"
+            )
+        for landmark, raw in zip(schema.landmarks, legacy_keypoints, strict=True):
+            if not isinstance(raw, (list, tuple)) or len(raw) < 3:
+                raise ReefPoseValidationError("Frozen legacy keypoint is malformed")
+            x, y, confidence = (float(raw[index]) for index in range(3))
+            if not all(math.isfinite(value) for value in (x, y, confidence)):
+                raise ReefPoseValidationError("Frozen legacy keypoint contains a non-finite value")
+            by_slot[(landmark.name, landmark.occurrence_index)] = {
+                "semantic_label": landmark.name,
+                "occurrence_index": landmark.occurrence_index,
+                "x": x,
+                "y": y,
+                "status": "visible" if confidence > 0 else "absent",
+            }
 
     keypoints: list[tuple[float, float]] = []
     visibility: list[int] = []
@@ -326,10 +392,10 @@ def load_reefvision_pose_export(
         for raw in _required_list(frame_extraction.get("frames"), "frozen frames"):
             frame = _required_mapping(raw, "frozen frame")
             frame_index = int(frame.get("source_frame_index", -1))
-            relative = PurePosixPath(str(frame.get("path", "")).replace("\\", "/"))
-            if relative.is_absolute() or ".." in relative.parts or frame_index in frame_paths:
+            relative_parts = _safe_relative_parts(str(frame.get("path", "")))
+            if frame_index in frame_paths:
                 raise ReefPoseValidationError("Frozen frame identity or path is invalid")
-            path = destination.joinpath(*relative.parts)
+            path = _contained_path(destination, relative_parts)
             if not path.is_file() or _sha256(path) != str(frame.get("sha256", "")):
                 raise ReefPoseValidationError("Frozen frame checksum does not match")
             try:
@@ -340,7 +406,7 @@ def load_reefvision_pose_export(
                         )
             except (OSError, UnidentifiedImageError) as exc:
                 raise ReefPoseValidationError("Frozen frame is not a readable image") from exc
-            frame_paths[frame_index] = Path(*relative.parts)
+            frame_paths[frame_index] = Path(*relative_parts)
 
         annotations = _required_list(manifest.get("annotations"), "annotations")
         if len(annotations) != int(dataset.get("item_count", -1)):
@@ -441,8 +507,23 @@ class ReefPoseDataset(Dataset[dict[str, Any]]):
         )
         states = torch.tensor(record.visibility, dtype=torch.int64)
         supervised = states > 0
-        heatmap_points[supervised, 0].clamp_(0.0, heatmap_width - 1e-4)
-        heatmap_points[supervised, 1].clamp_(0.0, heatmap_height - 1e-4)
+        if record.crop_box is not None and bool(supervised.any()):
+            x_min, y_min, x_max, y_max = record.crop_box
+            visible_points = source_keypoints[supervised]
+            outside_crop = (
+                (visible_points[:, 0] < x_min)
+                | (visible_points[:, 0] > x_max)
+                | (visible_points[:, 1] < y_min)
+                | (visible_points[:, 1] > y_max)
+            )
+            if bool(outside_crop.any()):
+                raise ReefPoseValidationError("Supervised landmark is outside its pose crop")
+        heatmap_points[supervised, 0] = heatmap_points[supervised, 0].clamp(
+            0.0, float(heatmap_width - 1)
+        )
+        heatmap_points[supervised, 1] = heatmap_points[supervised, 1].clamp(
+            0.0, float(heatmap_height - 1)
+        )
         targets = generate_gaussian_heatmaps(
             heatmap_points,
             states,

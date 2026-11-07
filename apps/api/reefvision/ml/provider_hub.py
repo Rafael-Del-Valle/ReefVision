@@ -20,11 +20,7 @@ from reefvision.ml.providers import (
     SegmentAnythingAssistProvider,
     UltralyticsDetectionProvider,
 )
-from reefvision.ml.reefpose.provider import (
-    REEFPOSE_PROVIDER_ID,
-    REEFPOSE_PROVIDER_VERSION,
-    ReefPoseRegistrationProvider,
-)
+from reefvision.ml.reefpose.constants import REEFPOSE_PROVIDER_ID, REEFPOSE_PROVIDER_VERSION
 from reefvision.ml.sleap_nn_provider import (
     SLEAP_IO_SUPPORTED_VERSION,
     SLEAP_NN_SUPPORTED_VERSION,
@@ -1109,6 +1105,10 @@ def provider_for_registration(
             descriptor = get_model_provider(REEFPOSE_PROVIDER_ID, settings)
             if not descriptor.registerable:
                 raise ValidationError("ReefPose registration is not available")
+            try:
+                from reefvision.ml.reefpose.provider import ReefPoseRegistrationProvider
+            except Exception as exc:
+                raise ValidationError(f"ReefPose runtime is unavailable: {exc}") from exc
             return ReefPoseRegistrationProvider()
         raise ValidationError(f"Unsupported detector provider: {provider_name}")
     if purpose == "assist":
@@ -1132,6 +1132,10 @@ def detection_provider_for_name(provider_name: str) -> DetectionProvider:
     if normalized == "sleap_nn":
         return SleapNNPoseRegistrationProvider()
     if normalized == REEFPOSE_PROVIDER_ID:
+        try:
+            from reefvision.ml.reefpose.provider import ReefPoseRegistrationProvider
+        except Exception as exc:
+            raise ValidationError(f"ReefPose runtime is unavailable: {exc}") from exc
         return ReefPoseRegistrationProvider()
     raise ValidationError(f"Unsupported detection provider: {provider_name}")
 

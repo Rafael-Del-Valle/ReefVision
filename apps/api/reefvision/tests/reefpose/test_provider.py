@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -66,6 +69,34 @@ def _checkpoint(path: Path) -> None:
 
 
 class ReefPoseProviderTests(unittest.TestCase):
+    def test_provider_catalog_import_does_not_require_torch_runtime(self) -> None:
+        repository_root = Path(__file__).resolve().parents[5]
+        environment = dict(os.environ)
+        environment["PYTHONPATH"] = os.pathsep.join(
+            [str(repository_root / "apps" / "api"), environment.get("PYTHONPATH", "")]
+        )
+        script = """
+import builtins
+real_import = builtins.__import__
+def guarded_import(name, *args, **kwargs):
+    if name == 'torch' or name.startswith('torch.'):
+        raise AssertionError('provider catalog imported torch eagerly')
+    return real_import(name, *args, **kwargs)
+builtins.__import__ = guarded_import
+import reefvision.ml.provider_hub
+"""
+
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=repository_root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_checkpoint_inspection_and_inference_preserve_anatomy(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

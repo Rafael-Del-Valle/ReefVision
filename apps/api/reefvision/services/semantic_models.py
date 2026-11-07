@@ -596,7 +596,7 @@ class SemanticModelService(SegmentationModelService):
         project = self._project(project_id)
         model = self._model(payload.model_id)
         compatible = model.project_id == project.id and (
-            (model.purpose == "detector" and model.task == "detect")
+            (model.purpose == "detector" and model.task in {"detect", "pose"})
             or (model.purpose == "segmenter" and model.task == "segment")
             or (
                 model.purpose == SEMANTIC_MODEL_PURPOSE and model.task == SEMANTIC_SEGMENTATION_TASK
@@ -604,8 +604,8 @@ class SemanticModelService(SegmentationModelService):
         )
         if not compatible:
             raise ValidationError(
-                "Inference jobs require a compatible detector, instance segmenter, or "
-                "semantic segmenter from the same project"
+                "Inference jobs require a compatible detector, pose model, instance segmenter, "
+                "or semantic segmenter from the same project"
             )
         images = self.images.list_by_ids(payload.image_ids)
         if len(images) != len(payload.image_ids):
