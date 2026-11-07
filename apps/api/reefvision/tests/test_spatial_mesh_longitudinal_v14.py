@@ -2875,3 +2875,97 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
     )
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
+
+
+@pytest.mark.parametrize("bound", [0.0, 0.05])
+def test_registered_centroid_caller_bounds_survive_saved_workflow(
+    client: TestClient, bound: float
+) -> None:
+    """Typed persisted graphs must retain the standalone provisional interval and QC."""
+    project_id = str(create_project(client, "Registered centroid interval parity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    before = _mesh("early", "2026-10-01T12:00:00Z", 1.0)
+    after = _mesh("late", "2026-10-02T12:00:00Z", 1.0)
+    before["coordinate_frame_id"] = "survey-frame"
+    after["coordinate_frame_id"] = "survey-frame"
+    evidence = {
+        "source_frame_id": "survey-frame",
+        "target_frame_id": "survey-frame",
+        "method": "landmark",
+        "rms_residual_m": 0.02,
+        "correspondence_count": 6,
+        "evidence_note": "Caller-supplied bounds; independent verification pending",
+        "source_to_target_transform_m": _rigid_transform(),
+        "source_centroid_position_error_bound_m": bound,
+        "target_centroid_position_error_bound_m": bound,
+        "registration_alignment_error_bound_m": bound,
+    }
+    standalone = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after, "registration_evidence": evidence},
+    )
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["registered_surface_centroid_separation_m"] == pytest.approx(0.1)
+    assert expected["registered_surface_centroid_separation_caller_bound_interval_m"] == (
+        pytest.approx([max(0.0, 0.1 - 3 * bound), 0.1 + 3 * bound])
+    )
+    assert expected["provenance"]["coordinate_registration_verified"] is False
+    assert "registered_centroid_caller_interval_not_a_confidence_interval" in (
+        expected["qc_warnings"]
+    )
+
+    graph = {
+        "graph_id": "registered-centroid-bound-parity-v14",
+        "name": "Provisional centroid bound parity",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
+            {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": after},
+            {
+                "node_id": "compare",
+                "node_type": "mesh_longitudinal_comparison",
+                "parameters": {"registration_evidence": evidence},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": f"project-{node}",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": node,
+                "target_port_id": "project",
+            }
+            for node in ("early", "late")
+        ]
+        + [
+            {
+                "edge_id": f"{node}-compare",
+                "source_node_id": node,
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": port,
+            }
+            for node, port in (("early", "before"), ("late", "after"))
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_longitudinal_comparison"
+    )
+    assert artifact["payload_json"] == expected
+    assert len(artifact["payload_sha256"]) == 64
