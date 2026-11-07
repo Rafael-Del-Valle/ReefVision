@@ -86,10 +86,9 @@ class SemanticModelService(SegmentationModelService):
                 "Only completed pose-training runs with a finalized checkpoint can be registered"
             )
 
-        if run.provider_id != "ultralytics":
+        if run.provider_id not in {"reefpose", "ultralytics"}:
             raise ValidationError(
-                "Phase 10B trained-pose registration currently supports "
-                "Ultralytics pose checkpoints only"
+                "Trained-pose registration supports ReefPose and Ultralytics checkpoints only"
             )
 
         artifact_manifest = dict(run.artifact_manifest_json or {})
@@ -243,6 +242,16 @@ class SemanticModelService(SegmentationModelService):
         if not source_path.is_file():
             raise ValidationError("Trained pose checkpoint is missing")
 
+        actual_checkpoint_sha256, _ = hash_model_file(source_path)
+        expected_checkpoint_sha256 = str(
+            artifact_manifest.get("best_checkpoint_sha256") or ""
+        )
+        if (
+            expected_checkpoint_sha256
+            and actual_checkpoint_sha256 != expected_checkpoint_sha256
+        ):
+            raise ValidationError("Trained pose checkpoint checksum changed after completion")
+
         # Inspect before registration so a malformed or incompatible
         # checkpoint cannot leave behind a partially registered model.
         provider = self._provider_for_registration(
@@ -280,6 +289,21 @@ class SemanticModelService(SegmentationModelService):
                 f"{checkpoint_keypoint_count} landmarks but the frozen "
                 f"schema defines {revision.keypoint_count}"
             )
+
+        if run.provider_id == "reefpose":
+            checkpoint_labels = inspected.metadata.get("pose_landmark_labels")
+            if checkpoint_labels != list(revision.expanded_labels_json):
+                raise ValidationError(
+                    "ReefPose checkpoint landmark labels do not match the frozen schema"
+                )
+            anatomy = inspected.metadata.get("reefpose_anatomy_schema")
+            if not isinstance(anatomy, dict) or (
+                anatomy.get("schema_id") != revision.schema_id
+                or anatomy.get("revision") != revision.revision
+            ):
+                raise ValidationError(
+                    "ReefPose checkpoint anatomy identity does not match the frozen schema"
+                )
 
         experiment = self.session.scalar(
             select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
@@ -322,7 +346,12 @@ class SemanticModelService(SegmentationModelService):
             "pose_landmark_schema": (schema_snapshot),
         }
 
-        display_name = payload.display_name or f"{run.run_name} pose"
+        default_display_name = (
+            f"{run.run_name} pose {run.id[:8]}"
+            if run.provider_id == "reefpose"
+            else f"{run.run_name} pose"
+        )
+        display_name = payload.display_name or default_display_name
 
         registered = self._register_model_path(
             project_id,
@@ -337,8 +366,10 @@ class SemanticModelService(SegmentationModelService):
 
         model = self._model(registered.id)
 
-        if model.task != "pose" or model.provider_name != "ultralytics":
-            raise ValidationError("Registered trained model is not an Ultralytics pose model")
+        if model.task != "pose" or model.provider_name != run.provider_id:
+            raise ValidationError(
+                "Registered trained model provider/task differs from the completed pose run"
+            )
 
         binding = self.session.get(
             PoseModelSchemaBinding,

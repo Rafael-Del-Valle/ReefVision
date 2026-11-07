@@ -23,6 +23,8 @@ from reefvision.db.models import (
     Project,
     TrainingRun,
     VideoAsset,
+    WorkflowArtifact,
+    WorkflowRun,
 )
 from reefvision.jobs.pose_training import (
     materialize_pose_training_exports,
@@ -31,11 +33,16 @@ from reefvision.jobs.pose_training import (
 from reefvision.jobs.training import (
     _complete_training_run,
 )
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.ml.providers import DetectionSettings
 from reefvision.ml.reefpose.checkpoints import save_checkpoint
 from reefvision.ml.reefpose.errors import ReefPoseCancelledError
+from reefvision.ml.reefpose.provider import ReefPoseRegistrationProvider
 from reefvision.ml.reefpose.training import ReefPoseTrainer
+from reefvision.schemas.models import RegisterModelFromRunRequest
 from reefvision.services.jobs import JobService
 from reefvision.services.pose_training_exports import PoseTrainingExportService
+from reefvision.services.semantic_models import SemanticModelService
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
 )
@@ -48,6 +55,7 @@ from reefvision.storage.projects import (
 from reefvision.tests.test_pose_training_datasets_phase9 import (
     _verified_round,
 )
+from reefvision.tests.test_workflow_pose_review_resume_phase10 import _save_and_queue
 
 
 def _frozen_dataset(
@@ -825,3 +833,161 @@ def test_native_reefpose_execution_rejects_schema_drift_without_registration_art
         assert run.result_checkpoint_path is None
         assert experiment is None
         assert frozen.manifest_sha256 == original_manifest
+
+
+def test_completed_native_reefpose_checkpoint_registers_and_runs_inference(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        trained = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            parameters={
+                "provider_id": "reefpose",
+                "architecture": "reefpose-s",
+                "device": "cpu",
+                "precision": "fp32",
+                "training_config": {
+                    "epochs": 1,
+                    "batch": 1,
+                    "input_height": 64,
+                    "input_width": 64,
+                    "base_channels": 4,
+                    "fpn_channels": 8,
+                    "workers": 0,
+                },
+            },
+        )
+        registered = SemanticModelService(session, test_settings).register_model_from_run(
+            str(project["id"]),
+            RegisterModelFromRunRequest(
+                training_run_id=str(trained["training_run_id"]),
+                display_name="Native ReefPose workflow model",
+            ),
+        )
+        binding = session.get(PoseModelSchemaBinding, registered.id)
+        assert binding is not None
+        assert binding.schema_id == dataset["pose_schema_id"]
+        assert binding.schema_revision == dataset["pose_schema_revision"]
+
+    assert registered.provider_name == "reefpose"
+    assert registered.task == "pose"
+    assert registered.metadata_json["source_training_run_id"] == trained["training_run_id"]
+    assert registered.metadata_json["source_pose_schema_content_hash"] == dataset[
+        "pose_schema_content_hash"
+    ]
+
+    image_path = tmp_path / "synthetic-animal.png"
+    Image.new("RGB", (80, 48), color=(32, 64, 96)).save(image_path)
+    checkpoint = resolve_managed_project_path(test_settings, registered.managed_path)
+    provider = ReefPoseRegistrationProvider()
+    provider.load_model(checkpoint, "cpu")
+    predictions = provider.predict(
+        image_path,
+        DetectionSettings(confidence_threshold=0.0, iou_threshold=0.5, device="cpu"),
+    )
+    provider.unload_model()
+
+    assert len(predictions) == 1
+    assert len(predictions[0].keypoints or ()) == 2
+    assert predictions[0].pose_schema["schema_revision"] == dataset["pose_schema_revision"]
+
+
+def test_saved_native_reefpose_workflow_executes_and_replays(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    graph: dict[str, object] = {
+        "graph_id": "phase2a-native-reefpose",
+        "name": "Phase 2A native ReefPose",
+        "nodes": [
+            {
+                "node_id": "dataset",
+                "node_type": "pose_training_dataset",
+                "parameters": {"dataset_id": dataset["id"]},
+            },
+            {
+                "node_id": "train",
+                "node_type": "pose_model_training",
+                "parameters": {
+                    "provider_id": "reefpose",
+                    "architecture": "reefpose-s",
+                    "device": "cpu",
+                    "precision": "fp32",
+                    "training_config": {
+                        "epochs": 1,
+                        "batch": 1,
+                        "input_height": 64,
+                        "input_width": 64,
+                        "base_channels": 4,
+                        "fpn_channels": 8,
+                        "workers": 0,
+                    },
+                },
+            },
+            {"node_id": "register", "node_type": "register_trained_model"},
+        ],
+        "edges": [
+            {
+                "edge_id": "dataset-train",
+                "source_node_id": "dataset",
+                "source_port_id": "dataset",
+                "target_node_id": "train",
+                "target_port_id": "dataset",
+            },
+            {
+                "edge_id": "train-register",
+                "source_node_id": "train",
+                "source_port_id": "training",
+                "target_node_id": "register",
+                "target_port_id": "training",
+            },
+        ],
+    }
+
+    for _ in range(2):
+        run_id, job_id = _save_and_queue(client, str(project["id"]), graph)
+        processed = process_workflow_run_job(
+            app.state.settings, app.state.session_factory, job_id
+        )
+        if not processed:
+            state = client.get(f"/api/v1/workflow-runs/{run_id}")
+            pytest.fail(f"Native ReefPose saved workflow failed: {state.json()!r}")
+        with app.state.session_factory() as session:
+            run = session.get(WorkflowRun, run_id)
+            assert run is not None and run.status == "succeeded"
+            model_artifact = session.scalar(
+                select(WorkflowArtifact).where(
+                    WorkflowArtifact.workflow_run_id == run_id,
+                    WorkflowArtifact.data_type == "model_reference",
+                )
+            )
+            assert model_artifact is not None
+            assert model_artifact.payload_json["provider_name"] == "reefpose"
+            assert model_artifact.payload_json["pose_schema_content_hash"] == dataset[
+                "pose_schema_content_hash"
+            ]

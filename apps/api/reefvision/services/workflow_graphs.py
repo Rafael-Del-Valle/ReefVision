@@ -119,6 +119,9 @@ _ACTIONS: dict[str, str] = {
     "pose_training_dataset_freeze": (
         "Freeze only verified pose candidates into immutable Phase 9 training truth."
     ),
+    "pose_training_dataset": (
+        "Resolve one existing immutable scientist-verified pose training dataset."
+    ),
     "pose_training_export": (
         "Export the immutable pose dataset through the validated Phase 9 exporters."
     ),
