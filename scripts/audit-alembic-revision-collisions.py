@@ -103,6 +103,11 @@ def revision_from_source(path: Path) -> str | None:
         elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if statement.name == "revision":
                 raise ValueError(f"{path}: declaration rebinds revision")
+        elif isinstance(statement, ast.TypeAlias) and any(
+            isinstance(name, ast.Name) and name.id == "revision"
+            for name in ast.walk(statement.name)
+        ):
+            raise ValueError(f"{path}: type alias rebinds revision")
     # Structural pattern matching can bind revision without an Assign node.
     # Capture names occur in MatchAs/MatchStar/MatchMapping patterns.
     for statement in ast.walk(tree):
