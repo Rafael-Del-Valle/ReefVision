@@ -198,6 +198,25 @@ describe("browser gallery storage access", () => {
 });
 
 describe("gallery preferences", () => {
+  it("round-trips camera-style JPEG identifiers without changing their case or internal spacing", () => {
+    const storage = memoryStorage();
+    for (const imageId of [
+      "DSC_0042.JPG",
+      "IMG_0123.JPEG",
+      "Canon EOS RP/IMG 0007.JpG",
+      "Sony α7R III/DSC 0008.JPEG",
+    ]) {
+      writeGalleryPreference(storage, "camera-project", {
+        imageId,
+        page: 2,
+        wrap: false,
+      });
+      expect(readGalleryPreference(storage, "camera-project").imageId).toBe(
+        imageId,
+      );
+    }
+  });
+
   it("persists the recent image and page per project", () => {
     const storage = memoryStorage();
 
