@@ -94,9 +94,9 @@ def test_destructured_revision_assignment_fails_closed(tmp_path: Path, assignmen
 @pytest.mark.parametrize(
     "source",
     [
-        'revision, other = "ab"\\n',
-        'other, revision = "ab"\\n',
-        'revision, (other, third) = "a", ("b", "c")\\n',
+        'revision, other = "ab"\n',
+        'other, revision = "ab"\n',
+        'revision, (other, third) = "a", ("b", "c")\n',
     ],
 )
 def test_standalone_destructured_revision_is_not_a_literal_binding(
