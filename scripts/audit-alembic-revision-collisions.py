@@ -16,7 +16,11 @@ def revision_from_source(path: Path) -> str | None:
     for node in tree.body:
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            if any(isinstance(target, ast.Name) and target.id == "revision" for target in targets):
+            if any(
+                isinstance(name, ast.Name) and name.id == "revision"
+                for target in targets
+                for name in ast.walk(target)
+            ):
                 value = node.value
                 if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
                     raise ValueError(f"{path}: revision must be a literal string")
