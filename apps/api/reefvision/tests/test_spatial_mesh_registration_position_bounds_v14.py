@@ -106,7 +106,9 @@ def test_error_bounds_require_registration_transform() -> None:
         _compare(evidence)
 
 
-@pytest.mark.parametrize("bad_bound", [float("nan"), -1.0, True, "0.1"])
+@pytest.mark.parametrize(
+    "bad_bound", [float("nan"), float("inf"), float("-inf"), -1.0, True, "0.1"]
+)
 def test_nonfinite_negative_and_nonnumeric_bounds_are_rejected(bad_bound: object) -> None:
     evidence = {
         **_registration(),
@@ -200,13 +202,9 @@ def test_zero_caller_error_bounds_preserve_exact_signed_component_intervals() ->
         "registration_alignment_error_bound_m": 0.0,
     }
     result = _compare(evidence)
-    intervals = result[
-        "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"
-    ]
+    intervals = result["registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"]
     assert intervals is not None
-    for observed, expected in zip(
-        intervals, [[1.0, 1.0], [0.0, 0.0], [0.0, 0.0]], strict=True
-    ):
+    for observed, expected in zip(intervals, [[1.0, 1.0], [0.0, 0.0], [0.0, 0.0]], strict=True):
         assert observed == pytest.approx(expected)
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
