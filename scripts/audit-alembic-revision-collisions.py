@@ -31,7 +31,11 @@ def audit(roots: list[Path]) -> dict:
     for root in roots:
         if not root.is_dir():
             raise ValueError(f"Migration directory missing: {root}")
+        if root.is_symlink():
+            raise ValueError(f"Migration directory is a symbolic link: {root}")
         for path in sorted(root.rglob("*.py")):
+            if path.is_symlink():
+                raise ValueError(f"Migration file is a symbolic link: {path}")
             if path.name == "__init__.py":
                 continue
             migration_files += 1
