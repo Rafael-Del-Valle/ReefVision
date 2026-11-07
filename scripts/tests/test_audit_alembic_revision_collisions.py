@@ -74,3 +74,26 @@ def test_nested_symlink_is_rejected_without_reading_external_content(
     with pytest.raises(ValueError, match="symbolic link"):
         load_audit()([root])
     assert external_file.read_bytes() == original
+
+
+def test_duplicate_directory_alias_does_not_invent_collision(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="specified more than once"):
+        load_audit()([root, root / ".." / "versions"])
+    assert file.read_bytes() == before
+
+
+def test_symlinked_parent_is_rejected_without_external_reads(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    file = migration(outside / "versions", "0038.py", "0038")
+    before = file.read_bytes()
+    alias = tmp_path / "alias"
+    try:
+        alias.symlink_to(outside, target_is_directory=True)
+    except (NotImplementedError, OSError):
+        pytest.skip("Filesystem does not permit symbolic links")
+    with pytest.raises(ValueError, match="symbolic-link ancestor"):
+        load_audit()([alias / "versions"])
+    assert file.read_bytes() == before
