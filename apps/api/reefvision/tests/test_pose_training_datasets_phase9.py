@@ -722,6 +722,37 @@ def test_frozen_dataset_rejects_resigned_incompatible_schema_version(
     assert "manifest lineage" in response.text
 
 
+@pytest.mark.parametrize("invalid_count", [0, 2, True, "1"])
+def test_frozen_dataset_rejects_resigned_incorrect_manifest_item_count(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_count: object,
+) -> None:
+    # Start with a persisted scientist-reviewed dataset; changing the count
+    # and re-signing its manifest must not authenticate false training truth.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    created = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert created.status_code == 201, created.text
+    dataset_id = created.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        assert dataset.item_count == 1
+        manifest = copy.deepcopy(dataset.manifest_json)
+        manifest["item_count"] = invalid_count
+        dataset.manifest_json = manifest
+        dataset.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
+    assert response.status_code == 409, response.text
+    assert "manifest lineage" in response.text
+
+
 @pytest.mark.parametrize("digest_variant", ["blank", "uppercase", "truncated"])
 def test_frozen_dataset_rejects_resigned_noncanonical_video_digest(
     client: TestClient,
