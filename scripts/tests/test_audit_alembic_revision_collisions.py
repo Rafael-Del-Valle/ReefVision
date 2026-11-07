@@ -246,3 +246,29 @@ def test_implicit_revision_rebinding_fails_closed(
     with pytest.raises(ValueError, match="revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("binding", "message"),
+    [
+        ("import package as revision\n", "import rebinds revision"),
+        ("from package import revision\n", "import rebinds revision"),
+        ("from package import item as revision\n", "import rebinds revision"),
+        ("def revision():\n    pass\n", "declaration rebinds revision"),
+        ("async def revision():\n    pass\n", "declaration rebinds revision"),
+        ("class revision:\n    pass\n", "declaration rebinds revision"),
+        ("match value:\n    case revision:\n        pass\n", "pattern rebinds revision"),
+        ("match value:\n    case [*revision]:\n        pass\n", "pattern rebinds revision"),
+        ("match value:\n    case {**revision}:\n        pass\n", "pattern rebinds revision"),
+    ],
+)
+def test_non_assignment_revision_bindings_fail_closed(
+    tmp_path: Path, binding: str, message: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + binding, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match=message):
+        load_audit()([root])
+    assert file.read_bytes() == before
