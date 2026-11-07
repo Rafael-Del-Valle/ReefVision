@@ -383,6 +383,34 @@ describe("gallery preferences", () => {
     }
   });
 
+  it("skips oversized persisted preferences without blocking first-image rendering", () => {
+    const key = "reefvision.gallery.project-a.v1";
+    const storage = memoryStorage({
+      [key]: JSON.stringify({
+        imageId: "camera-" + "x".repeat(10_000),
+        page: 999,
+        wrap: true,
+      }),
+    });
+    expect(readGalleryPreference(storage, "project-a")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+
+    // A corrupted preference in one project must not affect another.
+    writeGalleryPreference(storage, "project-b", {
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: true,
+    });
+    expect(readGalleryPreference(storage, "project-b")).toEqual({
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: true,
+    });
+  });
+
   it("rejects unsafe saved pages before loading the first camera image", () => {
     for (const page of [2 ** 53, 1e100, Number.MAX_VALUE]) {
       const storage = memoryStorage({
