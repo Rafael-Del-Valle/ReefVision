@@ -1,7 +1,7 @@
 """Regression coverage for non-destructive Alembic revision collision auditing."""
 
-import importlib.util
 import hashlib
+import importlib.util
 from pathlib import Path
 
 import pytest
